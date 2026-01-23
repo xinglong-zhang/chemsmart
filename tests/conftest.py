@@ -1202,6 +1202,21 @@ def complex_molecule_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def images_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "images")
+
+
+@pytest.fixture()
+def thiol1_image(images_directory):
+    return os.path.join(images_directory, "thiol1.png")
+
+
+@pytest.fixture()
+def thiol2_image(images_directory):
+    return os.path.join(images_directory, "thiol2.png")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 

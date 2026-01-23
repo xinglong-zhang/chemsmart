@@ -1738,3 +1738,25 @@ class TestCDXFile:
         assert mol.chemical_formula == "C32H31N5O5"
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
+
+
+class TestStructuresFromImage:
+    def test_read_molecule_from_image_file1(self, thiol1_image):
+        """Test reading a molecule from an image file thiol1."""
+        # Read molecule from image
+        molecule = Molecule.from_filepath(thiol1_image)
+
+        # Verify the molecule was created correctly
+        assert isinstance(molecule, Molecule)
+        assert molecule.chemical_formula == "C9H17NO4S"
+        assert molecule.num_atoms == 32
+
+    def test_read_molecule_from_image_file2(self, thiol2_image):
+        """Test reading a molecule from an image file thiol2, Ad-SH."""
+        # Read molecule from image
+        molecule = Molecule.from_filepath(thiol2_image)
+
+        # Verify the molecule was created correctly
+        assert isinstance(molecule, Molecule)
+        assert molecule.chemical_formula == "C10H16S"
+        assert molecule.num_atoms == 27

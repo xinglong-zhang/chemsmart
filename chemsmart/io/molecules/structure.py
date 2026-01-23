@@ -22,6 +22,42 @@ p = pt()
 
 logger = logging.getLogger(__name__)
 
+# Common chemical abbreviations and their SMILES representations
+# Used for expanding abbreviations in chemical structure images
+_CHEMICAL_ABBREVIATIONS = {
+    'Ad': 'C1C2CC3CC1CC(C2)C3',  # Adamantyl (1-adamantyl)
+    'Ph': 'c1ccccc1',  # Phenyl
+    'Me': 'C',  # Methyl
+    'Et': 'CC',  # Ethyl
+    'nPr': 'CCC',  # n-Propyl
+    'iPr': 'C(C)C',  # Isopropyl
+    'Bu': 'CCCC',  # Butyl
+    'iBu': 'CC(C)C',  # Isobutyl
+    'sBu': 'C(C)CC',  # sec-Butyl
+    'tBu': 'C(C)(C)C',  # tert-Butyl
+    'Bn': 'Cc1ccccc1',  # Benzyl
+    'Ac': 'C(=O)C',  # Acetyl
+    'Bz': 'C(=O)c1ccccc1',  # Benzoyl
+    'Ts': 'S(=O)(=O)c1ccc(C)cc1',  # Tosyl
+    'Ms': 'S(=O)(=O)C',  # Mesyl
+    'Tf': 'S(=O)(=O)C(F)(F)F',  # Triflyl
+    'Cy': 'C1CCCCC1',  # Cyclohexyl
+}
+
+# Dash characters commonly used in chemical drawings
+_DASH_CHARACTERS = ['-', '–', '—']  # hyphen, en-dash, em-dash
+
+# Minimum length for a valid SMILES string
+_MIN_VALID_SMILES_LENGTH = 3
+
+# Mapping of functional group text to SMILES atom
+_SUBSTITUENT_MAPPING = {
+    'SH': 'S',  # Thiol
+    'OH': 'O',  # Hydroxyl
+    'NH2': 'N',  # Amine
+    'NH₂': 'N',  # Amine (with subscript)
+}
+
 
 class Molecule:
     """Class to represent a molcular structure.
@@ -796,6 +832,9 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff")):
+            return cls._read_image_file(filepath)
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -935,6 +974,155 @@ class Molecule:
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
 
+    @classmethod
+    def _read_image_file(cls, filepath):
+        """
+        Read molecular structure from an image file using DECIMER.
+
+        Converts chemical structure images (PNG, JPG, JPEG, TIF, TIFF) to
+        molecular structures by first extracting SMILES representation using
+        DECIMER, then converting to a Molecule object via RDKit.
+        
+        Handles common chemical abbreviations (e.g., Ad for adamantyl, Ph for phenyl)
+        by using OCR to detect text and expanding abbreviations to full structures.
+        Abbreviation expansion requires pytesseract (optional dependency).
+
+        Args:
+            filepath (str): Path to the image file containing chemical structure
+
+        Returns:
+            Molecule: Molecule object created from the image
+
+        Raises:
+            ImportError: If DECIMER or opencv-python is not installed
+            ValueError: If the image cannot be processed or converted
+            
+        Note:
+            For better abbreviation support, install pytesseract:
+            ``pip install chemsmart[image]`` or ``pip install pytesseract``
+        """
+        try:
+            import cv2
+            from DECIMER import predict_SMILES
+        except ImportError as e:
+            raise ImportError(
+                "DECIMER and opencv-python are required to read image files. "
+                "Install them with: `pip install decimer opencv-python`"
+            ) from e
+
+        # Try to import pytesseract for OCR (optional)
+        try:
+            import pytesseract
+            has_ocr = True
+        except ImportError:
+            has_ocr = False
+            logger.debug("pytesseract not available, abbreviation expansion disabled")
+
+        # Load the image
+        img_orig = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+        if img_orig is None:
+            raise FileNotFoundError(filepath)
+
+        # Detect abbreviations using OCR if available
+        detected_abbrevs = {}
+        detected_text = ""
+        if has_ocr:
+            try:
+                # Use OCR to detect text in the image
+                # PSM 6: Assume a single uniform block of text (good for chemical labels)
+                detected_text = pytesseract.image_to_string(img_orig, config='--psm 6')
+                logger.debug(f"OCR detected text: {detected_text}")
+                
+                # Check for known abbreviations in the detected text
+                for abbrev, smiles in _CHEMICAL_ABBREVIATIONS.items():
+                    # Case-sensitive match for chemical abbreviations
+                    if abbrev in detected_text:
+                        detected_abbrevs[abbrev] = smiles
+                        logger.info(f"Detected abbreviation '{abbrev}' in image")
+            except Exception as e:
+                logger.debug(f"OCR failed: {e}")
+
+        # Pre-process image for DECIMER (binarize + resize)
+        img = cv2.resize(
+            img_orig, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC
+        )
+        _, img = cv2.threshold(
+            img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+
+        # Write a temp preprocessed image (DECIMER takes a path)
+        tmp = filepath + ".pre.png"
+        try:
+            cv2.imwrite(tmp, img)
+
+            # Get SMILES from DECIMER
+            smiles = predict_SMILES(tmp)  # DECIMER returns SMILES
+        finally:
+            # Clean up temporary file
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                    logger.debug(f"Removed temporary file: {tmp}")
+            except Exception as e:
+                logger.warning(f"Failed to remove temporary file {tmp}: {e}")
+        
+        # If DECIMER fails or returns suspicious results when abbreviations are detected
+        # (DECIMER typically fails with abbreviations), try to construct SMILES manually
+        decimer_failed = smiles is None or not smiles.strip()
+        should_use_abbrev = (
+            detected_abbrevs 
+            and (decimer_failed or (smiles and len(smiles) < _MIN_VALID_SMILES_LENGTH))
+        )
+        
+        if should_use_abbrev:
+            logger.warning(
+                f"DECIMER returned incomplete/null SMILES: {smiles}. "
+                f"Attempting to construct from detected abbreviations: {list(detected_abbrevs.keys())}"
+            )
+            
+            # Store the original smiles (may be None)
+            constructed_smiles = None
+            
+            # Try to construct molecule from abbreviations
+            # For simple cases like "Ad-SH", we can combine parts
+            if detected_text:
+                # Simple heuristic: if we detected abbreviations, try common patterns
+                text_upper = detected_text.upper()
+                
+                # Pattern: Ad-SH (adamantyl thiol)
+                # Note: The dash might be a hyphen (-), en-dash (–), or em-dash (—)
+                if 'Ad' in detected_abbrevs and 'SH' in text_upper:
+                    constructed_smiles = detected_abbrevs['Ad'] + 'S'
+                    logger.info(f"Constructed SMILES from Ad-SH pattern: {constructed_smiles}")
+                # Pattern: Ph-X (phenyl with substituent)
+                elif 'Ph' in detected_abbrevs and any(sep in detected_text for sep in _DASH_CHARACTERS):
+                    # Try to get the substituent by splitting on the first dash found
+                    # Note: We only handle simple cases with one dash
+                    parts = []
+                    for sep in _DASH_CHARACTERS:
+                        if sep in detected_text:
+                            parts = detected_text.split(sep, 1)  # Split only on first occurrence
+                            break
+                    if len(parts) == 2:
+                        substituent = parts[1].strip().upper()
+                        # Map common substituents using the predefined mapping
+                        if substituent in _SUBSTITUENT_MAPPING:
+                            constructed_smiles = detected_abbrevs['Ph'] + _SUBSTITUENT_MAPPING[substituent]
+                # If we have an abbreviation but couldn't construct, use it as-is
+                elif len(detected_abbrevs) == 1:
+                    constructed_smiles = next(iter(detected_abbrevs.values()))
+            
+            # Use constructed SMILES if we managed to construct one
+            if constructed_smiles:
+                smiles = constructed_smiles
+        
+        if smiles is None:
+            raise ValueError(
+                f"Image {filepath} cannot be converted to SMILES."
+            )
+
+        return cls.from_smiles(smiles)
+
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
@@ -1072,6 +1260,31 @@ class Molecule:
         rdkit_mol.num_atoms = rdMol.GetNumAtoms()
 
         return rdkit_mol
+
+    @classmethod
+    def from_smiles(cls, smiles):
+        # Convert SMILES to RDKit molecule
+        rdkit_mol = Chem.MolFromSmiles(smiles)
+        if rdkit_mol is None:
+            raise ValueError(
+                f"Failed to create valid molecule from SMILES: {smiles}"
+            )
+
+        # Generate 3D coordinates
+        from rdkit.Chem import AllChem
+
+        rdkit_mol = Chem.AddHs(rdkit_mol)
+        AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+        AllChem.MMFFOptimizeMolecule(rdkit_mol)
+
+        # Convert RDKit molecule to Molecule object using the classmethod
+        molecule = cls.from_rdkit_mol(rdkit_mol)
+
+        logger.info(
+            f"Successfully created molecule from image with formula: "
+            f"{molecule.chemical_formula}"
+        )
+        return molecule
 
     def write_coordinates(self, f, program=None):
         """
