@@ -1062,6 +1062,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         ecp_layer_ecp=None,
         ecp_layer=None,
         scale_formal_charge_ecp_atom=None,
+        parent_jobtype=None,
         **kwargs,
     ):
         """
@@ -1102,6 +1103,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         super().__init__(**kwargs)
         self.intermediate_solv_scheme = intermediate_solv_scheme
         self.jobtype = jobtype
+        self.parent_jobtype = parent_jobtype
         self.high_level_functional = high_level_functional
         self.high_level_basis = high_level_basis
         self.intermediate_level_functional = intermediate_level_functional
@@ -1360,16 +1362,17 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         ):
             level_of_theory = f"! {self.jobtype.upper()}"
         else:
-            level_of_theory = "! "
-            if self.job_type in ("opt", "modred", "scan"):
-                level_of_theory += "Opt"
-            elif self.job_type == "ts":
-                level_of_theory += "OptTS"
-            elif self.job_type == "irc":
-                level_of_theory += "IRC"
-            elif self.job_type == "sp":
+            level_of_theory = "!"
+            parent_jobtype = self.parent_jobtype.lower()
+            if parent_jobtype in ("opt", "modred", "scan"):
+                level_of_theory += " Opt"
+            elif parent_jobtype == "ts":
+                level_of_theory += " OptTS"
+            elif parent_jobtype == "irc":
+                level_of_theory += " IRC"
+            elif parent_jobtype == "sp":
                 level_of_theory += ""
-            level_of_theory += "QM"
+            level_of_theory += " QM"
             self.high_level_level_of_theory = self.validate_and_assign_level(
                 self.high_level_functional,
                 self.high_level_basis,

@@ -1,4 +1,4 @@
-! QM/QM2/MM mn15 genecp
+! Opt QM/QM2/MM mn15 genecp
 # Number of processors
 %pal nprocs 12 end
 # Memory per core

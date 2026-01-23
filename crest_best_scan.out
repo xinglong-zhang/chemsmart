@@ -7,7 +7,7 @@
                                        INPUT FILE                               
 ================================================================================
 NAME = /Users/taipanlan/PycharmProjects/chemsmart/crest_best_scan.inp
-|  1> ! QM/QM2/MM mn15 genecp
+|  1> ! Opt QM/QM2/MM mn15 genecp
 |  2> # Number of processors
 |  3> %pal nprocs 12 end
 |  4> # Memory per core

@@ -262,6 +262,7 @@ def create_orca_qmmm_subcommand(parent_command):
         parent_settings = ctx.obj.get("parent_settings")
         parent_kwargs = ctx.obj.get("parent_kwargs", {})
         parent_skip_completed = ctx.obj.get("parent_skip_completed")
+        parent_jobtype = ctx.obj.get("parent_jobtype")
 
         jobrunner = ctx.obj["jobrunner"]
         ctx.obj["qmmm"] = True
@@ -310,6 +311,8 @@ def create_orca_qmmm_subcommand(parent_command):
         logger.debug("Label for job: %s", label)
 
         qmmm_settings = ORCAQMMMJobSettings(**qmmm_settings.__dict__)
+        if parent_jobtype is not None:
+            qmmm_settings.parent_jobtype = parent_jobtype
 
         if job_type is not None:
             qmmm_settings.jobtype = job_type

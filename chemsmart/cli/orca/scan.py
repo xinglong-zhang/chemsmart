@@ -97,6 +97,7 @@ def scan(
     ctx.obj["parent_freeze_atoms"] = None
     ctx.obj["parent_kwargs"] = kwargs
     ctx.obj["parent_settings"] = scan_settings
+    ctx.obj["parent_jobtype"] = jobtype
 
     molecules = ctx.obj["molecules"]
     label = ctx.obj["label"]
