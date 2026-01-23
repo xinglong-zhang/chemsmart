@@ -80,7 +80,7 @@ class GaussianLinkJob(GaussianJob):
 
     def _is_irc_job(self):
         """Check if this is an IRC link job."""
-        return self.settings.job_type == "irc"
+        return self.settings.jobtype == "irc"
 
     def _create_irc_subjob(self, direction):
         """
@@ -97,7 +97,7 @@ class GaussianLinkJob(GaussianJob):
 
         # Create IRC subjob
         settings_dict = self.settings.__dict__.copy()
-        settings_dict["job_type"] = f"irc{direction}"
+        settings_dict["jobtype"] = f"irc{direction}"
         irc_settings = GaussianLinkJobSettings(**settings_dict)
 
         label = self.label
@@ -167,7 +167,7 @@ class GaussianLinkJob(GaussianJob):
             )
 
             for job in irc_jobs:
-                logger.debug(f"Running IRC job: {job.settings.job_type}")
+                logger.debug(f"Running IRC job: {job.settings.jobtype}")
                 job.run()
         else:
             super()._run(**kwargs)

@@ -282,7 +282,7 @@ class Gaussian16Output(GaussianFileMixin):
                     drop_first()
 
                 # Single-point link jobs: keep only the last frame (after drop)
-                if self.job_type == "sp" and orientations:
+                if self.jobtype == "sp" and orientations:
                     keep_last_only()
 
                 # Fall through to "normal termination" handling below

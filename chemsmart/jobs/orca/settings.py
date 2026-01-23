@@ -50,7 +50,7 @@ class ORCAJobSettings(MolecularJobSettings):
         quadrupole (bool): Compute quadrupole moment.
         mdci_cutoff (float | None): MDCI cutoff.
         mdci_density (float | None): MDCI density.
-        job_type (str | None): Calculation type (e.g., 'opt', 'sp').
+        jobtype (str | None): Calculation type (e.g., 'opt', 'sp').
         title (str | None): Job title string.
         solvent_model (str | None): Solvation model identifier.
         solvent_id (str | None): Solvent identifier.
@@ -89,7 +89,7 @@ class ORCAJobSettings(MolecularJobSettings):
         quadrupole=False,
         mdci_cutoff=None,
         mdci_density=None,
-        job_type=None,
+        jobtype=None,
         title=None,
         solvent_model=None,
         solvent_id=None,
@@ -130,7 +130,7 @@ class ORCAJobSettings(MolecularJobSettings):
             quadrupole: Whether to calculate quadrupole moment
             mdci_cutoff: MDCI cutoff
             mdci_density: MDCI density
-            job_type: Type of calculation
+            jobtype: Type of calculation
             title: Job title
             solvent_model: Solvation model
             solvent_id: Solvent identifier
@@ -157,7 +157,7 @@ class ORCAJobSettings(MolecularJobSettings):
             multiplicity=multiplicity,
             freq=freq,
             numfreq=numfreq,
-            job_type=job_type,
+            jobtype=jobtype,
             title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
@@ -433,7 +433,7 @@ class ORCAJobSettings(MolecularJobSettings):
             numfreq=False,
             mdci_cutoff=None,
             mdci_density=None,
-            job_type=None,
+            jobtype=None,
             title=None,
             solvent_model=None,
             solvent_id=None,
@@ -493,15 +493,15 @@ class ORCAJobSettings(MolecularJobSettings):
 
         # route string depends on job type
         # determine if route string requires 'opt' keyword
-        if self.job_type in ("opt", "modred", "scan"):
+        if self.jobtype in ("opt", "modred", "scan"):
             route_string += "Opt"
-        elif self.job_type == "ts":
+        elif self.jobtype == "ts":
             route_string += (
                 "OptTS"  # Orca keyword for transition state optimization
             )
-        elif self.job_type == "irc":
+        elif self.jobtype == "irc":
             route_string += "IRC"
-        elif self.job_type == "sp":
+        elif self.jobtype == "sp":
             route_string += ""
 
         # add frequency calculation
@@ -737,7 +737,7 @@ class ORCATSJobSettings(ORCAJobSettings):
         Returns:
             str: ORCA route string for TS calculation
         """
-        self.job_type = "ts"
+        self.jobtype = "ts"
         route_string = self._get_route_string_from_jobtype()
         if self.tssearch_type.lower() == "scants":
             route_string = route_string.replace("OptTS", "ScanTS")
@@ -861,7 +861,7 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         Returns:
             str: ORCA route string for IRC calculation
         """
-        self.job_type = "irc"
+        self.jobtype = "irc"
         route_string = self._get_route_string_from_jobtype()
         if "freq" in route_string.lower():
             route_string = re.sub(
