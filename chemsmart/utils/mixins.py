@@ -1302,14 +1302,14 @@ class XTBFileMixin(FileMixin):
         return XTBRoute(route_string=self.route_string)
 
     @property
-    def job_type(self):
+    def jobtype(self):
         """
         Extract the primary job type from the route.
 
         Returns:
             str: Job type (e.g. 'sp', 'opt', 'hess', 'md')
         """
-        return self.route_object.job_type
+        return self.route_object.jobtype
 
     @property
     def gfn_version(self):

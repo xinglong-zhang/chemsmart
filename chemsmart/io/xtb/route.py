@@ -160,7 +160,7 @@ class XTBRoute:
         return None
 
     @property
-    def job_type(self):
+    def jobtype(self):
         """
         Extract the primary job type from the route.
 
@@ -172,9 +172,9 @@ class XTBRoute:
         - 'path'  : Reaction path calculation (--path)
         - 'modef' : Mode following (--modef)
         """
-        return self.get_job_type()
+        return self.get_jobtype()
 
-    def get_job_type(self):
+    def get_jobtype(self):
         """
         Extract job type from route specification.
 

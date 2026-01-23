@@ -199,13 +199,13 @@ class XTBJobRunner(JobRunner):
         ):
             command += (
                 f"--{settings.gfn_version} "
-                f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
+                f"--{settings.jobtype} {settings.optimization_level} --chrg {settings.charge} "
                 f"--uhf {uhf} --{settings.solvent_model} {settings.solvent_id}"
             )
         else:
             command += (
                 f"--{settings.gfn_version} "
-                f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
+                f"--{settings.jobtype} {settings.optimization_level} --chrg {settings.charge} "
                 f"--uhf {uhf}"
             )
 

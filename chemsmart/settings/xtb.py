@@ -32,25 +32,25 @@ class XTBProjectSettings(RegistryMixin):
     def sp_settings(self):
         """xTB default settings for sp job."""
         settings = self.main_settings().copy()
-        settings.job_type = "sp"
+        settings.jobtype = "sp"
         return settings
 
     def opt_settings(self):
         """xTB default settings for opt job."""
         settings = self.main_settings().copy()
-        settings.job_type = "opt"
+        settings.jobtype = "opt"
         return settings
 
     def hess_settings(self):
         """xTB default settings for hess job."""
         settings = self.main_settings().copy()
-        settings.job_type = "hess"
+        settings.jobtype = "hess"
         return settings
 
     def md_settings(self):
         """xTB default settings for md job."""
         settings = self.main_settings().copy()
-        settings.job_type = "md"
+        settings.jobtype = "md"
         return settings
 
     @classmethod
@@ -140,12 +140,12 @@ class YamlXTBProjectSettingsBuilder:
         hess_settings = self._project_settings_for_job(job_type="hess")
         md_settings = self._project_settings_for_job(job_type="md")
 
-        # Internal job_type promotion based on opt flag
+        # Internal jobtype promotion based on opt flag
         if hess_settings.opt:
-            hess_settings.job_type = "ohess"
+            hess_settings.jobtype = "ohess"
 
         if md_settings.opt:
-            md_settings.job_type = "omd"
+            md_settings.jobtype = "omd"
 
         project_settings = YamlXTBProjectSettings(
             sp_settings=sp_settings,
@@ -176,7 +176,7 @@ class YamlXTBProjectSettingsBuilder:
                 f"Using default settings."
             )
             settings = XTBJobSettings.default()
-            settings.job_type = job_type
+            settings.jobtype = job_type
             return settings
 
         except KeyError:

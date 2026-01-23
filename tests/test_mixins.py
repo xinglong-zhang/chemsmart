@@ -110,7 +110,7 @@ class DummyXTBFile(XTBFileMixin):
 class TestXTBFileMixin:
     def test_xtb_file_properties(self):
         dummy = DummyXTBFile("test.out")
-        assert dummy.job_type == "opt"
+        assert dummy.jobtype == "opt"
         assert dummy.optimization_level == "loose"
         assert dummy.gfn_version == "gfn2"
         assert dummy.solvent_model == "alpb"

@@ -30,14 +30,14 @@ class XTBJobSettings:
     - gfn_version: GFN0, GFN1, GFN2, GFN-FF
     - optimization_level: crude to extreme (xTB-specific convergence criteria)
     - solvent_model: GBSA, ALPB, COSMO, etc.
-    - job_type: sp, opt, hess, md, ohess, omd, path, modef
+    - jobtype: sp, opt, hess, md, ohess, omd, path, modef
 
     Attributes:
         gfn_version (str): GFN-xTB version ('gfn0', 'gfn1', 'gfn2', 'gfnff').
         optimization_level (str): Optimization convergence level.
         charge (int): Molecular charge.
         multiplicity (int): Spin multiplicity (uhf parameter in xTB).
-        job_type (str): Type of calculation to perform.
+        jobtype (str): Type of calculation to perform.
         title (str): Job title/description.
         opt (bool): Whether to perform a prior optimization.
         grad (bool): Whether to calculate gradient (forces).
@@ -55,7 +55,7 @@ class XTBJobSettings:
         optimization_level="vtight",
         charge=0,
         multiplicity=1,
-        job_type=None,
+        jobtype=None,
         title=None,
         opt=False,
         grad=False,
@@ -78,7 +78,7 @@ class XTBJobSettings:
                 Defaults to 'vtight'.
             charge (int): Molecular charge. Defaults to 0.
             multiplicity (int): Spin multiplicity (2S+1). Defaults to 1 (singlet).
-            job_type (str): Calculation type. Options: 'sp', 'opt', 'hess', 'md', 'path', 'modef'.
+            jobtype (str): Calculation type. Options: 'sp', 'opt', 'hess', 'md', 'path', 'modef'.
             title (str): Job title/description.
             opt (bool): Whether to perform a prior optimization. Defaults to False.
             grad (bool): Calculate gradient (forces). Defaults to False.
@@ -121,7 +121,7 @@ class XTBJobSettings:
         self.optimization_level = optimization_level
         self.charge = charge
         self.multiplicity = multiplicity
-        self.job_type = job_type
+        self.jobtype = jobtype
         self.title = title if title is not None else "xTB calculation"
         self.opt = opt
         self.grad = grad

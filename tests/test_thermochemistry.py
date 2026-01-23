@@ -836,7 +836,7 @@ class TestThermochemistryCO2:
         assert os.path.exists(xtb_co2_outfolder)
         xtb_out = XTBOutput(folder=xtb_co2_outfolder)
         assert xtb_out.normal_termination
-        assert xtb_out.job_type == "opt"
+        assert xtb_out.jobtype == "opt"
         assert xtb_out.num_atoms == 3
         mol = xtb_out.molecule
         assert mol.empirical_formula == "CO2"
@@ -1704,7 +1704,7 @@ class TestThermochemistryHe:
         assert os.path.exists(xtb_he_outfolder)
         xtb_out = XTBOutput(folder=xtb_he_outfolder)
         assert xtb_out.normal_termination
-        assert xtb_out.job_type == "hess"
+        assert xtb_out.jobtype == "hess"
         assert xtb_out.num_atoms == 1
         mol = xtb_out.molecule
         assert mol.empirical_formula == "He"
@@ -2058,7 +2058,7 @@ class TestThermochemistryH2O:
         assert os.path.exists(xtb_water_outfolder)
         xtb_out = XTBOutput(folder=xtb_water_outfolder)
         assert xtb_out.normal_termination
-        assert xtb_out.job_type == "opt"
+        assert xtb_out.jobtype == "opt"
         assert xtb_out.num_atoms == 3
         mol = xtb_out.molecule
         assert mol.empirical_formula == "H2O"

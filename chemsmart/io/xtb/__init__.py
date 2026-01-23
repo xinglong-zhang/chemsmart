@@ -141,14 +141,14 @@ class XTBRefs:
         return [engine.lower() for engine in self.XTB_OPT_ENGINES]
 
     @property
-    def xtb_job_types(self):
+    def xtb_jobtypes(self):
         """
         Get xTB job types.
 
         Returns:
             list: Available job types in lowercase
         """
-        return [job_type.lower() for job_type in self.XTB_JOB_TYPES]
+        return [jobtype.lower() for jobtype in self.XTB_JOB_TYPES]
 
     @property
     def xtb_solvent_models(self):
@@ -177,6 +177,6 @@ XTB_ALL_GROUPS = xtb_ref.xtb_groups
 XTB_ALL_METHODS = xtb_ref.xtb_methods
 XTB_ALL_OPT_LEVELS = xtb_ref.xtb_opt_levels
 XTB_ALL_OPT_ENGINES = xtb_ref.xtb_opt_engines
-XTB_ALL_JOB_TYPES = xtb_ref.xtb_job_types
+XTB_ALL_JOB_TYPES = xtb_ref.xtb_jobtypes
 XTB_ALL_SOLVENT_MODELS = xtb_ref.xtb_solvent_models
 XTB_ALL_SOLVENT_IDS = xtb_ref.xtb_solvent_ids
