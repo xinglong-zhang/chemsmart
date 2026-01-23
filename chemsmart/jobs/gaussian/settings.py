@@ -41,7 +41,7 @@ class GaussianJobSettings(MolecularJobSettings):
 
     Inherits common calculation fields from `MolecularJobSettings`, such as
     `ab_initio`, `functional`, `basis`, `semiempirical`, `charge`,
-    `multiplicity`, `job_type`, `title`, `freq`, `numfreq`, `solvent_model`,
+    `multiplicity`, `jobtype`, `title`, `freq`, `numfreq`, `solvent_model`,
     `solvent_id`, `additional_solvent_options`, `additional_opt_options_in_route`,
     `append_additional_info`, `gen_genecp_file`, `heavy_elements`,
     `heavy_elements_basis`, `light_elements_basis`, `custom_solvent`, `forces`,
@@ -65,7 +65,7 @@ class GaussianJobSettings(MolecularJobSettings):
         charge=None,
         multiplicity=None,
         chk=True,
-        job_type=None,
+        jobtype=None,
         title=None,
         freq=False,
         numfreq=False,
@@ -101,7 +101,7 @@ class GaussianJobSettings(MolecularJobSettings):
             charge (int, optional): Molecular charge.
             multiplicity (int, optional): Spin multiplicity.
             chk (bool): Use checkpoint files (default True).
-            job_type (str, optional): Calculation type (e.g., 'opt', 'freq').
+            jobtype (str, optional): Calculation type (e.g., 'opt', 'freq').
             title (str, optional): Job title.
             freq (bool): Include frequency calculations.
             numfreq (bool): Use numerical frequencies.
@@ -135,7 +135,7 @@ class GaussianJobSettings(MolecularJobSettings):
             multiplicity=multiplicity,
             freq=freq,
             numfreq=numfreq,
-            job_type=job_type,
+            jobtype=jobtype,
             title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
@@ -426,7 +426,7 @@ class GaussianJobSettings(MolecularJobSettings):
             charge=None,
             multiplicity=None,
             chk=True,
-            job_type=None,
+            jobtype=None,
             title="Gaussian job with default settings",
             freq=True,
             numfreq=False,
@@ -580,36 +580,36 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Adding additional opt options: "
                 f"{self.additional_opt_options_in_route}"
             )
-            if self.job_type == "opt":
+            if self.jobtype == "opt":
                 route_string += (
                     f" opt=({self.additional_opt_options_in_route})"
                 )
-            elif self.job_type == "ts":
+            elif self.jobtype == "ts":
                 if "calcall" not in self.additional_opt_options_in_route:
                     route_string += f" opt=(ts,calcfc,noeigentest,{self.additional_opt_options_in_route})"
                 else:
                     route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
-            elif self.job_type == "modred":
+            elif self.jobtype == "modred":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = True
-            elif self.job_type == "scan":
+            elif self.jobtype == "scan":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = False
-            elif self.job_type == "sp":
+            elif self.jobtype == "sp":
                 route_string += ""
                 self.freq = False  # turn off freq calculation for sp job
         elif self.additional_opt_options_in_route is None:
-            if self.job_type == "opt":
+            if self.jobtype == "opt":
                 route_string += " opt"
-            elif self.job_type == "ts":
+            elif self.jobtype == "ts":
                 route_string += " opt=(ts,calcfc,noeigentest)"
-            elif self.job_type == "modred":
+            elif self.jobtype == "modred":
                 route_string += " opt=modredundant"
                 self.freq = True
-            elif self.job_type == "scan":
+            elif self.jobtype == "scan":
                 route_string += " opt=modredundant"
                 self.freq = False
-            elif self.job_type == "sp":
+            elif self.jobtype == "sp":
                 route_string += ""
                 self.freq = False  # turn off freq calculation for sp job
 
@@ -734,10 +734,10 @@ class GaussianJobSettings(MolecularJobSettings):
             )
 
         # Write job type specific route keywords
-        if self.job_type == "nci":
+        if self.jobtype == "nci":
             route_string += " output=wfn"  # output wavefunction file for NCI
             logger.debug("Added NCI-specific output=wfn keyword")
-        elif self.job_type == "wbi":
+        elif self.jobtype == "wbi":
             route_string += " pop=nboread"  # write bond order matrix
             logger.debug("Added WBI-specific pop=nboread keyword")
         return route_string
@@ -843,6 +843,62 @@ class GaussianJobSettings(MolecularJobSettings):
         return list(
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )
+
+    def determine_basis_keyword(self, molecule):
+        """
+        Determine the appropriate basis keyword (gen or genecp) for the molecule.
+
+        Based on the heavy elements present in the molecule, determines whether
+        to use 'gen' (for elements that don't require ECPs) or 'genecp' (for
+        elements that require ECPs). Elements with atomic number > 36 require
+        ECPs and thus need 'genecp', while elements <= 36 only need 'gen'.
+
+        If no heavy elements are present in the molecule, returns the light
+        elements basis keyword (with hyphens removed).
+
+        Args:
+            molecule: Molecule object containing atomic information.
+
+        Returns:
+            str: 'gen' if all heavy elements have atomic number <= 36,
+                 'genecp' if any heavy element has atomic number > 36,
+                 light_elements_basis (formatted) if no heavy elements present,
+                 or the original basis keyword if not using gen/genecp.
+        """
+        # Only applies when basis is gen or genecp
+        if self.basis not in ["gen", "genecp"]:
+            return self.basis
+
+        # Get heavy elements actually present in the molecule
+        heavy_elements_in_structure = self.prune_heavy_elements(molecule)
+
+        # If no heavy elements specified or present, use light elements basis
+        if (
+            heavy_elements_in_structure is None
+            or len(heavy_elements_in_structure) == 0
+        ):
+            # Return light elements basis if available,
+            # otherwise return original basis
+            if self.light_elements_basis is not None:
+                # Remove hyphens for Gaussian compatibility
+                # (def2-SVP -> def2svp)
+                return self.light_elements_basis.replace("-", "").lower()
+            return self.basis
+
+        # Check if any heavy element requires ECP (atomic number > 36)
+        for element in heavy_elements_in_structure:
+            if pt.requires_ecp(element):
+                logger.debug(
+                    f"Element {element} requires ECP (Z > 36), using 'genecp'"
+                )
+                return "genecp"
+
+        # All heavy elements have atomic number <= 36, use 'gen'
+        logger.debug(
+            f"All heavy elements {heavy_elements_in_structure} have Z <= 36, "
+            f"using 'gen'"
+        )
+        return "gen"
 
     def _check_solvent(self, solvent_model):
         """
@@ -960,10 +1016,10 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             )
 
         # Write job type specific route for IRC direction
-        if self.job_type == "ircf":
+        if self.jobtype == "ircf":
             self.direction = "forward"
             logger.debug("Set IRC direction to forward")
-        elif self.job_type == "ircr":
+        elif self.jobtype == "ircr":
             self.direction = "reverse"
             logger.debug("Set IRC direction to reverse")
 
@@ -1161,7 +1217,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             str: Route string for the optimization/IRC step.
         """
         # Special handling for IRC jobs - use GaussianIRCJobSettings
-        if self.job_type in ["ircf", "ircr"]:
+        if self.jobtype in ["ircf", "ircr"]:
             # Create a temporary GaussianIRCJobSettings instance with current settings
             irc_settings = GaussianIRCJobSettings(**self.__dict__)
             # Get the IRC route string from the specialized class
