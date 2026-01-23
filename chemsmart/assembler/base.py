@@ -60,7 +60,7 @@ class BaseAssembler:
             "basis_set": self.output.basis,
             "num_basis_functions": self.output.num_basis_functions,
             "spin": self.output.spin,
-            "job_type": self.output.job_type,
+            "job_type": self.output.jobtype,
             "solvent_on": self.output.solvent_on,
             "route_string": self.output.route_string,
         }
