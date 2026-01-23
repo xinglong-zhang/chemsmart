@@ -191,9 +191,7 @@ class GaussianInputWriter(InputWriter):
                 )
 
                 route_string = replace_word(
-                    route_string,
-                    self.settings.basis,
-                    light_elements_basis,
+                    route_string, self.settings.basis, light_elements_basis
                 )
             else:
                 # Determine the correct basis keyword (gen vs genecp) based on
@@ -207,9 +205,7 @@ class GaussianInputWriter(InputWriter):
                         f"'{determined_basis}' based on heavy elements in molecule"
                     )
                     route_string = replace_word(
-                        route_string,
-                        self.settings.basis,
-                        determined_basis,
+                        route_string, self.settings.basis, determined_basis
                     )
         f.write(route_string + "\n")
         f.write("\n")

@@ -168,7 +168,7 @@ def remove_keyword(text, keyword):
     )
 
 
-def replace_word(text, old_word, new_word):
+def replace_word(text, old_word, new_word, case_sensitive=True):
     """
     Replace a word in text using word boundary matching.
 
@@ -180,22 +180,26 @@ def replace_word(text, old_word, new_word):
         text (str): Input text to process.
         old_word (str): Word to replace.
         new_word (str): Replacement word.
+        case_sensitive (bool, optional): If `False`, replace all occurrences of
+            `old_word` with `new_word` in a case-insensitive manner.
+            Default is `True`.
 
     Returns:
         str: Text with the word replaced.
 
     Example:
-        >>> replace_word("gen test noeigentest", "gen", "def2svp")
+        >>> replace_word("gen test noeigentest","gen","def2svp",case_sensitive=True)
         'def2svp test noeigentest'
-        >>> replace_word("opt=(gen) freq", "gen", "6-31g")
+        >>> replace_word("opt=(gen) freq","gen","6-31g",case_sensitive=False)
         'opt=(6-31g) freq'
-
-    Note:
-        This replacement is case-sensitive. For case-insensitive replacement,
-        use re.sub with re.IGNORECASE flag directly.
+        >>> replace_word("Gen gen GEN","gen","X")
+        # -> "X X X"
+        >>> replace_word("Gen gen GEN","gen","X",case_sensitive=True)
+        # -> "Gen X GEN"
     """
     pattern = r"\b" + re.escape(old_word) + r"\b"
-    return re.sub(pattern, new_word, text)
+    flags = 0 if case_sensitive else re.IGNORECASE
+    return re.sub(pattern, new_word, text, flags=flags)
 
 
 def line_of_all_integers(line: str, allow_sign: bool = True) -> bool:
