@@ -81,7 +81,7 @@ class DataExporter:
             writer.writeheader()
             writer.writerows(filtered)
 
-    def to_sqlite(self, table_name: str = "records"):
+    def to_sqlite(self, table_name="records"):
         filtered: List[Dict[str, Any]] = self._filter_data()
         if len(filtered) == 0:
             return

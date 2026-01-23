@@ -16,7 +16,6 @@ class BaseAssembler:
         self.filename = filename
         self.index = index
         self.output = self.output_class(filename)
-        self.output.program_name = self.program_name
 
     @property
     def molecules_list(self):
