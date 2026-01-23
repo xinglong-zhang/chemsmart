@@ -44,6 +44,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+image = [
+    "pytesseract>=0.3.10",  # For OCR-based abbreviation detection in images
+]
 test = [
     "pytest",
     "pytest-mock",
