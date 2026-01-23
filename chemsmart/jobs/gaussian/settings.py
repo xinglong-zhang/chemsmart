@@ -701,21 +701,6 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Added solvation: {self.solvent_model} with solvent "
                 f"{self.solvent_id}"
             )
-        elif (self.solvent_model is not None and self.solvent_id is None) or (
-            self.solvent_model is None and self.solvent_id is not None
-        ):  # if one is provided but the other not
-            logger.error(
-                f"Incomplete solvation specification - model: "
-                f"{self.solvent_model}, ID: {self.solvent_id}"
-            )
-            raise ValueError(
-                f"Both solvent model and solvent ID need to be specified.\n"
-                f"Currently, solvent model is {self.solvent_model} and "
-                f"solvent id is {self.solvent_id}!"
-            )
-
-        # Add additional solvation options if present
-        if "scrf" in route_string:
             if self.additional_solvent_options is not None:
                 route_string += f",{self.additional_solvent_options})"
                 logger.debug(
@@ -724,6 +709,20 @@ class GaussianJobSettings(MolecularJobSettings):
                 )
             else:
                 route_string += ")"
+        elif (self.solvent_model is not None and self.solvent_id is None) or (
+            self.solvent_model is None and self.solvent_id is not None
+        ):  # if one is provided but the other not
+            logger.error(
+                f"Incomplete solvation specification - solvent_model: "
+                f"{self.solvent_model}, solvent_id: {self.solvent_id}"
+            )
+            raise ValueError(
+                f"Both solvent model (via -sm or --solvent-model)"
+                f"and solvent ID (via -si or --solvent-id) "
+                f"need to be specified.\n"
+                f"Currently, solvent model is {self.solvent_model} and "
+                f"solvent id is {self.solvent_id}!"
+            )
 
         # Write additional parameters for route
         if self.additional_route_parameters is not None:
