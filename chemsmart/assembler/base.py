@@ -1,15 +1,11 @@
-import hashlib
 import logging
 
 from chemsmart.assembler.provenance import build_provenance
+from chemsmart.assembler.records import AssembledRecord
+from chemsmart.assembler.utils import get_record_id
 from chemsmart.io.molecules.structure import Molecule
 
 logger = logging.getLogger(__name__)
-
-
-def get_record_id(filename):
-    """Generate a stable record ID from filename."""
-    return hashlib.sha256(str(filename).encode()).hexdigest()
 
 
 class BaseAssembler:
@@ -20,6 +16,7 @@ class BaseAssembler:
         self.filename = filename
         self.index = index
         self.output = self.output_class(filename)
+        self.output.program_name = self.program_name
 
     @property
     def molecules_list(self):
@@ -37,11 +34,8 @@ class BaseAssembler:
             logger.error(f"No molecules parsed from {self.filename}.")
             return None
 
-        record_id = get_record_id(self.filename)
-
         data = {
-            "record_id": record_id,
-            "program": self.program_name,
+            "record_id": get_record_id(self.filename),
             "meta": self.get_meta_data(),
             "results": self.get_calculation_results(),
             "molecules": [],
@@ -52,13 +46,16 @@ class BaseAssembler:
             mol_entry = {"index": i + 1, **self.get_molecule_info(mol)}
             data["molecules"].append(mol_entry)
 
-        return data
+        return AssembledRecord(
+            record_id=data["record_id"],
+            meta=data["meta"],
+            results=data["results"],
+            molecules=data["molecules"],
+            provenance=data["provenance"],
+        )
 
     def get_meta_data(self):
         meta_data = {
-            "filename": self.filename,
-            "version": self.output.version,
-            "date": self.output.date,
             "functional": self.output.functional,
             "basis_set": self.output.basis,
             "num_basis_functions": self.output.num_basis_functions,
@@ -128,12 +125,32 @@ class BaseAssembler:
     def get_calculation_results(self):
         calculation_results = {
             "total_energy": self.output.energies[-1],
-            "homo_energy": self.output.homo_energy,
-            "lumo_energy": self.output.lumo_energy,
+            "num_unpaired_electrons": self.output.num_unpaired_electrons,
+            "alpha_homo_energy": self.output.alpha_homo_energy,
+            "beta_homo_energy": self.output.beta_homo_energy,
+            "alpha_lumo_energy": self.output.alpha_lumo_energy,
+            "beta_lumo_energy": self.output.beta_lumo_energy,
             "fmo_gap": self.output.fmo_gap,
+            "alpha_fmo_gap": self.output.alpha_fmo_gap,
+            "beta_fmo_gap": self.output.beta_fmo_gap,
             "total_core_hours": self.output.total_core_hours,
             "total_elapsed_walltime": self.output.total_elapsed_walltime,
         }
+        if self.output.multiplicity == 1:
+            calculation_results.update(
+                {
+                    "homo_energy": self.output.homo_energy,
+                    "lumo_energy": self.output.lumo_energy,
+                }
+            )
+        else:
+            calculation_results.update(
+                {
+                    "somo_energies": self.output.somo_energies,
+                    "lowest_somo_energy": self.output.lowest_somo_energy,
+                    "highest_somo_energy": self.output.highest_somo_energy,
+                }
+            )
         if self.output.freq:
             calculation_results.update(
                 {

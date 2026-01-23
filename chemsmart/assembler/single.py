@@ -3,8 +3,7 @@ from functools import cached_property
 
 from chemsmart.assembler.gaussian import GaussianAssembler
 from chemsmart.assembler.orca import ORCAAssembler
-from chemsmart.assembler.records import AssembledRecord
-from chemsmart.utils.io import get_outfile_format
+from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +21,10 @@ class SingleFileAssembler:
         except Exception as e:
             logger.error(f"Error assembling {self.filename}: {e}")
             return None
-        if not data:
-            return None
-
-        return AssembledRecord(
-            record_id=data["record_id"],
-            program=data["program"],
-            meta=data["meta"],
-            results=data["results"],
-            molecules=data["molecules"],
-            provenance=data["provenance"],
-        )
+        return data
 
     def _get_assembler(self, file):
-        program = get_outfile_format(self.filename)
+        program = get_program_type_from_file(self.filename)
         if program == "gaussian":
             assembler = GaussianAssembler(file, index=self.index)
         elif program == "orca":
@@ -51,7 +40,6 @@ class SingleFileAssembler:
         record = self.assemble_data
         d_dict = {
             "record_id": record.record_id,
-            "program": record.program,
             "meta": record.meta,
             "results": record.results,
             "molecules": record.molecules,

@@ -31,7 +31,6 @@ class DataExporter:
             if isinstance(d, AssembledRecord):
                 d_dict = {
                     "record_id": d.record_id,
-                    "program": d.program,
                     "meta": d.meta,
                     "results": d.results,
                     "molecules": d.molecules,

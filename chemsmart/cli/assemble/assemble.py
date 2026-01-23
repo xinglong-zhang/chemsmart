@@ -8,6 +8,7 @@ import click
 from chemsmart.assembler.export import DataExporter
 from chemsmart.assembler.single import SingleFileAssembler
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.io import find_output_files_in_directory
 
 logger = logging.getLogger(__name__)
 
@@ -87,16 +88,10 @@ def assemble(
         raise FileNotFoundError(f"Directory does not exist: {directory}")
 
     # Collect available output files
-    if filetype.lower() == "gaussian":
-        from chemsmart.io.gaussian.folder import GaussianLogFolder
-
-        folder = GaussianLogFolder(directory)
-        files = folder.all_logfiles
-    elif filetype.lower() == "orca":
-        from chemsmart.io.orca.folder import ORCAOutFolder
-
-        folder = ORCAOutFolder(directory)
-        files = folder.all_outfiles
+    if filetype.lower() in {"gaussian", "orca"}:
+        files = find_output_files_in_directory(
+            directory=directory, program=filetype.lower()
+        )
     else:
         raise ValueError(
             f"Unsupported filetype '{filetype}'. Use 'gaussian' or 'orca'."
