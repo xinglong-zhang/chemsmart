@@ -103,7 +103,7 @@ jobs:
                   module load craype-x86-rome
                   module load libfabric/1.11.0.4.125
               SCRIPTS: |
-                  source GAUSS_DIR=/usr/local/gaussian/g16
+                  tcsh -c "source /usr/local/gaussian/g16/bsd/g16.login"
               ENVARS: |
                   export SCRATCH=~/scratch
                   export GAUSS_EXEDIR=/usr/local/gaussian/g16
@@ -212,7 +212,7 @@ jobs:
                   module load craype-x86-rome
                   module load libfabric/1.11.0.4.125
               SCRIPTS: |
-                  source GAUSS_DIR=/usr/local/gaussian/g16
+                  tcsh -c "source /usr/local/gaussian/g16/bsd/g16.login"
               ENVARS: |
                   export SCRATCH=~/scratch
                   export GAUSS_EXEDIR=/usr/local/gaussian/g16
@@ -301,7 +301,7 @@ jobs:
                   module load craype-x86-rome
                   module load libfabric/1.11.0.4.125
               SCRIPTS: |
-                  source GAUSS_DIR=/usr/local/gaussian/g16
+                  tcsh -c "source /usr/local/gaussian/g16/bsd/g16.login"
               ENVARS: |
                   export SCRATCH=~/scratch
                   export GAUSS_EXEDIR=/usr/local/gaussian/g16
@@ -381,10 +381,10 @@ jobs:
               USE_HOSTS: true
               EXTRA_COMMANDS: |
                   #extra commands to activate chemsmart environment in submission script
-                  export PATH="/home/runner/work/chemsmart/chemsmart:`$PATH"
-                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/cli:`$PATH"
-                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/scripts:`$PATH"
-                  export PYTHONPATH="/home/runner/work/chemsmart/chemsmart:`$PYTHONPATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart:$$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/cli:$$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/scripts:$$PATH"
+                  export PYTHONPATH="/home/runner/work/chemsmart/chemsmart:$$PYTHONPATH"
                   
           GAUSSIAN:
               EXEFOLDER: /usr/local/gaussian/g16
@@ -398,7 +398,7 @@ jobs:
                   module load craype-x86-rome
                   module load libfabric/1.11.0.4.125
               SCRIPTS: |
-                  source GAUSS_DIR=/usr/local/gaussian/g16
+                  tcsh -c "source /usr/local/gaussian/g16/bsd/g16.login"
               ENVARS: |
                   export SCRATCH=~/scratch
                   export GAUSS_EXEDIR=/usr/local/gaussian/g16
