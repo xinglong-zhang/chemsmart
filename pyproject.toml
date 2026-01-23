@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "0.1.19"
+version = "0.1.20"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -52,8 +52,8 @@ dev = [
     "pre-commit>=3.6.0",
     "flake8",
     "ruff",
-    "black",
-    "isort",
+    "black==26.1.0",
+    "isort==7.0.0",
     "gitchangelog",
     "pipreqs",
     "types-PyYAML",

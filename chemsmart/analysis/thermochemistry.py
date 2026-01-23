@@ -173,8 +173,8 @@ class Thermochemistry:
         return output
 
     @property
-    def job_type(self):
-        return self.file_object.job_type
+    def jobtype(self):
+        return self.file_object.jobtype
 
     @property
     def mass(self):
@@ -240,7 +240,7 @@ class Thermochemistry:
     def cleaned_frequencies(self):
         """Clean up vibrational frequencies for thermochemical calculations.
 
-        For transition states (job_type == "ts"), the first imaginary
+        For transition states (jobtype == "ts"), the first imaginary
         frequency is assumed to correspond to the reaction coordinate and is
         excluded from thermochemical calculation.
         For optimization, only geometries without imaginary frequencies are
@@ -249,7 +249,7 @@ class Thermochemistry:
         if self.vibrational_frequencies is None:
             return None
         if self.imaginary_frequencies:
-            if self.job_type == "ts":
+            if self.jobtype == "ts":
                 if (
                     len(self.imaginary_frequencies) == 1
                     and self.vibrational_frequencies[0] < 0.0
@@ -991,7 +991,7 @@ class Thermochemistry:
     def check_frequencies(self):
         """Check for imaginary frequencies and raise an error if found."""
         if self.imaginary_frequencies:
-            if self.job_type == "ts":
+            if self.jobtype == "ts":
                 if len(self.imaginary_frequencies) == 1:
                     logger.info(
                         f"Correct Transition State detected: only 1 imaginary "
@@ -1004,7 +1004,7 @@ class Thermochemistry:
                         f"{self.target}. Expected 0 for optimization or 1 "
                         f"for TS, but found "
                         f"{len(self.imaginary_frequencies)} for job: "
-                        f"{self.job_type}!"
+                        f"{self.jobtype}!"
                     )
             else:
                 raise ValueError(

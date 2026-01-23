@@ -129,7 +129,7 @@ class GaussianUVVISJob(GaussianJob):
         # i.e., linear response, non-equilibrium.
         if self._gs_geom_opt_complete():
             sp_settings = deepcopy(self.settings)
-            sp_settings.job_type = "sp"
+            sp_settings.jobtype = "sp"
             sp_settings.freq = False
             return GaussianSinglePointJob(
                 folder=self.folder, atoms=self.molecule, settings=sp_settings

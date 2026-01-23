@@ -29,6 +29,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pre-commit
           pip install .[dev,test,docs]  # Install dev dependencies from pyproject.toml
+      - name: Show formatter versions
+        run: |
+          conda run -n chemsmart python -V
+          conda run -n chemsmart black --version
+          conda run -n chemsmart isort --version-number
       - name: Run pre-commit
         shell: bash -l {0}
         run: pre-commit run --all-files

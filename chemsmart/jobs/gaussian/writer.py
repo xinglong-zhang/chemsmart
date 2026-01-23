@@ -16,6 +16,7 @@ import os.path
 
 from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 from chemsmart.jobs.writer import InputWriter
+from chemsmart.utils.io import replace_word
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
@@ -157,7 +158,8 @@ class GaussianInputWriter(InputWriter):
 
         Constructs and writes the route line (#-line) containing all
         calculation specifications. Handles basis set adjustments
-        for mixed heavy/light element calculations.
+        for mixed heavy/light element calculations and determines
+        appropriate gen/genecp keyword based on elements present.
 
         Args:
             f (file): Open file object to write to.
@@ -188,10 +190,23 @@ class GaussianInputWriter(InputWriter):
                     self.settings.light_elements_basis.replace("-", "").lower()
                 )
 
-                route_string = route_string.replace(
-                    self.settings.basis,
-                    light_elements_basis,
+                route_string = replace_word(
+                    route_string, self.settings.basis, light_elements_basis
                 )
+            else:
+                # Determine the correct basis keyword (gen vs genecp) based on
+                # the heavy elements actually present in the molecule
+                determined_basis = self.settings.determine_basis_keyword(
+                    self.job.molecule
+                )
+                if determined_basis != self.settings.basis:
+                    logger.info(
+                        f"Replacing basis keyword '{self.settings.basis}' with "
+                        f"'{determined_basis}' based on heavy elements in molecule"
+                    )
+                    route_string = replace_word(
+                        route_string, self.settings.basis, determined_basis
+                    )
         f.write(route_string + "\n")
         f.write("\n")
 
@@ -407,19 +422,19 @@ class GaussianInputWriter(InputWriter):
             f (file): Open file object to write to.
         """
         logger.debug("Writing job specific information.")
-        job_type = self.settings.job_type
+        jobtype = self.settings.jobtype
         job_label = self.job.label
-        if job_type == "nci":
+        if jobtype == "nci":
             # Appending wavefunction file specification for NCI job
             logger.debug("Adding NCI-specific wavefunction file")
             f.write(f"{job_label}.wfn\n")
             f.write("\n")
-        elif job_type == "wbi":
+        elif jobtype == "wbi":
             # Appending NBO directive for WBI job
             logger.debug("Adding WBI-specific NBO directive")
             f.write("$nbo bndidx $end\n")
             f.write("\n")
-        elif job_type == "resp":
+        elif jobtype == "resp":
             # Appending electrostatic potential file for RESP job
             logger.debug("Adding RESP-specific potential file")
             f.write(f"{job_label}.gesp\n")

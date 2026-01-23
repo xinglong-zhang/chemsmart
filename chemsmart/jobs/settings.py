@@ -24,7 +24,7 @@ class MolecularJobSettings:
         multiplicity=None,
         freq=True,
         numfreq=False,
-        job_type=None,
+        jobtype=None,
         title=None,
         solvent_model=None,
         solvent_id=None,
@@ -50,7 +50,7 @@ class MolecularJobSettings:
         self.multiplicity = multiplicity
         self.freq = freq
         self.numfreq = numfreq
-        self.job_type = job_type
+        self.jobtype = jobtype
         self.title = title
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
@@ -228,7 +228,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], solv_config
             )
@@ -238,7 +238,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], gas_config
             )
@@ -248,7 +248,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             )  # populate defaults
             # turn off freq calculation for single point calculations
             all_project_configs[job]["freq"] = False
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], solv_config
             )
@@ -260,7 +260,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], td_config
             )
