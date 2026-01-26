@@ -83,7 +83,7 @@ class XYZFile(FileMixin):
         all_molecules = []
         comments = []
         i = 0
-        frame_idx = 0  # 1-based index across the entire file
+        frame_idx = 0  # frame counter across the entire file (assigned to molecules as 1-based)
         while i < len(self.contents):
             # Read number of atoms
             num_atoms = int(self.contents[i].strip())

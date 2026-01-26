@@ -216,7 +216,6 @@ class TestORCAOutput:
         assert orca_out.spin == "restricted"
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
-        assert orca_out.spin == "restricted"
         assert orca_out.extrapolation_basis is None
         assert orca_out.num_atoms == 3
         assert orca_out.num_basis_functions == 24

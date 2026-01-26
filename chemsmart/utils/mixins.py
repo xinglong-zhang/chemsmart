@@ -417,6 +417,8 @@ class GaussianFileMixin(FileMixin):
 
     @property
     def date(self):
+        if not self.contents:
+            return None
         last_line = self.contents[-1]
         match = re.search(gaussian_date_pattern, last_line)
         if match:
