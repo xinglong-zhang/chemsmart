@@ -1,0 +1,12 @@
+# XTB settings for calculations
+sp:
+  job_type: sp
+  gfn_version: gfn2
+  solvent_model: alpb
+  solvent_id: acetone
+hess:
+  job_type: hess
+  gfn_version: gfn2
+  opt: True
+  optimization_level: vtight
+  grad: True
