@@ -3,13 +3,12 @@ from typing import Optional
 
 import networkx as nx
 import numpy as np
-from ase.data import covalent_radii
 from rdkit import Chem
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.periodictable import PeriodicTable, covalent_radii
 
 logger = logging.getLogger(__name__)
 
