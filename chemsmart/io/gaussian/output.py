@@ -1882,19 +1882,19 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def temperature_in_K(self):
         for line in self.contents:
-            if "Temperature" and "Kelvin." in line:
+            if "Temperature" in line and "Kelvin." in line:
                 return float(line.split()[1])
 
     @cached_property
     def pressure_in_atm(self):
         for line in self.contents:
-            if "Pressure" and "Atm." in line:
+            if "Pressure" in line and "Atm." in line:
                 return float(line.split()[-2])
 
     @property
     def mass(self):
         for line in self.contents:
-            if "Molecular mass:" and "amu." in line:
+            if "Molecular mass:" in line and "amu." in line:
                 return float(line.split()[2])
 
     @cached_property
