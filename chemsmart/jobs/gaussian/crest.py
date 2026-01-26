@@ -112,6 +112,7 @@ class GaussianCrestJob(GaussianJob):
                 molecules,
                 strategy=grouping_strategy,
                 num_groups=num_groups,
+                label=label,
                 **kwargs,
             )
             grouper.group()

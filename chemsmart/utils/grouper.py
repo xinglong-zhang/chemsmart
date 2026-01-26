@@ -42,14 +42,13 @@ from typing import Iterable, List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 from joblib import Parallel, delayed  # More efficient parallelization
 from networkx.algorithms import isomorphism
 from rdkit import Chem, DataStructs
 from rdkit.Chem import TorsionFingerprints, rdMolDescriptors, rdMolHash
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
 from scipy.optimize import linear_sum_assignment  # for Hungarian algorithm
-from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import cdist  # for Hungarian algorithm cost matrix
 
 from chemsmart.io.molecules.structure import Molecule
@@ -120,9 +119,15 @@ class MoleculeGrouper(ABC):
     Attributes:
         molecules (Iterable[Molecule]): Collection of molecules to group.
         num_procs (int): Number of processes for parallel computation.
+        label (str): Label/name for this grouping task (used in output filenames).
     """
 
-    def __init__(self, molecules: Iterable[Molecule], num_procs: int = 1):
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        num_procs: int = 1,
+        label: str = None,
+    ):
         """
         Initialize the molecular grouper.
 
@@ -130,9 +135,12 @@ class MoleculeGrouper(ABC):
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
                 Defaults to 1.
+            label (str): Label/name for this grouping task. Used in output folder
+                and file names. Defaults to None.
         """
         self.molecules = molecules
         self.num_procs = int(max(1, num_procs))
+        self.label = label
 
         # Cache for avoiding repeated grouping calculations
         self._cached_groups = None
@@ -177,7 +185,7 @@ class MoleculeGrouper(ABC):
 
         Returns the lowest energy molecule from each group as a representative
         of that structural family. Also generates XYZ files for each group,
-        sorted by energy, in a dedicated subfolder named 'group_result'.
+        sorted by energy, in a dedicated subfolder.
 
         Args:
             output_dir (str): Base directory for output. Default is current directory.
@@ -209,12 +217,21 @@ class MoleculeGrouper(ABC):
 
         unique_molecules = []
 
-        # Create dedicated subfolder for XYZ files
-        result_folder = "group_result"
+        # Create dedicated subfolder for XYZ files (include label if provided)
+        if self.label:
+            result_folder = f"{self.label}_group_result"
+        else:
+            result_folder = "group_result"
         full_output_path = os.path.join(output_dir, result_folder)
         os.makedirs(full_output_path, exist_ok=True)
 
         logger.info(f"Creating XYZ files in folder: {full_output_path}")
+
+        # Determine the file prefix (include label if provided)
+        if self.label:
+            file_prefix = f"{self.label}_{prefix}"
+        else:
+            file_prefix = prefix
 
         for i, (group, indices) in enumerate(zip(groups, group_indices)):
             # Create tuples of (molecule, original_index) for tracking
@@ -245,7 +262,7 @@ class MoleculeGrouper(ABC):
 
             # Write group XYZ file with all molecules sorted by energy
             group_filename = os.path.join(
-                full_output_path, f"{prefix}_{i+1}.xyz"
+                full_output_path, f"{file_prefix}_{i+1}.xyz"
             )
             with open(group_filename, "w") as f:
                 for j, (mol, original_idx) in enumerate(sorted_pairs):
@@ -312,6 +329,7 @@ class RMSDGrouper(MoleculeGrouper):
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
+        label: str = None,  # Label for output files
         **kwargs,  # Option to ignore H atoms for grouping
     ):
         """
@@ -328,8 +346,15 @@ class RMSDGrouper(MoleculeGrouper):
                 algorithm before RMSD calculation. Defaults to True.
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from
                 RMSD calculation. Defaults to False.
+            label (str): Label/name for output files. Defaults to None.
+
+        Note:
+            Uses complete linkage clustering: a structure joins a group only if
+            its RMSD to ALL existing members is below the threshold. This prevents
+            the chaining effect where dissimilar structures end up in the same
+            group through intermediate "bridge" structures.
         """
-        super().__init__(molecules, num_procs)
+        super().__init__(molecules, num_procs, label=label)
 
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
@@ -421,19 +446,24 @@ class RMSDGrouper(MoleculeGrouper):
         # Save RMSD matrix to group_result folder
         import os
 
-        output_dir = "group_result"
+        # Use label for folder name if provided
+        if self.label:
+            output_dir = f"{self.label}_group_result"
+        else:
+            output_dir = "group_result"
         os.makedirs(output_dir, exist_ok=True)
 
-        # Create filename based on grouper type and threshold/num_groups
+        # Create filename based on label, grouper type and threshold/num_groups
+        label_prefix = f"{self.label}_" if self.label else ""
         if self.num_groups is not None:
             matrix_filename = os.path.join(
                 output_dir,
-                f"{self.__class__.__name__}_rmsd_matrix_n{self.num_groups}.txt",
+                f"{label_prefix}{self.__class__.__name__}_rmsd_matrix_n{self.num_groups}.xlsx",
             )
         else:
             matrix_filename = os.path.join(
                 output_dir,
-                f"{self.__class__.__name__}_rmsd_matrix_t{self.threshold}.txt",
+                f"{label_prefix}{self.__class__.__name__}_rmsd_matrix_t{self.threshold}.xlsx",
             )
 
         # Choose grouping strategy based on parameters (do this first to set _auto_threshold)
@@ -460,7 +490,12 @@ class RMSDGrouper(MoleculeGrouper):
         return groups, index_groups
 
     def _group_by_threshold(self, rmsd_values, indices):
-        """Traditional threshold-based grouping."""
+        """
+        Threshold-based grouping using complete linkage.
+
+        A structure joins a group only if its RMSD to ALL existing members
+        is below the threshold. This prevents the chaining effect.
+        """
         n = len(self.molecules)
 
         # Build adjacency matrix for clustering
@@ -469,18 +504,68 @@ class RMSDGrouper(MoleculeGrouper):
             if rmsd < self.threshold:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
-        # Find connected components
-        _, labels = connected_components(csr_matrix(adj_matrix))
+        # Complete linkage grouping
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
 
-        # Use np.unique(labels) approach for better memory efficiency
-        unique_labels = np.unique(labels)
-        groups = [
-            [self.molecules[i] for i in np.where(labels == label)[0]]
-            for label in unique_labels
-        ]
-        index_groups = [
-            list(np.where(labels == label)[0]) for label in unique_labels
-        ]
+        return groups, index_groups
+
+    def _complete_linkage_grouping(self, adj_matrix, n):
+        """
+        Perform complete linkage grouping (from last to first).
+
+        A structure joins a group only if its RMSD to ALL existing members
+        of that group is below the threshold (i.e., all edges exist in adj_matrix).
+        This prevents the chaining effect where dissimilar structures end up
+        in the same group through intermediate "bridge" structures.
+
+        Iterates from last to first structure so that higher-energy structures
+        (typically at the end) are more likely to form singleton groups,
+        preserving lower-energy structures in larger groups.
+
+        Args:
+            adj_matrix: Boolean adjacency matrix where adj_matrix[i,j] = True
+                       if RMSD between i and j is below threshold
+            n: Number of molecules
+
+        Returns:
+            Tuple of (groups, index_groups)
+        """
+        assigned = [False] * n
+        groups = []
+        index_groups = []
+
+        # Iterate from last to first (higher energy structures first as seeds)
+        for i in range(n - 1, -1, -1):
+            if assigned[i]:
+                continue
+
+            # Start a new group with molecule i
+            current_group = [i]
+            assigned[i] = True
+
+            # Try to add unassigned molecules with lower indices (lower energy)
+            for j in range(i - 1, -1, -1):
+                if assigned[j]:
+                    continue
+
+                # Check if j is connected to ALL members in current_group
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            # Sort indices within group (lowest index = lowest energy first)
+            current_group.sort()
+            # Add the completed group
+            groups.append([self.molecules[idx] for idx in current_group])
+            index_groups.append(current_group)
+
+        # Reverse groups so that groups containing lower-energy structures come first
+        groups.reverse()
+        index_groups.reverse()
 
         return groups, index_groups
 
@@ -513,12 +598,9 @@ class RMSDGrouper(MoleculeGrouper):
             if rmsd < threshold:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
-        # Find connected components
-        _, labels = connected_components(csr_matrix(adj_matrix))
-
-        # Group molecules and get the first (lowest energy) from each group
-        unique_labels = np.unique(labels)
-        actual_groups = len(unique_labels)
+        # Use complete linkage grouping
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
+        actual_groups = len(groups)
 
         print(
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
@@ -526,18 +608,9 @@ class RMSDGrouper(MoleculeGrouper):
 
         if actual_groups > self.num_groups:
             # If we have too many groups, merge the smallest ones
-            groups, index_groups = self._merge_smallest_groups(
-                labels, actual_groups
+            groups, index_groups = self._merge_groups_to_target(
+                groups, index_groups, adj_matrix
             )
-        else:
-            # Use the groups as they are
-            groups = [
-                [self.molecules[i] for i in np.where(labels == label)[0]]
-                for label in unique_labels
-            ]
-            index_groups = [
-                list(np.where(labels == label)[0]) for label in unique_labels
-            ]
 
         return groups, index_groups
 
@@ -565,9 +638,9 @@ class RMSDGrouper(MoleculeGrouper):
                 if rmsd < threshold:
                     adj_matrix[idx_i, idx_j] = adj_matrix[idx_j, idx_i] = True
 
-            # Count connected components
-            _, labels = connected_components(csr_matrix(adj_matrix))
-            num_groups_found = len(np.unique(labels))
+            # Use complete linkage to count groups
+            groups, _ = self._complete_linkage_grouping(adj_matrix, n)
+            num_groups_found = len(groups)
 
             if num_groups_found == self.num_groups:
                 # Found exact match
@@ -619,6 +692,68 @@ class RMSDGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
+    def _merge_groups_to_target(self, groups, index_groups, adj_matrix):
+        """
+        Merge groups to reach target number when using complete linkage.
+
+        Merges smallest groups into the most compatible larger groups,
+        where compatibility is determined by the number of edges in adj_matrix.
+
+        Args:
+            groups: List of molecule groups
+            index_groups: List of index groups
+            adj_matrix: Boolean adjacency matrix
+
+        Returns:
+            Tuple of (merged_groups, merged_index_groups)
+        """
+        while len(groups) > self.num_groups:
+            # Find the smallest group
+            min_size = float("inf")
+            min_idx = 0
+            for i, g in enumerate(groups):
+                if len(g) < min_size:
+                    min_size = len(g)
+                    min_idx = i
+
+            # Find the best group to merge with (most connections)
+            best_merge_idx = -1
+            best_connection_count = -1
+
+            for i, target_indices in enumerate(index_groups):
+                if i == min_idx:
+                    continue
+
+                # Count connections between source group and target group
+                connection_count = 0
+                for src_idx in index_groups[min_idx]:
+                    for tgt_idx in target_indices:
+                        if adj_matrix[src_idx, tgt_idx]:
+                            connection_count += 1
+
+                if connection_count > best_connection_count:
+                    best_connection_count = connection_count
+                    best_merge_idx = i
+
+            # Merge the smallest group into the best target
+            if best_merge_idx >= 0:
+                groups[best_merge_idx].extend(groups[min_idx])
+                index_groups[best_merge_idx].extend(index_groups[min_idx])
+            else:
+                # No connections found, merge into the largest group
+                largest_idx = max(
+                    range(len(groups)),
+                    key=lambda i: len(groups[i]) if i != min_idx else -1,
+                )
+                groups[largest_idx].extend(groups[min_idx])
+                index_groups[largest_idx].extend(index_groups[min_idx])
+
+            # Remove the merged group
+            groups.pop(min_idx)
+            index_groups.pop(min_idx)
+
+        return groups, index_groups
+
     def __repr__(self):
         if self.num_groups is not None:
             return (
@@ -662,24 +797,33 @@ class RMSDGrouper(MoleculeGrouper):
             rmsd_matrix[i, j] = rmsd_matrix[j, i] = rmsd
 
         # Output results to console
+        col_width = 12  # Fixed width: fits "-XX.XXXXXX" (6 decimals)
+        row_header_width = 7  # Width for row headers
+
         print(f"\nFull RMSD Matrix ({n}x{n}):")
-        print("=" * 60)
+        print("=" * (row_header_width + col_width * n))
 
-        # Print header
-        print(f"{'':>6}", end="")
+        # Print column index header (right-aligned to match matrix values)
+        header_line = " " * row_header_width
         for j in range(n):
-            print(f"{j+1:>8}", end="")
-        print()
+            header_line += f"{j+1:>{col_width}}"
+        print(header_line)
 
-        # Print matrix rows
+        # Print header row label with separator
+        separator_line = "Conf".rjust(row_header_width)
+        for j in range(n):
+            separator_line += "-" * col_width
+        print(separator_line)
+
+        # Print matrix rows (right-aligned values)
         for i in range(n):
-            print(f"{i+1:>6}", end="")
+            row_line = f"{i+1:>{row_header_width}}"
             for j in range(n):
                 if np.isinf(rmsd_matrix[i, j]):
-                    print(f"{'∞':>8}", end="")
+                    row_line += f"{'∞':>{col_width}}"
                 else:
-                    print(f"{rmsd_matrix[i, j]:>8.3f}", end="")
-            print()
+                    row_line += f"{rmsd_matrix[i, j]:>{col_width}.6f}"
+            print(row_line)
 
         # Save to file if requested
         if output_file:
@@ -699,27 +843,32 @@ class RMSDGrouper(MoleculeGrouper):
                 f.write(
                     f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}\n"
                 )
-                f.write("=" * 80 + "\n")
+                f.write("=" * (row_header_width + col_width * n) + "\n")
                 f.write("Values in Angstroms (Å)\n")
                 f.write("∞ indicates non-comparable molecules\n")
-                f.write("-" * 80 + "\n\n")
+                f.write("-" * (row_header_width + col_width * n) + "\n\n")
 
-                # Write header
-                f.write(f"{'Mol':>6}")
+                # Write column index header (right-aligned to match matrix values)
+                header_line = " " * row_header_width
                 for j in range(n):
-                    f.write(f"{j:>10}")
-                f.write("\n")
-                f.write("-" * 80 + "\n")
+                    header_line += f"{j+1:>{col_width}}"
+                f.write(header_line + "\n")
 
-                # Write matrix
+                # Write header row label with separator line
+                separator_line = "Conf".rjust(row_header_width)
+                for j in range(n):
+                    separator_line += "-" * col_width
+                f.write(separator_line + "\n")
+
+                # Write matrix with 6 decimal places (right-aligned)
                 for i in range(n):
-                    f.write(f"{i:>6}")
+                    row_line = f"{i+1:>{row_header_width}}"
                     for j in range(n):
                         if np.isinf(rmsd_matrix[i, j]):
-                            f.write(f"{'∞':>10}")
+                            row_line += f"{'∞':>{col_width}}"
                         else:
-                            f.write(f"{rmsd_matrix[i, j]:>10.4f}")
-                    f.write("\n")
+                            row_line += f"{rmsd_matrix[i, j]:>{col_width}.6f}"
+                    f.write(row_line + "\n")
 
             logger.info(f"RMSD matrix saved to {output_file}")
 
@@ -731,51 +880,74 @@ class RMSDGrouper(MoleculeGrouper):
         filename: str,
         grouping_time: float = None,
     ):
-        """Save RMSD matrix to file."""
+        """Save RMSD matrix to Excel file with 6 decimal precision."""
         n = rmsd_matrix.shape[0]
-        with open(filename, "w") as f:
-            f.write(
-                f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}\n"
+
+        # Change extension to .xlsx if it's .txt
+        if filename.endswith(".txt"):
+            filename = filename[:-4] + ".xlsx"
+        elif not filename.endswith(".xlsx"):
+            filename = filename + ".xlsx"
+
+        # Create DataFrame with conformer indices as row and column labels
+        row_labels = [f"Conf {i+1}" for i in range(n)]
+        col_labels = [f"Conf {j+1}" for j in range(n)]
+
+        # Replace inf with string "∞" for display
+        matrix_display = np.where(np.isinf(rmsd_matrix), np.nan, rmsd_matrix)
+        df = pd.DataFrame(matrix_display, index=row_labels, columns=col_labels)
+
+        # Create Excel writer with openpyxl engine
+        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+            # Write matrix to 'Matrix' sheet starting from row 5 to leave room for header info
+            df.to_excel(
+                writer,
+                sheet_name="RMSD_Matrix",
+                startrow=5,
+                float_format="%.6f",
             )
 
-            # Add grouping information
+            # Get the worksheet to add header information
+            worksheet = writer.sheets["RMSD_Matrix"]
+
+            # Add header information
+            worksheet["A1"] = (
+                f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}"
+            )
+
             if hasattr(self, "num_groups") and self.num_groups is not None:
-                f.write(f"Requested Groups (-N): {self.num_groups}\n")
+                worksheet["A2"] = f"Requested Groups (-N): {self.num_groups}"
                 if (
                     hasattr(self, "_auto_threshold")
                     and self._auto_threshold is not None
                 ):
-                    f.write(
-                        f"Auto-determined Threshold: {self._auto_threshold:.6f} Å\n"
+                    worksheet["A3"] = (
+                        f"Auto-determined Threshold: {self._auto_threshold:.6f} Å"
                     )
             else:
-                f.write(f"Threshold: {self.threshold} Å\n")
+                worksheet["A2"] = f"Threshold: {self.threshold} Å"
 
-            # Add grouping time information if available
             if grouping_time is not None:
-                f.write(f"RMSD Grouping Time: {grouping_time:.2f} seconds\n")
+                worksheet["A4"] = (
+                    f"RMSD Grouping Time: {grouping_time:.2f} seconds"
+                )
 
-            f.write("=" * 80 + "\n")
-            f.write("Values in Angstroms (Å)\n")
-            f.write("∞ indicates non-comparable molecules\n")
-            f.write("-" * 80 + "\n\n")
+            # Auto-adjust column widths
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                    except (TypeError, AttributeError):
+                        pass
+                adjusted_width = min(max_length + 2, 15)
+                worksheet.column_dimensions[column_letter].width = (
+                    adjusted_width
+                )
 
-            # Write header
-            f.write(f"{'Mol':>6}")
-            for j in range(n):
-                f.write(f"{j+1:>10}")
-            f.write("\n")
-            f.write("-" * 80 + "\n")
-
-            # Write matrix
-            for i in range(n):
-                f.write(f"{i+1:>6}")
-                for j in range(n):
-                    if np.isinf(rmsd_matrix[i, j]):
-                        f.write(f"{'∞':>10}")
-                    else:
-                        f.write(f"{rmsd_matrix[i, j]:>10.4f}")
-                f.write("\n")
+        logger.info(f"RMSD matrix saved to {filename}")
 
 
 class BasicRMSDGrouper(RMSDGrouper):
@@ -899,7 +1071,7 @@ class HungarianRMSDGrouper(RMSDGrouper):
 
         if self.align_molecules:
             logger.debug("Aligning molecules using Kabsch algorithm.")
-            pos1_matched, pos2_matched, _, _, _ = kabsch_align(
+            pos1_matched, pos2_matched, _, _, rmsd = kabsch_align(
                 pos1_matched, pos2_matched
             )
 
@@ -1505,6 +1677,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         threshold: float = 0.5,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
+        label: str = None,
     ):
         """
         Initialize RMSD grouper with shared memory optimization.
@@ -1515,8 +1688,9 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules using Kabsch
                 algorithm before RMSD calculation. Defaults to True.
+            label (str): Label/name for output files.
         """
-        super().__init__(molecules, num_procs)
+        super().__init__(molecules, num_procs, label=label)
         self.threshold = threshold
         self.align_molecules = align_molecules
 
@@ -1563,18 +1737,49 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             if rmsd < self.threshold:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
-        # 🔗 **4️⃣ Find Connected Components (Groups)**
-        _, labels = connected_components(csr_matrix(adj_matrix))
-        groups, index_groups = [], []
-        for label in np.unique(labels):
-            mask = labels == label
-            groups.append([self.molecules[i] for i in np.where(mask)[0]])
-            index_groups.append(list(np.where(mask)[0]))
+        # 🔗 **4️⃣ Complete Linkage Grouping**
+        # A structure joins a group only if its RMSD to ALL existing members is below threshold
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
 
         # Cache the results to avoid recomputation
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
+        return groups, index_groups
+
+    def _complete_linkage_grouping(self, adj_matrix, n):
+        """
+        Perform complete linkage grouping (from last to first).
+
+        A structure joins a group only if its RMSD to ALL existing members
+        of that group is below the threshold.
+        """
+        assigned = [False] * n
+        groups = []
+        index_groups = []
+
+        for i in range(n - 1, -1, -1):
+            if assigned[i]:
+                continue
+            current_group = [i]
+            assigned[i] = True
+
+            for j in range(i - 1, -1, -1):
+                if assigned[j]:
+                    continue
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            current_group.sort()
+            groups.append([self.molecules[idx] for idx in current_group])
+            index_groups.append(current_group)
+
+        groups.reverse()
+        index_groups.reverse()
         return groups, index_groups
 
     @staticmethod
@@ -1626,37 +1831,21 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
 
 class PymolRMSDGrouper(RMSDGrouper):
     """
-    Group molecules using PyMOL-style alignment algorithms without external PyMOL.
+    Group molecules using PyMOL's align command for RMSD calculation.
 
-    This grouper implements both PyMOL align and super algorithms internally:
+    This grouper writes molecules to temporary XYZ files and uses PyMOL's
+    align command to calculate RMSD values, following the same approach
+    as PyMOLAlignJobRunner in jobs/mol/runner.py.
 
-    - **align**: Sequence-based alignment followed by structural refinement
-      - Performs sequence alignment with chemical symbol matching
-      - Good for molecules with decent sequence similarity (>30% identity)
+    Simple workflow:
+    1. Write molecules to temporary XYZ files
+    2. Load into PyMOL using cmd.load()
+    3. Run align command: align mol_i, mol_j (with PyMOL default parameters)
+    4. Get RMSD from the result
 
-    - **super**: Structure-based dynamic programming alignment
-      - Sequence-independent structural alignment
-      - More robust for molecules with low sequence similarity
-      - Uses 3D structural environment comparison
-
-    Both algorithms include:
-    - Structural superposition using Kabsch algorithm
-    - Iterative outlier rejection for refinement
-    - Final RMSD calculation on aligned atoms
-
-    This provides the same functionality as PyMOL's align/super commands but without
-    requiring an external PyMOL installation, improving performance and
-    eliminating external dependencies.
-
-    Attributes:
-        molecules (List[Molecule]): Collection of molecules to group.
-        threshold (float): RMSD threshold for grouping molecules.
-        num_groups (int): Number of groups to create (alternative to threshold).
-        cutoff (float): Outlier rejection cutoff in RMS (default: 2.0).
-        cycles (int): Maximum outlier rejection cycles (default: 5).
-        gap (float): Gap penalty for sequence alignment (default: -10.0).
-        extend (float): Gap extension penalty (default: -0.5).
-        use_super (bool): Use super (True) or align (False) algorithm (default: False).
+    PyMOL align default parameters (with outlier rejection):
+    - cutoff=2.0: outlier rejection cutoff in RMS
+    - cycles=5: maximum number of outlier rejection cycles
     """
 
     def __init__(
@@ -1665,59 +1854,107 @@ class PymolRMSDGrouper(RMSDGrouper):
         threshold: float = 0.5,
         num_groups=None,
         num_procs: int = 1,
-        align_molecules: bool = True,
         ignore_hydrogens: bool = False,
-        cutoff: float = 2.0,
-        cycles: int = 5,
-        gap: float = -10.0,
-        extend: float = -0.5,
-        use_super: bool = False,
+        label: str = None,
         **kwargs,
     ):
         """
-        Initialize PyMOL-style alignment grouper.
+        Initialize PyMOL RMSD grouper.
 
         Args:
-            molecules (Iterable[Molecule]): Collection of molecules to group.
-            threshold (float): RMSD threshold for grouping. Defaults to 0.5.
-            num_groups (int): Number of groups to create (alternative to threshold).
-            num_procs (int): Number of processes. Currently supports 1.
-            align_molecules (bool): Whether to use alignment. Defaults to True.
-            ignore_hydrogens (bool): Whether to exclude hydrogens. Defaults to False.
-            cutoff (float): Outlier rejection cutoff in RMS. Defaults to 2.0.
-            cycles (int): Maximum outlier rejection cycles. Defaults to 5.
-            gap (float): Gap penalty for sequence alignment. Defaults to -10.0.
-            extend (float): Gap extension penalty. Defaults to -0.5.
-            use_super (bool): Use super (True) or align (False) algorithm. Defaults to False.
+            molecules: Collection of molecules to group
+            threshold: RMSD threshold for grouping (Angstroms)
+            num_groups: Number of groups to create (alternative to threshold)
+            num_procs: Number of processes (PyMOL uses single process)
+            ignore_hydrogens: Whether to exclude hydrogen atoms
+            label: Label for output files
+
+        Note:
+            Uses PyMOL's default align parameters including outlier rejection
+            (cutoff=2.0, cycles=5). This matches PyMOL's standard behavior.
         """
+        # Note: align_molecules is always True for PyMOL align
         super().__init__(
             molecules=molecules,
             threshold=threshold,
             num_groups=num_groups,
-            num_procs=num_procs,
-            align_molecules=align_molecules,
+            num_procs=1,  # PyMOL is single-threaded
+            align_molecules=True,
             ignore_hydrogens=ignore_hydrogens,
+            label=label,
             **kwargs,
         )
-
-        self.cutoff = cutoff
-        self.cycles = cycles
-        self.gap = gap
-        self.extend = extend
-        self.use_super = use_super
-
-        # Cache for alignment results
+        self._temp_dir = None
+        self._xyz_files = []
+        self._mol_names = []
         self._alignment_cache = {}
+
+        # Initialize PyMOL and prepare molecules
+        self._init_pymol()
+        self._prepare_molecules()
+
+    def _init_pymol(self):
+        """Initialize PyMOL in command-line mode."""
+        try:
+            import pymol
+            from pymol import cmd
+
+            # Initialize PyMOL in quiet command-line mode
+            pymol.finish_launching(["pymol", "-qc"])
+            self.cmd = cmd
+            self.cmd.reinitialize()
+        except ImportError as e:
+            raise ImportError(
+                f"PyMOL not available: {e}\n"
+                f"Please install PyMOL: conda install -c conda-forge pymol-open-source"
+            )
+
+    def _prepare_molecules(self):
+        """Write all molecules to temporary XYZ files and load into PyMOL."""
+        import os
+        import tempfile
+
+        # Create temporary directory
+        self._temp_dir = tempfile.mkdtemp(prefix="pymol_rmsd_")
+
+        # Write each molecule to XYZ file and load into PyMOL
+        for i, mol in enumerate(self.molecules):
+            mol_name = f"mol_{i}"
+            xyz_path = os.path.join(self._temp_dir, f"{mol_name}.xyz")
+
+            # Write XYZ file
+            self._write_xyz(mol, xyz_path)
+
+            # Load into PyMOL
+            self.cmd.load(xyz_path, mol_name)
+
+            self._xyz_files.append(xyz_path)
+            self._mol_names.append(mol_name)
+
+    def _write_xyz(self, mol: Molecule, filepath: str):
+        """Write molecule to XYZ format file."""
+        positions = mol.positions
+        symbols = mol.chemical_symbols
+
+        if self.ignore_hydrogens:
+            # Filter out hydrogens
+            non_h_indices = [i for i, s in enumerate(symbols) if s != "H"]
+            positions = positions[non_h_indices]
+            symbols = [symbols[i] for i in non_h_indices]
+
+        with open(filepath, "w") as f:
+            f.write(f"{len(symbols)}\n")
+            f.write("Generated by PymolRMSDGrouper\n")
+            for pos, sym in zip(positions, symbols):
+                f.write(f"{sym} {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}\n")
 
     def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
         """
-        Calculate RMSD between two molecules using PyMOL-style alignment.
+        Calculate RMSD between two molecules using PyMOL align.
 
-        Args:
-            idx_pair (Tuple[int, int]): Tuple containing indices of two molecules.
-
-        Returns:
-            float: RMSD value between the two molecules.
+        Simply runs: align mol_i, mol_j
+        with PyMOL default parameters (cutoff=2.0, cycles=5 for outlier rejection).
+        Returns the RMSD value after alignment and outlier rejection.
         """
         i, j = idx_pair
 
@@ -1726,475 +1963,53 @@ class PymolRMSDGrouper(RMSDGrouper):
         if cache_key in self._alignment_cache:
             return self._alignment_cache[cache_key]
 
-        mol1, mol2 = self.molecules[i], self.molecules[j]
-
-        # Apply hydrogen filtering if enabled
-        if self.ignore_hydrogens:
-            pos1, symbols1 = self._get_heavy_atoms(mol1)
-            pos2, symbols2 = self._get_heavy_atoms(mol2)
-        else:
-            pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
-            pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
-
-        # Quick compatibility check
-        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
-            symbols2
-        ):
-            rmsd = float("inf")
-            self._alignment_cache[cache_key] = rmsd
-            return rmsd
+        mol_i = self._mol_names[i]
+        mol_j = self._mol_names[j]
 
         try:
-            if self.align_molecules:
-                rmsd = self._pymol_style_align(pos1, pos2, symbols1, symbols2)
+            # Run PyMOL align command with default parameters
+            # PyMOL defaults: cutoff=2.0, cycles=5 (outlier rejection enabled)
+            result = self.cmd.align(mol_i, mol_j)
+
+            if result is None or not isinstance(result, (list, tuple)):
+                rmsd = float("inf")
             else:
-                # Simple RMSD without alignment
-                rmsd = np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+                rmsd = result[0]  # First element is RMSD after alignment
+
+                # Validate RMSD
+                if rmsd < 0 or not np.isfinite(rmsd):
+                    rmsd = float("inf")
+
         except Exception as e:
-            logger.warning(
-                f"PyMOL-style alignment failed for pair ({i},{j}): {e}"
-            )
+            logger.warning(f"PyMOL align failed for ({i}, {j}): {e}")
             rmsd = float("inf")
 
         self._alignment_cache[cache_key] = rmsd
         return rmsd
 
-    def _pymol_style_align(
-        self,
-        pos1: np.ndarray,
-        pos2: np.ndarray,
-        symbols1: list,
-        symbols2: list,
-    ) -> float:
-        """
-        Perform PyMOL-style alignment with sequence alignment and outlier rejection.
-
-        Args:
-            pos1, pos2: Atomic coordinates
-            symbols1, symbols2: Chemical symbols
-
-        Returns:
-            float: Final RMSD after refinement
-        """
-        if self.use_super:
-            # Use super algorithm: structure-based dynamic programming
-            return self._super_align(pos1, pos2, symbols1, symbols2)
-        else:
-            # Use align algorithm: sequence-based alignment
-            return self._align_algorithm(pos1, pos2, symbols1, symbols2)
-
-    def _align_algorithm(
-        self,
-        pos1: np.ndarray,
-        pos2: np.ndarray,
-        symbols1: list,
-        symbols2: list,
-    ) -> float:
-        """
-        PyMOL align algorithm: sequence alignment followed by refinement.
-        """
-        # Step 1: Sequence alignment to find corresponding atoms
-        alignment = self._sequence_align(symbols1, symbols2)
-
-        if not alignment:
-            return float("inf")
-
-        # Step 2: Extract aligned positions
-        aligned_pos1, aligned_pos2 = self._extract_aligned_positions(
-            pos1, pos2, alignment
-        )
-
-        if len(aligned_pos1) < 3:  # Need at least 3 points for alignment
-            return float("inf")
-
-        # Step 3: Iterative refinement with outlier rejection
-        return self._iterative_refinement(aligned_pos1, aligned_pos2)
-
-    def _super_align(
-        self,
-        pos1: np.ndarray,
-        pos2: np.ndarray,
-        symbols1: list,
-        symbols2: list,
-    ) -> float:
-        """
-        PyMOL super algorithm: structure-based dynamic programming alignment.
-
-        This is more robust than align for molecules with low sequence similarity
-        as it doesn't rely on sequence alignment but on structural similarity.
-        """
-        # Step 1: Structure-based dynamic programming alignment
-        alignment = self._structure_based_alignment(
-            pos1, pos2, symbols1, symbols2
-        )
-
-        if not alignment:
-            return float("inf")
-
-        # Step 2: Extract aligned positions
-        aligned_pos1, aligned_pos2 = self._extract_aligned_positions(
-            pos1, pos2, alignment
-        )
-
-        if len(aligned_pos1) < 3:
-            return float("inf")
-
-        # Step 3: Iterative refinement with outlier rejection (same as align)
-        return self._iterative_refinement(aligned_pos1, aligned_pos2)
-
-    def _structure_based_alignment(
-        self,
-        pos1: np.ndarray,
-        pos2: np.ndarray,
-        symbols1: list,
-        symbols2: list,
-    ) -> list:
-        """
-        Structure-based dynamic programming alignment for super algorithm.
-
-        This aligns atoms based on 3D structural similarity rather than sequence.
-        """
-        n, m = len(symbols1), len(symbols2)
-
-        if n == 0 or m == 0:
-            return []
-
-        # Create distance matrices for both structures
-        dist_matrix1 = self._calculate_distance_matrix(pos1)
-        dist_matrix2 = self._calculate_distance_matrix(pos2)
-
-        # Dynamic programming matrix for structure alignment
-        score_matrix = np.full((n + 1, m + 1), -np.inf)
-        traceback = np.zeros((n + 1, m + 1), dtype=int)
-
-        # Initialize
-        score_matrix[0][0] = 0.0
-
-        # Fill the matrix
-        for i in range(1, n + 1):
-            for j in range(1, m + 1):
-                # Check if atoms can be matched (same element type)
-                if symbols1[i - 1] == symbols2[j - 1]:
-                    # Calculate structural similarity score
-                    struct_score = self._calculate_structural_similarity_score(
-                        i - 1,
-                        j - 1,
-                        dist_matrix1,
-                        dist_matrix2,
-                        symbols1,
-                        symbols2,
-                    )
-
-                    # Match score
-                    match_score = score_matrix[i - 1][j - 1] + struct_score
-
-                    # Gap penalties
-                    gap1_score = score_matrix[i - 1][j] + self.gap
-                    gap2_score = score_matrix[i][j - 1] + self.gap
-
-                    max_score = max(
-                        match_score, gap1_score, gap2_score, 0.0
-                    )  # Local alignment
-                    score_matrix[i][j] = max_score
-
-                    if max_score == match_score:
-                        traceback[i][j] = 0  # Diagonal (match)
-                    elif max_score == gap1_score:
-                        traceback[i][j] = 1  # Up (gap in seq2)
-                    elif max_score == gap2_score:
-                        traceback[i][j] = 2  # Left (gap in seq1)
-                    else:
-                        traceback[i][j] = -1  # Start new alignment
-                else:
-                    # Different element types - only gaps allowed
-                    gap1_score = score_matrix[i - 1][j] + self.gap
-                    gap2_score = score_matrix[i][j - 1] + self.gap
-                    max_score = max(gap1_score, gap2_score, 0.0)
-                    score_matrix[i][j] = max_score
-
-                    if max_score == gap1_score:
-                        traceback[i][j] = 1
-                    elif max_score == gap2_score:
-                        traceback[i][j] = 2
-                    else:
-                        traceback[i][j] = -1
-
-        # Find the best score position for local alignment
-        max_score = -np.inf
-        best_i, best_j = 0, 0
-        for i in range(n + 1):
-            for j in range(m + 1):
-                if score_matrix[i][j] > max_score:
-                    max_score = score_matrix[i][j]
-                    best_i, best_j = i, j
-
-        # Traceback to get alignment
-        alignment = []
-        i, j = best_i, best_j
-
-        while i > 0 and j > 0 and score_matrix[i][j] > 0:
-            if traceback[i][j] == 0:  # Match
-                alignment.append((i - 1, j - 1))
-                i -= 1
-                j -= 1
-            elif traceback[i][j] == 1:  # Gap in seq2
-                i -= 1
-            elif traceback[i][j] == 2:  # Gap in seq1
-                j -= 1
-            else:  # traceback[i][j] == -1, start of alignment
-                break
-
-        return list(reversed(alignment))
-
-    def _calculate_distance_matrix(self, positions: np.ndarray) -> np.ndarray:
-        """Calculate pairwise distance matrix for a set of positions."""
-        n = len(positions)
-        dist_matrix = np.zeros((n, n))
-
-        for i in range(n):
-            for j in range(i + 1, n):
-                dist = np.linalg.norm(positions[i] - positions[j])
-                dist_matrix[i][j] = dist_matrix[j][i] = dist
-
-        return dist_matrix
-
-    def _calculate_structural_similarity_score(
-        self,
-        i: int,
-        j: int,
-        dist_matrix1: np.ndarray,
-        dist_matrix2: np.ndarray,
-        symbols1: list,
-        symbols2: list,
-    ) -> float:
-        """
-        Calculate structural similarity score for aligning atom i with atom j.
-
-        This compares the local structural environment of the two atoms.
-        """
-        n1, n2 = len(symbols1), len(symbols2)
-
-        # Base score for matching atom types
-        if symbols1[i] != symbols2[j]:
-            return -10.0  # Penalty for different atom types
-
-        base_score = 5.0  # Reward for same atom type
-
-        # Compare local structural environments
-        environment_score = 0.0
-        comparisons = 0
-
-        # Look at distances to other atoms of the same type
-        for k1 in range(n1):
-            if k1 == i:
-                continue
-
-            for k2 in range(n2):
-                if k2 == j:
-                    continue
-
-                # Only compare distances to atoms of the same type
-                if symbols1[k1] == symbols2[k2]:
-                    dist1 = dist_matrix1[i][k1]
-                    dist2 = dist_matrix2[j][k2]
-
-                    # Score based on distance similarity
-                    dist_diff = abs(dist1 - dist2)
-                    if dist_diff < 0.5:  # Very similar distances
-                        environment_score += 2.0
-                    elif dist_diff < 1.0:  # Somewhat similar
-                        environment_score += 1.0
-                    elif dist_diff < 2.0:  # Moderately different
-                        environment_score += 0.0
-                    else:  # Very different
-                        environment_score -= 1.0
-
-                    comparisons += 1
-
-        # Normalize by number of comparisons
-        if comparisons > 0:
-            environment_score /= comparisons
-
-        return base_score + environment_score
-
-    def _sequence_align(self, symbols1: list, symbols2: list) -> list:
-        """
-        Perform sequence alignment between two molecules based on chemical symbols.
-
-        This is a simplified version of sequence alignment that works on chemical symbols
-        rather than amino acid sequences.
-
-        Returns:
-            list: List of (i1, i2) pairs indicating aligned atom indices
-        """
-        # For molecules with identical sequences, create direct mapping
-        if symbols1 == symbols2:
-            return [(i, i) for i in range(len(symbols1))]
-
-        # For different sequences, use dynamic programming alignment
-        return self._dp_sequence_align(symbols1, symbols2)
-
-    def _dp_sequence_align(self, seq1: list, seq2: list) -> list:
-        """
-        Dynamic programming sequence alignment for chemical symbols.
-        """
-        n, m = len(seq1), len(seq2)
-
-        # Initialize scoring matrix
-        score_matrix = np.zeros((n + 1, m + 1))
-        traceback = np.zeros((n + 1, m + 1), dtype=int)
-
-        # Initialize gaps
-        for i in range(1, n + 1):
-            score_matrix[i][0] = score_matrix[i - 1][0] + self.gap
-            traceback[i][0] = 1  # Up
-        for j in range(1, m + 1):
-            score_matrix[0][j] = score_matrix[0][j - 1] + self.gap
-            traceback[0][j] = 2  # Left
-
-        # Fill the matrix
-        for i in range(1, n + 1):
-            for j in range(1, m + 1):
-                match_score = score_matrix[i - 1][
-                    j - 1
-                ] + self._symbol_match_score(seq1[i - 1], seq2[j - 1])
-                gap1_score = score_matrix[i - 1][j] + self.gap
-                gap2_score = score_matrix[i][j - 1] + self.gap
-
-                max_score = max(match_score, gap1_score, gap2_score)
-                score_matrix[i][j] = max_score
-
-                if max_score == match_score:
-                    traceback[i][j] = 0  # Diagonal
-                elif max_score == gap1_score:
-                    traceback[i][j] = 1  # Up
-                else:
-                    traceback[i][j] = 2  # Left
-
-        # Traceback to get alignment
-        alignment = []
-        i, j = n, m
-
-        while i > 0 and j > 0:
-            if traceback[i][j] == 0:  # Match/mismatch
-                if seq1[i - 1] == seq2[j - 1]:  # Only include matches
-                    alignment.append((i - 1, j - 1))
-                i -= 1
-                j -= 1
-            elif traceback[i][j] == 1:  # Gap in seq2
-                i -= 1
-            else:  # Gap in seq1
-                j -= 1
-
-        return list(reversed(alignment))
-
-    def _symbol_match_score(self, sym1: str, sym2: str) -> float:
-        """
-        Score for matching chemical symbols.
-        """
-        if sym1 == sym2:
-            return 10.0  # High score for exact match
-        else:
-            return -5.0  # Penalty for mismatch
-
-    def _extract_aligned_positions(
-        self, pos1: np.ndarray, pos2: np.ndarray, alignment: list
-    ) -> tuple:
-        """
-        Extract positions of aligned atoms.
-        """
-        if not alignment:
-            return np.array([]), np.array([])
-
-        indices1, indices2 = zip(*alignment)
-        return pos1[list(indices1)], pos2[list(indices2)]
-
-    def _iterative_refinement(
-        self, pos1: np.ndarray, pos2: np.ndarray
-    ) -> float:
-        """
-        Perform iterative refinement with outlier rejection.
-
-        This mimics PyMOL's align algorithm:
-        1. Superimpose structures
-        2. Calculate per-atom RMSD
-        3. Remove outliers above cutoff
-        4. Repeat until convergence or max cycles
-        """
-        current_pos1 = pos1.copy()
-        current_pos2 = pos2.copy()
-
-        for cycle in range(self.cycles):
-            if len(current_pos1) < 3:
-                break
-
-            # Superimpose using Kabsch algorithm
-            try:
-                from chemsmart.utils.utils import kabsch_align
-
-                (
-                    aligned_pos1,
-                    aligned_pos2,
-                    rotation_matrix,
-                    translation,
-                    rmsd,
-                ) = kabsch_align(current_pos1, current_pos2)
-            except ImportError:
-                # Fallback to simple centering if kabsch_align not available
-                aligned_pos1 = current_pos1 - np.mean(current_pos1, axis=0)
-                aligned_pos2 = current_pos2 - np.mean(current_pos2, axis=0)
-
-            # Calculate per-atom distances
-            distances = np.sqrt(
-                np.sum((aligned_pos1 - aligned_pos2) ** 2, axis=1)
-            )
-
-            # Find outliers
-            outliers = distances > self.cutoff
-
-            if not np.any(outliers):
-                # No outliers found, converged
-                break
-
-            # Remove outliers for next iteration
-            current_pos1 = current_pos1[~outliers]
-            current_pos2 = current_pos2[~outliers]
-
-            logger.debug(
-                f"Cycle {cycle + 1}: Removed {np.sum(outliers)} outliers, "
-                f"{len(current_pos1)} atoms remaining"
-            )
-
-        # Final RMSD calculation
-        if len(current_pos1) < 1:
-            return float("inf")
-
+    def __del__(self):
+        """Clean up temporary files and PyMOL session."""
+        import shutil
+
+        # Clean up PyMOL
         try:
-            from chemsmart.utils.utils import kabsch_align
+            if hasattr(self, "cmd"):
+                self.cmd.quit()
+        except Exception:
+            pass
 
-            _, _, _, _, final_rmsd = kabsch_align(current_pos1, current_pos2)
-            return final_rmsd
-        except ImportError:
-            # Fallback calculation
-            centered_pos1 = current_pos1 - np.mean(current_pos1, axis=0)
-            centered_pos2 = current_pos2 - np.mean(current_pos2, axis=0)
-            return np.sqrt(
-                np.mean(np.sum((centered_pos1 - centered_pos2) ** 2, axis=1))
-            )
+        # Clean up temp directory
+        try:
+            if hasattr(self, "_temp_dir") and self._temp_dir:
+                shutil.rmtree(self._temp_dir, ignore_errors=True)
+        except Exception:
+            pass
 
     def __repr__(self):
-        """String representation of PymolRMSDGrouper."""
-        algorithm = "super" if self.use_super else "align"
         if self.num_groups is not None:
-            return (
-                f"{self.__class__.__name__}(num_groups={self.num_groups}, "
-                f"algorithm={algorithm}, cutoff={self.cutoff}, cycles={self.cycles})"
-            )
+            return f"{self.__class__.__name__}(num_groups={self.num_groups})"
         else:
-            return (
-                f"{self.__class__.__name__}(threshold={self.threshold}, "
-                f"algorithm={algorithm}, cutoff={self.cutoff}, cycles={self.cycles})"
-            )
+            return f"{self.__class__.__name__}(threshold={self.threshold})"
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
@@ -2223,6 +2038,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         num_procs: int = 1,
         fingerprint_type: str = "rdkit",
         use_rdkit_fp: bool = None,  # Legacy support
+        label: str = None,  # Label for output files
         **kwargs,
     ):
         """
@@ -2240,8 +2056,9 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 "torsion", "usr", "usrcat". Defaults to "rdkit".
             use_rdkit_fp (bool): Legacy parameter. If True, sets fingerprint_type="rdkit".
                 If False, sets fingerprint_type="rdk".
+            label (str): Label/name for output files. Defaults to None.
         """
-        super().__init__(molecules, num_procs)
+        super().__init__(molecules, num_procs, label=label)
 
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
@@ -2418,19 +2235,24 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         # Save Tanimoto matrix to group_result folder
         import os
 
-        output_dir = "group_result"
+        # Use label for folder name if provided
+        if self.label:
+            output_dir = f"{self.label}_group_result"
+        else:
+            output_dir = "group_result"
         os.makedirs(output_dir, exist_ok=True)
 
-        # Create filename based on grouper type, fingerprint type and threshold/num_groups
+        # Create filename based on label, grouper type, fingerprint type and threshold/num_groups
+        label_prefix = f"{self.label}_" if self.label else ""
         if self.num_groups is not None:
             matrix_filename = os.path.join(
                 output_dir,
-                f"{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_n{self.num_groups}.txt",
+                f"{label_prefix}{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_n{self.num_groups}.xlsx",
             )
         else:
             matrix_filename = os.path.join(
                 output_dir,
-                f"{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_t{self.threshold}.txt",
+                f"{label_prefix}{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_t{self.threshold}.xlsx",
             )
 
         # Save full matrix
@@ -2441,27 +2263,56 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         return groups, index_groups
 
     def _group_by_threshold(self, similarity_matrix, valid_indices):
-        """Traditional threshold-based grouping for Tanimoto similarity."""
+        """Threshold-based grouping for Tanimoto similarity using complete linkage."""
         # Apply threshold and create adjacency matrix
-        adj_matrix = csr_matrix(similarity_matrix >= self.threshold)
+        adj_matrix = similarity_matrix >= self.threshold
+        n = len(valid_indices)
 
-        # Use connected components clustering
-        _, labels = connected_components(adj_matrix)
+        # Complete linkage grouping
+        mol_groups, idx_groups = self._complete_linkage_grouping(
+            adj_matrix, n, valid_indices
+        )
 
-        # Build molecule groups
-        unique_labels = np.unique(labels)
-        mol_groups = [
-            [
-                self.valid_molecules[valid_indices[i]]
-                for i in np.where(labels == label)[0]
-            ]
-            for label in unique_labels
-        ]
-        idx_groups = [
-            list(np.array(valid_indices)[np.where(labels == label)[0]])
-            for label in unique_labels
-        ]
+        return mol_groups, idx_groups
 
+    def _complete_linkage_grouping(self, adj_matrix, n, valid_indices):
+        """
+        Perform complete linkage grouping for Tanimoto similarity (from last to first).
+
+        A structure joins a group only if its similarity to ALL existing members
+        of that group is above the threshold.
+        """
+        assigned = [False] * n
+        mol_groups = []
+        idx_groups = []
+
+        for i in range(n - 1, -1, -1):
+            if assigned[i]:
+                continue
+            current_group = [i]
+            assigned[i] = True
+
+            for j in range(i - 1, -1, -1):
+                if assigned[j]:
+                    continue
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            current_group.sort()
+            mol_groups.append(
+                [
+                    self.valid_molecules[valid_indices[idx]]
+                    for idx in current_group
+                ]
+            )
+            idx_groups.append([valid_indices[idx] for idx in current_group])
+
+        mol_groups.reverse()
+        idx_groups.reverse()
         return mol_groups, idx_groups
 
     def _group_by_num_groups(self, similarity_matrix, valid_indices):
@@ -2496,14 +2347,13 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         )
 
         # Build adjacency matrix with the determined threshold
-        adj_matrix = csr_matrix(similarity_matrix >= threshold)
+        adj_matrix = similarity_matrix >= threshold
 
-        # Use connected components clustering
-        _, labels = connected_components(adj_matrix)
-
-        # Build molecule groups
-        unique_labels = np.unique(labels)
-        actual_groups = len(unique_labels)
+        # Complete linkage grouping
+        groups, index_groups = self._complete_linkage_grouping(
+            adj_matrix, n, valid_indices
+        )
+        actual_groups = len(groups)
 
         print(
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
@@ -2511,22 +2361,35 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         if actual_groups > self.num_groups:
             # If we have too many groups, merge the smallest ones
-            groups, index_groups = self._merge_smallest_tanimoto_groups(
-                labels, actual_groups, valid_indices
+            groups, index_groups = self._merge_groups_to_target_tanimoto(
+                groups, index_groups, adj_matrix
             )
-        else:
-            # Use the groups as they are
-            groups = [
-                [
-                    self.valid_molecules[valid_indices[i]]
-                    for i in np.where(labels == label)[0]
-                ]
-                for label in unique_labels
-            ]
-            index_groups = [
-                list(np.array(valid_indices)[np.where(labels == label)[0]])
-                for label in unique_labels
-            ]
+
+        return groups, index_groups
+
+    def _merge_groups_to_target_tanimoto(
+        self, groups, index_groups, adj_matrix
+    ):
+        """Merge groups to reach target number for Tanimoto grouping."""
+        # Convert index_groups to local indices for adj_matrix lookup
+        while len(groups) > self.num_groups:
+            min_size = float("inf")
+            min_idx = 0
+            for i, g in enumerate(groups):
+                if len(g) < min_size:
+                    min_size = len(g)
+                    min_idx = i
+
+            # Merge into largest group
+            largest_idx = max(
+                range(len(groups)),
+                key=lambda i: len(groups[i]) if i != min_idx else -1,
+            )
+            groups[largest_idx].extend(groups[min_idx])
+            index_groups[largest_idx].extend(index_groups[min_idx])
+
+            groups.pop(min_idx)
+            index_groups.pop(min_idx)
 
         return groups, index_groups
 
@@ -2552,11 +2415,12 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             threshold = sorted_similarities[mid]
 
             # Build adjacency matrix with this threshold
-            adj_matrix = csr_matrix(similarity_matrix >= threshold)
+            adj_matrix = similarity_matrix >= threshold
 
-            # Count connected components
-            _, labels = connected_components(adj_matrix)
-            num_groups_found = len(np.unique(labels))
+            # Count groups using complete linkage
+            num_groups_found = self._count_complete_linkage_groups(
+                adj_matrix, n
+            )
 
             if num_groups_found == self.num_groups:
                 # Found exact match
@@ -2570,6 +2434,31 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 low = mid + 1
 
         return best_threshold
+
+    def _count_complete_linkage_groups(self, adj_matrix, n):
+        """Count number of groups using complete linkage algorithm."""
+        assigned = [False] * n
+        num_groups = 0
+
+        for i in range(n):
+            if assigned[i]:
+                continue
+            current_group = [i]
+            assigned[i] = True
+
+            for j in range(i + 1, n):
+                if assigned[j]:
+                    continue
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            num_groups += 1
+
+        return num_groups
 
     def _merge_smallest_tanimoto_groups(
         self, labels, actual_groups, valid_indices
@@ -2606,15 +2495,8 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
             # Add to the largest group
             if groups:
-                groups[0].extend(
-                    [
-                        self.valid_molecules[valid_indices[i]]
-                        for i in merge_indices
-                    ]
-                )
-                index_groups[0].extend(
-                    [valid_indices[i] for i in merge_indices]
-                )
+                groups[0].extend([self.molecules[i] for i in merge_indices])
+                index_groups[0].extend(merge_indices)
 
         return groups, index_groups
 
@@ -2625,8 +2507,15 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         valid_indices: List[int],
         grouping_time: float = None,
     ):
-        """Save Tanimoto similarity matrix to file."""
+        """Save Tanimoto similarity matrix to Excel file with 6 decimal precision."""
         n = len(self.molecules)
+
+        # Change extension to .xlsx if it's .txt
+        if filename.endswith(".txt"):
+            filename = filename[:-4] + ".xlsx"
+        elif not filename.endswith(".xlsx"):
+            filename = filename + ".xlsx"
+
         # Create full matrix with invalid molecules marked as NaN
         full_matrix = np.full((n, n), np.nan)
 
@@ -2635,52 +2524,63 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             for j, idx_j in enumerate(valid_indices):
                 full_matrix[idx_i, idx_j] = tanimoto_matrix[i, j]
 
-        with open(filename, "w") as f:
-            f.write(
-                f"Full Tanimoto Similarity Matrix ({n}x{n}) - {self.__class__.__name__}\n"
-            )
-            f.write(f"Fingerprint Type: {self.fingerprint_type}\n")
+        # Create DataFrame with conformer indices as row and column labels
+        row_labels = [f"Conf {i+1}" for i in range(n)]
+        col_labels = [f"Conf {j+1}" for j in range(n)]
+        df = pd.DataFrame(full_matrix, index=row_labels, columns=col_labels)
 
-            # Add grouping information
+        # Create Excel writer
+        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+            # Write matrix to sheet starting from row 6 to leave room for header info
+            df.to_excel(
+                writer,
+                sheet_name="Tanimoto_Matrix",
+                startrow=6,
+                float_format="%.6f",
+            )
+
+            # Get the worksheet to add header information
+            worksheet = writer.sheets["Tanimoto_Matrix"]
+
+            # Add header information
+            worksheet["A1"] = (
+                f"Full Tanimoto Similarity Matrix ({n}x{n}) - {self.__class__.__name__}"
+            )
+            worksheet["A2"] = f"Fingerprint Type: {self.fingerprint_type}"
+
             if hasattr(self, "num_groups") and self.num_groups is not None:
-                f.write(f"Requested Groups (-N): {self.num_groups}\n")
+                worksheet["A3"] = f"Requested Groups (-N): {self.num_groups}"
                 if (
                     hasattr(self, "_auto_threshold")
                     and self._auto_threshold is not None
                 ):
-                    f.write(
-                        f"Auto-determined Threshold: {self._auto_threshold:.6f}\n"
+                    worksheet["A4"] = (
+                        f"Auto-determined Threshold: {self._auto_threshold:.6f}"
                     )
             else:
-                f.write(f"Threshold: {self.threshold}\n")
+                worksheet["A3"] = f"Threshold: {self.threshold}"
 
-            # Add grouping time information if available
             if grouping_time is not None:
-                f.write(
-                    f"Tanimoto Grouping Time: {grouping_time:.2f} seconds\n"
+                worksheet["A5"] = (
+                    f"Tanimoto Grouping Time: {grouping_time:.2f} seconds"
                 )
 
-            f.write("=" * 80 + "\n")
-            f.write("Values range from 0.0 (dissimilar) to 1.0 (identical)\n")
-            f.write("NaN indicates invalid molecules\n")
-            f.write("-" * 80 + "\n\n")
+            # Auto-adjust column widths
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                    except (TypeError, AttributeError):
+                        pass
+                adjusted_width = min(max_length + 2, 15)
+                worksheet.column_dimensions[column_letter].width = (
+                    adjusted_width
+                )
 
-            # Write header
-            f.write(f"{'Mol':>6}")
-            for j in range(n):
-                f.write(f"{j+1:>10}")
-            f.write("\n")
-            f.write("-" * 80 + "\n")
-
-            # Write matrix
-            for i in range(n):
-                f.write(f"{i+1:>6}")
-                for j in range(n):
-                    if np.isnan(full_matrix[i, j]):
-                        f.write(f"{'NaN':>10}")
-                    else:
-                        f.write(f"{full_matrix[i, j]:>10.4f}")
-                f.write("\n")
+        logger.info(f"Tanimoto matrix saved to {filename}")
 
     def __repr__(self):
         if self.num_groups is not None:
@@ -2811,6 +2711,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         num_procs: int = 1,
         use_stereochemistry: bool = True,
         use_tautomers: bool = False,
+        label: str = None,
     ):
         """
         Initialize RDKit isomorphism-based molecular grouper.
@@ -2822,8 +2723,9 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                 differences in grouping. Defaults to True.
             use_tautomers (bool): Whether to consider tautomeric forms
                 as equivalent. Defaults to False.
+            label (str): Label/name for output files. Defaults to None.
         """
-        super().__init__(molecules, num_procs)
+        super().__init__(molecules, num_procs, label=label)
         self.use_stereochemistry = use_stereochemistry
         self.use_tautomers = use_tautomers
 
@@ -2991,6 +2893,7 @@ class ConnectivityGrouper(MoleculeGrouper):
         num_procs: int = 1,
         threshold=None,  # Buffer for bond cutoff
         adjust_H: bool = True,
+        label: str = None,
     ):
         """
         Initialize connectivity-based molecular grouper.
@@ -3001,8 +2904,9 @@ class ConnectivityGrouper(MoleculeGrouper):
             threshold (float): Buffer for bond cutoff distance. Defaults to 0.0.
             adjust_H (bool): Whether to adjust hydrogen bond detection.
                 Defaults to True.
+            label (str): Label/name for output files. Defaults to None.
         """
-        super().__init__(molecules, num_procs)
+        super().__init__(molecules, num_procs, label=label)
         if threshold is None:
             threshold = 0.0
         self.threshold = threshold  # Buffer for bond cutoff
@@ -3085,22 +2989,47 @@ class ConnectivityGrouper(MoleculeGrouper):
             if is_iso:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
-        # Find connected components (groups of isomorphic molecules)
-        _, labels = connected_components(csr_matrix(adj_matrix))
+        # Complete linkage grouping
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
 
-        unique_labels = np.unique(labels)
-        groups = [
-            [self.molecules[i] for i in np.where(labels == label)[0]]
-            for label in unique_labels
-        ]
-        index_groups = [
-            list(np.where(labels == label)[0]) for label in unique_labels
-        ]
-
-        # Cache the results to avoid recomputation
+        # Cache the results
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
+        return groups, index_groups
+
+    def _complete_linkage_grouping(self, adj_matrix, n):
+        """
+        Perform complete linkage grouping for connectivity (from last to first).
+
+        A molecule joins a group only if it is isomorphic to ALL existing members.
+        """
+        assigned = [False] * n
+        groups = []
+        index_groups = []
+
+        for i in range(n - 1, -1, -1):
+            if assigned[i]:
+                continue
+            current_group = [i]
+            assigned[i] = True
+
+            for j in range(i - 1, -1, -1):
+                if assigned[j]:
+                    continue
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            current_group.sort()
+            groups.append([self.molecules[idx] for idx in current_group])
+            index_groups.append(current_group)
+
+        groups.reverse()
+        index_groups.reverse()
         return groups, index_groups
 
 
@@ -3127,6 +3056,7 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
         num_procs: int = 1,
         threshold: float = 0.0,  # Buffer for bond cutoff
         adjust_H: bool = True,
+        label: str = None,
     ):
         """
         Initialize connectivity grouper with shared memory optimization.
@@ -3137,8 +3067,9 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
             threshold (float): Buffer for bond cutoff distance. Defaults to 0.0.
             adjust_H (bool): Whether to adjust hydrogen bond detection.
                 Defaults to True.
+            label (str): Label/name for output files. Defaults to None.
         """
-        super().__init__(molecules, num_procs)
+        super().__init__(molecules, num_procs, label=label)
         self.threshold = threshold
         self.adjust_H = adjust_H
 
@@ -3304,6 +3235,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         max_dev: str = "equal",
         symm_radius: int = 2,
         ignore_colinear_bonds: bool = True,
+        label: str = None,  # Label for output files
         **kwargs,
     ):
         """
@@ -3323,8 +3255,9 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             symm_radius (int): Radius for calculating atom invariants. Defaults to 2.
             ignore_colinear_bonds (bool): If True, single bonds adjacent to triple bonds
                 are ignored. Defaults to True.
+            label (str): Label/name for output files. Defaults to None.
         """
-        super().__init__(molecules, num_procs)
+        super().__init__(molecules, num_procs, label=label)
 
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
@@ -3428,25 +3361,61 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             return float("inf")
 
     def _group_by_threshold(self, tfd_values, indices, n):
-        """Traditional threshold-based grouping for TFD."""
+        """Threshold-based grouping for TFD using complete linkage."""
         # Build adjacency matrix for clustering (TFD uses <=)
         adj_matrix = np.zeros((n, n), dtype=bool)
         for (i, j), tfd in zip(indices, tfd_values):
             if tfd <= self.threshold:  # TFD: lower values = more similar
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
-        # Find connected components
-        _, labels = connected_components(csr_matrix(adj_matrix))
+        # Complete linkage grouping
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
 
-        # Build groups
-        unique_labels = np.unique(labels)
-        groups = [
-            [self.molecules[i] for i in np.where(labels == label)[0]]
-            for label in unique_labels
-        ]
-        index_groups = [
-            list(np.where(labels == label)[0]) for label in unique_labels
-        ]
+        return groups, index_groups
+
+    def _complete_linkage_grouping(self, adj_matrix, n):
+        """
+        Perform complete linkage grouping for TFD (from last to first).
+
+        A structure joins a group only if its TFD to ALL existing members
+        of that group is below the threshold.
+        """
+        assigned = [False] * n
+        groups = []
+        index_groups = []
+
+        # Iterate from last to first (higher energy structures first as seeds)
+        for i in range(n - 1, -1, -1):
+            if assigned[i]:
+                continue
+
+            # Start a new group with molecule i
+            current_group = [i]
+            assigned[i] = True
+
+            # Try to add unassigned molecules with lower indices (lower energy)
+            for j in range(i - 1, -1, -1):
+                if assigned[j]:
+                    continue
+
+                # Check if j is connected to ALL members in current_group
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            # Sort indices within group (lowest index = lowest energy first)
+            current_group.sort()
+            # Add the completed group
+            groups.append([self.molecules[idx] for idx in current_group])
+            index_groups.append(current_group)
+
+        # Reverse groups so that groups containing lower-energy structures come first
+        groups.reverse()
+        index_groups.reverse()
 
         return groups, index_groups
 
@@ -3477,12 +3446,9 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             if tfd <= threshold:  # TFD: lower values = more similar
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
-        # Find connected components
-        _, labels = connected_components(csr_matrix(adj_matrix))
-
-        # Build groups
-        unique_labels = np.unique(labels)
-        actual_groups = len(unique_labels)
+        # Complete linkage grouping
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
+        actual_groups = len(groups)
 
         print(
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
@@ -3490,18 +3456,32 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         if actual_groups > self.num_groups:
             # If we have too many groups, merge the smallest ones
-            groups, index_groups = self._merge_smallest_tfd_groups(
-                labels, actual_groups
+            groups, index_groups = self._merge_groups_to_target_tfd(
+                groups, index_groups, adj_matrix
             )
-        else:
-            # Use the groups as they are
-            groups = [
-                [self.molecules[i] for i in np.where(labels == label)[0]]
-                for label in unique_labels
-            ]
-            index_groups = [
-                list(np.where(labels == label)[0]) for label in unique_labels
-            ]
+
+        return groups, index_groups
+
+    def _merge_groups_to_target_tfd(self, groups, index_groups, adj_matrix):
+        """Merge groups to reach target number for TFD grouping."""
+        while len(groups) > self.num_groups:
+            min_size = float("inf")
+            min_idx = 0
+            for i, g in enumerate(groups):
+                if len(g) < min_size:
+                    min_size = len(g)
+                    min_idx = i
+
+            # Merge into largest group
+            largest_idx = max(
+                range(len(groups)),
+                key=lambda i: len(groups[i]) if i != min_idx else -1,
+            )
+            groups[largest_idx].extend(groups[min_idx])
+            index_groups[largest_idx].extend(index_groups[min_idx])
+
+            groups.pop(min_idx)
+            index_groups.pop(min_idx)
 
         return groups, index_groups
 
@@ -3527,9 +3507,10 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 if tfd <= threshold:  # TFD: lower values = more similar
                     adj_matrix[idx_i, idx_j] = adj_matrix[idx_j, idx_i] = True
 
-            # Count connected components
-            _, labels = connected_components(csr_matrix(adj_matrix))
-            num_groups_found = len(np.unique(labels))
+            # Count groups using complete linkage
+            num_groups_found = self._count_complete_linkage_groups(
+                adj_matrix, n
+            )
 
             if num_groups_found == self.num_groups:
                 # Found exact match
@@ -3543,6 +3524,31 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 high = mid - 1
 
         return best_threshold
+
+    def _count_complete_linkage_groups(self, adj_matrix, n):
+        """Count number of groups using complete linkage algorithm."""
+        assigned = [False] * n
+        num_groups = 0
+
+        for i in range(n):
+            if assigned[i]:
+                continue
+            current_group = [i]
+            assigned[i] = True
+
+            for j in range(i + 1, n):
+                if assigned[j]:
+                    continue
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            num_groups += 1
+
+        return num_groups
 
     def _merge_smallest_tfd_groups(self, labels, actual_groups):
         """Merge smallest groups to reach target number of groups."""
@@ -3639,19 +3645,24 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         # Save TFD matrix (same as RMSD workflow)
         import os
 
-        output_dir = "group_result"
+        # Use label for folder name if provided
+        if self.label:
+            output_dir = f"{self.label}_group_result"
+        else:
+            output_dir = "group_result"
         os.makedirs(output_dir, exist_ok=True)
 
-        # Create filename based on threshold or num_groups
+        # Create filename based on label and threshold or num_groups
+        label_prefix = f"{self.label}_" if self.label else ""
         if self.num_groups is not None:
             matrix_filename = os.path.join(
                 output_dir,
-                f"{self.__class__.__name__}_tfd_matrix_n{self.num_groups}.txt",
+                f"{label_prefix}{self.__class__.__name__}_tfd_matrix_n{self.num_groups}.xlsx",
             )
         else:
             matrix_filename = os.path.join(
                 output_dir,
-                f"{self.__class__.__name__}_tfd_matrix_t{self.threshold}.txt",
+                f"{label_prefix}{self.__class__.__name__}_tfd_matrix_t{self.threshold}.xlsx",
             )
 
         # Choose grouping strategy based on parameters (do this first to set _auto_threshold)
@@ -3687,57 +3698,81 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         filename: str,
         grouping_time: float = None,
     ):
-        """Save TFD matrix to file (same format as RMSD matrix)."""
+        """Save TFD matrix to Excel file with 6 decimal precision."""
         n = tfd_matrix.shape[0]
-        with open(filename, "w") as f:
-            f.write(f"Full TFD Matrix ({n}x{n}) - {self.__class__.__name__}\n")
-            f.write(
-                "Based on Schulz-Gasch et al., JCIM, 52, 1499-1512 (2012)\n"
+
+        # Change extension to .xlsx if it's .txt
+        if filename.endswith(".txt"):
+            filename = filename[:-4] + ".xlsx"
+        elif not filename.endswith(".xlsx"):
+            filename = filename + ".xlsx"
+
+        # Create DataFrame with conformer indices as row and column labels
+        row_labels = [f"Conf {i+1}" for i in range(n)]
+        col_labels = [f"Conf {j+1}" for j in range(n)]
+
+        # Replace inf with NaN for Excel (will show as blank)
+        matrix_display = np.where(np.isinf(tfd_matrix), np.nan, tfd_matrix)
+        df = pd.DataFrame(matrix_display, index=row_labels, columns=col_labels)
+
+        # Create Excel writer with openpyxl engine
+        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+            # Write matrix to sheet starting from row 7 to leave room for header info
+            df.to_excel(
+                writer,
+                sheet_name="TFD_Matrix",
+                startrow=7,
+                float_format="%.6f",
             )
 
-            # Add grouping information
+            # Get the worksheet to add header information
+            worksheet = writer.sheets["TFD_Matrix"]
+
+            # Add header information
+            worksheet["A1"] = (
+                f"Full TFD Matrix ({n}x{n}) - {self.__class__.__name__}"
+            )
+            worksheet["A2"] = (
+                "Based on Schulz-Gasch et al., JCIM, 52, 1499-1512 (2012)"
+            )
+
             if hasattr(self, "num_groups") and self.num_groups is not None:
-                f.write(f"Requested Groups (-N): {self.num_groups}\n")
+                worksheet["A3"] = f"Requested Groups (-N): {self.num_groups}"
                 if (
                     hasattr(self, "_auto_threshold")
                     and self._auto_threshold is not None
                 ):
-                    f.write(
-                        f"Auto-determined Threshold: {self._auto_threshold:.6f}\n"
+                    worksheet["A4"] = (
+                        f"Auto-determined Threshold: {self._auto_threshold:.6f}"
                     )
             else:
-                f.write(f"Threshold: {self.threshold}\n")
+                worksheet["A3"] = f"Threshold: {self.threshold}"
 
-            f.write(f"Use weights: {self.use_weights}\n")
-            f.write(f"Max deviation: {self.max_dev}\n")
-            f.write(f"Symmetry radius: {self.symm_radius}\n")
-            f.write(f"Ignore colinear bonds: {self.ignore_colinear_bonds}\n")
-
-            # Add grouping time information if available
             if grouping_time is not None:
-                f.write(f"TFD Grouping Time: {grouping_time:.2f} seconds\n")
+                worksheet["A5"] = (
+                    f"TFD Grouping Time: {grouping_time:.2f} seconds"
+                )
 
-            f.write("=" * 80 + "\n")
-            f.write("Lower values indicate higher torsional similarity\n")
-            f.write("∞ indicates calculation failures\n")
-            f.write("-" * 80 + "\n\n")
+            worksheet["A6"] = (
+                "Lower values indicate higher torsional similarity. Empty cells indicate calculation failures."
+            )
 
-            # Write header (same format as RMSD)
-            f.write(f"{'Conf':>6}")
-            for j in range(n):
-                f.write(f"{j+1:>10}")
-            f.write("\n")
-            f.write("-" * 80 + "\n")
+            # Auto-adjust column widths
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                    except (TypeError, AttributeError):
+                        pass
+                adjusted_width = min(max_length + 2, 15)
+                worksheet.column_dimensions[column_letter].width = (
+                    adjusted_width
+                )
 
-            # Write matrix (same format as RMSD)
-            for i in range(n):
-                f.write(f"{i+1:>6}")
-                for j in range(n):
-                    if np.isinf(tfd_matrix[i, j]):
-                        f.write(f"{'∞':>10}")
-                    else:
-                        f.write(f"{tfd_matrix[i, j]:>10.4f}")
-                f.write("\n")
+        logger.info(f"TFD matrix saved to {filename}")
 
     def calculate_full_tfd_matrix(
         self, output_file: Optional[str] = None
@@ -3796,24 +3831,33 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                     tfd_matrix[i, j] = tfd_matrix[j, i] = tfd
 
         # Output results (same format as RMSD)
+        col_width = 12  # Fixed width: fits "-XX.XXXXXX" (6 decimals)
+        row_header_width = 7  # Width for row headers
+
         print(f"\nFull TFD Matrix ({n}x{n}):")
-        print("=" * 60)
+        print("=" * (row_header_width + col_width * n))
 
-        # Print header
-        print(f"{'':>6}", end="")
+        # Print column index header (right-aligned to match matrix values)
+        header_line = " " * row_header_width
         for j in range(n):
-            print(f"{j+1:>8}", end="")
-        print()
+            header_line += f"{j+1:>{col_width}}"
+        print(header_line)
 
-        # Print matrix rows
+        # Print header row label with separator
+        separator_line = "Conf".rjust(row_header_width)
+        for j in range(n):
+            separator_line += "-" * col_width
+        print(separator_line)
+
+        # Print matrix rows (right-aligned values)
         for i in range(n):
-            print(f"{i+1:>6}", end="")
+            row_line = f"{i+1:>{row_header_width}}"
             for j in range(n):
                 if np.isinf(tfd_matrix[i, j]):
-                    print(f"{'∞':>8}", end="")
+                    row_line += f"{'∞':>{col_width}}"
                 else:
-                    print(f"{tfd_matrix[i, j]:>8.3f}", end="")
-            print()
+                    row_line += f"{tfd_matrix[i, j]:>{col_width}.6f}"
+            print(row_line)
 
         # Save to file if requested
         if output_file:
@@ -3864,6 +3908,7 @@ class StructureGrouperFactory:
         threshold=None,
         num_groups=None,
         ignore_hydrogens=None,
+        label=None,
         **kwargs,
     ):
         """
@@ -3878,6 +3923,7 @@ class StructureGrouperFactory:
             threshold (float): Threshold for grouping (strategy dependent).
             num_groups (int): Number of groups to create (alternative to threshold
                 for RMSD-based strategies).
+            label (str): Label/name for output files.
             **kwargs: Extra options forwarded to the grouper constructor
                 (e.g., `align_molecules`, `adjust_H`).
 
@@ -3926,6 +3972,7 @@ class StructureGrouperFactory:
                         num_groups=num_groups,
                         num_procs=num_procs,
                         ignore_hydrogens=ignore_hydrogens,
+                        label=label,
                         **kwargs,
                     )
                 elif strategy in ["tanimoto", "torsion"]:
@@ -3934,18 +3981,21 @@ class StructureGrouperFactory:
                         threshold=threshold,
                         num_groups=num_groups,
                         num_procs=num_procs,
+                        label=label,
                         **kwargs,
                     )
                 return groupers[strategy](
                     structures,
                     threshold=threshold,
                     num_procs=num_procs,
+                    label=label,
                     **kwargs,
                 )
             else:
                 return groupers[strategy](
                     structures,
                     num_procs=num_procs,
+                    label=label,
                     **kwargs,
                 )
         raise ValueError(f"Unknown grouping strategy: {strategy}")

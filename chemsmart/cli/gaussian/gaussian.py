@@ -310,12 +310,6 @@ def click_gaussian_grouper_options(f):
         default=True,
         help="Whether to use torsion weights in TFD calculation for torsion grouping. Default=True.",
     )
-    @click.option(
-        "--use-super/--no-use-super",
-        type=bool,
-        default=True,
-        help="Use align or super for PymolRMSD grouper. Default=False (use align).",
-    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
