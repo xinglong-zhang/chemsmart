@@ -123,7 +123,9 @@ class BaseAssembler:
 
     def get_calculation_results(self):
         calculation_results = {
-            "total_energy": self.output.energies[-1],
+            "total_energy": (
+                self.output.energies[-1] if self.output.energies else None
+            ),
             "num_unpaired_electrons": self.output.num_unpaired_electrons,
             "alpha_homo_energy": self.output.alpha_homo_energy,
             "beta_homo_energy": self.output.beta_homo_energy,
