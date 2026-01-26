@@ -1514,6 +1514,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             - The parent class 'functional' and 'basis' attributes are set to high_level values
         """
         super().__init__(**kwargs)
+        self.jobtype = jobtype
         self.high_level_functional = high_level_functional
         self.high_level_basis = high_level_basis
         self.high_level_force_field = high_level_force_field
@@ -1604,7 +1605,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             route_string += self.dieze_tag
 
         # Add job type
-        jobtype = self.job_type.lower() if self.job_type else None
+        jobtype = self.jobtype.lower() if self.jobtype else None
         if jobtype == "opt":
             route_string += " opt"
         elif jobtype == "scan" or jobtype == "modred":
@@ -1678,7 +1679,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         Note: jobtype is now inferred from the parent command when using CLI,
         so it should always be set. If not set, defaults to basic ONIOM route.
         """
-        if self.job_type is None:
+        if self.jobtype is None:
             logger.warning(
                 "Job type not specified for ONIOM job. "
                 "Using basic route string without job-specific keywords."

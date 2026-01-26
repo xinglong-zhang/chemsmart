@@ -325,6 +325,7 @@ class TestGaussianInputWriter:
         single_molecule_xyz_file,
         gaussian_yaml_settings_qmmm_project_name,
         gaussian_written_qmmm_file,
+        gaussian_jobrunner_no_scratch,
     ):
         project_settings = GaussianProjectSettings.from_project(
             gaussian_yaml_settings_qmmm_project_name
@@ -339,6 +340,7 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=qmmm_settings,
             label="gaussian_qmmm",
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianQMMMJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -365,7 +367,7 @@ class TestGaussianInputWriter:
         qmmm_settings.real_charge = 0
         qmmm_settings.real_multiplicity = 1
         qmmm_settings.high_level_atoms = [3, 12, 14, 7, 9]
-        qmmm_settings.medium_level_atoms = [8, 17, 19 - 25]
+        qmmm_settings.medium_level_atoms = [8, 17, 19, 20, 21, 22, 23, 24, 25]
         qmmm_settings.bonded_atoms = [(1, 3)]
         job_settings = GaussianJobSettings.from_logfile(
             gaussian_singlet_opt_outfile
@@ -376,6 +378,7 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=qmmm_settings,
             label="gaussian_qmmm_from_log",
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianQMMMJob)
         g16_writer = GaussianInputWriter(job=job)

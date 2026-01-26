@@ -2667,12 +2667,6 @@ class TestORCAQMMM:
         assert orca_qmmm1.qm_qm2_energy == -5889.533884098047
         assert orca_qmmm1.qm_energy == -5290.656904956516
 
-        print(
-            orca_qmmm1.qm2_energy_of_small_region,
-            orca_qmmm1.qm_qm2_energy,
-            orca_qmmm1.qm_energy,
-        )
-
 
 class TestORCAQMMMJobSettings:
     def test_partition_string_single_and_list_input(self):

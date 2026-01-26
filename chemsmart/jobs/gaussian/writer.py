@@ -222,9 +222,6 @@ class GaussianInputWriter(InputWriter):
                     )
         f.write(route_string + "\n")
         f.write("\n")
-        if route_string:
-            f.write(route_string + "\n")
-            f.write("\n")
 
     def _write_gaussian_title(self, f):
         """

@@ -1,5 +1,5 @@
 %chk=gaussian_qmmm.chk
-%nprocshared=12
+%nprocshared=64
 %mem=400GB
 # freq oniom(MN15/def2svp:PBE/6-31g(d,p)/auto:AMBER=HardFirst)
 

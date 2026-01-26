@@ -266,7 +266,6 @@ class TestGaussian16Input:
         assert g16_oniom.molecule.symbols.formula == "CH3CH3"
         assert g16_oniom.partition == {
             "high level atoms": ["2-5"],
-            "medium level atoms": [],
             "low level atoms": ["6-9"],
         }
 
@@ -1853,7 +1852,7 @@ class TestGaussian16Output:
             "high-level, model system": (1, 1),
             "low-level, model system": (1, 1),
         }
-        assert g16_oniom.oniom_getting_layer_energies == {
+        assert g16_oniom.oniom_layer_energies == {
             "method:  high, system:  model": -5303.002072980664,
             "method:  low, system:  model": 6.767438788151,
             "method:  low, system:  real": 9.234384095059,

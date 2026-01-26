@@ -106,16 +106,34 @@ class Gaussian16Input(GaussianFileMixin):
         """
         Get molecular charge.
         """
-        charge, _ = self._get_charge_and_multiplicity()
-        return charge
+        charge_multiplicity = self._get_charge_and_multiplicity()
+        if charge_multiplicity is not None:
+            charge, _ = charge_multiplicity
+            return charge
+
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity(
+            use_partition=False
+        )
+        if oniom_charge:
+            return oniom_charge.get("real_charge")
+        return None
 
     @property
     def multiplicity(self):
         """
         Get spin multiplicity.
         """
-        _, multiplicity = self._get_charge_and_multiplicity()
-        return multiplicity
+        charge_multiplicity = self._get_charge_and_multiplicity()
+        if charge_multiplicity is not None:
+            _, multiplicity = charge_multiplicity
+            return multiplicity
+
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity(
+            use_partition=False
+        )
+        if oniom_multiplicity:
+            return oniom_multiplicity.get("real_multiplicity")
+        return None
 
     @property
     def oniom_charge(self):
@@ -315,7 +333,7 @@ class Gaussian16Input(GaussianFileMixin):
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity
 
-    def _get_oniom_charge_and_multiplicity(self):
+    def _get_oniom_charge_and_multiplicity(self, use_partition=True):
         # line = self.contents[5]
         line_elements = []
         for line in self.contents:
@@ -336,7 +354,13 @@ class Gaussian16Input(GaussianFileMixin):
         oniom_charge = {}
         oniom_multiplicity = {}
         full_line = 12
-        if len(self.partition) == 2:
+        partition_len = None
+        if use_partition:
+            try:
+                partition_len = len(self.partition)
+            except RecursionError:
+                partition_len = None
+        if partition_len == 2:
             charge_multiplicity_list = charge_multiplicity_list[0:1, 4:5]
             full_line = 6
         for j in range(0, int(full_line) - len(line_elements)):
@@ -459,16 +483,20 @@ class Gaussian16QMMMInput(Gaussian16Input):
     def partition(self):
         """Get the partition string."""
         partition = {}
-        for key, val in [
-            ("high level atoms", self.molecule.high_level_atoms),
-            ("medium level atoms", self.molecule.medium_level_atoms),
-            ("low level atoms", self.molecule.low_level_atoms),
-        ]:
-            if val is not None:
-                partition[key] = get_range_from_list(val)
+        partitions_data = getattr(self.coordinate_block, "partitions", None)
+        if partitions_data:
+            _, high_atoms, medium_atoms, low_atoms = partitions_data
+            if high_atoms:
+                partition["high level atoms"] = get_range_from_list(high_atoms)
+            if medium_atoms:
+                partition["medium level atoms"] = get_range_from_list(
+                    medium_atoms
+                )
+            if low_atoms:
+                partition["low level atoms"] = get_range_from_list(low_atoms)
         return partition
 
-    def _get_oniom_charge_and_multiplicity(self):
+    def _get_oniom_charge_and_multiplicity(self, use_partition=True):
         line_elements = []
         for line in self.contents:
             line_elements = line.split()
@@ -489,7 +517,8 @@ class Gaussian16QMMMInput(Gaussian16Input):
         oniom_multiplicity = {}
         full_line = 12
         if len(self.partition) == 2:
-            charge_multiplicity_list = charge_multiplicity_list[0:1, 4:5]
+            print(charge_multiplicity_list)
+            charge_multiplicity_list = charge_multiplicity_list[0:3]
             full_line = 6
         for j in range(0, int(full_line) - len(line_elements)):
             line_elements.append("Not specified, will use default value.")
