@@ -3085,13 +3085,56 @@ class ORCAQMMMOutput(ORCAOutput):
     @property
     def scaling_factor_qm2(self):
         pattern = re.compile(
-            r"Scaling factor for QM2 charges\s+\.{3}\s+(?P<scaling>\d+\.\d+)"
+            r"Scaling factor for QM2 charges\s+\.\.\.\s+(?P<scaling>\d+\.\d+)"
         )
         for line in self.contents:
             match = pattern.search(line)
             if match:
                 return float(match.group("scaling"))
         return None
+
+    def _get_partition_system_sizes(self):
+        size_patterns = {
+            "QMMM": re.compile(r"Size of QMMM System\s*\.\.\.\s*(?P<size>\d+)"),
+            "QM2": re.compile(r"Size of QM2 Subsystem\s*\.\.\.\s*(?P<size>\d+)"),
+            "QM1": re.compile(r"Size of QM1 Subsystem\s*\.\.\.\s*(?P<size>\d+)"),
+        }
+        sizes = {"QM1": None, "QM2": None, "QMMM": None}
+        for line in self.contents:
+            for label, pattern in size_patterns.items():
+                match = pattern.search(line)
+                if match:
+                    sizes[label] = int(match.group("size"))
+        return sizes
+
+    def _get_point_charge_treatment(self):
+        pattern1 = re.compile(
+            r"Point charges in QM calc\. from MM atoms\s*\.\.\.\s*(\d+)"
+        )
+        pattern2 = re.compile(r"from charge shift scheme\s*\.\.\.\s*(\d+)")
+        point_charges_in_qm_from_mm = None
+        point_charges_in_qm_from_charge_shift = None
+        for line in self.contents:
+            match1 = pattern1.search(line)
+            match2 = pattern2.search(line)
+            if match1 is not None:
+                point_charges_in_qm_from_mm = int(
+                    re.sub(
+                        r"Point charges in QM calc\. from MM atoms\s*\.\.\.\s",
+                        "",
+                        line,
+                    ).strip()
+                )
+            if match2 is not None:
+                point_charges_in_qm_from_charge_shift = int(
+                    re.sub(
+                        r"from charge shift scheme\s*\.\.\.\s", "", line
+                    ).strip()
+                )
+        return (
+            point_charges_in_qm_from_mm,
+            point_charges_in_qm_from_charge_shift,
+        )
 
     @property
     def point_charges_in_qm_from_mm(self):
@@ -3195,76 +3238,30 @@ class ORCAQMMMOutput(ORCAOutput):
         pattern = re.compile(
             r"FINAL SINGLE POINT ENERGY(?:\s+\([^)]+\))?\s+(?P<energy>-?\d+\.\d+)"
         )
-        # pattern = re.compile(r"FINAL SINGLE POINT ENERGY\s+\([^)]+\)\s+(?P<energy>-?\d+\.\d+)")
         for line in self.contents:
             match = pattern.search(line)
-            if match:
-                if "(L-QM2)" in line:
-                    qm2_energy_of_large_system = (
-                        float(match.group("energy")) * units.Hartree
-                    )
-                elif "(S-QM2)" in line:
-                    qm2_energy_of_small_system = (
-                        float(match.group("energy")) * units.Hartree
-                    )
-                elif "(QM/QM2)" in line:
-                    qm_qm2_energy = (
-                        float(match.group("energy")) * units.Hartree
-                    )
-                else:
-                    qm_energy = float(match.group("energy")) * units.Hartree
-                    return (
-                        qm2_energy_of_large_system,
-                        qm2_energy_of_small_system,
-                        qm_qm2_energy,
-                        qm_energy,
-                    )
+            if not match:
+                continue
+            energy = float(match.group("energy")) * units.Hartree
+            if "(L-QM2)" in line:
+                qm2_energy_of_large_system = energy
+            elif "(S-QM2)" in line:
+                qm2_energy_of_small_system = energy
+            elif "(QM/QM2)" in line:
+                qm_qm2_energy = energy
+            else:
+                qm_energy = energy
+            if (
+                qm2_energy_of_large_system is not None
+                and qm2_energy_of_small_system is not None
+                and qm_qm2_energy is not None
+                and qm_energy is not None
+            ):
+                break
+        return (
+            qm2_energy_of_large_system,
+            qm2_energy_of_small_system,
+            qm_qm2_energy,
+            qm_energy,
+        )
 
-    def _get_point_charge_treatment(self):
-        pattern1 = re.compile(
-            r"Point charges in QM calc\. from MM atoms\s*\.{3}\s*(\d+)"
-        )
-        pattern2 = re.compile(r"from charge shift scheme\s*\.{3}\s*(\d+)")
-        point_charges_treatment = []
-        for line in self.contents:
-            match1 = pattern1.search(line)
-            match2 = pattern2.search(line)
-            if match1 is not None:
-                point_charges_in_qm_from_mm = int(
-                    re.sub(
-                        r"Point charges in QM calc\. from MM atoms\s*\.{3}\s",
-                        "",
-                        line,
-                    ).strip()
-                )
-                point_charges_treatment.append(point_charges_in_qm_from_mm)
-            if match2 is not None:
-                point_charges_in_qm_from_charge_shift = int(
-                    re.sub(
-                        r"from charge shift scheme\s*\.{3}\s", "", line
-                    ).strip()
-                )
-                point_charges_treatment.append(
-                    point_charges_in_qm_from_charge_shift
-                )
-        return point_charges_treatment[0], point_charges_treatment[1]
-
-    def _get_partition_system_sizes(self):
-        pattern1 = re.compile(
-            r"Size of (?P<partition>\w+) System\s+\.{3}\s+(?P<atoms>\d+)"
-        )
-        pattern2 = re.compile(
-            r"Size of (?P<partition>\w+) Subsystem\s+\.{3}\s+(?P<atoms>\d+)"
-        )
-        system_sizes = {}
-        match = None
-        for line in self.contents:
-            if pattern1.search(line):
-                match = pattern1.search(line)
-            elif pattern2.search(line):
-                match = pattern2.search(line)
-            if match:
-                partition = match.group("partition")
-                atoms = int(match.group("atoms"))
-                system_sizes[partition] = atoms
-        return system_sizes

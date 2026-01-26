@@ -2689,7 +2689,7 @@ class TestORCAQMMMJobSettings:
 
         s = ORCAQMMMJobSettings()
         s.high_level_atoms = "1-3,5"
-        s.medium_level_atoms = "7-9,12"
+        s.intermediate_level_atoms = "7-9,12"
         out = s._get_partition_string()
         # order: QMAtoms then QM2Atoms
         lines = [ln for ln in out.splitlines() if ln.strip()]

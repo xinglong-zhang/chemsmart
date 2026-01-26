@@ -901,7 +901,7 @@ class Molecule:
         from chemsmart.io.orca.output import ORCAOutput
 
         orca_output = ORCAOutput(filename=filepath)
-        return orca_output.molecule.get_molecule(index=index)
+        return orca_output.get_molecule(index=index)
 
     @classmethod
     def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):
