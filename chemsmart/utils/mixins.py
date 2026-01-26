@@ -407,7 +407,10 @@ class GaussianFileMixin(FileMixin):
 
     def _get_version(self):
         for i, line in enumerate(self.contents):
-            if "******************************************" in line:
+            if (
+                "******************************************" in line
+                and i + 1 < len(self.contents)
+            ):
                 next_line = self.contents[i + 1]
                 if "Gaussian" in next_line:
                     version_line = next_line

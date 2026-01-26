@@ -13,6 +13,7 @@ from chemsmart.io.gaussian.output import (
 )
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
 class TestRouteString:
@@ -599,20 +600,19 @@ class TestGaussian16Output:
         )
         assert mol.vibrational_frequencies[0] == 11.9481
         assert g16_output.zero_point_energy == 0.284336
-        KCAL_MOL_TO_HARTREE = 1 / 627.509
         assert np.isclose(
             g16_output.thermal_vibration_correction,
-            190.931 * KCAL_MOL_TO_HARTREE - 0.284336,
+            190.931 * kcal_per_mol_to_hartree - 0.284336,
             atol=1e-6,
         )
         assert np.isclose(
             g16_output.thermal_rotation_correction,
-            0.889 * KCAL_MOL_TO_HARTREE,
+            0.889 * kcal_per_mol_to_hartree,
             atol=1e-6,
         )
         assert np.isclose(
             g16_output.thermal_translation_correction,
-            0.889 * KCAL_MOL_TO_HARTREE,
+            0.889 * kcal_per_mol_to_hartree,
             atol=1e-6,
         )
         assert g16_output.thermal_energy_correction == 0.307101
@@ -623,22 +623,22 @@ class TestGaussian16Output:
         assert g16_output.gibbs_free_energy == -1863.814390
         assert np.isclose(
             g16_output.electronic_entropy,
-            0.000 * 1e-3 * KCAL_MOL_TO_HARTREE,
+            0.000 * 1e-3 * kcal_per_mol_to_hartree,
             atol=1e-3,
         )
         assert np.isclose(
             g16_output.vibrational_entropy,
-            90.556 * 1e-3 * KCAL_MOL_TO_HARTREE,
+            90.556 * 1e-3 * kcal_per_mol_to_hartree,
             atol=1e-3,
         )
         assert np.isclose(
             g16_output.rotational_entropy,
-            37.462 * 1e-3 * KCAL_MOL_TO_HARTREE,
+            37.462 * 1e-3 * kcal_per_mol_to_hartree,
             atol=1e-3,
         )
         assert np.isclose(
             g16_output.translational_entropy,
-            45.103 * 1e-3 * KCAL_MOL_TO_HARTREE,
+            45.103 * 1e-3 * kcal_per_mol_to_hartree,
             atol=1e-3,
         )
 
