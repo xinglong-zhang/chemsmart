@@ -20,7 +20,183 @@ DEFAULT_BUFFER = 0.3
 pt = PeriodicTable()
 
 
-class SkeletonPreprocessor:
+class BasePreprocessor:
+    """Base preprocessor class with shared logic for Skeleton and Substituent preprocessors."""
+
+    def __init__(self, molecule: Molecule, link_index: int):
+        self.molecule = molecule
+        # Convert 1-based to 0-based index
+        self.link_index = link_index - 1
+        # Store the final indices used to create the processed molecule
+        self._final_indices = None
+
+    def _has_available_bonding_position(self) -> bool:
+        """
+        Check if the link atom has an available bonding position.
+        """
+        # Build molecular graph
+        graph = self.molecule.to_graph()
+
+        # Calculate current total bond order
+        current_bond_order_sum = 0.0
+        for neighbor in graph.neighbors(self.link_index):
+            edge_data = graph.get_edge_data(self.link_index, neighbor)
+            # Default to 1.0 if bond_order is missing (shouldn't happen with to_graph)
+            bond_order = edge_data.get("bond_order", 1.0)
+            current_bond_order_sum += bond_order
+
+        # Get element symbol
+        element = self.molecule.chemical_symbols[self.link_index]
+
+        # Get expected maximum bonding capacity
+        max_bonds = self._get_max_bonding_capacity(element)
+
+        # Use a small epsilon for float comparison
+        return current_bond_order_sum < (max_bonds - 0.1)
+
+    @staticmethod
+    def _get_max_bonding_capacity(element: str) -> int:
+        """
+        Get the maximum bonding capacity for an element.
+        """
+        periodic_table = Chem.GetPeriodicTable()
+        atomic_num = periodic_table.GetAtomicNumber(element)
+
+        # GetDefaultValence returns a tuple of possible valences, take the max
+        default_valence = periodic_table.GetDefaultValence(atomic_num)
+
+        if isinstance(default_valence, tuple):
+            return max(default_valence)
+        return default_valence
+
+    def detect_substituent(self) -> list[int]:
+        """
+        Auto-detect substituent/group connected to link atom.
+        Identifies the smallest connected component when the bond is broken.
+        """
+        # Build molecular graph
+        graph = self.molecule.to_graph()
+
+        # Get neighbors of link atom
+        neighbors = list(graph.neighbors(self.link_index))
+
+        if len(neighbors) == 0:
+            logger.warning(
+                f"Link atom at index {self.link_index} has no neighbors"
+            )
+            return []
+
+        # For each neighbor, calculate the size of the component if bond is broken.
+        # The substituent/group to remove is the smallest component.
+        min_component_size = float("inf")
+        target_indices = []
+
+        for neighbor in neighbors:
+            # Temporarily remove the edge
+            graph_copy = graph.copy()
+            graph_copy.remove_edge(self.link_index, neighbor)
+
+            # Find connected components
+            components = list(nx.connected_components(graph_copy))
+
+            # Find which component contains the neighbor (not the link atom)
+            for component in components:
+                if neighbor in component and self.link_index not in component:
+                    if len(component) < min_component_size:
+                        min_component_size = len(component)
+                        target_indices = list(component)
+                    break
+
+        return target_indices
+
+    def _get_complement_indices(self, exclude_indices: list[int]) -> list[int]:
+        """
+        Get indices of all atoms except those in exclude_indices.
+        """
+        exclude_set = set(exclude_indices)
+        return [i for i in range(len(self.molecule)) if i not in exclude_set]
+
+    def _extract_by_indices(self, indices: list[int]) -> Molecule:
+        """
+        Extract a subset of atoms from molecule by indices.
+        """
+        if not indices:
+            raise ValueError("Cannot create molecule with no atoms")
+
+        # Sort indices to maintain order
+        sorted_indices = sorted(indices)
+
+        # Extract symbols
+        symbols = [self.molecule.chemical_symbols[i] for i in sorted_indices]
+
+        # Extract positions
+        positions = self.molecule.positions[sorted_indices]
+
+        # Extract frozen_atoms if present
+        frozen_atoms = None
+        if self.molecule.frozen_atoms is not None:
+            frozen_atoms = [
+                self.molecule.frozen_atoms[i] for i in sorted_indices
+            ]
+
+        return Molecule(
+            symbols=symbols,
+            positions=positions,
+            charge=self.molecule.charge,
+            multiplicity=self.molecule.multiplicity,
+            frozen_atoms=frozen_atoms,
+        )
+
+    def _run_auto_detect(self) -> Molecule:
+        """
+        Run auto-detection mode to find and remove the smallest group at link position.
+
+        Returns
+        -------
+        Molecule
+            Processed molecule with group removed.
+        """
+        removed_indices = self.detect_substituent()
+        keep_indices = self._get_complement_indices(removed_indices)
+        self._final_indices = sorted(keep_indices)
+        return self._extract_by_indices(keep_indices)
+
+    def get_new_link_index(self) -> int:
+        """
+        Get the new link index in the processed molecule (1-based).
+
+        After removing atoms, the original link_index may change.
+        This method returns the new index.
+
+        Returns
+        -------
+        int
+            New link index (1-based)
+        """
+        if self._final_indices is None:
+            indices = self._get_fallback_indices()
+        else:
+            indices = self._final_indices
+
+        # Find position of link_index in sorted indices
+        try:
+            new_index_0based = indices.index(self.link_index)
+            return new_index_0based + 1  # Convert to 1-based
+        except ValueError:
+            raise ValueError(
+                f"Link atom at index {self.link_index + 1} (1-based) was removed during preprocessing"
+            )
+
+    def _get_fallback_indices(self) -> list[int]:
+        """
+        Get indices to use for new link index calculation if run() wasn't called.
+        Default implementation: Auto-detect.
+        """
+        substituent_indices = self.detect_substituent()
+        return sorted(self._get_complement_indices(substituent_indices))
+
+
+class SkeletonPreprocessor(BasePreprocessor):
     """Preprocessor to prepare skeleton molecule by removing substituent at link position.
 
     This class handles two scenarios:
@@ -47,16 +223,11 @@ class SkeletonPreprocessor:
             Indices of atoms belonging to skeleton (1-based).
             If None, auto-detection will be used.
         """
-        self.molecule = molecule
-        # Convert 1-based to 0-based index
-        self.link_index = link_index - 1
+        super().__init__(molecule, link_index)
         # Convert skeleton_indices to 0-based if provided
         self.skeleton_indices = None
         if skeleton_indices is not None:
             self.skeleton_indices = [i - 1 for i in skeleton_indices]
-
-        # Store the final indices used to create the processed molecule
-        self._final_indices = None
 
     def run(self) -> Molecule:
         """
@@ -114,79 +285,6 @@ class SkeletonPreprocessor:
             # Mode 2: Auto-detect substituent
             return self._run_auto_detect()
 
-    def _has_available_bonding_position(self) -> bool:
-        """
-        Check if the link atom has an available bonding position.
-
-        This is determined by comparing the actual sum of bond orders
-        with the expected maximum bonding capacity of the element.
-
-        Returns
-        -------
-        bool
-            True if link atom has available position for new bond.
-        """
-        # Build molecular graph
-        graph = self.molecule.to_graph()
-
-        # Calculate current total bond order
-        current_bond_order_sum = 0.0
-        for neighbor in graph.neighbors(self.link_index):
-            edge_data = graph.get_edge_data(self.link_index, neighbor)
-            # Default to 1.0 if bond_order is missing (shouldn't happen with to_graph)
-            bond_order = edge_data.get("bond_order", 1.0)
-            current_bond_order_sum += bond_order
-
-        # Get element symbol
-        element = self.molecule.chemical_symbols[self.link_index]
-
-        # Get expected maximum bonding capacity
-        max_bonds = self._get_max_bonding_capacity(element)
-
-        # Use a small epsilon for float comparison
-        return current_bond_order_sum < (max_bonds - 0.1)
-
-    @staticmethod
-    def _get_max_bonding_capacity(element: str) -> int:
-        """
-        Get the maximum bonding capacity for an element.
-
-        Uses RDKit's periodic table to get the default valence.
-
-        Parameters
-        ----------
-        element : str
-            Element symbol
-
-        Returns
-        -------
-        int
-            Maximum number of bonds the element can form
-        """
-
-        periodic_table = Chem.GetPeriodicTable()
-        atomic_num = periodic_table.GetAtomicNumber(element)
-
-        # GetDefaultValence returns a tuple of possible valences, take the max
-        default_valence = periodic_table.GetDefaultValence(atomic_num)
-
-        if isinstance(default_valence, tuple):
-            return max(default_valence)
-        return default_valence
-
-    def _run_auto_detect(self) -> Molecule:
-        """
-        Run auto-detection mode to find and remove substituent.
-
-        Returns
-        -------
-        Molecule
-            Skeleton molecule with substituent removed.
-        """
-        substituent_indices = self.detect_substituent()
-        skeleton_indices = self._get_complement_indices(substituent_indices)
-        self._final_indices = sorted(skeleton_indices)
-        return self._extract_by_indices(skeleton_indices)
 
     def _find_non_skeleton_branches(self) -> list[list[int]]:
         """
@@ -272,148 +370,13 @@ class SkeletonPreprocessor:
 
         return branch_atoms
 
-    def detect_substituent(self) -> list[int]:
-        """
-        Auto-detect substituent atoms connected to link atom.
-
-        The substituent is identified as the smallest connected component
-        when the bond between link_atom and its neighbor is broken.
-
-        Returns
-        -------
-        list[int]
-            Indices of atoms belonging to the substituent (0-based).
-        """
-        # Build molecular graph
-        graph = self.molecule.to_graph()
-
-        # Get neighbors of link atom
-        neighbors = list(graph.neighbors(self.link_index))
-
-        if len(neighbors) == 0:
-            logger.warning(
-                f"Link atom at index {self.link_index} has no neighbors"
-            )
-            return []
-
-        # For each neighbor, calculate the size of the component if bond is broken
-        # The substituent is the smallest component
-        min_component_size = float("inf")
-        substituent_indices = []
-
-        for neighbor in neighbors:
-            # Temporarily remove the edge
-            graph_copy = graph.copy()
-            graph_copy.remove_edge(self.link_index, neighbor)
-
-            # Find connected components
-            components = list(nx.connected_components(graph_copy))
-
-            # Find which component contains the neighbor (not the link atom)
-            for component in components:
-                if neighbor in component and self.link_index not in component:
-                    # This component is a potential substituent
-                    if len(component) < min_component_size:
-                        min_component_size = len(component)
-                        substituent_indices = list(component)
-                    break
-
-        return substituent_indices
-
-    def _get_complement_indices(self, exclude_indices: list[int]) -> list[int]:
-        """
-        Get indices of all atoms except those in exclude_indices.
-
-        Parameters
-        ----------
-        exclude_indices : list[int]
-            Indices to exclude (0-based)
-
-        Returns
-        -------
-        list[int]
-            Complement indices (0-based)
-        """
-        exclude_set = set(exclude_indices)
-        return [i for i in range(len(self.molecule)) if i not in exclude_set]
-
-    def _extract_by_indices(self, indices: list[int]) -> Molecule:
-        """
-        Extract a subset of atoms from molecule by indices.
-
-        Parameters
-        ----------
-        indices : list[int]
-            Indices of atoms to keep (0-based)
-
-        Returns
-        -------
-        Molecule
-            New molecule containing only specified atoms
-        """
-        if not indices:
-            raise ValueError("Cannot create molecule with no atoms")
-
-        # Sort indices to maintain order
-        sorted_indices = sorted(indices)
-
-        # Extract symbols
-        symbols = [self.molecule.chemical_symbols[i] for i in sorted_indices]
-
-        # Extract positions
-        positions = self.molecule.positions[sorted_indices]
-
-        # Extract frozen_atoms if present
-        frozen_atoms = None
-        if self.molecule.frozen_atoms is not None:
-            frozen_atoms = [
-                self.molecule.frozen_atoms[i] for i in sorted_indices
-            ]
-
-        return Molecule(
-            symbols=symbols,
-            positions=positions,
-            charge=self.molecule.charge,
-            multiplicity=self.molecule.multiplicity,
-            frozen_atoms=frozen_atoms,
-        )
-
-    def get_new_link_index(self) -> int:
-        """
-        Get the new link index in the processed skeleton molecule (1-based).
-
-        After extracting skeleton atoms, the original link_index may change.
-        This method returns the new index.
-
-        Returns
-        -------
-        int
-            New link index (1-based)
-        """
-        if self._final_indices is None:
-            # Should not happen if run() was called
-            # Fallback to auto-detect logic if run() wasn't called (legacy behavior)
-            if self.skeleton_indices is not None:
-                indices = sorted(self.skeleton_indices)
-            else:
-                substituent_indices = self.detect_substituent()
-                indices = sorted(
-                    self._get_complement_indices(substituent_indices)
-                )
-        else:
-            indices = self._final_indices
-
-        # Find position of link_index in sorted indices
-        try:
-            new_index_0based = indices.index(self.link_index)
-            return new_index_0based + 1  # Convert to 1-based
-        except ValueError:
-            raise ValueError(
-                f"Link atom at index {self.link_index + 1} (1-based) is not in skeleton indices"
-            )
+    def _get_fallback_indices(self) -> list[int]:
+        if self.skeleton_indices is not None:
+            return sorted(self.skeleton_indices)
+        return super()._get_fallback_indices()
 
 
-class SubstituentPreprocessor:
+class SubstituentPreprocessor(BasePreprocessor):
     """Preprocessor to prepare substituent molecule by removing atom/group at link position if needed.
 
     This class checks if the link atom has an available bonding position.
@@ -438,12 +401,7 @@ class SubstituentPreprocessor:
         link_index : int
             Index of the link atom (1-based, will be converted to 0-based internally)
         """
-        self.molecule = molecule
-        # Convert 1-based to 0-based index
-        self.link_index = link_index - 1
-
-        # Store the final indices used to create the processed molecule
-        self._final_indices = None
+        super().__init__(molecule, link_index)
 
     def run(self) -> Molecule:
         """
@@ -474,218 +432,10 @@ class SubstituentPreprocessor:
         )
         return self._run_auto_detect()
 
-    def _has_available_bonding_position(self) -> bool:
-        """
-        Check if the link atom has an available bonding position.
-
-        This is determined by comparing the actual sum of bond orders
-        with the expected maximum bonding capacity of the element.
-
-        Returns
-        -------
-        bool
-            True if link atom has available position for new bond.
-        """
-        # Build molecular graph
-        graph = self.molecule.to_graph()
-
-        # Calculate current total bond order
-        current_bond_order_sum = 0.0
-        for neighbor in graph.neighbors(self.link_index):
-            edge_data = graph.get_edge_data(self.link_index, neighbor)
-            # Default to 1.0 if bond_order is missing (shouldn't happen with to_graph)
-            bond_order = edge_data.get("bond_order", 1.0)
-            current_bond_order_sum += bond_order
-
-        # Get element symbol
-        element = self.molecule.chemical_symbols[self.link_index]
-
-        # Get expected maximum bonding capacity
-        max_bonds = self._get_max_bonding_capacity(element)
-
-        # Use a small epsilon for float comparison
-        return current_bond_order_sum < (max_bonds - 0.1)
-
-    @staticmethod
-    def _get_max_bonding_capacity(element: str) -> int:
-        """
-        Get the maximum bonding capacity for an element.
-
-        Uses RDKit's periodic table to get the default valence.
-
-        Parameters
-        ----------
-        element : str
-            Element symbol
-
-        Returns
-        -------
-        int
-            Maximum number of bonds the element can form
-        """
-        periodic_table = Chem.GetPeriodicTable()
-        atomic_num = periodic_table.GetAtomicNumber(element)
-
-        # GetDefaultValence returns a tuple of possible valences, take the max
-        default_valence = periodic_table.GetDefaultValence(atomic_num)
-
-        if isinstance(default_valence, tuple):
-            return max(default_valence)
-        return default_valence
-
-    def _run_auto_detect(self) -> Molecule:
-        """
-        Run auto-detection mode to find and remove the smallest group at link position.
-
-        Returns
-        -------
-        Molecule
-            Substituent molecule with group removed.
-        """
-        removed_indices = self._detect_group_to_remove()
-        keep_indices = self._get_complement_indices(removed_indices)
-        self._final_indices = sorted(keep_indices)
-        return self._extract_by_indices(keep_indices)
-
-    def _detect_group_to_remove(self) -> list[int]:
-        """
-        Auto-detect the smallest group connected to link atom to remove.
-
-        The group to remove is identified as the smallest connected component
-        when the bond between link_atom and its neighbor is broken.
-
-        Returns
-        -------
-        list[int]
-            Indices of atoms to remove (0-based).
-        """
-        # Build molecular graph
-        graph = self.molecule.to_graph()
-
-        # Get neighbors of link atom
-        neighbors = list(graph.neighbors(self.link_index))
-
-        if len(neighbors) == 0:
-            logger.warning(
-                f"Substituent link atom at index {self.link_index} has no neighbors"
-            )
-            return []
-
-        # For each neighbor, calculate the size of the component if bond is broken
-        # The group to remove is the smallest component (not containing link atom)
-        min_component_size = float("inf")
-        remove_indices = []
-
-        for neighbor in neighbors:
-            # Temporarily remove the edge
-            graph_copy = graph.copy()
-            graph_copy.remove_edge(self.link_index, neighbor)
-
-            # Find connected components
-            components = list(nx.connected_components(graph_copy))
-
-            # Find which component contains the neighbor (not the link atom)
-            for component in components:
-                if neighbor in component and self.link_index not in component:
-                    # This component is a potential group to remove
-                    if len(component) < min_component_size:
-                        min_component_size = len(component)
-                        remove_indices = list(component)
-                    break
-
-        return remove_indices
-
-    def _get_complement_indices(self, exclude_indices: list[int]) -> list[int]:
-        """
-        Get indices of all atoms except those in exclude_indices.
-
-        Parameters
-        ----------
-        exclude_indices : list[int]
-            Indices to exclude (0-based)
-
-        Returns
-        -------
-        list[int]
-            Complement indices (0-based)
-        """
-        exclude_set = set(exclude_indices)
-        return [i for i in range(len(self.molecule)) if i not in exclude_set]
-
-    def _extract_by_indices(self, indices: list[int]) -> Molecule:
-        """
-        Extract a subset of atoms from molecule by indices.
-
-        Parameters
-        ----------
-        indices : list[int]
-            Indices of atoms to keep (0-based)
-
-        Returns
-        -------
-        Molecule
-            New molecule containing only specified atoms
-        """
-        if not indices:
-            raise ValueError(
-                "Cannot create substituent molecule with no atoms"
-            )
-
-        # Sort indices to maintain order
-        sorted_indices = sorted(indices)
-
-        # Extract symbols
-        symbols = [self.molecule.chemical_symbols[i] for i in sorted_indices]
-
-        # Extract positions
-        positions = self.molecule.positions[sorted_indices]
-
-        # Extract frozen_atoms if present
-        frozen_atoms = None
-        if self.molecule.frozen_atoms is not None:
-            frozen_atoms = [
-                self.molecule.frozen_atoms[i] for i in sorted_indices
-            ]
-
-        return Molecule(
-            symbols=symbols,
-            positions=positions,
-            charge=self.molecule.charge,
-            multiplicity=self.molecule.multiplicity,
-            frozen_atoms=frozen_atoms,
-        )
-
-    def get_new_link_index(self) -> int:
-        """
-        Get the new link index in the processed substituent molecule (1-based).
-
-        After removing atoms, the original link_index may change.
-        This method returns the new index.
-
-        Returns
-        -------
-        int
-            New link index (1-based)
-        """
-        if self._final_indices is None:
-            # Should not happen if run() was called
-            if self._has_available_bonding_position():
-                # No removal happened, index unchanged
-                return self.link_index + 1
-
-            removed_indices = self._detect_group_to_remove()
-            indices = sorted(self._get_complement_indices(removed_indices))
-        else:
-            indices = self._final_indices
-
-        # Find position of link_index in sorted indices
-        try:
-            new_index_0based = indices.index(self.link_index)
-            return new_index_0based + 1  # Convert to 1-based
-        except ValueError:
-            raise ValueError(
-                f"Link atom at index {self.link_index + 1} (1-based) was removed during preprocessing"
-            )
+    def _get_fallback_indices(self) -> list[int]:
+        if self._has_available_bonding_position():
+            return list(range(len(self.molecule)))
+        return super()._get_fallback_indices()
 
 
 class IterateAnalyzer:
