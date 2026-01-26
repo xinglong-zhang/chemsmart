@@ -3095,9 +3095,15 @@ class ORCAQMMMOutput(ORCAOutput):
 
     def _get_partition_system_sizes(self):
         size_patterns = {
-            "QMMM": re.compile(r"Size of QMMM System\s*\.\.\.\s*(?P<size>\d+)"),
-            "QM2": re.compile(r"Size of QM2 Subsystem\s*\.\.\.\s*(?P<size>\d+)"),
-            "QM1": re.compile(r"Size of QM1 Subsystem\s*\.\.\.\s*(?P<size>\d+)"),
+            "QMMM": re.compile(
+                r"Size of QMMM System\s*\.\.\.\s*(?P<size>\d+)"
+            ),
+            "QM2": re.compile(
+                r"Size of QM2 Subsystem\s*\.\.\.\s*(?P<size>\d+)"
+            ),
+            "QM1": re.compile(
+                r"Size of QM1 Subsystem\s*\.\.\.\s*(?P<size>\d+)"
+            ),
         }
         sizes = {"QM1": None, "QM2": None, "QMMM": None}
         for line in self.contents:
@@ -3264,4 +3270,3 @@ class ORCAQMMMOutput(ORCAOutput):
             qm_qm2_energy,
             qm_energy,
         )
-

@@ -537,7 +537,8 @@ class FakeNCIPLOT:
         """
         with open(self.output_filepath, "w") as g:
             # Write standard NCIPLOT header
-            g.write("""# ----------------- NCIPLOT ------------------------
+            g.write(
+                """# ----------------- NCIPLOT ------------------------
  # --- PLOTTING NON COVALENT INTERACTION REGIONS ----
  # ---             E.R. Johnson                  ----
  # ---          J. Contreras-Garcia              ----
@@ -566,11 +567,14 @@ class FakeNCIPLOT:
  # ---      algorithms from Erna Wieduwilt    --------
  # ---             are acknowledged           --------
  # ---------------------------------------------------
- #""")
+ #"""
+            )
             g.write(f" # Start -- {datetime.now()}\n")
-            g.write("""-----------------------------------------------------
+            g.write(
+                """-----------------------------------------------------
       INPUT INFORMATION:
------------------------------------------------------""")
+-----------------------------------------------------"""
+            )
             # Include input file content in output
             for line in open(self.input_filepath, "r"):
                 g.write(line)

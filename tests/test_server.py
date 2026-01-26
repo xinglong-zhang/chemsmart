@@ -20,7 +20,8 @@ class TestServer:
         assert server.scratch_dir is None
         assert server.use_hosts is True
         assert (
-            server.extra_commands == """export PATH=$HOME/bin/chemsmart:$PATH
+            server.extra_commands
+            == """export PATH=$HOME/bin/chemsmart:$PATH
 export PATH=$HOME/bin/chemsmart/chemsmart/cli:$PATH
 export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
 export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
