@@ -1838,10 +1838,15 @@ class Molecule:
             tmp.close()
             xyz_filename = tmp.name
             auto_xyz = True
-            logger.debug("Created temporary XYZ '%s' for PDB conversion", xyz_filename)
+            logger.debug(
+                "Created temporary XYZ '%s' for PDB conversion", xyz_filename
+            )
             self.write_xyz(xyz_filename, mode=mode)
         elif not os.path.isfile(xyz_filename):
-            logger.debug("XYZ '%s' missing; writing coordinates before conversion", xyz_filename)
+            logger.debug(
+                "XYZ '%s' missing; writing coordinates before conversion",
+                xyz_filename,
+            )
             self.write_xyz(xyz_filename, mode=mode)
 
         try:
@@ -1872,7 +1877,12 @@ class Molecule:
                 os.remove(xyz_filename)
                 logger.debug("Removed temporary XYZ '%s'", xyz_filename)
             except OSError as exc:
-                logger.warning("Could not remove temporary XYZ '%s': %s", xyz_filename, exc)
+                logger.warning(
+                    "Could not remove temporary XYZ '%s': %s",
+                    xyz_filename,
+                    exc,
+                )
+
 
 class CoordinateBlock:
     """

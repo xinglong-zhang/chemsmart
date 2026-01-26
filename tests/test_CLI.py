@@ -87,9 +87,38 @@ class TestCLI:
 
 class TestGaussianCLI(TestCLI):
     def test_output_command_string_with_space_in_args(
-        self, tmpdir, gaussian_singlet_opt_outfile
+        self, tmpdir, gaussian_singlet_opt_outfile, monkeypatch
     ):
         shutil.copy(src=gaussian_singlet_opt_outfile, dst=tmpdir)
+
+        # Redirect the server config used by the CLI to a temporary copy
+        from pathlib import Path
+
+        from chemsmart.settings import server as server_module
+
+        src_server = (
+            Path(__file__).resolve().parent.parent
+            / "chemsmart"
+            / "settings"
+            / "templates"
+            / "server.yaml"
+        )
+        server_dir = Path(tmpdir) / "chemsmart_templates" / "server"
+        server_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src=str(src_server), dst=str(server_dir / "PBS.yaml"))
+
+        class _StubUserSettings:
+            def __init__(self, server_path):
+                self._server_path = str(server_path)
+
+            @property
+            def user_server_dir(self):
+                return self._server_path
+
+        monkeypatch.setattr(
+            server_module, "user_settings", _StubUserSettings(server_dir)
+        )
+
         command = (
             "-s PBS --test --print-command --no-scratch  gaussian -p test2 -f nhc_neutral_singlet.log "
             "-l nhc userjob -r 'opt freq mn15 def2svp' "
