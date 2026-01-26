@@ -773,21 +773,16 @@ class Gaussian16Output(GaussianFileMixin):
         setattr(mol, "vibrational_modes", vib["modes"])
 
         # Attach Mulliken charges and rotational symmetry number like vibrations
-        try:
+        if hasattr(self, "mulliken_atomic_charges"):
             setattr(
                 mol, "mulliken_atomic_charges", self.mulliken_atomic_charges
             )
-        except Exception:
-            # Keep robust if not available
-            pass
-        try:
+        if hasattr(self, "rotational_symmetry_number"):
             setattr(
                 mol,
                 "rotational_symmetry_number",
                 self.rotational_symmetry_number,
             )
-        except Exception:
-            pass
 
         return mol
 
