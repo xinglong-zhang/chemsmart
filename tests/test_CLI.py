@@ -94,29 +94,30 @@ class TestGaussianCLI(TestCLI):
         # Redirect the server config used by the CLI to a temporary copy
         from pathlib import Path
 
+        from chemsmart.settings import gaussian as gaussian_module
         from chemsmart.settings import server as server_module
+        from chemsmart.settings import user as user_module
 
-        src_server = (
+        templates_root = (
             Path(__file__).resolve().parent.parent
             / "chemsmart"
             / "settings"
             / "templates"
-            / "server.yaml"
         )
-        server_dir = Path(tmpdir) / "chemsmart_templates" / "server"
-        server_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy(src=str(src_server), dst=str(server_dir / "PBS.yaml"))
-
-        class _StubUserSettings:
-            def __init__(self, server_path):
-                self._server_path = str(server_path)
-
-            @property
-            def user_server_dir(self):
-                return self._server_path
-
+        templates_config_dir = templates_root / ".chemsmart"
+        monkeypatch.setenv("HOME", str(templates_root))
         monkeypatch.setattr(
-            server_module, "user_settings", _StubUserSettings(server_dir)
+            user_module.ChemsmartUserSettings,
+            "USER_CONFIG_DIR",
+            str(templates_config_dir),
+            raising=False,
+        )
+        temp_user_settings = user_module.ChemsmartUserSettings()
+        monkeypatch.setattr(
+            server_module, "user_settings", temp_user_settings, raising=False
+        )
+        monkeypatch.setattr(
+            gaussian_module, "user_settings", temp_user_settings, raising=False
         )
 
         command = (
