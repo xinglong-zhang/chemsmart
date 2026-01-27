@@ -251,11 +251,9 @@ class SkeletonPreprocessor(BasePreprocessor):
             # Mode 1: User provided skeleton indices
             # Check if link_index is in skeleton_indices
             if self.link_index not in self.skeleton_indices:
-                logger.warning(
-                    f"Link atom at index {self.link_index + 1} (1-based) is not in skeleton_indices. "
-                    "Falling back to auto-detection mode."
+                raise ValueError(
+                    f"Link atom at index {self.link_index + 1} (1-based) must be included in skeleton_indices."
                 )
-                return self._run_auto_detect()
 
             # Find substituent branches that don't contain skeleton atoms
             substituent_branches = self._find_non_skeleton_branches()

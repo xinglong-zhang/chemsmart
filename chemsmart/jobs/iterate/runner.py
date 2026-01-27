@@ -384,6 +384,7 @@ class IterateJobRunner(JobRunner):
         )
         axial_rotations_sample_num = job.settings.axial_rotations_sample_num
 
+        valid_skeletons = []
         for skel_idx, skel_config in enumerate(skeleton_list):
             skeleton, skel_label = self._load_molecule(
                 skel_config, "skeleton", skel_idx
@@ -404,24 +405,44 @@ class IterateJobRunner(JobRunner):
                     f"Skeleton '{skel_label}' has no link_index, skipping."
                 )
                 continue
+            
+            valid_skeletons.append((skeleton, skel_label, skel_config))
 
-            for sub_idx, sub_config in enumerate(substituent_list):
-                substituent, sub_label = self._load_molecule(
-                    sub_config, "substituent", sub_idx
+        valid_substituents = []
+        for sub_idx, sub_config in enumerate(substituent_list):
+            substituent, sub_label = self._load_molecule(
+                sub_config, "substituent", sub_idx
+            )
+            if substituent is None:
+                continue
+
+            # sub_label is returned by _load_molecule
+            sub_link_index = sub_config.get(
+                "link_index"
+            )  # list[int], 1-based
+
+            if not sub_link_index:
+                logger.warning(
+                    f"Substituent '{sub_label}' has no link_index, skipping."
                 )
-                if substituent is None:
-                    continue
+                continue
+            
+            valid_substituents.append((substituent, sub_label, sub_config))
 
+        for skeleton, skel_label, skel_config in valid_skeletons:
+            # skel_label is returned by _load_molecule
+            skel_link_indices = skel_config.get(
+                "link_index"
+            )  # list[int], 1-based
+            skeleton_indices = skel_config.get(
+                "skeleton_indices"
+            )  # list[int] or None
+
+            for substituent, sub_label, sub_config in valid_substituents:
                 # sub_label is returned by _load_molecule
                 sub_link_index = sub_config.get(
                     "link_index"
                 )  # list[int], 1-based
-
-                if not sub_link_index:
-                    logger.warning(
-                        f"Substituent '{sub_label}' has no link_index, skipping."
-                    )
-                    continue
 
                 # Use the first substituent link index
                 sub_link_idx = sub_link_index[0]
