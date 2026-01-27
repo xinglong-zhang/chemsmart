@@ -43,7 +43,7 @@ def click_assemble_options(f):
     @click.option(
         "-i",
         "--index",
-        default="-1",
+        default=":",
         show_default=True,
         help="Index (1-based) of the molecule to extract from multi-molecule files.",
     )

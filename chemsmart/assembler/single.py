@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class SingleFileAssembler:
-    def __init__(self, filename, index="-1"):
+    def __init__(self, filename, index=":"):
         self.filename = filename
         self.index = index
 

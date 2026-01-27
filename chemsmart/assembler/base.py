@@ -12,7 +12,7 @@ class BaseAssembler:
     output_class = None  # To be defined in subclasses
     program_name = "unknown"  # To be defined in subclasses
 
-    def __init__(self, filename, index="-1"):
+    def __init__(self, filename, index=":"):
         self.filename = filename
         self.index = index
         self.output = self.output_class(filename)
