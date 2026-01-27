@@ -208,11 +208,12 @@ Align all files of the same type:
 
 .. code:: bash
 
-   chemsmart run mol -t xyz -l xyz_alignment align
+   chemsmart run mol -d . -t xyz -l xyz_alignment align
 
 .. note::
 
-   When using ``-i n``, ensure every input file contains the nth structure.
+   When using ``-i n``, ensure every input file contains the nth structure. File extensions are used to determine the
+   file type ``-t``.
 
 Align multiple structures in one file:
 

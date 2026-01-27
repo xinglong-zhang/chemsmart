@@ -10,7 +10,7 @@ from chemsmart.cli.mol.mol import (
     mol,
 )
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.io import load_molecules_from_paths
+from chemsmart.utils.io import load_molecules_from_paths, select_items_by_index
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ def align(
     **kwargs,
 ):
     """CLI subcommand for aligning multiple molecule files in PyMOL.
+    In align, the -t option uses file extensions like log, xyz, inp, instead of task types like Gaussian or ORCA to ensure structural visualization for multiple file types.
 
     Examples:
         # Align multiple files
@@ -63,7 +64,8 @@ def align(
 
     if directory and not filetype:
         raise click.BadParameter(
-            "Directory specified but no filetype provided. Use -t/--type to specify file type (e.g., xyz, log, gjf)."
+            "Directory specified but no filetype provided. Use -t/--type to specify file type "
+            "(e.g., xyz, log, gjf, mol, inp)."
         )
 
     # Set default index values for align task
@@ -90,47 +92,26 @@ def align(
         for file_path in files_list:
             logger.debug(f"Processing file: {file_path}")
 
-            # Load all structures from this file first
-            file_molecules = load_molecules_from_paths(
-                [file_path],
-                index=":",  # Load all structures first
-                add_index_suffix_for_single=add_index_suffix,
-                check_exists=check_exists,
-            )
-
-            # Apply index selection to this file's structures
-            if index and index != ":":
-                from chemsmart.utils.utils import parse_index_specification
-
-                try:
-                    selected_indices = parse_index_specification(
-                        index,
-                        total_count=len(file_molecules),
-                        allow_duplicates=False,  # Don't allow duplicates for alignment
-                        allow_out_of_range=False,  # Don't allow out of range indices
-                    )
-
-                    # Handle different return types for this file
-                    if isinstance(selected_indices, list):
-                        molecules.extend(
-                            [file_molecules[i] for i in selected_indices]
-                        )
-                    elif isinstance(selected_indices, int):
-                        molecules.append(file_molecules[selected_indices])
-                    elif isinstance(selected_indices, slice):
-                        molecules.extend(file_molecules[selected_indices])
-                    else:
-                        raise ValueError(
-                            f"Unexpected index type: {type(selected_indices)}"
-                        )
-
-                except ValueError as e:
-                    raise click.BadParameter(
-                        f"Error processing file {file_path}: {str(e)}"
-                    )
-            else:
-                # Use all structures from this file
-                molecules.extend(file_molecules)
+            try:
+                # Load all molecules from this file
+                file_molecules = load_molecules_from_paths(
+                    [file_path],
+                    index=":",
+                    add_index_suffix_for_single=add_index_suffix,
+                    check_exists=check_exists,
+                )
+                # Apply index selection
+                selected = select_items_by_index(
+                    file_molecules,
+                    index,
+                    allow_duplicates=False,
+                    allow_out_of_range=False,
+                )
+                molecules.extend(selected)
+            except ValueError as e:
+                raise click.BadParameter(
+                    f"Error processing file {file_path}: {str(e)}"
+                )
 
     if directory:
         directory = os.path.abspath(directory)
@@ -169,49 +150,23 @@ def align(
             filenames = [filenames]
 
         if len(filenames) == 1:
-            # Single file: first load all structures, then apply user's index
-            all_molecules = load_molecules_from_paths(
-                filenames,
-                index=":",  # Load all structures first
-                add_index_suffix_for_single=True,
-                check_exists=True,
-            )
-
-            # Now apply user's index selection if specified
-            if index and index != ":":
-                from chemsmart.utils.utils import parse_index_specification
-
-                try:
-                    # Use the enhanced parse_index_specification function with validation
-                    selected_indices = parse_index_specification(
-                        index,
-                        total_count=len(all_molecules),
-                        allow_duplicates=False,  # Don't allow duplicates for alignment
-                        allow_out_of_range=False,  # Don't allow out of range indices
-                    )
-
-                    # Handle different return types
-                    if isinstance(selected_indices, list):
-                        # List of 0-based indices - use directly
-                        molecules.extend(
-                            [all_molecules[i] for i in selected_indices]
-                        )
-                    elif isinstance(selected_indices, int):
-                        # Single 0-based index
-                        molecules.append(all_molecules[selected_indices])
-                    elif isinstance(selected_indices, slice):
-                        # Slice object - Python handles bounds automatically
-                        molecules.extend(all_molecules[selected_indices])
-                    else:
-                        raise ValueError(
-                            f"Unexpected index type: {type(selected_indices)}"
-                        )
-
-                except ValueError as e:
-                    raise click.BadParameter(str(e))
-            else:
-                # Use all structures
-                molecules.extend(all_molecules)
+            # Single file: load structures with index selection
+            try:
+                all_molecules = load_molecules_from_paths(
+                    filenames,
+                    index=":",
+                    add_index_suffix_for_single=True,
+                    check_exists=True,
+                )
+                selected = select_items_by_index(
+                    all_molecules,
+                    index,
+                    allow_duplicates=False,
+                    allow_out_of_range=False,
+                )
+                molecules.extend(selected)
+            except ValueError as e:
+                raise click.BadParameter(str(e))
         else:
             # Multiple files: use the same per-file processing as directory mode
             process_files_with_per_file_indexing(
@@ -258,8 +213,8 @@ def align(
 
         # Check if it's a single file case
         if filenames and len(filenames) == 1:
-            # Single file with multiple structures: filename_n_structures_align
-            align_label = f"{n_structures}_structures_in_{base_label}_align"
+            # Single file with multiple structures
+            align_label = f"{base_label}_{n_structures}_structures_align"
         else:
             # Multiple files: original naming scheme
             if n_structures > 2:

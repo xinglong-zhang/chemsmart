@@ -12,7 +12,7 @@ from chemsmart.cli.job import (
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import clean_label
+from chemsmart.utils.io import clean_label, select_items_by_index
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +378,6 @@ def mol(
 
         cli_string = " ".join(sys.argv)
         is_align_task = " align" in cli_string
-        print(f"is_align_task = {is_align_task}")
 
         if is_align_task:
             # align task can handle multiple files - pass to align command
@@ -434,26 +433,12 @@ def mol(
     # then return that structure as a list
     if index is not None:
         logger.debug(f"Using molecule with index: {index}")
-
-        from chemsmart.utils.utils import parse_index_specification
-
-        # Use new index parsing system
-        selected_indices = parse_index_specification(
+        molecules = select_items_by_index(
+            molecules,
             index,
-            total_count=len(molecules),
             allow_duplicates=False,
             allow_out_of_range=False,
         )
-
-        # Handle different return types from parse_index_specification
-        if isinstance(selected_indices, list):
-            molecules = [molecules[i] for i in selected_indices]
-        elif isinstance(selected_indices, int):
-            molecules = [molecules[selected_indices]]
-        elif isinstance(selected_indices, slice):
-            molecules = molecules[selected_indices]
-            if not isinstance(molecules, list):
-                molecules = [molecules]
     else:
         molecules = [molecules[-1]]  # Default: last molecule as list
 
