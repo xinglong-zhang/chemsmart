@@ -1525,9 +1525,15 @@ def iterate_expected_output_directory(iterate_test_directory):
 
 
 @pytest.fixture()
-def iterate_config_file(iterate_input_directory):
-    """Returns the absolute path to tests/data/IterateTests/input/test_iterate.cfg."""
-    return os.path.join(iterate_input_directory, "test_iterate.cfg")
+def iterate_configs_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs."""
+    return os.path.join(iterate_test_directory, "configs")
+
+
+@pytest.fixture()
+def iterate_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/regression_iterate.cfg."""
+    return os.path.join(iterate_configs_directory, "regression_iterate.cfg")
 
 
 @pytest.fixture()

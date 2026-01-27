@@ -9,15 +9,15 @@ from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
 
 
-def test_iterate_workflow(
+def test_iterate_regression_workflow(
     iterate_config_file,
     iterate_input_directory,
     iterate_expected_output_file,
     tmp_path,
 ):
     """
-    Test the full Iterate workflow:
-    1. Load config from YAML
+    Test the full Iterate workflow (Regression Test):
+    1. Load config from YAML (regression_iterate.cfg)
     2. Run IterateJob
     3. Compare output with expected XYZ file
     """
