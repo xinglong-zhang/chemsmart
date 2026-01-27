@@ -374,30 +374,27 @@ class Gaussian16Output(GaussianFileMixin):
         # Tag optimized structures
         try:
             # default False
-            for m in all_structures:
-                setattr(m, "is_optimized_structure", False)
+            for mol in all_structures:
+                mol.is_optimized_structure = False
 
             if getattr(self, "optimized_steps_indices", None):
                 if not self.include_intermediate:
                     # we kept only optimized steps
-                    for m in all_structures:
-                        setattr(m, "is_optimized_structure", True)
+                    for mol in all_structures:
+                        mol.is_optimized_structure = True
                 else:
                     for idx in self.optimized_steps_indices:
                         if 0 <= idx < len(all_structures):
-                            setattr(
-                                all_structures[idx],
-                                "is_optimized_structure",
-                                True,
-                            )
+                            all_structures[idx].is_optimized_structure = True
             elif self.normal_termination and all_structures:
                 # mark final structure as optimized
-                setattr(all_structures[-1], "is_optimized_structure", True)
-        except Exception:
-            # never fail tagging
-            pass
+                all_structures[-1].is_optimized_structure = True
+        except Exception as e:
+            logger.debug(f"Failed to tag optimized structures: {e}")
 
-        logger.debug("Total structures returned: %d", len(all_structures))
+        logger.debug(
+            f"Total number of structures located: {len(all_structures)}"
+        )
         return all_structures
 
     @cached_property

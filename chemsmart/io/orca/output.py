@@ -758,8 +758,8 @@ class ORCAOutput(ORCAFileMixin):
 
         # Tag optimized structures
         try:
-            for m in all_structures:
-                setattr(m, "is_optimized_structure", False)
+            for mol in all_structures:
+                mol.is_optimized_structure = False
 
             if (
                 hasattr(self, "optimized_steps_indices")
@@ -767,15 +767,15 @@ class ORCAOutput(ORCAFileMixin):
                 and not hasattr(self, "include_intermediate")
             ):
                 # if we filtered to only optimized steps, mark all as optimized
-                for m in all_structures:
-                    setattr(m, "is_optimized_structure", True)
+                for mol in all_structures:
+                    mol.is_optimized_structure = True
             elif self.normal_termination and all_structures:
                 # otherwise, mark the last as optimized when job finished normally
-                setattr(all_structures[-1], "is_optimized_structure", True)
+                all_structures[-1].is_optimized_structure = True
         except Exception as e:
             logger.debug(f"Failed to tag optimized structures: {e}")
 
-        logger.info(
+        logger.debug(
             f"Total number of structures located: {len(all_structures)}"
         )
         return all_structures
