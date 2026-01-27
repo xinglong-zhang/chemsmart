@@ -3,8 +3,8 @@ from chemsmart.io.orca.output import ORCAOutput
 
 
 class ORCAAssembler(BaseAssembler):
-    output_class = ORCAOutput
-    program_name = "ORCA"
+    OUTPUT_CLASS = ORCAOutput
+    PROGRAM = "ORCA"
 
     def get_meta_data(self):
         meta_data = super().get_meta_data()

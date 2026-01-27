@@ -9,13 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 class BaseAssembler:
-    output_class = None  # To be defined in subclasses
-    program_name = "unknown"  # To be defined in subclasses
+    OUTPUT_CLASS = None  # To be defined in subclasses
+    PROGRAM = "unknown"  # To be defined in subclasses
 
     def __init__(self, filename, index=":"):
         self.filename = filename
         self.index = index
-        self.output = self.output_class(filename)
+        self.output = self.OUTPUT_CLASS(filename)
 
     @property
     def molecules_list(self):

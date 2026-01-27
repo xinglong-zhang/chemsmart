@@ -3,8 +3,8 @@ from chemsmart.io.gaussian.output import Gaussian16Output
 
 
 class GaussianAssembler(BaseAssembler):
-    output_class = Gaussian16Output
-    program_name = "Gaussian"
+    OUTPUT_CLASS = Gaussian16Output
+    PROGRAM = "Gaussian"
 
     def get_meta_data(self):
         meta_data = super().get_meta_data()
