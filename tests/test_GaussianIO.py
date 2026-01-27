@@ -13,6 +13,7 @@ from chemsmart.io.gaussian.output import (
 )
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
 class TestRouteString:
@@ -515,6 +516,8 @@ class TestGaussian16Output:
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.version == "G16RevB.01"
+        assert g16_output.date == "2024-06-20 18:09:26"
         assert g16_output.normal_termination
         assert g16_output.molecule.num_atoms == 40
         assert g16_output.spin == "restricted"
@@ -535,6 +538,8 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+        assert g16_output.temperature_in_K == 298.15
+        assert g16_output.pressure_in_atm == 1.0
         assert g16_output.fmo_gap == g16_output.alpha_fmo_gap
         assert np.allclose(
             g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
@@ -594,6 +599,48 @@ class TestGaussian16Output:
             mol.vibrational_modes[0], vibrational_mode1, atol=1e-4
         )
         assert mol.vibrational_frequencies[0] == 11.9481
+        assert g16_output.zero_point_energy == 0.284336
+        assert np.isclose(
+            g16_output.thermal_vibration_correction,
+            190.931 * kcal_per_mol_to_hartree - 0.284336,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_rotation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_translation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert g16_output.thermal_energy_correction == 0.307101
+        assert g16_output.thermal_enthalpy_correction == 0.308045
+        assert g16_output.thermal_gibbs_free_energy_correction == 0.225790
+        assert g16_output.internal_energy == -1863.733079
+        assert g16_output.enthalpy == -1863.732135
+        assert g16_output.gibbs_free_energy == -1863.814390
+        assert np.isclose(
+            g16_output.electronic_entropy,
+            0.000 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.vibrational_entropy,
+            90.556 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.rotational_entropy,
+            37.462 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.translational_entropy,
+            45.103 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)

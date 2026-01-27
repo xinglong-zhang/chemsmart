@@ -47,6 +47,7 @@ def create_molecule_list(
     frozen_atoms,
     pbc_conditions,
     num_structures=None,
+    is_optimized_structure_list=None,
 ):
     """
     Helper to build a list of Molecule objects from arrays.
@@ -68,6 +69,8 @@ def create_molecule_list(
         pbc_conditions (list | None): Periodic boundary conditions.
         num_structures (int, optional): Number of structures to create; if None
             uses `len(orientations)`.
+        is_optimized_structure_list (list[bool] | None): Per-structure flags
+            indicating if the structure is optimized (optional).
 
     Returns:
         list[Molecule]: Molecule objects with specified properties.
@@ -103,6 +106,12 @@ def create_molecule_list(
             pbc_conditions=pbc_conditions,
             energy=energies[i] if energies else None,
             forces=forces[i] if forces else None,
+            structure_index_in_file=i + 1,
+            is_optimized_structure=(
+                is_optimized_structure_list[i]
+                if is_optimized_structure_list
+                else None
+            ),
         )
         for i in range(num_structures)
     ]
