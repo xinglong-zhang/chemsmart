@@ -1993,9 +1993,6 @@ class CoordinateBlock:
             # 6    6.000000  -12.064399   -0.057172   -0.099010
             # also not true for Gaussian QM/MM calculations where "H" or "L" is
             # indicated at the end of the line
-            if line_elements and line_elements[0].isdigit():
-                # skip the charge and multiplicity line of QM/MM coordinate block
-                continue
 
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
@@ -2006,14 +2003,55 @@ class CoordinateBlock:
             if (
                 line_elements[0].upper() == "TV"
             ):  # cases where PBC system occurs in Gaussian
+                logger.debug(f"Skipping line {line} with TV!")
+                continue
+            if all(el.isdigit() for el in line_elements):
+                # skip the charge and multiplicity line of QM/MM coordinate block
+                logger.debug(f"Skipping line {line} with all digit elements!")
                 continue
 
             try:
-                atomic_number = int(line_elements[0])
-                chemical_symbol = p.to_symbol(atomic_number=atomic_number)
+                logger.debug(
+                    f"Converting atomic number {line_elements[0]} to symbol."
+                )
+                atomic_number = int(
+                    line_elements[0]
+                )  # Could raise ValueError if not an integer
+                chemical_symbol = p.to_symbol(
+                    atomic_number=atomic_number
+                )  # Could raise KeyError or similar
+                logger.debug(
+                    f"Successfully converted {line_elements[0]} to {chemical_symbol}."
+                )
                 symbols.append(chemical_symbol)
             except ValueError:
-                symbols.append(p.to_element(element_str=str(line_elements[0])))
+                # Handle case where line_elements[0] isn’t a valid integer
+                logger.debug(
+                    f"{line_elements[0]} is not a valid atomic number; treating as symbol."
+                )
+                try:
+                    symbols.append(
+                        p.to_element(element_str=str(line_elements[0]))
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to convert {line_elements[0]} to element: {str(e)}"
+                    )
+            except Exception as e:
+                # Catch any other unexpected errors
+                logger.error(
+                    f"Unexpected error processing {line_elements[0]}: {str(e)}"
+                )
+                try:
+                    # Fallback attempt
+                    symbols.append(
+                        p.to_element(element_str=str(line_elements[0]))
+                    )
+                except Exception as fallback_e:
+                    logger.error(
+                        f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
+                    )
+
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
@@ -2035,7 +2073,7 @@ class CoordinateBlock:
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
                 continue
-            if line_elements[0].isdigit():
+            if all(el.isdigit() for el in line_elements):
                 # skip the charge and multiplicity line of QM/MM coordinate block
                 continue
 
@@ -2051,7 +2089,7 @@ class CoordinateBlock:
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
-            if len(line_elements) > 4 and line[-1].isdigit():
+            if len(line_elements) > 4:
                 if np.isclose(atomic_number, second_value, atol=10e-6):
                     # happens in cube file, where the second value is the same as
                     # the atomic number but in float format
