@@ -436,6 +436,56 @@ def load_molecules_from_paths(
     return loaded
 
 
+def select_items_by_index(
+    items_list,
+    index_spec,
+    allow_duplicates=False,
+    allow_out_of_range=False,
+):
+    """
+    Select items from a list based on an index specification.
+
+    This is a general-purpose utility for applying parse_index_specification
+    results to any list.
+
+    Args:
+        items_list (list): List of items to select from.
+        index_spec (int or str or None): Index specification for selection.
+            If None or ":", returns all items.
+        allow_duplicates (bool, optional): If True, allows duplicate indices.
+        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+
+    Returns:
+        list: List of selected items.
+
+    Raises:
+        ValueError: If index specification is invalid or out of range.
+    """
+    # If no filtering needed, return all
+    if index_spec is None or index_spec == ":":
+        return list(items_list)
+
+    from chemsmart.utils.utils import parse_index_specification
+
+    selected_indices = parse_index_specification(
+        index_spec,
+        total_count=len(items_list),
+        allow_duplicates=allow_duplicates,
+        allow_out_of_range=allow_out_of_range,
+    )
+
+    # Handle different return types from parse_index_specification
+    if isinstance(selected_indices, list):
+        return [items_list[i] for i in selected_indices]
+    elif isinstance(selected_indices, int):
+        return [items_list[selected_indices]]
+    elif isinstance(selected_indices, slice):
+        result = items_list[selected_indices]
+        return result if isinstance(result, list) else [result]
+    else:
+        raise ValueError(f"Unexpected index type: {type(selected_indices)}")
+
+
 def clean_label(label: str) -> str:
     """
     Make a label that is safe for filenames, DB keys, RST labels, etc.
