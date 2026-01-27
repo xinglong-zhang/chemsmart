@@ -56,9 +56,12 @@ optimizations, solution-phase single points, and TD-DFT calculations:
 In this configuration:
 
 -  **Gas phase** optimizations use M062X/def2-SVP with SMD(dichloroethane) implicit solvation
+
 -  **Solution phase** single points use M062X/def2-TZVP with higher basis set for better energies
--  **TD-DFT** calculations use CAM-B3LYP with mixed basis sets (GENECP) for systems containing iodine where ``I``
-   element takes def2-SVPD basis set whereas all other elements take def2-SVP basis set.
+
+-  **TD-DFT** calculations use CAM-B3LYP with mixed basis sets for systems containing iodine where ``I`` element takes
+   def2-SVPD basis set whereas all other elements take def2-SVP basis set. Since iodine (Z=53) has atomic number > 36,
+   the ``genecp`` keyword will be used in the Gaussian input file.
 
 Example 2: Mixed Element Basis Sets
 ===================================
@@ -90,6 +93,23 @@ This configuration:
    will be simply ignored.
 -  Assigns def2-SVP basis to all other light elements (H, C, N, O, etc.)
 -  Solution phase calculations use uniform def2-QZVP basis set for all atoms for high accuracy
+
+.. note::
+
+   **Automatic GEN/GENECP Selection**: CHEMSMART automatically determines whether to use ``gen`` or ``genecp`` keywords
+   in the Gaussian input file based on the elements present in your molecule:
+
+   -  If no heavy elements from the ``heavy_elements`` list are present, the ``light_elements_basis`` is used
+   -  If all heavy elements have atomic number ≤ 36 (up to Kr), the ``gen`` keyword is used
+   -  If any heavy element has atomic number > 36 (Rb and beyond), the ``genecp`` keyword is used
+
+   For example, with ``heavy_elements: ['Pd', 'Ag', 'Br']``:
+
+   -  A molecule containing only Br (Z=35) will use ``gen``
+   -  A molecule containing Pd (Z=46) or Ag (Z=47) will use ``genecp``
+   -  A molecule with no heavy elements will use ``light_elements_basis`` directly
+
+   This ensures that effective core potentials (ECPs) are only applied when needed for heavier elements.
 
 Example 3: Custom Solvent Parameters
 ====================================

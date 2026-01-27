@@ -101,7 +101,7 @@ class GaussianIRCJob(GaussianJob):
             if self.settings.flat_irc:
                 label += "_flat"
 
-        ircf_settings.job_type = "ircf"
+        ircf_settings.jobtype = "ircf"
         return GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircf_settings,
@@ -127,7 +127,7 @@ class GaussianIRCJob(GaussianJob):
             label = self.label + "r"
             if self.settings.flat_irc:
                 label += "_flat"
-        ircr_settings.job_type = "ircr"
+        ircr_settings.jobtype = "ircr"
         return GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircr_settings,
@@ -144,7 +144,7 @@ class GaussianIRCJob(GaussianJob):
         from transition state toward products.
         """
         logger.debug(
-            f"Running forward IRC job: {self._ircf_job().settings.job_type}"
+            f"Running forward IRC job: {self._ircf_job().settings.jobtype}"
         )
         self._ircf_job().run()
 
@@ -156,7 +156,7 @@ class GaussianIRCJob(GaussianJob):
         from transition state toward reactants.
         """
         logger.debug(
-            f"Running reverse IRC job: {self._ircr_job().settings.job_type}"
+            f"Running reverse IRC job: {self._ircr_job().settings.jobtype}"
         )
         self._ircr_job().run()
 
