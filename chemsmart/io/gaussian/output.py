@@ -329,6 +329,15 @@ class Gaussian16Output(GaussianFileMixin):
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
+        # Calculate is_optimized_structure_list
+        is_optimized = [False] * num_structures_to_use
+        if self.optimized_steps_indices and self.include_intermediate:
+            for idx in self.optimized_steps_indices:
+                if 0 <= idx < len(is_optimized):
+                    is_optimized[idx] = True
+        elif self.normal_termination:
+            is_optimized[-1] = True
+
         # 5) Build Molecule list
         create_kwargs = dict(
             orientations=orientations,
@@ -340,6 +349,7 @@ class Gaussian16Output(GaussianFileMixin):
             multiplicity=self.multiplicity,
             frozen_atoms=frozen_atoms,
             pbc_conditions=self.list_of_pbc_conditions,
+            is_optimized_structure_list=is_optimized,
         )
 
         if self.normal_termination:
@@ -351,16 +361,16 @@ class Gaussian16Output(GaussianFileMixin):
             )
 
         # 6) Keep only optimized steps if requested
-        if (
-            getattr(self, "optimized_steps_indices", None)
-            and not self.include_intermediate
-        ):
+        if self.optimized_steps_indices and not self.include_intermediate:
             logger.debug(
                 "Ignoring intermediate optimization steps (constrained opt)."
             )
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+            # Since we filtered to only optimized steps, mark all as optimized
+            for mol in all_structures:
+                mol.is_optimized_structure = True
 
         logger.debug(
             "Attaching vibrational data to the final structure if available..."
@@ -371,30 +381,6 @@ class Gaussian16Output(GaussianFileMixin):
         if self.num_vib_frequencies:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
 
-        # Tag optimized structures
-        try:
-            # default False
-            for mol in all_structures:
-                mol.is_optimized_structure = False
-
-            if getattr(self, "optimized_steps_indices", None):
-                if not self.include_intermediate:
-                    # we kept only optimized steps
-                    for mol in all_structures:
-                        mol.is_optimized_structure = True
-                else:
-                    for idx in self.optimized_steps_indices:
-                        if 0 <= idx < len(all_structures):
-                            all_structures[idx].is_optimized_structure = True
-            elif self.normal_termination and all_structures:
-                # mark final structure as optimized
-                all_structures[-1].is_optimized_structure = True
-        except Exception as e:
-            logger.debug(f"Failed to tag optimized structures: {e}")
-
-        logger.debug(
-            f"Total number of structures located: {len(all_structures)}"
-        )
         return all_structures
 
     @cached_property

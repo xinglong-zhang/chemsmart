@@ -719,6 +719,17 @@ class ORCAOutput(ORCAFileMixin):
         energies = energies[:num_structures_to_use]
         forces = forces[:num_structures_to_use]
 
+        # Calculate is_optimized_structure_list
+        is_optimized = [False] * num_structures_to_use
+        optimized_indices = getattr(self, "optimized_steps_indices", None)
+        include_intermediate = getattr(self, "include_intermediate", False)
+        if optimized_indices and include_intermediate:
+            for idx in optimized_indices:
+                if 0 <= idx < len(is_optimized):
+                    is_optimized[idx] = True
+        elif self.normal_termination:
+            is_optimized[-1] = True
+
         # Create molecule list
         all_structures = create_molecule_list(
             orientations=orientations,
@@ -735,6 +746,7 @@ class ORCAOutput(ORCAFileMixin):
                 else None
             ),
             num_structures=num_structures_to_use,
+            is_optimized_structure_list=is_optimized,
         )
 
         # Filter optimized steps if requested (e.g., for geometry optimization)
@@ -746,6 +758,9 @@ class ORCAOutput(ORCAFileMixin):
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+            # Since we filtered to only optimized steps, mark all as optimized
+            for mol in all_structures:
+                mol.is_optimized_structure = True
 
         logger.debug(
             "Attaching vibrational data to the final structure if available..."
@@ -755,25 +770,6 @@ class ORCAOutput(ORCAFileMixin):
         # Attach vibrational data to the final structure if available
         if self.vibrational_modes is not None:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
-
-        # Tag optimized structures
-        try:
-            for mol in all_structures:
-                mol.is_optimized_structure = False
-
-            if (
-                hasattr(self, "optimized_steps_indices")
-                and self.optimized_steps_indices
-                and not hasattr(self, "include_intermediate")
-            ):
-                # if we filtered to only optimized steps, mark all as optimized
-                for mol in all_structures:
-                    mol.is_optimized_structure = True
-            elif self.normal_termination and all_structures:
-                # otherwise, mark the last as optimized when job finished normally
-                all_structures[-1].is_optimized_structure = True
-        except Exception as e:
-            logger.debug(f"Failed to tag optimized structures: {e}")
 
         logger.debug(
             f"Total number of structures located: {len(all_structures)}"
