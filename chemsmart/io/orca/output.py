@@ -2469,16 +2469,8 @@ class ORCAOutput(ORCAFileMixin):
         setattr(mol, "vibrational_modes", vib["modes"])
 
         # Also attach Mulliken charges and rotational symmetry number, if available
-        if hasattr(self, "mulliken_atomic_charges"):
-            setattr(
-                mol, "mulliken_atomic_charges", self.mulliken_atomic_charges
-            )
-        if hasattr(self, "rotational_symmetry_number"):
-            setattr(
-                mol,
-                "rotational_symmetry_number",
-                self.rotational_symmetry_number,
-            )
+        mol.mulliken_atomic_charges = self.mulliken_atomic_charges
+        mol.rotational_symmetry_number = self.rotational_symmetry_number
 
         return mol
 

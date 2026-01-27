@@ -103,6 +103,8 @@ class Molecule:
         self._num_atoms = len(self.symbols)
         self.rotational_symmetry_number = rotational_symmetry_number
         self.is_optimized_structure = is_optimized_structure
+        self.mulliken_atomic_charges = mulliken_atomic_charges
+        self.rotational_symmetry_number = rotational_symmetry_number
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -165,12 +167,6 @@ class Molecule:
         # modes is a list of (num_atoms x 3) arrays; keep as-is if provided
         self.vibrational_modes = (
             [] if vibrational_modes is None else vibrational_modes
-        )
-
-        self.mulliken_atomic_charges = (
-            mulliken_atomic_charges
-            if mulliken_atomic_charges is not None
-            else None
         )
 
     def __len__(self):
