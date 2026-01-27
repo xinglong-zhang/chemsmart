@@ -1962,13 +1962,25 @@ class CoordinateBlock:
         Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class.
         """
-        return Molecule(
-            symbols=self.symbols,
-            positions=self.positions,
-            frozen_atoms=self.constrained_atoms,
-            pbc_conditions=self.pbc_conditions,
-            translation_vectors=self.translation_vectors,
-        )
+        if not self.partitions:
+            return Molecule(
+                symbols=self.symbols,
+                positions=self.positions,
+                frozen_atoms=self.constrained_atoms,
+                pbc_conditions=self.pbc_conditions,
+                translation_vectors=self.translation_vectors,
+            )
+        else:
+            return QMMMMolecule(
+                symbols=self.symbols,
+                positions=self.positions,
+                frozen_atoms=self.constrained_atoms,
+                pbc_conditions=self.pbc_conditions,
+                translation_vectors=self.translation_vectors,
+                high_level_atoms=self.partitions[1],
+                medium_level_atoms=self.partitions[2],
+                low_level_atoms=self.partitions[3],
+            )
 
     def _get_symbols(self):
         symbols = []
