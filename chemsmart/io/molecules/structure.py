@@ -2085,27 +2085,52 @@ class CoordinateBlock:
                 )
             atomic_numbers.append(atomic_number)
 
-            second_value = float(line_elements[1])
+            # Decide how to interpret the second token: constraint flag vs coordinate
+            try:
+                second_val_float = float(line_elements[1])
+                second_val_int = int(second_val_float)
+                is_exact_int = second_val_float == second_val_int
+                is_constraint_flag = is_exact_int and second_val_int in (-1, 0)
+            except (ValueError, IndexError):
+                second_val_float = None
+                second_val_int = None
+                is_constraint_flag = False
+
+            # If the last token is non-numeric (e.g., partition label like H/M/L),
+            # we should not attempt to treat the second token as a constraint flag.
+            def _is_numeric_token(token):
+                try:
+                    float(token)
+                    return True
+                except (ValueError, TypeError):
+                    return False
+
+            last_token_numeric = _is_numeric_token(line_elements[-1])
+
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
             if len(line_elements) > 4:
-                if np.isclose(atomic_number, second_value, atol=10e-6):
-                    # happens in cube file, where the second value is the same as
-                    # the atomic number but in float format
+                if is_constraint_flag and last_token_numeric:
+                    # Frozen coordinate line: second token is an explicit -1/0 flag
+                    constraints.append(second_val_int)
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
                     z_coordinate = float(line_elements[4])
-                elif np.isclose(second_value, -1, atol=10e-6) or np.isclose(
-                    second_value, 0, atol=10e-6
+                elif (
+                    last_token_numeric
+                    and second_val_float is not None
+                    and np.isclose(atomic_number, second_val_float, atol=1e-6)
                 ):
-                    # this is the case in frozen coordinates e.g.,
-                    # C        -1      -0.5448210000   -1.1694570000    0.0001270000
-                    # then ignore second value
-                    constraints.append(int(second_value))
+                    # Cube file style where the atomic number is repeated as float
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
                     z_coordinate = float(line_elements[4])
+                else:
+                    # Standard coordinate line (including cases like trailing partition labels)
+                    x_coordinate = float(line_elements[1])
+                    y_coordinate = float(line_elements[2])
+                    z_coordinate = float(line_elements[3])
             else:
                 x_coordinate = float(line_elements[1])
                 y_coordinate = float(line_elements[2])
