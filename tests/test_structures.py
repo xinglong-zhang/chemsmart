@@ -679,7 +679,6 @@ class TestMoleculeAdvanced:
             0,
             0,
             0,
-            0,
         ]
         my_list = mol.frozen_atoms
         indices = [i for i, x in enumerate(my_list) if x == -1]
