@@ -1,8 +1,9 @@
 import logging
 import os
+import time
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
 from concurrent.futures import as_completed
+from concurrent.futures import wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
@@ -235,36 +236,61 @@ class IterateJobRunner(JobRunner):
                 executor.submit(_run_combination_worker, comb): comb
                 for comb in combinations
             }
+            start_time = {future: time.monotonic() for future in future_to_comb}
 
-            # Use as_completed to process results as they finish
-            # This allows other tasks to continue even if one times out
-            for future in as_completed(future_to_comb, timeout=None):
-                comb = future_to_comb[future]
-                label = comb.label
+            # NOTE: ProcessPoolExecutor cannot reliably kill a running worker task.
+            # We implement a best-effort timeout:
+            # - If a task exceeds `timeout`, we mark it as timed out and attempt cancel().
+            # - If cancellation fails, the worker may still continue running in background
+            #   until the executor is shut down.
 
-                try:
-                    # Get result with timeout for this specific future
-                    result = future.result(timeout=timeout)
-                    results_dict[label] = result[
-                        1
-                    ]  # result is (label, molecule)
-                    if result[1] is not None:
-                        logger.info(f"Completed: {label}")
-                    else:
-                        logger.warning(
-                            f"Failed to generate molecule for: {label}"
-                        )
+            pending = set(future_to_comb.keys())
+
+            while pending:
+                done, pending = wait(
+                    pending, timeout=0.25, return_when=FIRST_COMPLETED
+                )
+
+                # Collect finished futures
+                for future in done:
+                    comb = future_to_comb[future]
+                    label = comb.label
+                    try:
+                        result = future.result()
+                        results_dict[label] = result[1]
+                        if result[1] is not None:
+                            logger.info(f"Completed: {label}")
+                        else:
+                            logger.warning(
+                                f"Failed to generate molecule for: {label}"
+                            )
+                            failed_labels.append(label)
+                    except Exception as e:
+                        logger.warning(f"Error for combination {label}: {e}")
+                        results_dict[label] = None
                         failed_labels.append(label)
-                except FuturesTimeoutError:
-                    logger.warning(
-                        f"Timeout ({timeout}s) for combination: {label}"
-                    )
-                    results_dict[label] = None
-                    timed_out_labels.append(label)
-                except Exception as e:
-                    logger.warning(f"Error for combination {label}: {e}")
-                    results_dict[label] = None
-                    failed_labels.append(label)
+
+                # Check timeouts for still-pending futures
+                now = time.monotonic()
+                newly_timed_out = []
+                for future in list(pending):
+                    elapsed = now - start_time[future]
+                    if elapsed > timeout:
+                        comb = future_to_comb[future]
+                        label = comb.label
+                        logger.warning(
+                            f"Timeout ({timeout}s) for combination: {label}"
+                        )
+                        results_dict[label] = None
+                        timed_out_labels.append(label)
+                        if not future.cancel():
+                            logger.warning(
+                                f"Combination {label} exceeded timeout but could not be cancelled (already running)."
+                            )
+                        newly_timed_out.append(future)
+
+                for future in newly_timed_out:
+                    pending.discard(future)
 
         # Build results list in original order
         results = [

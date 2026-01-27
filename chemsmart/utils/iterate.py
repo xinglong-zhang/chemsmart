@@ -95,7 +95,7 @@ substituents:
 
 
 def generate_template(
-    output_path: str = "iterate_template.cfg", overwrite: bool = False
+    output_path: str = "iterate_template.yaml", overwrite: bool = False
 ) -> str:
     """
     Generate a template configuration file for iterate jobs.
@@ -103,7 +103,7 @@ def generate_template(
     Parameters
     ----------
     output_path : str
-        Path to write the template file. Default is 'iterate_template.cfg'.
+        Path to write the template file. Default is 'iterate_template.yaml'.
     overwrite : bool
         If True, overwrite existing file. Default is False.
 
@@ -117,9 +117,9 @@ def generate_template(
     FileExistsError
         If file exists and overwrite is False.
     """
-    # Add .cfg extension if not present
-    if not output_path.endswith(".cfg"):
-        output_path = f"{output_path}.cfg"
+    # Add .yaml extension if not present
+    if not output_path.endswith((".yaml", ".yml", ".cfg")):
+        output_path = f"{output_path}.yaml"
 
     # Check if file exists
     if os.path.exists(output_path) and not overwrite:

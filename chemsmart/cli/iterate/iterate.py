@@ -1,5 +1,10 @@
-"""
-Here is a docstring made on the top of the hill in Kau Sai Chau
+"""Iterate CLI.
+
+This command generates new molecular structures by attaching substituents to
+skeleton molecules at specified link indices.
+
+The configuration file is YAML (recommended: .yaml/.yml). For backwards
+compatibility, .cfg is also accepted if its contents are YAML.
 """
 
 import functools
@@ -48,11 +53,11 @@ def click_iterate_options(f):
         "--generate-template",
         "generate_template_path",
         is_flag=False,
-        flag_value="iterate_template.cfg",
+        flag_value="iterate_template.yaml",
         default=None,
         type=str,
-        help="Generate a template configuration file and exit. "
-        "Optionally specify output path (default: iterate_template.cfg).",
+        help="Generate a template YAML configuration file and exit. "
+        "Optionally specify output path (default: iterate_template.yaml).",
     )
     @click.option(
         "--separate-outputs/--no-separate-outputs",
@@ -156,19 +161,19 @@ def iterate(
 
     Examples:
 
-    `chemsmart run iterate -f config.cfg`
-    will generate structures based on the configuration file.
+    `chemsmart run iterate -f config.yaml`
+    will generate structures based on the YAML configuration file.
 
-    `chemsmart run iterate -f config.cfg -P 4`
+    `chemsmart run iterate -f config.yaml -P 4`
     will use 4 processes for parallel execution.
 
-    `chemsmart run iterate -f config.cfg -o ./output`
-    will save generated structures to ./output directory.
+    `chemsmart run iterate -f config.yaml -o iterate_out`
+    will save generated structures to iterate_out.xyz.
 
     `chemsmart run iterate -g`
-    will generate a template configuration file (iterate_template.cfg).
+    will generate a template YAML configuration file (iterate_template.yaml).
 
-    `chemsmart run iterate -g my_config.cfg`
+    `chemsmart run iterate -g my_config.yaml`
     will generate a template at the specified path.
     """
     # Handle -g option: generate template and exit
@@ -201,7 +206,8 @@ def iterate(
                 "(default) is active. Please use '-o' / '--outputfile' to specify the output file."
             )
 
-    # Validate filename - expect a single YAML/CFG config file
+    # Validate filename - expect a single YAML config file.
+    # For backwards compatibility, we also accept .cfg if its contents are YAML.
     if not filename:
         raise click.BadParameter(
             "A configuration file is required.",
@@ -214,9 +220,9 @@ def iterate(
             param_hint="'-f' / '--filename'",
         )
 
-    if not filename.endswith(".cfg"):
+    if not filename.endswith((".yaml", ".yml", ".cfg")):
         raise click.BadParameter(
-            f"File '{filename}' must be a configuration file (ending with .cfg).",
+            f"File '{filename}' must be a YAML configuration file (ending with .yaml/.yml, or .cfg for legacy).",
             param_hint="'-f' / '--filename'",
         )
 
