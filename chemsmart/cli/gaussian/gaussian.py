@@ -274,16 +274,11 @@ def click_gaussian_grouper_options(f):
         help="Number of processors to use for the grouper.",
     )
     @click.option(
-        "--cache/--no-cache",
-        type=bool,
-        default=True,
-        help="Use cache graph isomorphism or not, default=Ture (for spyrmsd).",
-    )
-    @click.option(
-        "--stereo-check/--no-stereo-check",
-        type=bool,
-        default=False,
-        help="Whether to check stereoisomers (mirror images) in IRMSD grouper.(default=False)",
+        "--check-stereo",
+        type=click.Choice(["auto", "on", "off"], case_sensitive=False),
+        default="auto",
+        help="Control stereochemistry/inversion checking in iRMSD grouper. "
+        "'auto' (default): automatically detect, 'on': force check, 'off': disable.",
     )
     @click.option(
         "-ft",

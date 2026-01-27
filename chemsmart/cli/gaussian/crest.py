@@ -39,6 +39,8 @@ def crest(
     grouping_strategy,
     threshold,
     ignore_hydrogens,
+    num_procs,
+    check_stereo,
     fingerprint_type,
     use_weights,
     skip_completed,
@@ -97,6 +99,8 @@ def crest(
             if (grouping_strategy is not None and num_confs_to_run is not None)
             else None
         ),
+        num_procs=num_procs,
+        check_stereo=check_stereo,
         use_weights=use_weights,
         fingerprint_type=fingerprint_type,
         skip_completed=skip_completed,

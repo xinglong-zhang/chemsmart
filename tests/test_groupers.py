@@ -11,6 +11,7 @@ from chemsmart.utils.grouper import (
     ConnectivityGrouper,
     FormulaGrouper,
     HungarianRMSDGrouper,
+    IRMSDGrouper,
     PymolRMSDGrouper,
     RDKitIsomorphismGrouper,
     RMSDGrouper,
@@ -419,12 +420,86 @@ class Test_SpyRMSD_grouper:
         assert np.isclose(rmsd, 2.0029, rtol=1e-3)
 
 
-# class Test_iRMSD_grouper:
-#     NUM_PROCS = 4
+class Test_IRMSD_grouper:
+    NUM_PROCS = 4
+
+    def test_irmsd_grouper_for_rotated_molecules(
+        self, two_rotated_molecules_xyz_file, temp_working_dir
+    ):
+        xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 2
+        grouper = IRMSDGrouper(
+            molecules,
+            threshold=0.125,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=False,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 2
+        assert len(group_indices) == 2
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 2
+
+        # rmsd calculation from grouper
+        rmsd = grouper._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 0.21249, rtol=1e-3)
+
+    def test_irmsd_grouper_for_crest_molecules(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+        grouper = IRMSDGrouper(
+            molecules,
+            threshold=0.125,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=False,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 18
+        assert len(group_indices) == 18
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 18
+
+        # rmsd calculation from grouper
+        rmsd = grouper._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 0.4091, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((0, 4))
+        assert np.isclose(rmsd, 1.8202, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((1, 2))
+        assert np.isclose(rmsd, 1.4626, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((11, 17))
+        assert np.isclose(rmsd, 0.4497, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((16, 17))
+        assert np.isclose(rmsd, 3.1502, rtol=1e-3)
 
 
 class Test_PymolRMSD_grouper:
     NUM_PROCS = 4
+
+    @classmethod
+    def setup_class(cls):
+        """Initialize PyMOL once for all tests in this class."""
+        try:
+            import pymol
+            from pymol import cmd
+
+            pymol.finish_launching(["pymol", "-qc"])
+            cmd.reinitialize()
+        except Exception:
+            pass
+
+    def teardown_method(self, method):
+        """Clean up PyMOL objects after each test method to prevent slowdown."""
+        try:
+            from pymol import cmd
+
+            # Delete all objects instead of reinitialize to keep session alive
+            cmd.delete("all")
+        except Exception:
+            pass
 
     def test_pymolrmsd_grouper_for_rotated_molecules(
         self, two_rotated_molecules_xyz_file, temp_working_dir
@@ -447,6 +522,14 @@ class Test_PymolRMSD_grouper:
         # rmsd calculation from grouper
         rmsd = grouper._calculate_rmsd((0, 1))
         assert np.isclose(rmsd, 0.0000, rtol=1e-3)
+
+        # Explicitly cleanup to prevent __del__ from calling quit()
+        if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
+            import shutil
+
+            shutil.rmtree(grouper._temp_dir, ignore_errors=True)
+            grouper._temp_dir = None
+        grouper.cmd = None  # Prevent __del__ from calling quit()
 
     def test_pymolrmsd_grouper_for_crest_molecules(
         self, multiple_molecules_xyz_file, temp_working_dir
@@ -477,6 +560,24 @@ class Test_PymolRMSD_grouper:
         assert np.isclose(rmsd, 2.309451, rtol=1e-3)
         rmsd = grouper._calculate_rmsd((14, 16))
         assert np.isclose(rmsd, 1.837319, rtol=1e-3)
+
+        # Explicitly cleanup to prevent __del__ from calling quit()
+        if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
+            import shutil
+
+            shutil.rmtree(grouper._temp_dir, ignore_errors=True)
+            grouper._temp_dir = None
+        grouper.cmd = None  # Prevent __del__ from calling quit()
+
+    @classmethod
+    def teardown_class(cls):
+        """Clean up PyMOL after all tests in this class are done."""
+        try:
+            from pymol import cmd
+
+            cmd.reinitialize()
+        except Exception:
+            pass
 
 
 class Test_Tanimoto_similarity_grouper:
@@ -743,6 +844,18 @@ class Testfactory:
             methanol_molecules, strategy="pymolrmsd"
         )
         assert isinstance(pymolrmsd_grouper, RMSDGrouper)
+
+        # Explicitly cleanup pymolrmsd_grouper to prevent __del__ from calling quit()
+        if (
+            hasattr(pymolrmsd_grouper, "_temp_dir")
+            and pymolrmsd_grouper._temp_dir
+        ):
+            import shutil
+
+            shutil.rmtree(pymolrmsd_grouper._temp_dir, ignore_errors=True)
+            pymolrmsd_grouper._temp_dir = None
+        pymolrmsd_grouper.cmd = None  # Prevent __del__ from calling quit()
+
         torsion_grouper = factory.create(
             methanol_molecules, strategy="torsion"
         )
@@ -763,3 +876,13 @@ class Testfactory:
             methanol_molecules, strategy="isomorphism"
         )
         assert isinstance(rdkit_isomorphism_grouper, RDKitIsomorphismGrouper)
+
+    @classmethod
+    def teardown_class(cls):
+        """Clean up PyMOL after all tests in this class are done."""
+        try:
+            from pymol import cmd
+
+            cmd.reinitialize()
+        except Exception:
+            pass

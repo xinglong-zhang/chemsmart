@@ -35,7 +35,6 @@ import multiprocessing
 import pickle
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from itertools import product
 from multiprocessing import RawArray, shared_memory
 from multiprocessing.pool import ThreadPool
 from typing import Iterable, List, Optional, Tuple
@@ -435,7 +434,7 @@ class RMSDGrouper(MoleculeGrouper):
             rmsd = self._calculate_rmsd((i, j))
             rmsd_values.append(rmsd)
             print(
-                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, RMSD= {rmsd:.6f}"
+                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, RMSD= {rmsd:.7f}"
             )
 
         # Build full RMSD matrix for output
@@ -589,7 +588,7 @@ class RMSDGrouper(MoleculeGrouper):
         self._auto_threshold = threshold
 
         print(
-            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.6f} to create {self.num_groups} groups"
+            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
         )
 
         # Build adjacency matrix with the determined threshold
@@ -880,7 +879,7 @@ class RMSDGrouper(MoleculeGrouper):
         filename: str,
         grouping_time: float = None,
     ):
-        """Save RMSD matrix to Excel file with 6 decimal precision."""
+        """Save RMSD matrix to Excel file with 7 decimal precision."""
         n = rmsd_matrix.shape[0]
 
         # Change extension to .xlsx if it's .txt
@@ -899,38 +898,62 @@ class RMSDGrouper(MoleculeGrouper):
 
         # Create Excel writer with openpyxl engine
         with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # Write matrix to 'Matrix' sheet starting from row 5 to leave room for header info
+            # Write matrix to 'Matrix' sheet starting from row 8 to leave room for header info
             df.to_excel(
                 writer,
                 sheet_name="RMSD_Matrix",
-                startrow=5,
-                float_format="%.6f",
+                startrow=8,
+                float_format="%.7f",
             )
 
             # Get the worksheet to add header information
             worksheet = writer.sheets["RMSD_Matrix"]
 
             # Add header information
-            worksheet["A1"] = (
+            row = 1
+            worksheet[f"A{row}"] = (
                 f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}"
             )
+            row += 1
 
+            # Threshold or num_groups
             if hasattr(self, "num_groups") and self.num_groups is not None:
-                worksheet["A2"] = f"Requested Groups (-N): {self.num_groups}"
+                worksheet[f"A{row}"] = (
+                    f"Requested Groups (-N): {self.num_groups}"
+                )
+                row += 1
                 if (
                     hasattr(self, "_auto_threshold")
                     and self._auto_threshold is not None
                 ):
-                    worksheet["A3"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.6f} Å"
+                    worksheet[f"A{row}"] = (
+                        f"Auto-determined Threshold: {self._auto_threshold:.7f} Å"
                     )
+                    row += 1
             else:
-                worksheet["A2"] = f"Threshold: {self.threshold} Å"
+                worksheet[f"A{row}"] = f"Threshold: {self.threshold} Å"
+                row += 1
+
+            # Parameters specific to different groupers
+            worksheet[f"A{row}"] = (
+                f"Align Molecules: {getattr(self, 'align_molecules', 'N/A')}"
+            )
+            row += 1
+            worksheet[f"A{row}"] = (
+                f"Ignore Hydrogens: {getattr(self, 'ignore_hydrogens', False)}"
+            )
+            row += 1
+
+            # IRMSDGrouper specific parameters
+            if hasattr(self, "check_stereo"):
+                worksheet[f"A{row}"] = f"Check Stereo: {self.check_stereo}"
+                row += 1
 
             if grouping_time is not None:
-                worksheet["A4"] = (
-                    f"RMSD Grouping Time: {grouping_time:.2f} seconds"
+                worksheet[f"A{row}"] = (
+                    f"Grouping Time: {grouping_time:.2f} seconds"
                 )
+                row += 1
 
             # Auto-adjust column widths
             for column in worksheet.columns:
@@ -942,7 +965,7 @@ class RMSDGrouper(MoleculeGrouper):
                             max_length = max(max_length, len(str(cell.value)))
                     except (TypeError, AttributeError):
                         pass
-                adjusted_width = min(max_length + 2, 15)
+                adjusted_width = min(max_length + 2, 18)
                 worksheet.column_dimensions[column_letter].width = (
                     adjusted_width
                 )
@@ -1006,6 +1029,7 @@ class HungarianRMSDGrouper(RMSDGrouper):
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
+        label: str = None,
         **kwargs,
     ):
         """
@@ -1018,6 +1042,7 @@ class HungarianRMSDGrouper(RMSDGrouper):
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules (legacy parameter).
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
+            label (str): Label for output files.
         """
         super().__init__(
             molecules,
@@ -1026,6 +1051,7 @@ class HungarianRMSDGrouper(RMSDGrouper):
             num_procs,
             align_molecules,
             ignore_hydrogens,
+            label=label,
         )
 
     def _calculate_rmsd(self, idx_pair):
@@ -1102,6 +1128,7 @@ class SpyRMSDGrouper(RMSDGrouper):
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
         cache: bool = True,  # Cache graph isomorphisms
+        label: str = None,
         **kwargs,
     ):
         """
@@ -1115,6 +1142,7 @@ class SpyRMSDGrouper(RMSDGrouper):
             align_molecules (bool): Whether to align molecules (legacy parameter).
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
             cache (bool): Cache graph isomorphisms for efficiency.
+            label (str): Label for output files.
         """
         super().__init__(
             molecules,
@@ -1123,6 +1151,7 @@ class SpyRMSDGrouper(RMSDGrouper):
             num_procs,
             align_molecules,
             ignore_hydrogens,
+            label=label,
         )
         self.cache = cache
         self.periodic_table = PeriodicTable()
@@ -1386,27 +1415,146 @@ class SpyRMSDGrouper(RMSDGrouper):
 
 class IRMSDGrouper(RMSDGrouper):
     """
-    Invariant RMSD (iRMSD) Grouper based on CREST implementation.
+    Invariant RMSD (iRMSD) Grouper.
 
-    This implementation follows the CREST algorithm for calculating isomorphism-
-    invariant RMSD that considers both atomic permutations and stereochemistry.
+    This grouper computes the permutation-invariant RMSD between molecular
+    structures using canonical atom identification based on molecular graph
+    topology (All-Pair-Shortest-Path algorithm, similar to Morgan algorithm).
 
-    The algorithm:
-    1. Centers molecules at their centroids (initial alignment)
-    2. Tests multiple reflection matrices (det = ±1) for handling molecular symmetry
-    3. Tests multiple rotational orientations (including 180° and 90° rotations)
-    4. Uses Hungarian algorithm (LSAP) to find optimal atom assignments within element groups
-    5. Applies Kabsch alignment for final optimal superposition
-    6. Optionally tests stereoisomers via complete spatial inversion
-    7. Returns the minimum RMSD among all valid configurations
+    The implementation follows the iRMSD algorithm from:
+    J. Chem. Inf. Model. 2025, 65, 4501-4511
 
-    Computational cost: LSAP cost × factor (4-32) × 2 (if stereo_check=True)
+    **Features:**
+    - Canonical atom identifiers using APSP (All-Pair-Shortest-Path) algorithm
+    - D3 coordination number for connectivity detection
+    - Principal axes alignment using moment of inertia tensor
+    - Hungarian algorithm for optimal atom permutation within equivalent groups
+    - Quaternion-based RMSD calculation
+    - Stereochemistry/inversion checking (for chiral molecules)
+    - Full native Python implementation matching the original Fortran irmsd package
 
-    Note on stereoisomers: By default, stereoisomer checking is disabled since
-    CREST conformer ensembles typically maintain single stereochemistry and don't
-    generate both R and S enantiomers from a single input structure. Enable
-    stereo_check only when comparing molecules with different stereochemistry.
+    Parameters:
+        threshold (float): RMSD threshold for grouping (default: 0.125 Å)
+        check_stereo (str): Control stereochemistry/inversion checking.
+            - 'auto' (default): automatically detect if inversion check needed
+            - 'on': force inversion check on
+            - 'off': disable inversion check
+        ignore_hydrogens (bool): Whether to exclude hydrogen atoms from calculation
     """
+
+    # Standard rotation matrices for symmetry operations
+    Rx180 = np.array([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]])
+    Ry180 = np.array([[-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]])
+    Rz180 = np.array([[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]])
+    Rx90 = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])
+    Ry90 = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])
+    Rz90 = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    Rx90T = Rx90.T
+    Ry90T = Ry90.T
+    Rz90T = Rz90.T
+
+    # D3 covalent radii (in Angstroms) for connectivity detection
+    # Reference: S. Grimme, J. Antony, S. Ehrlich, H. Krieg, J. Chem. Phys. 2010, 132, 154104
+    _COVALENT_RADII_D3 = {
+        1: 0.32,
+        2: 0.46,
+        3: 1.20,
+        4: 0.94,
+        5: 0.77,
+        6: 0.75,
+        7: 0.71,
+        8: 0.63,
+        9: 0.64,
+        10: 0.67,
+        11: 1.40,
+        12: 1.25,
+        13: 1.13,
+        14: 1.04,
+        15: 1.10,
+        16: 1.02,
+        17: 0.99,
+        18: 0.96,
+        19: 1.76,
+        20: 1.54,
+        21: 1.33,
+        22: 1.22,
+        23: 1.21,
+        24: 1.10,
+        25: 1.07,
+        26: 1.04,
+        27: 1.00,
+        28: 0.99,
+        29: 1.01,
+        30: 1.09,
+        31: 1.12,
+        32: 1.09,
+        33: 1.15,
+        34: 1.10,
+        35: 1.14,
+        36: 1.17,
+        37: 1.89,
+        38: 1.67,
+        39: 1.47,
+        40: 1.39,
+        41: 1.32,
+        42: 1.24,
+        43: 1.15,
+        44: 1.13,
+        45: 1.13,
+        46: 1.08,
+        47: 1.15,
+        48: 1.23,
+        49: 1.28,
+        50: 1.26,
+        51: 1.26,
+        52: 1.23,
+        53: 1.32,
+        54: 1.31,
+        55: 2.09,
+        56: 1.76,
+        57: 1.62,
+        58: 1.47,
+        59: 1.58,
+        60: 1.57,
+        61: 1.56,
+        62: 1.55,
+        63: 1.51,
+        64: 1.52,
+        65: 1.51,
+        66: 1.50,
+        67: 1.49,
+        68: 1.49,
+        69: 1.48,
+        70: 1.53,
+        71: 1.46,
+        72: 1.37,
+        73: 1.31,
+        74: 1.23,
+        75: 1.18,
+        76: 1.16,
+        77: 1.11,
+        78: 1.12,
+        79: 1.13,
+        80: 1.32,
+        81: 1.30,
+        82: 1.30,
+        83: 1.36,
+        84: 1.31,
+        85: 1.38,
+        86: 1.42,
+        87: 2.01,
+        88: 1.81,
+        89: 1.67,
+        90: 1.58,
+        91: 1.52,
+        92: 1.53,
+        93: 1.54,
+        94: 1.55,
+    }
+
+    # D3 parameters for coordination number calculation (k1, k2 in the CN formula)
+    _CN_K1 = 16.0
+    _CN_K2 = 4.0 / 3.0
 
     def __init__(
         self,
@@ -1416,7 +1564,8 @@ class IRMSDGrouper(RMSDGrouper):
         num_procs: int = 1,
         align_molecules: bool = False,
         ignore_hydrogens: bool = False,
-        stereo_check: bool = False,
+        check_stereo: str = "auto",
+        label: str = None,
         **kwargs,
     ):
         """
@@ -1424,13 +1573,21 @@ class IRMSDGrouper(RMSDGrouper):
 
         Args:
             molecules: Collection of molecules to group
-            threshold: RMSD threshold for grouping
+            threshold: RMSD threshold for grouping (default: 0.125 Angstroms)
             num_groups (int): Number of groups to create (alternative to threshold)
             num_procs: Number of processes for parallel computation
-            align_molecules: Whether to align molecules (legacy parameter)
+            align_molecules: Whether to align molecules (legacy parameter, ignored)
             ignore_hydrogens: Whether to exclude hydrogen atoms
-            stereo_check: Whether to check stereoisomers (mirror images)
+            check_stereo (str): Control stereochemistry/inversion checking.
+                - 'auto' (default): automatically detect if inversion check needed
+                - 'on': force inversion check on
+                - 'off': disable inversion check
+            label (str): Label for output files
         """
+        # Set default threshold if not provided
+        if threshold is None and num_groups is None:
+            threshold = 0.125  # Default iRMSD threshold in Angstroms
+
         super().__init__(
             molecules,
             threshold,
@@ -1438,395 +1595,728 @@ class IRMSDGrouper(RMSDGrouper):
             num_procs,
             align_molecules,
             ignore_hydrogens,
+            label=label,
         )
-        self.stereo_check = stereo_check
+        self._pt = PeriodicTable()
 
-    @staticmethod
-    def _calculate_rmsd_basic(P, Q):
-        """Basic RMSD calculation without alignment."""
-        return np.sqrt(np.mean(np.sum((P - Q) ** 2, axis=1)))
+        # Set _check_stereo_enabled based on check_stereo flag
+        # check_stereo: 'auto', 'on', 'off'
+        self.check_stereo = (
+            check_stereo.lower() if isinstance(check_stereo, str) else "auto"
+        )
+        if self.check_stereo == "off":
+            self._check_stereo_enabled = False
+        else:
+            # For 'auto' and 'on', enable stereo check
+            self._check_stereo_enabled = True
 
-    @staticmethod
-    def _generate_reflections():
-        """Generate all valid reflection matrices (det = ±1)."""
-        reflections = []
-        signs = [-1.0, 1.0]
-        for sx, sy, sz in product(signs, repeat=3):
-            M = np.diag([sx, sy, sz])
-            if abs(np.linalg.det(M)) == 1.0:
-                reflections.append(M)
-        return reflections
+        logger.info(
+            "Using native Python iRMSD implementation with APSP algorithm"
+        )
 
-    @staticmethod
-    def _element_permutation(P, Q, symbols):
+    # ========== D3 Coordination Number Calculation ==========
+
+    def _get_covalent_radius(self, atomic_number: int) -> float:
+        """Get D3 covalent radius for an atomic number."""
+        return self._COVALENT_RADII_D3.get(
+            atomic_number, 1.5
+        )  # Default fallback
+
+    def _compute_cn_d3(
+        self, atomic_numbers: np.ndarray, positions: np.ndarray
+    ) -> np.ndarray:
         """
-        Find optimal permutation within element groups using Hungarian algorithm.
+        Compute D3 coordination numbers for all atoms.
+
+        This implements the D3 CN formula:
+        CN_i = sum_j [1 / (1 + exp(-k1 * (k2 * (R_cov_i + R_cov_j) / r_ij - 1)))]
 
         Args:
-            P, Q: Coordinate arrays
-            symbols: Atomic symbols
+            atomic_numbers: (N,) array of atomic numbers
+            positions: (N, 3) array of atomic positions
 
         Returns:
-            Permutation array
+            cn: (N,) array of coordination numbers
         """
-        perm = np.arange(len(symbols))
-        element_groups = defaultdict(list)
+        n_atoms = len(atomic_numbers)
+        cn = np.zeros(n_atoms, dtype=np.float64)
 
-        # Group atoms by element
+        # Get covalent radii for all atoms
+        cov_radii = np.array(
+            [self._get_covalent_radius(z) for z in atomic_numbers]
+        )
+
+        # Compute pairwise distances
+        for i in range(n_atoms):
+            for j in range(i + 1, n_atoms):
+                rij = np.linalg.norm(positions[i] - positions[j])
+                if rij < 1e-6:
+                    continue
+
+                # Reference covalent distance
+                rcov_sum = cov_radii[i] + cov_radii[j]
+
+                # D3 CN counting function
+                arg = -self._CN_K1 * (self._CN_K2 * rcov_sum / rij - 1.0)
+                cn_contrib = 1.0 / (1.0 + np.exp(arg))
+
+                cn[i] += cn_contrib
+                cn[j] += cn_contrib
+
+        return cn
+
+    def _build_connectivity_matrix(
+        self,
+        atomic_numbers: np.ndarray,
+        positions: np.ndarray,
+        cn_threshold: float = 0.5,
+    ) -> np.ndarray:
+        """
+        Build connectivity (adjacency) matrix from atomic positions using D3-like bond detection.
+
+        Two atoms are considered bonded if their contribution to CN exceeds cn_threshold.
+
+        Args:
+            atomic_numbers: (N,) array of atomic numbers
+            positions: (N, 3) array of atomic positions
+            cn_threshold: threshold for bond detection (default 0.5)
+
+        Returns:
+            connectivity: (N, N) integer matrix (1 = bonded, 0 = not bonded)
+        """
+        n_atoms = len(atomic_numbers)
+        connectivity = np.zeros((n_atoms, n_atoms), dtype=np.int32)
+
+        # Get covalent radii for all atoms
+        cov_radii = np.array(
+            [self._get_covalent_radius(z) for z in atomic_numbers]
+        )
+
+        for i in range(n_atoms):
+            for j in range(i + 1, n_atoms):
+                rij = np.linalg.norm(positions[i] - positions[j])
+                if rij < 1e-6:
+                    continue
+
+                rcov_sum = cov_radii[i] + cov_radii[j]
+
+                # D3 CN counting function
+                arg = -self._CN_K1 * (self._CN_K2 * rcov_sum / rij - 1.0)
+                cn_contrib = 1.0 / (1.0 + np.exp(arg))
+
+                if cn_contrib > cn_threshold:
+                    connectivity[i, j] = 1
+                    connectivity[j, i] = 1
+
+        return connectivity
+
+    # ========== APSP Algorithm for Canonical Ranking ==========
+
+    def _floyd_warshall_apsp(self, connectivity: np.ndarray) -> np.ndarray:
+        """
+        Compute All-Pairs Shortest Paths using Floyd-Warshall algorithm.
+
+        Args:
+            connectivity: (N, N) adjacency matrix (1 = connected, 0 = not connected)
+
+        Returns:
+            dist: (N, N) shortest path distance matrix
+        """
+        n = connectivity.shape[0]
+        INF = n + 1  # Infinity for unreachable pairs
+
+        # Initialize distance matrix
+        dist = np.full((n, n), INF, dtype=np.int32)
+        np.fill_diagonal(dist, 0)
+
+        # Set direct connections to distance 1
+        dist[connectivity == 1] = 1
+
+        # Floyd-Warshall algorithm
+        for k in range(n):
+            for i in range(n):
+                for j in range(n):
+                    if dist[i, k] + dist[k, j] < dist[i, j]:
+                        dist[i, j] = dist[i, k] + dist[k, j]
+
+        return dist
+
+    def _compute_apsp_invariants(
+        self, atomic_numbers: np.ndarray, dist_matrix: np.ndarray
+    ) -> np.ndarray:
+        """
+        Compute APSP+ invariants for each atom.
+
+        The APSP+ invariant for atom i is a tuple of:
+        - atomic number
+        - sorted list of (distance, neighbor_atomic_number) for all atoms
+
+        This is simplified to a hash for comparison purposes.
+
+        Args:
+            atomic_numbers: (N,) array of atomic numbers
+            dist_matrix: (N, N) shortest path distance matrix
+
+        Returns:
+            invariants: (N,) array of invariant values (hashes)
+        """
+        n = len(atomic_numbers)
+        invariants = np.zeros(n, dtype=np.int64)
+
+        # Use Python integers to avoid numpy overflow
+        P = 31  # Prime base
+        M = 10**18 + 9  # Large prime modulus
+
+        for i in range(n):
+            # Build invariant tuple: (atomic_number, sorted list of (dist, neighbor_Z))
+            inv_list = []
+            for j in range(n):
+                if i != j:
+                    inv_list.append(
+                        (int(dist_matrix[i, j]), int(atomic_numbers[j]))
+                    )
+
+            # Sort by distance first, then by atomic number
+            inv_list.sort()
+
+            # Create a hash from the invariant
+            # Use polynomial hashing: hash = sum(a[i] * p^i) mod M
+            # where a[i] combines distance and atomic number
+            h = int(
+                atomic_numbers[i]
+            )  # Start with own atomic number (Python int)
+            p_pow = P
+            for d, z in inv_list:
+                # Use Python integers to avoid overflow
+                h = (h + (d * 1000 + z) * p_pow) % M
+                p_pow = (p_pow * P) % M
+
+            invariants[i] = h
+
+        return invariants
+
+    def _compute_canonical_ranks(
+        self, atomic_numbers: np.ndarray, positions: np.ndarray
+    ) -> np.ndarray:
+        """
+        Compute canonical ranks for atoms using APSP algorithm.
+
+        Atoms with the same rank are topologically equivalent and can be permuted.
+
+        Args:
+            atomic_numbers: (N,) array of atomic numbers
+            positions: (N, 3) array of atomic positions
+
+        Returns:
+            ranks: (N,) array of canonical ranks (1-indexed, same rank = equivalent)
+        """
+
+        # Build connectivity matrix
+        connectivity = self._build_connectivity_matrix(
+            atomic_numbers, positions
+        )
+
+        # Compute APSP distance matrix
+        dist_matrix = self._floyd_warshall_apsp(connectivity)
+
+        # Compute APSP+ invariants
+        invariants = self._compute_apsp_invariants(atomic_numbers, dist_matrix)
+
+        # Assign ranks based on unique invariants
+        unique_invs = sorted(set(invariants))
+        inv_to_rank = {inv: rank + 1 for rank, inv in enumerate(unique_invs)}
+
+        ranks = np.array(
+            [inv_to_rank[inv] for inv in invariants], dtype=np.int32
+        )
+
+        return ranks
+
+    # ========== Core iRMSD Utilities ==========
+
+    def _get_atomic_masses(self, symbols):
+        """Get atomic masses for given element symbols."""
+        return np.array([self._pt.to_atomic_mass(s) for s in symbols])
+
+    def _compute_cma_and_shift(self, coords, masses):
+        """Compute mass-weighted center of mass and shift coordinates."""
+        total_mass = np.sum(masses) + 1e-20
+        cma = np.sum(coords * masses[:, np.newaxis], axis=0) / total_mass
+        return coords - cma, cma
+
+    def _compute_inertia_tensor(self, coords, masses):
+        """Compute the moment of inertia tensor."""
+        t = np.array([i * 1e-10 for i in range(1, 7)])
+        for m, r in zip(masses, coords):
+            x, y, z = r
+            t[0] += m * (y**2 + z**2)
+            t[1] -= m * x * y
+            t[2] += m * (z**2 + x**2)
+            t[3] -= m * z * x
+            t[4] -= m * y * z
+            t[5] += m * (x**2 + y**2)
+        return np.array(
+            [[t[0], t[1], t[3]], [t[1], t[2], t[4]], [t[3], t[4], t[5]]]
+        )
+
+    def _compute_rotational_constants(self, inertia):
+        """Compute rotational constants from inertia tensor."""
+        icm2MHz = 2.9979245e4
+        Aamu2icm = 16.8576522
+        eig, evec = np.linalg.eigh(inertia)
+        evec[np.abs(evec) < 1e-9] = 0.0
+        rot = np.zeros(3)
+        for i in range(3):
+            if eig[i] < 3e-4:
+                rot[i] = 0.0
+            else:
+                rot[i] = icm2MHz * Aamu2icm / eig[i]
+        return rot, evec
+
+    def _check_unique_axes(self, rot, thr=0.01):
+        """Check uniqueness of rotational constants."""
+        unique = np.array([False, False, False])
+        if rot[0] < 1e-10 or rot[1] < 1e-10:
+            return unique, 3
+        diff = np.array(
+            [
+                abs(rot[1] / rot[0] - 1.0),
+                abs(rot[2] / rot[0] - 1.0),
+                abs(rot[2] / rot[1] - 1.0),
+            ]
+        )
+        if diff[0] > thr and diff[1] > thr:
+            unique[0] = True
+        if diff[0] > thr and diff[2] > thr:
+            unique[1] = True
+        if diff[1] > thr and diff[2] > thr:
+            unique[2] = True
+        n_unique = np.sum(unique)
+        if n_unique == 3:
+            return unique, 0
+        elif n_unique == 1:
+            if unique[0]:
+                return unique, 1
+            elif unique[2]:
+                return unique, 2
+        return unique, 3
+
+    def _align_to_principal_axes(self, coords, masses):
+        """Align molecule to principal axes."""
+        shifted_coords, _ = self._compute_cma_and_shift(coords, masses)
+        inertia = self._compute_inertia_tensor(shifted_coords, masses)
+        rot, evec = self._compute_rotational_constants(inertia)
+        if np.linalg.det(evec) < 0:
+            evec[:, 0] = -evec[:, 0]
+        return shifted_coords @ evec, rot, evec
+
+    def _element_permutation(self, P, Q, symbols):
+        """Find optimal permutation within element groups using Hungarian algorithm."""
+        n_atoms = len(symbols)
+        perm = np.arange(n_atoms)
+        total_cost = 0.0
+        element_groups = defaultdict(list)
         for i, symbol in enumerate(symbols):
             element_groups[symbol].append(i)
-
-        # Apply Hungarian algorithm within each element group
         for element, indices in element_groups.items():
             if len(indices) <= 1:
                 continue
+            indices = np.array(indices)
+            cost_matrix = cdist(P[indices], Q[indices], metric="sqeuclidean")
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            perm[indices[row_ind]] = indices[col_ind]
+            total_cost += cost_matrix[row_ind, col_ind].sum()
+        return perm, total_cost
 
-            # Extract coordinates for this element
-            P_group = P[indices]
-            Q_group = Q[indices]
-
-            # Build distance cost matrix
-            n_atoms = len(indices)
-            cost_matrix = np.zeros((n_atoms, n_atoms))
-            for i in range(n_atoms):
-                for j in range(n_atoms):
-                    cost_matrix[i, j] = np.sum((P_group[i] - Q_group[j]) ** 2)
-
-            # Solve assignment problem
-            row_indices, col_indices = linear_sum_assignment(cost_matrix)
-
-            # Apply permutation
-            perm[np.array(indices)[row_indices]] = np.array(indices)[
-                col_indices
+    def _rmsd_quaternion(self, ref_coords, mol_coords):
+        """Calculate RMSD using quaternion-based algorithm."""
+        n_atoms = len(ref_coords)
+        x = ref_coords.T.copy()
+        y = mol_coords.T.copy()
+        x = x - np.mean(x, axis=1, keepdims=True)
+        y = y - np.mean(y, axis=1, keepdims=True)
+        x_norm = np.sum(x**2)
+        y_norm = np.sum(y**2)
+        R = x @ y.T
+        S = np.array(
+            [
+                [
+                    R[0, 0] + R[1, 1] + R[2, 2],
+                    R[1, 2] - R[2, 1],
+                    R[2, 0] - R[0, 2],
+                    R[0, 1] - R[1, 0],
+                ],
+                [
+                    R[1, 2] - R[2, 1],
+                    R[0, 0] - R[1, 1] - R[2, 2],
+                    R[0, 1] + R[1, 0],
+                    R[0, 2] + R[2, 0],
+                ],
+                [
+                    R[2, 0] - R[0, 2],
+                    R[0, 1] + R[1, 0],
+                    -R[0, 0] + R[1, 1] - R[2, 2],
+                    R[1, 2] + R[2, 1],
+                ],
+                [
+                    R[0, 1] - R[1, 0],
+                    R[0, 2] + R[2, 0],
+                    R[1, 2] + R[2, 1],
+                    -R[0, 0] - R[1, 1] + R[2, 2],
+                ],
             ]
+        )
+        eigenvalues, _ = np.linalg.eigh(S)
+        lambda_max = eigenvalues[-1]
+        rmsd_sq = max(0.0, (x_norm + y_norm - 2.0 * lambda_max)) / n_atoms
+        return np.sqrt(rmsd_sq)
 
-        return perm
+    def _test_orientations(
+        self, ref_coords, mol_coords, symbols, uniqueness_case
+    ):
+        """Test multiple orientations and return the best RMSD."""
+        best_rmsd = np.inf
+        best_perm = None
+        n_iterations = {0: 1, 1: 2, 2: 2}.get(uniqueness_case, 4)
+        mol_working = mol_coords.copy()
 
-    @staticmethod
-    def _get_rotation_matrices():
-        """Get standard rotation matrices for systematic orientation testing."""
-        # Identity
-        Identity = np.eye(3)
+        for ii in range(n_iterations):
+            for rot_matrix in [None, self.Rx180, self.Ry180, self.Rx180]:
+                if rot_matrix is not None:
+                    mol_working = mol_working @ rot_matrix.T
+                perm, _ = self._element_permutation(
+                    ref_coords, mol_working, symbols
+                )
+                rmsd = self._rmsd_quaternion(ref_coords, mol_working[perm])
+                if rmsd < best_rmsd:
+                    best_rmsd = rmsd
+                    best_perm = perm.copy()
+                if best_rmsd < 1e-10:
+                    return best_rmsd, best_perm
+            mol_working = mol_working @ self.Ry180.T
+            if uniqueness_case == 0:
+                break
+            elif uniqueness_case == 1 and ii == 0:
+                mol_working = mol_working @ self.Rx90.T
+            elif uniqueness_case == 2 and ii == 0:
+                mol_working = mol_working @ self.Rz90.T
+            elif uniqueness_case == 3:
+                if ii == 0:
+                    mol_working = mol_working @ self.Rz90.T
+                elif ii == 1:
+                    mol_working = mol_working @ self.Rz90T.T @ self.Ry90.T
+                elif ii == 2:
+                    mol_working = mol_working @ self.Ry90T.T @ self.Rx90.T
+        return best_rmsd, best_perm
 
-        # 180-degree rotations around axes
-        Rx180 = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
-        Ry180 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-        Rz180 = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+    # ========== APSP-based Permutation ==========
 
-        # 90-degree rotations
-        Rx90 = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
-        Ry90 = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
-        Rz90 = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
-
-        return [Identity, Rx180, Ry180, Rz180, Rx90, Ry90, Rz90]
-
-    def _irmsd_core(self, pos1, pos2, symbols):
+    def _apsp_permutation(self, ref_coords, mol_coords, atomic_numbers, ranks):
         """
-        Core iRMSD calculation following CREST algorithm.
+        Find optimal permutation using APSP-based canonical ranking.
 
-        The total computational cost is the cost of the LSAP (Hungarian algorithm)
-        times a factor between 4 and 32, depending on the system's rotational
-        ambiguity. Additional factor of 2 when stereoisomer checking is enabled.
+        Within each equivalence class (atoms with same rank), use Hungarian algorithm
+        to find the optimal atom-to-atom assignment.
 
         Args:
-            pos1, pos2: Coordinate arrays (N, 3)
-            symbols: List of atomic symbols
+            ref_coords: (N, 3) reference coordinates
+            mol_coords: (N, 3) molecule coordinates
+            atomic_numbers: (N,) atomic numbers
+            ranks: (N,) canonical ranks from APSP
 
         Returns:
-            Minimum RMSD value
+            perm: (N,) optimal permutation array
+            cost: total assignment cost
         """
-        pos1 = np.asarray(pos1, dtype=np.float64)
-        pos2 = np.asarray(pos2, dtype=np.float64)
+        n_atoms = len(atomic_numbers)
+        perm = np.arange(n_atoms)
+        total_cost = 0.0
 
-        if len(pos1) != len(pos2):
-            return np.inf
+        # Group atoms by their canonical rank
+        rank_groups = defaultdict(list)
+        for i, rank in enumerate(ranks):
+            rank_groups[rank].append(i)
 
-        if len(symbols) != len(pos1):
-            return np.inf
+        # For each equivalence class, use Hungarian algorithm
+        for rank, indices in rank_groups.items():
+            if len(indices) <= 1:
+                continue
 
-        # Check chemical composition - compare against reference molecule
-        # This should be done properly in the calling function by ensuring
-        # molecules have the same composition before calling this method
-        if len(set(symbols)) == 0:  # Empty molecule check
-            return np.inf
+            indices = np.array(indices)
+            cost_matrix = cdist(
+                ref_coords[indices], mol_coords[indices], metric="sqeuclidean"
+            )
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            perm[indices[row_ind]] = indices[col_ind]
+            total_cost += cost_matrix[row_ind, col_ind].sum()
 
-        # Initial centroid alignment (as done in CREST)
-        centroid_pos1 = np.mean(pos1, axis=0)
-        centroid_pos2 = np.mean(pos2, axis=0)
-        pos1_centered = pos1 - centroid_pos1
-        pos2_centered = pos2 - centroid_pos2
+        return perm, total_cost
 
+    def _test_orientations_apsp(
+        self, ref_coords, mol_coords, atomic_numbers, ranks, uniqueness_case
+    ):
+        """
+        Test multiple orientations using APSP-based permutation and return best RMSD.
+
+        This is the core iRMSD algorithm that:
+        1. Tests multiple molecular orientations (rotations around principal axes)
+        2. Uses APSP canonical ranking to identify equivalent atoms
+        3. Uses Hungarian algorithm within equivalence classes for optimal matching
+        4. Computes RMSD using quaternion algorithm
+
+        Args:
+            ref_coords: reference molecule coordinates (already aligned to principal axes)
+            mol_coords: test molecule coordinates (already aligned to principal axes)
+            atomic_numbers: (N,) atomic numbers
+            ranks: (N,) canonical ranks from APSP algorithm
+            uniqueness_case: symmetry case (0=asymmetric, 1-3=various symmetries)
+
+        Returns:
+            best_rmsd: best RMSD found across all orientations
+            best_perm: best permutation found
+        """
         best_rmsd = np.inf
-        reflections = self._generate_reflections()
-        rotation_matrices = self._get_rotation_matrices()
+        best_perm = None
 
-        # Test each reflection
-        for reflection in reflections:
-            pos2_reflected = pos2_centered @ reflection.T
+        # Number of major orientation iterations depends on symmetry
+        n_iterations = {0: 1, 1: 2, 2: 2}.get(uniqueness_case, 4)
+        mol_working = mol_coords.copy()
 
-            # Test different rotational orientations
-            for rotation in rotation_matrices:
-                pos2_rotated = pos2_reflected @ rotation.T
+        for ii in range(n_iterations):
+            # Test 4 rotations: identity, Rx180, Ry180, Rx180 (equivalent to Rz180)
+            for rot_matrix in [None, self.Rx180, self.Ry180, self.Rx180]:
+                if rot_matrix is not None:
+                    mol_working = mol_working @ rot_matrix.T
 
-                # Find optimal atom permutation
-                permutation = self._element_permutation(
-                    pos1_centered, pos2_rotated, symbols
-                )
-                pos2_permuted = pos2_rotated[permutation]
-
-                # Apply Kabsch alignment
-                pos1_aligned, pos2_aligned, _, _, rmsd_val = kabsch_align(
-                    pos1_centered, pos2_permuted
+                # Use APSP-based permutation
+                perm, _ = self._apsp_permutation(
+                    ref_coords, mol_working, atomic_numbers, ranks
                 )
 
-                if rmsd_val < best_rmsd:
-                    best_rmsd = rmsd_val
+                # Calculate RMSD with optimal permutation
+                rmsd = self._rmsd_quaternion(ref_coords, mol_working[perm])
 
-                # Early termination if RMSD is very small
+                if rmsd < best_rmsd:
+                    best_rmsd = rmsd
+                    best_perm = perm.copy()
+
+                # Early termination if we found perfect match
                 if best_rmsd < 1e-10:
-                    return best_rmsd
+                    return best_rmsd, best_perm
 
-        # Optionally test stereoisomers (mirror images/inversion)
-        if self.stereo_check:
-            # Perform proper inversion (spatial reflection through origin)
-            # This is the "inversion operation" mentioned in CREST algorithm
-            pos2_inverted = (
-                -pos2_centered
-            )  # Complete spatial inversion of centered coords
+            # Apply additional rotation for symmetric cases
+            mol_working = mol_working @ self.Ry180.T
 
-            for reflection in reflections:
-                pos2_reflected = pos2_inverted @ reflection.T
+            if uniqueness_case == 0:
+                break
+            elif uniqueness_case == 1 and ii == 0:
+                mol_working = mol_working @ self.Rx90.T
+            elif uniqueness_case == 2 and ii == 0:
+                mol_working = mol_working @ self.Rz90.T
+            elif uniqueness_case == 3:
+                if ii == 0:
+                    mol_working = mol_working @ self.Rz90.T
+                elif ii == 1:
+                    mol_working = mol_working @ self.Rz90T.T @ self.Ry90.T
+                elif ii == 2:
+                    mol_working = mol_working @ self.Ry90T.T @ self.Rx90.T
 
-                for rotation in rotation_matrices:
-                    pos2_rotated = pos2_reflected @ rotation.T
-                    permutation = self._element_permutation(
-                        pos1_centered, pos2_rotated, symbols
-                    )
-                    pos2_permuted = pos2_rotated[permutation]
-                    pos1_aligned, pos2_aligned, _, _, rmsd_val = kabsch_align(
-                        pos1_centered, pos2_permuted
-                    )
+        return best_rmsd, best_perm
 
-                    if rmsd_val < best_rmsd:
-                        best_rmsd = rmsd_val
+    def _irmsd_core(self, pos1, pos2, atomic_numbers1, atomic_numbers2):
+        """
+        Core iRMSD calculation using APSP algorithm.
 
-                    if best_rmsd < 1e-10:
-                        return best_rmsd
+        This is the main algorithm that matches the original Fortran irmsd package:
+        1. Compute canonical ranks using APSP (All-Pairs Shortest Paths) for both molecules
+        2. Find correspondence between atoms based on canonical ranks
+        3. Align both molecules to their principal axes
+        4. Test multiple orientations with APSP-based atom permutation
+        5. Optionally check inverted structure if stereo_check is enabled
+
+        Args:
+            pos1: (N, 3) reference molecule positions
+            pos2: (N, 3) test molecule positions
+            atomic_numbers1: (N,) atomic numbers for reference molecule
+            atomic_numbers2: (N,) atomic numbers for test molecule
+
+        Returns:
+            float: best iRMSD value
+        """
+
+        # Get atomic masses for principal axis alignment
+        # Note: to_atomic_mass expects element symbols, but we have atomic numbers
+        # Convert atomic numbers to symbols first using to_symbol method
+        symbols1 = [self._pt.to_symbol(int(z)) for z in atomic_numbers1]
+        symbols2 = [self._pt.to_symbol(int(z)) for z in atomic_numbers2]
+        masses1 = np.array([self._pt.to_atomic_mass(s) for s in symbols1])
+        masses2 = np.array([self._pt.to_atomic_mass(s) for s in symbols2])
+
+        # Compute canonical ranks using APSP algorithm for both molecules
+        ranks1 = self._compute_canonical_ranks(atomic_numbers1, pos1)
+        ranks2 = self._compute_canonical_ranks(atomic_numbers2, pos2)
+
+        # Find initial atom correspondence based on canonical ranks
+        # This maps atoms from mol2 to mol1 based on their canonical signatures
+        initial_perm = self._find_initial_correspondence(
+            atomic_numbers1, ranks1, atomic_numbers2, ranks2
+        )
+
+        if initial_perm is None:
+            # Cannot establish correspondence - molecules may have different topology
+            return np.inf
+
+        # Reorder mol2 according to initial correspondence
+        pos2_reordered = pos2[initial_perm]
+        masses2_reordered = masses2[initial_perm]
+
+        # Now both molecules should have corresponding atoms in the same order
+        # Use ranks from molecule 1 for the Hungarian algorithm
+        ranks = ranks1
+
+        # Align both molecules to principal axes
+        ref_aligned, rot_ref, evec_ref = self._align_to_principal_axes(
+            pos1, masses1
+        )
+        mol_aligned, rot_mol, evec_mol = self._align_to_principal_axes(
+            pos2_reordered, masses2_reordered
+        )
+
+        # Check uniqueness of principal axes
+        _, uniqueness_case = self._check_unique_axes(rot_ref)
+
+        # Test orientations with APSP-based permutation
+        best_rmsd, _ = self._test_orientations_apsp(
+            ref_aligned, mol_aligned, atomic_numbers1, ranks, uniqueness_case
+        )
+
+        # Check inverted structure if check_stereo is enabled
+        if self._check_stereo_enabled:
+            # Invert the second molecule
+            mol_inverted = -mol_aligned
+
+            # Test orientations with inverted structure
+            rmsd_inv, _ = self._test_orientations_apsp(
+                ref_aligned,
+                mol_inverted,
+                atomic_numbers1,
+                ranks,
+                uniqueness_case,
+            )
+
+            if rmsd_inv < best_rmsd:
+                best_rmsd = rmsd_inv
 
         return best_rmsd
+
+    def _find_initial_correspondence(
+        self, atomic_numbers1, ranks1, atomic_numbers2, ranks2
+    ):
+        """
+        Find initial atom correspondence between two molecules based on canonical ranks.
+
+        For each canonical rank group, we need to match atoms from mol2 to mol1.
+        If both molecules have the same number of atoms with the same (rank, atomic_number)
+        signatures, we can establish a correspondence.
+
+        Args:
+            atomic_numbers1: (N,) atomic numbers for molecule 1
+            ranks1: (N,) canonical ranks for molecule 1
+            atomic_numbers2: (N,) atomic numbers for molecule 2
+            ranks2: (N,) canonical ranks for molecule 2
+
+        Returns:
+            perm: (N,) permutation array mapping mol2 indices to mol1 positions,
+                  or None if correspondence cannot be established
+        """
+        n_atoms = len(atomic_numbers1)
+        perm = np.zeros(n_atoms, dtype=np.int32)
+
+        # Create signature tuples (rank, atomic_number) for each atom
+        sig1 = [(ranks1[i], atomic_numbers1[i]) for i in range(n_atoms)]
+        sig2 = [(ranks2[i], atomic_numbers2[i]) for i in range(n_atoms)]
+
+        # Group atoms by signature for mol1
+        sig_to_indices1 = defaultdict(list)
+        for i, sig in enumerate(sig1):
+            sig_to_indices1[sig].append(i)
+
+        # Group atoms by signature for mol2
+        sig_to_indices2 = defaultdict(list)
+        for i, sig in enumerate(sig2):
+            sig_to_indices2[sig].append(i)
+
+        # Check that both molecules have the same signature distribution
+        if set(sig_to_indices1.keys()) != set(sig_to_indices2.keys()):
+            return None
+
+        for sig in sig_to_indices1:
+            if len(sig_to_indices1[sig]) != len(sig_to_indices2[sig]):
+                return None
+
+        # Assign atoms from mol2 to mol1 positions
+        # For atoms with the same signature, assign them in order
+        # (the Hungarian algorithm will later optimize within groups)
+        for sig in sig_to_indices1:
+            indices1 = sig_to_indices1[sig]
+            indices2 = sig_to_indices2[sig]
+
+            for idx1, idx2 in zip(indices1, indices2):
+                perm[idx1] = idx2
+
+        return perm
 
     def _calculate_rmsd(self, mol_idx_pair: Tuple[int, int]) -> float:
         """
         Calculate iRMSD between two molecules.
 
+        This method overrides the base class _calculate_rmsd to use the
+        iRMSD algorithm with APSP-based canonical ranking.
+
         Args:
-            mol_idx_pair: Tuple of molecule indices
+            mol_idx_pair: Tuple of (index1, index2) for the two molecules
 
         Returns:
-            iRMSD value
+            float: iRMSD value, or np.inf if calculation fails
         """
-        try:
-            i, j = mol_idx_pair
-            mol1 = self.molecules[i]
-            mol2 = self.molecules[j]
+        i, j = mol_idx_pair
+        mol1 = self.molecules[i]
+        mol2 = self.molecules[j]
 
-            # Handle hydrogen filtering if needed
-            if self.ignore_hydrogens:
-                pos1, symbols1 = self._get_heavy_atoms(mol1)
-                pos2, symbols2 = self._get_heavy_atoms(mol2)
-            else:
-                pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
-                pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+        # Get positions and symbols
+        pos1 = mol1.positions
+        pos2 = mol2.positions
+        symbols1 = mol1.chemical_symbols
+        symbols2 = mol2.chemical_symbols
 
-            # Check consistency
-            if len(pos1) != len(pos2):
-                return np.inf
-
-            if sorted(symbols1) != sorted(symbols2):
-                return np.inf
-
-            # Calculate iRMSD
-            return self._irmsd_core(pos1, pos2, symbols1)
-
-        except Exception:
-            # Return infinity for any errors
+        # Validate that molecules have same atoms (sorted comparison to allow different ordering)
+        if sorted(symbols1) != sorted(symbols2):
+            logger.warning(f"Molecules {i} and {j} have different atom types")
             return np.inf
-
-
-class RMSDGrouperSharedMemory(MoleculeGrouper):
-    """
-    Group molecules based on RMSD using shared memory optimization.
-
-    Optimized version of RMSDGrouper that uses shared memory to reduce
-    data copying overhead in multiprocessing scenarios. Provides faster
-    computation for large datasets by minimizing memory allocation and
-    inter-process communication costs.
-
-    Attributes:
-        molecules (Iterable[Molecule]): Inherited; collection of molecules to
-            group.
-        num_procs (int): Inherited; number of worker processes.
-        threshold (float): RMSD threshold for grouping molecules.
-        align_molecules (bool): Whether to align molecules before RMSD
-            calculation.
-    """
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        threshold: float = 0.5,  # RMSD threshold for grouping
-        num_procs: int = 1,
-        align_molecules: bool = True,
-        label: str = None,
-    ):
-        """
-        Initialize RMSD grouper with shared memory optimization.
-
-        Args:
-            molecules (Iterable[Molecule]): Collection of molecules to group.
-            threshold (float): RMSD threshold for grouping. Defaults to 0.5.
-            num_procs (int): Number of processes for parallel computation.
-            align_molecules (bool): Whether to align molecules using Kabsch
-                algorithm before RMSD calculation. Defaults to True.
-            label (str): Label/name for output files.
-        """
-        super().__init__(molecules, num_procs, label=label)
-        self.threshold = threshold
-        self.align_molecules = align_molecules
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """
-        Group molecules using shared memory with optimized parallelism.
-
-        Uses RawArray shared memory to minimize data copying between processes.
-        Molecular positions are stored once in shared memory and accessed
-        by worker processes for RMSD calculations.
-
-        Returns:
-            Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
-                - List of molecule groups (each group is a list of molecules)
-                - List of index groups (corresponding indices for each group)
-        """
-        n = len(self.molecules)
-        num_atoms = self.molecules[0].positions.shape[0]
-
-        # 🧠 **1️⃣ Create Shared Memory (RawArray - Faster, Less Locking)**
-        shared_pos = RawArray("d", n * num_atoms * 3)  # 'd' -> float64
-
-        # Convert RawArray into numpy view
-        pos_np = np.frombuffer(shared_pos, dtype=np.float64).reshape(
-            n, num_atoms, 3
-        )
-
-        # Copy molecular positions into shared memory (only once!)
-        for i, mol in enumerate(self.molecules):
-            pos_np[i] = mol.positions
-
-        # 🏃‍♂️ **2️⃣ Run Parallel RMSD Calculation Using Explicit Shared Memory**
-        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
-        with multiprocessing.Pool(
-            self.num_procs,
-            initializer=self._init_worker,
-            initargs=(shared_pos, (n, num_atoms, 3)),
-        ) as pool:
-            rmsd_values = pool.map(self._calculate_rmsd, indices)
-
-        # 🏗️ **3️⃣ Construct Adjacency Matrix for Clustering**
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        # 🔗 **4️⃣ Complete Linkage Grouping**
-        # A structure joins a group only if its RMSD to ALL existing members is below threshold
-        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
-
-        # Cache the results to avoid recomputation
-        self._cached_groups = groups
-        self._cached_group_indices = index_groups
-
-        return groups, index_groups
-
-    def _complete_linkage_grouping(self, adj_matrix, n):
-        """
-        Perform complete linkage grouping (from last to first).
-
-        A structure joins a group only if its RMSD to ALL existing members
-        of that group is below the threshold.
-        """
-        assigned = [False] * n
-        groups = []
-        index_groups = []
-
-        for i in range(n - 1, -1, -1):
-            if assigned[i]:
-                continue
-            current_group = [i]
-            assigned[i] = True
-
-            for j in range(i - 1, -1, -1):
-                if assigned[j]:
-                    continue
-                can_join = all(
-                    adj_matrix[j, member] for member in current_group
-                )
-                if can_join:
-                    current_group.append(j)
-                    assigned[j] = True
-
-            current_group.sort()
-            groups.append([self.molecules[idx] for idx in current_group])
-            index_groups.append(current_group)
-
-        groups.reverse()
-        index_groups.reverse()
-        return groups, index_groups
-
-    @staticmethod
-    def _init_worker(shared_pos, pos_shape):
-        """
-        Initialize worker process with shared memory access.
-
-        Sets up global shared memory access for worker processes,
-        allowing them to read molecular positions without data copying.
-
-        Args:
-            shared_pos: RawArray containing shared position data.
-            pos_shape (tuple): Shape tuple for reshaping the shared array.
-        """
-        global shared_positions
-        shared_positions = np.frombuffer(shared_pos, dtype=np.float64).reshape(
-            pos_shape
-        )
-
-    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
-        """
-        Calculate RMSD efficiently using shared memory.
-
-        Computes RMSD between two molecules by reading their positions
-        from shared memory and creating local copies to reduce lock
-        contention during computation.
-
-        Args:
-            idx_pair (Tuple[int, int]): Pair of molecule indices to compare.
-
-        Returns:
-            float: RMSD value between the two molecules, or np.inf if
-                   shapes don't match.
-        """
-        i, j = idx_pair
-
-        # Read from Shared Memory ONCE (No repeated locking)
-        pos1 = np.array(shared_positions[i])  # Copying reduces lock contention
-        pos2 = np.array(shared_positions[j])
 
         if pos1.shape != pos2.shape:
+            logger.warning(f"Molecules {i} and {j} have different shapes")
             return np.inf
 
-        if self.align_molecules:
-            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
+        # Filter hydrogens if requested
+        if self.ignore_hydrogens:
+            non_h_mask1 = np.array([s != "H" for s in symbols1])
+            non_h_mask2 = np.array([s != "H" for s in symbols2])
+            pos1 = pos1[non_h_mask1]
+            pos2 = pos2[non_h_mask2]
+            symbols1 = [s for s in symbols1 if s != "H"]
+            symbols2 = [s for s in symbols2 if s != "H"]
 
-        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+        # Convert symbols to atomic numbers for both molecules
+        atomic_numbers1 = np.array(
+            [self._pt.to_atomic_number(s) for s in symbols1]
+        )
+        atomic_numbers2 = np.array(
+            [self._pt.to_atomic_number(s) for s in symbols2]
+        )
+
+        # Calculate iRMSD using APSP core algorithm
+        return self._irmsd_core(pos1, pos2, atomic_numbers1, atomic_numbers2)
 
 
 class PymolRMSDGrouper(RMSDGrouper):
@@ -2010,6 +2500,207 @@ class PymolRMSDGrouper(RMSDGrouper):
             return f"{self.__class__.__name__}(num_groups={self.num_groups})"
         else:
             return f"{self.__class__.__name__}(threshold={self.threshold})"
+
+
+class RMSDGrouperSharedMemory(MoleculeGrouper):
+    """
+    Group molecules based on RMSD using shared memory optimization.
+
+    Optimized version of RMSDGrouper that uses shared memory to reduce
+    data copying overhead in multiprocessing scenarios. Provides faster
+    computation for large datasets by minimizing memory allocation and
+    inter-process communication costs.
+
+    Attributes:
+        molecules (Iterable[Molecule]): Inherited; collection of molecules to
+            group.
+        num_procs (int): Inherited; number of worker processes.
+        threshold (float): RMSD threshold for grouping molecules.
+        align_molecules (bool): Whether to align molecules before RMSD
+            calculation.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold: float = 0.5,  # RMSD threshold for grouping
+        num_procs: int = 1,
+        align_molecules: bool = True,
+        label: str = None,
+    ):
+        """
+        Initialize RMSD grouper with shared memory optimization.
+
+        Args:
+            molecules (Iterable[Molecule]): Collection of molecules to group.
+            threshold (float): RMSD threshold for grouping. Defaults to 0.5.
+            num_procs (int): Number of processes for parallel computation.
+            align_molecules (bool): Whether to align molecules using Kabsch
+                algorithm before RMSD calculation. Defaults to True.
+            label (str): Label/name for output files.
+        """
+        super().__init__(molecules, num_procs, label=label)
+        self.threshold = threshold
+        self.align_molecules = align_molecules
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """
+        Group molecules using shared memory with optimized parallelism.
+
+        Uses RawArray shared memory to minimize data copying between processes.
+        Molecular positions are stored once in shared memory and accessed
+        by worker processes for RMSD calculations.
+
+        Returns:
+            Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
+                - List of molecule groups (each group is a list of molecules)
+                - List of index groups (corresponding indices for each group)
+        """
+        n = len(self.molecules)
+        num_atoms = self.molecules[0].positions.shape[0]
+
+        # 🧠 **1️⃣ Create Shared Memory (RawArray - Faster, Less Locking)**
+        shared_pos = RawArray("d", n * num_atoms * 3)  # 'd' -> float64
+
+        # Convert RawArray into numpy view
+        pos_np = np.frombuffer(shared_pos, dtype=np.float64).reshape(
+            n, num_atoms, 3
+        )
+
+        # Copy molecular positions into shared memory (only once!)
+        for i, mol in enumerate(self.molecules):
+            pos_np[i] = mol.positions
+
+        # 🏃‍♂️ **2️⃣ Run Parallel RMSD Calculation Using Explicit Shared Memory**
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        with multiprocessing.Pool(
+            self.num_procs,
+            initializer=self._init_worker,
+            initargs=(shared_pos, (n, num_atoms, 3)),
+        ) as pool:
+            rmsd_values = pool.map(self._calculate_rmsd, indices)
+
+        # 🏗️ **3️⃣ Construct Adjacency Matrix for Clustering**
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), rmsd in zip(indices, rmsd_values):
+            if rmsd < self.threshold:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # 🔗 **4️⃣ Complete Linkage Grouping**
+        # A structure joins a group only if its RMSD to ALL existing members is below the threshold
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
+
+        # Cache the results to avoid recomputation
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+
+        return groups, index_groups
+
+    def _complete_linkage_grouping(self, adj_matrix, n):
+        """
+        Perform complete linkage grouping (from last to first).
+
+        A structure joins a group only if its RMSD to ALL existing members
+        of that group is below the threshold (i.e., all edges exist in adj_matrix).
+        This prevents the chaining effect where dissimilar structures end up
+        in the same group through intermediate "bridge" structures.
+
+        Iterates from last to first structure so that higher-energy structures
+        (typically at the end) are more likely to form singleton groups,
+        preserving lower-energy structures in larger groups.
+
+        Args:
+            adj_matrix: Boolean adjacency matrix where adj_matrix[i,j] = True
+                       if RMSD between i and j is below threshold
+            n: Number of molecules
+
+        Returns:
+            Tuple of (groups, index_groups)
+        """
+        assigned = [False] * n
+        groups = []
+        index_groups = []
+
+        # Iterate from last to first (higher energy structures first as seeds)
+        for i in range(n - 1, -1, -1):
+            if assigned[i]:
+                continue
+
+            # Start a new group with molecule i
+            current_group = [i]
+            assigned[i] = True
+
+            # Try to add unassigned molecules with lower indices (lower energy)
+            for j in range(i - 1, -1, -1):
+                if assigned[j]:
+                    continue
+
+                # Check if j is connected to ALL members in current_group
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            # Sort indices within group (lowest index = lowest energy first)
+            current_group.sort()
+            # Add the completed group
+            groups.append([self.molecules[idx] for idx in current_group])
+            index_groups.append(current_group)
+
+        # Reverse groups so that groups containing lower-energy structures come first
+        groups.reverse()
+        index_groups.reverse()
+
+        return groups, index_groups
+
+    @staticmethod
+    def _init_worker(shared_pos, pos_shape):
+        """
+        Initialize worker process with shared memory access.
+
+        Sets up global shared memory access for worker processes,
+        allowing them to read molecular positions without data copying.
+
+        Args:
+            shared_pos: RawArray containing shared position data.
+            pos_shape (tuple): Shape tuple for reshaping the shared array.
+        """
+        global shared_positions
+        shared_positions = np.frombuffer(shared_pos, dtype=np.float64).reshape(
+            pos_shape
+        )
+
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """
+        Calculate RMSD efficiently using shared memory.
+
+        Computes RMSD between two molecules by reading their positions
+        from shared memory and creating local copies to reduce lock
+        contention during computation.
+
+        Args:
+            idx_pair (Tuple[int, int]): Pair of molecule indices to compare.
+
+        Returns:
+            float: RMSD value between the two molecules, or np.inf if
+                   shapes don't match.
+        """
+        i, j = idx_pair
+
+        # Read from Shared Memory ONCE (No repeated locking)
+        pos1 = np.array(shared_positions[i])  # Copying reduces lock contention
+        pos2 = np.array(shared_positions[j])
+
+        if pos1.shape != pos2.shape:
+            return np.inf
+
+        if self.align_molecules:
+            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
+
+        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
@@ -2343,7 +3034,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         self._auto_threshold = threshold
 
         print(
-            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.6f} to create {self.num_groups} groups"
+            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
         )
 
         # Build adjacency matrix with the determined threshold
@@ -2507,7 +3198,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         valid_indices: List[int],
         grouping_time: float = None,
     ):
-        """Save Tanimoto similarity matrix to Excel file with 6 decimal precision."""
+        """Save Tanimoto similarity matrix to Excel file with 7 decimal precision."""
         n = len(self.molecules)
 
         # Change extension to .xlsx if it's .txt
@@ -2531,39 +3222,51 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         # Create Excel writer
         with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # Write matrix to sheet starting from row 6 to leave room for header info
+            # Write matrix to sheet starting from row 8 to leave room for header info
             df.to_excel(
                 writer,
                 sheet_name="Tanimoto_Matrix",
-                startrow=6,
-                float_format="%.6f",
+                startrow=8,
+                float_format="%.7f",
             )
 
             # Get the worksheet to add header information
             worksheet = writer.sheets["Tanimoto_Matrix"]
 
             # Add header information
-            worksheet["A1"] = (
+            row = 1
+            worksheet[f"A{row}"] = (
                 f"Full Tanimoto Similarity Matrix ({n}x{n}) - {self.__class__.__name__}"
             )
-            worksheet["A2"] = f"Fingerprint Type: {self.fingerprint_type}"
+            row += 1
+            worksheet[f"A{row}"] = f"Fingerprint Type: {self.fingerprint_type}"
+            row += 1
 
             if hasattr(self, "num_groups") and self.num_groups is not None:
-                worksheet["A3"] = f"Requested Groups (-N): {self.num_groups}"
+                worksheet[f"A{row}"] = (
+                    f"Requested Groups (-N): {self.num_groups}"
+                )
+                row += 1
                 if (
                     hasattr(self, "_auto_threshold")
                     and self._auto_threshold is not None
                 ):
-                    worksheet["A4"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.6f}"
+                    worksheet[f"A{row}"] = (
+                        f"Auto-determined Threshold: {self._auto_threshold:.7f}"
                     )
+                    row += 1
             else:
-                worksheet["A3"] = f"Threshold: {self.threshold}"
+                worksheet[f"A{row}"] = f"Threshold: {self.threshold}"
+                row += 1
+
+            worksheet[f"A{row}"] = f"Number of Processors: {self.num_procs}"
+            row += 1
 
             if grouping_time is not None:
-                worksheet["A5"] = (
-                    f"Tanimoto Grouping Time: {grouping_time:.2f} seconds"
+                worksheet[f"A{row}"] = (
+                    f"Grouping Time: {grouping_time:.2f} seconds"
                 )
+                row += 1
 
             # Auto-adjust column widths
             for column in worksheet.columns:
@@ -2575,7 +3278,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                             max_length = max(max_length, len(str(cell.value)))
                     except (TypeError, AttributeError):
                         pass
-                adjusted_width = min(max_length + 2, 15)
+                adjusted_width = min(max_length + 2, 18)
                 worksheet.column_dimensions[column_letter].width = (
                     adjusted_width
                 )
@@ -3437,7 +4140,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         self._auto_threshold = threshold
 
         print(
-            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.6f} to create {self.num_groups} groups"
+            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
         )
 
         # Build adjacency matrix with the determined threshold
@@ -3634,7 +4337,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             tfd = self._calculate_tfd((i, j))
             tfd_values.append(tfd)
             print(
-                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, TFD= {tfd:.6f}"
+                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, TFD= {tfd:.7f}"
             )
 
         # Build full TFD matrix (same as RMSD workflow)
@@ -3698,7 +4401,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         filename: str,
         grouping_time: float = None,
     ):
-        """Save TFD matrix to Excel file with 6 decimal precision."""
+        """Save TFD matrix to Excel file with 7 decimal precision."""
         n = tfd_matrix.shape[0]
 
         # Change extension to .xlsx if it's .txt
@@ -3717,45 +4420,73 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         # Create Excel writer with openpyxl engine
         with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # Write matrix to sheet starting from row 7 to leave room for header info
+            # Write matrix to sheet starting from row 12 to leave room for header info
             df.to_excel(
                 writer,
                 sheet_name="TFD_Matrix",
-                startrow=7,
-                float_format="%.6f",
+                startrow=12,
+                float_format="%.7f",
             )
 
             # Get the worksheet to add header information
             worksheet = writer.sheets["TFD_Matrix"]
 
             # Add header information
-            worksheet["A1"] = (
+            row = 1
+            worksheet[f"A{row}"] = (
                 f"Full TFD Matrix ({n}x{n}) - {self.__class__.__name__}"
             )
-            worksheet["A2"] = (
-                "Based on Schulz-Gasch et al., JCIM, 52, 1499-1512 (2012)"
+            row += 1
+            worksheet[f"A{row}"] = (
+                "Based on Schulz-Gasch et al., JCIM, 1499-1512 (2012)"
             )
+            row += 1
 
             if hasattr(self, "num_groups") and self.num_groups is not None:
-                worksheet["A3"] = f"Requested Groups (-N): {self.num_groups}"
+                worksheet[f"A{row}"] = (
+                    f"Requested Groups (-N): {self.num_groups}"
+                )
+                row += 1
                 if (
                     hasattr(self, "_auto_threshold")
                     and self._auto_threshold is not None
                 ):
-                    worksheet["A4"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.6f}"
+                    worksheet[f"A{row}"] = (
+                        f"Auto-determined Threshold: {self._auto_threshold:.7f}"
                     )
+                    row += 1
             else:
-                worksheet["A3"] = f"Threshold: {self.threshold}"
+                worksheet[f"A{row}"] = f"Threshold: {self.threshold}"
+                row += 1
+
+            # TFD specific parameters
+            worksheet[f"A{row}"] = (
+                f"Use Weights: {getattr(self, 'use_weights', True)}"
+            )
+            row += 1
+            worksheet[f"A{row}"] = (
+                f"Max Deviation: {getattr(self, 'max_dev', 'equal')}"
+            )
+            row += 1
+            worksheet[f"A{row}"] = (
+                f"Symmetry Radius: {getattr(self, 'symm_radius', 2)}"
+            )
+            row += 1
+            worksheet[f"A{row}"] = (
+                f"Ignore Colinear Bonds: {getattr(self, 'ignore_colinear_bonds', True)}"
+            )
+            row += 1
 
             if grouping_time is not None:
-                worksheet["A5"] = (
-                    f"TFD Grouping Time: {grouping_time:.2f} seconds"
+                worksheet[f"A{row}"] = (
+                    f"Grouping Time: {grouping_time:.2f} seconds"
                 )
+                row += 1
 
-            worksheet["A6"] = (
+            worksheet[f"A{row}"] = (
                 "Lower values indicate higher torsional similarity. Empty cells indicate calculation failures."
             )
+            row += 1
 
             # Auto-adjust column widths
             for column in worksheet.columns:
@@ -3767,7 +4498,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                             max_length = max(max_length, len(str(cell.value)))
                     except (TypeError, AttributeError):
                         pass
-                adjusted_width = min(max_length + 2, 15)
+                adjusted_width = min(max_length + 2, 18)
                 worksheet.column_dimensions[column_letter].width = (
                     adjusted_width
                 )
