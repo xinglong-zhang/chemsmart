@@ -1538,5 +1538,8 @@ def iterate_config_file(iterate_configs_directory):
 
 @pytest.fixture()
 def iterate_expected_output_file(iterate_expected_output_directory):
-    """Returns the absolute path to tests/data/IterateTests/expected_output/final.xyz."""
-    return os.path.join(iterate_expected_output_directory, "final.xyz")
+    """Returns the absolute path to tests/data/IterateTests/expected_output/regression_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    return os.path.join(
+        iterate_expected_output_directory,
+        "regression_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+    )
