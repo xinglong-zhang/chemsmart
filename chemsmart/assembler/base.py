@@ -56,10 +56,10 @@ class BaseAssembler:
     def get_meta_data(self):
         meta_data = {
             "functional": self.output.functional,
-            "basis_set": self.output.basis,
+            "basis": self.output.basis,
             "num_basis_functions": self.output.num_basis_functions,
             "spin": self.output.spin,
-            "job_type": self.output.jobtype,
+            "jobtype": self.output.jobtype,
             "solvent_on": self.output.solvent_on,
             "route_string": self.output.route_string,
         }
@@ -68,6 +68,7 @@ class BaseAssembler:
                 {
                     "solvent_model": self.output.solvent_model,
                     "solvent_id": self.output.solvent_id,
+                    "custom_solvent": self.output.custom_solvent,
                 }
             )
         if self.output.freq:
@@ -85,7 +86,8 @@ class BaseAssembler:
             "is_optimized_structure": mol.is_optimized_structure,
             "charge": mol.charge,
             "multiplicity": mol.multiplicity,
-            "coordinates": list(zip(mol.chemical_symbols, mol.positions)),
+            "chemical_symbols": mol.chemical_symbols,
+            "positions": mol.positions,
             "chemical_formula": mol.chemical_formula,
             "number_of_atoms": mol.num_atoms,
             "mass": mol.mass,
@@ -127,31 +129,21 @@ class BaseAssembler:
                 self.output.energies[-1] if self.output.energies else None
             ),
             "num_unpaired_electrons": self.output.num_unpaired_electrons,
+            "homo_energy": self.output.homo_energy,
+            "lumo_energy": self.output.lumo_energy,
             "alpha_homo_energy": self.output.alpha_homo_energy,
             "beta_homo_energy": self.output.beta_homo_energy,
             "alpha_lumo_energy": self.output.alpha_lumo_energy,
             "beta_lumo_energy": self.output.beta_lumo_energy,
+            "somo_energies": self.output.somo_energies,
+            "lowest_somo_energy": self.output.lowest_somo_energy,
+            "highest_somo_energy": self.output.highest_somo_energy,
             "fmo_gap": self.output.fmo_gap,
             "alpha_fmo_gap": self.output.alpha_fmo_gap,
             "beta_fmo_gap": self.output.beta_fmo_gap,
             "total_core_hours": self.output.total_core_hours,
             "total_elapsed_walltime": self.output.total_elapsed_walltime,
         }
-        if self.output.multiplicity == 1:
-            calculation_results.update(
-                {
-                    "homo_energy": self.output.homo_energy,
-                    "lumo_energy": self.output.lumo_energy,
-                }
-            )
-        else:
-            calculation_results.update(
-                {
-                    "somo_energies": self.output.somo_energies,
-                    "lowest_somo_energy": self.output.lowest_somo_energy,
-                    "highest_somo_energy": self.output.highest_somo_energy,
-                }
-            )
         if self.output.freq:
             calculation_results.update(
                 {
