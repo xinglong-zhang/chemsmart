@@ -311,6 +311,10 @@ def create_orca_qmmm_subcommand(parent_command):
         label = ctx.obj.get("label")
         logger.debug("Label for job: %s", label)
 
+        # Distinguish QMMM subcommand outputs from parent job outputs
+        if label and "qmmm" not in label.lower():
+            label = f"{label}_qmmm"
+
         qmmm_settings = ORCAQMMMJobSettings(**qmmm_settings.__dict__)
         if parent_jobtype is not None:
             qmmm_settings.parent_jobtype = parent_jobtype
@@ -406,9 +410,9 @@ def create_orca_qmmm_subcommand(parent_command):
                 )
 
         effective_skip_completed = (
-            parent_skip_completed
-            if parent_skip_completed is not None
-            else skip_completed
+            skip_completed
+            if skip_completed is not None
+            else parent_skip_completed
         )
 
         qmmm_settings.re_init_and_validate()

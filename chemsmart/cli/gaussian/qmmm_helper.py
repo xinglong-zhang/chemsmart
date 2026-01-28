@@ -204,13 +204,21 @@ def create_qmmm_subcommand(parent_command):
         project_settings = ctx.obj["project_settings"]
         label = ctx.obj.get("label")
 
+        # Distinguish QMMM subcommand outputs from parent job outputs
+        if label and "qmmm" not in label.lower():
+            label = f"{label}_qmmm"
+
         # Infer jobtype from parent command name
         parent_cmd_name = ctx.parent.command.name if ctx.parent else None
         jobtype = parent_cmd_name  # The parent command name (opt, ts, sp, modred, scan, etc.)
 
         # Get parent command options
-        skip_completed = ctx.obj.get(
-            "parent_skip_completed", kwargs.get("skip_completed", False)
+        # Subcommand value wins over parent; fall back to parent then default False
+        skip_cli = kwargs.get("skip_completed", None)
+        skip_completed = (
+            skip_cli
+            if skip_cli is not None
+            else ctx.obj.get("parent_skip_completed", False)
         )
         freeze_atoms = ctx.obj.get("parent_freeze_atoms", None)
         parent_kwargs = ctx.obj.get("parent_kwargs", {})

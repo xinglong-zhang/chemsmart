@@ -1370,6 +1370,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 level_of_theory += " IRC"
             elif parent_jobtype == "sp":
                 level_of_theory += ""
+            if self.freq is True:
+                level_of_theory += " Freq"
             self.high_level_of_theory = self.validate_and_assign_level(
                 self.high_level_functional,
                 self.high_level_basis,
