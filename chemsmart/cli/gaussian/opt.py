@@ -50,6 +50,9 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     # cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
+    if ctx.invoked_subcommand is not None:
+        return
+
     check_charge_and_multiplicity(opt_settings)
 
     # get molecule

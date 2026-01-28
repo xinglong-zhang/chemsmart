@@ -53,6 +53,10 @@ def sp(
     # merge project settings with job settings from cli keywords from
     # cli.gaussian.py subcommands
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
+
+    if ctx.invoked_subcommand is not None:
+        return
+
     check_charge_and_multiplicity(sp_settings)
 
     # get molecule

@@ -73,6 +73,10 @@ def scan(
     # merge project settings with job settings from cli keywords from
     # cli.gaussian.py subcommands
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
+
+    if ctx.invoked_subcommand is not None:
+        return
+
     check_charge_and_multiplicity(scan_settings)
 
     if constrained_coordinates is not None:

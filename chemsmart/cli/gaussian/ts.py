@@ -47,6 +47,9 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
     # cli.gaussian.py subcommands
     ts_settings = ts_settings.merge(job_settings, keywords=keywords)
 
+    if ctx.invoked_subcommand is not None:
+        return
+
     check_charge_and_multiplicity(ts_settings)
 
     # get molecule
