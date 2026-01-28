@@ -1375,9 +1375,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             low_level_force_field (str): Force field for low layer (usually MM)
 
         Charge and multiplicity specifications:
-            real_charge/real_multiplicity (int): Full system properties
-            int_charge/int_multiplicity (int): Intermediate system properties
-            model_charge/model_multiplicity (int): Model system properties
+            charge_total/mult_total (int): Full system properties (legacy: real_charge/real_multiplicity)
+            charge_intermediate/mult_intermediate (int): Intermediate system properties (legacy: int_charge/int_multiplicity)
+            charge_high/mult_high (int): Model/high-layer properties (legacy: model_charge/model_multiplicity)
 
         Atom partitioning:
             high_level_atoms (list/str): Atoms in high layer (1-indexed)
@@ -1443,6 +1443,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         low_level_functional=None,
         low_level_basis=None,
         low_level_force_field=None,
+        charge_total=None,
+        mult_total=None,
+        charge_intermediate=None,
+        mult_intermediate=None,
+        charge_high=None,
+        mult_high=None,
         real_charge=None,
         real_multiplicity=None,
         int_charge=None,
@@ -1484,12 +1490,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                     (e.g., 'AMBER=HardFirst', 'UFF', 'DREIDING', 'MM3')
 
             Charge and multiplicity:
-                real_charge (int): Total charge of complete molecular system
-                real_multiplicity (int): Spin multiplicity of complete system (2S+1)
-                int_charge (int): Charge of high+medium layers (3-layer only)
-                int_multiplicity (int): Multiplicity of high+medium layers
-                model_charge (int): Charge of high layer only
-                model_multiplicity (int): Multiplicity of high layer only
+                charge_total (int): Total charge of complete molecular system (legacy: real_charge)
+                mult_total (int): Spin multiplicity of complete system (legacy: real_multiplicity)
+                charge_intermediate (int): Charge of high+medium layers (legacy: int_charge)
+                mult_intermediate (int): Multiplicity of high+medium layers (legacy: int_multiplicity)
+                charge_high (int): Charge of high layer only (legacy: model_charge)
+                mult_high (int): Multiplicity of high layer only (legacy: model_multiplicity)
 
             Atom partitioning:
                 high_level_atoms (list/str): Atoms in high layer. Can be:
@@ -1524,38 +1530,43 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.low_level_functional = low_level_functional
         self.low_level_basis = low_level_basis
         self.low_level_force_field = low_level_force_field
-        self.real_charge = real_charge
-        self.real_multiplicity = real_multiplicity
-        self.int_charge = int_charge
-        self.int_multiplicity = int_multiplicity
-        self.model_charge = model_charge
-        self.model_multiplicity = model_multiplicity
-        self.high_level_atoms = high_level_atoms
-        self.medium_level_atoms = medium_level_atoms
-        self.low_level_atoms = low_level_atoms
-        self.bonded_atoms = bonded_atoms
-        self.scale_factors = scale_factors
-        # If the user only specifies the parameters of two layers, the low-level layer will be omitted
+        # Canonical charge/multiplicity names (aligned with ORCA) with legacy fallbacks
+        self.charge_total = charge_total
+        if self.charge_total is None:
+            self.charge_total = real_charge
+        self.mult_total = mult_total
+        if self.mult_total is None:
+            self.mult_total = real_multiplicity
 
-        # populate self.functional and self.basis so that
-        # it will not raise errors in parent class
-        self.functional = (
-            self.high_level_functional
-            or self.medium_level_functional
-            or self.low_level_functional
-        )
-        self.basis = (
-            self.high_level_basis
-            or self.medium_level_basis
-            or self.low_level_basis
-        )
+        self.charge_intermediate = charge_intermediate
+        if self.charge_intermediate is None:
+            self.charge_intermediate = int_charge
+        self.mult_intermediate = mult_intermediate
+        if self.mult_intermediate is None:
+            self.mult_intermediate = int_multiplicity
+
+        self.charge_high = charge_high
+        if self.charge_high is None:
+            self.charge_high = model_charge
+        self.mult_high = mult_high
+        if self.mult_high is None:
+            self.mult_high = model_multiplicity
+
+        # Maintain legacy attribute names for backward compatibility
+        self.real_charge = self.charge_total
+        self.real_multiplicity = self.mult_total
+        self.int_charge = self.charge_intermediate
+        self.int_multiplicity = self.mult_intermediate
+        self.model_charge = self.charge_high
+        self.model_multiplicity = self.mult_high
+
         self.title = "Gaussian QM/MM job"
 
-        if self.real_charge and self.real_multiplicity:
+        if self.charge_total is not None and self.mult_total is not None:
             # the charge and multiplicity of the real system equal to
             # that of the low_level_charge and low_level_multiplicity
-            self.charge = self.real_charge
-            self.multiplicity = self.real_multiplicity
+            self.charge = self.charge_total
+            self.multiplicity = self.mult_total
 
     @property
     def charge_and_multiplicity_string(self):
@@ -1706,20 +1717,20 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         is one of: H, M and L for the High, Medium and Low levels).
         """
         assert (
-            self.real_charge is not None and self.real_multiplicity is not None
+            self.charge_total is not None and self.mult_total is not None
         ), "Charge and multiplicity for the real system must be specified!"
-        real_low_charge = self.real_charge
-        real_low_multiplicity = self.real_multiplicity
-        int_med_charge = self.int_charge
-        int_med_multiplicity = self.int_multiplicity
-        int_low_charge = self.int_charge
-        int_low_multiplicity = self.int_multiplicity
-        model_high_charge = self.model_charge
-        model_high_multiplicity = self.model_multiplicity
-        model_med_charge = self.model_charge
-        model_med_multiplicity = self.model_multiplicity
-        model_low_charge = self.model_charge
-        model_low_multiplicity = self.model_multiplicity
+        real_low_charge = self.charge_total
+        real_low_multiplicity = self.mult_total
+        int_med_charge = self.charge_intermediate
+        int_med_multiplicity = self.mult_intermediate
+        int_low_charge = self.charge_intermediate
+        int_low_multiplicity = self.mult_intermediate
+        model_high_charge = self.charge_high
+        model_high_multiplicity = self.mult_high
+        model_med_charge = self.charge_high
+        model_med_multiplicity = self.mult_high
+        model_low_charge = self.charge_high
+        model_low_multiplicity = self.mult_high
 
         # two-layer ONIOM model
         if (

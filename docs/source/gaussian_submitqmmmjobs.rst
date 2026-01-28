@@ -309,29 +309,29 @@ Settings Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``real_charge``
+   -  -  ``charge_total``
       -  int
-      -  Total charge of complete molecular system
+      -  Total charge of complete molecular system (legacy: real_charge)
 
-   -  -  ``real_multiplicity``
+   -  -  ``mult_total``
       -  int
-      -  Spin multiplicity of complete system (2S+1)
+      -  Spin multiplicity of complete system (legacy: real_multiplicity)
 
-   -  -  ``int_charge``
+   -  -  ``charge_intermediate``
       -  int
-      -  Charge of high+medium layers (3-layer only)
+      -  Charge of high+medium layers (legacy: int_charge, 3-layer only)
 
-   -  -  ``int_multiplicity``
+   -  -  ``mult_intermediate``
       -  int
-      -  Multiplicity of high+medium layers
+      -  Multiplicity of high+medium layers (legacy: int_multiplicity)
 
-   -  -  ``model_charge``
+   -  -  ``charge_high``
       -  int
-      -  Charge of high layer only
+      -  Charge of high layer only (legacy: model_charge)
 
-   -  -  ``model_multiplicity``
+   -  -  ``mult_high``
       -  int
-      -  Multiplicity of high layer only
+      -  Multiplicity of high layer only (legacy: model_multiplicity)
 
 Advanced ONIOM Features
 =======================

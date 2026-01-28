@@ -129,27 +129,27 @@ Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``-rc, --real-charge``
+   -  -  ``-ct, --charge-total``
       -  int
       -  Charge of complete molecular system
 
-   -  -  ``-rm, --real-multiplicity``
+   -  -  ``-mt, --mult-total``
       -  int
       -  Spin multiplicity of complete system (2S+1)
 
-   -  -  ``-ic, --int-charge``
+   -  -  ``-ci, --charge-intermediate``
       -  int
       -  Charge of high+medium layers (3-layer only)
 
-   -  -  ``-im, --int-multiplicity``
+   -  -  ``-mi, --mult-intermediate``
       -  int
       -  Multiplicity of high+medium layers
 
-   -  -  ``-mc, --model-charge``
+   -  -  ``-ch, --charge-high``
       -  int
       -  Charge of high layer only
 
-   -  -  ``-mm, --model-multiplicity``
+   -  -  ``-mh, --mult-high``
       -  int
       -  Multiplicity of high layer only
 
@@ -164,7 +164,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -rc 0 -rm 1 -mc 0 -mm 1 -ba "(25,26)"
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(25,26)"
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -173,7 +173,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz freq qmmm -hf M06-2X -hb def2-TZVP -mf B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -rc -1 -rm 2 -ic 0 -im 1 -mc 0 -mm 1 -ba "(10,11),(50,51)"
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz freq qmmm -hf M06-2X -hb def2-TZVP -mf B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba "(10,11),(50,51)"
 
 Transition State Search
 =======================

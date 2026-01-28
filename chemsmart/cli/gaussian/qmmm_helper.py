@@ -91,46 +91,46 @@ def create_qmmm_subcommand(parent_command):
         help="Force field for low-level MM region.",
     )
     @click.option(
-        "-rc",
-        "--real-charge",
+        "-ct",
+        "--charge-total",
         type=int,
         default=None,
-        help="Charge of the real system in QMMM calculation.",
+        help="Total system charge (1-indexed atoms)",
     )
     @click.option(
-        "-rm",
-        "--real-multiplicity",
+        "-mt",
+        "--mult-total",
         type=int,
         default=None,
-        help="Multiplicity of the real system in QMMM calculation.",
+        help="Total system multiplicity (2S+1)",
     )
     @click.option(
-        "-ic",
-        "--int-charge",
+        "-ci",
+        "--charge-intermediate",
         type=int,
         default=None,
-        help="Charge of the intermediate system in QMMM calculation.",
+        help="Charge of intermediate (high+medium) system",
     )
     @click.option(
-        "-im",
-        "--int-multiplicity",
+        "-mi",
+        "--mult-intermediate",
         type=int,
         default=None,
-        help="Multiplicity of the intermediate system in QMMM calculation.",
+        help="Multiplicity of intermediate (high+medium) system",
     )
     @click.option(
-        "-mc",
-        "--model-charge",
+        "-ch",
+        "--charge-high",
         type=int,
         default=None,
-        help="Charge of the model system in QMMM calculation.",
+        help="Charge of high-level (model) system",
     )
     @click.option(
-        "-mm",
-        "--model-multiplicity",
+        "-mh",
+        "--mult-high",
         type=int,
         default=None,
-        help="Multiplicity of the model system in QMMM calculation.",
+        help="Multiplicity of high-level (model) system",
     )
     @click.option(
         "-ha",
@@ -180,12 +180,12 @@ def create_qmmm_subcommand(parent_command):
         low_level_functional,
         low_level_basis,
         low_level_force_field,
-        real_charge,
-        real_multiplicity,
-        int_charge,
-        int_multiplicity,
-        model_charge,
-        model_multiplicity,
+        charge_total,
+        mult_total,
+        charge_intermediate,
+        mult_intermediate,
+        charge_high,
+        mult_high,
         high_level_atoms,
         medium_level_atoms,
         low_level_atoms,
@@ -319,18 +319,18 @@ def create_qmmm_subcommand(parent_command):
             qmmm_settings.low_level_basis = low_level_basis
         if low_level_force_field is not None:
             qmmm_settings.low_level_force_field = low_level_force_field
-        if real_charge is not None:
-            qmmm_settings.real_charge = real_charge
-        if real_multiplicity is not None:
-            qmmm_settings.real_multiplicity = real_multiplicity
-        if int_charge is not None:
-            qmmm_settings.int_charge = int_charge
-        if int_multiplicity is not None:
-            qmmm_settings.int_multiplicity = int_multiplicity
-        if model_charge is not None:
-            qmmm_settings.model_charge = model_charge
-        if model_multiplicity is not None:
-            qmmm_settings.model_multiplicity = model_multiplicity
+        if charge_total is not None:
+            qmmm_settings.charge_total = charge_total
+        if mult_total is not None:
+            qmmm_settings.mult_total = mult_total
+        if charge_intermediate is not None:
+            qmmm_settings.charge_intermediate = charge_intermediate
+        if mult_intermediate is not None:
+            qmmm_settings.mult_intermediate = mult_intermediate
+        if charge_high is not None:
+            qmmm_settings.charge_high = charge_high
+        if mult_high is not None:
+            qmmm_settings.mult_high = mult_high
         if high_level_atoms is not None:
             qmmm_settings.high_level_atoms = high_level_atoms
         if medium_level_atoms is not None:
@@ -388,3 +388,34 @@ def create_qmmm_subcommand(parent_command):
         )
 
     return qmmm
+
+
+def _populate_charge_and_multiplicity_on_settings(qs):
+    charge = getattr(qs, "charge", None)
+    mult = getattr(qs, "multiplicity", None)
+
+    if (
+        getattr(qs, "charge_intermediate", None) is not None
+        and getattr(qs, "mult_intermediate", None) is not None
+    ):
+        charge = qs.charge_intermediate
+        mult = qs.mult_intermediate
+    elif (
+        getattr(qs, "charge_high", None) is not None
+        and getattr(qs, "mult_high", None) is not None
+    ):
+        charge = qs.charge_high
+        mult = qs.mult_high
+    elif (
+        getattr(qs, "charge_total", None) is not None
+        and getattr(qs, "mult_total", None) is not None
+    ):
+        charge = qs.charge_total
+        mult = qs.mult_total
+
+    if charge is not None:
+        qs.charge = charge
+        qs.charge_total = charge
+    if mult is not None:
+        qs.multiplicity = mult
+        qs.mult_total = mult
