@@ -419,7 +419,57 @@ def validate_config(config: dict, filename: str) -> dict:
     else:
         validated_config["substituents"] = []
 
+    # Business Logic Validation
+    _validate_business_logic(
+        validated_config["skeletons"], validated_config["substituents"], filename
+    )
+
     return validated_config
+
+
+def _validate_business_logic(skeletons: list, substituents: list, filename: str):
+    """
+    Orchestrate business logic checks for all entities.
+    """
+    _validate_skeletons_logic(skeletons, filename)
+
+    # _validate_substituents_logic(substituents, filename)
+
+
+def _validate_skeletons_logic(skeletons: list, filename: str):
+    """
+    Validate business rules for all skeleton entries.
+    """
+    for idx, entry in enumerate(skeletons):
+        _validate_single_skeleton_rules(entry, idx, filename)
+
+
+def _validate_single_skeleton_rules(entry: dict, idx: int, filename: str):
+    """
+    Collection of all business rules for a single skeleton.
+    """
+    # Rule 1: Check if link_index is included in skeleton_indices
+    _rule_skeleton_indices_must_contain_link(entry, idx, filename)
+
+
+def _rule_skeleton_indices_must_contain_link(entry: dict, idx: int, filename: str):
+    """
+    Rule: If skeleton_indices is specified, link_index must be included in it.
+    """
+    skeleton_indices = entry.get("skeleton_indices")
+    link_indices = entry.get("link_index")
+
+    if skeleton_indices is not None and link_indices:
+        skel_set = set(skeleton_indices)
+        missing = [i for i in link_indices if i not in skel_set]
+
+        if missing:
+            raise click.BadParameter(
+                f"Skeleton entry {idx + 1} (label='{entry.get('label')}'): "
+                f"The link_index {missing} is not included in 'skeleton_indices'. "
+                f"When 'skeleton_indices' is specified, it must contain the link atom.",
+                param_hint=filename,
+            )
 
 
 def _validate_skeleton_entry(entry: dict, idx: int, filename: str) -> dict:

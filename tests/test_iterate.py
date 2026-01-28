@@ -235,3 +235,30 @@ def test_iterate_template_generation(tmp_path, iterate_template_file):
     assert len(parsed["skeletons"]) == 2  # Based on current template examples
     assert len(parsed["substituents"]) == 3
 
+
+def test_iterate_validation_fails_on_invalid_link_index(
+    iterate_invalid_skeleton_link_index_config_file,
+):
+    """
+    Test that the validation logic correctly identifies when a link_index is not
+    included in skeleton_indices.
+    """
+    from click.testing import CliRunner
+
+    from chemsmart.cli.iterate.iterate import iterate
+
+    runner = CliRunner()
+    # Pass obj={} to initialize context object, required by MyGroup middleware
+    result = runner.invoke(
+        iterate, ["-f", iterate_invalid_skeleton_link_index_config_file], obj={}
+    )
+
+    assert result.exit_code != 0
+    # Click 8.x format for BadParameter: "Error: Invalid value for ..."
+    # We check for key parts of the error message
+    assert "Invalid value" in result.output
+    assert (
+        "The link_index [6] is not included in 'skeleton_indices'" in result.output
+    )
+
+
