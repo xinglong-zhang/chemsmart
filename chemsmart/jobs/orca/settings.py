@@ -1019,6 +1019,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         "XTB",
         "XTB0",
         "XTB1",
+        "XTB2",
         "HF-3C",
         "PBEH-3C",
         "R2SCAN-3C",
@@ -1208,20 +1209,11 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             and self.intermediate_level_basis is not None
         ) or self.intermediate_level_method is not None
         if has_intermediate_params:
-            missing = [
-                name
-                for name, value in {
-                    "intermediate_level_atoms": self.intermediate_level_atoms,
-                    "charge_intermediate": self.charge_intermediate,
-                    "mult_intermediate": self.mult_intermediate,
-                }.items()
-                if value is None
-            ]
-
-            if missing:
+            if self.intermediate_level_atoms is None and self.low_level_method:
                 raise ValueError(
-                    "When intermediate-level theory is specified, the following "
-                    f"parameters must also be provided: {', '.join(missing)}"
+                    "When intermediate-level theory is specified, the atoms "
+                    "in intermediate level layer must also be specified via "
+                    "intermediate_level_atoms."
                 )
 
         # Job types that require QM2 (intermediate) layer
@@ -1259,14 +1251,15 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             if self.intermediate_level_solvation is not None:
                 provided_params.append("intermediate_level_solvation")
 
-            raise ValueError(
-                f"Job type '{self.jobtype}' does not require QM2 (intermediate) layer, but "
-                f"intermediate-level parameters were provided: {', '.join(provided_params)}.\n"
-                f"QM2 layer is only used in job types: {', '.join(qm2_required_jobtypes)}.\n"
-                f"Either:\n"
-                f"  - Change job type to 'QM/QM2' or 'QM/QM2/MM', OR\n"
-                f"  - Remove the intermediate-level parameters"
-            )
+            if self.low_level_method is not None:
+                raise ValueError(
+                    f"Job type '{self.jobtype}' does not require QM2 (intermediate) layer, but "
+                    f"intermediate-level parameters were provided: {', '.join(provided_params)}.\n"
+                    f"QM2 layer is only used in job types: {', '.join(qm2_required_jobtypes)}.\n"
+                    f"Either:\n"
+                    f"  - Change job type to 'QM/QM2' or 'QM/QM2/MM', OR\n"
+                    f"  - Remove the intermediate-level parameters"
+                )
 
     @property
     def qmmm_route_string(self):
@@ -1377,32 +1370,34 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 level_of_theory += " IRC"
             elif parent_jobtype == "sp":
                 level_of_theory += ""
-            level_of_theory += " QM"
-            self.high_level_level_of_theory = self.validate_and_assign_level(
+            self.high_level_of_theory = self.validate_and_assign_level(
                 self.high_level_functional,
                 self.high_level_basis,
                 None,
                 level_name="high_level",
             )
-            self.intermediate_level_level_of_theory = (
-                self.validate_and_assign_level(
-                    self.intermediate_level_functional,
-                    self.intermediate_level_basis,
-                    self.intermediate_level_method,
-                    level_name="intermediate_level",
-                )
+            self.intermediate_level_of_theory = self.validate_and_assign_level(
+                self.intermediate_level_functional,
+                self.intermediate_level_basis,
+                self.intermediate_level_method,
+                level_name="intermediate_level",
             )
-            self.low_level_level_of_theory = self.validate_and_assign_level(
+            self.low_level_of_theory = self.validate_and_assign_level(
                 None, None, self.low_level_method, level_name="low_level"
             )
-            # only "!QMMM" will be used for additive QMMM
-            level_of_theory += f"/{self.intermediate_level_level_of_theory}"
-            if self.low_level_level_of_theory is not None:
+            if self.low_level_of_theory is not None:
                 if self.jobtype.upper() == "QMMM":
-                    level_of_theory = "!QMMM"  # Additive QM/MM
+                    level_of_theory += " QMMM"  # Additive QM/MM
                 else:
-                    level_of_theory += f"/{self.low_level_level_of_theory}"
-            level_of_theory += f" {self.high_level_level_of_theory}"
+                    level_of_theory += " QM"
+                    # only "!QMMM" will be used for additive QMMM
+                    level_of_theory += f"/{self.intermediate_level_of_theory}"
+                    print(
+                        f"+++++++++++\n{self.intermediate_level_of_theory}\n+++++++++++"
+                    )
+                    if self.low_level_method is not None:
+                        level_of_theory += f"/{self.low_level_of_theory}"
+            level_of_theory += f" {self.high_level_of_theory}"
             if self.solvent_model is not None:
                 level_of_theory += f" {self.solvent_model}"
             self.intermediate_level_method = (
