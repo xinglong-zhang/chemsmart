@@ -22,63 +22,68 @@ ITERATE_TEMPLATE = """# Chemsmart Iterate Configuration Template
 #   - skeleton_indices: Atom indices to keep, format: "1, 3-10, 15" (1-based)
 #                       If not specified, all atoms except link_index are kept
 #
-# Note: Leave empty for null/None values. Strings don\'t need quotes.
+# Note: Strings should be quoted. Arrays of tables [[name]] are used for lists.
 
 # ==============================================================================
 # SKELETONS
 # ==============================================================================
 # Define base molecular scaffolds that will be modified with substituents.
-# Each skeleton is a list item (starts with "-")
 
-skeletons:
-  # Example 1: Skeleton from file
-  - file_path: /path/to/skeleton1.xyz
-    smiles:
-    pubchem:
-    label: benzene_core
-    link_index: 6,7,8
-    skeleton_indices: 1-5
+# Example 1: Skeleton from file
+[[skeletons]]
+file_path = "/path/to/skeleton1.xyz"
+# smiles = ""
+# pubchem = ""
+label = "benzene_core"
+link_index = "6,7,8"
+skeleton_indices = "1-5"
 
-  # Example 2: Skeleton from SMILES
-  - file_path:
-    smiles: c1ccccc1
-    pubchem:
-    label: phenyl_ring
-    link_index: 1
-    skeleton_indices:
+# Example 2: Skeleton from SMILES
+[[skeletons]]
+# file_path = ""
+smiles = "c1ccccc1"
+# pubchem = ""
+label = "phenyl_ring"
+link_index = "1"
+# skeleton_indices = ""
 
-  # Add more skeletons as needed...
+# Add more skeletons as needed...
+# [[skeletons]]
+# ...
 
 
 # ==============================================================================
 # SUBSTITUENTS
 # ==============================================================================
 # Define functional groups or fragments to attach to skeletons.
-# Each substituent is a list item (starts with "-")
 
-substituents:
-  # Example 1: Substituent from file
-  - file_path: /path/to/methyl.xyz
-    smiles:
-    pubchem:
-    label: methyl
-    link_index: 1
+# Example 1: Substituent from file
+[[substituents]]
+file_path = "/path/to/methyl.xyz"
+# smiles = ""
+# pubchem = ""
+label = "methyl"
+link_index = "1"
 
-  # Example 2: Substituent from SMILES
-  - file_path:
-    smiles: C
-    pubchem:
-    label: CH3
-    link_index: 1
+# Example 2: Substituent from SMILES
+[[substituents]]
+# file_path = ""
+smiles = "C"
+# pubchem = ""
+label = "CH3"
+link_index = "1"
 
-  # Example 3: Substituent from PubChem
-  - file_path:
-    smiles:
-    pubchem: methane
-    label: methyl_pubchem
-    link_index: 1
+# Example 3: Substituent from PubChem
+[[substituents]]
+# file_path = ""
+# smiles = ""
+pubchem = "methane"
+label = "methyl_pubchem"
+link_index = "1"
 
-  # Add more substituents as needed...
+# Add more substituents as needed...
+# [[substituents]]
+# ...
 
 
 # ==============================================================================
@@ -90,12 +95,11 @@ substituents:
 # 4. For substituents, the atom at link_index bonds to the skeleton
 # 5. skeleton_indices format: "1, 3-10, 15, 20-25" (ranges and individual indices)
 # 6. Only one source (file_path, smiles, pubchem) should be non-null per entry
-# 7. Use ~ for null/None values
 """
 
 
 def generate_template(
-    output_path: str = "iterate_template.cfg", overwrite: bool = False
+    output_path: str = "iterate_template.toml", overwrite: bool = False
 ) -> str:
     """
     Generate a template configuration file for iterate jobs.
@@ -103,7 +107,7 @@ def generate_template(
     Parameters
     ----------
     output_path : str
-        Path to write the template file. Default is 'iterate_template.cfg'.
+        Path to write the template file. Default is 'iterate_template.toml'.
     overwrite : bool
         If True, overwrite existing file. Default is False.
 
@@ -117,9 +121,9 @@ def generate_template(
     FileExistsError
         If file exists and overwrite is False.
     """
-    # Add .cfg extension if not present
-    if not output_path.endswith(".cfg"):
-        output_path = f"{output_path}.cfg"
+    # Add .toml extension if not present
+    if not output_path.endswith(".toml"):
+        output_path = f"{output_path}.toml"
 
     # Check if file exists
     if os.path.exists(output_path) and not overwrite:

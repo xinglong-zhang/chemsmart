@@ -1,7 +1,7 @@
 import os
 
 import numpy as np
-import yaml
+import tomlkit
 
 from chemsmart.cli.iterate.iterate import validate_config
 from chemsmart.jobs.iterate.job import IterateJob
@@ -9,32 +9,32 @@ from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
 
 
-def test_iterate_regression_workflow(
-    iterate_regression_config_file,
+def test_iterate_integration_workflow(
+    iterate_integration_config_file,
     iterate_input_directory,
     iterate_expected_output_file,
     tmp_path,
 ):
     """
-    Test the full Iterate workflow (Regression Test):
-    1. Load config from YAML (regression_iterate.cfg)
+    Test the full Iterate workflow (Integration Test):
+    1. Load config from TOML (integration_iterate.toml)
     2. Run IterateJob
     3. Compare output with expected XYZ file
     """
-    # Change CWD to input directory so relative paths in YAML work
+    # Change CWD to input directory so relative paths in TOML work
     original_cwd = os.getcwd()
     os.chdir(iterate_input_directory)
 
     try:
         # 1. Load and validate configuration
-        with open(iterate_regression_config_file, "r") as f:
-            raw_config = yaml.safe_load(f)
+        with open(iterate_integration_config_file, "r") as f:
+            raw_config = tomlkit.load(f).unwrap()
 
-        config = validate_config(raw_config, iterate_regression_config_file)
+        config = validate_config(raw_config, iterate_integration_config_file)
 
         # 2. Setup Job Settings
         job_settings = IterateJobSettings(
-            config_file=iterate_regression_config_file, method="lagrange_multipliers"
+            config_file=iterate_integration_config_file, method="lagrange_multipliers"
         )
         job_settings.skeleton_list = config["skeletons"]
         job_settings.substituent_list = config["substituents"]
@@ -157,7 +157,7 @@ def test_iterate_timeout(
     try:
         # 1. Load Config
         with open(iterate_timeout_config_file, "r") as f:
-            raw_config = yaml.safe_load(f)
+            raw_config = tomlkit.load(f).unwrap()
         config = validate_config(raw_config, iterate_timeout_config_file)
 
         # 2. Setup Job with very short timeout
@@ -200,4 +200,38 @@ def test_iterate_timeout(
 
     finally:
         os.chdir(original_cwd)
+
+
+def test_iterate_template_generation(tmp_path, iterate_template_file):
+    """
+    Test that the iterate configuration template is generated correctly and matches the golden copy.
+    """
+    from chemsmart.utils.iterate import generate_template
+
+    # 1. Generate template
+    generated_path = tmp_path / "test_template.toml"
+    generate_template(str(generated_path))
+
+    # 2. Assert file exists
+    assert generated_path.exists()
+
+    # 3. Compare content with expected template
+    with open(generated_path, "r") as f:
+        generated_content = f.read()
+
+    with open(iterate_template_file, "r") as f:
+        expected_content = f.read()
+
+    # Normalize newlines and strip whitespace for robust comparison
+    assert generated_content.strip() == expected_content.strip(), (
+        "Generated template does not match expected template content."
+    )
+
+    # 4. Verify it is valid TOML
+    import tomlkit
+    parsed = tomlkit.parse(generated_content)
+    assert "skeletons" in parsed
+    assert "substituents" in parsed
+    assert len(parsed["skeletons"]) == 2  # Based on current template examples
+    assert len(parsed["substituents"]) == 3
 

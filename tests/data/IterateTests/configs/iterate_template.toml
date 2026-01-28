@@ -15,64 +15,68 @@
 #   - skeleton_indices: Atom indices to keep, format: "1, 3-10, 15" (1-based)
 #                       If not specified, all atoms except link_index are kept
 #
-# Note: Leave empty for null/None values. Strings don't need quotes.
+# Note: Strings should be quoted. Arrays of tables [[name]] are used for lists.
 
 # ==============================================================================
 # SKELETONS
 # ==============================================================================
 # Define base molecular scaffolds that will be modified with substituents.
-# Each skeleton is a list item (starts with "-")
 
-skeletons:
-  # Example 1: Skeleton from file
-  - file_path: ./carbene1_opt.com
-    smiles:
-    pubchem:
-    label: Carbene1
-    link_index: 34,7,8
-    skeleton_indices: 7,10,18,34,8
+# Example 1: Skeleton from file
+[[skeletons]]
+file_path = "/path/to/skeleton1.xyz"
+# smiles = ""
+# pubchem = ""
+label = "benzene_core"
+link_index = "6,7,8"
+skeleton_indices = "1-5"
 
-  # Example 2: Skeleton from file
-  - file_path: ./carbene2_opt.gjf
-    smiles: 
-    pubchem:
-    label: Carbene2
-    link_index: 4-7,17
-    skeleton_indices:
+# Example 2: Skeleton from SMILES
+[[skeletons]]
+# file_path = ""
+smiles = "c1ccccc1"
+# pubchem = ""
+label = "phenyl_ring"
+link_index = "1"
+# skeleton_indices = ""
 
-  # Example 3: Skeleton from file
-  - file_path: ./carbene3_opt.xyz
-    smiles: 
-    pubchem:
-    label: Carbene3
-    link_index: 40
-    skeleton_indices:
-
-  # Add more skeletons as needed...
+# Add more skeletons as needed...
+# [[skeletons]]
+# ...
 
 
 # ==============================================================================
 # SUBSTITUENTS
 # ==============================================================================
 # Define functional groups or fragments to attach to skeletons.
-# Each substituent is a list item (starts with "-")
 
-substituents:
-  # Example 1: Substituent from file
-  - file_path: ./OTf_opt.xyz
-    smiles:
-    pubchem:
-    label: OTf
-    link_index: 8
+# Example 1: Substituent from file
+[[substituents]]
+file_path = "/path/to/methyl.xyz"
+# smiles = ""
+# pubchem = ""
+label = "methyl"
+link_index = "1"
 
-  # Example 2: Substituent from SMILES
-  - file_path: ./ome_opt.log
-    smiles: 
-    pubchem:
-    label: ome
-    link_index: 1
+# Example 2: Substituent from SMILES
+[[substituents]]
+# file_path = ""
+smiles = "C"
+# pubchem = ""
+label = "CH3"
+link_index = "1"
 
-  # Add more substituents as needed...
+# Example 3: Substituent from PubChem
+[[substituents]]
+# file_path = ""
+# smiles = ""
+pubchem = "methane"
+label = "methyl_pubchem"
+link_index = "1"
+
+# Add more substituents as needed...
+# [[substituents]]
+# ...
 
 
 # ==============================================================================
@@ -84,4 +88,3 @@ substituents:
 # 4. For substituents, the atom at link_index bonds to the skeleton
 # 5. skeleton_indices format: "1, 3-10, 15, 20-25" (ranges and individual indices)
 # 6. Only one source (file_path, smiles, pubchem) should be non-null per entry
-# 7. Use ~ for null/None values

@@ -1531,21 +1531,27 @@ def iterate_configs_directory(iterate_test_directory):
 
 
 @pytest.fixture()
-def iterate_regression_config_file(iterate_configs_directory):
-    """Returns the absolute path to tests/data/IterateTests/configs/regression_iterate.cfg."""
-    return os.path.join(iterate_configs_directory, "regression_iterate.cfg")
+def iterate_integration_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/integration_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "integration_iterate.toml")
 
 
 @pytest.fixture()
 def iterate_timeout_config_file(iterate_configs_directory):
-    """Returns the absolute path to tests/data/IterateTests/configs/timeout_iterate.cfg."""
-    return os.path.join(iterate_configs_directory, "timeout_iterate.cfg")
+    """Returns the absolute path to tests/data/IterateTests/configs/timeout_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "timeout_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_template_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/iterate_template.toml."""
+    return os.path.join(iterate_configs_directory, "iterate_template.toml")
 
 
 @pytest.fixture()
 def iterate_expected_output_file(iterate_expected_output_directory):
-    """Returns the absolute path to tests/data/IterateTests/expected_output/regression_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    """Returns the absolute path to tests/data/IterateTests/expected_output/integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
     return os.path.join(
         iterate_expected_output_directory,
-        "regression_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+        "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
     )

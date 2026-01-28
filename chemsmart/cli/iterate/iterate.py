@@ -7,7 +7,7 @@ import logging
 import os
 
 import click
-import yaml
+import tomlkit
 
 from chemsmart.cli.job import click_filename_options
 from chemsmart.jobs.iterate.job import IterateJob
@@ -19,7 +19,7 @@ from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
 
-# Define allowed keys for configuration (YAML format) validation
+# Define allowed keys for configuration (TOML format) validation
 ALLOWED_TOP_LEVEL_KEYS = {"skeletons", "substituents"}
 ALLOWED_SKELETON_KEYS = {
     "file_path",
@@ -48,11 +48,11 @@ def click_iterate_options(f):
         "--generate-template",
         "generate_template_path",
         is_flag=False,
-        flag_value="iterate_template.cfg",
+        flag_value="iterate_template.toml",
         default=None,
         type=str,
         help="Generate a template configuration file and exit. "
-        "Optionally specify output path (default: iterate_template.cfg).",
+        "Optionally specify output path (default: iterate_template.toml).",
     )
     @click.option(
         "--separate-outputs/--no-separate-outputs",
@@ -156,19 +156,19 @@ def iterate(
 
     Examples:
 
-    `chemsmart run iterate -f config.cfg`
+    `chemsmart run iterate -f config.toml`
     will generate structures based on the configuration file.
 
-    `chemsmart run iterate -f config.cfg -P 4`
+    `chemsmart run iterate -f config.toml -P 4`
     will use 4 processes for parallel execution.
 
-    `chemsmart run iterate -f config.cfg -o ./output`
+    `chemsmart run iterate -f config.toml -o ./output`
     will save generated structures to ./output directory.
 
     `chemsmart run iterate -g`
-    will generate a template configuration file (iterate_template.cfg).
+    will generate a template configuration file (iterate_template.toml).
 
-    `chemsmart run iterate -g my_config.cfg`
+    `chemsmart run iterate -g my_config.toml`
     will generate a template at the specified path.
     """
     # Handle -g option: generate template and exit
@@ -201,7 +201,7 @@ def iterate(
                 "(default) is active. Please use '-o' / '--outputfile' to specify the output file."
             )
 
-    # Validate filename - expect a single YAML/CFG config file
+    # Validate filename - expect a single TOML config file
     if not filename:
         raise click.BadParameter(
             "A configuration file is required.",
@@ -214,15 +214,16 @@ def iterate(
             param_hint="'-f' / '--filename'",
         )
 
-    if not filename.endswith(".cfg"):
+    if not filename.endswith(".toml"):
         raise click.BadParameter(
-            f"File '{filename}' must be a configuration file (ending with .cfg).",
+            f"File '{filename}' must be a configuration file (ending with .toml).",
             param_hint="'-f' / '--filename'",
         )
 
-    # Load YAML configuration file
+    # Load TOML configuration file
     with open(filename, "r") as f:
-        raw_config = yaml.safe_load(f)
+        # Load and unwrap to get standard Python dict/list types
+        raw_config = tomlkit.load(f).unwrap()
 
     # Handle empty configuration file
     if raw_config is None:
@@ -352,7 +353,7 @@ def _parse_index_string(
 
 def validate_config(config: dict, filename: str) -> dict:
     """
-    Validate configuration (from .cfg file in YAML format) and normalize values.
+    Validate configuration (from .toml file) and normalize values.
 
     Parameters
     ----------
@@ -360,12 +361,12 @@ def validate_config(config: dict, filename: str) -> dict:
         Raw configuration dictionary from parsed file
     filename : str
         Path to configuration file (for error messages)
-
+    
     Returns
     -------
     dict
         Validated and normalized configuration
-
+    
     Raises
     ------
     click.BadParameter
@@ -428,11 +429,11 @@ def _validate_skeleton_entry(entry: dict, idx: int, filename: str) -> dict:
     Parameters
     ----------
     entry : dict
-        Skeleton entry from YAML
+        Skeleton entry from TOML
     idx : int
         Index of the entry (for error messages)
     filename : str
-        Path to YAML file (for error messages)
+        Path to TOML file (for error messages)
 
     Returns
     -------
@@ -491,11 +492,11 @@ def _validate_substituent_entry(entry: dict, idx: int, filename: str) -> dict:
     Parameters
     ----------
     entry : dict
-        Substituent entry from YAML
+        Substituent entry from TOML
     idx : int
         Index of the entry (for error messages)
     filename : str
-        Path to YAML file (for error messages)
+        Path to TOML file (for error messages)
 
     Returns
     -------
