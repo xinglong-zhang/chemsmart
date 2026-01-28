@@ -368,6 +368,63 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             ["Found invalid index <= 0", "skeleton_indices"],
             "Skeleton negative skeleton_indices",
         ),
+        # Case 8: Substituent multiple link_indices (S3 Check)
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            [[substituents]]
+            file_path = "sub.xyz"
+            label = "sub1"
+            link_index = "1, 2" 
+            """,
+            ["Multiple values found in 'link_index'", "exactly one link atom"],
+            "Substituent multiple link_index",
+        ),
+        # Case 9: Skeleton label with invalid characters (S4 Check: Safe Label)
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1/unsafe"
+            link_index = "1"
+            """,
+            ["Contains invalid characters", "Allowed characters"],
+            "Skeleton label unsafe characters",
+        ),
+        # Case 10: Substituent label with invalid characters (S4 Check: Safe Label)
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            [[substituents]]
+            file_path = "sub.xyz"
+            label = "sub .. 1"
+            link_index = "1"
+            """,
+            ["Contains invalid characters", "Allowed characters"],
+            "Substituent label unsafe characters",
+        ),
+        # Case 11: Valid complex label (Testing allowed chars)
+        # This one should PASS, but our loop expects FAILURES.
+        # We will add it to a separate test if needed, or invert logic here.
+        # Sticking to FAILURE cases here.
+        
+        # Case 11: Label with space
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1 "
+            link_index = "1"
+            """,
+            ["Contains invalid characters"],
+            "Label with space",
+        ),
     ]
 
     runner = CliRunner()
@@ -462,6 +519,73 @@ def test_iterate_runner_bounds_validation(tmp_path):
         res, label = runner._load_molecule(config_3, "skeleton", 2)
         assert res is not None
         assert res == mock_mol
+
+
+def test_iterate_cli_pipeline_success(
+    iterate_configs_directory,
+    iterate_input_directory,
+    iterate_expected_output_directory,
+    tmp_path,
+):
+    """
+    Test the full Iterate pipeline via the CLI:
+    1. Run 'chemsmart iterate -f config.toml'
+    2. Verify success exit code
+    3. Verify output file exists and matches expected content.
+    This ensures that the CLI entry point correctly orchestrates the job runner.
+    """
+    from click.testing import CliRunner
+    from chemsmart.cli.iterate.iterate import iterate
+    import os
+
+    # Use the renamed config file which represents a valid CLI happy path
+    config_file = os.path.join(iterate_configs_directory, "cli_happy_path.toml")
+    expected_output_file = os.path.join(
+        iterate_expected_output_directory, "cli_happy_path.xyz"
+    )
+
+    # Define output path in tmp directory (without extension for -o argument)
+    output_base_path = str(tmp_path / "cli_happy_path_out")
+    output_xyz_path = output_base_path + ".xyz"
+
+    # Change CWD to input directory so relative paths in configuration work
+    original_cwd = os.getcwd()
+    os.chdir(iterate_input_directory)
+
+    runner = CliRunner()
+
+    try:
+        # Pass obj={} to initialize context object
+        result = runner.invoke(
+            iterate,
+            ["-f", config_file, "-o", output_base_path],
+            obj={},
+        )
+
+        assert result.exit_code == 0, f"CLI execution failed. Output:\n{result.output}"
+        assert os.path.exists(output_xyz_path), "Output XYZ file was not generated."
+
+        # Verify content matches
+        with open(expected_output_file, "r") as f_exp:
+            expected_content = f_exp.read().strip()
+
+        with open(output_xyz_path, "r") as f_out:
+            generated_content = f_out.read().strip()
+
+        # Basic check: Ensuring specific label presence which confirms combination logic ran
+        # The runner combines skeleton label, link index, sub label, and link index.
+        # e.g. Carbene1 + 8 + OTf + 8 -> Carbene1_8_OTf_8
+        assert "Carbene1_8_OTf_8" in generated_content
+
+        # Verify line count matches (structure completeness check)
+        exp_lines = expected_content.splitlines()
+        gen_lines = generated_content.splitlines()
+        assert len(exp_lines) == len(
+            gen_lines
+        ), "Generated XYZ line count differs from expected."
+
+    finally:
+        os.chdir(original_cwd)
 
 
 

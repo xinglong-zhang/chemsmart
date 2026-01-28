@@ -2,6 +2,7 @@
 Here is a docstring made on the top of the hill in Kau Sai Chau
 """
 
+import re
 import functools
 import logging
 import os
@@ -473,6 +474,23 @@ def _validate_single_skeleton_rules(entry: dict, idx: int, filename: str):
     # Rule 2: file_path is required
     _rule_file_path_required(entry, idx, filename)
 
+    # Rule 3: label must be safe for filenames
+    _rule_label_syntax(entry, idx, "Skeleton", filename)
+
+
+def _rule_label_syntax(entry: dict, idx: int, entry_type: str, filename: str):
+    """
+    Rule: Label must only contain safe characters [a-zA-Z0-9_-.].
+    """
+    label = entry.get("label")
+    if label:
+        if not re.match(r"^[a-zA-Z0-9_\-\.]+$", label):
+            raise click.BadParameter(
+                f"{entry_type} entry {idx + 1} label '{label}': "
+                f"Contains invalid characters. Allowed characters: a-z, A-Z, 0-9, _, -, .",
+                param_hint=filename,
+            )
+
 
 def _rule_file_path_required(entry: dict, idx: int, filename: str):
     """
@@ -525,6 +543,19 @@ def _validate_single_substituent_rules(entry: dict, idx: int, filename: str):
             f"Missing required field 'file_path'.",
             param_hint=filename,
         )
+
+    # Rule 2: link_index must be single value
+    link_index = entry.get("link_index")
+    if link_index and len(link_index) > 1:
+        raise click.BadParameter(
+            f"Substituent entry {idx + 1} (label='{entry.get('label', 'unnamed')}'): "
+            f"Multiple values found in 'link_index': {link_index}. "
+            f"Substituents must have exactly one link atom.",
+            param_hint=filename,
+        )
+
+    # Rule 3: label must be safe for filenames
+    _rule_label_syntax(entry, idx, "Substituent", filename)
 
 
 def _validate_skeleton_entry(entry: dict, idx: int, filename: str) -> dict:
