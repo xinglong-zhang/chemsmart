@@ -345,6 +345,29 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             ["Unknown key(s) in skeleton entry 1", "{'random_key'}"],
             "Skeleton random garbage key",
         ),
+        # Case 6: Zero link_index (S2 Check)
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "0" 
+            """,
+            ["Found invalid index <= 0", "link_index"],
+            "Skeleton zero link_index",
+        ),
+        # Case 7: Negative skeleton_indices (S2 Check)
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            skeleton_indices = [1, -5, 3]
+            """,
+            ["Found invalid index <= 0", "skeleton_indices"],
+            "Skeleton negative skeleton_indices",
+        ),
     ]
 
     runner = CliRunner()
@@ -365,5 +388,80 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
                 f"Case '{case_name}' failed. "
                 f"Expected fragment '{fragment}' not found in output:\n{result.output}"
             )
+
+
+def test_iterate_runner_bounds_validation(tmp_path):
+    """
+    Test that IterateJobRunner correctly validates indices against molecule size.
+    (S2) Check: indices > num_atoms checking LOGS, not exceptions.
+    """
+    from unittest.mock import MagicMock, patch
+    from chemsmart.jobs.iterate.runner import IterateJobRunner
+    from chemsmart.io.molecules.structure import Molecule
+
+    # Setup wrapper for the test
+    runner = IterateJobRunner(fake=True)
+
+    # Mock Molecule.from_filepath to return a predictable molecule
+    # Create a dummy molecule with 5 atoms
+    mock_mol = MagicMock(spec=Molecule)
+    mock_mol.num_atoms = 5
+    # Configure mock to return itself when from_filepath is called
+    
+    with patch("chemsmart.io.molecules.structure.Molecule.from_filepath", return_value=mock_mol), \
+         patch("chemsmart.jobs.iterate.runner.logger") as mock_logger:
+
+        # Case 1: Skelton link_index out of bounds
+        config_1 = {
+            "file_path": "dummy.xyz",
+            "label": "skel1",
+            "link_index": [6], # > 5
+        }
+        res, label = runner._load_molecule(config_1, "skeleton", 0)
+        
+        assert res is None
+        assert label == "skel1"
+        # Check logs for "out of bounds"
+        # We need to check if ANY of the call args contain our message
+        found_error = False
+        for call_args in mock_logger.error.call_args_list:
+            msg = call_args[0][0]
+            if "out of bounds" in msg and "link_index [6]" in msg:
+                found_error = True
+                break
+        assert found_error, "Failed to log out-of-bounds link_index error"
+
+
+        # Case 2: Skeleton skeleton_indices out of bounds
+        config_2 = {
+            "file_path": "dummy.xyz",
+            "label": "skel2",
+            "link_index": [1], # Valid
+            "skeleton_indices": [1, 2, 8] # 8 > 5
+        }
+        res, label = runner._load_molecule(config_2, "skeleton", 1)
+        
+        assert res is None
+        assert label == "skel2"
+        
+        found_error = False
+        for call_args in mock_logger.error.call_args_list:
+            msg = call_args[0][0]
+            if "out of bounds" in msg and "skeleton_indices [8]" in msg:
+                found_error = True
+                break
+        assert found_error, "Failed to log out-of-bounds skeleton_indices error"
+
+        # Case 3: Valid input
+        config_3 = {
+            "file_path": "dummy.xyz",
+            "label": "skel3",
+            "link_index": [1],
+            "skeleton_indices": [1, 2, 3]
+        }
+        res, label = runner._load_molecule(config_3, "skeleton", 2)
+        assert res is not None
+        assert res == mock_mol
+
 
 

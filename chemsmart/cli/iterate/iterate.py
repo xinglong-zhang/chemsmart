@@ -327,12 +327,35 @@ def _parse_index_string(
 
     # Handle single integer
     if isinstance(value, int):
+        if value <= 0:
+             raise click.BadParameter(
+                f"{entry_type.capitalize()} entry {idx + 1}: Found invalid index {value} in '{field_name}'. "
+                f"Index must be positive (1-based).",
+                param_hint="'-f' / '--filename'",
+            )
         return [value]
 
     # Use utility function for string parsing
     try:
+        parsed_indices = None
         if isinstance(value, str):
-            return get_list_from_string_range(value)
+            parsed_indices = get_list_from_string_range(value)
+        elif isinstance(value, list) and all(isinstance(x, int) for x in value):
+             # Already a list of ints (though TOML parser usually handles this, sometimes flexible)
+             parsed_indices = value
+
+        if parsed_indices:
+            # S2 Check: Validate positive non-zero indices
+            if any(i <= 0 for i in parsed_indices):
+                raise click.BadParameter(
+                    f"{entry_type.capitalize()} entry {idx + 1}: Found invalid index <= 0 in '{field_name}'. "
+                    f"All indices must be positive (1-based). Found: {parsed_indices}",
+                    param_hint="'-f' / '--filename'",
+                )
+            return parsed_indices
+        
+    except click.BadParameter:
+        raise
     except Exception:
         raise click.BadParameter(
             f"{entry_type.capitalize()} entry {idx + 1}: Invalid format '{value}' in '{field_name}'. "

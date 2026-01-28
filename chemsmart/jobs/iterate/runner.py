@@ -344,6 +344,44 @@ class IterateJobRunner(JobRunner):
                     f"(file_path), skipping."
                 )
                 return None, label
+            
+            # S2 Check: Validate indices against atom count
+            num_atoms = molecule.num_atoms
+            
+            # Validate link_index
+            link_indices = mol_config.get("link_index")
+            # Ensure it is a list if not None (normalized in CLI, but for safety in runner)
+            if link_indices is not None and not isinstance(link_indices, list):
+                if isinstance(link_indices, int):
+                    link_indices = [link_indices]
+                # If string or other, it should have been caught by CLI, but we assume it might be raw here if skipped CLI
+            
+            if link_indices:
+                invalid_links = [i for i in link_indices if i > num_atoms]
+                if invalid_links:
+                     logger.error(
+                        f"{mol_type.capitalize()} '{label}': link_index {invalid_links} "
+                        f"out of bounds. Molecule has {num_atoms} atoms."
+                    )
+                     return None, label
+
+            # Validate skeleton_indices (only for skeletons)
+            if mol_type == "skeleton":
+                skel_indices = mol_config.get("skeleton_indices")
+                 # Ensure list
+                if skel_indices is not None and not isinstance(skel_indices, list):
+                     if isinstance(skel_indices, int):
+                        skel_indices = [skel_indices]
+
+                if skel_indices:
+                     invalid_skels = [i for i in skel_indices if i > num_atoms]
+                     if invalid_skels:
+                        logger.error(
+                            f"{mol_type.capitalize()} '{label}': skeleton_indices {invalid_skels} "
+                            f"out of bounds. Molecule has {num_atoms} atoms."
+                        )
+                        return None, label
+
             return molecule, label
         except Exception as e:
             logger.error(f"Failed to load {mol_type} '{label}': {e}")
