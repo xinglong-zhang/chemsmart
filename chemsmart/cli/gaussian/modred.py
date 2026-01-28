@@ -54,6 +54,12 @@ def modred(
 
     # merge project settings with job settings from cli keywords from
     # cli.gaussian.py subcommands
+    # Store parent context for potential qmmm subcommand
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_freeze_atoms"] = None  # modred doesn't have freeze_atoms
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = modred_settings
+    ctx.obj["modred"] = "modred"
     if ctx.invoked_subcommand is not None:
         return
 
@@ -68,12 +74,6 @@ def modred(
     logger.debug(f"Label for job: {label}")
 
     logger.info(f"Modred settings from project: {modred_settings.__dict__}")
-
-    # Store parent context for potential qmmm subcommand
-    ctx.obj["parent_skip_completed"] = skip_completed
-    ctx.obj["parent_freeze_atoms"] = None  # modred doesn't have freeze_atoms
-    ctx.obj["parent_kwargs"] = kwargs
-    ctx.obj["parent_settings"] = modred_settings
 
     # If no subcommand invoked, run regular modred
     if ctx.invoked_subcommand is None:
