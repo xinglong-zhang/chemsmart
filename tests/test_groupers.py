@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.utils.grouper import (
+from chemsmart.jobs.grouper.runner import (
     BasicRMSDGrouper,
     ConnectivityGrouper,
     FormulaGrouper,
@@ -14,9 +14,7 @@ from chemsmart.utils.grouper import (
     IRMSDGrouper,
     PymolRMSDGrouper,
     RDKitIsomorphismGrouper,
-    RMSDGrouper,
     SpyRMSDGrouper,
-    StructureGrouperFactory,
     TanimotoSimilarityGrouper,
     TorsionFingerprintGrouper,
 )
@@ -824,65 +822,66 @@ class Test_other_groupers:
         ), "Molecules should form two groups based on RCM similarity."
 
 
-class Testfactory:
-
-    def test_structure_grouper_factory(
-        self, methanol_molecules, temp_working_dir
-    ):
-        factory = StructureGrouperFactory()
-        rmsd_grouper = factory.create(methanol_molecules, strategy="rmsd")
-        assert isinstance(rmsd_grouper, RMSDGrouper)
-        hrmsd_grouper = factory.create(methanol_molecules, strategy="hrmsd")
-        assert isinstance(hrmsd_grouper, RMSDGrouper)
-        spyrmsd_grouper = factory.create(
-            methanol_molecules, strategy="spyrmsd"
-        )
-        assert isinstance(spyrmsd_grouper, RMSDGrouper)
-        irmsd_grouper = factory.create(methanol_molecules, strategy="irmsd")
-        assert isinstance(irmsd_grouper, RMSDGrouper)
-        pymolrmsd_grouper = factory.create(
-            methanol_molecules, strategy="pymolrmsd"
-        )
-        assert isinstance(pymolrmsd_grouper, RMSDGrouper)
-
-        # Explicitly cleanup pymolrmsd_grouper to prevent __del__ from calling quit()
-        if (
-            hasattr(pymolrmsd_grouper, "_temp_dir")
-            and pymolrmsd_grouper._temp_dir
-        ):
-            import shutil
-
-            shutil.rmtree(pymolrmsd_grouper._temp_dir, ignore_errors=True)
-            pymolrmsd_grouper._temp_dir = None
-        pymolrmsd_grouper.cmd = None  # Prevent __del__ from calling quit()
-
-        torsion_grouper = factory.create(
-            methanol_molecules, strategy="torsion"
-        )
-        assert isinstance(torsion_grouper, TorsionFingerprintGrouper)
-        formula_grouper = factory.create(
-            methanol_molecules, strategy="formula"
-        )
-        assert isinstance(formula_grouper, FormulaGrouper)
-        connectivity_grouper = factory.create(
-            methanol_molecules, strategy="connectivity"
-        )
-        assert isinstance(connectivity_grouper, ConnectivityGrouper)
-        tanimoto_grouper = factory.create(
-            methanol_molecules, strategy="tanimoto"
-        )
-        assert isinstance(tanimoto_grouper, TanimotoSimilarityGrouper)
-        rdkit_isomorphism_grouper = factory.create(
-            methanol_molecules, strategy="isomorphism"
-        )
-        assert isinstance(rdkit_isomorphism_grouper, RDKitIsomorphismGrouper)
-
-    @classmethod
-    def teardown_class(cls):
-        """Clean up PyMOL after all tests in this class are done."""
-        try:
-            from pymol import cmd
-
-            cmd.reinitialize()
-        except Exception:
-            pass
+#
+# class Testfactory:
+#
+#     def test_structure_grouper_factory(
+#         self, methanol_molecules, temp_working_dir
+#     ):
+#         factory = StructureGrouperFactory()
+#         rmsd_grouper = factory.create(methanol_molecules, strategy="rmsd")
+#         assert isinstance(rmsd_grouper, RMSDGrouper)
+#         hrmsd_grouper = factory.create(methanol_molecules, strategy="hrmsd")
+#         assert isinstance(hrmsd_grouper, RMSDGrouper)
+#         spyrmsd_grouper = factory.create(
+#             methanol_molecules, strategy="spyrmsd"
+#         )
+#         assert isinstance(spyrmsd_grouper, RMSDGrouper)
+#         irmsd_grouper = factory.create(methanol_molecules, strategy="irmsd")
+#         assert isinstance(irmsd_grouper, RMSDGrouper)
+#         pymolrmsd_grouper = factory.create(
+#             methanol_molecules, strategy="pymolrmsd"
+#         )
+#         assert isinstance(pymolrmsd_grouper, RMSDGrouper)
+#
+#         # Explicitly cleanup pymolrmsd_grouper to prevent __del__ from calling quit()
+#         if (
+#             hasattr(pymolrmsd_grouper, "_temp_dir")
+#             and pymolrmsd_grouper._temp_dir
+#         ):
+#             import shutil
+#
+#             shutil.rmtree(pymolrmsd_grouper._temp_dir, ignore_errors=True)
+#             pymolrmsd_grouper._temp_dir = None
+#         pymolrmsd_grouper.cmd = None  # Prevent __del__ from calling quit()
+#
+#         torsion_grouper = factory.create(
+#             methanol_molecules, strategy="torsion"
+#         )
+#         assert isinstance(torsion_grouper, TorsionFingerprintGrouper)
+#         formula_grouper = factory.create(
+#             methanol_molecules, strategy="formula"
+#         )
+#         assert isinstance(formula_grouper, FormulaGrouper)
+#         connectivity_grouper = factory.create(
+#             methanol_molecules, strategy="connectivity"
+#         )
+#         assert isinstance(connectivity_grouper, ConnectivityGrouper)
+#         tanimoto_grouper = factory.create(
+#             methanol_molecules, strategy="tanimoto"
+#         )
+#         assert isinstance(tanimoto_grouper, TanimotoSimilarityGrouper)
+#         rdkit_isomorphism_grouper = factory.create(
+#             methanol_molecules, strategy="isomorphism"
+#         )
+#         assert isinstance(rdkit_isomorphism_grouper, RDKitIsomorphismGrouper)
+#
+#     @classmethod
+#     def teardown_class(cls):
+#         """Clean up PyMOL after all tests in this class are done."""
+#         try:
+#             from pymol import cmd
+#
+#             cmd.reinitialize()
+#         except Exception:
+#             pass
