@@ -1375,7 +1375,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             low_level_force_field (str): Force field for low layer (usually MM)
 
         Charge and multiplicity specifications:
-            charge_total/mult_total (int): Full system properties (legacy: real_charge/real_multiplicity)
+            charge_total/mult_total (int): Full system properties (legacy: charge_total/real_multiplicity)
             charge_intermediate/mult_intermediate (int): Intermediate system properties (legacy: int_charge/int_multiplicity)
             charge_high/mult_high (int): Model/high-layer properties (legacy: model_charge/model_multiplicity)
 
@@ -1393,7 +1393,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         ...     high_level_functional='B3LYP',
         ...     high_level_basis='6-31G*',
         ...     low_level_force_field='AMBER=HardFirst',
-        ...     real_charge=0,
+        ...     charge_total=0,
         ...     real_multiplicity=1,
         ...     high_level_atoms=[1, 2, 3, 4, 5],  # Active site residues
         ...     bonded_atoms=[(5, 6)],  # QM-MM boundary bond
@@ -1407,7 +1407,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         ...     medium_level_functional='B3LYP',
         ...     medium_level_basis='6-31G*',
         ...     low_level_force_field='UFF',
-        ...     real_charge=-1,
+        ...     charge_total=-1,
         ...     real_multiplicity=2,
         ...     high_level_atoms='1-10',     # Metal center and ligands
         ...     medium_level_atoms='11-50',  # Extended coordination sphere
@@ -1490,7 +1490,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                     (e.g., 'AMBER=HardFirst', 'UFF', 'DREIDING', 'MM3')
 
             Charge and multiplicity:
-                charge_total (int): Total charge of complete molecular system (legacy: real_charge)
+                charge_total (int): Total charge of complete molecular system (legacy: charge_total)
                 mult_total (int): Spin multiplicity of complete system (legacy: real_multiplicity)
                 charge_intermediate (int): Charge of high+medium layers (legacy: int_charge)
                 mult_intermediate (int): Multiplicity of high+medium layers (legacy: int_multiplicity)
@@ -1559,6 +1559,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.int_multiplicity = self.mult_intermediate
         self.model_charge = self.charge_high
         self.model_multiplicity = self.mult_high
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.bonded_atoms = bonded_atoms
+        self.scale_factors = scale_factors
 
         self.title = "Gaussian QM/MM job"
 

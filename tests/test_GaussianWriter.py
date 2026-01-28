@@ -333,8 +333,8 @@ class TestGaussianInputWriter:
         qmmm_settings = project_settings.qmmm_settings()
         qmmm_settings.charge = 0
         qmmm_settings.multiplicity = 1
-        qmmm_settings.real_charge = 0
-        qmmm_settings.real_multiplicity = 1
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
         qmmm_settings.high_level_atoms = [1, 2, 3]
         job = GaussianQMMMJob.from_filename(
             filename=single_molecule_xyz_file,
@@ -364,7 +364,7 @@ class TestGaussianInputWriter:
         qmmm_settings = project_settings.qmmm_settings()
         qmmm_settings.charge = 0
         qmmm_settings.multiplicity = 1
-        qmmm_settings.real_charge = 0
+        qmmm_settings.charge_total = 0
         qmmm_settings.real_multiplicity = 1
         qmmm_settings.high_level_atoms = [3, 12, 14, 7, 9]
         qmmm_settings.medium_level_atoms = [8, 17, 19, 20, 21, 22, 23, 24, 25]

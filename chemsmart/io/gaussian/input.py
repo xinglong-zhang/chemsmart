@@ -115,7 +115,7 @@ class Gaussian16Input(GaussianFileMixin):
             use_partition=False
         )
         if oniom_charge:
-            return oniom_charge.get("real_charge")
+            return oniom_charge.get("charge_total")
         return None
 
     @property
@@ -344,7 +344,7 @@ class Gaussian16Input(GaussianFileMixin):
             ):
                 break
         charge_multiplicity_list = [
-            "real_charge",
+            "charge_total",
             "real_multiplicity",
             "int_charge",
             "int_multiplicity",
@@ -447,7 +447,7 @@ class Gaussian16QMMMInput(Gaussian16Input):
     @property
     def real_charge(self):
         oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
-        return int(oniom_charge["real_charge"])
+        return int(oniom_charge["charge_total"])
 
     @property
     def int_charge(self):
@@ -506,7 +506,7 @@ class Gaussian16QMMMInput(Gaussian16Input):
             ):
                 break
         charge_multiplicity_list = [
-            "real_charge",
+            "charge_total",
             "real_multiplicity",
             "int_charge",
             "int_multiplicity",

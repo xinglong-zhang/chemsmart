@@ -274,7 +274,7 @@ class TestGaussian16Input:
             filename=gaussian_qmmm_inputfile_3layer
         )
         assert g16_oniom.oniom_charge == {
-            "real_charge": "0",
+            "charge_total": "0",
             "int_charge": "0",
             "model_charge": "0",
         }

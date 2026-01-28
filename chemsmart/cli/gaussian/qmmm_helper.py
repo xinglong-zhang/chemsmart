@@ -269,7 +269,7 @@ def create_qmmm_subcommand(parent_command):
         #                 'high_level_force_field', 'medium_level_functional',
         #                 'medium_level_basis', 'medium_level_force_field',
         #                 'low_level_functional', 'low_level_basis',
-        #                 'low_level_force_field', 'real_charge', 'real_multiplicity',
+        #                 'low_level_force_field', 'charge_total', 'real_multiplicity',
         #                 'int_charge', 'int_multiplicity', 'model_charge',
         #                 'model_multiplicity', 'high_level_atoms', 'medium_level_atoms',
         #                 'low_level_atoms', 'bonded_atoms', 'scale_factors'
