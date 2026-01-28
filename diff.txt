@@ -1,0 +1,430 @@
+diff --git a/chemsmart/io/molecules/structure.py b/chemsmart/io/molecules/structure.py
+index 51efe025..b460b6a4 100644
+--- a/chemsmart/io/molecules/structure.py
++++ b/chemsmart/io/molecules/structure.py
+@@ -4,6 +4,7 @@ import inspect
+ import logging
+ import os
+ import re
++import tempfile
+ from functools import cached_property, lru_cache
+ 
+ import networkx as nx
+@@ -17,7 +18,6 @@ from rdkit.Geometry import Point3D
+ from scipy.spatial.distance import cdist
+ 
+ from chemsmart.io.molecules import get_bond_cutoff
+-from chemsmart.io.xyz.xyzfile import XYZFile
+ from chemsmart.utils.geometry import is_collinear
+ from chemsmart.utils.mixins import FileMixin
+ from chemsmart.utils.periodictable import PeriodicTable as pt
+@@ -133,13 +133,6 @@ class Molecule:
+             raise ValueError(
+                 "The number of symbols and positions should be the same!"
+             )
+-        # # update partition levels if available
+-        # if self.high_level_atoms is not None:
+-        #     (
+-        #         self.high_level_atoms,
+-        #         self.medium_level_atoms,
+-        #         self.low_level_atoms,
+-        #     ) = self._get_partition_levels()
+ 
+         self.vibrational_frequencies = (
+             []
+@@ -300,6 +293,143 @@ class Molecule:
+         if self.symbols is not None:
+             return list(self.symbols)
+ 
++    @property
++    def atomic_radii_list(self):
++        """Return a list of atomic radii for each atom in the molecule."""
++        return [p.covalent_radius(symbol) for symbol in self.symbols]
++
++    @property
++    def vdw_radii_list(self):
++        """Return a list of van der Waals radii for each atom in the molecule."""
++        return [p.vdw_radius(symbol) for symbol in self.symbols]
++
++    @property
++    def estimated_dispersion(self):
++        """Estimated dispersion parameter for Voronoi tessellation.
++        Returns:
++        - dispersion (float): Estimated maximum distance for adjacent points.
++        """
++        n_points = self.distance_matrix.shape[0]
++        max_distance = np.max(
++            self.distance_matrix[np.triu_indices(n_points, k=1)]
++        )
++
++        max_radii_sum = 0.0
++        radii = np.array(self.vdw_radii_list)
++        if len(radii) != n_points:
++            raise ValueError("Number of radii must match number of points.")
++        for i in range(n_points):
++            for j in range(i + 1, n_points):
++                radii_sum = radii[i] + radii[j]
++                max_radii_sum = max(max_radii_sum, radii_sum)
++
++        # Use a factor of 1.5 to ensure sufficient dispersion for Voronoi tessellation
++        dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
++        return dispersion
++
++    @property
++    def voronoi_dirichlet_occupied_volume(self):
++        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet tessellation.
++
++        Note: This method requires the pyvoro package, which can be installed with:
++            pip install chemsmart[voronoi]
++        Note: pyvoro requires Python < 3.12
++        """
++        from chemsmart.utils.geometry import (
++            calculate_voronoi_dirichlet_occupied_volume,
++        )
++
++        return calculate_voronoi_dirichlet_occupied_volume(
++            coords=self.positions,
++            radii=self.vdw_radii_list,
++            dispersion=self.estimated_dispersion,
++        )
++
++    @property
++    def voronoi_dirichlet_polyhedra_occupied_volume(self):
++        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet Polyhedra (VDP)."""
++        from chemsmart.utils.geometry import (
++            calculate_molecular_volume_vdp,
++        )
++
++        return calculate_molecular_volume_vdp(
++            coordinates=self.positions,
++            vdw_radii=self.vdw_radii_list,
++        )
++
++    @property
++    def crude_volume_by_atomic_radii(self):
++        """Calculate the crude occupied volume of the molecule using atomic radii."""
++        from chemsmart.utils.geometry import calculate_crude_occupied_volume
++
++        return calculate_crude_occupied_volume(
++            coords=self.positions, radii=self.atomic_radii_list
++        )
++
++    @property
++    def crude_volume_by_vdw_radii(self):
++        """Calculate the crude occupied volume of the molecule using van der Waals radii."""
++        from chemsmart.utils.geometry import calculate_crude_occupied_volume
++
++        return calculate_crude_occupied_volume(
++            coords=self.positions, radii=self.vdw_radii_list
++        )
++
++    @property
++    def vdw_volume(self):
++        """Calculate the occupied volume of the molecule using van der Waals radii.
++
++        Uses pairwise overlap correction. For more accurate results on complex
++        molecules, consider using ``grid_vdw_volume`` instead.
++
++        See Also
++        --------
++        grid_vdw_volume : Grid-based volume (more accurate for complex molecules)
++        vdw_volume_from_rdkit : RDKit's grid-based implementation
++        """
++        from chemsmart.utils.geometry import calculate_vdw_volume
++
++        return calculate_vdw_volume(
++            coords=self.positions, radii=self.vdw_radii_list
++        )
++
++    @property
++    def grid_vdw_volume(self):
++        """Calculate the VDW volume using grid-based numerical integration.
++
++        This method places the molecule in a 3D grid and counts grid points
++        that fall inside any atomic VDW sphere. This approach correctly handles
++        all orders of atomic overlaps and provides more accurate volume estimates
++        for complex molecules compared to the pairwise method.
++
++        This implementation is similar to RDKit's DoubleCubicLatticeVolume
++        algorithm.
++
++        Returns
++        -------
++        float
++            Volume in cubic Ångstroms (Å³).
++
++        See Also
++        --------
++        vdw_volume : Faster pairwise overlap method
++        vdw_volume_from_rdkit : RDKit's native implementation
++        """
++        from chemsmart.utils.geometry import calculate_grid_vdw_volume
++
++        return calculate_grid_vdw_volume(
++            coords=self.positions, radii=self.vdw_radii_list
++        )
++
++    @property
++    def vdw_volume_from_rdkit(self):
++        """Calculate the van der Waals volume of the molecule using RDKit."""
++        from rdkit.Chem.rdMolDescriptors import DoubleCubicLatticeVolume
++
++        dclv = DoubleCubicLatticeVolume(self.to_rdkit())
++        volume = dclv.GetVDWVolume()
++        return volume
++
+     @property
+     def num_atoms(self):
+         """
+@@ -334,7 +464,8 @@ class Molecule:
+         """
+         Check if molecule is aromatic or not.
+         """
+-        return Chem.GetAromaticAtoms(self.to_rdkit()) != []
++        mol = self.to_rdkit()
++        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
+ 
+     @property
+     def is_ring(self):
+@@ -649,9 +780,9 @@ class Molecule:
+             return cls._read_orca_inputfile(filepath, **kwargs)
+ 
+         if basename.endswith(".out"):
+-            from chemsmart.utils.io import get_outfile_format
++            from chemsmart.utils.io import get_program_type_from_file
+ 
+-            program = get_outfile_format(filepath)
++            program = get_program_type_from_file(filepath)
+             if program == "orca":
+                 return cls._read_orca_outfile(filepath, index, **kwargs)
+             if program == "gaussian":
+@@ -670,6 +801,13 @@ class Molecule:
+         # if basename.endswith(".traj"):
+         #     return cls._read_traj_file(filepath, index, **kwargs)
+ 
++        if basename.endswith((".cdx", ".cdxml")):
++            return cls._read_chemdraw_file(
++                filepath=filepath,
++                index=index,
++                return_list=return_list,
++            )
++
+         return cls._read_other(filepath, index, **kwargs)
+ 
+     @classmethod
+@@ -677,6 +815,8 @@ class Molecule:
+         """
+         Read XYZ format molecular structure file.
+         """
++        from chemsmart.io.xyz.xyzfile import XYZFile
++
+         xyz_file = XYZFile(filename=filepath)
+         molecules = xyz_file.get_molecules(
+             index=index, return_list=return_list
+@@ -689,6 +829,8 @@ class Molecule:
+         """
+         Read SDF format molecular structure file.
+         """
++        from chemsmart.io.file import SDFFile
++
+         sdf_file = SDFFile(filepath)
+         return sdf_file.molecule
+ 
+@@ -759,7 +901,34 @@ class Molecule:
+         from chemsmart.io.orca.output import ORCAOutput
+ 
+         orca_output = ORCAOutput(filename=filepath)
+-        return orca_output.molecule.get_molecule(index=index)
++        return orca_output.get_molecule(index=index)
++
++    @classmethod
++    def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):
++        """
++        Read ChemDraw file (.cdx or .cdxml) format.
++
++        Args:
++            filepath (str): Path to ChemDraw file (.cdx or .cdxml)
++            index (str or int): Index for multi-structure files.
++                Use "-1" for last molecule, ":" for all, or 1-based integer.
++            return_list (bool): If True, return a list of molecules.
++
++        Returns:
++            Molecule or list[Molecule]: Molecule object(s) from ChemDraw file.
++
++        Note:
++            - .cdxml files are XML-based ChemDraw format.
++            - .cdx files are binary ChemDraw format.
++            - RDKit's MolsFromCDXMLFile supports both formats.
++            - 3D coordinates are generated using RDKit's EmbedMolecule.
++        """
++        from chemsmart.io.file import CDXFile
++
++        chemdraw_file = CDXFile(filename=filepath)
++        return chemdraw_file.get_molecules(
++            index=index, return_list=return_list
++        )
+ 
+     # @staticmethod
+     # @file_cache()
+@@ -1644,6 +1813,76 @@ class Molecule:
+ 
+         return frames
+ 
++    def xyz_to_pdb(
++        self,
++        pdb_filename,
++        xyz_filename=None,
++        mode="w",
++        overwrite=True,
++        cleanup=True,
++    ):
++        """
++        Convert an XYZ representation of the molecule to PDB using Open Babel.
++
++        Args:
++            pdb_filename (str): Destination PDB file path.
++            xyz_filename (str, optional): Source XYZ file path; if omitted or missing, a
++                temporary XYZ is written via ``write_xyz``.
++            mode (str): File mode passed to ``write_xyz`` when creating the XYZ file.
++            overwrite (bool): Whether to overwrite an existing PDB file.
++            cleanup (bool): Remove auto-generated XYZ files after conversion.
++        """
++        auto_xyz = False
++        if xyz_filename is None:
++            tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
++            tmp.close()
++            xyz_filename = tmp.name
++            auto_xyz = True
++            logger.debug(
++                "Created temporary XYZ '%s' for PDB conversion", xyz_filename
++            )
++            self.write_xyz(xyz_filename, mode=mode)
++        elif not os.path.isfile(xyz_filename):
++            logger.debug(
++                "XYZ '%s' missing; writing coordinates before conversion",
++                xyz_filename,
++            )
++            self.write_xyz(xyz_filename, mode=mode)
++
++        try:
++            from openbabel import pybel
++        except ImportError as exc:  # pragma: no cover
++            if auto_xyz and cleanup:
++                os.remove(xyz_filename)
++            raise ImportError(
++                "xyz_to_pdb requires Open Babel. Install openbabel/pybel to enable this conversion."
++            ) from exc
++
++        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
++        if xyz_mol is None:
++            if auto_xyz and cleanup:
++                os.remove(xyz_filename)
++            raise ValueError(f"Unable to read molecule from {xyz_filename}")
++
++        logger.info(
++            "Converting XYZ '%s' to PDB '%s' using Open Babel (overwrite=%s)",
++            xyz_filename,
++            pdb_filename,
++            overwrite,
++        )
++        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
++
++        if auto_xyz and cleanup:
++            try:
++                os.remove(xyz_filename)
++                logger.debug("Removed temporary XYZ '%s'", xyz_filename)
++            except OSError as exc:
++                logger.warning(
++                    "Could not remove temporary XYZ '%s': %s",
++                    xyz_filename,
++                    exc,
++                )
++
+ 
+ class CoordinateBlock:
+     """
+@@ -1730,27 +1969,6 @@ class CoordinateBlock:
+             pbc_conditions=self.pbc_conditions,
+             translation_vectors=self.translation_vectors,
+         )
+-        """Function to convert coordinate block supplied as text or as a list of lines into
+-        Molecule class."""
+-        if not self.partitions:
+-            return Molecule(
+-                symbols=self.symbols,
+-                positions=self.positions,
+-                frozen_atoms=self.constrained_atoms,
+-                pbc_conditions=self.pbc_conditions,
+-                translation_vectors=self.translation_vectors,
+-            )
+-        else:
+-            return QMMMMolecule(
+-                symbols=self.symbols,
+-                positions=self.positions,
+-                frozen_atoms=self.constrained_atoms,
+-                pbc_conditions=self.pbc_conditions,
+-                translation_vectors=self.translation_vectors,
+-                high_level_atoms=self.partitions[1],
+-                medium_level_atoms=self.partitions[2],
+-                low_level_atoms=self.partitions[3],
+-            )
+ 
+     def _get_symbols(self):
+         symbols = []
+@@ -1770,6 +1988,7 @@ class CoordinateBlock:
+             if (
+                 len(line_elements) < 4 or len(line_elements) == 0
+             ):  # skip lines that do not contain coordinates
++                logger.debug(f"Line {line} has less than 4 line elements!")
+                 continue
+ 
+             if (
+@@ -1929,8 +2148,6 @@ class CoordinateBlock:
+                     low_level_atoms.append(i)
+                     partitions.append("L")
+                 i += 1
+-            # else:
+-            #     raise ValueError(f"Partition level not found in the coordinate block: {self.coordinate_block}!")
+         return (
+             partitions,
+             high_level_atoms,
+@@ -2031,6 +2248,10 @@ class QMMMMolecule(Molecule):
+         scale_factors=None,
+         **kwargs,
+     ):
++        # store reference to the original molecule early to avoid
++        # __getattr__ recursion when attribute access falls back to it.
++        self.molecule = molecule
++
+         if molecule is not None:
+             # inherit all parameters from the molecule object including class methods
+             sig = inspect.signature(Molecule.__init__)
+@@ -2044,7 +2265,7 @@ class QMMMMolecule(Molecule):
+             }
+             init_params.update(kwargs)
+ 
+-            super().__init__(**init_params)
++            self.__dict__.update(molecule.__dict__)
+         else:
+             # Otherwise, let QMMM behave like a Molecule itself
+             super().__init__(**kwargs)
+@@ -2062,9 +2283,16 @@ class QMMMMolecule(Molecule):
+             self.multiplicity = self.real_multiplicity
+ 
+     def __getattr__(self, name):
+-        # Forward any missing attribute to the underlying Molecule
+-        if hasattr(self.molecule, name):
+-            return getattr(self.molecule, name)
++        # Forward any missing attribute to the underlying Molecule.
++        # Use object.__getattribute__ to avoid re-entering this __getattr__
++        # when accessing self.molecule (which would cause recursion).
++        try:
++            mol = object.__getattribute__(self, "molecule")
++        except AttributeError:
++            raise AttributeError(f"'QMMM' object has no attribute '{name}'")
++
++        if mol is not None and hasattr(mol, name):
++            return getattr(mol, name)
+         raise AttributeError(f"'QMMM' object has no attribute '{name}'")
+ 
+     @property

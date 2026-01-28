@@ -7,6 +7,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian import (
     GaussianModredJob,
     GaussianOptJob,
+    GaussianQMMMJob,
     GaussianScanJob,
     GaussianSinglePointJob,
     GaussianTSJob,
@@ -317,6 +318,79 @@ class TestGaussianInputWriter:
         g16_file = os.path.join(tmpdir, "gaussian_ts.com")
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_ts_file, shallow=False)
+
+    def test_write_qmmm_job(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_written_qmmm_file,
+        gaussian_jobrunner_no_scratch,
+    ):
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.charge = 0
+        qmmm_settings.multiplicity = 1
+        qmmm_settings.charge_total = 0
+        qmmm_settings.mult_total = 1
+        qmmm_settings.high_level_atoms = [1, 2, 3]
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert isinstance(job, GaussianQMMMJob)
+        g16_writer = GaussianInputWriter(job=job)
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_qmmm.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
+
+    def test_write_qmmm_input_from_logfile(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_singlet_opt_outfile,
+        gaussian_jobrunner_no_scratch,
+        gaussian_written_qmmm_log_file,
+    ):
+        """Taking the Gaussian nhc_neutral_singlet.log output and write qmmm .com"""
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.charge = 0
+        qmmm_settings.multiplicity = 1
+        qmmm_settings.charge_total = 0
+        qmmm_settings.real_multiplicity = 1
+        qmmm_settings.high_level_atoms = [3, 12, 14, 7, 9]
+        qmmm_settings.medium_level_atoms = [8, 17, 19, 20, 21, 22, 23, 24, 25]
+        qmmm_settings.bonded_atoms = [(1, 3)]
+        job_settings = GaussianJobSettings.from_logfile(
+            gaussian_singlet_opt_outfile
+        )
+        keywords = ("charge", "multiplicity", "title")
+        qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
+        job = GaussianQMMMJob.from_filename(
+            filename=gaussian_singlet_opt_outfile,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_from_log",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert isinstance(job, GaussianQMMMJob)
+        g16_writer = GaussianInputWriter(job=job)
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_qmmm_from_log.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(
+            g16_file,
+            gaussian_written_qmmm_log_file,
+            shallow=False,
+        )
 
     def test_write_opt_input_from_logfile(
         self,

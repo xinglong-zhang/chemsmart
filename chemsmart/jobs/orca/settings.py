@@ -14,6 +14,7 @@ import re
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
+    get_list_from_string_range,
     get_prepend_string_list_from_modred_free_format,
 )
 
@@ -565,6 +566,20 @@ class ORCAJobSettings(MolecularJobSettings):
         """
         level_of_theory = ""
 
+        # detect whether this is a QMMM-type job to relax some validations
+        job_type_val = getattr(self, "job_type", None) or getattr(
+            self, "jobtype", None
+        )
+        is_qmmm = False
+        if job_type_val and (
+            "qm" in str(job_type_val).lower()
+            and "mm" in str(job_type_val).lower()
+        ):
+            try:
+                is_qmmm = True
+            except Exception:
+                is_qmmm = False
+
         if self.ab_initio is not None and self.functional is not None:
             raise ValueError(
                 "Warning: both ab initio and DFT are specified!\n"
@@ -572,11 +587,12 @@ class ORCAJobSettings(MolecularJobSettings):
             )
 
         if self.ab_initio is None and self.functional is None:
-            raise ValueError(
-                "Warning: neither ab initio nor DFT is specified!\n"
-                "Please specify one method!"
-            )
-
+            # Allow missing ab_initio/functional for ORCA QMMM-type jobs.
+            if not is_qmmm:
+                raise ValueError(
+                    "Warning: neither ab initio nor DFT is specified!\n"
+                    "Please specify one method!"
+                )
         if self.ab_initio is not None:
             level_of_theory += f"{self.ab_initio}"
         elif self.functional is not None:
@@ -585,7 +601,10 @@ class ORCAJobSettings(MolecularJobSettings):
         if self.basis is not None:
             level_of_theory += f" {self.basis}"
         elif self.basis is None:
-            raise ValueError("Warning: basis is missing!")
+            # allow missing basis for QMMM-type jobs where basis may be
+            # provided per-layer (or omitted)
+            if not is_qmmm:
+                raise ValueError("Warning: basis is missing!")
 
         if self.aux_basis is not None:
             level_of_theory += f" {self.aux_basis}"
@@ -948,3 +967,818 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             else:  # all other keys with given values
                 f.write(f"  {key} {value}\n")
         f.write("end\n")
+
+
+class ORCAQMMMJobSettings(ORCAJobSettings):
+    """
+    Configuration for ORCA multiscale QM/MM calculations.
+
+    Supports five multiscale calculation types:
+    1. Additive QM/MM
+    2. Subtractive QM/QM2 (2-layer ONIOM)
+    3. Subtractive QM/QM2/MM (3-layer ONIOM)
+    4. MOL-CRYSTAL-QMMM (molecular crystals)
+    5. IONIC-CRYSTAL-QMMM (semiconductors/insulators)
+
+    Attributes:
+        jobtype (str): Multiscale calculation type
+        high_level_functional (str): DFT functional for high-level (QM) region
+        high_level_basis (str): Basis set for high-level (QM) region
+        intermediate_level_functional (str): DFT functional for intermediate-level (QM2) region
+        intermediate_level_basis (str): Basis set for intermediate-level (QM2) region
+        intermediate_level_method (str): Built-in method for intermediate-level (XTB, HF-3C, etc.)
+        low_level_method (str): Method/force field for low-level (MM) region
+        high_level_atoms (list): Atom indices for high-level (QM) region
+        intermediate_level_atoms (list): Atom indices for intermediate-level (QM2) region
+        charge_total (int): Total system charge
+        mult_total (int): Total system multiplicity
+        charge_intermediate (int): Intermediate layer charge
+        mult_intermediate (int): Intermediate layer multiplicity
+        charge_high (int): High-level region charge
+        mult_high (int): High-level region multiplicity
+        intermediate_level_solvation (str): Solvation model for intermediate-level region
+        active_atoms (list): Active atoms for optimization
+        use_active_info_from_pbc (bool): Use PDB active atom info
+        optregion_fixed_atoms (list): Fixed atoms in optimization
+        high_level_h_bond_length (dict): Custom high-level-H bond distances
+        delete_la_double_counting (bool): Remove bend/torsion double counting
+        delete_la_bond_double_counting_atoms (bool): Remove bond double counting
+        embedding_type (str): Electronic or mechanical embedding
+        conv_charges (bool): Use converged charges for crystal QM/MM
+        conv_charges_max_n_cycles (int): Max charge convergence cycles
+        conv_charges_conv_thresh (float): Charge convergence threshold
+        scale_formal_charge_mm_atom (float): MM charge scaling factor
+        n_unit_cell_atoms (int): Atoms per unit cell (MOL-CRYSTAL-QMMM)
+        ecp_layer_ecp (str): ECP type for boundary region
+        ecp_layer (int): Number of ECP layers
+        scale_formal_charge_ecp_atom (float): ECP charge scaling factor
+    """
+
+    # Class attribute: Built-in methods supported for intermediate level (QM2)
+    INTERMEDIATE_LEVEL_BUILT_IN_METHODS = [
+        "XTB",
+        "XTB0",
+        "XTB1",
+        "XTB2",
+        "HF-3C",
+        "PBEH-3C",
+        "R2SCAN-3C",
+        "PM3",
+        "AM1",
+    ]
+
+    def __init__(
+        self,
+        jobtype=None,  # corresponding to the 5 types of jobs mentioned above
+        high_level_functional=None,
+        high_level_basis=None,
+        intermediate_level_functional=None,
+        intermediate_level_basis=None,
+        intermediate_level_method=None,
+        low_level_method=None,  # level-of-theory for MM
+        high_level_atoms=None,
+        intermediate_level_atoms=None,
+        charge_total=None,
+        mult_total=None,
+        charge_intermediate=None,
+        mult_intermediate=None,
+        charge_high=None,
+        mult_high=None,
+        intermediate_level_solvation=None,
+        intermediate_solv_scheme=None,
+        active_atoms=None,
+        use_active_info_from_pbc=False,
+        optregion_fixed_atoms=None,
+        high_level_h_bond_length=None,  # similar to scale factors in Gaussian ONIOM jobs
+        delete_la_double_counting=False,
+        delete_la_bond_double_counting_atoms=False,
+        embedding_type=None,  # optional
+        # the followings are crystal QM/MM parameters
+        conv_charges=True,
+        conv_charges_max_n_cycles=None,
+        conv_charges_conv_thresh=None,
+        scale_formal_charge_mm_atom=None,
+        n_unit_cell_atoms=None,  # for MOL-CRYSTAL-QMMM jobs
+        # the followings are for INONIC-CRYSTAL-QMMM jobs
+        ecp_layer_ecp=None,
+        ecp_layer=None,
+        scale_formal_charge_ecp_atom=None,
+        parent_jobtype=None,
+        **kwargs,
+    ):
+        """
+        Initialize ORCA QM/MM job settings.
+
+        Args:
+            jobtype: Type of multiscale calculation (QMMM, QM/QM2, QM/QM2/MM, etc.)
+            high_level_functional: DFT functional for high-level (QM) region
+            high_level_basis: Basis set for high-level (QM) region
+            intermediate_level_functional: DFT functional for intermediate-level (QM2) region
+            intermediate_level_basis: Basis set for intermediate-level (QM2) region
+            intermediate_level_method: Built-in method for intermediate-level (XTB, HF-3C, PBEH-3C, etc.)
+            low_level_method: Method/force field for low-level (MM) region (MMFF, AMBER, CHARMM, etc.)
+            high_level_atoms: Atom indices for high-level (QM) region
+            intermediate_level_atoms: Atom indices for intermediate-level (QM2) region
+            charge_total: Total system charge
+            mult_total: Total system multiplicity
+            charge_intermediate: Intermediate layer charge (QM2)
+            mult_intermediate: Intermediate layer multiplicity (QM2)
+            charge_high: High-level region charge
+            mult_high: High-level region multiplicity
+            intermediate_level_solvation: Solvation model for intermediate-level (CPCM, SMD, etc.)
+            active_atoms: Active atom indices (default: whole system)
+            optregion_fixed_atoms: Fixed atom indices in optimization
+            high_level_h_bond_length: Custom bond lengths {(atom1, atom2): length}
+            delete_la_double_counting: Remove bend/torsion double counting
+            delete_la_bond_double_counting_atoms: Remove bond double counting
+            embedding_type: Electronic (default) or mechanical embedding
+            conv_charges: Use converged charges
+            conv_charges_max_n_cycles: Max cycles for charge convergence
+            conv_charges_conv_thresh: Convergence threshold for charges
+            scale_formal_charge_mm_atom: MM atomic charge scaling factor
+            n_unit_cell_atoms: Atoms per unit cell (required for MOL-CRYSTAL-QMMM)
+            ecp_layer_ecp: ECP type for boundary region
+            ecp_layer: Number of ECP layers around QM region
+            scale_formal_charge_ecp_atom: ECP atomic charge scaling factor
+        """
+        super().__init__(**kwargs)
+        self.intermediate_solv_scheme = intermediate_solv_scheme
+        self.jobtype = jobtype
+        self.parent_jobtype = parent_jobtype
+        self.high_level_functional = high_level_functional
+        self.high_level_basis = high_level_basis
+        self.intermediate_level_functional = intermediate_level_functional
+        self.intermediate_level_basis = intermediate_level_basis
+        self.intermediate_level_method = intermediate_level_method
+        # allow legacy kwarg name from older configs
+        self.low_level_method = (
+            low_level_method
+            if low_level_method is not None
+            else kwargs.pop("low_level_force_field", None)
+        )
+        self.high_level_atoms = high_level_atoms
+        self.intermediate_level_atoms = intermediate_level_atoms
+        self.charge_total = charge_total
+        self.mult_total = mult_total
+        self.charge_intermediate = charge_intermediate
+        self.mult_intermediate = mult_intermediate
+        self.charge_high = charge_high
+        self.mult_high = mult_high
+        self.intermediate_level_solvation = intermediate_level_solvation
+        self.active_atoms = active_atoms
+        self.use_active_info_from_pbc = use_active_info_from_pbc
+        self.optregion_fixed_atoms = optregion_fixed_atoms
+        self.high_level_h_bond_length = high_level_h_bond_length
+        self.delete_la_double_counting = delete_la_double_counting
+        self.delete_la_bond_double_counting_atoms = (
+            delete_la_bond_double_counting_atoms
+        )
+        self.embedding_type = embedding_type
+        # Crystal QM/MM parameters
+        self.conv_charges = conv_charges
+        self.conv_charges_max_n_cycles = conv_charges_max_n_cycles
+        self.conv_charges_conv_thresh = conv_charges_conv_thresh
+        self.scale_formal_charge_mm_atom = scale_formal_charge_mm_atom
+        self.n_unit_cell_atoms = n_unit_cell_atoms  # For MOL-CRYSTAL-QMMM
+        # Ionic crystal QM/MM parameters
+        self.ecp_layer_ecp = ecp_layer_ecp
+        self.ecp_layer = ecp_layer
+        self.scale_formal_charge_ecp_atom = scale_formal_charge_ecp_atom
+
+        # Set parent class attributes from high-level (QM) region
+        self.functional = self.high_level_functional
+        self.basis = self.high_level_basis
+
+        # Set charge/multiplicity with fallback priority: high -> intermediate -> total
+        if self.charge_high is not None and self.mult_high is not None:
+            self.charge = self.charge_high
+            self.multiplicity = self.mult_high
+        elif (
+            self.charge_intermediate is not None
+            and self.mult_intermediate is not None
+        ):
+            # the charge/multiplicity of the intermediate system corresponds to the
+            # sum of the charge/multiplicity of the high level and low level regions
+            self.charge = self.charge_intermediate
+            self.multiplicity = self.mult_intermediate
+        elif self.charge_total is not None and self.mult_total is not None:
+            self.charge = self.charge_total
+            self.multiplicity = self.mult_total
+        else:
+            self.charge = None
+            self.multiplicity = None
+
+        # Validate intermediate-level parameters match job type
+        self._validate_intermediate_parameters()
+
+    def re_init_and_validate(self):
+        """Recompute derived fields and rerun validation after overrides."""
+        # Update inherited level-of-theory aliases
+        self.functional = self.high_level_functional
+        self.basis = self.high_level_basis
+
+        if self.charge_high is not None and self.mult_high is not None:
+            self.charge = self.charge_high
+            self.multiplicity = self.mult_high
+        elif (
+            self.charge_intermediate is not None
+            and self.mult_intermediate is not None
+        ):
+            self.charge = self.charge_intermediate
+            self.multiplicity = self.mult_intermediate
+        elif self.charge_total is not None and self.mult_total is not None:
+            self.charge = self.charge_total
+            self.multiplicity = self.mult_total
+        else:
+            self.charge = None
+            self.multiplicity = None
+
+        self._validate_intermediate_parameters()
+
+    def _validate_intermediate_parameters(self):
+        """
+        Validate that intermediate-level parameters are provided when needed and not provided when not needed.
+
+        Raises:
+            ValueError: If QM2 layer is required but intermediate parameters are missing,
+                       or if intermediate parameters are provided but QM2 layer is not required.
+        """
+        # Check if intermediate parameters are provided
+        has_intermediate_params = (
+            self.intermediate_level_functional is not None
+            and self.intermediate_level_basis is not None
+        ) or self.intermediate_level_method is not None
+        if has_intermediate_params:
+            if self.intermediate_level_atoms is None and self.low_level_method:
+                raise ValueError(
+                    "When intermediate-level theory is specified, the atoms "
+                    "in intermediate level layer must also be specified via "
+                    "intermediate_level_atoms."
+                )
+
+        # Job types that require QM2 (intermediate) layer
+        qm2_required_jobtypes = ["QM/QM2", "QM/QM2/MM"]
+
+        # Check if this job type requires QM2 layer
+        requires_qm2 = self.jobtype and self.jobtype.upper() in [
+            jt.upper() for jt in qm2_required_jobtypes
+        ]
+
+        if requires_qm2 and not has_intermediate_params:
+            raise ValueError(
+                f"Job type '{self.jobtype}' requires QM2 (intermediate) layer, but no intermediate-level "
+                f"parameters were provided. Please specify at least one of:\n"
+                f"  - intermediate_level_functional and intermediate_level_basis\n"
+                f"  - intermediate_level_method (e.g., 'XTB', 'HF-3C')\n"
+                f"  - intermediate_level_atoms\n"
+                f"  - charge_intermediate and mult_intermediate"
+            )
+
+        if not requires_qm2 and has_intermediate_params:
+            provided_params = []
+            if self.intermediate_level_functional is not None:
+                provided_params.append("intermediate_level_functional")
+            if self.intermediate_level_basis is not None:
+                provided_params.append("intermediate_level_basis")
+            if self.intermediate_level_method is not None:
+                provided_params.append("intermediate_level_method")
+            if self.intermediate_level_atoms is not None:
+                provided_params.append("intermediate_level_atoms")
+            if self.charge_intermediate is not None:
+                provided_params.append("charge_intermediate")
+            if self.mult_intermediate is not None:
+                provided_params.append("mult_intermediate")
+            if self.intermediate_level_solvation is not None:
+                provided_params.append("intermediate_level_solvation")
+
+            if self.low_level_method is not None:
+                raise ValueError(
+                    f"Job type '{self.jobtype}' does not require QM2 (intermediate) layer, but "
+                    f"intermediate-level parameters were provided: {', '.join(provided_params)}.\n"
+                    f"QM2 layer is only used in job types: {', '.join(qm2_required_jobtypes)}.\n"
+                    f"Either:\n"
+                    f"  - Change job type to 'QM/QM2' or 'QM/QM2/MM', OR\n"
+                    f"  - Remove the intermediate-level parameters"
+                )
+
+    @property
+    def qmmm_route_string(self):
+        return self._get_level_of_theory_string()
+
+    @property
+    def qmmm_block(self):
+        return self._write_qmmm_block()
+
+    def validate_and_assign_level(
+        self, functional, basis, built_in_method, level_name
+    ):
+        """
+        Validate and assign level of theory for high/intermediate/low-level layers.
+
+        Args:
+            functional: DFT functional
+            basis: Basis set
+            built_in_method: Built-in ORCA method (XTB, HF-3C, etc.)
+            level_name: Layer name (high_level, intermediate_level, low_level)
+
+        Returns:
+            str: Validated level of theory string
+
+        Raises:
+            ValueError: If incompatible options are specified
+        """
+        level_of_theory = ""
+        if functional and basis and built_in_method:
+            raise ValueError(
+                f"For {level_name} level: specify either functional/basis OR built-in method, not both!"
+            )
+        if built_in_method:
+            assert functional is None and basis is None, (
+                f"Built-in method specified for {level_name} level - "
+                f"functional and basis should not be provided!"
+            )
+            if (
+                level_name == "intermediate_level"
+                and built_in_method.upper()
+                in self.INTERMEDIATE_LEVEL_BUILT_IN_METHODS
+            ):
+                level_of_theory = built_in_method
+        elif functional and basis:
+            if level_name == "intermediate_level":
+                level_of_theory = "QM2"
+            else:
+                level_of_theory = f"{functional} {basis}"
+        if level_name == "low_level":
+            level_of_theory = "MM"
+        logger.debug(f"Level of theory for {level_name}: {level_of_theory}")
+        return level_of_theory
+
+    def check_crystal_qmmm(self):
+        """
+        Validate crystal QM/MM job settings.
+
+        Ensures required parameters are set for MOL-CRYSTAL-QMMM
+        and IONIC-CRYSTAL-QMMM calculations.
+
+        Raises:
+            AssertionError: If required parameters are missing or invalid
+        """
+        jobtype = self.job_type.upper()
+        if jobtype in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
+            assert (
+                self.mult_high is None
+                and self.mult_intermediate is None
+                and self.mult_total is None
+            ), f"Multiplicity should not be specified for {jobtype} job!"
+            self.multiplicity = 0  # avoid conflicts from parent class
+            if self.conv_charges is False:
+                assert (
+                    self.low_level_method is not None
+                ), "Force field file containing convergence charges is not provided!"
+            if jobtype == "MOL-CRYSTAL-QMMM":
+                assert (
+                    self.n_unit_cell_atoms
+                ), f"The number of atoms per molecular subunit for {jobtype} job is not provided!"
+            else:
+                assert (
+                    self.ecp_layer_ecp
+                ), f"cECPs used for the boundary region for {jobtype} job must be specified! "
+                assert (
+                    self.n_unit_cell_atoms is None
+                ), "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
+
+    def _get_level_of_theory_string(self):
+        """
+        Generate ORCA route string for QM/MM calculations.
+
+        Returns:
+            str: Route string (e.g., '!QM/XTB', '!QM/HF-3C/MM', '!QMMM')
+        """
+        if (
+            self.jobtype.upper() == "IONIC-CRYSTAL-QMMM"
+            or self.jobtype.upper() == "MOL-CRYSTAL-QMMM"
+        ):
+            level_of_theory = f"! {self.jobtype.upper()}"
+        else:
+            level_of_theory = "!"
+            parent_jobtype = self.parent_jobtype.lower()
+            if parent_jobtype in ("opt", "modred", "scan"):
+                level_of_theory += " Opt"
+            elif parent_jobtype == "ts":
+                level_of_theory += " OptTS"
+            elif parent_jobtype == "irc":
+                level_of_theory += " IRC"
+            elif parent_jobtype == "sp":
+                level_of_theory += ""
+            if self.freq is True:
+                level_of_theory += " Freq"
+            self.high_level_of_theory = self.validate_and_assign_level(
+                self.high_level_functional,
+                self.high_level_basis,
+                None,
+                level_name="high_level",
+            )
+            self.intermediate_level_of_theory = self.validate_and_assign_level(
+                self.intermediate_level_functional,
+                self.intermediate_level_basis,
+                self.intermediate_level_method,
+                level_name="intermediate_level",
+            )
+            self.low_level_of_theory = self.validate_and_assign_level(
+                None, None, self.low_level_method, level_name="low_level"
+            )
+            if self.low_level_of_theory is not None:
+                if self.jobtype.upper() == "QMMM":
+                    level_of_theory += " QMMM"  # Additive QM/MM
+                else:
+                    level_of_theory += " QM"
+                    # only "!QMMM" will be used for additive QMMM
+                    level_of_theory += f"/{self.intermediate_level_of_theory}"
+                    print(
+                        f"+++++++++++\n{self.intermediate_level_of_theory}\n+++++++++++"
+                    )
+                    if self.low_level_method is not None:
+                        level_of_theory += f"/{self.low_level_of_theory}"
+            level_of_theory += f" {self.high_level_of_theory}"
+            if self.solvent_model is not None:
+                level_of_theory += f" {self.solvent_model}"
+            self.intermediate_level_method = (
+                self.intermediate_level_method or ""
+            ).lower()
+            if self.intermediate_level_solvation:
+                if self.intermediate_level_solvation in [
+                    "alpb(water)",
+                    "ddcosmo(water)",
+                    "cpcmx(water)",
+                ]:
+                    assert self.intermediate_level_method.lower() == "xtb", (
+                        "The intermediate-level solvation models ALPB, DDCOSMO, CPCMX are only "
+                        "compatible with XTB method!"
+                    )
+                    level_of_theory += f" {self.intermediate_level_solvation}"
+                elif (
+                    self.intermediate_level_solvation.lower() == "cpcm(water)"
+                ):
+                    level_of_theory += f" {self.intermediate_level_solvation}"
+        return level_of_theory
+
+    def _get_h_bond_length(self):
+        """
+        Generate custom high-level-H bond length specifications.
+
+        Returns:
+            str: Bond length specifications for %qmmm block
+
+        Example output:
+            Dist_C_HLA 1.09
+            Dist_O_HLA 0.98
+            or
+            H_Dist_FileName "QM_H_dist.txt"
+        """
+        if isinstance(self.high_level_h_bond_length, dict):
+            h_bond_length = ""
+            for (
+                atom_pair,
+                bond_length,
+            ) in self.high_level_h_bond_length.items():
+                h_bond_length += (
+                    f"Dist_{atom_pair[0]}_{atom_pair[1]} {bond_length}\n"
+                )
+            return h_bond_length
+        elif isinstance(self.high_level_h_bond_length, str):
+            # if the user provided a file with the d0_X-H values
+            assert os.path.exists(
+                self.high_level_h_bond_length
+            ), f"File {self.high_level_h_bond_length} does not exist!"
+            return f'H_Dist_FileName "{self.high_level_h_bond_length}"'
+
+    def _get_embedding_type(self):
+        """
+        Generate embedding type specification for QM/MM calculations.
+
+        Returns:
+            str: Embedding directive (e.g., "Embedding Electronic")
+
+        Raises:
+            ValueError: If invalid embedding type specified
+        """
+        embedding_type = "Embedding "
+        if self.embedding_type.lower() == "electronic":
+            embedding_type += "Electronic"
+        elif self.embedding_type.lower() == "mechanical":
+            embedding_type += "Mechanical"
+        else:
+            raise ValueError(
+                f"Invalid embedding type: {self.embedding_type}. "
+                "Valid options are 'Electronic' or 'Mechanical'."
+            )
+        return embedding_type
+
+    def _get_charge_and_multiplicity(self):
+        """
+        Generate charge and multiplicity lines for %qmmm block.
+
+        Returns charge/multiplicity for total system (QM/MM) or intermediate system (QM/QM2/MM).
+        ORCA specifies total/intermediate charge/multiplicity in %qmmm block while
+        high-level charge/multiplicity are specified in the coordinate section.
+
+        Returns:
+            tuple: (charge_str, mult_str) for %qmmm block
+        """
+        if self.intermediate_level_atoms is not None:
+            charge = f"Charge_Intermediate {self.charge_intermediate}"
+            mult = f"Mult_Intermediate {self.mult_intermediate}"
+        else:
+            charge = f"Charge_Total {self.charge_total}"
+            mult = f"Mult_Total {self.mult_total}"
+        return charge, mult
+
+    def _get_partition_string(self):
+        """
+        Generate atom partition specifications for high-level and intermediate-level regions.
+
+        Returns:
+            str: Partition block with QMAtoms and QM2Atoms directives
+
+        Example:
+            QMAtoms {1:10 15:20} end
+            QM2Atoms {21:30} end
+        """
+
+        partition_string = ""
+        high_fmt = self._get_formatted_partition_strings(self.high_level_atoms)
+        if high_fmt is not None:
+            partition_string += f"QMAtoms {{{high_fmt}}} end\n"
+        intermediate_fmt = self._get_formatted_partition_strings(
+            self.intermediate_level_atoms
+        )
+        if intermediate_fmt is not None:
+            partition_string += f"QM2Atoms {{{intermediate_fmt}}} end\n"
+        return partition_string
+
+    def _get_formatted_partition_strings(self, atom_id):
+        """
+        Convert atom specifications to ORCA-formatted range strings.
+
+        Normalizes various atom specification formats to sorted unique integers
+        and compresses contiguous sequences into compact range notation.
+
+        Args:
+            atom_id: Atom specification (list/tuple of ints, string ranges, etc.)
+
+        Returns:
+            str: Formatted string with ranges and individual atoms
+
+        Examples:
+            Input: [1,2,3,5,7,8,9] → Output: "1:3 5 7:9"
+            Input: "1-15,37,39" → Output: "1:15 37 39"
+        """
+        if atom_id is None:
+            return None
+
+        # If it's already a sequence of integers (list/tuple), coerce to ints
+        if isinstance(atom_id, (list, tuple)):
+            atoms = [int(x) for x in atom_id]
+        elif isinstance(atom_id, str):
+            # Prefer robust utility if available
+            try:
+                atoms = get_list_from_string_range(atom_id)
+            except Exception:
+                # Fallback simple parser: split on commas/spaces, handle ranges like '1-5' or '1:5'
+                tokens = re.split(r"[,\s]+", atom_id.strip())
+                atoms = []
+                for tok in tokens:
+                    if not tok:
+                        continue
+                    if "-" in tok:
+                        a, b = tok.split("-", 1)
+                        atoms.extend(range(int(a), int(b) + 1))
+                    elif ":" in tok:
+                        a, b = tok.split(":", 1)
+                        atoms.extend(range(int(a), int(b) + 1))
+                    else:
+                        atoms.append(int(tok))
+        else:
+            # Try to iterate and coerce
+            try:
+                atoms = [int(x) for x in atom_id]
+            except Exception:
+                raise TypeError(
+                    "Unsupported atom specification type for partition string"
+                )
+
+        # make unique sorted list of ints
+        atoms = sorted(set(int(x) for x in atoms))
+        if not atoms:
+            return None
+
+        # Convert user-facing 1-indexed atom ids to ORCA's 0-indexed requirement
+        if min(atoms) > 0:
+            atoms = [a - 1 for a in atoms]
+
+        # compress contiguous sequences into start:end or single integer
+        ranges = []
+        start = prev = atoms[0]
+        for a in atoms[1:]:
+            if a == prev + 1:
+                prev = a
+                continue
+            # break in sequence
+            if start == prev:
+                ranges.append(str(start))
+            else:
+                ranges.append(f"{start}:{prev}")
+            start = prev = a
+        # finalize last segment
+        if start == prev:
+            ranges.append(str(start))
+        else:
+            ranges.append(f"{start}:{prev}")
+
+        return " ".join(ranges)
+
+    def _write_qmmm_block(self):
+        """
+        Generate complete %qmmm block for ORCA multiscale calculations.
+
+        Constructs the full %qmmm block containing all necessary parameters
+        for QM/MM calculations including atom partitions, charges, force fields,
+        embedding options, and crystal-specific parameters.
+
+        Returns:
+            str: Complete %qmmm block ready for ORCA input file
+
+        Example output:
+            %qmmm
+            QMAtoms {16:33 68:82} end
+            QM2Atoms {0:12 83:104} end
+            Charge_Medium 0
+            ORCAFFFilename "system.prms"
+            end
+        """
+        full_qm_block = "%qmmm\n"
+
+        # Add atom partition specifications
+        partition_block = self._get_partition_string()
+        if partition_block:
+            full_qm_block += partition_block
+
+        # Add charge/multiplicity for medium or total system
+        charge_str, mult_str = self._get_charge_and_multiplicity()
+        # Only include lines that do not contain the string 'None'
+        if charge_str and "None" not in str(charge_str):
+            full_qm_block += f"{charge_str}\n"
+        if mult_str and "None" not in str(mult_str):
+            full_qm_block += f"{mult_str}\n"
+
+        # Add intermediate-level solvation if specified
+        if self.intermediate_solv_scheme is not None:
+            full_qm_block += f"solv_scheme {self.intermediate_solv_scheme}\n"
+
+        # Add active atoms specification
+        active_fmt = self._get_formatted_partition_strings(self.active_atoms)
+        if active_fmt is not None:
+            full_qm_block += f"ActiveAtoms {{{active_fmt}}} end\n"
+
+        # Add intermediate-level method/basis specifications
+        if (
+            self.intermediate_level_method is not None
+            and self.intermediate_level_method.strip()
+        ):
+            # Only write QM2CustomFile if method is NOT in the built-in list
+            if (
+                self.intermediate_level_method.upper()
+                not in self.INTERMEDIATE_LEVEL_BUILT_IN_METHODS
+            ):
+                # intermediate-level method provided via external file
+                full_qm_block += (
+                    f'QM2CustomFile "{self.intermediate_level_method}" end\n'
+                )
+        else:
+            # If custom intermediate-level functional/basis provided, include them
+            if (
+                self.intermediate_level_functional is not None
+                and self.intermediate_level_functional.strip()
+            ):
+                full_qm_block += f'QM2CUSTOMMETHOD "{self.intermediate_level_functional}" end\n'
+            if (
+                self.intermediate_level_basis is not None
+                and self.intermediate_level_basis.strip()
+            ):
+                full_qm_block += (
+                    f'QM2CUSTOMBASIS "{self.intermediate_level_basis}" end\n'
+                )
+
+        # Add force field for specific job types
+        # assert (
+        #         self.low_level_force_field is not None
+        # ), f"Force field file missing for {self.jobtype} job!"
+        if self.jobtype and self.jobtype.upper() in [
+            "QMMM" "QM/MM",
+            "QM/QM2/MM",
+            "IONIC-CRYSTAL-QMMM",
+        ]:
+            assert (
+                self.low_level_method is not None
+            ), f"Force field file missing for {self.jobtype} job!"
+            full_qm_block += f'ORCAFFFilename "{self.low_level_method}"\n'
+
+        # Fixed atoms options
+        if self.use_active_info_from_pbc:
+            full_qm_block += "Use_Active_InfoFromPDB true\n"
+        elif self.optregion_fixed_atoms:
+            fixed_fmt = self._get_formatted_partition_strings(
+                self.optregion_fixed_atoms
+            )
+            if fixed_fmt is not None:
+                full_qm_block += f"OptRegion_FixedAtoms {{{fixed_fmt}}} end\n"
+
+        # Add custom H-bond lengths
+        if self.high_level_h_bond_length is not None:
+            h_block = self._get_h_bond_length()
+            if h_block:
+                # _get_h_bond_length may return a multi-line string
+                full_qm_block += (
+                    f"{h_block}\n" if not h_block.endswith("\n") else h_block
+                )
+
+        # Add double-counting removal options
+        if self.delete_la_double_counting is True:
+            full_qm_block += "Delete_LA_Double_Counting true\n"
+        if self.delete_la_bond_double_counting_atoms:
+            full_qm_block += "DeleteLABondDoubleCounting true\n"
+        if self.embedding_type is not None:
+            full_qm_block += f"{self._get_embedding_type()}\n"
+
+        # Add crystal QM/MM parameters if any
+        crystal_sub = self._write_crystal_qmmm_subblock()
+        if crystal_sub is not None:
+            full_qm_block += crystal_sub
+
+        full_qm_block += "end\n"
+        return full_qm_block
+
+    def _write_crystal_qmmm_subblock(self):
+        """
+        Generate crystal-specific parameters for %qmmm block.
+
+        Creates parameter block for MOL-CRYSTAL-QMMM and IONIC-CRYSTAL-QMMM
+        calculations including charge convergence, ECP settings, and scaling factors.
+
+        Returns:
+            str: Crystal QM/MM parameter block
+        """
+        crystal_qmmm_subblock = ""
+        if not self.conv_charges:
+            crystal_qmmm_subblock += "Conv_Charges False \n"
+            crystal_qmmm_subblock += (
+                f'ORCAFFFilename "{self.low_level_method}" \n'
+            )
+        if self.conv_charges_max_n_cycles is not None:
+            crystal_qmmm_subblock += (
+                f"Conv_Charges_MaxNCycles {self.conv_charges_max_n_cycles} \n"
+            )
+        if self.conv_charges_conv_thresh is not None:
+            crystal_qmmm_subblock += (
+                f"Conv_Charges_ConvThresh {self.conv_charges_conv_thresh} \n"
+            )
+        if self.scale_formal_charge_mm_atom is not None:
+            crystal_qmmm_subblock += f"Scale_FormalCharge_MMAtom {self.scale_formal_charge_mm_atom} \n"
+        if self.n_unit_cell_atoms is not None:
+            crystal_qmmm_subblock += (
+                f"NumUnitCellAtoms {self.n_unit_cell_atoms} \n"
+            )
+        if self.ecp_layer_ecp is not None:
+            crystal_qmmm_subblock += f"cECPs {self.ecp_layer_ecp} \n"
+        if self.ecp_layer is not None:
+            crystal_qmmm_subblock += f"ECPLayers {self.ecp_layer} \n"
+        if self.scale_formal_charge_ecp_atom is not None:
+            crystal_qmmm_subblock += f"Scale_FormalCharge_ECPAtom {self.scale_formal_charge_ecp_atom} \n"
+        return crystal_qmmm_subblock
+
+    def __eq__(self, other):
+        """
+        Compare two ORCAQMMMJobSettings objects for equality.
+
+        Compares all attributes between two ORCA QMMM settings objects, including the
+        QMMM-specific attributes that are not present in the parent class.
+
+        Args:
+            other (ORCAQMMMJobSettings): Settings object to compare with.
+
+        Returns:
+            bool or NotImplemented: True if equal, False if different,
+                NotImplemented if types don't match.
+        """
+        if type(self) is not type(other):
+            return NotImplemented
+
+        # Get dictionaries of both objects
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+
+        # Exclude append_additional_info from the comparison (inherited behavior)
+        self_dict.pop("append_additional_info", None)
+        other_dict.pop("append_additional_info", None)
+
+        return self_dict == other_dict
