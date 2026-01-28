@@ -10,7 +10,7 @@ from chemsmart.jobs.iterate.settings import IterateJobSettings
 
 
 def test_iterate_regression_workflow(
-    iterate_config_file,
+    iterate_regression_config_file,
     iterate_input_directory,
     iterate_expected_output_file,
     tmp_path,
@@ -27,14 +27,14 @@ def test_iterate_regression_workflow(
 
     try:
         # 1. Load and validate configuration
-        with open(iterate_config_file, "r") as f:
+        with open(iterate_regression_config_file, "r") as f:
             raw_config = yaml.safe_load(f)
 
-        config = validate_config(raw_config, iterate_config_file)
+        config = validate_config(raw_config, iterate_regression_config_file)
 
         # 2. Setup Job Settings
         job_settings = IterateJobSettings(
-            config_file=iterate_config_file, method="lagrange_multipliers"
+            config_file=iterate_regression_config_file, method="lagrange_multipliers"
         )
         job_settings.skeleton_list = config["skeletons"]
         job_settings.substituent_list = config["substituents"]
@@ -133,3 +133,71 @@ def test_iterate_regression_workflow(
     finally:
         # Restore CWD
         os.chdir(original_cwd)
+
+
+def test_iterate_timeout(
+    iterate_timeout_config_file,
+    iterate_input_directory,
+    tmp_path,
+    caplog,
+):
+    """
+    Test that the timeout mechanism works correctly.
+    We set a very short timeout (e.g. 0.001s) which should cause the worker to fail due to timeout.
+    """
+    import logging
+
+    # Change CWD to input directory for relative file paths
+    original_cwd = os.getcwd()
+    os.chdir(iterate_input_directory)
+
+    # Capture logs
+    caplog.set_level(logging.WARNING)
+
+    try:
+        # 1. Load Config
+        with open(iterate_timeout_config_file, "r") as f:
+            raw_config = yaml.safe_load(f)
+        config = validate_config(raw_config, iterate_timeout_config_file)
+
+        # 2. Setup Job with very short timeout
+        job_settings = IterateJobSettings(
+            config_file=iterate_timeout_config_file, method="lagrange_multipliers"
+        )
+        job_settings.skeleton_list = config["skeletons"]
+        job_settings.substituent_list = config["substituents"]
+
+        output_file = tmp_path / "timeout_output"
+
+        jobrunner = IterateJobRunner()
+        job = IterateJob(
+            settings=job_settings,
+            jobrunner=jobrunner,
+            nprocs=1, # Use 1 proc to ensure we hit it
+            timeout=0.00000001,  # Ultra short timeout
+            outputfile=str(output_file),
+        )
+
+        # 4. Run Job
+        # It should not raise an exception, but handle the timeout gracefully
+        job.run()
+
+        # 5. Verify results
+        # Check logs for timeout warning
+        # Expected log from runner.py: "Timeout ({timeout}s) for combination: {label}"
+        
+        # We need to construct the label to search for
+        # Carbene1_34_OTf_8
+        label = "Carbene1_34_OTf_8"
+        
+        found_timeout_log = False
+        for record in caplog.records:
+            if "Timeout" in record.message and label in record.message:
+                found_timeout_log = True
+                break
+        
+        assert found_timeout_log, f"Timeout warning log not found for the combination {label}. Logs: {[r.message for r in caplog.records]}"
+
+    finally:
+        os.chdir(original_cwd)
+

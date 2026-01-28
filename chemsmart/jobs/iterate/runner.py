@@ -236,18 +236,20 @@ class IterateJobRunner(JobRunner):
                 for comb in combinations
             }
 
-            # Use as_completed to process results as they finish
-            # This allows other tasks to continue even if one times out
-            for future in as_completed(future_to_comb, timeout=None):
+            # Iterate over futures directly to strictly enforce timeout.
+            # Unlike as_completed(), this ensures we don't hang if a task is stuck.
+            for future in future_to_comb:
                 comb = future_to_comb[future]
                 label = comb.label
 
                 try:
-                    # Get result with timeout for this specific future
+                    # Strict timeout check: raises TimeoutError if task exceeds limit
                     result = future.result(timeout=timeout)
+
                     results_dict[label] = result[
                         1
                     ]  # result is (label, molecule)
+
                     if result[1] is not None:
                         logger.info(f"Completed: {label}")
                     else:
@@ -255,6 +257,7 @@ class IterateJobRunner(JobRunner):
                             f"Failed to generate molecule for: {label}"
                         )
                         failed_labels.append(label)
+
                 except FuturesTimeoutError:
                     logger.warning(
                         f"Timeout ({timeout}s) for combination: {label}"
