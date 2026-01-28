@@ -63,10 +63,11 @@ def create_orca_qmmm_subcommand(parent_command):
         help="Built-in method for intermediate-level region",
     )
     @click.option(
-        "-lf",
-        "--low-level-force-field",
+        "-lm",
+        "--low-level-method",
+        "--low-level-force-field",  # legacy alias
         type=str,
-        help="Force field for low-level (MM) region",
+        help="Method/force field for low-level (MM) region",
     )
     @click.option(
         "-ha",
@@ -229,7 +230,7 @@ def create_orca_qmmm_subcommand(parent_command):
         intermediate_level_functional,
         intermediate_level_basis,
         intermediate_level_method,
-        low_level_force_field,
+        low_level_method,
         high_level_atoms,
         intermediate_level_atoms,
         charge_total,
@@ -328,8 +329,9 @@ def create_orca_qmmm_subcommand(parent_command):
             qmmm_settings.intermediate_level_basis = intermediate_level_basis
         if intermediate_level_method is not None:
             qmmm_settings.intermediate_level_method = intermediate_level_method
-        if low_level_force_field is not None:
-            qmmm_settings.low_level_force_field = low_level_force_field
+        if low_level_method is not None:
+            # accept both new and legacy flag
+            qmmm_settings.low_level_method = low_level_method
         if high_level_atoms is not None:
             qmmm_settings.high_level_atoms = high_level_atoms
         if intermediate_level_atoms is not None:

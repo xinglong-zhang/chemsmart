@@ -2676,12 +2676,12 @@ class TestORCAQMMMJobSettings:
         s = ORCAQMMMJobSettings()
         s.high_level_atoms = "1-15,37,39"
         out = s._get_partition_string()
-        assert out.strip() == "QMAtoms {1:15 37 39} end"
+        assert out.strip() == "QMAtoms {0:14 36 38} end"
 
         # list input should produce the same output
         s.high_level_atoms = [1, *range(2, 16), 37, 39]
         out2 = s._get_partition_string()
-        assert out2.strip() == "QMAtoms {1:15 37 39} end"
+        assert out2.strip() == "QMAtoms {0:14 36 38} end"
 
     def test_partition_string_qm_and_qm2(self):
         """When both high_level_atoms and medium_level_atoms provided, both lines should be returned."""
@@ -2693,8 +2693,8 @@ class TestORCAQMMMJobSettings:
         out = s._get_partition_string()
         # order: QMAtoms then QM2Atoms
         lines = [ln for ln in out.splitlines() if ln.strip()]
-        assert lines[0].strip() == "QMAtoms {1:3 5} end"
-        assert lines[1].strip() == "QM2Atoms {7:9 12} end"
+        assert lines[0].strip() == "QMAtoms {0:2 4} end"
+        assert lines[1].strip() == "QM2Atoms {6:8 11} end"
 
     def test_charge_and_multiplicity_population(self):
         """ORCAQMMMJobSettings should populate .charge and .multiplicity from intermediate or high fields."""

@@ -987,7 +987,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         intermediate_level_functional (str): DFT functional for intermediate-level (QM2) region
         intermediate_level_basis (str): Basis set for intermediate-level (QM2) region
         intermediate_level_method (str): Built-in method for intermediate-level (XTB, HF-3C, etc.)
-        low_level_force_field (str): Force field for low-level (MM) region
+        low_level_method (str): Method/force field for low-level (MM) region
         high_level_atoms (list): Atom indices for high-level (QM) region
         intermediate_level_atoms (list): Atom indices for intermediate-level (QM2) region
         charge_total (int): Total system charge
@@ -1034,7 +1034,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         intermediate_level_functional=None,
         intermediate_level_basis=None,
         intermediate_level_method=None,
-        low_level_force_field=None,  # level-of-theory for MM
+        low_level_method=None,  # level-of-theory for MM
         high_level_atoms=None,
         intermediate_level_atoms=None,
         charge_total=None,
@@ -1075,7 +1075,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             intermediate_level_functional: DFT functional for intermediate-level (QM2) region
             intermediate_level_basis: Basis set for intermediate-level (QM2) region
             intermediate_level_method: Built-in method for intermediate-level (XTB, HF-3C, PBEH-3C, etc.)
-            low_level_force_field: Force field for low-level (MM) region (MMFF, AMBER, CHARMM, etc.)
+            low_level_method: Method/force field for low-level (MM) region (MMFF, AMBER, CHARMM, etc.)
             high_level_atoms: Atom indices for high-level (QM) region
             intermediate_level_atoms: Atom indices for intermediate-level (QM2) region
             charge_total: Total system charge
@@ -1109,7 +1109,12 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         self.intermediate_level_functional = intermediate_level_functional
         self.intermediate_level_basis = intermediate_level_basis
         self.intermediate_level_method = intermediate_level_method
-        self.low_level_force_field = low_level_force_field
+        # allow legacy kwarg name from older configs
+        self.low_level_method = (
+            low_level_method
+            if low_level_method is not None
+            else kwargs.pop("low_level_force_field", None)
+        )
         self.high_level_atoms = high_level_atoms
         self.intermediate_level_atoms = intermediate_level_atoms
         self.charge_total = charge_total
@@ -1335,7 +1340,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             self.multiplicity = 0  # avoid conflicts from parent class
             if self.conv_charges is False:
                 assert (
-                    self.low_level_force_field is not None
+                    self.low_level_method is not None
                 ), "Force field file containing convergence charges is not provided!"
             if jobtype == "MOL-CRYSTAL-QMMM":
                 assert (
@@ -1388,7 +1393,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 )
             )
             self.low_level_level_of_theory = self.validate_and_assign_level(
-                None, None, self.low_level_force_field, level_name="low_level"
+                None, None, self.low_level_method, level_name="low_level"
             )
             # only "!QMMM" will be used for additive QMMM
             level_of_theory += f"/{self.intermediate_level_level_of_theory}"
@@ -1570,6 +1575,10 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if not atoms:
             return None
 
+        # Convert user-facing 1-indexed atom ids to ORCA's 0-indexed requirement
+        if min(atoms) > 0:
+            atoms = [a - 1 for a in atoms]
+
         # compress contiguous sequences into start:end or single integer
         ranges = []
         start = prev = atoms[0]
@@ -1673,9 +1682,9 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             "IONIC-CRYSTAL-QMMM",
         ]:
             assert (
-                self.low_level_force_field is not None
+                self.low_level_method is not None
             ), f"Force field file missing for {self.jobtype} job!"
-            full_qm_block += f'ORCAFFFilename "{self.low_level_force_field}"\n'
+            full_qm_block += f'ORCAFFFilename "{self.low_level_method}"\n'
 
         # Fixed atoms options
         if self.use_active_info_from_pbc:
@@ -1726,7 +1735,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if not self.conv_charges:
             crystal_qmmm_subblock += "Conv_Charges False \n"
             crystal_qmmm_subblock += (
-                f'ORCAFFFilename "{self.low_level_force_field}" \n'
+                f'ORCAFFFilename "{self.low_level_method}" \n'
             )
         if self.conv_charges_max_n_cycles is not None:
             crystal_qmmm_subblock += (
