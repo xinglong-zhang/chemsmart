@@ -21,6 +21,7 @@ ITERATE_TEMPLATE = """# Chemsmart Iterate Configuration Template
 # Optional Fields:
 #   - skeleton_indices: Atom indices to keep, format: "1, 3-10, 15" (1-based)
 #                       If not specified, all atoms except link_index are kept
+#                       IMPORTANT: If specified, link_index MUST be included in skeleton_indices, otherwise an error will occur.
 #
 # Note: Strings should be quoted. Arrays of tables [[name]] are used for lists.
 
