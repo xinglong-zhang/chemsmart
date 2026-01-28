@@ -51,11 +51,7 @@ Job Type and Theory Levels
       -  Type
       -  Description
 
-   -  -  ``-j, --jobtype``
-      -  Choice
-      -  ONIOM job type: sp, opt, freq, ts, irc
-
-   -  -  ``-hx, --high-level-functional``
+   -  -  ``-hf, --high-level-functional``
       -  string
       -  DFT functional for high layer (e.g., B3LYP, M06-2X, wB97X-D)
 
@@ -63,11 +59,11 @@ Job Type and Theory Levels
       -  string
       -  Basis set for high layer (e.g., 6-31G*, def2-TZVP, cc-pVTZ)
 
-   -  -  ``-hf, --high-level-force-field``
+   -  -  ``-hff, --high-level-force-field``
       -  string
-      -  Force field for high layer (if MM, rare)
+      -  Force field for high layer (if MM, uncommon)
 
-   -  -  ``-mx, --medium-level-functional``
+   -  -  ``-mf, --medium-level-functional``
       -  string
       -  DFT functional for medium layer
 
@@ -75,11 +71,11 @@ Job Type and Theory Levels
       -  string
       -  Basis set for medium layer
 
-   -  -  ``-mf, --medium-level-force-field``
+   -  -  ``-mff, --medium-level-force-field``
       -  string
       -  Force field for medium layer
 
-   -  -  ``-lx, --low-level-functional``
+   -  -  ``-lf, --low-level-functional``
       -  string
       -  DFT functional for low layer (if QM, uncommon)
 
@@ -87,7 +83,7 @@ Job Type and Theory Levels
       -  string
       -  Basis set for low layer (if QM, uncommon)
 
-   -  -  ``-lf, --low-level-force-field``
+   -  -  ``-lff, --low-level-force-field``
       -  string
       -  Force field for low layer (AMBER=HardFirst, UFF, DREIDING)
 
@@ -114,11 +110,11 @@ Atom Partitioning
       -  string
       -  Atom indices for low layer (usually auto-assigned)
 
-   -  -  ``-b, --bonded-atoms``
+   -  -  ``-ba, --bonded-atoms``
       -  string
       -  Bonds crossing layer boundaries: e.g., '(1,2),(5,6)'
 
-   -  -  ``-s, --scale-factors``
+   -  -  ``-sf, --scale-factors``
       -  dict
       -  Custom link atom scale factors: {(atom1,atom2): [low,med,high]}
 
@@ -133,23 +129,23 @@ Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``-cr, --real-charge``
+   -  -  ``-rc, --real-charge``
       -  int
       -  Charge of complete molecular system
 
-   -  -  ``-mr, --real-multiplicity``
+   -  -  ``-rm, --real-multiplicity``
       -  int
       -  Spin multiplicity of complete system (2S+1)
 
-   -  -  ``-ci, --int-charge``
+   -  -  ``-ic, --int-charge``
       -  int
       -  Charge of high+medium layers (3-layer only)
 
-   -  -  ``-mi, --int-multiplicity``
+   -  -  ``-im, --int-multiplicity``
       -  int
       -  Multiplicity of high+medium layers
 
-   -  -  ``-cm, --model-charge``
+   -  -  ``-mc, --model-charge``
       -  int
       -  Charge of high layer only
 
@@ -168,7 +164,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb qmmm -j opt -hx B3LYP -hb 6-31G* -lf AMBER=HardFirst -ha 1-25 -cr 0 -mr 1 -cm 0 -mm 1 -b "(25,26)"
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -rc 0 -rm 1 -mc 0 -mm 1 -ba "(25,26)"
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -177,7 +173,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz qmmm -j freq -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lf UFF -ha 1-10 -ma 11-50 -cr -1 -mr 2 -ci 0 -mi 1 -cm 0 -mm 1 -b "(10,11),(50,51)"
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz freq qmmm -hf M06-2X -hb def2-TZVP -mf B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -rc -1 -rm 2 -ic 0 -im 1 -mc 0 -mm 1 -ba "(10,11),(50,51)"
 
 Transition State Search
 =======================
@@ -186,7 +182,7 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com qmmm -j ts -hx wB97X-D -hb 6-311++G(d,p) -lf AMBER=HardFirst -ha 1-30 -cr 0 -mr 1 -cm 0 -mm 1 -b "(30,31)" -s "{(30,31): [0.709, 0.709, 0.709]}"
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hf wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -rc 0 -rm 1 -mc 0 -mm 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
 
 Frequency Analysis
 ==================
@@ -195,7 +191,7 @@ Vibrational analysis of QM/MM optimized structure:
 
 .. code:: console
 
-   chemsmart sub gaussian -p freq_qmmm -f optimized.com qmmm -j freq -hx B3LYP -hb 6-31G* -lf AMBER=HardFirst -ha 1-20 -cr 0 -mr 1 -cm 0 -mm 1
+   chemsmart sub gaussian -p freq_qmmm -f optimized.com freq qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -rc 0 -rm 1 -mc 0 -mm 1
 
 Single Point Energy
 ===================
@@ -204,7 +200,7 @@ High-accuracy single point calculation on QM/MM geometry:
 
 .. code:: console
 
-   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz qmmm -j sp -hx CCSD(T) -hb aug-cc-pVDZ -lf AMBER=HardFirst -ha 1-15 -cr 0 -mr 1 -cm 0 -mm 1
+   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hf CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -rc 0 -rm 1 -mc 0 -mm 1
 
 ***********************************
  GaussianQMMMJobSettings Reference

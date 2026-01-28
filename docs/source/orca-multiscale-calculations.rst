@@ -88,11 +88,11 @@ Job Type and Theory Level
       -  string
       -  Basis set for high-level (QM) region (e.g., def2-SVP, def2-TZVP)
 
-   -  -  ``-intx, --intermediate-level-functional``
+   -  -  ``-ix, --intermediate-level-functional``
       -  string
       -  DFT functional for intermediate-level (QM2) region
 
-   -  -  ``-intb, --intermediate-level-basis``
+   -  -  ``-ib, --intermediate-level-basis``
       -  string
       -  Basis set for intermediate-level (QM2) region
 
@@ -119,7 +119,7 @@ Atom Partitioning
       -  string
       -  High-level (QM) atom indices (e.g., '1-15,20' or '1:15 20')
 
-   -  -  ``-inta, --intermediate-level-atoms``
+   -  -  ``-ia, --intermediate-level-atoms``
       -  string
       -  Intermediate-level (QM2) atom indices (e.g., '16-30')
 
@@ -146,11 +146,11 @@ Charge and Multiplicity
       -  string
       -  High-level (QM) region multiplicity
 
-   -  -  ``-mi, --charge-intermediate``
+   -  -  ``-ci, --charge-intermediate``
       -  int
       -  Intermediate layer charge (for QM/QM2/MM)
 
-   -  -  ``-minti, --mult-intermediate``
+   -  -  ``-mi, --mult-intermediate``
       -  string
       -  Intermediate layer multiplicity
 
@@ -284,10 +284,10 @@ Two-layer ONIOM calculation with DFT for high level and semi-empirical for inter
    chemsmart sub orca -p enzyme_oniom -f enzyme.xyz qmmm \
      -j QM/QM2 \
      -hx B3LYP -hb def2-TZVP \
-     -intx HF -intb STO-3G \
-     -ha 1-15 -inta 16-50 \
+     -ix HF -ib STO-3G \
+     -ha 1-15 -ia 16-50 \
      -ch 0 -mh 1 \
-     -mi 0 -minti 1
+     -ci 0 -mi 1
 
 Three-Layer QM/QM2/MM ONIOM
 ===========================
@@ -301,9 +301,9 @@ Three-layer ONIOM with DFT, XTB, and MM:
      -hx B3LYP -hb def2-SVP \
      -im XTB \
      -lf amber99 \
-     -ha 1-10 -inta 11-30 \
+     -ha 1-10 -ia 11-30 \
      -ch 0 -mh 1 \
-     -mi 0 -minti 1 \
+     -ci 0 -mi 1 \
      -ct 0 -mt 1
 
 Crystal QM/MM for Molecular Crystals
@@ -539,11 +539,11 @@ Updated CLI options after refactoring from "medium" to "intermediate" naming:
       -  ``--high-level-atoms``
       -  High-level atom indices
 
-   -  -  ``-intx``
+   -  -  ``-ix``
       -  ``--intermediate-level-functional``
       -  Intermediate (QM2) functional
 
-   -  -  ``-intb``
+   -  -  ``-ib``
       -  ``--intermediate-level-basis``
       -  Intermediate (QM2) basis set
 
@@ -551,15 +551,15 @@ Updated CLI options after refactoring from "medium" to "intermediate" naming:
       -  ``--intermediate-level-method``
       -  Intermediate built-in method
 
-   -  -  ``-inta``
+   -  -  ``-ia``
       -  ``--intermediate-level-atoms``
       -  Intermediate atom indices
 
-   -  -  ``-mi``
+   -  -  ``-ci``
       -  ``--charge-intermediate``
       -  Intermediate charge
 
-   -  -  ``-minti``
+   -  -  ``-mi``
       -  ``--mult-intermediate``
       -  Intermediate multiplicity
 
@@ -572,7 +572,8 @@ Naming Update Summary
 
 **Old → New:** The "medium" terminology has been updated to "intermediate" throughout:
 
--  CLI options: ``-mx`` → ``-intx``, ``-mm`` → ``-im``, ``-cm`` → ``-mi``
+-  CLI options now use ``-ix/-ib/-im/-ia/-ci/-mi`` for intermediate functionals, bases, methods, atoms, charge, and
+   multiplicity.
 -  YAML parameters: ``medium_level_*`` → ``intermediate_level_*``
 -  Settings attributes: ``charge_medium`` → ``charge_intermediate``
 
