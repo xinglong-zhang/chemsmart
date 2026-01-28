@@ -1448,7 +1448,7 @@ class TestQMMMinMolecule:
         written_input = os.path.join(tmpdir, "tmp.xyz")
         methyl_3_hexane.write(written_input, format="xyz", xyz_only=False)
         assert cmp_with_ignore(
-            written_input, qmmm_written_xyz_file, ignore_string="tmp"
+            written_input, qmmm_written_xyz_only_file, ignore_string="tmp"
         )  # writes input file as expected
 
         written_input2 = os.path.join(tmpdir, "tmp_xyz_only.xyz")
