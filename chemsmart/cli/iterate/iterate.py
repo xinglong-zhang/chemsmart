@@ -23,16 +23,12 @@ logger = logging.getLogger(__name__)
 ALLOWED_TOP_LEVEL_KEYS = {"skeletons", "substituents"}
 ALLOWED_SKELETON_KEYS = {
     "file_path",
-    "smiles",
-    "pubchem",
     "label",
     "link_index",
     "skeleton_indices",
 }
 ALLOWED_SUBSTITUENT_KEYS = {
     "file_path",
-    "smiles",
-    "pubchem",
     "label",
     "link_index",
 }
@@ -433,7 +429,7 @@ def _validate_business_logic(skeletons: list, substituents: list, filename: str)
     """
     _validate_skeletons_logic(skeletons, filename)
 
-    # _validate_substituents_logic(substituents, filename)
+    _validate_substituents_logic(substituents, filename)
 
 
 def _validate_skeletons_logic(skeletons: list, filename: str):
@@ -450,6 +446,21 @@ def _validate_single_skeleton_rules(entry: dict, idx: int, filename: str):
     """
     # Rule 1: Check if link_index is included in skeleton_indices
     _rule_skeleton_indices_must_contain_link(entry, idx, filename)
+
+    # Rule 2: file_path is required
+    _rule_file_path_required(entry, idx, filename)
+
+
+def _rule_file_path_required(entry: dict, idx: int, filename: str):
+    """
+    Rule: file_path must be provided and not empty.
+    """
+    if not entry.get("file_path"):
+        raise click.BadParameter(
+            f"Skeleton entry {idx + 1} (label='{entry.get('label', 'unnamed')}'): "
+            f"Missing required field 'file_path'.",
+            param_hint=filename,
+        )
 
 
 def _rule_skeleton_indices_must_contain_link(entry: dict, idx: int, filename: str):
@@ -470,6 +481,27 @@ def _rule_skeleton_indices_must_contain_link(entry: dict, idx: int, filename: st
                 f"When 'skeleton_indices' is specified, it must contain the link atom.",
                 param_hint=filename,
             )
+
+
+def _validate_substituents_logic(substituents: list, filename: str):
+    """
+    Validate business rules for all substituent entries.
+    """
+    for idx, entry in enumerate(substituents):
+        _validate_single_substituent_rules(entry, idx, filename)
+
+
+def _validate_single_substituent_rules(entry: dict, idx: int, filename: str):
+    """
+    Collection of all business rules for a single substituent.
+    """
+    # Rule 1: file_path is required
+    if not entry.get("file_path"):
+        raise click.BadParameter(
+            f"Substituent entry {idx + 1} (label='{entry.get('label', 'unnamed')}'): "
+            f"Missing required field 'file_path'.",
+            param_hint=filename,
+        )
 
 
 def _validate_skeleton_entry(entry: dict, idx: int, filename: str) -> dict:

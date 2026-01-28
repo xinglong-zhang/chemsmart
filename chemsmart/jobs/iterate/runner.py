@@ -318,7 +318,7 @@ class IterateJobRunner(JobRunner):
         Parameters
         ----------
         mol_config : dict
-            Configuration containing file_path, smiles, or pubchem
+            Configuration containing file_path
         mol_type : str
             "skeleton" or "substituent" for logging
         idx : int
@@ -331,8 +331,6 @@ class IterateJobRunner(JobRunner):
         """
         label = mol_config.get("label") or f"{mol_type}{idx + 1}"
         file_path = mol_config.get("file_path")
-        smiles = mol_config.get("smiles")
-        pubchem = mol_config.get("pubchem")
 
         try:
             if file_path:
@@ -340,20 +338,10 @@ class IterateJobRunner(JobRunner):
                 logger.debug(
                     f"Loaded {mol_type} '{label}' from file: {file_path}"
                 )
-            elif smiles:
-                molecule = Molecule.from_smiles(smiles)
-                logger.debug(
-                    f"Loaded {mol_type} '{label}' from SMILES: {smiles}"
-                )
-            elif pubchem:
-                molecule = Molecule.from_pubchem(pubchem)
-                logger.debug(
-                    f"Loaded {mol_type} '{label}' from PubChem: {pubchem}"
-                )
             else:
                 logger.warning(
                     f"{mol_type.capitalize()} '{label}' has no valid source "
-                    f"(file_path, smiles, or pubchem), skipping."
+                    f"(file_path), skipping."
                 )
                 return None, label
             return molecule, label

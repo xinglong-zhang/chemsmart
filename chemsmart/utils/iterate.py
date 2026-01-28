@@ -9,10 +9,8 @@ ITERATE_TEMPLATE = """# Chemsmart Iterate Configuration Template
 # =========================================
 # This template defines skeletons and substituents for iterative structure generation.
 #
-# Structure Sources (mutually exclusive - use only one per entry):
+# Structure Sources:
 #   - file_path: Path to molecular structure file (.xyz, .com, .log, .sdf, etc.)
-#   - smiles: SMILES string for the molecule
-#   - pubchem: PubChem identifier (CID, name, or SMILES)
 #
 # Required Fields:
 #   - label: Unique identifier for this structure
@@ -33,23 +31,14 @@ ITERATE_TEMPLATE = """# Chemsmart Iterate Configuration Template
 # Example 1: Skeleton from file
 [[skeletons]]
 file_path = "/path/to/skeleton1.xyz"
-# smiles = ""
-# pubchem = ""
 label = "benzene_core"
 link_index = "6,7,8"
 skeleton_indices = "1-5"
 
-# Example 2: Skeleton from SMILES
-[[skeletons]]
-# file_path = ""
-smiles = "c1ccccc1"
-# pubchem = ""
-label = "phenyl_ring"
-link_index = "1"
-# skeleton_indices = ""
-
-# Add more skeletons as needed...
+# Example 2: Another skeleton
 # [[skeletons]]
+# file_path = "..."
+# label = "..."
 # ...
 
 
@@ -61,25 +50,7 @@ link_index = "1"
 # Example 1: Substituent from file
 [[substituents]]
 file_path = "/path/to/methyl.xyz"
-# smiles = ""
-# pubchem = ""
 label = "methyl"
-link_index = "1"
-
-# Example 2: Substituent from SMILES
-[[substituents]]
-# file_path = ""
-smiles = "C"
-# pubchem = ""
-label = "CH3"
-link_index = "1"
-
-# Example 3: Substituent from PubChem
-[[substituents]]
-# file_path = ""
-# smiles = ""
-pubchem = "methane"
-label = "methyl_pubchem"
 link_index = "1"
 
 # Add more substituents as needed...
@@ -95,7 +66,6 @@ link_index = "1"
 # 3. For skeletons, the atom at link_index is typically replaced/removed
 # 4. For substituents, the atom at link_index bonds to the skeleton
 # 5. skeleton_indices format: "1, 3-10, 15, 20-25" (ranges and individual indices)
-# 6. Only one source (file_path, smiles, pubchem) should be non-null per entry
 """
 
 

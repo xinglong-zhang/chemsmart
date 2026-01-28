@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pytest
 import tomlkit
 
 from chemsmart.cli.iterate.iterate import validate_config
@@ -232,8 +233,8 @@ def test_iterate_template_generation(tmp_path, iterate_template_file):
     parsed = tomlkit.parse(generated_content)
     assert "skeletons" in parsed
     assert "substituents" in parsed
-    assert len(parsed["skeletons"]) == 2  # Based on current template examples
-    assert len(parsed["substituents"]) == 3
+    assert len(parsed["skeletons"]) == 1  # Based on current template examples
+    assert len(parsed["substituents"]) == 1
 
 
 def test_iterate_validation_fails_on_invalid_link_index(
@@ -260,5 +261,109 @@ def test_iterate_validation_fails_on_invalid_link_index(
     assert (
         "The link_index [6] is not included in 'skeleton_indices'" in result.output
     )
+
+
+def test_iterate_validation_failures_comprehensive(tmp_path):
+    """
+    Test various validation failure scenarios using dynamically generated configs.
+    Covers missing required fields and forbidden keys.
+    """
+    from click.testing import CliRunner
+
+    from chemsmart.cli.iterate.iterate import iterate
+
+    test_cases = [
+        # Case 1: Skeleton missing file_path
+        (
+            """
+            [[skeletons]]
+            label = "s1"
+            link_index = "1"
+            [[substituents]]
+            file_path = "sub.xyz"
+            label = "sub1"
+            link_index = "1"
+            """,
+            ["Missing required field 'file_path'", "Skeleton entry 1"],
+            "Skeleton missing file_path",
+        ),
+        # Case 2: Substituent missing file_path
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            [[substituents]]
+            label = "sub1"
+            link_index = "1"
+            """,
+            ["Missing required field 'file_path'", "Substituent entry 1"],
+            "Substituent missing file_path",
+        ),
+        # Case 3: Skeleton has forbidden key 'smiles'
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            smiles = "C"
+            [[substituents]]
+            file_path = "sub.xyz"
+            label = "sub1"
+            link_index = "1"
+            """,
+            ["Unknown key(s) in skeleton entry 1", "{'smiles'}"],
+            "Skeleton forbidden key smiles",
+        ),
+        # Case 4: Substituent has forbidden key 'pubchem'
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            [[substituents]]
+            file_path = "sub.xyz"
+            label = "sub1"
+            link_index = "1"
+            pubchem = "100"
+            """,
+            ["Unknown key(s) in substituent entry 1", "{'pubchem'}"],
+            "Substituent forbidden key pubchem",
+        ),
+        # Case 5: Random garbage key
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            random_key = "garbage"
+            """,
+            ["Unknown key(s) in skeleton entry 1", "{'random_key'}"],
+            "Skeleton random garbage key",
+        ),
+    ]
+
+    runner = CliRunner()
+
+    for idx, (config_content, expected_fragments, case_name) in enumerate(test_cases):
+        config_file = tmp_path / f"test_config_{idx}.toml"
+        with open(config_file, "w") as f:
+            f.write(config_content)
+
+        result = runner.invoke(iterate, ["-f", str(config_file)], obj={})
+
+        assert result.exit_code != 0, f"Case '{case_name}' failed to raise error"
+        assert (
+            "Invalid value" in result.output
+        ), f"Case '{case_name}' missing generic invalid value message"
+        for fragment in expected_fragments:
+            assert fragment in result.output, (
+                f"Case '{case_name}' failed. "
+                f"Expected fragment '{fragment}' not found in output:\n{result.output}"
+            )
 
 
