@@ -29,7 +29,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     subcommand for QM/MM optimization jobs.
 
     Examples:
-        chemsmart sub gaussian opt              # Regular optimization
+        chemsmart sub gaussian opt              # Regular DFT optimization
         chemsmart sub gaussian opt qmmm         # QM/MM optimization
     """
 
@@ -49,9 +49,6 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     # merge project opt settings with job settings from cli keywords from
     # cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
-
-    if ctx.invoked_subcommand is not None:
-        return
 
     check_charge_and_multiplicity(opt_settings)
 
@@ -83,6 +80,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     ctx.obj["parent_freeze_atoms"] = freeze_atoms
     ctx.obj["parent_kwargs"] = kwargs
     ctx.obj["parent_settings"] = opt_settings
+    ctx.obj["parent_jobtype"] = "opt"
 
     # If no subcommand invoked, run regular optimization
     if ctx.invoked_subcommand is None:

@@ -223,6 +223,7 @@ def create_qmmm_subcommand(parent_command):
         freeze_atoms = ctx.obj.get("parent_freeze_atoms", None)
         parent_kwargs = ctx.obj.get("parent_kwargs", {})
         parent_settings = ctx.obj.get("parent_settings", None)
+        parent_jobtype = ctx.obj.get("parent_jobtype", None)
 
         # Build QMMM settings in proper order:
         # 1. Start with project QMMM settings (from YAML)
@@ -371,6 +372,25 @@ def create_qmmm_subcommand(parent_command):
             molecule.bonded_atoms = ast.literal_eval(bonded_atoms)
         if scale_factors is not None:
             molecule.scale_factors = ast.literal_eval(scale_factors)
+
+        if parent_settings is not None:
+            inherited_keywords = [
+                "modred",
+                "custom_solvent",
+                "append_additional_info",
+                "additional_route_parameters",
+            ]
+            try:
+                qmmm_settings = qmmm_settings.merge(
+                    parent_settings, keywords=inherited_keywords
+                )
+            except Exception as exc:
+                logger.debug(
+                    "Failed to merge parent settings into QMMM: %s", exc
+                )
+
+        if parent_jobtype is not None:
+            qmmm_settings.parent_jobtype = parent_jobtype
 
         logger.info(f"QMMM job settings: {qmmm_settings.__dict__}")
 

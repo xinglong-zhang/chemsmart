@@ -48,7 +48,7 @@ def scan(
     subcommand for QM/MM scan calculations.
 
     Examples:
-        chemsmart sub gaussian scan              # Regular scan
+        chemsmart sub gaussian scan              # Regular DFT scan
         chemsmart sub gaussian scan qmmm         # QM/MM scan
     """
 
@@ -74,11 +74,6 @@ def scan(
     # cli.gaussian.py subcommands
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
 
-    if ctx.invoked_subcommand is not None:
-        return
-
-    check_charge_and_multiplicity(scan_settings)
-
     if constrained_coordinates is not None:
         constrained_coordinates_info = ast.literal_eval(
             constrained_coordinates
@@ -101,9 +96,11 @@ def scan(
     ctx.obj["parent_freeze_atoms"] = None  # scan doesn't have freeze_atoms
     ctx.obj["parent_kwargs"] = kwargs
     ctx.obj["parent_settings"] = scan_settings
+    ctx.obj["parent_jobtype"] = jobtype
 
     # If no subcommand invoked, run regular scan
     if ctx.invoked_subcommand is None:
+        check_charge_and_multiplicity(scan_settings)
         from chemsmart.jobs.gaussian.scan import GaussianScanJob
 
         return GaussianScanJob(

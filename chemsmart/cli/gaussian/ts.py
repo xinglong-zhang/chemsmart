@@ -27,7 +27,7 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
     subcommand for QM/MM TS calculations.
 
     Examples:
-        chemsmart sub gaussian ts              # Regular TS search
+        chemsmart sub gaussian ts              # Regular DFT TS search
         chemsmart sub gaussian ts qmmm         # QM/MM TS search
     """
 
@@ -46,6 +46,12 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
     # merge project opt settings with job settings from cli keywords from
     # cli.gaussian.py subcommands
     ts_settings = ts_settings.merge(job_settings, keywords=keywords)
+    # Store parent context for potential qmmm subcommand
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_freeze_atoms"] = freeze_atoms
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = ts_settings
+    ctx.obj["parent_jobtype"] = "ts"
 
     if ctx.invoked_subcommand is not None:
         return
@@ -75,24 +81,71 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
 
     logger.info(f"TS job settings from project: {ts_settings.__dict__}")
 
-    # Store parent context for potential qmmm subcommand
-    ctx.obj["parent_skip_completed"] = skip_completed
-    ctx.obj["parent_freeze_atoms"] = freeze_atoms
-    ctx.obj["parent_kwargs"] = kwargs
-    ctx.obj["parent_settings"] = ts_settings
-
-    # If no subcommand invoked, run regular TS search
+    # If no subcommand invoked, run regular DFT TS search
     if ctx.invoked_subcommand is None:
         from chemsmart.jobs.gaussian.ts import GaussianTSJob
 
-        return GaussianTSJob(
-            molecule=molecule,
-            settings=ts_settings,
-            label=label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
-        )
+        # Get the original molecule indices from context
+        molecule_indices = ctx.obj["molecule_indices"]
+
+        # Handle multiple molecules: create one job per molecule
+        if len(molecules) > 1 and molecule_indices is not None:
+            logger.info(f"Creating {len(molecules)} TS jobs")
+            jobs = []
+            for molecule, idx in zip(molecules, molecule_indices):
+                # Create a copy to avoid side effects from mutation
+                molecule = molecule.copy()
+                molecule_label = f"{label}_idx{idx}"
+                logger.info(
+                    f"Running TS search for molecule {idx}: {molecule} with label {molecule_label}"
+                )
+
+                # Apply frozen atoms if specified
+                if freeze_atoms is not None:
+                    frozen_atoms_list = get_list_from_string_range(
+                        freeze_atoms
+                    )
+                    logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+                    molecule.frozen_atoms = (
+                        convert_list_to_gaussian_frozen_list(
+                            frozen_atoms_list, molecule
+                        )
+                    )
+                else:
+                    logger.debug("No atoms will be frozen during TS search")
+
+                job = GaussianTSJob(
+                    molecule=molecule,
+                    settings=ts_settings,
+                    label=molecule_label,
+                    jobrunner=jobrunner,
+                    skip_completed=skip_completed,
+                    **kwargs,
+                )
+                jobs.append(job)
+            return jobs
+        else:
+            # Single molecule case
+            molecule = molecules[-1]
+            molecule = molecule.copy()
+
+            if freeze_atoms is not None:
+                frozen_atoms_list = get_list_from_string_range(freeze_atoms)
+                logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+                molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
+                    frozen_atoms_list, molecule
+                )
+            else:
+                logger.debug("No atoms will be frozen during TS search")
+
+            return GaussianTSJob(
+                molecule=molecule,
+                settings=ts_settings,
+                label=label,
+                jobrunner=jobrunner,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
 
 
 create_qmmm_subcommand(ts)

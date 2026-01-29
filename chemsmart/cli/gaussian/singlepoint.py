@@ -33,7 +33,7 @@ def sp(
     subcommand for QM/MM single point calculations.
 
     Examples:
-        chemsmart sub gaussian sp              # Regular single point
+        chemsmart sub gaussian sp              # Regular DFT single point
         chemsmart sub gaussian sp qmmm         # QM/MM single point
     """
 
@@ -53,11 +53,6 @@ def sp(
     # merge project settings with job settings from cli keywords from
     # cli.gaussian.py subcommands
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
-
-    if ctx.invoked_subcommand is not None:
-        return
-
-    check_charge_and_multiplicity(sp_settings)
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -106,9 +101,11 @@ def sp(
     ctx.obj["parent_freeze_atoms"] = None  # sp doesn't have freeze_atoms
     ctx.obj["parent_kwargs"] = kwargs
     ctx.obj["parent_settings"] = sp_settings
+    ctx.obj["parent_jobtype"] = "sp"
 
     # If no subcommand invoked, run regular single point
     if ctx.invoked_subcommand is None:
+        check_charge_and_multiplicity(sp_settings)
         from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
         return GaussianSinglePointJob(

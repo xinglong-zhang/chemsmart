@@ -29,4 +29,3 @@ __all__ = [
     "sp",
     "ts",
 ]
-__all__ = ["inp", "irc", "modred", "opt", "orca", "scan", "sp", "ts"]
