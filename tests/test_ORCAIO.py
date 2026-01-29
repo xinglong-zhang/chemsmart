@@ -211,7 +211,7 @@ class TestORCAInput:
         ):
             orca_inp.solvent_id
 
-    def test_orca_input_with_xyz_files_specified(
+    def test_orca_neb_input_with_xyz_files_specified(
         self,
         tmpdir,
         orca_input_nebts_file,
@@ -246,7 +246,7 @@ class TestORCAInput:
         assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
 
         orca_inp = ORCAInput(filename=orca_input_nebts_file)
-        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.route_string == "! gfn2-xtb neb-ts freq".lower()
         assert orca_inp.functional is None
         assert orca_inp.basis is None
         assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified
