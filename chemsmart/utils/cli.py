@@ -43,6 +43,16 @@ def _add_subcommand_info_to_ctx(ctx):
     Args:
         ctx (Context): Click context object containing command information.
     """
+    # Ensure ctx.obj is a mutable mapping (dict) so callers like MyGroup
+    # and MyCommand can safely append subcommand metadata even when the
+    # group's callback has not yet executed (ctx.obj may be None).
+    try:
+        ctx.ensure_object(dict)
+    except Exception:
+        # fallback for contexts that may not implement ensure_object
+        if ctx.obj is None:
+            ctx.obj = {}
+
     if "subcommand" not in ctx.obj:
         ctx.obj["subcommand"] = []
 
@@ -405,6 +415,8 @@ def get_setting_from_jobtype_for_gaussian(
         settings = project_settings.wbi_settings()
     elif jobtype.lower() == "nci":
         settings = project_settings.nci_settings()
+    elif jobtype.lower() == "qmmm":
+        settings = project_settings.qmmm_settings()
     elif jobtype.lower() == "neb":
         settings = project_settings.neb_settings()
 
@@ -562,6 +574,8 @@ def get_setting_from_jobtype_for_orca(
         settings = project_settings.wbi_settings()
     elif jobtype.lower() == "nci":
         settings = project_settings.nci_settings()
+    elif jobtype.lower() == "qmmm":
+        settings = project_settings.qmmm_settings()
     elif jobtype.lower() == "neb":
         settings = project_settings.neb_settings()
 
@@ -706,4 +720,28 @@ def update_irc_label(label, direction, flat_irc):
             )
     if flat_irc:
         label += "_flat"
+    return label
+
+
+def create_sp_label(label, sp_settings):
+    """Helper to create label with solvent info."""
+    # either supplied or not from cli, would still want label to have model
+    # and id, if both given;
+    # will not be activated when both are not given, e.g., in the gaussian
+    # calculator calling the sp job
+    if (
+        sp_settings.solvent_model is not None
+        and sp_settings.solvent_id is not None
+    ):
+        # replace , by _ if it occurs in the solvent name, as , in file will
+        # cause gaussian run error
+        solvent_label = sp_settings.solvent_id.replace(",", "_")
+        solvent_label = solvent_label.replace("-", "_")
+        label = f"{label}_{sp_settings.solvent_model}_{solvent_label}"
+    elif sp_settings.solvent_model is None and sp_settings.solvent_id is None:
+        label = (
+            f"{label}_gas_phase"
+            if sp_settings.custom_solvent is None
+            else f"{label}_custom_solvent"
+        )
     return label

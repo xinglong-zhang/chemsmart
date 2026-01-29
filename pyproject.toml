@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "0.1.15"  # Update this dynamically if needed
+version = "0.1.20"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -38,12 +38,10 @@ dependencies = [
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
     "pytest_mock>=3.14.0",
+    "pyvoro>=1.3.2",  # Note: pyvoro requires Python < 3.12
 ]
 
 [project.optional-dependencies]
-voronoi = [
-    "pyvoro>=1.3.2",  # Note: pyvoro requires Python < 3.12
-]
 test = [
     "pytest",
     "pytest-mock",
@@ -54,9 +52,10 @@ dev = [
     "pre-commit>=3.6.0",
     "flake8",
     "ruff",
-    "black",
-    "isort",
+    "black==26.1.0",
+    "isort==7.0.0",
     "gitchangelog",
+    "pipreqs",
     "types-PyYAML",
 ]
 docs = [
@@ -76,6 +75,9 @@ homepage = "https://github.com/xinglong-zhang/chemsmart/"
 
 [tool.setuptools.packages.find]
 exclude = [".github"]
+
+[tool.setuptools.package-data]
+"chemsmart" = ["VERSION"]
 
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]

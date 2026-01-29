@@ -37,9 +37,8 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     td_settings = td_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(td_settings)
 
-    # get molecule
+    # get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
 
     # get label for the job
     label = ctx.obj["label"]
@@ -59,10 +58,35 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
 
     from chemsmart.jobs.gaussian.tddft import GaussianTDDFTJob
 
-    return GaussianTDDFTJob(
-        molecule=molecule,
-        settings=td_settings,
-        label=label,
-        jobrunner=jobrunner,
-        **kwargs,
-    )
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} TDDFT jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running TDDFT for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = GaussianTDDFTJob(
+                molecule=molecule,
+                settings=td_settings,
+                label=molecule_label,
+                jobrunner=jobrunner,
+                **kwargs,
+            )
+            jobs.append(job)
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        return GaussianTDDFTJob(
+            molecule=molecule,
+            settings=td_settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )

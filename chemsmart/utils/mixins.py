@@ -525,12 +525,12 @@ class GaussianFileMixin(FileMixin):
 
             if is_scan:
                 modred = self._get_modred_scan_coords(self.modredundant_group)
-                self.job_type = "scan"
+                self.jobtype = "scan"
             else:
                 modred = self._get_modred_frozen_coords(
                     self.modredundant_group
                 )
-                self.job_type = "modred"
+                self.jobtype = "modred"
             return modred
 
     @staticmethod
@@ -635,7 +635,7 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.dieze_tag
 
     @property
-    def job_type(self):
+    def jobtype(self):
         """
         Get job type from route object.
 
@@ -645,10 +645,10 @@ class GaussianFileMixin(FileMixin):
         Returns:
             str: Job type specification.
         """
-        return self.route_object.job_type
+        return self.route_object.jobtype
 
-    @job_type.setter
-    def job_type(self, value):
+    @jobtype.setter
+    def jobtype(self, value):
         """
         Set job type in route object.
 
@@ -658,7 +658,7 @@ class GaussianFileMixin(FileMixin):
         Args:
             value (str): New job type to set.
         """
-        self.route_object.job_type = value
+        self.route_object.jobtype = value
 
     @property
     def chk(self):
@@ -853,7 +853,7 @@ class GaussianFileMixin(FileMixin):
             charge=self.charge,
             multiplicity=self.multiplicity,
             chk=self.chk,
-            job_type=self.job_type,
+            jobtype=self.jobtype,
             title=title,
             freq=self.freq,
             numfreq=self.numfreq,
@@ -1166,7 +1166,7 @@ class ORCAFileMixin(FileMixin):
         return self.route_object.scf_algorithm
 
     @property
-    def job_type(self):
+    def jobtype(self):
         """
         Get job type from ORCA route string.
 
@@ -1176,7 +1176,7 @@ class ORCAFileMixin(FileMixin):
         Returns:
             str: Job type specification.
         """
-        return self.route_object.job_type
+        return self.route_object.jobtype
 
     @property
     def freq(self):
@@ -1238,7 +1238,7 @@ class ORCAFileMixin(FileMixin):
             quadrupole=self.quadrupole,
             mdci_cutoff=self.mdci_cutoff,
             mdci_density=self.mdci_density,
-            job_type=self.job_type,
+            jobtype=self.jobtype,
             solvent_model=self.solvent_model,
             solvent_id=self.solvent_id,
             additional_route_parameters=dv.additional_route_parameters,
@@ -1524,22 +1524,3 @@ class FolderMixin:
             if re.match(regex, file):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
-
-
-class BaseFolder(FolderMixin):
-    """
-    Base class for folder management with path operations.
-
-    Provides basic folder initialization and validation functionality.
-    Combines folder path management with file discovery capabilities
-    from the FolderMixin class.
-    """
-
-    def __init__(self, folder):
-        """
-        Initialize the BaseFolder with a specified path.
-
-        Args:
-            folder (str): Path to the folder to be managed.
-        """
-        self.folder = folder

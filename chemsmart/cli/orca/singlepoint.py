@@ -12,16 +12,17 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
-from chemsmart.utils.cli import MyCommand
+from chemsmart.cli.orca.qmmm_helper import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("sp", cls=MyCommand)
+@orca.group("sp", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click.pass_context
-def sp(ctx, **kwargs):
+def sp(ctx, skip_completed, **kwargs):
     """
     Run ORCA single point energy calculations.
 
@@ -49,24 +50,67 @@ def sp(ctx, **kwargs):
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
     logger.info(f"Final single point settings: {sp_settings.__dict__}")
 
-    # validate charge and multiplicity consistency
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = sp_settings
+    ctx.obj["parent_jobtype"] = "sp"
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # validate charge and multiplicity consistency only for direct sp jobs
     check_charge_and_multiplicity(sp_settings)
 
-    # get molecule from context (use the last molecule if multiple)
+    # get molecules from context
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running single point calculation on molecule: {molecule}")
 
     # get label for the job output files
     label = ctx.obj["label"]
 
     from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
+    from chemsmart.utils.cli import create_sp_label
 
-    job = ORCASinglePointJob(
-        molecule=molecule,
-        settings=sp_settings,
-        label=label,
-        **kwargs,
-    )
-    logger.debug(f"Created ORCA single point job: {job}")
-    return job
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} ORCA single point jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            final_label = create_sp_label(molecule_label, sp_settings)
+            logger.info(
+                f"Running single point for molecule {idx}: {molecule} with label {final_label}"
+            )
+
+            job = ORCASinglePointJob(
+                molecule=molecule,
+                settings=sp_settings,
+                label=final_label,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
+            jobs.append(job)
+        logger.debug(f"Created {len(jobs)} ORCA single point jobs")
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        label = create_sp_label(label, sp_settings)
+        logger.info(
+            f"Running single point calculation on molecule: {molecule} with label: {label}"
+        )
+
+        job = ORCASinglePointJob(
+            molecule=molecule,
+            settings=sp_settings,
+            label=label,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+        logger.debug(f"Created ORCA single point job: {job}")
+        return job
+
+
+create_orca_qmmm_subcommand(sp)

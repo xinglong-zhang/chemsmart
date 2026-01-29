@@ -10,7 +10,7 @@ from chemsmart.cli.job import (
     click_folder_options,
     click_pubchem_options,
 )
-from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import get_list_from_string_range
@@ -347,7 +347,10 @@ def mol(
     Example usage:
         chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
     """
-    # Initialize molecules variable
+    # Ensure ctx.obj is a dict and initialize molecules variable
+    ctx.ensure_object(dict)
+    # mark this pipeline as not QMMM by default
+    ctx.obj.setdefault("qmmm", False)
     molecules = None
 
     # obtain molecule structure
@@ -358,6 +361,7 @@ def mol(
         ctx.obj["filenames"] = None
         ctx.obj["molecules"] = None
         ctx.obj["label"] = label
+        ctx.obj["qmmm"] = False
         return
 
     if filenames is None and pubchem is None:
@@ -365,6 +369,7 @@ def mol(
         logger.warning("[filename] or [pubchem] has not been specified!")
         ctx.obj["molecules"] = None
         ctx.obj["label"] = None
+        ctx.obj["qmmm"] = False
         return
     # if both filename and pubchem are specified, raise error
     if filenames and pubchem:
@@ -391,6 +396,7 @@ def mol(
             ctx.obj["filetype"] = None
             ctx.obj["molecules"] = None
             ctx.obj["label"] = label
+            ctx.obj["qmmm"] = False
             return
 
     # if pubchem is specified, obtain molecule from PubChem
@@ -437,14 +443,17 @@ def mol(
             # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
             index = get_list_from_string_range(index)
             molecules = [molecules[i - 1] for i in index]
+    else:
+        molecules = molecules[-1]
 
     logger.debug(f"Obtained molecules: {molecules}")
 
-    # store objects
+    # store objects and ensure qmmm flag is explicit
     ctx.obj["molecules"] = (
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
+    ctx.obj["qmmm"] = False
 
 
 @mol.result_callback()
@@ -452,4 +461,134 @@ def mol(
 def mol_process_pipeline(ctx, *args, **kwargs):
     kwargs.update({"subcommand": ctx.invoked_subcommand})
     ctx.obj[ctx.info_name] = kwargs
+    return args[0]
+
+
+@click.group(cls=MyGroup)
+@click_filenames_options
+@click_file_label_and_index_options
+@click_folder_options
+@click_pubchem_options
+@click.pass_context
+def mol_qmmm(
+    ctx,
+    filenames,
+    label,
+    append_label,
+    index,
+    directory,
+    filetype,
+    pubchem,
+):
+    """CLI group for working with QMMM-aware Molecules (QMMMMolecule).
+
+    Mirrors the behaviour of `mol` but ensures the stored molecules are
+    instances of `QMMMMolecule` so downstream commands can rely on
+    QMMM-specific attributes and methods.
+    """
+    # Ensure ctx.obj is a dict and mark QMMM mode
+    ctx.ensure_object(dict)
+    ctx.obj["qmmm"] = True
+    molecules = None
+
+    # obtain molecule structure
+    if directory is not None and filetype is not None:
+        ctx.obj["directory"] = directory
+        ctx.obj["filetype"] = filetype
+        ctx.obj["index"] = index
+        ctx.obj["filenames"] = None
+        ctx.obj["molecules"] = None
+        ctx.obj["label"] = label
+        ctx.obj["qmmm"] = True
+        return
+
+    if filenames is None and pubchem is None:
+        logger.warning("[filename] or [pubchem] has not been specified!")
+        ctx.obj["molecules"] = None
+        ctx.obj["label"] = None
+        ctx.obj["qmmm"] = True
+        return
+    if filenames and pubchem:
+        raise ValueError(
+            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+        )
+
+    if filenames:
+        if len(filenames) == 1:
+            filenames = filenames[0]
+            molecules = QMMMMolecule.from_filepath(
+                filepath=filenames, index=":", return_list=True
+            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filenames}!"
+            logger.debug(f"Obtained molecule {molecules} from {filenames}")
+        else:
+            ctx.obj["filenames"] = filenames
+            ctx.obj["index"] = index
+            ctx.obj["directory"] = None
+            ctx.obj["filetype"] = None
+            ctx.obj["molecules"] = None
+            ctx.obj["label"] = label
+            ctx.obj["qmmm"] = True
+            return
+
+    if pubchem:
+        molecules = QMMMMolecule.from_pubchem(
+            identifier=pubchem, return_list=True
+        )
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from PubChem {pubchem}!"
+        logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
+
+    if label is not None and append_label is not None:
+        raise ValueError(
+            "Only give Gaussian input filename or name to be appended, but not both!"
+        )
+    if append_label is not None:
+        label = os.path.splitext(os.path.basename(filenames))[0]
+        label = f"{label}_{append_label}"
+    if label is None and append_label is None:
+        label = os.path.splitext(os.path.basename(filenames))[0]
+
+    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+
+    if index is not None:
+        logger.debug(f"Using molecule with index: {index}")
+        try:
+            from chemsmart.utils.utils import string2index_1based
+
+            index = string2index_1based(index)
+            molecules = molecules[index]
+            if not isinstance(molecules, list):
+                molecules = [molecules]
+        except ValueError:
+            index = get_list_from_string_range(index)
+            molecules = [molecules[i - 1] for i in index]
+
+    logger.debug(f"Obtained molecules: {molecules}")
+
+    # Convert Molecule -> QMMMMolecule for QMMM workflows
+    if molecules is not None:
+        converted = []
+        for m in molecules:
+            if isinstance(m, QMMMMolecule):
+                converted.append(m)
+            else:
+                converted.append(QMMMMolecule(molecule=m))
+        molecules = converted
+
+    ctx.obj["molecules"] = molecules
+    ctx.obj["label"] = label
+    ctx.obj["qmmm"] = True
+
+
+@mol_qmmm.result_callback()
+@click.pass_context
+def mol_qmmm_process_pipeline(ctx, *args, **kwargs):
+    kwargs.update({"subcommand": ctx.invoked_subcommand})
+    ctx.obj[ctx.info_name] = kwargs
+    # mark that this pipeline used QMMM molecules
+    ctx.obj["qmmm"] = True
     return args[0]

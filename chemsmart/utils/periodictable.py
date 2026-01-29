@@ -6,6 +6,8 @@ atomic numbers, masses, radii, and isotope information. Integrates with
 ASE data sources and ChemSmart isotope data for complete element handling.
 """
 
+import re
+
 from ase.data import chemical_symbols as elements
 from ase.data import covalent_radii
 from ase.data.vdw import vdw_radii
@@ -50,12 +52,35 @@ class PeriodicTable:
         Returns:
             str: Properly capitalized element symbol.
         """
-        # if element_str.upper() == "TV":
-        #     pass
+        cleaned = (element_str or "").strip()
+        if not cleaned:
+            raise ValueError("Element string cannot be empty")
+
+        # Remove partition/layer annotations (e.g., O-O_3, C-C_R, H-H_)
+        cleaned = re.split(r"[\s:_-]+", cleaned)[0]
+        cleaned = re.sub(r"[^A-Za-z]", "", cleaned)
+
+        if not cleaned:
+            raise ValueError(f"Unable to parse element from '{element_str}'")
+
+        # Prefer two-letter symbols first (e.g., 'Na') before one-letter ones.
+        for length in (2, 1):
+            if len(cleaned) >= length:
+                candidate = cleaned[:length]
+                if length == 1:
+                    candidate = candidate.upper()
+                else:
+                    candidate = (
+                        f"{candidate[0].upper()}{candidate[1:].lower()}"
+                    )
+                if candidate in self.PERIODIC_TABLE:
+                    return candidate
+
+        # Fall back to legacy behavior if nothing matched (will likely raise later)
         return (
-            element_str.upper()
-            if len(element_str) == 1
-            else f"{element_str[0].upper()}{element_str[1:]}"
+            cleaned.upper()
+            if len(cleaned) == 1
+            else f"{cleaned[0].upper()}{cleaned[1:]}"
         )
 
     def sorted_periodic_table_list(self, list_of_elements):
@@ -167,3 +192,21 @@ class PeriodicTable:
         """
         # obtain the covalent radius of the element
         return covalent_radii[self.to_atomic_number(symbol)]
+
+    def requires_ecp(self, symbol):
+        """
+        Check if an element requires an effective core potential (ECP).
+
+        Elements with atomic number > 36 (i.e., beyond Kr in period 4)
+        typically require ECPs in pseudopotential calculations. This
+        corresponds to elements from Rb (Z=37) onwards.
+
+        Args:
+            symbol (str): Element symbol.
+
+        Returns:
+            bool: True if element requires ECP, False otherwise.
+        """
+        # Elements with atomic number > 36 require genecp (ECP)
+        # Elements with atomic number <= 36 use gen (no ECP)
+        return self.to_atomic_number(symbol) > 36

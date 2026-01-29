@@ -1,17 +1,17 @@
 import logging
 import os
 
+from chemsmart.io.file import SDFFile
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.io.molecules.structure import SDFFile
 from chemsmart.io.orca.folder import ORCAInpFolder, ORCAOutFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xyz.folder import XYZFolder
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.logger import create_logger
-from chemsmart.utils.mixins import BaseFolder
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"

@@ -23,7 +23,7 @@ class MolecularJobSettings:
         multiplicity=None,
         freq=True,
         numfreq=False,
-        job_type=None,
+        jobtype=None,
         title=None,
         solvent_model=None,
         solvent_id=None,
@@ -49,7 +49,7 @@ class MolecularJobSettings:
         self.multiplicity = multiplicity
         self.freq = freq
         self.numfreq = numfreq
-        self.job_type = job_type
+        self.jobtype = jobtype
         self.title = title
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
@@ -87,6 +87,7 @@ class MolecularJobSettings:
     def remove_solvent(self):
         self.solvent_model = None
         self.solvent_id = None
+        self.custom_solvent = None
 
     def update_solvent(self, solvent_model=None, solvent_id=None):
         """Update solvent model and solvent identity for implicit solvation.
@@ -173,29 +174,35 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     ]
     sp_job = ["sp"]
     td_job = ["td"]
+    qmmm_job = ["qmmm"]
     neb_job = ["neb"]
     all_jobs = gas_phase_jobs + sp_job + td_job + neb_job
 
     # read in project config
     with open(filename) as f:
         project_config = yaml.safe_load(f)
+        logger.debug(
+            f"Project settings from yaml {filename}: \n{project_config}"
+        )
 
     # populate job settings for different jobs
-    all_project_configs = {}  # store all job settings in a dict
+    all_project_configs = {}  # store all job settings in a dict\
 
     # check if solv settings exist
     solv_config = project_config.get("solv", None)
 
     # check if separate gas phase settings exist
     gas_config = project_config.get("gas", None)
+    qmmm_config = project_config.get("qmmm", None)
 
     if gas_config is None:
         # no settings for gas phase; using implicit solvation model for all jobs
+        # (except td and qmmm, which will use their own configurations)
         for job in all_jobs:
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], solv_config
             )
@@ -205,17 +212,31 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], gas_config
             )
+            try:
+                # Try updating with gas_config first
+                all_project_configs[job] = update_dict_with_existing_keys(
+                    all_project_configs[job], gas_config
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Updating job '{job}' with gas_config failed ({e}). "
+                    f"Falling back to qmmm_config."
+                )
+                # Fallback: try updating with qmmm_config
+                all_project_configs[job] = update_dict_with_existing_keys(
+                    all_project_configs[job], qmmm_config
+                )
         for job in sp_job:  # jobs using solv config
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
             # turn off freq calculation for single point calculations
             all_project_configs[job]["freq"] = False
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], solv_config
             )
@@ -227,9 +248,24 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], td_config
             )
+
+    # check if qmmm settings exist (optional)
+    if "qmmm" in project_config:
+        qmmm_config = project_config["qmmm"]
+        for job in qmmm_job:  # jobs using qmmm config
+            all_project_configs[job] = (
+                default_config.copy()
+            )  # populate defaults
+            all_project_configs[job]["job_type"] = job  # update job_type
+            logger.debug(
+                f"Updating qmmm job settings: {all_project_configs[job]} with {qmmm_config}"
+            )
+            for k, v in qmmm_config.items():
+                logger.debug(f"Updating qmmm job settings: {k} with {v}")
+                all_project_configs[job][k] = v
 
     return all_project_configs

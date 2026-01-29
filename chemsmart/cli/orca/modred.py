@@ -13,18 +13,26 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
-from chemsmart.utils.cli import MyCommand, get_setting_from_jobtype_for_orca
+from chemsmart.cli.orca.qmmm_helper import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("modred", cls=MyCommand)
+@orca.group("modred", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_orca_jobtype_options
 @click.pass_context
 def modred(
-    ctx, jobtype, coordinates, dist_start, dist_end, num_steps, **kwargs
+    ctx,
+    jobtype,
+    coordinates,
+    dist_start,
+    dist_end,
+    num_steps,
+    skip_completed,
+    **kwargs,
 ):
     """
     Run ORCA modified redundant coordinate (modred) calculations.
@@ -59,13 +67,19 @@ def modred(
     modred_settings = modred_settings.merge(job_settings, keywords=keywords)
     logger.info(f"Final modred settings: {modred_settings.__dict__}")
 
-    # validate charge and multiplicity consistency
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = modred_settings
+    ctx.obj["parent_jobtype"] = jobtype
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # validate charge and multiplicity consistency for direct modred jobs
     check_charge_and_multiplicity(modred_settings)
 
-    # get molecule from context (use the last molecule if multiple)
+    # get molecules from context
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running modred calculation on molecule: {molecule}")
 
     # get label for the job output files
     label = ctx.obj["label"]
@@ -73,8 +87,45 @@ def modred(
 
     from chemsmart.jobs.orca.modred import ORCAModredJob
 
-    job = ORCAModredJob(
-        molecule=molecule, settings=modred_settings, label=label, **kwargs
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get(
+        "molecule_indices", list(range(1, len(molecules) + 1))
     )
-    logger.debug(f"Created ORCA modred job: {job}")
-    return job
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} ORCA modred jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running modred for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = ORCAModredJob(
+                molecule=molecule,
+                settings=modred_settings,
+                label=molecule_label,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
+            jobs.append(job)
+        logger.debug(f"Created {len(jobs)} ORCA modred jobs")
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        logger.info(f"Running modred calculation on molecule: {molecule}")
+
+        job = ORCAModredJob(
+            molecule=molecule,
+            settings=modred_settings,
+            label=label,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+        logger.debug(f"Created ORCA modred job: {job}")
+        return job
+
+
+create_orca_qmmm_subcommand(modred)

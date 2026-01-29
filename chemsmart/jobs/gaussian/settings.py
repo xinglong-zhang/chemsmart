@@ -27,6 +27,7 @@ from chemsmart.utils.repattern import (
 
 pt = PeriodicTable()
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +42,7 @@ class GaussianJobSettings(MolecularJobSettings):
 
     Inherits common calculation fields from `MolecularJobSettings`, such as
     `ab_initio`, `functional`, `basis`, `semiempirical`, `charge`,
-    `multiplicity`, `job_type`, `title`, `freq`, `numfreq`, `solvent_model`,
+    `multiplicity`, `jobtype`, `title`, `freq`, `numfreq`, `solvent_model`,
     `solvent_id`, `additional_solvent_options`, `additional_opt_options_in_route`,
     `append_additional_info`, `gen_genecp_file`, `heavy_elements`,
     `heavy_elements_basis`, `light_elements_basis`, `custom_solvent`, `forces`,
@@ -65,7 +66,7 @@ class GaussianJobSettings(MolecularJobSettings):
         charge=None,
         multiplicity=None,
         chk=True,
-        job_type=None,
+        jobtype=None,
         title=None,
         freq=False,
         numfreq=False,
@@ -101,7 +102,7 @@ class GaussianJobSettings(MolecularJobSettings):
             charge (int, optional): Molecular charge.
             multiplicity (int, optional): Spin multiplicity.
             chk (bool): Use checkpoint files (default True).
-            job_type (str, optional): Calculation type (e.g., 'opt', 'freq').
+            jobtype (str, optional): Calculation type (e.g., 'opt', 'freq').
             title (str, optional): Job title.
             freq (bool): Include frequency calculations.
             numfreq (bool): Use numerical frequencies.
@@ -135,7 +136,7 @@ class GaussianJobSettings(MolecularJobSettings):
             multiplicity=multiplicity,
             freq=freq,
             numfreq=numfreq,
-            job_type=job_type,
+            jobtype=jobtype,
             title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
@@ -156,6 +157,7 @@ class GaussianJobSettings(MolecularJobSettings):
         self.additional_solvent_options = additional_solvent_options
         self.additional_opt_options_in_route = additional_opt_options_in_route
         self.append_additional_info = append_additional_info
+        self._route_string = None
 
         if gen_genecp_file is not None and "~" in gen_genecp_file:
             gen_genecp_file = os.path.expanduser(gen_genecp_file)
@@ -426,7 +428,7 @@ class GaussianJobSettings(MolecularJobSettings):
             charge=None,
             multiplicity=None,
             chk=True,
-            job_type=None,
+            jobtype=None,
             title="Gaussian job with default settings",
             freq=True,
             numfreq=False,
@@ -499,6 +501,10 @@ class GaussianJobSettings(MolecularJobSettings):
         logger.debug(f"Route for settings {self}: {route_string}")
         return route_string
 
+    @route_string.setter
+    def route_string(self, value):
+        self._route_string = value
+
     def _get_route_string_from_user_input(self):
         """
         Generate route string from user-provided route specification.
@@ -564,6 +570,19 @@ class GaussianJobSettings(MolecularJobSettings):
                 options are specified.
         """
         route_string = ""
+
+        # Get dieze tag with job route and freq string
+        dieze_tag = self._get_dieze_tag()
+        route_string += dieze_tag
+
+        level_of_theory_string = self._get_level_of_theory_string()
+        route_string += level_of_theory_string
+
+        return route_string
+
+    def _get_dieze_tag(self):
+        """Get dieze tag from job type."""
+        route_string = ""
         # Add #-tag prefix for calculation level specification
         if self.dieze_tag is not None:
             route_string += (
@@ -580,36 +599,36 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Adding additional opt options: "
                 f"{self.additional_opt_options_in_route}"
             )
-            if self.job_type == "opt":
+            if self.jobtype == "opt":
                 route_string += (
                     f" opt=({self.additional_opt_options_in_route})"
                 )
-            elif self.job_type == "ts":
+            elif self.jobtype == "ts":
                 if "calcall" not in self.additional_opt_options_in_route:
                     route_string += f" opt=(ts,calcfc,noeigentest,{self.additional_opt_options_in_route})"
                 else:
                     route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
-            elif self.job_type == "modred":
+            elif self.jobtype == "modred":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = True
-            elif self.job_type == "scan":
+            elif self.jobtype == "scan":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = False
-            elif self.job_type == "sp":
+            elif self.jobtype == "sp":
                 route_string += ""
                 self.freq = False  # turn off freq calculation for sp job
         elif self.additional_opt_options_in_route is None:
-            if self.job_type == "opt":
+            if self.jobtype == "opt":
                 route_string += " opt"
-            elif self.job_type == "ts":
+            elif self.jobtype == "ts":
                 route_string += " opt=(ts,calcfc,noeigentest)"
-            elif self.job_type == "modred":
+            elif self.jobtype == "modred":
                 route_string += " opt=modredundant"
                 self.freq = True
-            elif self.job_type == "scan":
+            elif self.jobtype == "scan":
                 route_string += " opt=modredundant"
                 self.freq = False
-            elif self.job_type == "sp":
+            elif self.jobtype == "sp":
                 route_string += ""
                 self.freq = False  # turn off freq calculation for sp job
 
@@ -620,6 +639,15 @@ class GaussianJobSettings(MolecularJobSettings):
         elif not self.freq and self.numfreq:
             route_string += " freq=numer"
             logger.debug("Added numerical frequency calculation")
+        elif self.freq and self.numfreq:
+            raise ValueError(
+                "Both freq and numfreq cannot be True at the same time!"
+            )
+        return route_string
+
+    def _get_level_of_theory_string(self):
+        """Get level of theory string for route."""
+        route_string = ""
 
         # Determine computational method and add to route string
         if self.semiempirical is not None:
@@ -734,10 +762,10 @@ class GaussianJobSettings(MolecularJobSettings):
             )
 
         # Write job type specific route keywords
-        if self.job_type == "nci":
+        if self.jobtype == "nci":
             route_string += " output=wfn"  # output wavefunction file for NCI
             logger.debug("Added NCI-specific output=wfn keyword")
-        elif self.job_type == "wbi":
+        elif self.jobtype == "wbi":
             route_string += " pop=nboread"  # write bond order matrix
             logger.debug("Added WBI-specific pop=nboread keyword")
         return route_string
@@ -843,6 +871,62 @@ class GaussianJobSettings(MolecularJobSettings):
         return list(
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )
+
+    def determine_basis_keyword(self, molecule):
+        """
+        Determine the appropriate basis keyword (gen or genecp) for the molecule.
+
+        Based on the heavy elements present in the molecule, determines whether
+        to use 'gen' (for elements that don't require ECPs) or 'genecp' (for
+        elements that require ECPs). Elements with atomic number > 36 require
+        ECPs and thus need 'genecp', while elements <= 36 only need 'gen'.
+
+        If no heavy elements are present in the molecule, returns the light
+        elements basis keyword (with hyphens removed).
+
+        Args:
+            molecule: Molecule object containing atomic information.
+
+        Returns:
+            str: 'gen' if all heavy elements have atomic number <= 36,
+                 'genecp' if any heavy element has atomic number > 36,
+                 light_elements_basis (formatted) if no heavy elements present,
+                 or the original basis keyword if not using gen/genecp.
+        """
+        # Only applies when basis is gen or genecp
+        if self.basis not in ["gen", "genecp"]:
+            return self.basis
+
+        # Get heavy elements actually present in the molecule
+        heavy_elements_in_structure = self.prune_heavy_elements(molecule)
+
+        # If no heavy elements specified or present, use light elements basis
+        if (
+            heavy_elements_in_structure is None
+            or len(heavy_elements_in_structure) == 0
+        ):
+            # Return light elements basis if available,
+            # otherwise return original basis
+            if self.light_elements_basis is not None:
+                # Remove hyphens for Gaussian compatibility
+                # (def2-SVP -> def2svp)
+                return self.light_elements_basis.replace("-", "").lower()
+            return self.basis
+
+        # Check if any heavy element requires ECP (atomic number > 36)
+        for element in heavy_elements_in_structure:
+            if pt.requires_ecp(element):
+                logger.debug(
+                    f"Element {element} requires ECP (Z > 36), using 'genecp'"
+                )
+                return "genecp"
+
+        # All heavy elements have atomic number <= 36, use 'gen'
+        logger.debug(
+            f"All heavy elements {heavy_elements_in_structure} have Z <= 36, "
+            f"using 'gen'"
+        )
+        return "gen"
 
     def _check_solvent(self, solvent_model):
         """
@@ -960,10 +1044,10 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             )
 
         # Write job type specific route for IRC direction
-        if self.job_type == "ircf":
+        if self.jobtype == "ircf":
             self.direction = "forward"
             logger.debug("Set IRC direction to forward")
-        elif self.job_type == "ircr":
+        elif self.jobtype == "ircr":
             self.direction = "reverse"
             logger.debug("Set IRC direction to reverse")
 
@@ -1161,7 +1245,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             str: Route string for the optimization/IRC step.
         """
         # Special handling for IRC jobs - use GaussianIRCJobSettings
-        if self.job_type in ["ircf", "ircr"]:
+        if self.jobtype in ["ircf", "ircr"]:
             # Create a temporary GaussianIRCJobSettings instance with current settings
             irc_settings = GaussianIRCJobSettings(**self.__dict__)
             # Get the IRC route string from the specialized class
@@ -1243,3 +1327,552 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
         route_string += f" TD({self.states},nstates={self.nstates},root={self.root}{eqsolv})"
 
         return route_string
+
+
+class GaussianQMMMJobSettings(GaussianJobSettings):
+    """
+    Configuration settings for Gaussian QM/MM calculations using ONIOM methodology.
+
+    This class manages all parameters needed to set up multi-layer ONIOM calculations
+    in Gaussian, which partition molecular systems into different regions treated with
+    varying levels of theory. The ONIOM approach enables accurate quantum mechanical
+    treatment of chemically active regions while efficiently handling large molecular
+    environments with molecular mechanics.
+
+    The class supports 2-layer and 3-layer ONIOM calculations:
+
+    **2-Layer ONIOM**: High(QM):Low(MM)
+        - High level: Quantum mechanics (DFT, ab initio, etc.)
+        - Low level: Molecular mechanics force fields
+
+    **3-Layer ONIOM**: High(QM):Medium(QM):Low(MM)
+        - High level: High-accuracy quantum mechanics
+        - Medium level: Lower-cost quantum mechanics
+        - Low level: Molecular mechanics force fields
+
+    Key Features:
+    - Flexible layer definition with atom selection
+    - Support for mixed QM/MM and QM/QM/MM schemes
+    - Automatic link atom handling for covalent boundaries
+    - Customizable scale factors for link atom placement
+    - Integration with popular force fields (AMBER, UFF, etc.)
+    - Multiple charge/multiplicity specifications per layer
+
+    Attributes:
+        jobtype (str, optional): Type of ONIOM calculation ('sp', 'opt', 'freq', 'ts', 'irc',
+            'modred', 'scan'). When using CLI commands, this is automatically inferred from
+            the parent command (e.g., 'chemsmart sub gaussian opt qmmm' sets jobtype='opt').
+
+        Level-specific theory parameters:
+            high_level_functional (str): DFT functional for high layer (e.g., 'B3LYP', 'M06-2X')
+            high_level_basis (str): Basis set for high layer (e.g., '6-31G*', 'def2-TZVP')
+            high_level_force_field (str): Force field for high layer (if MM)
+            medium_level_functional (str): DFT functional for medium layer
+            medium_level_basis (str): Basis set for medium layer
+            medium_level_force_field (str): Force field for medium layer
+            low_level_functional (str): DFT functional for low layer (if QM)
+            low_level_basis (str): Basis set for low layer (if QM)
+            low_level_force_field (str): Force field for low layer (usually MM)
+
+        Charge and multiplicity specifications:
+            charge_total/mult_total (int): Full system properties (legacy: charge_total/real_multiplicity)
+            charge_intermediate/mult_intermediate (int): Intermediate system properties (legacy: int_charge/int_multiplicity)
+            charge_high/mult_high (int): Model/high-layer properties (legacy: model_charge/model_multiplicity)
+
+        Atom partitioning:
+            high_level_atoms (list/str): Atoms in high layer (1-indexed)
+            medium_level_atoms (list/str): Atoms in medium layer (1-indexed)
+            low_level_atoms (list/str): Atoms in low layer (1-indexed)
+            bonded_atoms (list): Covalent bonds crossing layer boundaries
+            scale_factors (dict): Custom scale factors for link atom placement
+
+    Examples:
+        2-layer enzyme active site calculation:
+        >>> settings = GaussianQMMMJobSettings(
+        ...     jobtype='opt',
+        ...     high_level_functional='B3LYP',
+        ...     high_level_basis='6-31G*',
+        ...     low_level_force_field='AMBER=HardFirst',
+        ...     charge_total=0,
+        ...     real_multiplicity=1,
+        ...     high_level_atoms=[1, 2, 3, 4, 5],  # Active site residues
+        ...     bonded_atoms=[(5, 6)],  # QM-MM boundary bond
+        ... )
+
+        3-layer organometallic catalyst:
+        >>> settings = GaussianQMMMJobSettings(
+        ...     jobtype='freq',
+        ...     high_level_functional='M06-2X',
+        ...     high_level_basis='def2-TZVP',
+        ...     medium_level_functional='B3LYP',
+        ...     medium_level_basis='6-31G*',
+        ...     low_level_force_field='UFF',
+        ...     charge_total=-1,
+        ...     real_multiplicity=2,
+        ...     high_level_atoms='1-10',     # Metal center and ligands
+        ...     medium_level_atoms='11-50',  # Extended coordination sphere
+        ...     bonded_atoms=[(10,11), (50,51)],
+        ...     scale_factors={(10,11): [0.709, 0.709, 0.709]}
+        ... )
+
+    Note:
+        The real/intermediate/model charge and multiplicity specifications follow
+        ONIOM conventions where:
+        - Real system: Complete molecular system
+        - Intermediate system: High+Medium layers (3-layer only)
+        - Model system: High layer only
+
+        Scale factors control link atom placement and default to covalent radii
+        ratios if not specified. The format is {(atom1,atom2): [low,medium,high]}.
+
+    See Also:
+        - GaussianQMMMJob: Job execution class for QM/MM calculations
+        - GaussianJobSettings: Base class for Gaussian job configuration
+        - Molecule: Molecular structure with QM/MM partitioning information
+    """
+
+    def __init__(
+        self,
+        jobtype=None,
+        high_level_functional=None,
+        high_level_basis=None,
+        high_level_force_field=None,
+        medium_level_functional=None,
+        medium_level_basis=None,
+        medium_level_force_field=None,
+        low_level_functional=None,
+        low_level_basis=None,
+        low_level_force_field=None,
+        charge_total=None,
+        mult_total=None,
+        charge_intermediate=None,
+        mult_intermediate=None,
+        charge_high=None,
+        mult_high=None,
+        real_charge=None,
+        real_multiplicity=None,
+        int_charge=None,
+        int_multiplicity=None,
+        model_charge=None,
+        model_multiplicity=None,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        bonded_atoms=None,
+        scale_factors=None,
+        **kwargs,
+    ):
+        """
+        Initialize Gaussian QM/MM job settings for ONIOM calculations.
+
+        Args:
+            jobtype (str, optional): Type of ONIOM calculation to perform.
+                Options: 'sp' (single-point), 'opt' (optimization), 'freq' (frequency),
+                'ts' (transition state), 'irc' (intrinsic reaction coordinate),
+                'modred' (redundant coordinates), 'scan' (coordinate scan)
+
+                Note: When using the CLI with `chemsmart sub gaussian <jobtype> qmmm`,
+                the jobtype is automatically inferred from the parent command and does
+                not need to be specified manually.
+
+            Theory level parameters:
+                high_level_functional (str): DFT functional for high QM layer
+                    (e.g., 'B3LYP', 'M06-2X', 'wB97X-D', 'PBE0')
+                high_level_basis (str): Basis set for high QM layer
+                    (e.g., '6-31G*', '6-311++G(d,p)', 'def2-TZVP', 'cc-pVTZ')
+                high_level_force_field (str): Force field for high MM layer (rare)
+                medium_level_functional (str): DFT functional for medium QM layer
+                medium_level_basis (str): Basis set for medium QM layer
+                medium_level_force_field (str): Force field for medium MM layer
+                low_level_functional (str): DFT functional for low QM layer (uncommon)
+                low_level_basis (str): Basis set for low QM layer (uncommon)
+                low_level_force_field (str): Force field for low MM layer
+                    (e.g., 'AMBER=HardFirst', 'UFF', 'DREIDING', 'MM3')
+
+            Charge and multiplicity:
+                charge_total (int): Total charge of complete molecular system (legacy: charge_total)
+                mult_total (int): Spin multiplicity of complete system (legacy: real_multiplicity)
+                charge_intermediate (int): Charge of high+medium layers (legacy: int_charge)
+                mult_intermediate (int): Multiplicity of high+medium layers (legacy: int_multiplicity)
+                charge_high (int): Charge of high layer only (legacy: model_charge)
+                mult_high (int): Multiplicity of high layer only (legacy: model_multiplicity)
+
+            Atom partitioning:
+                high_level_atoms (list/str): Atoms in high layer. Can be:
+                    - List of integers: [1, 2, 3, 5, 8]
+                    - Range string: "1-10,15,20-25"
+                    - List of ranges: ["1-10", "15", "20-25"]
+                medium_level_atoms (list/str): Atoms in medium layer (3-layer only)
+                low_level_atoms (list/str): Atoms in low layer (usually auto-assigned)
+                bonded_atoms (list): Covalent bonds crossing layer boundaries.
+                    Format: [(atom1, atom2), (atom3, atom4)] where atoms are 1-indexed
+                scale_factors (dict): Custom link atom scale factors. Format:
+                    {(atom1, atom2): [scale_low, scale_medium, scale_high]}
+                    Values typically range from 0.5-1.0, common value is 0.709
+
+            **kwargs: Additional keyword arguments passed to parent GaussianJobSettings
+
+        Note:
+            - All atom indices are 1-based following Gaussian conventions
+            - If only 2 layers specified, use high_level_* and low_level_* parameters
+            - Force fields must be available in your Gaussian installation
+            - Link atoms are automatically placed for bonded_atoms specifications
+            - The parent class 'functional' and 'basis' attributes are set to high_level values
+        """
+        super().__init__(**kwargs)
+        self.jobtype = jobtype
+        self.high_level_functional = high_level_functional
+        self.high_level_basis = high_level_basis
+        self.high_level_force_field = high_level_force_field
+        self.medium_level_functional = medium_level_functional
+        self.medium_level_basis = medium_level_basis
+        self.medium_level_force_field = medium_level_force_field
+        self.low_level_functional = low_level_functional
+        self.low_level_basis = low_level_basis
+        self.low_level_force_field = low_level_force_field
+        # Canonical charge/multiplicity names (aligned with ORCA) with legacy fallbacks
+        self.charge_total = charge_total
+        if self.charge_total is None:
+            self.charge_total = real_charge
+        self.mult_total = mult_total
+        if self.mult_total is None:
+            self.mult_total = real_multiplicity
+
+        self.charge_intermediate = charge_intermediate
+        if self.charge_intermediate is None:
+            self.charge_intermediate = int_charge
+        self.mult_intermediate = mult_intermediate
+        if self.mult_intermediate is None:
+            self.mult_intermediate = int_multiplicity
+
+        self.charge_high = charge_high
+        if self.charge_high is None:
+            self.charge_high = model_charge
+        self.mult_high = mult_high
+        if self.mult_high is None:
+            self.mult_high = model_multiplicity
+
+        # Maintain legacy attribute names for backward compatibility
+        self.real_charge = self.charge_total
+        self.real_multiplicity = self.mult_total
+        self.int_charge = self.charge_intermediate
+        self.int_multiplicity = self.mult_intermediate
+        self.model_charge = self.charge_high
+        self.model_multiplicity = self.mult_high
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.bonded_atoms = bonded_atoms
+        self.scale_factors = scale_factors
+
+        self.title = "Gaussian QM/MM job"
+
+        if self.charge_total is not None and self.mult_total is not None:
+            # the charge and multiplicity of the real system equal to
+            # that of the low_level_charge and low_level_multiplicity
+            self.charge = self.charge_total
+            self.multiplicity = self.mult_total
+
+    @property
+    def charge_and_multiplicity_string(self):
+        """Obtain charge and multiplicity string."""
+        return self._get_charge_and_multiplicity()
+
+    def validate_and_assign_level(
+        self, functional, basis, force_field, level_name
+    ):
+        """Validates functional and basis set for a given level
+        and returns formatted theory string.
+        Return level of theory if both functional and basis are specified,
+        or force field if both are not specified.
+        """
+
+        if functional and basis and force_field:
+            raise ValueError(
+                f"For {level_name} level of theory, one should specify only functional/basis or force field!"
+            )
+
+        if force_field:
+            assert functional is None and basis is None, (
+                f"Force field is given for {level_name} level of theory, "
+                f"thus no functional and basis should be given!"
+            )
+            level_of_theory = force_field
+        else:
+            # if force field is not given, then functional and basis can be given,
+            # so that level of theory takes functional and basis set
+            if functional and basis:
+                level_of_theory = f"{functional}/{basis}"
+            else:
+                # but functional and basis set can also not be given, in which case,
+                # all 3 are None and overall level of theory for that layer is None.
+                level_of_theory = None
+
+        logger.debug(
+            f"Obtained level of theory {level_of_theory} for {level_name} level."
+        )
+
+        return level_of_theory
+
+    def _get_route_string_from_jobtype(self):
+        """Generate QM/MM route string with job type, freq, and ONIOM specification."""
+        route_string = "#"
+        if self.dieze_tag:
+            route_string += self.dieze_tag
+
+        # Add job type
+        jobtype = self.jobtype.lower() if self.jobtype else None
+        if jobtype == "opt":
+            route_string += " opt"
+        elif jobtype == "scan" or jobtype == "modred":
+            route_string += " opt=modredundant"
+        elif jobtype == "ts":
+            route_string += " opt=(ts,calcfc,noeigentest)"
+        elif jobtype == "irc":
+            route_string += " irc"
+        # sp doesn't add any keyword
+
+        # Add freq if enabled (and not already a freq job)
+        if (self.freq or self.numfreq) and jobtype != "freq":
+            route_string += " freq"
+
+        # Add ONIOM level of theory string
+        oniom_string = self._get_oniom_string()
+        route_string += oniom_string
+
+        # Add solvation if specified
+        if self.solvent_model is not None and self.solvent_id is not None:
+            route_string += (
+                f" scrf=({self.solvent_model},solvent={self.solvent_id})"
+            )
+
+        return route_string
+
+    def _get_oniom_string(self):
+        """Get ONIOM level of theory string."""
+        high_level_of_theory = self.validate_and_assign_level(
+            self.high_level_functional,
+            self.high_level_basis,
+            self.high_level_force_field,
+            level_name="high",
+        )
+
+        medium_level_of_theory = self.validate_and_assign_level(
+            self.medium_level_functional,
+            self.medium_level_basis,
+            self.medium_level_force_field,
+            level_name="medium",
+        )
+
+        low_level_of_theory = self.validate_and_assign_level(
+            self.low_level_functional,
+            self.low_level_basis,
+            self.low_level_force_field,
+            level_name="low",
+        )
+
+        # Build ONIOM string with proper parentheses handling
+        levels = []
+        if high_level_of_theory is not None:
+            levels.append(high_level_of_theory)
+        if medium_level_of_theory is not None:
+            levels.append(medium_level_of_theory)
+        if low_level_of_theory is not None:
+            levels.append(low_level_of_theory)
+
+        if levels:
+            oniom_string = f" oniom({':'.join(levels)})"
+        else:
+            oniom_string = " oniom"
+
+        return oniom_string
+
+    def get_qmmm_level_of_theory_string(self):
+        """Get ONIOM level of theory for route string.
+
+        Deprecated: Use _get_route_string_from_jobtype instead.
+
+        Note: jobtype is now inferred from the parent command when using CLI,
+        so it should always be set. If not set, defaults to basic ONIOM route.
+        """
+        if self.jobtype is None:
+            logger.warning(
+                "Job type not specified for ONIOM job. "
+                "Using basic route string without job-specific keywords."
+            )
+        return self._get_route_string_from_jobtype()
+
+    def _get_charge_and_multiplicity(self):
+        """Obtain charge and multiplicity string.
+        For two-layer ONIOM jobs, the format for this input line is:
+
+        chrg_real-low spin_real-low [chrg_model-high spin_model-high
+                                    [chrg_model-low spin_model-low [chrg_real-high spin_real-high]]]
+
+        Fourth pair applies only to ONIOM=SValue calculations.
+        When only a single value pair is specified, all levels will use those values.
+        If two pairs of values are included, then third pair defaults to same values as second pair.
+        If final pair is omitted for an S-value job, it defaults to values for the real system at low level.
+        For such two-layer ONIOM jobs, users are required to specify the charge and multiplicity of high-level
+         layer and low-level layer, instead high and medium level.
+
+        For 3-layers ONIOM, the format is:
+        cRealL sRealL [cIntM sIntM [cIntL sIntL [cModH sModH [cModM sModM [cModL sModL]]]]]
+        Real, Int=Intermediate system, and Mod=Model system, and second character
+        is one of: H, M and L for the High, Medium and Low levels).
+        """
+        assert (
+            self.charge_total is not None and self.mult_total is not None
+        ), "Charge and multiplicity for the real system must be specified!"
+        real_low_charge = self.charge_total
+        real_low_multiplicity = self.mult_total
+        int_med_charge = self.charge_intermediate
+        int_med_multiplicity = self.mult_intermediate
+        int_low_charge = self.charge_intermediate
+        int_low_multiplicity = self.mult_intermediate
+        model_high_charge = self.charge_high
+        model_high_multiplicity = self.mult_high
+        model_med_charge = self.charge_high
+        model_med_multiplicity = self.mult_high
+        model_low_charge = self.charge_high
+        model_low_multiplicity = self.mult_high
+
+        # two-layer ONIOM model
+        if (
+            self.validate_and_assign_level(
+                self.medium_level_functional,
+                self.medium_level_basis,
+                self.medium_level_force_field,
+                level_name="medium",
+            )
+            is None
+            or self.validate_and_assign_level(
+                self.low_level_functional,
+                self.low_level_basis,
+                self.low_level_force_field,
+                level_name="low",
+            )
+            is None
+        ):
+            charge_and_multiplicity_list = [
+                real_low_charge,
+                real_low_multiplicity,
+                model_high_charge,
+                model_high_multiplicity,
+                model_low_charge,
+                model_low_multiplicity,
+            ]
+            if all(var is None for var in charge_and_multiplicity_list[2:]):
+                for i in range(2, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = real_low_charge
+                    charge_and_multiplicity_list[i + 1] = real_low_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[4:]):
+                for i in range(4, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = model_high_charge
+                    charge_and_multiplicity_list[i + 1] = (
+                        model_high_multiplicity
+                    )
+            elif all(var is not None for var in charge_and_multiplicity_list):
+                pass
+            else:
+                raise ValueError(
+                    "The charge and multiplicity of lower level-of-theory cannot override the higher ones!"
+                )
+            updated_list = []
+            for charge_and_multiplicity in charge_and_multiplicity_list:
+                updated_list.append(str(charge_and_multiplicity))
+            charge_and_multiplicity = " ".join(updated_list)
+        else:
+            # three-layer ONIOM model
+            charge_and_multiplicity_list = [
+                real_low_charge,
+                real_low_multiplicity,
+                int_med_charge,
+                int_med_multiplicity,
+                int_low_charge,
+                int_low_multiplicity,
+                model_high_charge,
+                model_high_multiplicity,
+                model_med_charge,
+                model_med_multiplicity,
+                model_low_charge,
+                model_low_multiplicity,
+            ]
+            # Defaults for missing charge / spin multiplicity pairs are taken from the next highest
+            # calculation level and / or system size.
+            if all(var is None for var in charge_and_multiplicity_list[2:]):
+                # only charge and multiplicity of real system is specified,
+                # so the charge and multiplicity of other systems will be the same as the real system
+                for i in range(2, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = real_low_charge
+                    charge_and_multiplicity_list[i + 1] = real_low_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[4:]):
+                # only charge and multiplicity of real system and that of intermediate layer,
+                # medium level-of-theory are specified, the charge and multiplicity of other
+                # systems will be the same as the intermediate layer
+                for i in range(4, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = int_med_charge
+                    charge_and_multiplicity_list[i + 1] = int_med_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[6:]):
+                # only charge and multiplicity of real system, intermediate layer, medium level-of-theory
+                # and intermediate layer, medium level-of-theory are specified, the charge and multiplicity of other
+                # systems will be the same as intermediate layer, medium level-of-theory,...
+                for i in range(6, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = int_med_charge
+                    charge_and_multiplicity_list[i + 1] = int_med_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[8:]):
+                # the rest systems will follow the model system, high level-of-theory
+                for i in range(8, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = model_high_charge
+                    charge_and_multiplicity_list[i + 1] = (
+                        model_high_multiplicity
+                    )
+            elif all(var is None for var in charge_and_multiplicity_list[10:]):
+                charge_and_multiplicity_list[-2] = model_med_charge
+                charge_and_multiplicity_list[-1] = model_med_multiplicity
+            elif all(var is not None for var in charge_and_multiplicity_list):
+                pass
+            else:
+                raise ValueError(
+                    "The charge and multiplicity of lower level-of-theory cannot override the higher ones!"
+                )
+            updated_list = []
+            for charge_and_multiplicity in charge_and_multiplicity_list:
+                updated_list.append(str(charge_and_multiplicity))
+            charge_and_multiplicity = " ".join(updated_list)
+        return charge_and_multiplicity
+
+    def __eq__(self, other):
+        """
+        Compare two GaussianQMMMJobSettings objects for equality.
+
+        Compares all attributes between two QMMM settings objects, including the
+        QMMM-specific attributes that are not present in the parent class.
+
+        Args:
+            other (GaussianQMMMJobSettings): Settings object to compare with.
+
+        Returns:
+            bool or NotImplemented: True if equal, False if different,
+                NotImplemented if types don't match.
+        """
+        if type(self) is not type(other):
+            return NotImplemented
+
+        # Get dictionaries of both objects
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+
+        # Exclude append_additional_info from the comparison (inherited behavior)
+        self_dict.pop("append_additional_info", None)
+        other_dict.pop("append_additional_info", None)
+
+        is_equal = self_dict == other_dict
+        if not is_equal:
+            import dictdiffer
+
+            logger.info("Gaussian QMMM job settings are not equal.")
+            for diff in list(dictdiffer.diff(self_dict, other_dict)):
+                logger.info(f"Difference: {diff}")
+
+        return self_dict == other_dict

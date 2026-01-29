@@ -5,6 +5,7 @@ from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCAJobSettings,
     ORCANEBJobSettings,
+    ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -68,7 +69,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for geometry optimization.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "opt"
+        settings.jobtype = "opt"
         return settings
 
     def modred_settings(self):
@@ -82,7 +83,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for modredundant optimization.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "modred"
+        settings.jobtype = "modred"
         return settings
 
     def ts_settings(self):
@@ -99,7 +100,7 @@ class ORCAProjectSettings(RegistryMixin):
         settings = ORCATSJobSettings(
             **settings.__dict__
         )  # convert settings to ORCATSJobSettings
-        settings.job_type = "ts"
+        settings.jobtype = "ts"
         return settings
 
     def irc_settings(self):
@@ -117,7 +118,7 @@ class ORCAProjectSettings(RegistryMixin):
         settings = ORCAIRCJobSettings(
             **settings.__dict__
         )  # convert settings to ORCAIRCJobSettings
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.freq = False
         return settings
 
@@ -133,7 +134,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for coordinate scan calculations.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "scan"
+        settings.jobtype = "scan"
         settings.freq = False
         return settings
 
@@ -149,7 +150,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for NCI analysis.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "nci"
+        settings.jobtype = "nci"
         settings.freq = False
         return settings
 
@@ -165,7 +166,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for WBI calculations.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "wbi"
+        settings.jobtype = "wbi"
         settings.freq = False
         return settings
 
@@ -181,7 +182,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for single point calculations.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "sp"
+        settings.jobtype = "sp"
         settings.freq = False  # turn off freq calculation for sp job
         settings.basis = self.large_basis
         return settings
@@ -201,6 +202,14 @@ class ORCAProjectSettings(RegistryMixin):
             **settings.__dict__
         )  # convert settings to ORCANEBJobSettings
         settings.job_type = "neb"
+        settings.freq = False
+        return settings
+
+    def qmmm_settings(self):
+        """ORCA default settings for QMMM job."""
+        settings = self.main_settings().copy()
+        settings = ORCAQMMMJobSettings(**settings.__dict__)
+        settings.jobtype = "qmmm"
         settings.freq = False
         return settings
 
@@ -351,6 +360,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        qmmm_settings,
         neb_settings,
     ):
         """
@@ -377,6 +387,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._qmmm_settings = qmmm_settings
         self._neb_settings = neb_settings
 
     def opt_settings(self):
@@ -460,6 +471,9 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         """
         return self._wbi_settings
 
+    def qmmm_settings(self):
+        return self._qmmm_settings
+
     def neb_settings(self):
         """
         Get Nudged Elastic Band calculation settings.
@@ -513,15 +527,16 @@ class YamlORCAProjectSettingsBuilder:
             FileNotFoundError: If the YAML configuration file is not found.
             ValueError: If the YAML file contains invalid configuration.
         """
-        opt_settings = self._project_settings_for_job(job_type="opt")
-        modred_settings = self._project_settings_for_job(job_type="modred")
-        ts_settings = self._project_settings_for_job(job_type="ts")
-        irc_settings = self._project_settings_for_job(job_type="irc")
-        scan_settings = self._project_settings_for_job(job_type="scan")
-        nci_settings = self._project_settings_for_job(job_type="nci")
-        sp_settings = self._project_settings_for_job(job_type="sp")
-        td_settings = self._project_settings_for_job(job_type="td")
-        wbi_settings = self._project_settings_for_job(job_type="wbi")
+        opt_settings = self._project_settings_for_job(jobtype="opt")
+        modred_settings = self._project_settings_for_job(jobtype="modred")
+        ts_settings = self._project_settings_for_job(jobtype="ts")
+        irc_settings = self._project_settings_for_job(jobtype="irc")
+        scan_settings = self._project_settings_for_job(jobtype="scan")
+        nci_settings = self._project_settings_for_job(jobtype="nci")
+        sp_settings = self._project_settings_for_job(jobtype="sp")
+        td_settings = self._project_settings_for_job(jobtype="td")
+        wbi_settings = self._project_settings_for_job(jobtype="wbi")
+        qmmm_settings = self._project_settings_for_job(jobtype="qmmm")
         neb_settings = self._project_settings_for_job(job_type="neb")
 
         # Create complete project settings with all job configurations
@@ -535,6 +550,7 @@ class YamlORCAProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            qmmm_settings=qmmm_settings,
             neb_settings=neb_settings,
         )
 
@@ -554,7 +570,7 @@ class YamlORCAProjectSettingsBuilder:
 
         return read_molecular_job_yaml(self.filename, program="orca")
 
-    def _project_settings_for_job(self, job_type):
+    def _project_settings_for_job(self, jobtype):
         """
         Create job-specific settings from YAML configuration.
 
@@ -562,7 +578,7 @@ class YamlORCAProjectSettingsBuilder:
         configured instances based on YAML data.
 
         Args:
-            job_type (str): Type of job (opt, ts, irc, scan, etc.).
+            jobtype (str): Type of job (opt, ts, irc, scan, etc.).
 
         Returns:
             ORCAJobSettings or ORCAIRCJobSettings or ORCATSJobSettings: Configured
@@ -574,31 +590,24 @@ class YamlORCAProjectSettingsBuilder:
             RuntimeError: If configuration for the job type is not found.
         """
         # Map job types to their specific settings classes
-        settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
-        # Define a dictionary to map job_type to corresponding settings class
         settings_mapping = {
             "irc": ORCAIRCJobSettings,
             "ts": ORCATSJobSettings,
+            "qmmm": ORCAQMMMJobSettings,
             "neb": ORCANEBJobSettings,
         }
 
         try:
-            job_type_config = self._read_config().get(job_type)
-            if job_type_config is not None:
+            jobtype_config = self._read_config().get(jobtype)
+            if jobtype_config is not None:
                 # Use specific settings class if available, otherwise default
                 return settings_mapping.get(
-                    job_type, ORCAJobSettings
-                ).from_dict(job_type_config)
-            else:
-                # The current block is for neb jobs as  self._read_config().get(job_type) return None.
-                # todo: needs to be unified this with other job types.
-                return settings_mapping.get(
-                    job_type, ORCAJobSettings
-                ).default()
+                    jobtype, ORCAJobSettings
+                ).from_dict(jobtype_config)
         except KeyError as e:
             available_jobs = list(self._read_config().keys())
             raise RuntimeError(
-                f"ORCA settings for job {job_type} cannot be found!\n"
+                f"ORCA settings for job {jobtype} cannot be found!\n"
                 f"Available ORCA jobs with settings are: {available_jobs}"
             ) from e
 

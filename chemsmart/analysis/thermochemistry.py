@@ -15,7 +15,7 @@ from chemsmart.utils.constants import (
     energy_conversion,
     hartree_to_joules,
 )
-from chemsmart.utils.io import get_outfile_format
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
     head_gordon_damping_function_ref,
@@ -137,18 +137,24 @@ class Thermochemistry:
     @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        program = get_outfile_format(self.filename)
+        program = get_program_type_from_file(self.filename)
         if program == "gaussian":
-            return Gaussian16Output(self.filename)
+            output = Gaussian16Output(self.filename)
         elif program == "orca":
-            return ORCAOutput(self.filename)
+            output = ORCAOutput(self.filename)
         else:
             # can be added in future to parse other file formats
             raise ValueError("Unsupported file format.")
+        if not output.normal_termination:
+            raise ValueError(
+                f"File '{self.filename}' did not terminate normally. "
+                "Skipping thermochemistry calculation for this file."
+            )
+        return output
 
     @property
-    def job_type(self):
-        return self.file_object.job_type
+    def jobtype(self):
+        return self.file_object.jobtype
 
     @property
     def mass(self):
@@ -214,7 +220,7 @@ class Thermochemistry:
     def cleaned_frequencies(self):
         """Clean up vibrational frequencies for thermochemical calculations.
 
-        For transition states (job_type == "ts"), the first imaginary
+        For transition states (jobtype == "ts"), the first imaginary
         frequency is assumed to correspond to the reaction coordinate and is
         excluded from thermochemical calculation.
         For optimization, only geometries without imaginary frequencies are
@@ -223,7 +229,7 @@ class Thermochemistry:
         if self.vibrational_frequencies is None:
             return None
         if self.imaginary_frequencies:
-            if self.job_type == "ts":
+            if self.jobtype == "ts":
                 if (
                     len(self.imaginary_frequencies) == 1
                     and self.vibrational_frequencies[0] < 0.0
@@ -661,6 +667,8 @@ class Thermochemistry:
         if self.v is None:
             return None
         bav = self.Bav
+        if bav is None:
+            return []
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
         entropy = [
@@ -960,7 +968,7 @@ class Thermochemistry:
     def check_frequencies(self):
         """Check for imaginary frequencies and raise an error if found."""
         if self.imaginary_frequencies:
-            if self.job_type == "ts":
+            if self.jobtype == "ts":
                 if len(self.imaginary_frequencies) == 1:
                     logger.info(
                         f"Correct Transition State detected: only 1 imaginary "
@@ -973,7 +981,7 @@ class Thermochemistry:
                         f"{self.filename}. Expected 0 for optimization or 1 "
                         f"for TS, but found "
                         f"{len(self.imaginary_frequencies)} for job: "
-                        f"{self.job_type}!"
+                        f"{self.jobtype}!"
                     )
             else:
                 raise ValueError(
@@ -1085,6 +1093,7 @@ class Thermochemistry:
         qrrho_gibbs_free_energy,
         outputfile=None,
         overwrite=False,
+        write_header=True,
     ):
         """
         Log thermochemistry results to a structured output file.
@@ -1138,6 +1147,10 @@ class Thermochemistry:
             If True, existing files are replaced. If False, results are
             appended
             (header is repeated to reflect possible changes in conditions).
+        write_header : bool, default=True
+            If True, writes the header block before results. Set to False
+            to skip header writing (useful when appending multiple times
+            without changing conditions).
 
         Notes
         -----
@@ -1182,7 +1195,7 @@ class Thermochemistry:
                 if not self.use_weighted_mass
                 else "Natural Abundance Weighted Masses"
             )
-            header = f"Temperature: {self.temperature:.2f} K\n"
+            header = f"\nTemperature: {self.temperature:.2f} K\n"
             if self.concentration is not None:
                 header += f"Concentration: {self.concentration:.1f} mol/L\n"
             else:
@@ -1315,15 +1328,11 @@ class Thermochemistry:
             if overwrite:
                 mode = "w"
                 logger.info(f"Overwriting {outputfile}.")
-                write_header = True
             else:
                 mode = "a"
                 logger.info(f"Appending to {outputfile}.")
-                # Always repeat header when appending (different conditions may be used)
-                write_header = True
         else:
             mode = "w"
-            write_header = True
 
         with open(outputfile, mode) as out:
             if write_header:

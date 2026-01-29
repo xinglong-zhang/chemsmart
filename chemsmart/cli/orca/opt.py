@@ -13,13 +13,14 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
-from chemsmart.utils.cli import MyCommand
+from chemsmart.cli.orca.qmmm_helper import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("opt", cls=MyCommand)
+@orca.group("opt", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click.option(
     "-f",
@@ -65,40 +66,89 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
     opt_settings.invert_constraints = invert_constraints
     logger.info(f"Final optimization settings: {opt_settings.__dict__}")
 
-    # validate charge and multiplicity consistency
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = opt_settings
+    ctx.obj["parent_jobtype"] = "opt"
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # validate charge and multiplicity consistency only for direct opt jobs
     check_charge_and_multiplicity(opt_settings)
 
-    # get molecule from context (use the last molecule if multiple)
+    # get molecules from context
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Optimizing molecule: {molecule}")
 
     # get label for the job output files
     label = ctx.obj["label"]
 
     # Set atoms to freeze for constrained optimization
+    from chemsmart.jobs.orca.opt import ORCAOptJob
     from chemsmart.utils.utils import (
         convert_list_to_gaussian_frozen_list,
         get_list_from_string_range,
     )
 
-    if freeze_atoms is not None:
-        frozen_atoms_list = get_list_from_string_range(freeze_atoms)
-        logger.debug(f"Freezing atoms: {frozen_atoms_list}")
-        molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
-            frozen_atoms_list, molecule
-        )
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} ORCA optimization jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            # Create a copy to avoid side effects from mutation
+            molecule = molecule.copy()
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Optimizing molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            # Apply frozen atoms if specified
+            if freeze_atoms is not None:
+                frozen_atoms_list = get_list_from_string_range(freeze_atoms)
+                logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+                molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
+                    frozen_atoms_list, molecule
+                )
+            else:
+                logger.debug("No atoms will be frozen during optimization")
+
+            job = ORCAOptJob(
+                molecule=molecule,
+                settings=opt_settings,
+                label=molecule_label,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
+            jobs.append(job)
+        logger.debug(f"Created {len(jobs)} ORCA optimization jobs")
+        return jobs
     else:
-        logger.debug("No atoms will be frozen during optimization")
+        # Single molecule case
+        molecule = molecules[-1]
+        molecule = molecule.copy()
+        logger.info(f"Optimizing molecule: {molecule}")
 
-    from chemsmart.jobs.orca.opt import ORCAOptJob
+        if freeze_atoms is not None:
+            frozen_atoms_list = get_list_from_string_range(freeze_atoms)
+            logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+            molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
+                frozen_atoms_list, molecule
+            )
+        else:
+            logger.debug("No atoms will be frozen during optimization")
 
-    job = ORCAOptJob(
-        molecule=molecule,
-        settings=opt_settings,
-        label=label,
-        skip_completed=skip_completed,
-        **kwargs,
-    )
-    logger.debug(f"Created ORCA optimization job: {job}")
-    return job
+        job = ORCAOptJob(
+            molecule=molecule,
+            settings=opt_settings,
+            label=label,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+        logger.debug(f"Created ORCA optimization job: {job}")
+        return job
+
+
+create_orca_qmmm_subcommand(opt)

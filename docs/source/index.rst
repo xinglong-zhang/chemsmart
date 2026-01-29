@@ -35,6 +35,7 @@ chemistry software.
    :caption: CLI Reference
 
    cli-overview
+   molecule-input-formats
 
 .. toctree::
    :maxdepth: 2
@@ -46,6 +47,7 @@ chemistry software.
    gaussian-conformational-sampling
    gaussian-qrc
    gaussian-electronic-structure
+   gaussian-qmmm-jobs
    gaussian-other-jobs
 
 .. toctree::
@@ -56,6 +58,7 @@ chemistry software.
    orca-structure-optimization
    orca-transition-state
    orca-direct-input
+   orca-multiscale-calculations
 
 .. toctree::
    :maxdepth: 2

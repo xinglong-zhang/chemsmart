@@ -180,9 +180,16 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
-    job.jobrunner = jobrunner
 
-    _process_single_job(job=job)
+    # Handle list of jobs (when multiple molecules are specified with --index)
+    if isinstance(job, list):
+        logger.info(f"Processing {len(job)} jobs")
+        for single_job in job:
+            single_job.jobrunner = jobrunner
+            _process_single_job(job=single_job)
+    else:
+        job.jobrunner = jobrunner
+        _process_single_job(job=job)
 
 
 for subcommand in subcommands:

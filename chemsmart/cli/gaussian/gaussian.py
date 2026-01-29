@@ -12,7 +12,9 @@ from chemsmart.cli.job import (
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
-from chemsmart.utils.utils import return_objects_from_string_index
+from chemsmart.utils.utils import (
+    return_objects_and_indices_from_string_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +357,138 @@ def click_gaussian_td_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_qmmm_options(f):
+    """Common click options for QMMM jobs."""
+
+    @click.option(
+        "-hx",
+        "--high-level-functional",
+        type=str,
+        help="High-level layer functional.",
+    )
+    @click.option(
+        "-hb",
+        "--high-level-basis",
+        type=str,
+        help="High-level layer basis.",
+    )
+    @click.option(
+        "-hf",
+        "--high-level-force-field",
+        type=str,
+        help="High-level layer force field.",
+    )
+    @click.option(
+        "-mx",
+        "--medium-level-functional",
+        type=str,
+        help="Medium-level layer functional.",
+    )
+    @click.option(
+        "-mb",
+        "--medium-level-basis",
+        type=str,
+        help="Medium-level layer basis.",
+    )
+    @click.option(
+        "-mf",
+        "--Medium-level-force-field",
+        type=str,
+        help="Medium-level layer force field.",
+    )
+    @click.option(
+        "-lx",
+        "--low-level-functional",
+        type=str,
+        help="Low level layer functional.",
+    )
+    @click.option(
+        "-lb",
+        "--low-level-basis",
+        type=str,
+        help="Low level layer basis.",
+    )
+    @click.option(
+        "-lf",
+        "--low-level-force-field",
+        type=str,
+        help="Low level layer force field.",
+    )
+    @click.option(
+        "-cr",
+        "--real-charge",
+        type=int,
+        help="Charge of real system.",
+    )
+    @click.option(
+        "-mr",
+        "--real-multiplicity",
+        type=int,
+        help="Spin multiplicity of real system.",
+    )
+    @click.option(
+        "-ci",
+        "--int-charge",
+        type=int,
+        help="Charge of intermediate system.",
+    )
+    @click.option(
+        "-mi",
+        "--int-multiplicity",
+        type=int,
+        help="Spin multiplicity of intermediate system.",
+    )
+    @click.option(
+        "-cm",
+        "--model-charge",
+        type=int,
+        help="Charge of model system.",
+    )
+    @click.option(
+        "-mm",
+        "--model-multiplicity",
+        type=int,
+        help="Spin multiplicity of model system.",
+    )
+    @click.option(
+        "-ha",
+        "--high-level-atoms",
+        type=str,
+        help="Atom indices for high level.",
+    )
+    @click.option(
+        "-ma",
+        "--medium-level-atoms",
+        type=str,
+        help="Atom indices for medium level.",
+    )
+    @click.option(
+        "-la",
+        "--low-level-atoms",
+        type=str,
+        help="Atom indices for low level.",
+    )
+    @click.option(
+        "-b",
+        "--bonded-atoms",
+        type=str,
+        help="List of tuples of the bonds to be cut, specified by "
+        "two atomic indexes in each tuple, e.g., (1,2), (3,4)",
+    )
+    @click.option(
+        "-s",
+        "--scale-factors",
+        type=dict,
+        help="A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom "
+        "pair indices and the value is a list of scale factors for (low, medium, high).",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @click.group(cls=MyGroup)
 @click_gaussian_options
 @click_filename_options
@@ -502,16 +636,48 @@ def gaussian(
     label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
-    # then return that structure as a list
+    # then return that structure as a list and track the original indices
+    molecule_indices = None
     if index is not None:
-        molecules = return_objects_from_string_index(
-            list_of_objects=molecules, index=index
+        molecules, molecule_indices = (
+            return_objects_and_indices_from_string_index(
+                list_of_objects=molecules, index=index
+            )
         )
 
     if not isinstance(molecules, list):
         molecules = [molecules]
+        if molecule_indices is not None and not isinstance(
+            molecule_indices, list
+        ):
+            molecule_indices = [molecule_indices]
 
     logger.debug(f"Obtained molecules: {molecules}")
+    logger.debug(f"Molecule indices: {molecule_indices}")
+
+    # If the user requested the qmmm subcommand, ensure molecules are
+    # represented as QMMMMolecule so the subcommand sees QMMM-specific
+    # attributes early (e.g., high_level_atoms, bonded_atoms).
+    try:
+        if ctx.invoked_subcommand == "qmmm":
+            from chemsmart.io.molecules.structure import QMMMMolecule
+
+            converted = []
+            for m in molecules:
+                if isinstance(m, QMMMMolecule):
+                    converted.append(m)
+                else:
+                    converted.append(QMMMMolecule(molecule=m))
+            molecules = converted
+            logger.debug(
+                "Converted molecules to QMMMMolecule for qmmm subcommand."
+            )
+    except Exception:
+        # Non-fatal: if anything goes wrong, keep original molecules and
+        # let the qmmm subcommand attempt conversion itself.
+        logger.debug(
+            "Could not convert molecules to QMMMMolecule at group level."
+        )
 
     # store objects
     ctx.obj["project_settings"] = project_settings
@@ -519,6 +685,9 @@ def gaussian(
     ctx.obj["keywords"] = keywords
     ctx.obj["molecules"] = (
         molecules  # molecules as a list, as some jobs requires all structures to be used
+    )
+    ctx.obj["molecule_indices"] = (
+        molecule_indices  # Store original 1-based indices
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename

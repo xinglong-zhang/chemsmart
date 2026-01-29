@@ -26,6 +26,7 @@ frozen_coordinates_pattern = (
 )
 scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
 mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
+oniom_gridpoint_pattern = r"ONIOM:\s+gridpoint\s+(\d+)\s+method:\s+(\w+)\s+system:\s+(\w+)\s+energy:\s+([+-]?\d*\.\d+|\d+)"
 oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
 xyz_energy_pattern = r"Energy\(Hartree\):\s*(-?\d+\.\d+)"
 
@@ -92,6 +93,9 @@ orca_frozen_atoms_output_pattern = r"Will constrain atom \d+ coordinate \d"
 # 30. A(C   1,C   5,H   8)           69.0631         0.105398 C
 # 49. D(H   9,C   4,C   3,C   2)   -180.0000         0.024745 C
 orca_constrained_coordinates_pattern = r"^\d+\.\s+[BAD]\([A-Z][a-z]?\s+\d+,[A-Z][a-z]?\s+\d+(?:,[A-Z][a-z]?\s+\d+)?(?:,[A-Z][a-z]?\s+\d+)?\)\s+-?\d+\.\d{4}\s+\d+\.\d{6}\s+C$"
+
+# regex pattern for QMMM calculations in orca
+orca_qm_h_bond_length_pattern = r"Dist_\w+_\w+\s+[\d.]+"
 
 # filename pattern for orca output files
 

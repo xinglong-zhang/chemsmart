@@ -329,6 +329,7 @@ class ThermochemistryJob(Job):
                 qrrho_gibbs_free_energy,
                 outputfile=self.settings.outputfile,
                 overwrite=self.settings.overwrite,
+                write_header=self.settings.write_header,
             )
 
         except Exception as e:
@@ -342,7 +343,10 @@ class ThermochemistryJob(Job):
         Reads and prints the contents of the output file containing
         the computed thermochemical properties to the console.
         """
-        with open(self.settings.outputfile, "r") as out:
-            print()
-            results = out.read()
-            print(results)
+        if self.settings.outputfile and os.path.exists(
+            self.settings.outputfile
+        ):
+            with open(self.settings.outputfile, "r") as out:
+                print()
+                results = out.read()
+                print(results)

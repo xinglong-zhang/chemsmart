@@ -14,10 +14,19 @@ Key functionality includes:
 import logging
 import os
 import re
+import shutil
 import string
+import subprocess
+from io import BytesIO
+
+# from rdkit import Chem
+#
+# import tempfile
 from pathlib import Path
+from typing import List
 
 import numpy as np
+from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
@@ -159,6 +168,40 @@ def remove_keyword(text, keyword):
     )
 
 
+def replace_word(text, old_word, new_word, case_sensitive=True):
+    """
+    Replace a word in text using word boundary matching.
+
+    Replaces all occurrences of `old_word` with `new_word` using `\b`
+    word-boundary matching to ensure only complete words are replaced,
+    not partial matches within other words.
+
+    Args:
+        text (str): Input text to process.
+        old_word (str): Word to replace.
+        new_word (str): Replacement word.
+        case_sensitive (bool, optional): If `False`, replace all occurrences of
+            `old_word` with `new_word` in a case-insensitive manner.
+            Default is `True`.
+
+    Returns:
+        str: Text with the word replaced.
+
+    Example:
+        >>> replace_word("gen test noeigentest","gen","def2svp",case_sensitive=True)
+        'def2svp test noeigentest'
+        >>> replace_word("opt=(gen) freq","gen","6-31g",case_sensitive=False)
+        'opt=(6-31g) freq'
+        >>> replace_word("Gen gen GEN","gen","X")
+        # -> "X X X"
+        >>> replace_word("Gen gen GEN","gen","X",case_sensitive=True)
+        # -> "Gen X GEN"
+    """
+    pattern = r"\b" + re.escape(old_word) + r"\b"
+    flags = 0 if case_sensitive else re.IGNORECASE
+    return re.sub(pattern, new_word, text, flags=flags)
+
+
 def line_of_all_integers(line: str, allow_sign: bool = True) -> bool:
     """
     Return True iff the line has 1+ whitespace-separated tokens
@@ -238,7 +281,7 @@ def match_outfile_pattern(line) -> str | None:
     return None
 
 
-def get_outfile_format(filepath) -> str:
+def get_program_type_from_file(filepath) -> str:
     """
     Detect the type of quantum chemistry output file.
 
@@ -249,7 +292,8 @@ def get_outfile_format(filepath) -> str:
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
+        str: Program name, one of: "gaussian", "orca", "xtb", "crest",
+        or "unknown" if the format cannot be detected.
     """
     max_lines = 200
     try:
@@ -304,7 +348,9 @@ def find_output_files_in_directory(directory, program):
                 outfiles.append(os.path.join(subdir, file))
 
     matched_files = [
-        file for file in outfiles if get_outfile_format(file) == program
+        file
+        for file in outfiles
+        if get_program_type_from_file(file) == program
     ]
     return matched_files
 
@@ -324,7 +370,8 @@ def load_molecules_from_paths(
 
     Args:
         file_paths (list of str or Path): List of file paths to load molecules from.
-        index (int or str): Index or slice to select specific structures from each file.
+        index (int or str or None): Index or slice to select specific structures from each file.
+            If None, defaults to "-1" (last structure).
         add_index_suffix_for_single (bool, optional): If True, appends an index suffix to
             the molecule name even if only a single structure is loaded from a file.
         check_exists (bool, optional): If True, checks that each file exists before loading.
@@ -336,6 +383,10 @@ def load_molecules_from_paths(
         FileNotFoundError: If `check_exists` is True and a file does not exist.
         Exception: If an error occurs during molecule loading from a file.
     """
+    # Default index to "-1" (last structure) if not specified
+    if index is None:
+        index = "-1"
+
     loaded = []
 
     for i, file_path in enumerate(file_paths):
@@ -466,3 +517,56 @@ def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
         return f"id {parts[0]}"
 
     return " or ".join(f"id {part}" for part in parts)
+
+
+def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
+    """
+    Use the Open Babel CLI ('obabel') to convert a CDX file to SDF and
+    return a list of RDKit Mol objects.
+
+    This implementation writes no temporary files; it streams SDF from
+    stdout into RDKit, which avoids Windows path issues.
+
+    Args:
+        filename: Path to the .cdx file.
+
+    Returns:
+        List of RDKit Mol objects.
+
+    Raises:
+        ValueError: If 'obabel' is not available or no molecules can be read.
+        RuntimeError: If the obabel subprocess fails.
+    """
+    obabel = shutil.which("obabel")
+    if obabel is None:
+        raise ValueError(
+            "Open Babel CLI ('obabel') is not available on PATH. "
+            "Install Open Babel or save the ChemDraw file as CDXML instead."
+        )
+
+    # Run: obabel -icdx input.cdx -osdf
+    # This writes SDF directly to stdout.
+    result = subprocess.run(
+        [obabel, "-icdx", filename, "-osdf"],
+        check=False,
+        capture_output=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"obabel failed to convert {filename!r} to SDF "
+            f"(exit code {result.returncode}). stderr:\n{result.stderr.decode(errors='replace')}"
+        )
+
+    # Feed stdout bytes directly into RDKit's ForwardSDMolSupplier
+    sdf_stream = BytesIO(result.stdout)
+    suppl = Chem.ForwardSDMolSupplier(sdf_stream, removeHs=False)
+
+    mols = [mol for mol in suppl if mol is not None]
+
+    if not mols:
+        raise ValueError(
+            f"Open Babel produced no valid molecules from CDX file: {filename}"
+        )
+
+    return mols

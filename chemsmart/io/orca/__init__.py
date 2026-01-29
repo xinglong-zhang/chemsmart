@@ -642,6 +642,25 @@ class ORCARefs:
 
     ORCA_DISPERSION_CORRECTIONS = ["d2", "d3zero", "d3bj", "d4"]
 
+    ORCA_QMMM_JOBTYPE = [
+        "QMMM",
+        "QM/QM2",
+        "QM/QM2/MM",
+        "MOL-CRYSTAL-QMMM",
+        "IONIC-CRYSTAL-QMMM",
+    ]
+
+    ORCA_QM2_BUILT_IN_METHODS = [
+        "XTB",
+        "XTB0",
+        "XTB1",
+        "HF-3C",
+        "PBEH-3C",
+        "R2SCAN-3C",
+        "PM3",
+        "AM1",
+    ]
+
     @property
     def orca_blocks(self):
         """
@@ -1275,6 +1294,14 @@ class ORCARefs:
         """
         return [i.lower() for i in self.O_DENSITY_OPTIONS]
 
+    @property
+    def orca_qmmm_jobtype(self):
+        return [i.lower() for i in self.ORCA_QMMM_JOBTYPE]
+
+    @property
+    def orca_qm2_built_in_methods(self):
+        return [i.lower() for i in self.ORCA_QM2_BUILT_IN_METHODS]
+
 
 # Global constants for convenient access to ORCA reference data
 orca_ref = ORCARefs()
@@ -1291,3 +1318,5 @@ ORCA_SCF_CONVERGENCE = orca_ref.ORCA_SCF_CONVERGENCE_CRITERIA
 ORCA_ALL_DENSITY_OPTIONS = orca_ref.orca_density_options
 ORCA_ALL_SCF_ALGORITHMS = orca_ref.ORCA_SCF_ALGORITHMS
 ORCA_ALL_DISPERSION_CORRECTIONS = orca_ref.ORCA_DISPERSION_CORRECTIONS
+ORCA_ALL_QMMM_JOBTYPE = orca_ref.orca_qmmm_jobtype
+ORCA_ALL_QM2_BUILT_IN_METHODS = orca_ref.orca_qm2_built_in_methods

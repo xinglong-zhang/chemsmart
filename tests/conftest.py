@@ -6,6 +6,8 @@ import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
 from pytest_mock import MockerFixture
+
+# from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
@@ -575,6 +577,18 @@ def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "solv.yaml")
 
 
+@pytest.fixture()
+def gaussian_yaml_settings_qmmm(gaussian_yaml_settings_directory):
+    return os.path.join(gaussian_yaml_settings_directory, "qmmm.yaml")
+
+
+@pytest.fixture()
+def gaussian_yaml_settings_qmmm_project_name(
+    gaussian_yaml_settings_directory,
+):
+    return os.path.join(gaussian_yaml_settings_directory, "qmmm")
+
+
 # gaussian written files
 @pytest.fixture()
 def gaussian_written_files_directory(gaussian_test_directory):
@@ -640,6 +654,18 @@ def gaussian_written_scan_multiple_degrees_of_freedom_with_constraints_file(
 @pytest.fixture()
 def gaussian_written_ts_file(gaussian_written_files_directory):
     return os.path.join(gaussian_written_files_directory, "gaussian_ts.com")
+
+
+@pytest.fixture()
+def gaussian_written_qmmm_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_qmmm.com")
+
+
+@pytest.fixture()
+def gaussian_written_qmmm_log_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_qmmm_from_log.com"
+    )
 
 
 @pytest.fixture()
@@ -899,6 +925,11 @@ def orca_faulty_solv(orca_inputs_directory):
 
 
 @pytest.fixture()
+def orca_qmmm_input_file(orca_inputs_directory):
+    return os.path.join(orca_inputs_directory, "dna_qmmm.inp")
+
+
+@pytest.fixture()
 def orca_outputs_directory(orca_test_directory):
     orca_outputs_directory = os.path.join(orca_test_directory, "outputs")
     return os.path.abspath(orca_outputs_directory)
@@ -1002,6 +1033,11 @@ def orca_fixed_dihedral(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
     )
+
+
+@pytest.fixture()
+def orca_two_layer_qmmmm_output_file(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "methanol_ethane_qmmm.out")
 
 
 @pytest.fixture()
@@ -1184,6 +1220,36 @@ def extended_xyz_file(xyz_directory):
 @pytest.fixture()
 def dna_hybrid_visualized_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "dna_hybrid.xyz")
+
+
+@pytest.fixture()
+def chemdraw_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "chemdraw")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_benzene(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "benzene.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_methane(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "methane.cdxml")
+
+
+@pytest.fixture()
+def multi_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "two_molecules.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdx_file_imidazole(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "imidazole.cdx")
+
+
+@pytest.fixture()
+def complex_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "complex_molecule.cdxml")
 
 
 @pytest.fixture()

@@ -1,7 +1,10 @@
+import ast
 import copy
+import inspect
 import logging
 import os
 import re
+import tempfile
 from functools import cached_property, lru_cache
 
 import networkx as nx
@@ -15,7 +18,6 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
-from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
@@ -52,6 +54,13 @@ class Molecule:
         The forces on the atoms in the molecule in eV/Å.
     velocities: numpy array
         The velocities of the atoms in the molecule.
+    qm high/medium/low_level_atoms：list of integers to define QM/MM layers
+        The atoms that are treated at the high/medium/low level of theory.
+    bonded_atoms: list of tuples of integers
+        The atom pairs that are treated as bonded in QM/MM calculations.
+    scale factors: a dictionary of scale factors for QM/MM calculations,
+        where the key is the bonded atom pair indices and the value is
+        a list of scale factors for (low, medium, high).
     info: dict
         A dictionary containing additional information about the molecule.
     """
@@ -771,9 +780,9 @@ class Molecule:
             return cls._read_orca_inputfile(filepath, **kwargs)
 
         if basename.endswith(".out"):
-            from chemsmart.utils.io import get_outfile_format
+            from chemsmart.utils.io import get_program_type_from_file
 
-            program = get_outfile_format(filepath)
+            program = get_program_type_from_file(filepath)
             if program == "orca":
                 return cls._read_orca_outfile(filepath, index, **kwargs)
             if program == "gaussian":
@@ -792,6 +801,13 @@ class Molecule:
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
 
+        if basename.endswith((".cdx", ".cdxml")):
+            return cls._read_chemdraw_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -799,6 +815,8 @@ class Molecule:
         """
         Read XYZ format molecular structure file.
         """
+        from chemsmart.io.xyz.xyzfile import XYZFile
+
         xyz_file = XYZFile(filename=filepath)
         molecules = xyz_file.get_molecules(
             index=index, return_list=return_list
@@ -811,6 +829,8 @@ class Molecule:
         """
         Read SDF format molecular structure file.
         """
+        from chemsmart.io.file import SDFFile
+
         sdf_file = SDFFile(filepath)
         return sdf_file.molecule
 
@@ -883,6 +903,33 @@ class Molecule:
         orca_output = ORCAOutput(filename=filepath)
         return orca_output.get_molecule(index=index)
 
+    @classmethod
+    def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):
+        """
+        Read ChemDraw file (.cdx or .cdxml) format.
+
+        Args:
+            filepath (str): Path to ChemDraw file (.cdx or .cdxml)
+            index (str or int): Index for multi-structure files.
+                Use "-1" for last molecule, ":" for all, or 1-based integer.
+            return_list (bool): If True, return a list of molecules.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from ChemDraw file.
+
+        Note:
+            - .cdxml files are XML-based ChemDraw format.
+            - .cdx files are binary ChemDraw format.
+            - RDKit's MolsFromCDXMLFile supports both formats.
+            - 3D coordinates are generated using RDKit's EmbedMolecule.
+        """
+        from chemsmart.io.file import CDXFile
+
+        chemdraw_file = CDXFile(filename=filepath)
+        return chemdraw_file.get_molecules(
+            index=index, return_list=return_list
+        )
+
     # @staticmethod
     # @file_cache()
     # def _read_gromacs_gro(filepath, index, **kwargs):
@@ -953,7 +1000,7 @@ class Molecule:
                     f"Structure successfully created from pubchem with {attribute} = {identifier}"
                 )
                 if return_list:
-                    return [molecule]
+                    return molecule
                 return molecule
 
         logger.debug("Could not create structure from pubchem.")
@@ -1206,6 +1253,21 @@ class Molecule:
         """
         # ORCA cannot do PBC calculations
         pass
+
+    def _determine_level_from_atom_index(self, atom_index):
+        """Determine the partition level of an atom based on its integer index."""
+        atom_index = str(atom_index)
+        if self.high_level_atoms is not None:
+            if atom_index in self.high_level_atoms:
+                return "H"
+            elif self.medium_level_atoms:
+                if atom_index in self.medium_level_atoms:
+                    return "M"
+            else:
+                # if high level atoms is given, then low level atoms will be needed
+                return "L"
+        else:
+            return None
 
     def __repr__(self):
         """
@@ -1751,6 +1813,76 @@ class Molecule:
 
         return frames
 
+    def xyz_to_pdb(
+        self,
+        pdb_filename,
+        xyz_filename=None,
+        mode="w",
+        overwrite=True,
+        cleanup=True,
+    ):
+        """
+        Convert an XYZ representation of the molecule to PDB using Open Babel.
+
+        Args:
+            pdb_filename (str): Destination PDB file path.
+            xyz_filename (str, optional): Source XYZ file path; if omitted or missing, a
+                temporary XYZ is written via ``write_xyz``.
+            mode (str): File mode passed to ``write_xyz`` when creating the XYZ file.
+            overwrite (bool): Whether to overwrite an existing PDB file.
+            cleanup (bool): Remove auto-generated XYZ files after conversion.
+        """
+        auto_xyz = False
+        if xyz_filename is None:
+            tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
+            tmp.close()
+            xyz_filename = tmp.name
+            auto_xyz = True
+            logger.debug(
+                "Created temporary XYZ '%s' for PDB conversion", xyz_filename
+            )
+            self.write_xyz(xyz_filename, mode=mode)
+        elif not os.path.isfile(xyz_filename):
+            logger.debug(
+                "XYZ '%s' missing; writing coordinates before conversion",
+                xyz_filename,
+            )
+            self.write_xyz(xyz_filename, mode=mode)
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:  # pragma: no cover
+            if auto_xyz and cleanup:
+                os.remove(xyz_filename)
+            raise ImportError(
+                "xyz_to_pdb requires Open Babel. Install openbabel/pybel to enable this conversion."
+            ) from exc
+
+        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
+        if xyz_mol is None:
+            if auto_xyz and cleanup:
+                os.remove(xyz_filename)
+            raise ValueError(f"Unable to read molecule from {xyz_filename}")
+
+        logger.info(
+            "Converting XYZ '%s' to PDB '%s' using Open Babel (overwrite=%s)",
+            xyz_filename,
+            pdb_filename,
+            overwrite,
+        )
+        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
+
+        if auto_xyz and cleanup:
+            try:
+                os.remove(xyz_filename)
+                logger.debug("Removed temporary XYZ '%s'", xyz_filename)
+            except OSError as exc:
+                logger.warning(
+                    "Could not remove temporary XYZ '%s': %s",
+                    xyz_filename,
+                    exc,
+                )
+
 
 class CoordinateBlock:
     """
@@ -1820,18 +1952,35 @@ class CoordinateBlock:
         """
         return self._get_constraints()
 
+    @property
+    def partitions(self):
+        """Returns a list of partition levels for the atoms."""
+        return self._get_partitions()
+
     def convert_coordinate_block_list_to_molecule(self):
         """
         Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class.
         """
-        return Molecule(
-            symbols=self.symbols,
-            positions=self.positions,
-            frozen_atoms=self.constrained_atoms,
-            pbc_conditions=self.pbc_conditions,
-            translation_vectors=self.translation_vectors,
-        )
+        if not self.partitions:
+            return Molecule(
+                symbols=self.symbols,
+                positions=self.positions,
+                frozen_atoms=self.constrained_atoms,
+                pbc_conditions=self.pbc_conditions,
+                translation_vectors=self.translation_vectors,
+            )
+        else:
+            return QMMMMolecule(
+                symbols=self.symbols,
+                positions=self.positions,
+                frozen_atoms=self.constrained_atoms,
+                pbc_conditions=self.pbc_conditions,
+                translation_vectors=self.translation_vectors,
+                high_level_atoms=self.partitions[1],
+                medium_level_atoms=self.partitions[2],
+                low_level_atoms=self.partitions[3],
+            )
 
     def _get_symbols(self):
         symbols = []
@@ -1855,6 +2004,10 @@ class CoordinateBlock:
                 line_elements[0].upper() == "TV"
             ):  # cases where PBC system occurs in Gaussian
                 logger.debug(f"Skipping line {line} with TV!")
+                continue
+            if all(el.isdigit() for el in line_elements):
+                # skip the charge and multiplicity line of QM/MM coordinate block
+                logger.debug(f"Skipping line {line} with all digit elements!")
                 continue
 
             try:
@@ -1920,6 +2073,9 @@ class CoordinateBlock:
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
                 continue
+            if all(el.isdigit() for el in line_elements):
+                # skip the charge and multiplicity line of QM/MM coordinate block
+                continue
 
             try:
                 atomic_number = int(line_elements[0])
@@ -1929,27 +2085,52 @@ class CoordinateBlock:
                 )
             atomic_numbers.append(atomic_number)
 
-            second_value = float(line_elements[1])
+            # Decide how to interpret the second token: constraint flag vs coordinate
+            try:
+                second_val_float = float(line_elements[1])
+                second_val_int = int(second_val_float)
+                is_exact_int = second_val_float == second_val_int
+                is_constraint_flag = is_exact_int and second_val_int in (-1, 0)
+            except (ValueError, IndexError):
+                second_val_float = None
+                second_val_int = None
+                is_constraint_flag = False
+
+            # If the last token is non-numeric (e.g., partition label like H/M/L),
+            # we should not attempt to treat the second token as a constraint flag.
+            def _is_numeric_token(token):
+                try:
+                    float(token)
+                    return True
+                except (ValueError, TypeError):
+                    return False
+
+            last_token_numeric = _is_numeric_token(line_elements[-1])
+
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
             if len(line_elements) > 4:
-                if np.isclose(atomic_number, second_value, atol=10e-6):
-                    # happens in cube file, where the second value is the same as
-                    # the atomic number but in float format
+                if is_constraint_flag and last_token_numeric:
+                    # Frozen coordinate line: second token is an explicit -1/0 flag
+                    constraints.append(second_val_int)
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
                     z_coordinate = float(line_elements[4])
-                elif np.isclose(second_value, -1, atol=10e-6) or np.isclose(
-                    second_value, 0, atol=10e-6
+                elif (
+                    last_token_numeric
+                    and second_val_float is not None
+                    and np.isclose(atomic_number, second_val_float, atol=1e-6)
                 ):
-                    # this is the case in frozen coordinates e.g.,
-                    # C        -1      -0.5448210000   -1.1694570000    0.0001270000
-                    # then ignore second value
-                    constraints.append(int(second_value))
+                    # Cube file style where the atomic number is repeated as float
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
                     z_coordinate = float(line_elements[4])
+                else:
+                    # Standard coordinate line (including cases like trailing partition labels)
+                    x_coordinate = float(line_elements[1])
+                    y_coordinate = float(line_elements[2])
+                    z_coordinate = float(line_elements[3])
             else:
                 x_coordinate = float(line_elements[1])
                 y_coordinate = float(line_elements[2])
@@ -1987,6 +2168,67 @@ class CoordinateBlock:
         if all(constraint == 0 for constraint in constraints):
             return None
         return constraints
+
+    def _get_partitions(self):
+        partitions = []
+        high_level_atoms = []
+        medium_level_atoms = []
+        low_level_atoms = []
+        i = 1
+        for line in self.coordinate_block:
+            if line.startswith(
+                "TV"
+            ):  # cases where PBC system occurs in Gaussian
+                continue
+
+            line_elements = line.strip().split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+            if len(line_elements) > 5 and all(
+                line_elements[i]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for i in range(2, 5)
+            ):
+                # happens in cube file and frozen atoms case
+                if line_elements[5] == "H":
+                    high_level_atoms.append(i)
+                    partitions.append("H")
+                elif line_elements[5] == "M":
+                    medium_level_atoms.append(i)
+                    partitions.append("M")
+                elif line_elements[5] == "L":
+                    low_level_atoms.append(i)
+                    partitions.append("L")
+                i += 1
+            elif len(line_elements) > 4 and all(
+                line_elements[i]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for i in range(1, 4)
+            ):
+                if line_elements[4].strip() == "H":
+                    high_level_atoms.append(i)
+                    partitions.append("H")
+                elif line_elements[4].strip() == "M":
+                    medium_level_atoms.append(i)
+                    partitions.append("M")
+                elif line_elements[4] == "L":
+                    low_level_atoms.append(i)
+                    partitions.append("L")
+                i += 1
+        return (
+            partitions,
+            high_level_atoms,
+            medium_level_atoms,
+            low_level_atoms,
+        )
 
     def _get_translation_vectors(self):
         tvs = []
@@ -2061,3 +2303,307 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
+
+
+class QMMMMolecule(Molecule):
+    """
+    Standardise QMMM-related objects subclass normal objects (settings, jobrunner, molecule, etc),
+    without affecting the normal molecules.
+    """
+
+    def __init__(
+        self,
+        molecule: Molecule = None,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        real_charge=None,
+        real_multiplicity=None,
+        bonded_atoms=None,
+        scale_factors=None,
+        **kwargs,
+    ):
+        # store reference to the original molecule early to avoid
+        # __getattr__ recursion when attribute access falls back to it.
+        self.molecule = molecule
+
+        if molecule is not None:
+            # inherit all parameters from the molecule object including class methods
+            sig = inspect.signature(Molecule.__init__)
+            valid_params = set(sig.parameters.keys()) - {"self"}
+
+            # Keep only attributes of molecule that are valid init params and override with any explicit kwargs if given
+            init_params = {
+                k: getattr(molecule, k)
+                for k in valid_params
+                if hasattr(molecule, k)
+            }
+            init_params.update(kwargs)
+
+            self.__dict__.update(molecule.__dict__)
+        else:
+            # Otherwise, let QMMM behave like a Molecule itself
+            super().__init__(**kwargs)
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.bonded_atoms = bonded_atoms
+        self.scale_factors = scale_factors
+        self.real_charge = real_charge
+        self.real_multiplicity = real_multiplicity
+        if self.real_charge and self.real_multiplicity:
+            # the charge and multiplicity of the real system equal to
+            # that of the low_level_charge and low_level_multiplicity
+            self.charge = self.real_charge
+            self.multiplicity = self.real_multiplicity
+
+    def __getattr__(self, name):
+        # Forward any missing attribute to the underlying Molecule.
+        # Use object.__getattribute__ to avoid re-entering this __getattr__
+        # when accessing self.molecule (which would cause recursion).
+        try:
+            mol = object.__getattribute__(self, "molecule")
+        except AttributeError:
+            raise AttributeError(f"'QMMM' object has no attribute '{name}'")
+
+        if mol is not None and hasattr(mol, name):
+            return getattr(mol, name)
+        raise AttributeError(f"'QMMM' object has no attribute '{name}'")
+
+    @property
+    def partition_level_strings(self):
+        """Obtain the list of partition levels for the atoms in the system."""
+        return self._get_partition_level_strings()
+
+    def _get_partition_levels(self):
+        """Obtain the list of partition levels for the atoms in the system.
+        Returns:
+            list: List of partition levels as strings (H, M, L) for the atoms in the system.
+        """
+        # convert atom indices to lists if they are not already so
+        # for example high_level_atoms=[[18-28], [29-39], [40-50], [51-61], [62-72]],
+        # then we want high_level_atoms=[18, 19, 20, ..., 28, 29, 30, ..., 39, ...]
+        from chemsmart.utils.utils import get_list_from_string_range
+
+        # Normalize inputs into lists of integer indices
+        if self.high_level_atoms is None:
+            raise ValueError("High level atoms should not be None!")
+
+        high_level_atoms = (
+            self.high_level_atoms
+            if isinstance(self.high_level_atoms, list)
+            else get_list_from_string_range(self.high_level_atoms)
+        )
+
+        medium_level_atoms = (
+            self.medium_level_atoms
+            if isinstance(self.medium_level_atoms, list)
+            else (
+                get_list_from_string_range(self.medium_level_atoms)
+                if self.medium_level_atoms
+                else []
+            )
+        )
+
+        # If low level atoms are not provided and high level atoms exist,
+        # assign the remainder of the atoms to low level. Otherwise normalize.
+        if self.low_level_atoms is None:
+            if len(high_level_atoms) != 0:
+                default_layer = list(range(1, int(self.num_atoms) + 1))
+                low_level_atoms = list(
+                    set(default_layer)
+                    - set(medium_level_atoms)
+                    - set(high_level_atoms)
+                )
+                low_level_atoms.sort()
+            else:
+                low_level_atoms = []
+        else:
+            low_level_atoms = (
+                self.low_level_atoms
+                if isinstance(self.low_level_atoms, list)
+                else get_list_from_string_range(self.low_level_atoms)
+            )
+
+        # Validation: indices must be within 1..num_atoms
+        def _validate_indices(name, indices):
+            if indices is None:
+                return
+            for idx in indices:
+                try:
+                    i = int(idx)
+                except Exception:
+                    raise ValueError(
+                        f"Invalid atom index '{idx}' in {name}; must be integer."
+                    )
+                if i < 1 or i > int(self.num_atoms):
+                    raise ValueError(
+                        f"Atom index {i} in {name} out of range: must be between 1 and {int(self.num_atoms)}"
+                    )
+
+        _validate_indices("high_level_atoms", high_level_atoms)
+        _validate_indices("medium_level_atoms", medium_level_atoms)
+        _validate_indices("low_level_atoms", low_level_atoms)
+
+        # Validation: ensure partitions do not overlap
+        set_h = set(high_level_atoms)
+        set_m = set(medium_level_atoms)
+        set_l = set(low_level_atoms)
+
+        overlaps = []
+        if set_h & set_m:
+            overlaps.append(("high", "medium", sorted(list(set_h & set_m))))
+        if set_h & set_l:
+            overlaps.append(("high", "low", sorted(list(set_h & set_l))))
+        if set_m & set_l:
+            overlaps.append(("medium", "low", sorted(list(set_m & set_l))))
+
+        if overlaps:
+            msgs = [
+                f"Overlap between {a} and {b}: atoms {c}"
+                for a, b, c in overlaps
+            ]
+            raise ValueError("; ".join(msgs))
+
+        # If all three layers are provided, ensure they sum to the total atoms
+        if (len(set_h) + len(set_m) + len(set_l)) != int(
+            self.num_atoms
+        ) and len(set_h) + len(set_m) + len(set_l) != 0:
+            # allow the case where user only supplied some layers and intended others empty
+            # but raise if they provided explicit low/medium/high that don't cover all atoms
+            if self.low_level_atoms is not None:
+                raise ValueError(
+                    "The number of low + medium + high level atoms must equal the number of atoms in the molecule when low_level_atoms is explicitly provided."
+                )
+
+        return high_level_atoms, medium_level_atoms, low_level_atoms
+
+    def _get_partition_level_strings(self):
+        """Obtain the list of partition levels for the atoms in the system.
+        H = high, M = medium, L = low."""
+        high_level_atoms, medium_level_atoms, low_level_atoms = (
+            self._get_partition_levels()
+        )
+        partition_level_strings = []
+        for i in range(1, self.num_atoms + 1):
+            if i in high_level_atoms:
+                partition_level_strings.append("H")
+            elif i in medium_level_atoms:
+                partition_level_strings.append("M")
+            elif i in low_level_atoms:
+                partition_level_strings.append("L")
+        if len(partition_level_strings) == 0:
+            return None
+        return partition_level_strings
+
+    def _write_gaussian_coordinates(self, f):
+
+        assert self.symbols is not None, "Symbols to write should not be None!"
+        assert (
+            self.positions is not None
+        ), "Positions to write should not be None!"
+        for i, (s, (x, y, z)) in enumerate(
+            zip(self.chemical_symbols, self.positions)
+        ):
+            line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+            if self.frozen_atoms is not None:
+                line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+            if self.partition_level_strings is not None:
+                line += f" {self.partition_level_strings[i]}"
+
+            if self.bonded_atoms is not None:
+                # Handle QM link atoms and bonded-to atoms
+                if not isinstance(self.bonded_atoms, list):
+                    self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
+                for atom1, atom2 in self.bonded_atoms:
+                    atom1_level = self._determine_level_from_atom_index(atom1)
+                    atom2_level = self._determine_level_from_atom_index(atom2)
+                    if (
+                        (atom1_level == atom2_level == "H")
+                        or (atom1_level == atom2_level == "M")
+                        or (atom1_level == atom2_level == "L")
+                    ):
+                        raise ValueError(
+                            f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
+                        )
+                    elif atom1_level == "H" and (
+                        atom2_level == "M" or atom2_level == "L"
+                    ):
+                        if (i + 1) == atom2:
+                            line += f" H {atom1}"
+                    elif atom1_level == "M" and atom2_level == "L":
+                        if (i + 1) == atom2:
+                            line += f" H {atom1}"
+                    elif (
+                        atom1_level == "M" or atom1_level == "L"
+                    ) and atom2_level == "H":
+                        # lower level line will get the link atom (Hydrogen)
+                        if (i + 1) == atom1:
+                            line += f" H {atom2}"
+                    elif atom1_level == "L" and atom2_level == "M":
+                        if (i + 1) == atom1:
+                            line += f" H {atom2}"
+
+            if self.scale_factors is not None:
+                logger.warning(
+                    "WARNING: Please be advised that you know what you are doing,"
+                    " as you are overriding Gaussian defaults for determining"
+                    "scale factors.\n Please specify scale factors for each required"
+                    "bonded atoms."
+                )
+                for (
+                    atom1,
+                    atom2,
+                ), scale_factors in self.scale_factors.items():
+                    atom1_level = self._determine_level_from_atom_index(atom1)
+                    atom2_level = self._determine_level_from_atom_index(atom2)
+                    if not isinstance(scale_factors, list):
+                        raise ValueError(
+                            "Scale factors should be a list for each atom pair!"
+                        )
+                    if (
+                        atom1_level == atom2_level == "H"
+                        or atom1_level == atom2_level == "M"
+                        or atom1_level == atom2_level == "L"
+                    ):
+                        raise ValueError(
+                            f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
+                        )
+                    elif atom1_level == "H" and (
+                        atom2_level == "M" or atom2_level == "L"
+                    ):
+                        if (i + 1) == atom2:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
+                    elif atom1_level == "M" and atom2_level == "L":
+                        if (i + 1) == atom2:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
+                    elif (
+                        atom1_level == "M" or atom1_level == "L"
+                    ) and atom2_level == "H":
+                        if (i + 1) == atom1:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
+                    elif atom1_level == "L" and atom2_level == "M":
+                        if (i + 1) == atom1:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
+            f.write(line + "\n")
+        return f
+
+    def _determine_level_from_atom_index(self, atom_index):
+        """Determine the partition level of an atom based on its integer index."""
+        if self.high_level_atoms is not None:
+            if atom_index in self.high_level_atoms:
+                return "H"
+            elif (
+                self.medium_level_atoms
+                and atom_index in self.medium_level_atoms
+            ):
+                return "M"
+            else:
+                # if high level atoms is given, then low level atoms will be needed
+                return "L"
+        else:
+            return None

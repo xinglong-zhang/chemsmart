@@ -14,7 +14,7 @@ import click
 
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.io import get_outfile_format
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -77,14 +77,14 @@ def entry_point(
     charge_for_radical_cation = None
     charge_for_radical_anion = None
 
-    program = get_outfile_format(neutral_filename)
+    program = get_program_type_from_file(neutral_filename)
     cation_program = (
-        get_outfile_format(radical_cation_filename)
+        get_program_type_from_file(radical_cation_filename)
         if radical_cation_filename is not None
         else None
     )
     anion_program = (
-        get_outfile_format(radical_anion_filename)
+        get_program_type_from_file(radical_anion_filename)
         if radical_anion_filename is not None
         else None
     )
@@ -108,6 +108,40 @@ def entry_point(
             radical_anion_output = ORCAOutput(radical_anion_filename)
     else:
         raise TypeError(f"File {neutral_filename} is of unknown filetype.")
+
+    # calculate the global electrophilicity and nucleophilicity
+    # global electrophilicity index, ω = μ^2/2η, where chemical potential,
+    # μ ≈ -(I+A)/2 and chemical hardness, η ≈ I-A.
+    # I ≈ E(rc)-E(n) and A ≈ E(n)-E(ra).
+    if None in [neutral_output, radical_cation_output, radical_anion_output]:
+        pass
+    else:
+        ionization_energy = (
+            radical_cation_output.energies[-1] - neutral_output.energies[-1]
+        )
+        affinity_energy = (
+            neutral_output.energies[-1] - radical_anion_output.energies[-1]
+        )
+        chemical_potential = -0.5 * (ionization_energy + affinity_energy)
+        chemical_hardness = ionization_energy - affinity_energy
+        if abs(chemical_hardness) < 1e-12:
+            logger.warning(
+                "Chemical hardness is effectively zero; global "
+                "electrophilicity index cannot be computed to avoid "
+                "division by zero."
+            )
+            global_electrophilicity_index = None
+        else:
+            global_electrophilicity_index = chemical_potential**2 / (
+                2 * chemical_hardness
+            )
+        logger.info(f"Ionization energy = {ionization_energy}")
+        logger.info(f"Electron affinity energy = {affinity_energy}")
+        logger.info(f"Chemical potential = {chemical_potential}")
+        logger.info(f"Chemical hardness = {chemical_hardness}")
+        logger.info(
+            f"Global electrophilicity index = {global_electrophilicity_index}"
+        )
 
     if mode == "mulliken":
         logger.info(

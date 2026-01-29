@@ -14,13 +14,17 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
-from chemsmart.utils.cli import MyCommand, get_setting_from_jobtype_for_orca
+from chemsmart.cli.orca.qmmm_helper import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import (
+    MyGroup,
+    get_setting_from_jobtype_for_orca,
+)
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("scan", cls=MyCommand)
+@orca.group("scan", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_orca_jobtype_options
 @click.option(
@@ -41,6 +45,7 @@ def scan(
     dist_end,
     num_steps,
     constrained_coordinates=None,
+    skip_completed=False,
     **kwargs,
 ):
     """
@@ -80,9 +85,6 @@ def scan(
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
     logger.info(f"Final scan settings: {scan_settings.__dict__}")
 
-    # validate charge and multiplicity consistency
-    check_charge_and_multiplicity(scan_settings)
-
     if constrained_coordinates is not None:
         constrained_coordinates_info = ast.literal_eval(
             constrained_coordinates
@@ -91,22 +93,61 @@ def scan(
             constrained_coordinates_info
         )
 
-    # get molecule from context (use the last molecule if multiple)
-    molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running coordinate scan on molecule: {molecule}")
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_freeze_atoms"] = None
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = scan_settings
+    ctx.obj["parent_jobtype"] = jobtype
 
-    # get label for the job output files
+    molecules = ctx.obj["molecules"]
     label = ctx.obj["label"]
     logger.debug(f"Job label: {label}")
 
-    from chemsmart.jobs.orca.scan import ORCAScanJob
+    if ctx.invoked_subcommand is None:
 
-    job = ORCAScanJob(
-        molecule=molecule,
-        settings=scan_settings,
-        label=label,
-        **kwargs,
-    )
-    logger.debug(f"Created ORCA scan job: {job}")
-    return job
+        from chemsmart.jobs.orca.scan import ORCAScanJob
+
+        # validate charge and multiplicity consistency
+        check_charge_and_multiplicity(scan_settings)
+
+        # Get the original molecule indices from context
+        molecule_indices = ctx.obj["molecule_indices"]
+
+        # Handle multiple molecules: create one job per molecule
+        if len(molecules) > 1 and molecule_indices is not None:
+            logger.info(f"Creating {len(molecules)} ORCA scan jobs")
+            jobs = []
+            for molecule, idx in zip(molecules, molecule_indices):
+                molecule_label = f"{label}_idx{idx}"
+                logger.info(
+                    f"Running coordinate scan for molecule {idx}: {molecule} with label {molecule_label}"
+                )
+
+                job = ORCAScanJob(
+                    molecule=molecule,
+                    settings=scan_settings,
+                    label=molecule_label,
+                    skip_completed=skip_completed,
+                    **kwargs,
+                )
+                jobs.append(job)
+            logger.debug(f"Created {len(jobs)} ORCA scan jobs")
+            return jobs
+        else:
+            # Single molecule case
+            molecule = molecules[-1]
+            logger.info(f"Running coordinate scan on molecule: {molecule}")
+
+            job = ORCAScanJob(
+                molecule=molecule,
+                settings=scan_settings,
+                label=label,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
+            logger.debug(f"Created ORCA scan job: {job}")
+            return job
+
+
+# Register qmmm subcommand
+create_orca_qmmm_subcommand(scan)
