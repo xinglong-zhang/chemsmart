@@ -113,23 +113,32 @@ class NCIPLOTInputWriter(InputWriter):
 
                 for file in self.job.filenames:
                     # Convert non-supported formats to promolecular xyz
+                    # NCIPLOT natively supports .xyz, .wfn, and .wfx
+                    # Other formats (.log, etc.) are converted to .xyz and
+                    # renamed with _promolecular suffix to indicate use of
+                    # promolecular density approximation
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
 
-                    logger.debug(f"Writing filename: {file}.")
+                    # Extract basename for validation and writing
+                    # The runner copies all files to scratch using only their basename.
+                    # For converted files, _promolecular suffix is added to the basename.
+                    # We must use basename here to find files in scratch directory.
+                    file_basename = os.path.basename(file)
+                    logger.debug(f"Writing filename: {file_basename}.")
 
                     # Use the running directory from jobrunner
                     file_path = self.jobrunner.running_directory
                     logger.info(f"Running in directory: {file_path}")
 
-                    # Validate file existence
-                    full_path = os.path.join(file_path, file)
+                    # Validate file existence using basename
+                    full_path = os.path.join(file_path, file_basename)
                     if not os.path.exists(full_path):
                         raise FileNotFoundError(
                             f"File {os.path.abspath(full_path)} does not "
                             f"exist. Please check the file path."
                         )
-                    f.write(f"{file}\n")
+                    f.write(f"{file_basename}\n")
 
     def _write_rthres(self, f):
         """

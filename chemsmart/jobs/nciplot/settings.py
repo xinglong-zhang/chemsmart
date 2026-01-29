@@ -39,23 +39,23 @@ class NCIPLOTJobSettings:
 
     def __init__(
         self,
-        rthres,
-        ligand_file_number,
-        ligand_radius,
-        radius_positions,
-        radius_r,
-        intercut1,
-        intercut2,
-        increments,
-        fragments,  # dictionary
-        cutoff_density_dat,
-        cutoff_rdg_dat,
-        cutoff_density_cube,
-        cutoff_rdg_cube,
-        dgrid,
-        integrate,
-        ranges,  # list of lists
-        grid_quality,
+        rthres=None,
+        ligand_file_number=None,
+        ligand_radius=None,
+        radius_positions=None,
+        radius_r=None,
+        intercut1=None,
+        intercut2=None,
+        increments=None,
+        fragments=None,  # dictionary
+        cutoff_density_dat=None,
+        cutoff_rdg_dat=None,
+        cutoff_density_cube=None,
+        cutoff_rdg_cube=None,
+        dgrid=False,
+        integrate=False,
+        ranges=None,  # list of lists
+        grid_quality=None,
     ):
         """
         Initialize NCIPLOT job settings.

@@ -149,7 +149,7 @@ class ORCARoute:
         return None
 
     @property
-    def job_type(self):
+    def jobtype(self):
         """
         Extract job type from route keywords.
 

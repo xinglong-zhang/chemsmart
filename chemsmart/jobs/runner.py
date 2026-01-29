@@ -39,7 +39,6 @@ class JobRunner(RegistryMixin):
         server,
         scratch=None,
         scratch_dir=None,  # Explicit scratch directory
-        running_directory=None,
         delete_scratch=False,
         fake=False,
         num_cores=None,
@@ -61,7 +60,6 @@ class JobRunner(RegistryMixin):
         self.server = server
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
-        self.running_directory = running_directory
         self.delete_scratch = delete_scratch
 
         if self.scratch:

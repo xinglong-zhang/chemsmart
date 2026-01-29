@@ -1,0 +1,61 @@
+# Chemsmart Iterate Configuration Template
+# =========================================
+# This template defines skeletons and substituents for iterative structure generation.
+#
+# Structure Sources:
+#   - file_path: Path to molecular structure file (.xyz, .com, .log, .sdf, etc.)
+#
+# Required Fields:
+#   - label: Unique identifier for this structure
+#   - link_index: Atom index (1-based) where substitution occurs
+#
+# Optional Fields:
+#   - skeleton_indices: Atom indices to keep, format: "1, 3-10, 15" (1-based)
+#                       If not specified, all atoms except link_index are kept
+#                       IMPORTANT: If specified, link_index MUST be included in skeleton_indices, otherwise an error will occur.
+#
+# Note: Strings should be quoted. Arrays of tables [[name]] are used for lists.
+
+# ==============================================================================
+# SKELETONS
+# ==============================================================================
+# Define base molecular scaffolds that will be modified with substituents.
+
+# Example 1: Skeleton from file
+[[skeletons]]
+file_path = "/path/to/skeleton1.xyz"
+label = "benzene_core"
+link_index = "6,7,8"
+skeleton_indices = "1-5"
+
+# Example 2: Another skeleton
+# [[skeletons]]
+# file_path = "..."
+# label = "..."
+# ...
+
+
+# ==============================================================================
+# SUBSTITUENTS
+# ==============================================================================
+# Define functional groups or fragments to attach to skeletons.
+
+# Example 1: Substituent from file
+[[substituents]]
+file_path = "/path/to/methyl.xyz"
+label = "methyl"
+link_index = "1"
+
+# Add more substituents as needed...
+# [[substituents]]
+# ...
+
+
+# ==============================================================================
+# USAGE NOTES
+# ==============================================================================
+# 1. Atom indices are 1-based (first atom is index 1)
+# 2. link_index specifies the atom that will form the new bond
+# 3. For skeletons, the atom at link_index is typically replaced/removed
+# 4. For substituents, the atom at link_index bonds to the skeleton
+# 5. skeleton_indices format: "1, 3-10, 15, 20-25" (ranges and individual indices)

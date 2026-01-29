@@ -1,4 +1,9 @@
+from ase import Atoms
+
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import two_files_have_similar_contents
 
 
@@ -100,3 +105,413 @@ class TestGaussianGenGenECP:
             "S",
         }
         assert genecp_section.light_elements_basis == "def2svp"
+
+
+class TestGenGenECPBasisDetermination:
+    """Test automatic determination of gen vs genecp basis keywords
+    based on elements present."""
+
+    def test_periodic_table_requires_ecp(self):
+        """Test that requires_ecp correctly identifies elements needing ECPs."""
+        pt = PeriodicTable()
+
+        # Elements with Z <= 36 should not require ECP
+        assert not pt.requires_ecp("H")  # Z=1
+        assert not pt.requires_ecp("C")  # Z=6
+        assert not pt.requires_ecp("Br")  # Z=35
+        assert not pt.requires_ecp("Kr")  # Z=36 (last element in period 4)
+
+        # Elements with Z > 36 should require ECP
+        assert pt.requires_ecp("Rb")  # Z=37 (first element in period 5)
+        assert pt.requires_ecp("I")  # Z=53
+        assert pt.requires_ecp("Pd")  # Z=46
+        assert pt.requires_ecp("Ir")  # Z=77
+
+    def test_determine_basis_keyword_with_br(self):
+        """Test that molecules with only Br use 'gen' instead of 'genecp'."""
+        # Create molecule with Br
+        br_molecule = Atoms(
+            "BrC2H4O2",
+            positions=[
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0],
+                [6, 0, 0],
+                [7, 0, 0],
+                [8, 0, 0],
+            ],
+        )
+        symbols = br_molecule.get_chemical_symbols()
+        positions = br_molecule.get_positions()
+        br_mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+
+        # Create settings with genecp basis
+        settings = GaussianJobSettings(
+            functional="mn15",
+            basis="genecp",
+            heavy_elements=["Ir", "Br"],
+            heavy_elements_basis="def2-SVPD",
+            light_elements_basis="def2SVP",
+            charge=0,
+            multiplicity=1,
+        )
+
+        # Determine basis should return 'gen' since Br (Z=35) <= 36
+        determined_basis = settings.determine_basis_keyword(br_mol)
+        assert determined_basis == "gen"
+
+    def test_determine_basis_keyword_with_i(self):
+        """Test that molecules with I use 'genecp'."""
+        # Create molecule with I
+        i_molecule = Atoms(
+            "IC2H4O2",
+            positions=[
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0],
+                [6, 0, 0],
+                [7, 0, 0],
+                [8, 0, 0],
+            ],
+        )
+        symbols = i_molecule.get_chemical_symbols()
+        positions = i_molecule.get_positions()
+        i_mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+
+        # Create settings with genecp basis
+        settings = GaussianJobSettings(
+            functional="mn15",
+            basis="genecp",
+            heavy_elements=["Ir", "I"],
+            heavy_elements_basis="def2-SVPD",
+            light_elements_basis="def2SVP",
+            charge=0,
+            multiplicity=1,
+        )
+
+        # Determine basis should return 'genecp' since I (Z=53) > 36
+        determined_basis = settings.determine_basis_keyword(i_mol)
+        assert determined_basis == "genecp"
+
+    def test_determine_basis_keyword_with_pd(self):
+        """Test that molecules with Pd use 'genecp'."""
+        # Create molecule with Pd
+        pd_molecule = Atoms(
+            "PdC2H4O2",
+            positions=[
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0],
+                [6, 0, 0],
+                [7, 0, 0],
+                [8, 0, 0],
+            ],
+        )
+        symbols = pd_molecule.get_chemical_symbols()
+        positions = pd_molecule.get_positions()
+        pd_mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+
+        # Create settings with genecp basis
+        settings = GaussianJobSettings(
+            functional="mn15",
+            basis="genecp",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="def2-TZVPPD",
+            light_elements_basis="def2SVP",
+            charge=0,
+            multiplicity=1,
+        )
+
+        # Determine basis should return 'genecp' since Pd (Z=46) > 36
+        determined_basis = settings.determine_basis_keyword(pd_mol)
+        assert determined_basis == "genecp"
+
+    def test_determine_basis_keyword_no_heavy_elements(self):
+        """Test that molecules with no heavy elements use light elements basis."""
+        # Create molecule with only light elements
+        h2o_molecule = Atoms(
+            "H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
+        )
+        symbols = h2o_molecule.get_chemical_symbols()
+        positions = h2o_molecule.get_positions()
+        h2o_mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+
+        # Create settings with genecp basis
+        settings = GaussianJobSettings(
+            functional="mn15",
+            basis="genecp",
+            heavy_elements=["Ir", "Br"],
+            heavy_elements_basis="def2-SVPD",
+            light_elements_basis="def2SVP",
+            charge=0,
+            multiplicity=1,
+        )
+
+        # Determine basis should use light elements since no heavy elements present
+        determined_basis = settings.determine_basis_keyword(h2o_mol)
+        assert determined_basis == "def2svp"
+
+    def test_determine_basis_keyword_non_gen_basis(self):
+        """Test that non-gen/genecp basis keywords are returned unchanged."""
+        # Create molecule
+        br_molecule = Atoms(
+            "BrC2H4O2",
+            positions=[
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0],
+                [6, 0, 0],
+                [7, 0, 0],
+                [8, 0, 0],
+            ],
+        )
+        symbols = br_molecule.get_chemical_symbols()
+        positions = br_molecule.get_positions()
+        br_mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+
+        # Create settings with regular basis
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="6-31g(d)",
+            charge=0,
+            multiplicity=1,
+        )
+
+        # Determine basis should return original basis since it's not gen/genecp
+        determined_basis = settings.determine_basis_keyword(br_mol)
+        assert determined_basis == "6-31g(d)"
+
+    def test_determine_basis_keyword_mixed_elements(self):
+        """Test molecule with both gen and genecp elements uses genecp."""
+        # Create molecule with both Br (gen) and I (genecp)
+        mixed_molecule = Atoms(
+            "BrIC2H4O2",
+            positions=[
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0],
+                [6, 0, 0],
+                [7, 0, 0],
+                [8, 0, 0],
+                [9, 0, 0],
+            ],
+        )
+        symbols = mixed_molecule.get_chemical_symbols()
+        positions = mixed_molecule.get_positions()
+        mixed_mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+
+        # Create settings with both Br and I as heavy elements
+        settings = GaussianJobSettings(
+            functional="mn15",
+            basis="genecp",
+            heavy_elements=["Br", "I"],
+            heavy_elements_basis="def2-SVPD",
+            light_elements_basis="def2SVP",
+            charge=0,
+            multiplicity=1,
+        )
+
+        # Should use 'genecp' since I requires ECP (even though Br doesn't)
+        determined_basis = settings.determine_basis_keyword(mixed_mol)
+        assert determined_basis == "genecp"
+
+
+class TestGenECPReplacementInRoute:
+    """Test that gen/genecp replacement in route strings doesn't affect other keywords."""
+
+    def test_gen_replacement_does_not_affect_noeigentest(self):
+        """Test that 'gen' in 'noeigentest' is not replaced, and case mode behaves correctly."""
+        import re
+
+        from chemsmart.utils.io import replace_word
+
+        # Route strings with lowercase 'gen' (replacement should work in BOTH modes)
+        route_strings = [
+            "# opt=(ts,calcfc,noeigentest) freq mn15 gen",
+            "opt=(calcfc,ts,noeigentest,maxstep=5) freq gen m06",
+            "# opt=(ts,calcfc,noeigentest) freq b3lyp gen",
+            "# opt=(ts,calcfc,noeigentest) freq b3lyp gen",
+        ]
+
+        for case_sensitive in (True, False):
+            for route_string in route_strings:
+                result = replace_word(
+                    route_string,
+                    "gen",
+                    "def2svp",
+                    case_sensitive=case_sensitive,
+                )
+
+                # The word 'noeigentest' should remain unchanged
+                assert "noeigentest" in result
+
+                # If 'gen' appeared as a standalone word, it should be replaced
+                assert re.search(r"\bgen\b", result) is None
+                assert "def2svp" in result
+
+                # Make sure we didn't create 'noeidef2svptest'
+                assert "noeidef2svptest" not in result
+
+        # Extra: include a case-variant route to test the difference explicitly
+        route_string_case = "# opt=(ts,calcfc,noeigentest) freq mn15 Gen"
+
+        # case-insensitive: should replace "Gen"
+        result_ci = replace_word(
+            route_string_case, "gen", "def2svp", case_sensitive=False
+        )
+        assert re.search(r"\bGen\b", result_ci) is None
+        assert "def2svp" in result_ci
+        assert "noeigentest" in result_ci
+
+        # case-sensitive: should NOT replace "Gen" when old_word is "gen"
+        result_cs = replace_word(
+            route_string_case, "gen", "def2svp", case_sensitive=True
+        )
+        assert re.search(r"\bGen\b", result_cs) is not None
+        assert "def2svp" not in result_cs
+        assert "noeigentest" in result_cs
+
+    def test_genecp_replacement_does_not_affect_other_keywords(self):
+        """Test that 'genecp' replacement works correctly in both case modes."""
+        from chemsmart.utils.io import replace_word
+
+        route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 genecp"
+
+        # lowercase genecp -> replacement should work in BOTH modes
+        for case_sensitive in (True, False):
+            result = replace_word(
+                route_string,
+                "genecp",
+                "def2svp",
+                case_sensitive=case_sensitive,
+            )
+            assert "noeigentest" in result
+            assert "genecp" not in result
+            assert "def2svp" in result
+            assert "noeidef2svptest" not in result
+
+        # Extra: case-variant explicitly tests the difference
+        route_string_case = "# opt=(ts,calcfc,noeigentest) freq mn15 GenECP"
+
+        # case-insensitive: should replace
+        result_ci = replace_word(
+            route_string_case, "genecp", "def2svp", case_sensitive=False
+        )
+        assert "GenECP" not in result_ci
+        assert "def2svp" in result_ci
+
+        # case-sensitive: should NOT replace when old_word is "genecp"
+        result_cs = replace_word(
+            route_string_case, "genecp", "def2svp", case_sensitive=True
+        )
+        assert "GenECP" in result_cs
+        assert "def2svp" not in result_cs
+
+    def test_gen_to_genecp_replacement(self):
+        """Test replacing 'gen' with 'genecp' in route strings for both case modes."""
+        import re
+
+        from chemsmart.utils.io import replace_word
+
+        route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 gen"
+
+        # lowercase 'gen' -> replacement should work in BOTH modes
+        for case_sensitive in (True, False):
+            result = replace_word(
+                route_string, "gen", "genecp", case_sensitive=case_sensitive
+            )
+            assert "noeigentest" in result
+            assert re.search(r"\bgen\b", result) is None
+            assert "genecp" in result
+
+        # Extra: case variant shows mode difference
+        route_string_case = "# opt=(ts,calcfc,noeigentest) freq mn15 Gen"
+
+        # case-insensitive: should replace "Gen"
+        result_ci = replace_word(
+            route_string_case, "gen", "genecp", case_sensitive=False
+        )
+        assert re.search(r"\bGen\b", result_ci) is None
+        assert "genecp" in result_ci
+
+        # case-sensitive: should NOT replace "Gen" when old_word is "gen"
+        result_cs = replace_word(
+            route_string_case, "gen", "genecp", case_sensitive=True
+        )
+        assert re.search(r"\bGen\b", result_cs) is not None
+        assert "genecp" not in result_cs
+
+    def test_replacement_with_various_delimiters(self):
+        """Test that replacement works correctly with various delimiters, in both case modes."""
+        from chemsmart.utils.io import replace_word
+
+        # These are all lowercase 'gen' -> should replace in BOTH modes
+        test_cases = [
+            ("gen def2svp", "gen", "6-31g", "6-31g def2svp"),
+            ("def2svp gen", "gen", "6-31g", "def2svp 6-31g"),
+            ("opt gen freq", "gen", "6-31g", "opt 6-31g freq"),
+            ("opt=(gen) freq", "gen", "6-31g", "opt=(6-31g) freq"),
+        ]
+
+        for case_sensitive in (True, False):
+            for route_string, old_basis, new_basis, expected in test_cases:
+                result = replace_word(
+                    route_string,
+                    old_basis,
+                    new_basis,
+                    case_sensitive=case_sensitive,
+                )
+                assert (
+                    result == expected
+                ), f"[case_sensitive={case_sensitive}] Expected '{expected}' but got '{result}'"
+
+        # Should not replace "gen" when it is part of another word (boundary test)
+        # NOTE: this string actually *contains* a standalone "gen" at the end, so it SHOULD replace that one.
+        route_string = "regenerate gen"
+        expected = "regenerate 6-31g"
+        for case_sensitive in (True, False):
+            result = replace_word(
+                route_string, "gen", "6-31g", case_sensitive=case_sensitive
+            )
+            assert (
+                result == expected
+            ), f"[case_sensitive={case_sensitive}] Expected '{expected}' but got '{result}'"
+
+        # Extra: ensure case-sensitive does NOT replace "Gen" if old_word="gen"
+        route_string_case = "opt=(Gen) freq"
+        result_cs = replace_word(
+            route_string_case, "gen", "6-31g", case_sensitive=True
+        )
+        assert result_cs == route_string_case  # unchanged
+
+        result_ci = replace_word(
+            route_string_case, "gen", "6-31g", case_sensitive=False
+        )
+        assert result_ci == "opt=(6-31g) freq"

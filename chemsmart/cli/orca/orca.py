@@ -455,10 +455,6 @@ def orca(
             molecule_indices, list
         ):
             molecule_indices = [molecule_indices]
-    else:
-        # If molecules is a list but molecule_indices is not set, create sequential indices
-        if molecule_indices is None:
-            molecule_indices = list(range(1, len(molecules) + 1))
 
     logger.debug(f"Final molecules list: {molecules}")
     logger.debug(f"Molecule indices: {molecule_indices}")

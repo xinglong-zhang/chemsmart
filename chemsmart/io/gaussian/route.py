@@ -43,7 +43,7 @@ class GaussianRoute:
         >>> route = GaussianRoute("#P B3LYP/6-31G(d) opt freq")
         >>> route.method  # 'b3lyp'
         >>> route.basis   # '6-31g(d)'
-        >>> route.job_type  # 'opt'
+        >>> route.jobtype  # 'opt'
     """
 
     def __init__(self, route_string):
@@ -64,18 +64,18 @@ class GaussianRoute:
         return self.get_dieze_tag()
 
     @property
-    def job_type(self):
+    def jobtype(self):
         """
         Extract the primary job type from the route.
         """
-        return self.get_job_type()
+        return self.get_jobtype()
 
-    @job_type.setter
-    def job_type(self, value):
+    @jobtype.setter
+    def jobtype(self, value):
         """
         Set the job type.
         """
-        self._job_type = value
+        self._jobtype = value
 
     @property
     def freq(self):
@@ -195,40 +195,40 @@ class GaussianRoute:
             dieze_tag = self.route_string[0:2]
         return dieze_tag
 
-    def get_job_type(self):
+    def get_jobtype(self):
         """
         Extract job type from route specification.
         """
         # get job type: opt/ts/sp/ircf/ircr
         if "ts" in self.route_string:
-            job_type = "ts"
+            jobtype = "ts"
         elif (
             "opt" in self.route_string
             and "ts" not in self.route_string
             and "modred" not in self.route_string
             and "stable=opt" not in self.route_string
         ):
-            job_type = "opt"
+            jobtype = "opt"
         elif "opt=modred" in self.route_string:
-            job_type = "modred"  # would include scan jobs too
+            jobtype = "modred"  # would include scan jobs too
         elif "irc" in self.route_string and "forward" in self.route_string:
-            job_type = "ircf"
+            jobtype = "ircf"
         elif "irc" in self.route_string and "reverse" in self.route_string:
-            job_type = "ircr"
+            jobtype = "ircr"
         elif "output=wfn" in self.route_string:
-            job_type = "nci"
+            jobtype = "nci"
         elif (
             "Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)".lower()
             in self.route_string
         ):
-            job_type = "resp"
+            jobtype = "resp"
         elif "stable=opt" in self.route_string:
-            job_type = (
+            jobtype = (
                 "link"  # so far only using stable=opt to determine link job
             )
         else:
-            job_type = "sp"
-        return job_type
+            jobtype = "sp"
+        return jobtype
 
     def get_frequency(self):
         """

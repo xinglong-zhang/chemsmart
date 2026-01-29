@@ -190,9 +190,28 @@ def nciplot(
     """
     CLI subcommand for running NCIPLOT jobs using the chemsmart framework.
 
+    NCIPLOT uses different density calculation methods based on input file type:
+    - .wfn/.wfx files: Uses SCF wavefunction density
+    - .xyz/.log/other files: Uses promolecular density approximation
+
+    When using promolecular density, the job label automatically gets
+    "_promolecular" appended to distinguish the output files.
+
     Example usage:
-        chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
+        # Promolecular density (label will be "test_promolecular")
+        chemsmart sub -s xz nciplot -f test.xyz
+        chemsmart run nciplot -f test.xyz
+
+        # Wavefunction density (label will be "test")
+        chemsmart sub -s xz nciplot -f test.wfn
+        chemsmart run nciplot -f test.wfn
+
+        # Multiple files with custom label
+        chemsmart sub -s xz nciplot -f test.xyz -f test2.xyz -l nci_test \\
         --fragments "{1: [1,4,5], 2: [3,4,5]}"
+
+    For detailed documentation on file types and behavior, see the NCIPLOT tutorial
+    in the documentation.
     """
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
@@ -268,6 +287,9 @@ def nciplot(
                 )
             elif len(filenames) == 1:
                 label = filenames[0].split(".")[0] if label is None else label
+                # Add _promolecular suffix for non-wavefunction files
+                # (.xyz, .log, etc. use promolecular density)
+                # (.wfn, .wfx use SCF wavefunction density without suffix)
                 if not filenames[0].endswith((".wfn", ".wfx")):
                     if label is not None and not label.endswith(
                         "promolecular"
