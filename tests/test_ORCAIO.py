@@ -8,9 +8,15 @@ from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
-from chemsmart.io.orca.input import ORCAInput
-from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
+from chemsmart.io.orca.input import ORCAInput, ORCAQMMMInput
+from chemsmart.io.orca.output import (
+    ORCAEngradFile,
+    ORCANEBFile,
+    ORCAOutput,
+    ORCAQMMMOutput,
+)
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.jobs.orca.settings import ORCANEBJobSettings
 
 
 class TestORCARoute:
@@ -92,6 +98,53 @@ class TestORCARoute:
         assert r6.extrapolation_basis is None
         assert r6.auxiliary_basis is None
 
+        # two-layer ONIOM
+        s7 = "!QM/XTB BP86 def2-TZVP def2/J"
+        r7 = ORCARoute(route_string=s7)
+        assert r7.route_keywords == ["qm/xtb", "bp86", "def2-tzvp", "def2/j"]
+        assert r7.qm_functional == "bp86"
+        assert r7.qm_basis == "def2-tzvp"
+        assert r7.auxiliary_basis == "def2/j"
+        assert r7.qm2_method == "xtb"
+        assert r7.qmmm_jobtype == "qm/xtb"
+
+        # three-layer ONIOM
+        s8 = "!QM/HF-3c/MM Opt B3LYP def2-TZVP def2/J NumFreq CPCM(water)"
+        r8 = ORCARoute(route_string=s8)
+        assert r8.route_keywords == [
+            "qm/hf-3c/mm",
+            "opt",
+            "b3lyp",
+            "def2-tzvp",
+            "def2/j",
+            "numfreq",
+            "cpcm(water)",
+        ]
+        assert r8.qm_functional == "b3lyp"
+        assert r8.qm_basis == "def2-tzvp"
+        assert r8.auxiliary_basis == "def2/j"
+        assert r8.qm2_method == "hf-3c"
+        assert r8.qmmm_jobtype == "qm/hf-3c/mm"
+
+        # MOL-CRYSTAL-QMMM route
+        s9 = "! MOL-CRYSTAL-QMMM PBE def2-SVP Opt NumFreq"
+        r9 = ORCARoute(route_string=s9)
+        assert r9.route_keywords == [
+            "mol-crystal-qmmm",
+            "pbe",
+            "def2-svp",
+            "opt",
+            "numfreq",
+        ]
+        assert r9.qm_functional == "pbe"
+        assert r9.qm_basis == "def2-svp"
+        assert r9.qmmm_jobtype == "mol-crystal-qmmm"
+
+        # IONIC-CRYSTAL-QMMM route
+        s10 = "! IONIC-CRYSTAL-QMMM"
+        r10 = ORCARoute(route_string=s10)
+        assert r10.qmmm_jobtype == "ionic-crystal-qmmm"
+
 
 class TestORCABasis:
     def test_orca_all_auxiliary_basis_sets(self):
@@ -158,7 +211,7 @@ class TestORCAInput:
         ):
             orca_inp.solvent_id
 
-    def test_orca_input_with_xyz_files_specified(
+    def test_orca_neb_input_with_xyz_files_specified(
         self,
         tmpdir,
         orca_input_nebts_file,
@@ -193,15 +246,59 @@ class TestORCAInput:
         assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
 
         orca_inp = ORCAInput(filename=orca_input_nebts_file)
-        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.route_string == "! gfn2-xtb neb-ts freq".lower()
         assert orca_inp.functional is None
         assert orca_inp.basis is None
         assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified
         assert orca_inp.charge == 0
-        assert orca_inp.multiplicity == 1
+        assert orca_inp.multiplicity == 2
         assert orca_inp.molecule.num_atoms == 40
         assert isinstance(orca_inp.molecule, Molecule)
         assert orca_inp.molecule.empirical_formula == "C23H15NO"
+
+    def test_orca_qmmm_input(self, orca_inputs_directory):
+        orca_inp1 = os.path.join(orca_inputs_directory, "dna_qmmm1.inp")
+        orca_inp1 = ORCAQMMMInput(filename=orca_inp1)
+        # charge and multiplicity of QM region (instead of real system in regular input)
+        assert orca_inp1.qm_charge == 2
+        assert orca_inp1.qm_multiplicity == 1
+        assert orca_inp1.qm_atoms == [
+            "54",
+            "124:133",
+            "209",
+            "210",
+            "259:263",
+            "271",
+            "272",
+            "326:340",
+            "424:476",
+            "488:516",
+        ]
+        assert orca_inp1.qm_active_atoms == ["0:5", "16", "21:30"]
+        # assert orca_inp.qm_force_field
+        assert orca_inp1.qm_h_bond_length == [
+            ("c", "hla", "1.09"),
+            ("o", "hla", "0.98"),
+            ("n", "hla", "0.99"),
+        ]
+        assert orca_inp1.qm_boundary_interaction == (
+            "Will neglect bends at QM2-QM1-MM1 and torsions at QM3-QM2-QM1-MM1 boundary.\n"
+            "Will include bonds at QM1-MM1 boundary.\n"
+        )
+        assert orca_inp1.qm_embedding_type == "electrostatic"
+        assert orca_inp1.qm2_functional.strip('"') == "b3lyp"
+        assert orca_inp1.qm2_basis.strip('"') == "def2-svp def2/j"
+
+        orca_inp2 = os.path.join(orca_inputs_directory, "dna_qmmm2.inp")
+        orca_inp2 = ORCAQMMMInput(filename=orca_inp2)
+        assert orca_inp2.qm2_level_of_theory.strip('"') == "myqm2method.txt"
+        assert orca_inp2.qm_qm2_boundary_treatment == "pbeh3c"
+        assert orca_inp2.qm2_atoms == ["5:22"]
+        assert orca_inp2.qm2_charge == 0
+        assert orca_inp2.qm2_multiplicity == 3
+
+        # todo:tests for crystal QMMM
+        # orca_inp3 = os.path.join(orca_inputs_directory, "ionic_crystal_qmmm.inp")
 
 
 class TestORCAOutput:
@@ -2554,3 +2651,165 @@ class TestORCAEngrad:
         assert np.allclose(
             orca_engrad.molecule.positions, coordinates, rtol=1e-6
         )
+
+
+class TestORCAQMMM:
+    def test_read_qmmm_output(self, orca_two_layer_qmmmm_output_file):
+        orca_qmmm1 = ORCAQMMMOutput(filename=orca_two_layer_qmmmm_output_file)
+        assert orca_qmmm1.multiscale_model == "QM1/QM2"
+        assert orca_qmmm1.qm2_method == "XTB2"
+        assert orca_qmmm1.total_charge == 0
+        assert orca_qmmm1.scaling_factor_qm2 == 1.0
+        assert orca_qmmm1.point_charges_in_qm_from_mm == 24
+        assert orca_qmmm1.point_charges_in_qm_from_charge_shift == 0
+        assert orca_qmmm1.total_system_size == 36
+        assert orca_qmmm1.qm_system_size == 12
+        assert orca_qmmm1.qm2_system_size == 24
+        assert orca_qmmm1.number_of_link_atoms == 0
+        assert orca_qmmm1.qm_plus_link_atoms_size == 12
+        assert orca_qmmm1.qm_region == ["1-12"]
+        assert orca_qmmm1.qm2_energy_of_large_region == -994.9374837306615
+        assert orca_qmmm1.qm2_energy_of_small_region == -396.0605045891306
+        assert orca_qmmm1.qm_qm2_energy == -5889.533884098047
+        assert orca_qmmm1.qm_energy == -5290.656904956516
+
+
+class TestORCAQMMMJobSettings:
+    def test_partition_string_single_and_list_input(self):
+        """Partition string should accept '1-15,37,39' or list and compress ranges."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.high_level_atoms = "1-15,37,39"
+        out = s._get_partition_string()
+        assert out.strip() == "QMAtoms {0:14 36 38} end"
+
+        # list input should produce the same output
+        s.high_level_atoms = [1, *range(2, 16), 37, 39]
+        out2 = s._get_partition_string()
+        assert out2.strip() == "QMAtoms {0:14 36 38} end"
+
+    def test_partition_string_qm_and_qm2(self):
+        """When both high_level_atoms and medium_level_atoms provided, both lines should be returned."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.high_level_atoms = "1-3,5"
+        s.intermediate_level_atoms = "7-9,12"
+        out = s._get_partition_string()
+        # order: QMAtoms then QM2Atoms
+        lines = [ln for ln in out.splitlines() if ln.strip()]
+        assert lines[0].strip() == "QMAtoms {0:2 4} end"
+        assert lines[1].strip() == "QM2Atoms {6:8 11} end"
+
+    def test_charge_and_multiplicity_population(self):
+        """ORCAQMMMJobSettings should populate .charge and .multiplicity from intermediate or high fields."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        # when both high and intermediate specified, high-region takes precedence
+        s1 = ORCAQMMMJobSettings(
+            charge_intermediate=0,
+            mult_intermediate=1,
+            charge_high=2,
+            mult_high=3,
+        )
+        assert s1.charge == 2
+        assert s1.multiplicity == 3
+
+        # intermediate missing -> fall back to high
+        s2 = ORCAQMMMJobSettings(charge_high=-1, mult_high=2)
+        assert s2.charge == -1
+        assert s2.multiplicity == 2
+
+    def test_partition_string_empty_and_none(self):
+        """Empty string or None should return empty partition block."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.high_level_atoms = ""
+        assert s._get_partition_string() == ""
+
+        s.high_level_atoms = None
+        assert s._get_partition_string() == ""
+
+
+class TestORCANEB:
+    def test_read_neb_output(self, orca_neb_output_file):
+        import pathlib
+
+        src = pathlib.Path(orca_neb_output_file)
+
+        # Read with tolerant UTF-8 decoding and inject into the parser to avoid locale decoding errors
+        data = src.read_text(encoding="utf-8", errors="replace")
+        lines = [ln.strip() for ln in data.splitlines()]
+
+        orca_neb = ORCANEBFile(filename=str(src))
+        orca_neb.__dict__["contents"] = lines
+        orca_neb.__dict__["content_lines_string"] = data
+        assert orca_neb.nimages == 10
+        assert orca_neb.num_atoms == 148
+        assert orca_neb.ci_converged is True
+        assert orca_neb.ts_converged is True
+        assert orca_neb.ci == "Climbing Image:  image 4."
+        assert orca_neb.ci_energy == -219.0833212
+        assert (
+            orca_neb.reactant.empirical_formula
+            == orca_neb.reactant.empirical_formula
+            == "C72H68NO6P"
+        )
+        assert orca_neb.ci_max_abs_force == 0.001963
+        assert orca_neb.ts_delta_energy == 4.02
+        assert orca_neb.ts_rms_force == 0.00034
+        assert orca_neb.ts_max_abs_force == 0.00543
+        assert orca_neb.ts_energy == -219.09056
+        assert orca_neb.preopt_ends
+
+
+class TestORCANEBJobSettings:
+    """Test suite for ORCANEBJobSettings class."""
+
+    def test_init_default(self):
+        """Test default initialization."""
+        settings = ORCANEBJobSettings()
+        assert settings.jobtype is None
+        assert settings.nimages is None
+        assert settings.preopt_ends is False
+
+    def test_init_with_parameters(self):
+        """Test initialization with parameters."""
+        settings = ORCANEBJobSettings(
+            jobtype="NEB-TS", nimages=8, semiempirical="XTB2"
+        )
+        assert settings.jobtype == "NEB-TS"
+        assert settings.nimages == 8
+        assert settings.semiempirical == "XTB2"
+
+    def test_route_string_generation(self):
+        """Test route string generation."""
+        settings = ORCANEBJobSettings(jobtype="NEB-CI", semiempirical="XTB2")
+        assert settings.route_string == "!  XTB2 NEB-CI"
+
+    def test_neb_block_basic(self):
+        """Test basic NEB block generation."""
+        settings = ORCANEBJobSettings(
+            nimages=5, starting_xyz="start.xyz", ending_xyzfile="end.xyz"
+        )
+        neb_block = settings.neb_block
+        assert "%neb" in neb_block
+        assert "NImages 5" in neb_block
+        assert 'NEB_END_XYZFile "end.xyz"' in neb_block
+
+    def test_inheritance(self):
+        """Test inheritance from ORCAJobSettings."""
+        settings = ORCANEBJobSettings(functional="B3LYP", basis="def2-SVP")
+        assert isinstance(settings, ORCANEBJobSettings)
+        assert settings.functional == "B3LYP"
+        assert settings.basis == "def2-SVP"
+
+    def test_validation_errors(self):
+        """Test validation raises appropriate errors."""
+        settings = ORCANEBJobSettings(starting_xyz="start.xyz")
+        with pytest.raises(
+            AssertionError, match="The number of images is missing"
+        ):
+            _ = settings.neb_block

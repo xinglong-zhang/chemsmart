@@ -76,6 +76,9 @@ def qrc(
 
     qrc_settings = qrc_settings.merge(job_settings, keywords=keywords)
 
+    if ctx.invoked_subcommand is not None:
+        return
+
     check_charge_and_multiplicity(qrc_settings)
 
     # get molecule

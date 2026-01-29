@@ -16,13 +16,14 @@ from chemsmart.cli.job import (
     click_molecule_vibrational_displacement_options,
 )
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
-from chemsmart.utils.cli import MyCommand, get_setting_from_jobtype_for_orca
+from chemsmart.cli.orca.qmmm_helper import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("qrc", cls=MyCommand)
+@orca.group("qrc", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_orca_jobtype_options
 @click_molecule_vibrational_displacement_options
@@ -85,7 +86,15 @@ def qrc(
     qrc_settings = qrc_settings.merge(job_settings, keywords=keywords)
     logger.info(f"Final QRC settings: {qrc_settings.__dict__}")
 
-    # validate charge and multiplicity consistency
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = qrc_settings
+    ctx.obj["parent_jobtype"] = jobtype
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # validate charge and multiplicity consistency only for direct qrc jobs
     check_charge_and_multiplicity(qrc_settings)
 
     # get molecule from context (use the last molecule if multiple)
@@ -113,3 +122,6 @@ def qrc(
         skip_completed=skip_completed,
         **kwargs,
     )
+
+
+create_orca_qmmm_subcommand(qrc)
