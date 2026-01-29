@@ -8,7 +8,7 @@ from chemsmart.cli.gaussian.gaussian import (
 )
 
 # Import and register qmmm subcommand
-from chemsmart.cli.gaussian.qmmm_helper import create_qmmm_subcommand
+from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyGroup,

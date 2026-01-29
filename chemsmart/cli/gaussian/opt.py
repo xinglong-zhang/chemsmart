@@ -5,7 +5,7 @@ import click
 from chemsmart.cli.gaussian.gaussian import gaussian
 
 # Import and register qmmm subcommand
-from chemsmart.cli.gaussian.qmmm_helper import create_qmmm_subcommand
+from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity

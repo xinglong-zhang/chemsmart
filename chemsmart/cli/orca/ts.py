@@ -14,7 +14,7 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
-from chemsmart.cli.orca.qmmm_helper import create_orca_qmmm_subcommand
+from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
 from chemsmart.utils.cli import MyGroup, check_scan_coordinates_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 

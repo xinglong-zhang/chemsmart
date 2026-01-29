@@ -7,7 +7,7 @@ from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_jobtype_options,
     gaussian,
 )
-from chemsmart.cli.gaussian.qmmm_helper import create_qmmm_subcommand
+from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyGroup,
