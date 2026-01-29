@@ -1,8 +1,7 @@
 import logging
+import multiprocessing
 import os
-from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
-from concurrent.futures import as_completed
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
@@ -51,13 +50,11 @@ class IterateCombination:
         return f"{self.skeleton_label}_{self.skeleton_link_index}_{self.substituent_label}_{self.substituent_link_index}"
 
 
-def _run_combination_worker(
+def _run_combination_task(
     combination: IterateCombination,
 ) -> tuple[str, Optional[Molecule]]:
     """
-    Worker function for multiprocessing Pool.
-
-    This function is module-level to be picklable for multiprocessing.
+    Core logic to run a single combination.
 
     Parameters
     ----------
@@ -112,8 +109,30 @@ def _run_combination_worker(
         return (label, result)
 
     except Exception as e:
-        logger.error(f"Error in worker for {label}: {e}")
+        logger.error(f"Error in task for {label}: {e}")
         return (label, None)
+
+
+def _run_combination_worker(
+    combination: IterateCombination,
+    result_queue: "multiprocessing.Queue",
+) -> None:
+    """
+    Worker function for multiprocessing.Process.
+
+    Parameters
+    ----------
+    combination : IterateCombination
+        The combination to process
+    result_queue : multiprocessing.Queue
+        Queue to put the result tuple
+    """
+    try:
+        result_pair = _run_combination_task(combination)
+        result_queue.put(result_pair)
+    except Exception as e:
+        logger.error(f"Worker process panic for {combination.label}: {e}")
+        result_queue.put((combination.label, None))
 
 
 class IterateJobRunner(JobRunner):
@@ -180,7 +199,7 @@ class IterateJobRunner(JobRunner):
             )
             return (combination.label, None)
 
-        return _run_combination_worker(combination)
+        return _run_combination_task(combination)
 
     def run_combinations(
         self,
@@ -189,10 +208,12 @@ class IterateJobRunner(JobRunner):
         timeout: float = DEFAULT_WORKER_TIMEOUT,
     ) -> list[tuple[str, Optional[Molecule]]]:
         """
-        Run multiple combinations, optionally using multiprocessing.
+        Run multiple combinations using multiprocessing.Process with watchdog.
 
-        Each worker has a timeout limit. Timeout or error in one worker
-        does not affect other workers.
+        This implementation manually manages processes to ensure they can be
+        forcefully killed (terminate/kill) if they exceed the timeout.
+        ProcessPoolExecutor does not support killing individual tasks/processes
+        mid-execution easily.
 
         Parameters
         ----------
@@ -219,55 +240,107 @@ class IterateJobRunner(JobRunner):
             return []
 
         logger.info(
-            f"Running {len(combinations)} combination(s) with {nprocs} process(es), timeout={timeout}s"
+            f"Running {len(combinations)} combination(s) with {nprocs} process(es) (manual management), timeout={timeout}s"
         )
 
-        # Track results by label to maintain order
         results_dict: dict[str, Optional[Molecule]] = {}
         failed_labels: list[str] = []
         timed_out_labels: list[str] = []
 
         max_workers = 1 if nprocs == 1 else nprocs
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            future_to_comb = {
-                executor.submit(_run_combination_worker, comb): comb
-                for comb in combinations
-            }
+        # Use Manager Queue for IPC
+        manager = multiprocessing.Manager()
+        result_queue = manager.Queue()
 
-            # Iterate over futures directly to strictly enforce timeout.
-            # Unlike as_completed(), this ensures we don't hang if a task is stuck.
-            for future in future_to_comb:
-                comb = future_to_comb[future]
-                label = comb.label
+        # State tracking
+        pending_combinations = combinations.copy()
+        # pid -> (process, combination, start_time)
+        active_processes: dict[
+            int, tuple[multiprocessing.Process, IterateCombination, float]
+        ] = {}
 
+        while pending_combinations or active_processes:
+            # 1. Fill up empty slots
+            while pending_combinations and len(active_processes) < max_workers:
+                comb = pending_combinations.pop(0)
+                p = multiprocessing.Process(
+                    target=_run_combination_worker,
+                    args=(comb, result_queue),
+                    daemon=True,
+                )
+                p.start()
+                active_processes[p.pid] = (p, comb, time.time())
+
+            # 2. Check for results in queue
+            while not result_queue.empty():
                 try:
-                    # Strict timeout check: raises TimeoutError if task exceeds limit
-                    result = future.result(timeout=timeout)
+                    # Grab all available data
+                    lbl, mol = result_queue.get_nowait()
+                    results_dict[lbl] = mol
+                except Exception:  # Empty or other error
+                    break
 
-                    results_dict[label] = result[
-                        1
-                    ]  # result is (label, molecule)
+            # 3. Monitor running processes
+            current_time = time.time()
+            pids_to_remove = []
 
-                    if result[1] is not None:
-                        logger.info(f"Completed: {label}")
-                    else:
+            for pid, (p, comb, start_time) in active_processes.items():
+                if not p.is_alive():
+                    # Process finished naturally (or crashed).
+                    # Result should be in queue (handled above or next loop before exit)
+                    p.join()
+                    pids_to_remove.append(pid)
+                else:
+                    # Check timeout
+                    if (current_time - start_time) > timeout:
                         logger.warning(
-                            f"Failed to generate molecule for: {label}"
+                            f"Timeout ({timeout}s) for {comb.label} (pid {pid}). Terminating..."
                         )
-                        failed_labels.append(label)
+                        p.terminate()
+                        # Give it a tiny bit to terminate gracefully-ish
+                        p.join(timeout=0.5)
+                        if p.is_alive():
+                            logger.warning(
+                                f"Process {pid} stuck, killing..."
+                            )
+                            p.kill()  # SIGKILL
 
-                except FuturesTimeoutError:
-                    logger.warning(
-                        f"Timeout ({timeout}s) for combination: {label}"
-                    )
-                    results_dict[label] = None
-                    timed_out_labels.append(label)
-                except Exception as e:
-                    logger.warning(f"Error for combination {label}: {e}")
-                    results_dict[label] = None
-                    failed_labels.append(label)
+                        timed_out_labels.append(comb.label)
+                        results_dict[comb.label] = None  # Explicitly mark as failed/timeout
+                        pids_to_remove.append(pid)
+
+            # 4. Cleanup removed processes
+            for pid in pids_to_remove:
+                del active_processes[pid]
+
+            # 5. Sleep briefly to yield CPU
+            if active_processes:
+                time.sleep(0.1)
+
+        # Double check queue one last time just in case
+        while not result_queue.empty():
+            try:
+                lbl, mol = result_queue.get_nowait()
+                results_dict[lbl] = mol
+            except Exception:
+                break
+
+        # Check for missing results (crashes that didn't write to queue)
+        for comb in combinations:
+            if comb.label not in results_dict:
+                logger.error(
+                    f"No result found for {comb.label} - assuming worker crash."
+                )
+                failed_labels.append(comb.label)
+                results_dict[comb.label] = None
+            elif (
+                results_dict[comb.label] is None
+                and comb.label not in timed_out_labels
+            ):
+                # It might have returned None explicitly (handled in worker)
+                if comb.label not in failed_labels:
+                    failed_labels.append(comb.label)
 
         # Build results list in original order
         results = [
