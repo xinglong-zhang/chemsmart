@@ -512,10 +512,12 @@ class IterateAnalyzer:
             return None
 
         # Update substituent positions with optimized positions
-        self.substituent.positions = sub_optimal_arr[:, 1:4]
+        optimized_substituent = self._update_molecule_positions(
+            self.substituent, sub_optimal_arr[:, 1:4]
+        )
 
         # Combine skeleton and optimized substituent
-        combined_mol = self._combine_molecules(self.skeleton, self.substituent)
+        combined_mol = self._combine_molecules(self.skeleton, optimized_substituent)
 
         return combined_mol
 
