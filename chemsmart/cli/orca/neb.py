@@ -33,6 +33,12 @@ logger = logging.getLogger(__name__)
     help="NEB calculation type (e.g., NEB-TS for transition state search).",
 )
 @click.option(
+    "-n",
+    "--nimages",
+    type=int,
+    help="Number of images used for NEB calculation.",
+)
+@click.option(
     "-e",
     "--ending-xyzfile",
     type=str,
@@ -61,6 +67,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-a",
     "--semiempirical",
+    "-A",
     type=click.Choice(
         [
             "XTB0",
@@ -71,22 +78,16 @@ logger = logging.getLogger(__name__)
     ),
     help="Semiempirical method for NEB calculation.",
 )
-@click.option(
-    "-n",
-    "--nimages",
-    type=int,
-    help="Number of images used for NEB calculation.",
-)
 @click.pass_context
 def neb(
     ctx,
     job_type,
+    nimages,
     ending_xyzfile,
     intermediate_xyzfile,
     restarting_xyzfile,
     pre_optimization,
     semiempirical,
-    nimages,
     **kwargs,
 ):
     """
@@ -146,6 +147,8 @@ def neb(
     # then the project value should be used and unmodified, ie, should not be merged.
     # update value only if user specifies a value for the attribute:
     neb_settings.jobtype = job_type
+    if nimages is not None:
+        neb_settings.nimages = nimages
     if ending_xyzfile:
         neb_settings.ending_xyzfile = ending_xyzfile
     if intermediate_xyzfile:
@@ -156,8 +159,6 @@ def neb(
     neb_settings.preopt_ends = pre_optimization
     if semiempirical:
         neb_settings.semiempirical = semiempirical
-    if nimages:
-        neb_settings.nimages = nimages
 
     check_charge_and_multiplicity(neb_settings)
 

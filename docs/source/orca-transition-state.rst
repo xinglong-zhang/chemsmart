@@ -110,6 +110,18 @@ product geometries.
 NEB Options
 ===========
 
+.. list-table:: General Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-S, --skip-completed`` / ``-R, --no-skip-completed``
+      -  flag
+      -  Skip completed jobs (default) or rerun completed jobs.
+
 .. list-table:: Job Type Options
    :header-rows: 1
    :widths: 30 15 55
@@ -143,7 +155,7 @@ NEB Options
       -  string
       -  Filename of geometry for restarting calculation
 
-.. list-table:: Optimization Options
+.. list-table:: Optimization and Method Options
    :header-rows: 1
    :widths: 30 15 55
 
@@ -151,13 +163,17 @@ NEB Options
       -  Type
       -  Description
 
-   -  -  ``-o, --pre-optimization/--no-pre-optimization``
-      -  flag
-      -  Whether to optimize input geometries (default: disabled)
+   -  -  ``-o, --pre-optimization``
+      -  bool
+      -  Whether to optimize input geometries (accepts True/False). [default: False]
 
-   -  -  ``-A, --semiempirical``
+   -  -  ``-a, --semiempirical``
       -  choice
-      -  Semiempirical method: XTB0, XTB1, XTB2
+      -  Semiempirical method for NEB calculation: XTB0, XTB1, XTB2
+
+   -  -  ``-n, --nimages``
+      -  int
+      -  Number of images used for NEB calculation.
 
 Basic Usage
 ===========
@@ -190,7 +206,7 @@ NEB with geometry pre-optimization:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -o -A XTB2
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -o True -a XTB2
 
 Job Types
 =========
