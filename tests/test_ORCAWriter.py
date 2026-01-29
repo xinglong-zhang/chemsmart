@@ -397,11 +397,8 @@ class TestORCAInputWriter:
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_gas_solv_project_name
         )
-        # the current code cannot read from neb.yml file
-        # todo: need to fix this
         settings = project_settings.neb_settings()
         settings.semiempirical = "GFN2-xTB"
-        # settings.semiempirical = "GFN2-xTB"
         settings.jobtype = "NEB-TS"
         settings.nimages = 5
         settings.charge = 0
@@ -421,5 +418,12 @@ class TestORCAInputWriter:
         # write input file
         orca_writer.write(target_directory=tmpdir)
         orca_file = os.path.join(tmpdir, "orca_neb.inp")
+        with open(orca_file, "r") as fout:
+            neb_input_content = fout.read()
+            print(neb_input_content)
+        with open(orca_written_neb_file, "r") as fin:
+            reactant_input_content = fin.read()
+            print(reactant_input_content)
+
         assert os.path.isfile(orca_file)
         assert cmp(orca_file, orca_written_neb_file, shallow=False)

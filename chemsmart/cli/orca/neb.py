@@ -3,7 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
+from chemsmart.cli.orca.orca import orca
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 @orca.command("neb", cls=MyCommand)
 @click_job_options
-@click_orca_jobtype_options
 @click.option(
     "-j",
     "--job-type",
@@ -53,12 +52,14 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "-o",
-    "--pre-optimization/--no-pre-optimization",
+    "--pre-optimization",
+    type=bool,
     default=False,
-    help="Whether to optimize the input geometries.",
+    show_default=True,
+    help="Whether to optimize the input geometries (accepts True/False).",
 )
 @click.option(
-    "-A",
+    "-a",
     "--semiempirical",
     type=click.Choice(
         [
@@ -70,6 +71,12 @@ logger = logging.getLogger(__name__)
     ),
     help="Semiempirical method for NEB calculation.",
 )
+@click.option(
+    "-n",
+    "--nimages",
+    type=int,
+    help="Number of images used for NEB calculation.",
+)
 @click.pass_context
 def neb(
     ctx,
@@ -79,6 +86,7 @@ def neb(
     restarting_xyzfile,
     pre_optimization,
     semiempirical,
+    nimages,
     **kwargs,
 ):
     """
@@ -148,6 +156,8 @@ def neb(
     neb_settings.preopt_ends = pre_optimization
     if semiempirical:
         neb_settings.semiempirical = semiempirical
+    if nimages:
+        neb_settings.nimages = nimages
 
     check_charge_and_multiplicity(neb_settings)
 

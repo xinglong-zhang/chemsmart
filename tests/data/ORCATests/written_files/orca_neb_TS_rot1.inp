@@ -1,4 +1,4 @@
-! GFN2-xTB NEB-TS
+!  Freq GFN2-xTB NEB-TS DEFGRID3
 # Number of processors
 %pal nprocs 64 end
 # Memory per core

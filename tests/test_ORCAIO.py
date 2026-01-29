@@ -2787,7 +2787,7 @@ class TestORCANEBJobSettings:
     def test_route_string_generation(self):
         """Test route string generation."""
         settings = ORCANEBJobSettings(jobtype="NEB-CI", semiempirical="XTB2")
-        assert settings.route_string == "! XTB2 NEB-CI"
+        assert settings.route_string == "!  XTB2 NEB-CI"
 
     def test_neb_block_basic(self):
         """Test basic NEB block generation."""

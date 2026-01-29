@@ -1873,10 +1873,74 @@ class ORCANEBJobSettings(ORCAJobSettings):
             "! XTB2 NEB-TS" (with semiempirical)
             "! B3LYP def2-SVP NEB-CI" (with DFT)
         """
+        route_string = ""
+        if not route_string.startswith("!"):
+            route_string += "! "
+
+        # route string depends on job type
+        # determine if route string requires 'opt' keyword
+        if self.jobtype in ("opt", "modred", "scan"):
+            route_string += "Opt"
+        elif self.jobtype == "ts":
+            route_string += (
+                "OptTS"  # Orca keyword for transition state optimization
+            )
+        elif self.jobtype == "irc":
+            route_string += "IRC"
+        elif self.jobtype == "sp":
+            route_string += ""
+
+        # add frequency calculation
+        # not okay if both freq and numfreq are True
+        if self.freq and self.numfreq:
+            raise ValueError("Cannot specify both freq and numfreq!")
+
+        if self.freq:
+            route_string += " Freq"
+        elif self.numfreq:
+            route_string += " NumFreq"  # requires numerical frequency,
+            # e.g., in SMD model where analytic Hessian is not available
+
+        # write level of theory
         if self.semiempirical:
-            return f"! {self.semiempirical} {self.jobtype}"
+            route_string += f" {self.semiempirical} {self.jobtype}"
         else:
-            return f"! {self._get_level_of_theory()} {self.jobtype}"
+            route_string += f" {self._get_level_of_theory()} {self.jobtype}"
+
+        # write grid information
+        if self.defgrid is not None:
+            route_string += (
+                f" {self.defgrid}"  # default is 'defgrid2', if not specified
+            )
+
+        # write convergence criteria in simple input/route
+        if self.scf_tol is not None:
+            if not self.scf_tol.lower().endswith("scf"):
+                self.scf_tol += "SCF"
+            route_string += f" {self.scf_tol}"
+
+        # write convergence algorithm if not default
+        if self.scf_algorithm is not None:
+            route_string += f" {self.scf_algorithm}"
+
+        # write solvent if solvation is turned on
+        if self.solvent_model is not None and self.solvent_id is not None:
+            route_string += f" {self.solvent_model}({self.solvent_id})"
+        elif self.solvent_model is not None and self.solvent_id is None:
+            raise ValueError(
+                "Warning: Solvent model is specified but solvent identity "
+                "is missing!"
+            )
+        elif self.solvent_model is None and self.solvent_id is not None:
+            logger.warning(
+                "Warning: Solvent identity is specified but solvent model "
+                "is missing!\nDefaulting to CPCM model."
+            )
+            route_string += f" CPCM({self.solvent_id})"
+        else:
+            pass
+
+        return route_string
 
     @property
     def neb_block(self):
