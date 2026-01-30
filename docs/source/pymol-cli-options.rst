@@ -35,7 +35,7 @@ This page documents the CLI options for molecular visualization and analysis usi
 
    -  -  ``-t, --filetype``
       -  string
-      -  File type filter for directory processing (gjf, xyz, mol, log, etc.) for align jobs
+      -  File type filter for directory processing
 
    -  -  ``-l, --label``
       -  string
