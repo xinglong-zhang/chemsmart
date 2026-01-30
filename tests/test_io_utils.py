@@ -367,7 +367,7 @@ class TestSelectItemsByIndex:
 
     # ---- Tests for allow_duplicates ----
     def test_allow_duplicates_true(self):
-        """Test that duplicates are allowed by default."""
+        """Test that duplicates are allowed when allow_duplicates=True."""
         result = self.select_fn(self.test_list, "1,1,2", allow_duplicates=True)
         assert result == ["a", "a", "b"]
 

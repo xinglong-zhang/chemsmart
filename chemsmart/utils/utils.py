@@ -536,7 +536,7 @@ def convert_string_index_from_1_based_to_0_based(
     if isinstance(index, slice):
         return index  # Already processed
 
-        # String index - use the new unified parser
+    # String index - use the new unified parser
     if isinstance(index, str):
         return parse_index_specification(
             index, total_count, allow_duplicates, allow_out_of_range

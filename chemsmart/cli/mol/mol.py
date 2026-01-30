@@ -373,11 +373,8 @@ def mol(
 
     # if filename is specified, read the file and obtain molecule
     if filenames:
-        # Check if this is an align task by looking for " align" in command line
-        import sys
-
-        cli_string = " ".join(sys.argv)
-        is_align_task = " align" in cli_string
+        # Check if this is an align task by looking for " align" in invokded subcommand
+        is_align_task = ctx.invoked_subcommand == "align"
 
         if is_align_task:
             # align task can handle multiple files - pass to align command
