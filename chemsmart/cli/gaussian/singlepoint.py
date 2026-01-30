@@ -27,15 +27,7 @@ def sp(
     skip_completed,
     **kwargs,
 ):
-    """CLI subcommand for running Gaussian single point calculation.
-
-    Can be used standalone for regular single point or with the 'qmmm'
-    subcommand for QM/MM single point calculations.
-
-    Examples:
-        chemsmart sub gaussian sp              # Regular DFT single point
-        chemsmart sub gaussian sp qmmm         # QM/MM single point
-    """
+    """CLI subcommand for running Gaussian single point calculation."""
 
     # get jobrunner for single point
     jobrunner = ctx.obj["jobrunner"]
@@ -54,13 +46,11 @@ def sp(
     # cli.gaussian.py subcommands
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
 
-    # get molecule
+    # get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
 
     # get label for the job
     label = ctx.obj["label"]
-    logger.debug(f"Label for job: {label}")
 
     # cli-supplied solvent model and solvent id
     sp_settings.modify_solvent(
@@ -69,26 +59,6 @@ def sp(
         solvent_id=solvent_id,
     )
 
-    # either supplied or not from cli, would still want label to have model
-    # and id, if both given;
-    # will not be activated when both are not given, e.g., in the gaussian
-    # calculator calling the sp job
-    if (
-        sp_settings.solvent_model is not None
-        and sp_settings.solvent_id is not None
-    ):
-        # replace , by _ if it occurs in the solvent name, as , in file will
-        # cause gaussian run error
-        solvent_label = sp_settings.solvent_id.replace(",", "_")
-        solvent_label = solvent_label.replace("-", "_")
-        label = f"{label}_{sp_settings.solvent_model}_{solvent_label}"
-    elif sp_settings.solvent_model is None and sp_settings.solvent_id is None:
-        label = (
-            f"{label}_gas_phase"
-            if sp_settings.custom_solvent is None
-            else f"{label}_custom_solvent"
-        )
-
     if solvent_options is not None:
         sp_settings.additional_solvent_options = solvent_options
 
@@ -96,6 +66,13 @@ def sp(
         f"Single point job settings from project: {sp_settings.__dict__}"
     )
 
+    from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
+    from chemsmart.utils.cli import create_sp_label
+
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    # Handle multiple molecules: create one job per molecule
     # Store parent context for potential qmmm subcommand
     ctx.obj["parent_skip_completed"] = skip_completed
     ctx.obj["parent_freeze_atoms"] = None  # sp doesn't have freeze_atoms
@@ -106,16 +83,41 @@ def sp(
     # If no subcommand invoked, run regular single point
     if ctx.invoked_subcommand is None:
         check_charge_and_multiplicity(sp_settings)
-        from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
-        return GaussianSinglePointJob(
-            molecule=molecule,
-            settings=sp_settings,
-            label=label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
-        )
+        if len(molecules) > 1 and molecule_indices is not None:
+            logger.info(f"Creating {len(molecules)} single point jobs")
+            jobs = []
+            for molecule, idx in zip(molecules, molecule_indices):
+                molecule_label = f"{label}_idx{idx}"
+                final_label = create_sp_label(molecule_label, sp_settings)
+                logger.info(
+                    f"Running single point for molecule {idx}: {molecule} with label {final_label}"
+                )
+
+                job = GaussianSinglePointJob(
+                    molecule=molecule,
+                    settings=sp_settings,
+                    label=final_label,
+                    jobrunner=jobrunner,
+                    **kwargs,
+                )
+                jobs.append(job)
+            return jobs
+        else:
+            # Single molecule case
+            molecule = molecules[-1]
+            label = create_sp_label(label, sp_settings)
+            logger.info(
+                f"Running single point calculation on molecule: {molecule} with label: {label}"
+            )
+
+            return GaussianSinglePointJob(
+                molecule=molecule,
+                settings=sp_settings,
+                label=label,
+                jobrunner=jobrunner,
+                **kwargs,
+            )
 
 
 # Register qmmm subcommand

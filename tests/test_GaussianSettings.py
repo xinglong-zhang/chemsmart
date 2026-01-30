@@ -126,9 +126,10 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
-            jobtype="opt",
+            parent_jobtype="opt",
             freq=True,
         )
+        print(settings1.route_string)
         assert settings1.route_string == "# opt freq oniom(b3lyp/6-31g(d):uff)"
 
         settings2 = GaussianQMMMJobSettings(
@@ -140,7 +141,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
-            jobtype="sp",
+            parent_jobtype="sp",
         )
         assert (
             settings2.route_string
@@ -157,7 +158,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
-            jobtype="sp",
+            parent_jobtype="sp",
         )
         # assert settings3.route_string == "# oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
         # ValueError: For high level of theory, one should specify only functional/basis or force field!
@@ -176,7 +177,7 @@ class TestGaussianQMMMJobSettings:
             high_level_atoms=[1, 2, 3],
             solvent_model="smd",
             solvent_id="toluene",
-            jobtype="sp",
+            parent_jobtype="sp",
         )
         assert (
             settings4.route_string
@@ -193,7 +194,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
-            jobtype="opt",
+            parent_jobtype="opt",
             freq=True,
             solvent_model="smd",
             solvent_id="toluene",
@@ -213,7 +214,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
-            jobtype="ts",
+            parent_jobtype="ts",
             freq=True,
             solvent_model="smd",
             solvent_id="toluene",
@@ -233,7 +234,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
-            jobtype="ts",
+            parent_jobtype="ts",
             freq=False,
             numfreq=True,
             solvent_model="smd",

@@ -23,15 +23,7 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def opt(ctx, freeze_atoms, skip_completed, **kwargs):
-    """CLI subcommand for running Gaussian optimization calculation.
-
-    Can be used standalone for regular optimization or with the 'qmmm'
-    subcommand for QM/MM optimization jobs.
-
-    Examples:
-        chemsmart sub gaussian opt              # Regular DFT optimization
-        chemsmart sub gaussian opt qmmm         # QM/MM optimization
-    """
+    """CLI subcommand for running Gaussian optimization calculation."""
 
     # get jobrunner for optimization
     jobrunner = ctx.obj["jobrunner"]
@@ -50,28 +42,18 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     # cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
-    check_charge_and_multiplicity(opt_settings)
-
-    # get molecule
+    # get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Optimizing molecule: {molecule}.")
 
     # get label for the job
     label = ctx.obj["label"]
 
     # Set atoms to freeze
+
     from chemsmart.utils.utils import (
         convert_list_to_gaussian_frozen_list,
         get_list_from_string_range,
     )
-
-    if freeze_atoms is not None:
-        frozen_atoms_list = get_list_from_string_range(freeze_atoms)
-        logger.debug(f"Freezing atoms: {frozen_atoms_list}")
-        molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
-            frozen_atoms_list, molecule
-        )
 
     logger.info(f"Opt job settings from project: {opt_settings.__dict__}")
 
@@ -82,18 +64,73 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     ctx.obj["parent_settings"] = opt_settings
     ctx.obj["parent_jobtype"] = "opt"
 
-    # If no subcommand invoked, run regular optimization
-    if ctx.invoked_subcommand is None:
-        from chemsmart.jobs.gaussian.opt import GaussianOptJob
+    from chemsmart.jobs.gaussian.opt import GaussianOptJob
 
-        return GaussianOptJob(
-            molecule=molecule,
-            settings=opt_settings,
-            label=label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
-        )
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    if ctx.invoked_subcommand is None:
+        check_charge_and_multiplicity(opt_settings)
+
+        # Handle multiple molecules: create one job per molecule
+        if len(molecules) > 1 and molecule_indices is not None:
+            logger.info(f"Creating {len(molecules)} optimization jobs")
+            jobs = []
+            for molecule, idx in zip(molecules, molecule_indices):
+                # Create a copy to avoid side effects from mutation
+                molecule = molecule.copy()
+                molecule_label = f"{label}_idx{idx}"
+                logger.info(
+                    f"Optimizing molecule {idx}: {molecule} with label {molecule_label}"
+                )
+
+                # Apply frozen atoms if specified
+                if freeze_atoms is not None:
+                    frozen_atoms_list = get_list_from_string_range(
+                        freeze_atoms
+                    )
+                    logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+                    molecule.frozen_atoms = (
+                        convert_list_to_gaussian_frozen_list(
+                            frozen_atoms_list, molecule
+                        )
+                    )
+                else:
+                    logger.debug("No atoms will be frozen during optimization")
+
+                job = GaussianOptJob(
+                    molecule=molecule,
+                    settings=opt_settings,
+                    label=molecule_label,
+                    jobrunner=jobrunner,
+                    skip_completed=skip_completed,
+                    **kwargs,
+                )
+                jobs.append(job)
+            return jobs
+        else:
+            # Single molecule case
+            molecule = molecules[-1]
+            molecule = molecule.copy()
+            logger.info(f"Optimizing molecule: {molecule}.")
+
+            if freeze_atoms is not None:
+                frozen_atoms_list = get_list_from_string_range(freeze_atoms)
+                logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+                molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
+                    frozen_atoms_list, molecule
+                )
+            else:
+                logger.debug("No atoms will be frozen during optimization")
+
+            return GaussianOptJob(
+                molecule=molecule,
+                settings=opt_settings,
+                label=label,
+                jobrunner=jobrunner,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
 
 
 create_qmmm_subcommand(opt)
