@@ -13,7 +13,7 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.orca.orca import orca
+from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
 from chemsmart.utils.cli import MyGroup, check_scan_coordinates_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 @orca.group("ts", cls=MyGroup, invoke_without_command=True)
 @click_job_options
+@click_orca_jobtype_options
 @click.option(
     "-i/",
     "--inhess/--no-inhess",
