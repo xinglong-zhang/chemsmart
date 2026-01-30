@@ -361,7 +361,11 @@ class Gaussian16Input(GaussianFileMixin):
             except RecursionError:
                 partition_len = None
         if partition_len == 2:
-            charge_multiplicity_list = charge_multiplicity_list[0:1, 4:5]
+            # For two-layer ONIOM, keep only the first and last layer
+            # (drop intermediate/int layer): total and model.
+            charge_multiplicity_list = (
+                charge_multiplicity_list[0:2] + charge_multiplicity_list[4:6]
+            )
             full_line = 6
         for j in range(0, int(full_line) - len(line_elements)):
             line_elements.append("Not specified, will use default value.")

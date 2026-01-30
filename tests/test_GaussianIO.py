@@ -287,8 +287,8 @@ class TestGaussian16Input:
         assert g16_oniom.int_charge == 0
         assert g16_oniom.model_charge == 0
         assert g16_oniom.real_multiplicity == 1
-        assert g16_oniom.real_multiplicity == 1
-        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.int_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
