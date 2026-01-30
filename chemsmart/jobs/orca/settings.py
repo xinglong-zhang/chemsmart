@@ -567,13 +567,13 @@ class ORCAJobSettings(MolecularJobSettings):
         level_of_theory = ""
 
         # detect whether this is a QMMM-type job to relax some validations
-        job_type_val = getattr(self, "job_type", None) or getattr(
+        jobtype_val = getattr(self, "jobtype", None) or getattr(
             self, "jobtype", None
         )
         is_qmmm = False
-        if job_type_val and (
-            "qm" in str(job_type_val).lower()
-            and "mm" in str(job_type_val).lower()
+        if jobtype_val and (
+            "qm" in str(jobtype_val).lower()
+            and "mm" in str(jobtype_val).lower()
         ):
             try:
                 is_qmmm = True

@@ -297,7 +297,7 @@ def create_qmmm_subcommand(parent_command):
 
         # Set jobtype inferred from parent command
         if jobtype is not None:
-            qmmm_settings.job_type = jobtype
+            qmmm_settings.jobtype = jobtype
             logger.debug(f"Inferred jobtype from parent command: {jobtype}")
 
         # Step 3: Apply CLI options to qmmm_settings (these override project and parent)

@@ -1,0 +1,40 @@
+# ORCA QMMM 3-Layer Configuration
+# This file defines settings for 3-layer QM/QM2/MM calculations
+
+qmmm:
+  jobtype: "QM/QM2/MM"
+
+  # High-level (QM) region
+  high_level_functional: "mn15"
+  high_level_basis: "genecp"
+  charge_high: 0
+  mult_high: 1
+
+  # Intermediate-level (QM2) region
+  intermediate_level_atoms: 19-20  
+  intermediate_level_functional: "B3LYP"
+  intermediate_level_basis: "def2-SVP"
+  # Or use a built-in method:
+  # intermediate_level_method: "XTB"
+  charge_intermediate: 0
+  mult_intermediate: 1
+
+  # Low-level (MM) region
+  low_level_force_field: "ff13SB"
+
+  # Total system
+  charge_total: 0
+  mult_total: 1
+
+  # Additional options
+  freq: false
+  embedding_type: "Electronic"
+  delete_la_double_counting: true
+solv:
+  functional: mn15
+  basis: def2qzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: generic
+  custom_solvent : |
+    solventname=1,1,1,3,3,3-hexafluoropropan-2-ol

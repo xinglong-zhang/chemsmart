@@ -1,0 +1,21 @@
+# Default Gaussian settings for calculations for project ring strain (rs)
+qmmm:
+  high_level_functional: mn15
+  high_level_basis: genecp
+  medium_level_functional: b3lyp
+  medium_level_basis: 6-31g
+solv: 
+  functional: mn15
+  basis: def2qzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: generic 
+  custom_solvent : |
+    solventname=1,1,1,3,3,3-hexafluoropropan-2-ol
+    eps=16.7 
+    epsinf=1.625625 !(not really needed for gs properties)
+    HBondAcidity=0.77
+    HBondBasicity=0.10
+    SurfaceTensionAtInterface=23.23
+    CarbonAromaticity=0.0
+    ElectronegativeHalogenicity=0.60
