@@ -12,8 +12,7 @@ from chemsmart.cli.job import (
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import clean_label
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.io import clean_label, select_items_by_index
 
 logger = logging.getLogger(__name__)
 
@@ -374,17 +373,14 @@ def mol(
 
     # if filename is specified, read the file and obtain molecule
     if filenames:
-        if len(filenames) == 1:
-            filenames = filenames[0]
-            molecules = Molecule.from_filepath(
-                filepath=filenames, index=":", return_list=True
-            )
-            assert (
-                molecules is not None
-            ), f"Could not obtain molecule from {filenames}!"
-            logger.debug(f"Obtained molecule {molecules} from {filenames}")
-        else:
-            # Multiple filenames - pass to align command
+        # Check if this is an align task by looking for " align" in command line
+        import sys
+
+        cli_string = " ".join(sys.argv)
+        is_align_task = " align" in cli_string
+
+        if is_align_task:
+            # align task can handle multiple files - pass to align command
             ctx.obj["filenames"] = filenames
             ctx.obj["index"] = index
             ctx.obj["directory"] = None
@@ -392,6 +388,20 @@ def mol(
             ctx.obj["molecules"] = None
             ctx.obj["label"] = label
             return
+        else:
+            if len(filenames) == 1:
+                filenames = filenames[0]
+                molecules = Molecule.from_filepath(
+                    filepath=filenames, index=":", return_list=True
+                )
+                assert (
+                    molecules is not None
+                ), f"Could not obtain molecule from {filenames}!"
+                logger.debug(f"Obtained molecule {molecules} from {filenames}")
+            else:
+                raise ValueError(
+                    f"This task can only process one file, but {len(filenames)} files were provided. "
+                )
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
@@ -423,22 +433,14 @@ def mol(
     # then return that structure as a list
     if index is not None:
         logger.debug(f"Using molecule with index: {index}")
-        try:
-            # try to get molecule using python style string indexing,
-            # but in 1-based
-            from chemsmart.utils.utils import string2index_1based
-
-            index = string2index_1based(index)
-            molecules = molecules[index]
-            if not isinstance(molecules, list):
-                molecules = [molecules]
-        except ValueError:
-            # except user defined indices such as s='[1-3,28-31,34-41]'
-            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
-            index = get_list_from_string_range(index)
-            molecules = [molecules[i - 1] for i in index]
+        molecules = select_items_by_index(
+            molecules,
+            index,
+            allow_duplicates=False,
+            allow_out_of_range=False,
+        )
     else:
-        molecules = molecules[-1]
+        molecules = [molecules[-1]]  # Default: last molecule as list
 
     logger.debug(f"Obtained molecules: {molecules}")
 
