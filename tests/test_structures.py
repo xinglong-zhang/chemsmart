@@ -17,7 +17,7 @@ from chemsmart.io.molecules.structure import (
     Molecule,
     QMMMMolecule,
 )
-from chemsmart.io.xyz.file import XYZFile
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.utils import cmp_with_ignore
 

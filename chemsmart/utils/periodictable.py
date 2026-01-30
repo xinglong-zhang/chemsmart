@@ -13,6 +13,10 @@ from ase.data import covalent_radii
 from ase.data.vdw import vdw_radii
 
 from chemsmart.utils.isotopes_data import isotopes
+from chemsmart.utils.repattern import (
+    element_non_alpha_pattern,
+    element_partition_split_pattern,
+)
 
 
 class PeriodicTable:
@@ -57,8 +61,8 @@ class PeriodicTable:
             raise ValueError("Element string cannot be empty")
 
         # Remove partition/layer annotations (e.g., O-O_3, C-C_R, H-H_)
-        cleaned = re.split(r"[\s:_-]+", cleaned)[0]
-        cleaned = re.sub(r"[^A-Za-z]", "", cleaned)
+        cleaned = re.split(element_partition_split_pattern, cleaned)[0]
+        cleaned = re.sub(element_non_alpha_pattern, "", cleaned)
 
         if not cleaned:
             raise ValueError(f"Unable to parse element from '{element_str}'")

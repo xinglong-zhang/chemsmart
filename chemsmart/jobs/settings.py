@@ -185,7 +185,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         )
 
     # populate job settings for different jobs
-    all_project_configs = {}  # store all job settings in a dict\
+    all_project_configs = {}  # store all job settings in a dict
 
     # check if solv settings exist
     solv_config = project_config.get("solv", None)
