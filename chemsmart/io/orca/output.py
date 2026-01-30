@@ -328,8 +328,8 @@ class ORCAOutput(ORCAFileMixin):
         Route string for ORCA file, convert to lower case.
         """
         for line in self.contents:
-            if line.startswith("|  1> !"):
-                return line.lower().split("1> ")[-1]
+            if line.startswith("|  1> !") or line.startswith("|  2> !"):
+                return line.lower().split("> ")[-1]
         return None
 
     @property

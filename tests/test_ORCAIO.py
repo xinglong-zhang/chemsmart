@@ -1921,6 +1921,7 @@ class TestORCAOutput:
 
     def test_sn2_ts_orca_output(self, orca_sn2_ts_output):
         orca_out = ORCAOutput(filename=orca_sn2_ts_output)
+        assert orca_out.route_string == "! m062x def2-svp optts freq"
         assert orca_out.spin == "restricted"
         assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
