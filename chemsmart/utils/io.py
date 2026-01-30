@@ -464,7 +464,14 @@ def select_items_by_index(
         list: List of selected items.
 
     Raises:
-        ValueError: If index specification is invalid or out of range.
+        IndexError: If int index is out of range.
+        ValueError: If string index specification is invalid or out of range
+            (when allow_out_of_range=False).
+    
+    Note:
+        - int indices raise IndexError for out-of-range access.
+        - slice indices never raise errors; they return empty or partial results.
+        - str indices raise ValueError based on allow_out_of_range parameter.
     """
     # If no filtering needed, return all
     if index_spec is None or index_spec == ":":
@@ -476,8 +483,7 @@ def select_items_by_index(
         return [items_list[index_spec]]
     elif isinstance(index_spec, slice):
         # Direct slice - return sliced items as list
-        result = items_list[index_spec]
-        return result if isinstance(result, list) else [result]
+        return items_list[index_spec]
 
     # Handle string specifications via parse_index_specification
     from chemsmart.utils.utils import parse_index_specification
@@ -495,8 +501,7 @@ def select_items_by_index(
     elif isinstance(selected_indices, int):
         return [items_list[selected_indices]]
     elif isinstance(selected_indices, slice):
-        result = items_list[selected_indices]
-        return result if isinstance(result, list) else [result]
+        return items_list[selected_indices]
     else:
         raise ValueError(f"Unexpected index type: {type(selected_indices)}")
 

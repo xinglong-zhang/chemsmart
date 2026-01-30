@@ -337,6 +337,31 @@ class TestSelectItemsByIndex:
         result = self.select_fn(self.test_list, slice(-3, None))
         assert result == ["h", "i", "j"]
 
+    def test_int_out_of_range_raises(self):
+        """Test that out-of-range int index raises IndexError."""
+        with pytest.raises(IndexError):
+            self.select_fn(self.test_list, 100)
+
+    def test_int_negative_out_of_range_raises(self):
+        """Test that out-of-range negative int index raises IndexError."""
+        with pytest.raises(IndexError):
+            self.select_fn(self.test_list, -100)
+
+    def test_slice_empty_result(self):
+        """Test that slice returning empty list works correctly."""
+        result = self.select_fn(self.test_list, slice(5, 5))
+        assert result == []
+
+    def test_slice_beyond_range_returns_partial(self):
+        """Test that slice beyond range returns partial results."""
+        result = self.select_fn(self.test_list, slice(8, 20))
+        assert result == ["i", "j"]
+
+    def test_slice_completely_out_of_range_returns_empty(self):
+        """Test that slice completely out of range returns empty list."""
+        result = self.select_fn(self.test_list, slice(20, 30))
+        assert result == []
+
     # ---- Tests for single index ----
     def test_single_positive_index_middle(self):
         """Test single positive index in the middle."""
