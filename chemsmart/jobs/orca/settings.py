@@ -1674,7 +1674,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         #         self.low_level_force_field is not None
         # ), f"Force field file missing for {self.jobtype} job!"
         if self.jobtype and self.jobtype.upper() in [
-            "QMMM" "QM/MM",
+            "QMMM",
+            "QM/MM",
             "QM/QM2/MM",
             "IONIC-CRYSTAL-QMMM",
         ]:
