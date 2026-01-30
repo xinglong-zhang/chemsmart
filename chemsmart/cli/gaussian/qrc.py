@@ -6,12 +6,13 @@ from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_jobtype_options,
     gaussian,
 )
+from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import (
     click_job_options,
     click_molecule_vibrational_displacement_options,
 )
 from chemsmart.utils.cli import (
-    MyCommand,
+    MyGroup,
     get_setting_from_jobtype_for_gaussian,
 )
 from chemsmart.utils.utils import check_charge_and_multiplicity
@@ -19,7 +20,7 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command(cls=MyCommand)
+@gaussian.group("qrc", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_gaussian_jobtype_options
 @click_molecule_vibrational_displacement_options
@@ -75,35 +76,43 @@ def qrc(
     keywords = ctx.obj["keywords"]
 
     qrc_settings = qrc_settings.merge(job_settings, keywords=keywords)
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = qrc_settings
+    ctx.obj["parent_jobtype"] = jobtype
 
-    check_charge_and_multiplicity(qrc_settings)
+    if ctx.invoked_subcommand is None:
+        check_charge_and_multiplicity(qrc_settings)
 
-    # get molecule
-    molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]  # use last structure
+        # get molecule
+        molecules = ctx.obj["molecules"]
+        molecule = molecules[-1]  # use last structure
 
-    # get label
-    label = ctx.obj["label"]
+        # get label
+        label = ctx.obj["label"]
 
-    logger.info(
-        f"QRC {jobtype} settings from project: {qrc_settings.__dict__}"
-    )
+        logger.info(
+            f"QRC {jobtype} settings from project: {qrc_settings.__dict__}"
+        )
 
-    from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
 
-    logger.debug(f"Creating GaussianQRCJob using molecule {molecule}")
+        logger.debug(f"Creating GaussianQRCJob using molecule {molecule}")
 
-    return GaussianQRCJob(
-        molecule=molecule,
-        settings=qrc_settings,
-        label=label,
-        jobrunner=jobrunner,
-        mode_idx=mode_idx,
-        amp=amp,
-        nframes=nframes,
-        phase=phase,
-        normalize=normalize,
-        return_xyz=return_xyz,
-        skip_completed=skip_completed,
-        **kwargs,
-    )
+        return GaussianQRCJob(
+            molecule=molecule,
+            settings=qrc_settings,
+            label=label,
+            jobrunner=jobrunner,
+            mode_idx=mode_idx,
+            amp=amp,
+            nframes=nframes,
+            phase=phase,
+            normalize=normalize,
+            return_xyz=return_xyz,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+
+
+create_qmmm_subcommand(qrc)

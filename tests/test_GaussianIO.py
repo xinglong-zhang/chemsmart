@@ -5,7 +5,7 @@ from ase import units
 from ase.symbols import Symbols
 
 from chemsmart.io.gaussian.cube import GaussianCubeFile
-from chemsmart.io.gaussian.input import Gaussian16Input
+from chemsmart.io.gaussian.input import Gaussian16Input, Gaussian16QMMMInput
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
     Gaussian16OutputWithPBC,
@@ -257,6 +257,38 @@ class TestGaussian16Input:
         assert g16_frozen.additional_opt_options_in_route is None
         assert g16_frozen.additional_route_parameters is None
         assert g16_frozen.jobtype == "opt"
+
+    def test_partition(self, gaussian_qmmm_inputfile_2layer):
+        assert os.path.exists(gaussian_qmmm_inputfile_2layer)
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert g16_oniom.molecule.symbols.formula == "CH3CH3"
+        assert g16_oniom.partition == {
+            "high level atoms": ["2-5"],
+            "low level atoms": ["6-9"],
+        }
+
+    def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfile_3layer):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_3layer
+        )
+        assert g16_oniom.oniom_charge == {
+            "charge_total": "0",
+            "int_charge": "0",
+            "model_charge": "0",
+        }
+        assert g16_oniom.oniom_multiplicity == {
+            "real_multiplicity": "1",
+            "int_multiplicity": "1",
+            "model_multiplicity": "1",
+        }
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.int_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.int_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
@@ -1776,6 +1808,55 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_oniom_outputfile)
         g16_oniom = Gaussian16Output(filename=gaussian_oniom_outputfile)
         assert g16_oniom.normal_termination is False
+        assert g16_oniom.oniom_cutting_bonds == {
+            (49, 50): (0.700189, 0.700189),
+            (80, 81): (0.700189, 0.700189),
+            (176, 177): (0.700189, 0.700189),
+            (198, 199): (0.700189, 0.700189),
+            (217, 218): (0.700189, 0.700189),
+            (439, 438): (0.700189, 0.700189),
+        }
+        assert g16_oniom.oniom_partition == {
+            "high level atoms": [
+                "50-60",
+                "81-89",
+                "177-186",
+                "199-207",
+                "218-225",
+                "291-294",
+                "308-312",
+                "364-367",
+                "375-379",
+                "387-390",
+                "421-438",
+                "440-475",
+            ],
+            "low level atoms": [
+                "1-49",
+                "61-80",
+                "90-176",
+                "187-198",
+                "208-217",
+                "226-290",
+                "295-307",
+                "313-363",
+                "368-374",
+                "380-386",
+                "391-420",
+                "439",
+                "476-483",
+            ],
+        }
+        assert g16_oniom.oniom_get_charge_and_multiplicity == {
+            "low-level, real system": (1, 2),
+            "high-level, model system": (1, 1),
+            "low-level, model system": (1, 1),
+        }
+        assert g16_oniom.oniom_layer_energies == {
+            "method:  high, system:  model": -5303.002072980664,
+            "method:  low, system:  model": 6.767438788151,
+            "method:  low, system:  real": 9.234384095059,
+        }
         assert g16_oniom.num_atoms == 483
         assert len(g16_oniom.oniom_energies) == 2
         assert g16_oniom.oniom_energies[0] == -5278.927903743607

@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCAJobSettings,
+    ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -185,6 +186,14 @@ class ORCAProjectSettings(RegistryMixin):
         settings.basis = self.large_basis
         return settings
 
+    def qmmm_settings(self):
+        """ORCA default settings for QMMM job."""
+        settings = self.main_settings().copy()
+        settings = ORCAQMMMJobSettings(**settings.__dict__)
+        settings.jobtype = "qmmm"
+        settings.freq = False
+        return settings
+
     @classmethod
     def from_project(cls, project):
         """
@@ -332,6 +341,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        qmmm_settings,
     ):
         """
         Initialize YAML-based ORCA project settings.
@@ -356,6 +366,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._qmmm_settings = qmmm_settings
 
     def opt_settings(self):
         """
@@ -438,6 +449,9 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         """
         return self._wbi_settings
 
+    def qmmm_settings(self):
+        return self._qmmm_settings
+
     @classmethod
     def from_yaml(cls, filename):
         """
@@ -500,6 +514,7 @@ class YamlORCAProjectSettingsBuilder:
         sp_settings = self._project_settings_for_job(jobtype="sp")
         td_settings = self._project_settings_for_job(jobtype="td")
         wbi_settings = self._project_settings_for_job(jobtype="wbi")
+        qmmm_settings = self._project_settings_for_job(jobtype="qmmm")
 
         # Create complete project settings with all job configurations
         project_settings = YamlORCAProjectSettings(
@@ -512,6 +527,7 @@ class YamlORCAProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            qmmm_settings=qmmm_settings,
         )
 
         # Set project name from filename and return
@@ -550,7 +566,11 @@ class YamlORCAProjectSettingsBuilder:
             RuntimeError: If configuration for the job type is not found.
         """
         # Map job types to their specific settings classes
-        settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
+        settings_mapping = {
+            "irc": ORCAIRCJobSettings,
+            "ts": ORCATSJobSettings,
+            "qmmm": ORCAQMMMJobSettings,
+        }
 
         try:
             jobtype_config = self._read_config().get(jobtype)
