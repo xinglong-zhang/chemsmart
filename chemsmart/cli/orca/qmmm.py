@@ -19,7 +19,7 @@ def create_orca_qmmm_subcommand(parent_command):
     @click_job_options
     @click.option(
         "-j",
-        "--job-type",
+        "--jobtype",
         type=click.Choice(
             [
                 "QMMM",
@@ -224,7 +224,7 @@ def create_orca_qmmm_subcommand(parent_command):
     @click.pass_context
     def qmmm(
         ctx,
-        job_type,
+        jobtype,
         high_level_functional,
         high_level_basis,
         intermediate_level_functional,
@@ -319,8 +319,8 @@ def create_orca_qmmm_subcommand(parent_command):
         if parent_jobtype is not None:
             qmmm_settings.parent_jobtype = parent_jobtype
 
-        if job_type is not None:
-            qmmm_settings.jobtype = job_type
+        if jobtype is not None:
+            qmmm_settings.jobtype = jobtype
         if high_level_functional is not None:
             qmmm_settings.high_level_functional = high_level_functional
         if high_level_basis is not None:

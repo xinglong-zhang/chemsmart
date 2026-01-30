@@ -76,7 +76,7 @@ Job Type and Theory Level
       -  Type
       -  Description
 
-   -  -  ``-j, --job-type``
+   -  -  ``-j, --jobtype``
       -  Choice
       -  Multiscale calculation type: QMMM, QM/QM2, QM/QM2/MM, MOL-CRYSTAL-QMMM, IONIC-CRYSTAL-QMMM
 
