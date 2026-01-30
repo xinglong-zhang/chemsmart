@@ -1319,7 +1319,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         Raises:
             AssertionError: If required parameters are missing or invalid
         """
-        jobtype = self.job_type.upper()
+        jobtype = self.jobtype.upper()
         if jobtype in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
             assert (
                 self.mult_high is None
