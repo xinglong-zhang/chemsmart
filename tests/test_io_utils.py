@@ -267,3 +267,178 @@ class TestLoadMoleculesFromPaths:
         )
         assert len(molecules) > 0
         assert all(mol is not None for mol in molecules)
+
+
+class TestSelectItemsByIndex:
+    """Tests for the select_items_by_index function."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        from chemsmart.utils.io import select_items_by_index
+
+        self.select_fn = select_items_by_index
+        self.test_list = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+
+    # ---- Tests for None or ":" (return all items) ----
+    def test_none_returns_all(self):
+        """Test that None index_spec returns all items."""
+        result = self.select_fn(self.test_list, None)
+        assert result == self.test_list
+
+    def test_colon_returns_all(self):
+        """Test that ':' index_spec returns all items."""
+        result = self.select_fn(self.test_list, ":")
+        assert result == self.test_list
+
+    # ---- Tests for single index ----
+    def test_single_positive_index_middle(self):
+        """Test single positive index in the middle."""
+        result = self.select_fn(self.test_list, "5")
+        assert result == ["e"]
+
+    def test_single_negative_index(self):
+        """Test single negative index (-1 = last)."""
+        result = self.select_fn(self.test_list, "-1")
+        assert result == ["j"]
+
+    def test_single_negative_index_second_last(self):
+        """Test single negative index (-2 = second last)."""
+        result = self.select_fn(self.test_list, "-2")
+        assert result == ["i"]
+
+    # ---- Tests for comma-separated indices ----
+    def test_comma_separated_indices(self):
+        """Test comma-separated specific indices (1-based)."""
+        result = self.select_fn(self.test_list, "1,3,5")
+        assert result == ["a", "c", "e"]
+
+    def test_comma_separated_with_negative(self):
+        """Test comma-separated indices including negative."""
+        result = self.select_fn(self.test_list, "1,-1")
+        assert result == ["a", "j"]
+
+    def test_comma_separated_multiple_negatives(self):
+        """Test comma-separated multiple negative indices."""
+        result = self.select_fn(self.test_list, "-3,-2,-1")
+        assert result == ["h", "i", "j"]
+
+    # ---- Tests for hyphen-based ranges ----
+    def test_hyphen_range_middle(self):
+        """Test hyphen range in the middle of list."""
+        result = self.select_fn(self.test_list, "3-6")
+        assert result == ["c", "d", "e", "f"]
+
+    # ---- Tests for mixed comma and hyphen ----
+    def test_mixed_ranges_and_singles(self):
+        """Test mixed comma-separated singles and ranges."""
+        result = self.select_fn(self.test_list, "1-3,5,7-9")
+        assert result == ["a", "b", "c", "e", "g", "h", "i"]
+
+    def test_mixed_with_negative(self):
+        """Test mixed ranges with negative indices."""
+        result = self.select_fn(self.test_list, "1,3,-1")
+        assert result == ["a", "c", "j"]
+
+    # ---- Tests for colon-based slicing (ASE-style) ----
+    def test_slice_from_start(self):
+        """Test slice from start to specific index."""
+        result = self.select_fn(self.test_list, ":5")
+        assert result == ["a", "b", "c", "d"]
+
+    def test_slice_from_index_to_end(self):
+        """Test slice from specific index to end."""
+        result = self.select_fn(self.test_list, "5:")
+        assert result == ["e", "f", "g", "h", "i", "j"]
+
+    def test_slice_with_step(self):
+        """Test slice with step."""
+        result = self.select_fn(self.test_list, "::2")
+        assert result == ["a", "c", "e", "g", "i"]
+
+    def test_slice_from3to9_with_step(self):
+        """Test slice with step."""
+        result = self.select_fn(self.test_list, "3:9:2")
+        assert result == ["c", "e", "g"]
+
+    def test_slice_range_exclusive_end(self):
+        """Test slice range has exclusive end (1:5 -> items 1-4)."""
+        result = self.select_fn(self.test_list, "1:5")
+        assert result == ["a", "b", "c", "d"]
+
+    # ---- Tests for allow_duplicates ----
+    def test_allow_duplicates_true(self):
+        """Test that duplicates are allowed by default."""
+        result = self.select_fn(self.test_list, "1,1,2", allow_duplicates=True)
+        assert result == ["a", "a", "b"]
+
+    def test_allow_duplicates_false_raises(self):
+        """Test that allow_duplicates=False raises on duplicates."""
+        with pytest.raises(ValueError):
+            self.select_fn(self.test_list, "1,1,2", allow_duplicates=False)
+
+    def test_allow_duplicates_false_negative_positive_same(self):
+        """Test that -10 and 1 (same item) raises when duplicates not allowed."""
+        with pytest.raises(ValueError):
+            self.select_fn(self.test_list, "1,-10", allow_duplicates=False)
+
+    # ---- Tests for allow_out_of_range ----
+    def test_allow_out_of_range_true_filters(self):
+        """Test that out of range indices are filtered when allowed."""
+        result = self.select_fn(
+            self.test_list, "1,15", allow_out_of_range=True
+        )
+        # 15 is out of range for 10 items, should be filtered
+        assert result == ["a"]
+
+    def test_allow_out_of_range_false_raises(self):
+        """Test that allow_out_of_range=False raises on out of bounds."""
+        with pytest.raises(ValueError):
+            self.select_fn(self.test_list, "1,9-11", allow_out_of_range=False)
+
+    # ---- Tests for invalid inputs ----
+    def test_zero_index_raises(self):
+        """Test that index 0 raises ValueError (1-based indexing)."""
+        with pytest.raises(ValueError):
+            self.select_fn(self.test_list, "0")
+
+    def test_zero_in_range_raises(self):
+        """Test that 0 in range raises ValueError."""
+        with pytest.raises(ValueError):
+            self.select_fn(self.test_list, "0-5")
+
+    # ---- Tests for empty list ----
+    def test_empty_list_with_none(self):
+        """Test empty list with None returns empty."""
+        result = self.select_fn([], None)
+        assert result == []
+
+    def test_empty_list_with_colon(self):
+        """Test empty list with ':' returns empty."""
+        result = self.select_fn([], ":")
+        assert result == []
+
+    # ---- Tests for single item list ----
+    def test_single_item_list_select_first(self):
+        """Test selecting from single item list."""
+        result = self.select_fn(["only"], "1")
+        assert result == ["only"]
+
+    def test_single_item_list_select_last(self):
+        """Test selecting last from single item list."""
+        result = self.select_fn(["only"], "-1")
+        assert result == ["only"]
+
+    # ---- Test for bracket format ----
+    def test_bracket_format(self):
+        """Test that bracket format [1-3] works."""
+        result = self.select_fn(self.test_list, "[1-3]")
+        assert result == ["a", "b", "c"]
+
+    # ---- Test return type is always list ----
+    def test_return_type_is_list(self):
+        """Test that return type is always a list."""
+        assert isinstance(self.select_fn(self.test_list, None), list)
+        assert isinstance(self.select_fn(self.test_list, "1"), list)
+        assert isinstance(self.select_fn(self.test_list, "1-3"), list)
+        assert isinstance(self.select_fn(self.test_list, ":"), list)
+        assert isinstance(self.select_fn(self.test_list, "::2"), list)
