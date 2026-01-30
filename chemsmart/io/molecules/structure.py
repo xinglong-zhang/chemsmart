@@ -1839,12 +1839,12 @@ class Molecule:
             xyz_filename = tmp.name
             auto_xyz = True
             logger.debug(
-                f"Created temporary XYZ '%s' for PDB conversion {xyz_filename}"
+                f"Created temporary XYZ {xyz_filename} for PDB conversion. "
             )
             self.write_xyz(xyz_filename, mode=mode)
         elif not os.path.isfile(xyz_filename):
             logger.debug(
-                f"XYZ '%s' missing; writing coordinates before conversion {xyz_filename}"
+                f"XYZ {xyz_filename} missing; writing coordinates before conversion."
             )
             self.write_xyz(xyz_filename, mode=mode)
 
@@ -1854,7 +1854,7 @@ class Molecule:
             if auto_xyz and cleanup:
                 os.remove(xyz_filename)
             raise ImportError(
-                "xyz_to_pdb requires Open Babel. Install openbabel/pybel to enable this conversion."
+                "xyz_to_pdb requires Open Babel. Use 'conda install -c conda-forge openbabel' to install Openbabel and to enable this conversion."
             ) from exc
 
         xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
@@ -1871,12 +1871,10 @@ class Molecule:
         if auto_xyz and cleanup:
             try:
                 os.remove(xyz_filename)
-                logger.debug("Removed temporary XYZ '%s'", xyz_filename)
+                logger.debug(f"Removed temporary XYZ {xyz_filename}")
             except OSError as exc:
                 logger.warning(
-                    "Could not remove temporary XYZ '%s': %s",
-                    xyz_filename,
-                    exc,
+                    f"Could not remove temporary XYZ {xyz_filename}: {exc}"
                 )
 
 
