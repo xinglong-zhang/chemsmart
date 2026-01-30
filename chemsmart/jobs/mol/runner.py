@@ -632,7 +632,7 @@ class PyMOLJobRunner(JobRunner):
         command += '; quit"'
         return command
 
-    def _create_process(self, job, command, env):
+    def _create_process(self, job, command, env, append_mode=False):
         """
         Create and execute the PyMOL subprocess.
 
@@ -644,6 +644,8 @@ class PyMOLJobRunner(JobRunner):
             job: PyMOL job object with file paths.
             command: Complete PyMOL command string to execute.
             env: Environment variables for the process.
+            append_mode: If True, append to existing log/err files instead of overwriting.
+                         Used for batch processing to preserve logs from previous batches.
 
         Returns:
             subprocess.Popen: The completed process object.
@@ -654,9 +656,10 @@ class PyMOLJobRunner(JobRunner):
         # Open files for stdout/stderr
         job_errfile = os.path.abspath(job.errfile)
         job_logfile = os.path.abspath(job.logfile)
+        file_mode = "a" if append_mode else "w"
         with (
-            open(job_errfile, "w") as err,
-            open(job_logfile, "w") as out,
+            open(job_errfile, file_mode) as err,
+            open(job_logfile, file_mode) as out,
         ):
             logger.info(
                 f"Command executed: {command}\n"
@@ -1656,12 +1659,30 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
 
 class PyMOLAlignJobRunner(PyMOLJobRunner):
     JOBTYPES = ["pymol_align"]
+    MAX_MOLECULES_PER_BATCH = 100  # Maximum molecules per batch
 
     def _write_input(self, job):
+        """Prepare input files and check if batch processing is needed"""
         job.xyz_absolute_paths = []
         job.mol_names = []
         mol = job.molecule
         mol_list = mol if isinstance(mol, list) else [mol]
+
+        # Check if batch processing is needed
+        total_molecules = len(mol_list)
+        if total_molecules > self.MAX_MOLECULES_PER_BATCH:
+            logger.info(
+                f"Enabling batch processing: {total_molecules} molecules will be processed in {(total_molecules + self.MAX_MOLECULES_PER_BATCH - 1) // self.MAX_MOLECULES_PER_BATCH} batches"
+            )
+            job.use_batch_processing = True
+            job.total_batches = (
+                total_molecules + self.MAX_MOLECULES_PER_BATCH - 1
+            ) // self.MAX_MOLECULES_PER_BATCH
+        else:
+            job.use_batch_processing = False
+            job.total_batches = 1
+
+        # Write all XYZ files
         for m in mol_list:
             if not isinstance(m, Molecule):
                 raise ValueError(f"Object {m} is not of Molecule type!")
@@ -1678,19 +1699,168 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             job.xyz_absolute_paths.append(abs_xyz_path)
             job.mol_names.append(name)
 
-    def _get_visualization_command(self, job):
-        exe = quote_path(self.executable)
-        xyz_paths = job.xyz_absolute_paths
-        if not xyz_paths:
-            raise ValueError(
-                "No XYZ files found. Ensure _write_input is called first."
-            )
-        first_mol = quote_path(xyz_paths[0])
-        load_cmds = [f"{quote_path(path)}" for path in xyz_paths[1:]]
-        command = f"{exe} {first_mol}"
-        if load_cmds:
-            command += f" {' '.join(load_cmds)}"
+    def run(self, job, **kwargs):
+        """Execute alignment task with batch processing support"""
+        # Execute preprocessing and input preparation first to set batch processing flag
+        self._prerun(job)
+        self._write_input(job)
 
+        # Now check if batch processing is needed
+        if hasattr(job, "use_batch_processing") and job.use_batch_processing:
+            # Use batch processing
+            logger.info(
+                f"Starting batch processing: {len(job.xyz_absolute_paths)} molecules in {job.total_batches} batches"
+            )
+            return self._run_batch_processing(job, **kwargs)
+        else:
+            # Use original single batch processing - execute all steps to ensure consistency with original behavior
+            logger.info(
+                f"Using single batch processing: {len(job.xyz_absolute_paths)} molecules"
+            )
+            command = self._get_command(job)
+            env = self._update_os_environ(job)
+            process = self._create_process(job, command, env)
+            self._run(process, **kwargs)  # Wait for process to complete
+            self._postrun(job)
+            self._postrun_cleanup(job)  # Clean up error files etc
+            return job
+
+    def _run_batch_processing(self, job, **kwargs):
+        """Main batch processing logic"""
+        # _prerun and _write_input have already been called in run method
+        xyz_paths = job.xyz_absolute_paths
+        mol_names = job.mol_names
+
+        # Process each batch in sequence
+        for batch_idx in range(job.total_batches):
+            start_idx = batch_idx * self.MAX_MOLECULES_PER_BATCH
+            end_idx = min(
+                (batch_idx + 1) * self.MAX_MOLECULES_PER_BATCH, len(xyz_paths)
+            )
+
+            batch_paths = xyz_paths[start_idx:end_idx]
+            batch_names = mol_names[start_idx:end_idx]
+
+            logger.info(
+                f"Processing batch {batch_idx + 1}/{job.total_batches}: {len(batch_paths)} molecules"
+            )
+
+            # Create and execute independent command for this batch
+            self._execute_batch(job, batch_idx, batch_paths, batch_names)
+
+        self._postrun(job)
+        self._postrun_cleanup(job)  # Ensure error files etc are cleaned up
+        return job
+
+    def _execute_batch(self, job, batch_idx, batch_paths, batch_names):
+        """Execute single batch - cumulative save to same PSE file"""
+        # All batches save to the same PSE file
+        final_pse = os.path.join(job.folder, f"{job.label}.pse")
+
+        # Build PyMOL command
+        exe = quote_path(self.executable)
+
+        if batch_idx == 0:
+            # First batch: load molecules directly
+            first_mol = quote_path(batch_paths[0])
+            command = f"{exe} {first_mol}"
+
+            # Load additional molecules
+            if len(batch_paths) > 1:
+                for path in batch_paths[1:]:
+                    command += f" {quote_path(path)}"
+        else:
+            # Subsequent batches: open existing PSE file first
+            command = f"{exe} {quote_path(final_pse)}"
+
+        # All batches need to add style script to ensure pymol_style function is available
+        command = self._add_style_script(job, command)
+
+        # Add PyMOL options
+        if job.quiet_mode:
+            command += " -q"
+        if job.command_line_only:
+            command += " -c"
+
+        # Build PyMOL command strings
+        pymol_commands = []
+
+        if batch_idx == 0:
+            # First batch: apply style and alignment to all molecules
+            # Apply style to each molecule
+            for name in batch_names:
+                if job.style is None or job.style.lower() == "pymol":
+                    pymol_commands.append(f"pymol_style {name}")
+                elif job.style.lower() == "cylview":
+                    pymol_commands.append(f"cylview_style {name}")
+
+            # Alignment commands - align all to GLOBAL first molecule (not batch first molecule)
+            global_ref = job.mol_names[
+                0
+            ]  # Always use global first molecule as reference
+            align_cmds = []
+            for name in batch_names:
+                if (
+                    name != global_ref
+                ):  # Don't align the reference molecule to itself
+                    align_cmds.append(f"align {name}, {global_ref}")
+            if align_cmds:
+                pymol_commands.extend(align_cmds)
+        else:
+            # Subsequent batches: load new molecules, apply style, and align to global first molecule
+            for i, path in enumerate(batch_paths):
+                pymol_commands.append(f"load {quote_path(path)}")
+                # Apply style to each newly loaded molecule
+                name = batch_names[i]
+                if job.style is None or job.style.lower() == "pymol":
+                    pymol_commands.append(f"pymol_style {name}")
+                elif job.style.lower() == "cylview":
+                    pymol_commands.append(f"cylview_style {name}")
+
+            # Align to global first molecule (job.mol_names[0])
+            global_ref = job.mol_names[0]
+            for name in batch_names:
+                pymol_commands.append(f"align {name}, {global_ref}")
+
+        # Save to same PSE file and quit
+        pymol_commands.append("viewport 800, 600")
+        pymol_commands.append("zoom")
+        pymol_commands.append(f"save {quote_path(final_pse)}")
+        pymol_commands.append("quit")
+
+        # Combine all commands
+        pymol_cmd_string = "; ".join(pymol_commands)
+        command += f' -d "{pymol_cmd_string}"'
+
+        logger.info(
+            f"Executing batch {batch_idx + 1}/{job.total_batches}: {len(batch_names)} molecules"
+        )
+
+        # Execute command
+        try:
+            env = os.environ.copy()
+            # Use append mode for batches after the first one to preserve logs
+            append_logs = batch_idx > 0
+            process = self._create_process(
+                job, command, env, append_mode=append_logs
+            )
+            # Wait for process to complete
+            self._run(process)
+            if process.returncode != 0:
+                logger.error(
+                    f"Batch {batch_idx + 1} execution failed, return code: {process.returncode}"
+                )
+                raise RuntimeError(f"Batch {batch_idx + 1} execution failed")
+            else:
+                logger.info(
+                    f"Batch {batch_idx + 1} executed successfully, cumulative save to: {final_pse}"
+                )
+        except Exception as e:
+            logger.error(f"Error executing batch {batch_idx + 1}: {e}")
+            raise
+
+    def _add_style_script(self, job, command):
+        """Add style script to command"""
         if job.pymol_script is None:
             style_file_path = os.path.join(
                 job.folder, "zhang_group_pymol_style.py"
@@ -1698,21 +1868,37 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             if os.path.exists(style_file_path):
                 job_pymol_script = style_file_path
             else:
-                logger.info(
-                    "Using default zhang_group_pymol_style for rendering."
-                )
+                logger.info("Using default style file")
                 job_pymol_script = self._generate_visualization_style_script(
                     job
                 )
             if os.path.exists(job_pymol_script):
                 command += f" -r {quote_path(job_pymol_script)}"
         else:
-            # using user-defined style file
             if not os.path.exists(job.pymol_script):
                 raise FileNotFoundError(
-                    f"Supplied PyMOL Style file {job.pymol_script} does not exist!"
+                    f"Specified PyMOL style file does not exist: {job.pymol_script}"
                 )
             command += f" -r {quote_path(job.pymol_script)}"
+        return command
+
+    def _get_visualization_command(self, job):
+        """Generate visualization command for non-batch processing"""
+        exe = quote_path(self.executable)
+        xyz_paths = job.xyz_absolute_paths
+        if not xyz_paths:
+            raise ValueError(
+                "No XYZ files found. Ensure _write_input is called first."
+            )
+
+        first_mol = quote_path(xyz_paths[0])
+        load_cmds = [quote_path(path) for path in xyz_paths[1:]]
+        command = f"{exe} {first_mol}"
+        if load_cmds:
+            command += f" {' '.join(load_cmds)}"
+
+        # Add style script
+        command = self._add_style_script(job, command)
 
         if job.quiet_mode:
             command += " -q"
@@ -1721,6 +1907,7 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
         return command
 
     def _setup_style(self, job, command):
+        """Set up style commands"""
         if job.style is None or job.style.lower() == "pymol":
             molnames = job.mol_names
             style_cmds = "; ".join(
@@ -1738,14 +1925,17 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
         return command
 
     def _job_specific_commands(self, job, command):
+        """Add alignment-specific commands"""
         command = self._align_command(job, command)
         return command
 
     def _align_command(self, job, command):
+        """Add alignment commands"""
         molnames = job.mol_names
         align_cmds = []
         for i in range(1, len(molnames)):
             align_cmds.append(f"align {molnames[i]}, {molnames[0]}")
-        pymol_cmds = "; ".join(align_cmds)
-        command += f"; {pymol_cmds}"
+        if align_cmds:
+            pymol_cmds = "; ".join(align_cmds)
+            command += f"; {pymol_cmds}"
         return command
