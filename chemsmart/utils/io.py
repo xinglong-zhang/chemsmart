@@ -370,8 +370,8 @@ def load_molecules_from_paths(
 
     Args:
         file_paths (list of str or Path): List of file paths to load molecules from.
-        index (int or str or None): Index or slice to select specific structures from each file.
-            If None, defaults to "-1" (last structure).
+        index (int or str or None): Index or slice to select specific
+            structures from each file. If None, defaults to "-1" (last structure).
         add_index_suffix_for_single (bool, optional): If True, appends an index suffix to
             the molecule name even if only a single structure is loaded from a file.
         check_exists (bool, optional): If True, checks that each file exists before loading.
@@ -411,7 +411,8 @@ def load_molecules_from_paths(
                 return_list=True,
             )
 
-            # assign unique names per-structure when file contains multiple structures
+            # assign unique names per-structure when file
+            # contains multiple structures
             base = os.path.splitext(os.path.basename(file_path))[0]
             if isinstance(mols, list) and len(mols) > 1:
                 for j, mol in enumerate(mols, start=1):
@@ -454,7 +455,8 @@ def select_items_by_index(
             If None or ":", returns all items.
             If int: Direct integer index (0-based Python indexing).
             If slice: Direct slice object (0-based Python indexing).
-            If str: String specification (1-based indexing, parsed by parse_index_specification).
+            If str: String specification (1-based indexing,
+            parsed by parse_index_specification).
         allow_duplicates (bool, optional): If True, allows duplicate indices.
             Only applies to string specifications.
         allow_out_of_range (bool, optional): If True, allows out-of-range indices.
