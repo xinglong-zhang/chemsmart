@@ -467,7 +467,7 @@ def select_items_by_index(
         IndexError: If int index is out of range.
         ValueError: If string index specification is invalid or out of range
             (when allow_out_of_range=False).
-    
+
     Note:
         - int indices raise IndexError for out-of-range access.
         - slice indices never raise errors; they return empty or partial results.

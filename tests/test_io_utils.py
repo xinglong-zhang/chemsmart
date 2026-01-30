@@ -312,27 +312,27 @@ class TestSelectItemsByIndex:
         assert result == ["i"]
 
     # ---- Tests for slice type (0-based Python indexing) ----
-    def test_slice_from_start(self):
+    def test_slice_from_start_using_slice(self):
         """Test direct slice from start."""
         result = self.select_fn(self.test_list, slice(None, 5))
         assert result == ["a", "b", "c", "d", "e"]
 
-    def test_slice_from_index_to_end(self):
+    def test_slice_from_index_to_end_using_slice(self):
         """Test direct slice from index to end."""
         result = self.select_fn(self.test_list, slice(4, None))
         assert result == ["e", "f", "g", "h", "i", "j"]
 
-    def test_slice_with_step(self):
+    def test_slice_with_step_using_slice(self):
         """Test direct slice with step."""
         result = self.select_fn(self.test_list, slice(None, None, 2))
         assert result == ["a", "c", "e", "g", "i"]
 
-    def test_slice_range(self):
+    def test_slice_range_using_slice(self):
         """Test direct slice range."""
         result = self.select_fn(self.test_list, slice(2, 6))
         assert result == ["c", "d", "e", "f"]
 
-    def test_slice_with_negative_indices(self):
+    def test_slice_with_negative_indices_using_slice(self):
         """Test direct slice with negative indices."""
         result = self.select_fn(self.test_list, slice(-3, None))
         assert result == ["h", "i", "j"]

@@ -1840,7 +1840,9 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             env = os.environ.copy()
             # Use append mode for batches after the first one to preserve logs
             append_logs = batch_idx > 0
-            process = self._create_process(job, command, env, append_mode=append_logs)
+            process = self._create_process(
+                job, command, env, append_mode=append_logs
+            )
             # Wait for process to complete
             self._run(process)
             if process.returncode != 0:

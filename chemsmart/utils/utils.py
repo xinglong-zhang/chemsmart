@@ -915,18 +915,18 @@ def _is_index_in_bounds(idx, total_count):
 def _normalize_negative_indices(indices, total_count):
     """
     Convert negative indices to their positive 0-based equivalents.
-    
+
     This helper ensures that downstream code can safely convert indices back
     to 1-based by doing `idx + 1` without producing incorrect results for
     negative indices.
-    
+
     Args:
         indices: The indices to normalize (int, list, or slice)
         total_count: Total number of items available
-        
+
     Returns:
         Normalized indices with negatives converted to positive 0-based equivalents
-        
+
     Examples:
         >>> _normalize_negative_indices(-1, 5)
         4
