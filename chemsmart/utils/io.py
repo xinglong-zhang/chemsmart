@@ -450,21 +450,42 @@ def select_items_by_index(
 
     Args:
         items_list (list): List of items to select from.
-        index_spec (int or str or None): Index specification for selection.
+        index_spec (int or str or slice or None): Index specification for selection.
             If None or ":", returns all items.
+            If int: Direct integer index (0-based Python indexing).
+            If slice: Direct slice object (0-based Python indexing).
+            If str: String specification (1-based indexing, parsed by parse_index_specification).
         allow_duplicates (bool, optional): If True, allows duplicate indices.
+            Only applies to string specifications.
         allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+            Only applies to string specifications.
 
     Returns:
         list: List of selected items.
 
     Raises:
-        ValueError: If index specification is invalid or out of range.
+        IndexError: If int index is out of range.
+        ValueError: If string index specification is invalid or out of range
+            (when allow_out_of_range=False).
+    
+    Note:
+        - int indices raise IndexError for out-of-range access.
+        - slice indices never raise errors; they return empty or partial results.
+        - str indices raise ValueError based on allow_out_of_range parameter.
     """
     # If no filtering needed, return all
     if index_spec is None or index_spec == ":":
         return list(items_list)
 
+    # Handle int and slice types directly
+    if isinstance(index_spec, int):
+        # Direct integer index - return as single-item list
+        return [items_list[index_spec]]
+    elif isinstance(index_spec, slice):
+        # Direct slice - return sliced items as list
+        return items_list[index_spec]
+
+    # Handle string specifications via parse_index_specification
     from chemsmart.utils.utils import parse_index_specification
 
     selected_indices = parse_index_specification(
@@ -480,8 +501,7 @@ def select_items_by_index(
     elif isinstance(selected_indices, int):
         return [items_list[selected_indices]]
     elif isinstance(selected_indices, slice):
-        result = items_list[selected_indices]
-        return result if isinstance(result, list) else [result]
+        return items_list[selected_indices]
     else:
         raise ValueError(f"Unexpected index type: {type(selected_indices)}")
 

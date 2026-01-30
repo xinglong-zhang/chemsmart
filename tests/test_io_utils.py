@@ -290,6 +290,78 @@ class TestSelectItemsByIndex:
         result = self.select_fn(self.test_list, ":")
         assert result == self.test_list
 
+    # ---- Tests for int type (0-based Python indexing) ----
+    def test_int_positive_index(self):
+        """Test direct int index (0-based)."""
+        result = self.select_fn(self.test_list, 0)
+        assert result == ["a"]
+
+    def test_int_middle_index(self):
+        """Test direct int index in middle (0-based)."""
+        result = self.select_fn(self.test_list, 4)
+        assert result == ["e"]
+
+    def test_int_negative_index(self):
+        """Test direct int negative index (0-based)."""
+        result = self.select_fn(self.test_list, -1)
+        assert result == ["j"]
+
+    def test_int_negative_index_second_last(self):
+        """Test direct int negative index for second last (0-based)."""
+        result = self.select_fn(self.test_list, -2)
+        assert result == ["i"]
+
+    # ---- Tests for slice type (0-based Python indexing) ----
+    def test_slice_from_start(self):
+        """Test direct slice from start."""
+        result = self.select_fn(self.test_list, slice(None, 5))
+        assert result == ["a", "b", "c", "d", "e"]
+
+    def test_slice_from_index_to_end(self):
+        """Test direct slice from index to end."""
+        result = self.select_fn(self.test_list, slice(4, None))
+        assert result == ["e", "f", "g", "h", "i", "j"]
+
+    def test_slice_with_step(self):
+        """Test direct slice with step."""
+        result = self.select_fn(self.test_list, slice(None, None, 2))
+        assert result == ["a", "c", "e", "g", "i"]
+
+    def test_slice_range(self):
+        """Test direct slice range."""
+        result = self.select_fn(self.test_list, slice(2, 6))
+        assert result == ["c", "d", "e", "f"]
+
+    def test_slice_with_negative_indices(self):
+        """Test direct slice with negative indices."""
+        result = self.select_fn(self.test_list, slice(-3, None))
+        assert result == ["h", "i", "j"]
+
+    def test_int_out_of_range_raises(self):
+        """Test that out-of-range int index raises IndexError."""
+        with pytest.raises(IndexError):
+            self.select_fn(self.test_list, 100)
+
+    def test_int_negative_out_of_range_raises(self):
+        """Test that out-of-range negative int index raises IndexError."""
+        with pytest.raises(IndexError):
+            self.select_fn(self.test_list, -100)
+
+    def test_slice_empty_result(self):
+        """Test that slice returning empty list works correctly."""
+        result = self.select_fn(self.test_list, slice(5, 5))
+        assert result == []
+
+    def test_slice_beyond_range_returns_partial(self):
+        """Test that slice beyond range returns partial results."""
+        result = self.select_fn(self.test_list, slice(8, 20))
+        assert result == ["i", "j"]
+
+    def test_slice_completely_out_of_range_returns_empty(self):
+        """Test that slice completely out of range returns empty list."""
+        result = self.select_fn(self.test_list, slice(20, 30))
+        assert result == []
+
     # ---- Tests for single index ----
     def test_single_positive_index_middle(self):
         """Test single positive index in the middle."""
