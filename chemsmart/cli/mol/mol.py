@@ -358,7 +358,7 @@ def mol(
         ctx.obj["directory"] = directory
         ctx.obj["filetype"] = filetype
         ctx.obj["index"] = index
-        ctx.obj["filenames"] = None
+        ctx.obj["filenames"] = filenames
         ctx.obj["molecules"] = None
         ctx.obj["label"] = label
         ctx.obj["qmmm"] = False
@@ -453,6 +453,10 @@ def mol(
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
+    ctx.obj["index"] = index
+    ctx.obj["directory"] = directory
+    ctx.obj["filetype"] = filetype
+    ctx.obj["filenames"] = filenames
     ctx.obj["qmmm"] = False
 
 
