@@ -349,6 +349,10 @@ def mol(
     # Initialize molecules variable
     molecules = None
 
+    # Normalize empty tuple to None (click's multiple=True returns () when no -f provided)
+    if not filenames:
+        filenames = None
+
     # obtain molecule structure
     if directory is not None and filetype is not None:
         ctx.obj["directory"] = directory

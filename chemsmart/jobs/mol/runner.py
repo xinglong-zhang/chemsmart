@@ -1820,6 +1820,7 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                 pymol_commands.append(f"align {name}, {global_ref}")
 
         # Save to same PSE file and quit
+        pymol_commands.append("viewport 800, 600")
         pymol_commands.append("zoom")
         pymol_commands.append(f"save {quote_path(final_pse)}")
         pymol_commands.append("quit")

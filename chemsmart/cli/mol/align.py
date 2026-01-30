@@ -24,10 +24,8 @@ def align(
     file,
     style,
     trace,
-    vdw,
     quiet,
     command_line_only,
-    label_offset,
     skip_completed,
     **kwargs,
 ):
@@ -50,11 +48,11 @@ def align(
         chemsmart run mol -f scan.log -i 1:3:10 align
     """
 
-    index = ctx.obj["index"]
-    label = ctx.obj["label"]
-    filenames = ctx.obj["filenames"]
-    directory = ctx.obj["directory"]
-    filetype = ctx.obj["filetype"]
+    index = ctx.obj.get("index")
+    label = ctx.obj.get("label")
+    filenames = ctx.obj.get("filenames")
+    directory = ctx.obj.get("directory")
+    filetype = ctx.obj.get("filetype")
 
     # Validate input parameters first
     if not filenames and not directory:
@@ -232,10 +230,8 @@ def align(
         pymol_script=file,
         style=style,
         trace=trace,
-        vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
-        label_offset=label_offset,
         skip_completed=skip_completed,
         **kwargs,
     )
