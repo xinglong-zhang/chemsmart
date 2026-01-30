@@ -450,10 +450,15 @@ def select_items_by_index(
 
     Args:
         items_list (list): List of items to select from.
-        index_spec (int or str or None): Index specification for selection.
+        index_spec (int or str or slice or None): Index specification for selection.
             If None or ":", returns all items.
+            If int: Direct integer index (0-based Python indexing).
+            If slice: Direct slice object (0-based Python indexing).
+            If str: String specification (1-based indexing, parsed by parse_index_specification).
         allow_duplicates (bool, optional): If True, allows duplicate indices.
+            Only applies to string specifications.
         allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+            Only applies to string specifications.
 
     Returns:
         list: List of selected items.
@@ -465,6 +470,16 @@ def select_items_by_index(
     if index_spec is None or index_spec == ":":
         return list(items_list)
 
+    # Handle int and slice types directly
+    if isinstance(index_spec, int):
+        # Direct integer index - return as single-item list
+        return [items_list[index_spec]]
+    elif isinstance(index_spec, slice):
+        # Direct slice - return sliced items as list
+        result = items_list[index_spec]
+        return result if isinstance(result, list) else [result]
+
+    # Handle string specifications via parse_index_specification
     from chemsmart.utils.utils import parse_index_specification
 
     selected_indices = parse_index_specification(
