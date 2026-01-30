@@ -636,17 +636,19 @@ class TestParseIndexSpecification:
         """Test duplicate detection when allow_duplicates=True."""
         from chemsmart.utils.utils import parse_index_specification
 
-        # Test duplicates are allowed - should return all indices as specified
+        # Test duplicates are allowed - should return all indices normalized
         result = parse_index_specification(
             "1,4,-2", total_count=5, allow_duplicates=True
         )
-        assert result == [0, 3, -2]  # 0-based: [1-1, 4-1, -2]
+        # After normalization: [1-1=0, 4-1=3, 5+(-2)=3]
+        assert result == [0, 3, 3]
 
         # Test negative and positive indices pointing to same structure are allowed
         result = parse_index_specification(
             "1,-5", total_count=5, allow_duplicates=True
         )
-        assert result == [0, -5]
+        # After normalization: [1-1=0, 5+(-5)=0]
+        assert result == [0, 0]
 
     def test_parse_index_boundary_detection_disabled(self):
         """Test boundary detection when allow_out_of_range=False."""

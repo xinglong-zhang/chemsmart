@@ -603,6 +603,8 @@ def parse_index_specification(
         0
         >>> parse_index_specification('-1')
         -1
+        >>> parse_index_specification('-1', total_count=5)
+        4
         >>> parse_index_specification('1:5')
         slice(0, 4, None)
         >>> parse_index_specification('1,3,5')
@@ -611,6 +613,8 @@ def parse_index_specification(
         [0, 1, 2, 3, 4]
         >>> parse_index_specification('1,-1')
         [0, -1]
+        >>> parse_index_specification('1,-1', total_count=5)
+        [0, 4]
     """
     if not isinstance(index_spec, str):
         raise ValueError(
