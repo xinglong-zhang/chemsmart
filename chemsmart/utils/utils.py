@@ -660,15 +660,7 @@ def parse_index_specification(
                             indices.extend(range(start - 1, end))
                         else:
                             # If either is negative, add them separately
-                            if start == 0:
-                                raise ValueError(
-                                    "Index cannot be 0 in 1-based indexing"
-                                )
                             indices.append(start - 1 if start > 0 else start)
-                            if end == 0:
-                                raise ValueError(
-                                    "Index cannot be 0 in 1-based indexing"
-                                )
                             indices.append(end - 1 if end > 0 else end)
                     except ValueError as e:
                         if "invalid literal" in str(e):
