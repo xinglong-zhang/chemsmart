@@ -1000,7 +1000,7 @@ class Molecule:
                     f"Structure successfully created from pubchem with {attribute} = {identifier}"
                 )
                 if return_list:
-                    return molecule
+                    return [molecule]
                 return molecule
 
         logger.debug("Could not create structure from pubchem.")
@@ -1839,13 +1839,12 @@ class Molecule:
             xyz_filename = tmp.name
             auto_xyz = True
             logger.debug(
-                "Created temporary XYZ '%s' for PDB conversion", xyz_filename
+                f"Created temporary XYZ '%s' for PDB conversion {xyz_filename}"
             )
             self.write_xyz(xyz_filename, mode=mode)
         elif not os.path.isfile(xyz_filename):
             logger.debug(
-                "XYZ '%s' missing; writing coordinates before conversion",
-                xyz_filename,
+                f"XYZ '%s' missing; writing coordinates before conversion {xyz_filename}"
             )
             self.write_xyz(xyz_filename, mode=mode)
 
@@ -1865,10 +1864,7 @@ class Molecule:
             raise ValueError(f"Unable to read molecule from {xyz_filename}")
 
         logger.info(
-            "Converting XYZ '%s' to PDB '%s' using Open Babel (overwrite=%s)",
-            xyz_filename,
-            pdb_filename,
-            overwrite,
+            f"Converting XYZ {xyz_filename} to PDB {pdb_filename} using Open Babel (overwrite={overwrite})"
         )
         xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
 
