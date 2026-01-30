@@ -1741,6 +1741,10 @@ class Gaussian16Output(GaussianFileMixin):
                                 medium_level.append(i + 4)
                             elif layer == "L":
                                 low_level.append(i + 4)
+                            else:
+                                raise ValueError(
+                                    f"Malformed ONIOM partition: expected H/M/L, got '{layer}' in line '{j_line}'"
+                                )
                             i += 1
                 else:
                     for j_line in self.contents[i + 7 :]:
@@ -1757,6 +1761,11 @@ class Gaussian16Output(GaussianFileMixin):
                                 medium_level.append(layer)
                             elif layer == "L":
                                 low_level.append(layer)
+                            else:
+                                raise ValueError(
+                                    f"Malformed ONIOM partition: expected H/M/L, got '{layer}' in line '{j_line}'"
+                                )
+
         partition = {}
         for level_name, level_list in [
             ("high level atoms", high_level),
