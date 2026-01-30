@@ -2201,9 +2201,9 @@ class ORCAOutput(ORCAFileMixin):
         Including translational and rotational modes.
         """
         vibrational_frequencies = []
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "VIBRATIONAL FREQUENCIES":
-                for line_j in self.optimized_output_lines[i + 5 :]:
+                for line_j in self.contents[i + 5 :]:
                     if len(line_j) == 0:
                         break
                     # if 'Rotational constants in MHz :' in line_j:
@@ -2238,12 +2238,12 @@ class ORCAOutput(ORCAFileMixin):
 
         normal_modes = []
 
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "NORMAL MODES":
                 j = i + 7  # Start after header lines
 
-                while j < len(self.optimized_output_lines):
-                    j_line = self.optimized_output_lines[j]
+                while j < len(self.contents):
+                    j_line = self.contents[j]
 
                     # Check for empty line (end of normal modes section)
                     if len(j_line.strip()) == 0:
@@ -2259,7 +2259,7 @@ class ORCAOutput(ORCAFileMixin):
 
                         pre_modes = []
                         for k in range(coord_lines_to_read):
-                            coord_line = self.optimized_output_lines[j + 1 + k]
+                            coord_line = self.contents[j + 1 + k]
 
                             # Check if this line matches the coordinate pattern
                             if re.fullmatch(
@@ -2304,9 +2304,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def vib_freq_scale_factor(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "VIBRATIONAL FREQUENCIES":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Scaling factor for frequencies =" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-3])
@@ -2325,9 +2325,9 @@ class ORCAOutput(ORCAFileMixin):
             0.0 for freq in self.vibrational_frequencies if freq == 0.0
         ]
 
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
+                for line_j in self.contents[i + 6 :]:
                     if (
                         "* The epsilon (eps) is given for a Dirac delta lineshape."
                         in line_j
@@ -2352,9 +2352,9 @@ class ORCAOutput(ORCAFileMixin):
             0.0 for freq in self.vibrational_frequencies if freq == 0.0
         ]
 
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
+                for line_j in self.contents[i + 6 :]:
                     if (
                         "* The epsilon (eps) is given for a Dirac delta lineshape."
                         in line_j
@@ -2377,9 +2377,9 @@ class ORCAOutput(ORCAFileMixin):
             0.0 for freq in self.vibrational_frequencies if freq == 0.0
         ]
 
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
+                for line_j in self.contents[i + 6 :]:
                     if (
                         "* The epsilon (eps) is given for a Dirac delta lineshape."
                         in line_j
@@ -2397,9 +2397,9 @@ class ORCAOutput(ORCAFileMixin):
     def transition_dipoles(self):
         """Transition dipole for each vibrational mode, (Tx, Ty, Tz)."""
         transition_dipoles = []
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
+                for line_j in self.contents[i + 6 :]:
                     if len(line_j) == 0:
                         break
                     line_j_elements = line_j.split()
@@ -2541,9 +2541,9 @@ class ORCAOutput(ORCAFileMixin):
         E(trans)- is the translational thermal energy.
         Default units are Hartree.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Total thermal energy" in line_j:
                         line_j_elements = line_j.split()
                         internal_energy_in_Hartree = float(line_j_elements[-2])
@@ -2561,9 +2561,9 @@ class ORCAOutput(ORCAFileMixin):
         Total energy from the electronic structure calculation.
         Defaults to Hartree.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Electronic energy" in line_j:
                         line_j_elements = line_j.split()
                         electronic_energy_in_Hartree = float(
@@ -2578,11 +2578,11 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def zero_point_energy(self):
-        """E(ZPE)  - the the zero temperature vibrational energy from the frequency calculation.
+        """E(ZPE)  - the zero temperature vibrational energy from the frequency calculation.
         Default units are Hartree."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Zero point energy" in line_j:
                         line_j_elements = line_j.split()
                         zpe_in_Hartree = float(line_j_elements[-4])
@@ -2596,11 +2596,11 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def thermal_vibration_correction(self):
         """
-        E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states.
+        E(vib)  - the finite temperature correction to E(ZPE) due to population of excited vibrational states.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal vibrational correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_vibration_correction_in_Hartree = float(
@@ -2620,9 +2620,9 @@ class ORCAOutput(ORCAFileMixin):
     def thermal_rotation_correction(self):
         """E(rot)  - is the rotational thermal energy.
         Default units are Hartree."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal rotational correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_rotation_correction_energy_in_Hartree = float(
@@ -2643,9 +2643,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         E(trans)- is the translational thermal energy.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal translational correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_translation_correction_in_Hartree = float(
@@ -2677,9 +2677,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         Total correction due to Thermal (trans, rot, vib) + ZPE.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Total correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_energy_correction_in_Hartree = float(
@@ -2695,9 +2695,9 @@ class ORCAOutput(ORCAFileMixin):
         kB is Boltzmann's constant.
         Default units are Hartree.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTHALPY":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Total Enthalpy" in line_j:
                         line_j_elements = line_j.split()
                         enthalpy_in_Hartree = float(line_j_elements[-2])
@@ -2718,9 +2718,9 @@ class ORCAOutput(ORCAFileMixin):
         kB is Boltzmann's constant.
         Default units are Hartree.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTHALPY":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal Enthalpy correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_enthalpy_correction_in_Hartree = float(
@@ -2744,9 +2744,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         Return electronic entropy in J/mol/K.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Electronic entropy" in line_j:
                         line_j_elements = line_j.split()
                         electronic_entropy_hartree = float(line_j_elements[-4])
@@ -2780,9 +2780,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         Return vibrational entropy in J/mol/K.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Vibrational entropy" in line_j:
                         line_j_elements = line_j.split()
                         vibrational_entropy_hartree = float(
@@ -2818,9 +2818,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         Return rotational entropy in J/mol/K.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Rotational entropy" in line_j:
                         line_j_elements = line_j.split()
                         rotational_entropy_hartree = float(line_j_elements[-4])
@@ -2854,9 +2854,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         Return translational entropy in J/mol/K.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Translational entropy" in line_j:
                         line_j_elements = line_j.split()
                         translational_entropy_hartree = float(
@@ -2889,12 +2889,19 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def entropy_in_J_per_mol_per_K(self):
-        return (
-            self.electronic_entropy_no_temperature_in_SI
-            + self.translational_entropy_no_temperature_in_SI
-            + self.rotational_entropy_no_temperature_in_SI
-            + self.vibrational_entropy_no_temperature_in_SI
-        )
+        if (
+            self.electronic_entropy_no_temperature_in_SI is not None
+            and self.translational_entropy_no_temperature_in_SI is not None
+            and self.rotational_entropy_no_temperature_in_SI is not None
+            and self.vibrational_entropy_no_temperature_in_SI is not None
+        ):
+            return (
+                self.electronic_entropy_no_temperature_in_SI
+                + self.translational_entropy_no_temperature_in_SI
+                + self.rotational_entropy_no_temperature_in_SI
+                + self.vibrational_entropy_no_temperature_in_SI
+            )
+        return None
 
     @cached_property
     def entropy(self):
@@ -2916,9 +2923,9 @@ class ORCAOutput(ORCAFileMixin):
         The entropies will be listed as multiplied by the temperature
         to get units of energy, in Hartree.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Final entropy term" in line_j:
                         line_j_elements = line_j.split()
                         entropy_hartree = float(line_j_elements[-4])
@@ -2931,11 +2938,9 @@ class ORCAOutput(ORCAFileMixin):
         Return rotational entropy in J/mol/K for different symmetry numbers.
         """
         rotational_entropy_symmetry_correction_J_per_mol_per_K = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "rotational entropy values for sn=1,12" in line_i:
-                for line_j in self.optimized_output_lines[
-                    i + 2 :
-                ]:  # i+2 onwards
+                for line_j in self.contents[i + 2 :]:  # i+2 onwards
                     if len(line_j) == 0:
                         break
                     if "S(rot)" in line_j:
@@ -2969,9 +2974,9 @@ class ORCAOutput(ORCAFileMixin):
         """
         The Gibbs free energy is G = H - T*S.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "GIBBS FREE ENERGY":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Final Gibbs free energy" in line_j:
                         line_j_elements = line_j.split()
                         entropy_hartree = float(line_j_elements[-2])
@@ -2991,9 +2996,9 @@ class ORCAOutput(ORCAFileMixin):
         the Gibbs free energy minus the electronic energy, G - E(el).
         Default units are Hartree.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "GIBBS FREE ENERGY":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "G-E(el)" in line_j:
                         line_j_elements = line_j.split()
                         thermal_gibbs_free_energy_correction_in_Hartree = (
