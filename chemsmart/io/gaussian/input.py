@@ -175,7 +175,7 @@ class Gaussian16Input(GaussianFileMixin):
             return None
         return [
             i
-            for i in range(self.num_atoms)
+            for i in range(1, self.num_atoms + 1)
             if i not in self.frozen_coordinate_indices
         ]
 
