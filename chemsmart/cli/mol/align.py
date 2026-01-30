@@ -48,11 +48,11 @@ def align(
         chemsmart run mol -f scan.log -i 1:3:10 align
     """
 
-    index = ctx.obj.get("index")
-    label = ctx.obj.get("label")
-    filenames = ctx.obj.get("filenames")
-    directory = ctx.obj.get("directory")
-    filetype = ctx.obj.get("filetype")
+    index = ctx.obj.get("index", None)
+    label = ctx.obj.get("label", None)
+    filenames = ctx.obj.get("filenames", None)
+    directory = ctx.obj.get("directory", None)
+    filetype = ctx.obj.get("filetype", None)
 
     # Validate input parameters first
     if not filenames and not directory:
