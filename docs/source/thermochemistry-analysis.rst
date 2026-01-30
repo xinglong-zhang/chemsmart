@@ -2,22 +2,22 @@
  Thermochemistry Analysis
 ##########################
 
-Chemsmart provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
-output files.
+Chemsmart provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian, ORCA, and
+xTB output files.
 
 *******************************
  Thermochemistry Analysis Jobs
 *******************************
 
-The ``thermochemistry`` command parses output files and calculates thermochemical properties including enthalpy,
-entropy, and Gibbs free energy.
+The ``thermochemistry`` command parses output files (Gaussian/ORCA) or directories (xTB), and calculates thermochemical
+properties including enthalpy, entropy, and Gibbs free energy.
 
 Usage
 =====
 
 .. code:: text
 
-   chemsmart run thermochemistry [-d path/to/directory] [-t log|out] [-f filename(s)]
+   chemsmart run thermochemistry [-d path/to/directory] [-t gaussian|orca|xtb] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
                                  [-ch h_freq_cutoff] [-c concentration] [-p pressure] [-w]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
@@ -38,15 +38,15 @@ Options
 
    -  -  ``-d, --directory``
       -  string
-      -  Directory for batch processing (mutually exclusive with -f)
+      -  Directory (mutually exclusive with ``-f``)
 
    -  -  ``-t, --filetype``
       -  string
-      -  File type: log (Gaussian) or out (ORCA)
+      -  File type: gaussian, orca, or xtb
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific file(s) to analyze (repeatable, mutually exclusive with -d)
+      -  Specific file(s) to analyze (repeatable, mutually exclusive with ``-d``)
 
 **Quasi-RRHO Corrections:**
 
@@ -86,7 +86,7 @@ Options
 
    -  -  ``-c, --concentration``
       -  float
-      -  Solution concentration in mol/L (mutually exclusive with -p)
+      -  Solution concentration in mol/L (mutually exclusive with ``-p``)
 
    -  -  ``-p, --pressure``
       -  float
@@ -120,7 +120,7 @@ Options
 
    -  -  ``-o, --outputfile``
       -  string
-      -  Output filename (default: <basename>.dat)
+      -  Output filename (default: <input_name>.dat)
 
    -  -  ``-O, --overwrite``
       -  bool
@@ -139,6 +139,8 @@ Examples
 
 **Single file analysis:**
 
+Analyze a single Gaussian/ORCA output file.
+
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -f water_opt.out
@@ -151,17 +153,51 @@ Output:
    ================================================================================
    water_opt               -76.323311   0.021581  -76.297951   0.021430  -76.319381
 
+**Single xTB calculation directory:**
+
+Analyze a single xTB calculation directory containing all relevant xTB output files.
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -d water_ohess/ -t xtb
+
 **Multiple files:**
+
+Analyze multiple Gaussian/ORCA output files in a single run.
 
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -f he_gaussian.log -f he_orca.out
 
-**Batch processing:**
+**Batch processing of Gaussian/ORCA output files:**
+
+Automatically discover and analyze Gaussian or ORCA output files within a directory.
 
 .. code:: bash
 
-   chemsmart run thermochemistry -T 298.15 -d . -t log -o thermo.dat
+   chemsmart run thermochemistry -T 298.15 -d . -t gaussian -o thermo.dat
+
+**Batch processing of xTB calculation directories:**
+
+Analyze multiple xTB calculation directories located within a parent directory.
+
+Example directory layout:
+
+.. code::
+
+   molecules/
+   ├── molecule1_ohess/
+   ├── molecule2_sp/
+   ├── molecule2_opt/
+   └── molecule3_hess/
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -d molecules/ -t xtb -o thermo_xtb.dat
+
+The specified directory is scanned for xTB calculation folders. If the given directory itself is not an xTB calculation
+directory, only its immediate subdirectories (one level deep) are inspected. Thermochemistry analysis is performed for
+each identified calculation directory.
 
 **Solution phase:**
 
@@ -235,6 +271,6 @@ Output:
 
 .. code:: bash
 
-   chemsmart run thermochemistry -T 298.15 -d . -t log boltzmann
+   chemsmart run thermochemistry -T 298.15 -d . -t gaussian boltzmann
 
 Results are saved to ``thermochemistry_job_boltzmann.dat``.
