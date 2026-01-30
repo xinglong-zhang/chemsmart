@@ -632,7 +632,7 @@ class PyMOLJobRunner(JobRunner):
         command += '; quit"'
         return command
 
-    def _create_process(self, job, command, env):
+    def _create_process(self, job, command, env, append_mode=False):
         """
         Create and execute the PyMOL subprocess.
 
@@ -644,6 +644,8 @@ class PyMOLJobRunner(JobRunner):
             job: PyMOL job object with file paths.
             command: Complete PyMOL command string to execute.
             env: Environment variables for the process.
+            append_mode: If True, append to existing log/err files instead of overwriting.
+                         Used for batch processing to preserve logs from previous batches.
 
         Returns:
             subprocess.Popen: The completed process object.
@@ -654,9 +656,10 @@ class PyMOLJobRunner(JobRunner):
         # Open files for stdout/stderr
         job_errfile = os.path.abspath(job.errfile)
         job_logfile = os.path.abspath(job.logfile)
+        file_mode = "a" if append_mode else "w"
         with (
-            open(job_errfile, "w") as err,
-            open(job_logfile, "w") as out,
+            open(job_errfile, file_mode) as err,
+            open(job_logfile, file_mode) as out,
         ):
             logger.info(
                 f"Command executed: {command}\n"
@@ -1835,7 +1838,9 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
         # Execute command
         try:
             env = os.environ.copy()
-            process = self._create_process(job, command, env)
+            # Use append mode for batches after the first one to preserve logs
+            append_logs = batch_idx > 0
+            process = self._create_process(job, command, env, append_mode=append_logs)
             # Wait for process to complete
             self._run(process)
             if process.returncode != 0:
