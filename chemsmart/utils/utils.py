@@ -696,6 +696,10 @@ def parse_index_specification(
             if allow_out_of_range:
                 indices = _filter_out_of_range_indices(indices, total_count)
 
+            # Normalize negative indices to positive 0-based equivalents
+            # This ensures downstream code can safely do `idx + 1` for 1-based conversion
+            indices = _normalize_negative_indices(indices, total_count)
+
         return indices
 
     # Check if this is a colon-based slice (ASE-style)
@@ -727,6 +731,8 @@ def parse_index_specification(
                         result = _filter_out_of_range_indices(
                             result, total_count
                         )
+                    # Normalize negative indices to positive 0-based equivalents
+                    result = _normalize_negative_indices(result, total_count)
                 return result
             else:
                 # Handle mixed positive/negative
@@ -744,6 +750,8 @@ def parse_index_specification(
                         result = _filter_out_of_range_indices(
                             result, total_count
                         )
+                    # Normalize negative indices to positive 0-based equivalents
+                    result = _normalize_negative_indices(result, total_count)
                 return result
         else:
             # Just a negative number
@@ -754,6 +762,8 @@ def parse_index_specification(
                 _validate_parsed_indices(
                     idx, total_count, allow_duplicates, allow_out_of_range
                 )
+                # Normalize negative indices to positive 0-based equivalents
+                idx = _normalize_negative_indices(idx, total_count)
             return idx
 
         # Single index (no special characters)
@@ -770,6 +780,10 @@ def parse_index_specification(
             _validate_parsed_indices(
                 result, total_count, allow_duplicates, allow_out_of_range
             )
+
+            # Normalize negative indices to positive 0-based equivalents
+            # This ensures downstream code can safely do `idx + 1` for 1-based conversion
+            result = _normalize_negative_indices(result, total_count)
 
         return result
 
@@ -892,6 +906,47 @@ def _is_index_in_bounds(idx, total_count):
         else:
             return abs(idx) <= total_count
     return True  # Non-integer indices are considered valid
+
+
+def _normalize_negative_indices(indices, total_count):
+    """
+    Convert negative indices to their positive 0-based equivalents.
+    
+    This helper ensures that downstream code can safely convert indices back
+    to 1-based by doing `idx + 1` without producing incorrect results for
+    negative indices.
+    
+    Args:
+        indices: The indices to normalize (int, list, or slice)
+        total_count: Total number of items available
+        
+    Returns:
+        Normalized indices with negatives converted to positive 0-based equivalents
+        
+    Examples:
+        >>> _normalize_negative_indices(-1, 5)
+        4
+        >>> _normalize_negative_indices([0, -1], 5)
+        [0, 4]
+        >>> _normalize_negative_indices([0, 2, -1], 5)
+        [0, 2, 4]
+    """
+    if isinstance(indices, list):
+        normalized = []
+        for idx in indices:
+            if idx < 0:
+                normalized.append(total_count + idx)
+            else:
+                normalized.append(idx)
+        return normalized
+    elif isinstance(indices, int):
+        if indices < 0:
+            return total_count + indices
+        else:
+            return indices
+    else:
+        # slice objects are not normalized
+        return indices
 
 
 def _validate_single_index_bounds(idx, total_count):
