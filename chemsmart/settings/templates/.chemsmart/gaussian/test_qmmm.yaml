@@ -1,4 +1,4 @@
-# Default Gaussian settings for calculations for project ring strain (rs)
+# Default Gaussian QMMM settings for test calculations
 qmmm:
   high_level_functional: mn15
   high_level_basis: genecp
