@@ -33,7 +33,7 @@ qmmm:
 solv:
   functional: mn15
   basis: def2qzvp
-  freq: False
+  freq: false
   solvent_model: smd
   solvent_id: generic
   custom_solvent : |
