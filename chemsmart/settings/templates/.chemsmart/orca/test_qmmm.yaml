@@ -11,7 +11,7 @@ qmmm:
   mult_high: 1
 
   # Intermediate-level (QM2) region
-  intermediate_level_atoms: 19-20  
+  intermediate_level_atoms: 19-20
   intermediate_level_functional: "B3LYP"
   intermediate_level_basis: "def2-SVP"
   # Or use a built-in method:
