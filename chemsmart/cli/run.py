@@ -115,7 +115,7 @@ def process_pipeline(ctx, *args, **kwargs):
             logger.info("Running jobs in serial mode (one after another)")
         else:
             logger.info("Running jobs using default behavior")
-        
+
         for single_job in job:
             logger.info(f"Running job: {single_job.label}")
             # Instantiate a specific jobrunner based on job type
