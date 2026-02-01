@@ -6,19 +6,19 @@ import numpy as np
 import pytest
 
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.jobs.grouper.runner import (
+from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
+from chemsmart.jobs.grouper.formula import FormulaGrouper
+from chemsmart.jobs.grouper.isomorphism import RDKitIsomorphismGrouper
+from chemsmart.jobs.grouper.rmsd import (
     BasicRMSDGrouper,
-    ConnectivityGrouper,
-    FormulaGrouper,
     HungarianRMSDGrouper,
     IRMSDGrouper,
     PymolRMSDGrouper,
-    RDKitIsomorphismGrouper,
     RMSDGrouper,
     SpyRMSDGrouper,
-    TanimotoSimilarityGrouper,
-    TorsionFingerprintGrouper,
 )
+from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
+from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 from chemsmart.utils.grouper import StructureGrouperFactory
 from chemsmart.utils.utils import kabsch_align
 

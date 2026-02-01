@@ -3,7 +3,7 @@ Molecular structure grouping factory.
 
 Provides a factory interface for creating grouper instances used by
 crest and traj jobs. The actual grouper implementations are in
-chemsmart.jobs.grouper.runner.
+chemsmart.jobs.grouper.
 
 Available strategies:
 - rmsd: Basic RMSD grouping
@@ -20,18 +20,18 @@ Available strategies:
 
 import logging
 
-from chemsmart.jobs.grouper.runner import (
+from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
+from chemsmart.jobs.grouper.formula import FormulaGrouper
+from chemsmart.jobs.grouper.isomorphism import RDKitIsomorphismGrouper
+from chemsmart.jobs.grouper.rmsd import (
     BasicRMSDGrouper,
-    ConnectivityGrouper,
-    FormulaGrouper,
     HungarianRMSDGrouper,
     IRMSDGrouper,
     PymolRMSDGrouper,
-    RDKitIsomorphismGrouper,
     SpyRMSDGrouper,
-    TanimotoSimilarityGrouper,
-    TorsionFingerprintGrouper,
 )
+from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
+from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 
 logger = logging.getLogger(__name__)
 
