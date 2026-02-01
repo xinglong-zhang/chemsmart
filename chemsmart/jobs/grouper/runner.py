@@ -98,6 +98,7 @@ class GrouperJobRunner(JobRunner):
             "molecules": job.molecules,
             "num_procs": job.num_procs,
             "label": job.label,
+            "conformer_ids": job.conformer_ids,  # Pass custom conformer IDs
         }
 
         # Strategy-specific kwargs
@@ -129,6 +130,9 @@ class GrouperJobRunner(JobRunner):
         from openpyxl import load_workbook
 
         unique_molecules = []
+        conformer_ids = (
+            job.conformer_ids
+        )  # Get custom conformer IDs if provided
 
         # Determine file prefix
         file_prefix = f"{job.label}_group" if job.label else "group"
@@ -169,11 +173,17 @@ class GrouperJobRunner(JobRunner):
                     # Write the molecule coordinates
                     f.write(f"{mol.num_atoms}\n")
 
+                    # Determine original index label (use conformer_id if available)
+                    if conformer_ids is not None:
+                        original_label = conformer_ids[original_idx]
+                    else:
+                        original_label = str(original_idx + 1)
+
                     # Create comment line with energy info and original molecule index
                     if mol.energy is not None:
-                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_idx+1} Energy(Hartree): {mol.energy:.8f}"
+                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_label} Energy(Hartree): {mol.energy:.8f}"
                     else:
-                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_idx+1} Energy: N/A"
+                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_label} Energy: N/A"
 
                     f.write(f"{comment}\n")
 
@@ -216,11 +226,16 @@ class GrouperJobRunner(JobRunner):
             ws["B1"] = "Members"
             ws["C1"] = "Indices"
 
-            # Write data
+            # Write data - use conformer_ids if available
             for i, indices in enumerate(group_indices):
                 ws[f"A{i+2}"] = i + 1
                 ws[f"B{i+2}"] = len(indices)
-                ws[f"C{i+2}"] = str([idx + 1 for idx in indices])
+                if conformer_ids is not None:
+                    # Use conformer IDs like [c1, c3, c5]
+                    idx_labels = [conformer_ids[idx] for idx in indices]
+                    ws[f"C{i+2}"] = str(idx_labels)
+                else:
+                    ws[f"C{i+2}"] = str([idx + 1 for idx in indices])
 
             # Auto-adjust column widths
             ws.column_dimensions["A"].width = 8
@@ -303,6 +318,7 @@ class MoleculeGrouper(ABC):
         molecules (Iterable[Molecule]): Collection of molecules to group.
         num_procs (int): Number of processes for parallel computation.
         label (str): Label/name for this grouping task (used in output filenames).
+        conformer_ids (list[str]): Optional custom IDs for each molecule (e.g., ['c1', 'c2']).
     """
 
     def __init__(
@@ -310,6 +326,7 @@ class MoleculeGrouper(ABC):
         molecules: Iterable[Molecule],
         num_procs: int = 1,
         label: str = None,
+        conformer_ids: List[str] = None,
     ):
         """
         Initialize the molecular grouper.
@@ -320,10 +337,13 @@ class MoleculeGrouper(ABC):
                 Defaults to 1.
             label (str): Label/name for this grouping task. Used in output folder
                 and file names. Defaults to None.
+            conformer_ids (list[str]): Optional custom IDs for each molecule (e.g., ['c1', 'c2']).
+                If provided, these are used as labels in matrix output instead of numeric indices.
         """
         self.molecules = molecules
         self.num_procs = int(max(1, num_procs))
         self.label = label
+        self.conformer_ids = conformer_ids
 
         # Cache for avoiding repeated grouping calculations
         self._cached_groups = None
@@ -513,6 +533,7 @@ class RMSDGrouper(MoleculeGrouper):
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
         label: str = None,  # Label for output files
+        conformer_ids: List[str] = None,  # Custom conformer IDs for labeling
         **kwargs,  # Option to ignore H atoms for grouping
     ):
         """
@@ -530,6 +551,7 @@ class RMSDGrouper(MoleculeGrouper):
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from
                 RMSD calculation. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
 
         Note:
             Uses complete linkage clustering: a structure joins a group only if
@@ -537,7 +559,9 @@ class RMSDGrouper(MoleculeGrouper):
             the chaining effect where dissimilar structures end up in the same
             group through intermediate "bridge" structures.
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
 
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
@@ -1073,9 +1097,13 @@ class RMSDGrouper(MoleculeGrouper):
         elif not filename.endswith(".xlsx"):
             filename = filename + ".xlsx"
 
-        # Create DataFrame with simple numeric indices as row and column labels
-        row_labels = [str(i + 1) for i in range(n)]
-        col_labels = [str(j + 1) for j in range(n)]
+        # Create DataFrame with labels - use conformer_ids if available
+        if self.conformer_ids is not None and len(self.conformer_ids) == n:
+            row_labels = self.conformer_ids
+            col_labels = self.conformer_ids
+        else:
+            row_labels = [str(i + 1) for i in range(n)]
+            col_labels = [str(j + 1) for j in range(n)]
 
         # Replace inf with string "∞" for display
         matrix_display = np.where(np.isinf(rmsd_matrix), np.nan, rmsd_matrix)
@@ -2714,6 +2742,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
         label: str = None,
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
         """
@@ -2728,8 +2757,11 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from
                 RMSD calculation. Defaults to False.
             label (str): Label/name for output files.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
         self.threshold = threshold
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
@@ -2922,6 +2954,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         use_rdkit_fp: bool = None,  # Legacy support
         label: str = None,  # Label for output files
         ignore_hydrogens: bool = False,
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
         """
@@ -2941,8 +2974,11 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 If False, sets fingerprint_type="rdk".
             label (str): Label/name for output files. Defaults to None.
             ignore_hydrogens (bool): Not supported for this grouper. Must be False.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
 
         # Check for unsupported ignore_hydrogens
         if ignore_hydrogens:
@@ -3416,9 +3452,13 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             for j, idx_j in enumerate(valid_indices):
                 full_matrix[idx_i, idx_j] = tanimoto_matrix[i, j]
 
-        # Create DataFrame with simple numeric indices as row and column labels
-        row_labels = [str(i + 1) for i in range(n)]
-        col_labels = [str(j + 1) for j in range(n)]
+        # Create DataFrame with labels - use conformer_ids if available
+        if self.conformer_ids is not None and len(self.conformer_ids) == n:
+            row_labels = self.conformer_ids
+            col_labels = self.conformer_ids
+        else:
+            row_labels = [str(i + 1) for i in range(n)]
+            col_labels = [str(j + 1) for j in range(n)]
         df = pd.DataFrame(full_matrix, index=row_labels, columns=col_labels)
 
         # Create Excel writer
@@ -3617,6 +3657,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         use_tautomers: bool = False,
         label: str = None,
         ignore_hydrogens: bool = False,
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
         """
@@ -3631,8 +3672,11 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                 as equivalent. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
             ignore_hydrogens (bool): Not supported for this grouper. Must be False.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
 
         # Check for unsupported ignore_hydrogens
         if ignore_hydrogens:
@@ -3757,9 +3801,13 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
         n = adj_matrix.shape[0]
 
-        # Create DataFrame with simple numeric indices
-        row_labels = [str(i + 1) for i in range(n)]
-        col_labels = [str(j + 1) for j in range(n)]
+        # Create DataFrame with labels - use conformer_ids if available
+        if self.conformer_ids is not None and len(self.conformer_ids) == n:
+            row_labels = self.conformer_ids
+            col_labels = self.conformer_ids
+        else:
+            row_labels = [str(i + 1) for i in range(n)]
+            col_labels = [str(j + 1) for j in range(n)]
 
         # Convert boolean matrix to int (1/0) for display
         matrix_display = adj_matrix.astype(int)
@@ -3881,6 +3929,7 @@ class FormulaGrouper(MoleculeGrouper):
         num_procs: int = 1,
         label: str = None,
         ignore_hydrogens: bool = False,
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
         """
@@ -3891,8 +3940,11 @@ class FormulaGrouper(MoleculeGrouper):
             num_procs (int): Number of processes for parallel computation.
             label (str): Label/name for output files. Defaults to None.
             ignore_hydrogens (bool): Not supported for this grouper. Must be False.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
 
         # Check for unsupported ignore_hydrogens
         if ignore_hydrogens:
@@ -3971,9 +4023,13 @@ class FormulaGrouper(MoleculeGrouper):
 
         n = adj_matrix.shape[0]
 
-        # Create DataFrame with simple numeric indices
-        row_labels = [str(i + 1) for i in range(n)]
-        col_labels = [str(j + 1) for j in range(n)]
+        # Create DataFrame with labels - use conformer_ids if available
+        if self.conformer_ids is not None and len(self.conformer_ids) == n:
+            row_labels = self.conformer_ids
+            col_labels = self.conformer_ids
+        else:
+            row_labels = [str(i + 1) for i in range(n)]
+            col_labels = [str(j + 1) for j in range(n)]
 
         # Convert boolean matrix to int (1/0) for display
         matrix_display = adj_matrix.astype(int)
@@ -4083,6 +4139,7 @@ class ConnectivityGrouper(MoleculeGrouper):
         adjust_H: bool = True,
         ignore_hydrogens: bool = False,
         label: str = None,
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
         """
@@ -4097,8 +4154,11 @@ class ConnectivityGrouper(MoleculeGrouper):
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from
                 graph comparison. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
         if threshold is None:
             threshold = 0.0
         self.threshold = threshold  # Buffer for bond cutoff
@@ -4224,9 +4284,13 @@ class ConnectivityGrouper(MoleculeGrouper):
             f"{label_prefix}{self.__class__.__name__}.xlsx",
         )
 
-        # Create DataFrame with simple numeric indices
-        row_labels = [str(i + 1) for i in range(n)]
-        col_labels = [str(j + 1) for j in range(n)]
+        # Create DataFrame with labels - use conformer_ids if available
+        if self.conformer_ids is not None and len(self.conformer_ids) == n:
+            row_labels = self.conformer_ids
+            col_labels = self.conformer_ids
+        else:
+            row_labels = [str(i + 1) for i in range(n)]
+            col_labels = [str(j + 1) for j in range(n)]
 
         # Convert boolean matrix to int (1/0) for display
         matrix_display = adj_matrix.astype(int)
@@ -4363,6 +4427,7 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
         adjust_H: bool = True,
         ignore_hydrogens: bool = False,
         label: str = None,
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
         """
@@ -4377,8 +4442,11 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from
                 graph comparison. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
         self.threshold = threshold
         self.adjust_H = adjust_H
         self.ignore_hydrogens = ignore_hydrogens
@@ -4547,6 +4615,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         ignore_colinear_bonds: bool = True,
         ignore_hydrogens: bool = False,
         label: str = None,  # Label for output files
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
         """
@@ -4569,8 +4638,11 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from TFD calculation.
                 Defaults to False.
             label (str): Label/name for output files. Defaults to None.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
-        super().__init__(molecules, num_procs, label=label)
+        super().__init__(
+            molecules, num_procs, label=label, conformer_ids=conformer_ids
+        )
 
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
@@ -5045,9 +5117,13 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         elif not filename.endswith(".xlsx"):
             filename = filename + ".xlsx"
 
-        # Create DataFrame with simple numeric indices as row and column labels
-        row_labels = [str(i + 1) for i in range(n)]
-        col_labels = [str(j + 1) for j in range(n)]
+        # Create DataFrame with labels - use conformer_ids if available
+        if self.conformer_ids is not None and len(self.conformer_ids) == n:
+            row_labels = self.conformer_ids
+            col_labels = self.conformer_ids
+        else:
+            row_labels = [str(i + 1) for i in range(n)]
+            col_labels = [str(j + 1) for j in range(n)]
 
         # Replace inf with NaN for Excel (will show as blank)
         matrix_display = np.where(np.isinf(tfd_matrix), np.nan, tfd_matrix)
@@ -5244,29 +5320,6 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
                 f"max_dev='{self.max_dev}', symm_radius={self.symm_radius})"
             )
-
-
-class StructureGrouperFactory:
-    """
-    Factory for creating molecular grouper instances.
-
-    Provides a unified entry point to construct groupers by name. Supported
-    strategies (case-insensitive):
-    - "rmsd": BasicRMSDGrouper
-    - "hrmsd": HungarianRMSDGrouper
-    - "spyrmsd": SpyRMSDGrouper
-    - "pymol" or "pymol_align": PymolRMSDGrouper
-    - "tanimoto" or "fingerprint": TanimotoSimilarityGrouper
-    - "torsion": TorsionFingerprintGrouper
-    - "isomorphism" or "rdkit": RDKitIsomorphismGrouper
-    - "formula": FormulaGrouper
-    - "connectivity": ConnectivityGrouper
-
-    Additional keyword arguments are forwarded to the specific grouper
-    constructors (e.g., thresholds or flags).
-    """
-
-    pass
 
 
 # Register grouper classes in GrouperJobRunner

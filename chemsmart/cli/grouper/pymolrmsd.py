@@ -6,7 +6,10 @@ import logging
 
 import click
 
-from chemsmart.cli.grouper.grouper import grouper
+from chemsmart.cli.grouper.grouper import (
+    create_grouper_job_from_context,
+    grouper,
+)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -28,30 +31,7 @@ def pymolrmsd(ctx):
         chemsmart run grouper -f conformers.xyz -T 0.3 pymolrmsd
         chemsmart run grouper -f conformers.xyz -N 10 pymolrmsd
     """
-    molecules = ctx.obj["molecules"]
-    ignore_hydrogens = ctx.obj["ignore_hydrogens"]
-    num_procs = ctx.obj["num_procs"]
-    label = ctx.obj["grouper_label"]
-    num_groups = ctx.obj["num_groups"]
-
-    # Use threshold from parent command, with strategy-specific default
-    threshold = ctx.obj["threshold"]
-    if threshold is None and num_groups is None:
-        threshold = 0.5  # Strategy-specific default
-
-    logger.info(
-        f"Running PyMOL RMSD grouping with threshold={threshold}, "
-        f"ignore_hydrogens={ignore_hydrogens}"
-    )
-
-    from chemsmart.jobs.grouper import GrouperJob
-
-    return GrouperJob(
-        molecules=molecules,
-        grouping_strategy="pymolrmsd",
-        threshold=threshold,
-        num_groups=num_groups,
-        ignore_hydrogens=ignore_hydrogens,
-        num_procs=num_procs,
-        label=f"{label}_pymolrmsd",
+    logger.info("Running PyMOL RMSD grouping")
+    return create_grouper_job_from_context(
+        ctx, strategy="pymolrmsd", default_threshold=0.5
     )

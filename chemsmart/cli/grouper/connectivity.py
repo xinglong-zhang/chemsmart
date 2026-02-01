@@ -19,26 +19,19 @@ def connectivity(ctx):
     Group structures by molecular connectivity.
 
     Groups molecules based on their bond connectivity patterns (graph isomorphism).
-    This grouper does not use a threshold - molecules are either isomorphic or not.
+    This grouper does not use threshold or num_groups - molecules are either
+    isomorphic (same connectivity) or not.
 
     Examples:
         chemsmart run grouper -f molecules.xyz connectivity
     """
-    molecules = ctx.obj["molecules"]
-    num_procs = ctx.obj["num_procs"]
-    label = ctx.obj["grouper_label"]
-    num_groups = ctx.obj["num_groups"]
-    threshold = ctx.obj["threshold"]
-
-    # Connectivity grouper does not support threshold
-    if threshold is not None:
+    # Validate: connectivity grouper does not support threshold or num_groups
+    if ctx.obj["threshold"] is not None:
         raise click.UsageError(
             "Connectivity grouper does not support threshold (-T). "
             "Molecules are grouped by graph isomorphism (same/different connectivity)."
         )
-
-    # Connectivity grouper does not support num_groups
-    if num_groups is not None:
+    if ctx.obj["num_groups"] is not None:
         raise click.UsageError(
             "Connectivity grouper does not support num_groups (-N). "
             "Molecules are grouped by graph isomorphism (same/different connectivity)."
@@ -49,11 +42,12 @@ def connectivity(ctx):
     from chemsmart.jobs.grouper import GrouperJob
 
     return GrouperJob(
-        molecules=molecules,
+        molecules=ctx.obj["molecules"],
         grouping_strategy="connectivity",
         threshold=None,
         num_groups=None,
-        ignore_hydrogens=False,
-        num_procs=num_procs,
-        label=f"{label}_connectivity",
+        ignore_hydrogens=ctx.obj["ignore_hydrogens"],
+        num_procs=ctx.obj["num_procs"],
+        label=f"{ctx.obj['grouper_label']}_connectivity",
+        conformer_ids=ctx.obj.get("conformer_ids"),
     )

@@ -2,11 +2,12 @@ import logging
 
 import click
 
+from chemsmart.cli.gaussian.crest import click_crest_grouper_options
 from chemsmart.cli.gaussian.gaussian import (
-    click_gaussian_grouper_options,
     click_gaussian_jobtype_options,
     gaussian,
 )
+from chemsmart.cli.grouper.grouper import click_grouper_common_options
 from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.gaussian import GaussianTrajJob
 from chemsmart.utils.cli import (
@@ -21,15 +22,8 @@ logger = logging.getLogger(__name__)
 @gaussian.command(cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
-@click_gaussian_grouper_options
-@click.option(
-    "-N",  # avoid conflict with num_steps if scan
-    "--num-structures-to-run",
-    type=int,
-    default=None,
-    help="Number of structures from the list of unique structures to "
-    "run the job on.",
-)
+@click_grouper_common_options
+@click_crest_grouper_options
 @click.option(
     "-x",
     "--proportion-structures-to-use",
@@ -47,11 +41,14 @@ def traj(
     coordinates,
     step_size,
     num_steps,
-    num_structures_to_run,
-    grouping_strategy,
-    threshold,
+    # grouper common options
     ignore_hydrogens,
     num_procs,
+    threshold,
+    num_groups,
+    # crest grouper options
+    grouping_strategy,
+    check_stereo,
     fingerprint_type,
     use_weights,
     proportion_structures_to_use,
@@ -103,11 +100,12 @@ def traj(
         grouping_strategy=grouping_strategy,
         num_procs=num_procs,
         proportion_structures_to_use=proportion_structures_to_use,
-        num_structures_to_run=num_structures_to_run,
+        num_groups=num_groups,
         ignore_hydrogens=ignore_hydrogens,
         use_weights=use_weights,
         threshold=threshold,
         fingerprint_type=fingerprint_type,
+        check_stereo=check_stereo,
         skip_completed=skip_completed,
         **kwargs,
     )

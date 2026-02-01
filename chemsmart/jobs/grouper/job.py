@@ -51,6 +51,7 @@ class GrouperJob(Job):
         ignore_hydrogens: bool = False,
         num_procs: int = 1,
         skip_completed: bool = True,
+        conformer_ids: Optional[List[str]] = None,
         **kwargs,
     ):
         """
@@ -66,6 +67,8 @@ class GrouperJob(Job):
             ignore_hydrogens (bool): Whether to ignore hydrogens.
             num_procs (int): Number of processors for parallel calculation.
             skip_completed (bool): If True, skip completed jobs.
+            conformer_ids (list[str], optional): Custom IDs for each molecule (e.g., ['c1', 'c2', 'c3']).
+                If provided, these are used instead of numeric indices for matrix labels and output.
             **kwargs: Additional strategy-specific arguments.
         """
         if not isinstance(molecules, list) or len(molecules) < 2:
@@ -87,6 +90,7 @@ class GrouperJob(Job):
         self.num_groups = num_groups
         self.ignore_hydrogens = ignore_hydrogens
         self.num_procs = num_procs
+        self.conformer_ids = conformer_ids
         self.grouper_kwargs = kwargs
 
         # Results storage (populated after grouping)

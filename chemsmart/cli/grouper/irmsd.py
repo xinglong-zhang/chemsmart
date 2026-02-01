@@ -6,7 +6,10 @@ import logging
 
 import click
 
-from chemsmart.cli.grouper.grouper import grouper
+from chemsmart.cli.grouper.grouper import (
+    create_grouper_job_from_context,
+    grouper,
+)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -36,31 +39,7 @@ def irmsd(ctx, check_stereo):
         chemsmart run grouper -f conformers.xyz -T 0.3 irmsd --check-stereo on
         chemsmart run grouper -f conformers.xyz -N 10 irmsd
     """
-    molecules = ctx.obj["molecules"]
-    ignore_hydrogens = ctx.obj["ignore_hydrogens"]
-    num_procs = ctx.obj["num_procs"]
-    label = ctx.obj["grouper_label"]
-    num_groups = ctx.obj["num_groups"]
-
-    # Use threshold from parent command, with strategy-specific default
-    threshold = ctx.obj["threshold"]
-    if threshold is None and num_groups is None:
-        threshold = 0.5  # Strategy-specific default
-
-    logger.info(
-        f"Running iRMSD grouping with threshold={threshold}, "
-        f"check_stereo={check_stereo}, ignore_hydrogens={ignore_hydrogens}"
-    )
-
-    from chemsmart.jobs.grouper import GrouperJob
-
-    return GrouperJob(
-        molecules=molecules,
-        grouping_strategy="irmsd",
-        threshold=threshold,
-        num_groups=num_groups,
-        ignore_hydrogens=ignore_hydrogens,
-        num_procs=num_procs,
-        check_stereo=check_stereo,
-        label=f"{label}_irmsd",
+    logger.info(f"Running iRMSD grouping with check_stereo={check_stereo}")
+    return create_grouper_job_from_context(
+        ctx, strategy="irmsd", default_threshold=0.5, check_stereo=check_stereo
     )

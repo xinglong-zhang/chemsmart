@@ -1,12 +1,13 @@
+import functools
 import logging
 
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
-    click_gaussian_grouper_options,
     click_gaussian_jobtype_options,
     gaussian,
 )
+from chemsmart.cli.grouper.grouper import click_grouper_common_options
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
@@ -17,17 +18,74 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
+def click_crest_grouper_options(f):
+    """Grouper options specific to crest command (strategy selection and strategy-specific options)."""
+
+    @click.option(
+        "-g",
+        "--grouping-strategy",
+        type=click.Choice(
+            [
+                "rmsd",
+                "hrmsd",
+                "spyrmsd",
+                "irmsd",
+                "pymolrmsd",
+                "tanimoto",
+                "torsion",
+                "isomorphism",
+                "formula",
+                "connectivity",
+            ],
+            case_sensitive=False,
+        ),
+        default=None,
+        help="Grouping strategy to use for conformer grouping.",
+    )
+    @click.option(
+        "--check-stereo",
+        type=click.Choice(["auto", "on", "off"], case_sensitive=False),
+        default="auto",
+        help="Control stereochemistry/inversion checking in iRMSD grouper. "
+        "'auto' (default): automatically detect, 'on': force check, 'off': disable.",
+    )
+    @click.option(
+        "-ft",
+        "--fingerprint-type",
+        type=click.Choice(
+            [
+                "rdkit",
+                "rdk",
+                "morgan",
+                "maccs",
+                "atompair",
+                "torsion",
+                "usr",
+                "usrcat",
+            ],
+            case_sensitive=False,
+        ),
+        default="rdkit",
+        help="Fingerprint type for tanimoto grouping.",
+    )
+    @click.option(
+        "--use-weights/--no-use-weights",
+        type=bool,
+        default=True,
+        help="Whether to use torsion weights in TFD calculation for torsion grouping.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @gaussian.command(cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
-@click_gaussian_grouper_options
-@click.option(
-    "-N",
-    "--num-confs-to-run",
-    type=int,
-    default=None,
-    help="Number of conformers to optimize.",
-)
+@click_grouper_common_options
+@click_crest_grouper_options
 @click.pass_context
 def crest(
     ctx,
@@ -35,11 +93,13 @@ def crest(
     coordinates,
     step_size,
     num_steps,
-    num_confs_to_run,
-    grouping_strategy,
-    threshold,
+    # grouper common options
     ignore_hydrogens,
     num_procs,
+    threshold,
+    num_groups,
+    # crest grouper options
+    grouping_strategy,
     check_stereo,
     fingerprint_type,
     use_weights,
@@ -90,15 +150,10 @@ def crest(
         settings=crest_settings,
         label=label,
         jobrunner=jobrunner,
-        num_confs_to_run=num_confs_to_run,
         grouping_strategy=grouping_strategy,
         ignore_hydrogens=ignore_hydrogens,
         threshold=threshold,
-        num_groups=(
-            num_confs_to_run
-            if (grouping_strategy is not None and num_confs_to_run is not None)
-            else None
-        ),
+        num_groups=num_groups,
         num_procs=num_procs,
         check_stereo=check_stereo,
         use_weights=use_weights,
