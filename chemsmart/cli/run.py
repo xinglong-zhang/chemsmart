@@ -44,6 +44,7 @@ def run(
     fake,
     scratch,
     delete_scratch,
+    run_in_serial,
     debug,
     stream,
 ):
@@ -65,6 +66,7 @@ def run(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
+        run_in_serial=run_in_serial,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
@@ -108,22 +110,45 @@ def process_pipeline(ctx, *args, **kwargs):
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Running {len(job)} jobs")
-        for single_job in job:
-            logger.info(f"Running job: {single_job.label}")
-            # Instantiate a specific jobrunner based on job type
-            job_specific_runner = jobrunner.from_job(
-                job=single_job,
-                server=jobrunner.server,
-                scratch=jobrunner.scratch,
-                fake=jobrunner.fake,
-                delete_scratch=jobrunner.delete_scratch,
-                num_cores=jobrunner.num_cores,
-                num_gpus=jobrunner.num_gpus,
-                mem_gb=jobrunner.mem_gb,
-            )
-            # Attach jobrunner to job and run the job with the jobrunner
-            single_job.jobrunner = job_specific_runner
-            single_job.run()
+        # Check if jobs should be run in serial
+        if jobrunner.run_in_serial:
+            logger.info("Running jobs in serial mode (one after another)")
+            for single_job in job:
+                logger.info(f"Running job: {single_job.label}")
+                # Instantiate a specific jobrunner based on job type
+                job_specific_runner = jobrunner.from_job(
+                    job=single_job,
+                    server=jobrunner.server,
+                    scratch=jobrunner.scratch,
+                    fake=jobrunner.fake,
+                    delete_scratch=jobrunner.delete_scratch,
+                    run_in_serial=jobrunner.run_in_serial,
+                    num_cores=jobrunner.num_cores,
+                    num_gpus=jobrunner.num_gpus,
+                    mem_gb=jobrunner.mem_gb,
+                )
+                # Attach jobrunner to job and run the job with the jobrunner
+                single_job.jobrunner = job_specific_runner
+                single_job.run()
+        else:
+            logger.info("Running jobs using default behavior")
+            for single_job in job:
+                logger.info(f"Running job: {single_job.label}")
+                # Instantiate a specific jobrunner based on job type
+                job_specific_runner = jobrunner.from_job(
+                    job=single_job,
+                    server=jobrunner.server,
+                    scratch=jobrunner.scratch,
+                    fake=jobrunner.fake,
+                    delete_scratch=jobrunner.delete_scratch,
+                    run_in_serial=jobrunner.run_in_serial,
+                    num_cores=jobrunner.num_cores,
+                    num_gpus=jobrunner.num_gpus,
+                    mem_gb=jobrunner.mem_gb,
+                )
+                # Attach jobrunner to job and run the job with the jobrunner
+                single_job.jobrunner = job_specific_runner
+                single_job.run()
         return None
 
     # Instantiate a specific jobrunner based on job type
@@ -136,6 +161,7 @@ def process_pipeline(ctx, *args, **kwargs):
             scratch=jobrunner.scratch,
             fake=jobrunner.fake,
             delete_scratch=jobrunner.delete_scratch,
+            run_in_serial=jobrunner.run_in_serial,
             num_cores=jobrunner.num_cores,
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,
