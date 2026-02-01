@@ -113,42 +113,26 @@ def process_pipeline(ctx, *args, **kwargs):
         # Check if jobs should be run in serial
         if jobrunner.run_in_serial:
             logger.info("Running jobs in serial mode (one after another)")
-            for single_job in job:
-                logger.info(f"Running job: {single_job.label}")
-                # Instantiate a specific jobrunner based on job type
-                job_specific_runner = jobrunner.from_job(
-                    job=single_job,
-                    server=jobrunner.server,
-                    scratch=jobrunner.scratch,
-                    fake=jobrunner.fake,
-                    delete_scratch=jobrunner.delete_scratch,
-                    run_in_serial=jobrunner.run_in_serial,
-                    num_cores=jobrunner.num_cores,
-                    num_gpus=jobrunner.num_gpus,
-                    mem_gb=jobrunner.mem_gb,
-                )
-                # Attach jobrunner to job and run the job with the jobrunner
-                single_job.jobrunner = job_specific_runner
-                single_job.run()
         else:
             logger.info("Running jobs using default behavior")
-            for single_job in job:
-                logger.info(f"Running job: {single_job.label}")
-                # Instantiate a specific jobrunner based on job type
-                job_specific_runner = jobrunner.from_job(
-                    job=single_job,
-                    server=jobrunner.server,
-                    scratch=jobrunner.scratch,
-                    fake=jobrunner.fake,
-                    delete_scratch=jobrunner.delete_scratch,
-                    run_in_serial=jobrunner.run_in_serial,
-                    num_cores=jobrunner.num_cores,
-                    num_gpus=jobrunner.num_gpus,
-                    mem_gb=jobrunner.mem_gb,
-                )
-                # Attach jobrunner to job and run the job with the jobrunner
-                single_job.jobrunner = job_specific_runner
-                single_job.run()
+        
+        for single_job in job:
+            logger.info(f"Running job: {single_job.label}")
+            # Instantiate a specific jobrunner based on job type
+            job_specific_runner = jobrunner.from_job(
+                job=single_job,
+                server=jobrunner.server,
+                scratch=jobrunner.scratch,
+                fake=jobrunner.fake,
+                delete_scratch=jobrunner.delete_scratch,
+                run_in_serial=jobrunner.run_in_serial,
+                num_cores=jobrunner.num_cores,
+                num_gpus=jobrunner.num_gpus,
+                mem_gb=jobrunner.mem_gb,
+            )
+            # Attach jobrunner to job and run the job with the jobrunner
+            single_job.jobrunner = job_specific_runner
+            single_job.run()
         return None
 
     # Instantiate a specific jobrunner based on job type
