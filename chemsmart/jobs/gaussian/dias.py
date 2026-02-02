@@ -352,11 +352,19 @@ class GaussianDIASJob(GaussianJob):
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
             logger.info("Running molecule jobs in serial mode (one after another)")
+            for job in self.all_molecules_jobs:
+                job.run()
+                # Enforce that job completed before proceeding to next
+                if not job.is_complete():
+                    logger.warning(
+                        f"Molecule job {job.label} did not complete successfully. "
+                        f"Stopping serial execution."
+                    )
+                    break
         else:
             logger.info("Running molecule jobs using default behavior")
-
-        for job in self.all_molecules_jobs:
-            job.run()
+            for job in self.all_molecules_jobs:
+                job.run()
 
     def _run_fragment1_jobs(self):
         """
@@ -369,11 +377,19 @@ class GaussianDIASJob(GaussianJob):
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
             logger.info("Running fragment 1 jobs in serial mode (one after another)")
+            for job in self.fragment1_jobs:
+                job.run()
+                # Enforce that job completed before proceeding to next
+                if not job.is_complete():
+                    logger.warning(
+                        f"Fragment 1 job {job.label} did not complete successfully. "
+                        f"Stopping serial execution."
+                    )
+                    break
         else:
             logger.info("Running fragment 1 jobs using default behavior")
-
-        for job in self.fragment1_jobs:
-            job.run()
+            for job in self.fragment1_jobs:
+                job.run()
 
     def _run_fragment2_jobs(self):
         """
@@ -386,11 +402,19 @@ class GaussianDIASJob(GaussianJob):
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
             logger.info("Running fragment 2 jobs in serial mode (one after another)")
+            for job in self.fragment2_jobs:
+                job.run()
+                # Enforce that job completed before proceeding to next
+                if not job.is_complete():
+                    logger.warning(
+                        f"Fragment 2 job {job.label} did not complete successfully. "
+                        f"Stopping serial execution."
+                    )
+                    break
         else:
             logger.info("Running fragment 2 jobs using default behavior")
-
-        for job in self.fragment2_jobs:
-            job.run()
+            for job in self.fragment2_jobs:
+                job.run()
 
     def _run(self, **kwargs):
         """

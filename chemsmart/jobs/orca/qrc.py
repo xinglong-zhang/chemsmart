@@ -153,11 +153,19 @@ class ORCAQRCJob(ORCAJob):
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
             logger.info("Running QRC jobs in serial mode (one after another)")
+            for job in self.both_qrc_jobs:
+                job.run()
+                # Enforce that job completed before proceeding to next
+                if not job.is_complete():
+                    logger.warning(
+                        f"QRC job {job.label} did not complete successfully. "
+                        f"Stopping serial execution."
+                    )
+                    break
         else:
             logger.info("Running QRC jobs using default behavior")
-
-        for job in self.both_qrc_jobs:
-            job.run()
+            for job in self.both_qrc_jobs:
+                job.run()
 
     def _run(self):
         """

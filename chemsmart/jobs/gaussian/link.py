@@ -172,6 +172,13 @@ class GaussianLinkJob(GaussianJob):
                 for job in irc_jobs:
                     logger.debug(f"Running IRC job: {job.settings.jobtype}")
                     job.run()
+                    # Enforce that job completed before proceeding to next
+                    if not job.is_complete():
+                        logger.warning(
+                            f"IRC job {job.settings.jobtype} did not complete successfully. "
+                            f"Stopping serial execution."
+                        )
+                        break
             else:
                 logger.info("Running IRC jobs using default behavior")
                 for job in irc_jobs:
