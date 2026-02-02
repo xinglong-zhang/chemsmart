@@ -1,4 +1,5 @@
 from .connectivity import connectivity
+from .energy import energy
 from .formula import formula
 from .grouper import grouper
 from .hrmsd import hrmsd
@@ -22,4 +23,5 @@ __all__ = [
     "isomorphism",
     "formula",
     "connectivity",
+    "energy",
 ]

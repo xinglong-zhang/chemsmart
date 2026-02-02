@@ -7,6 +7,7 @@ torsion fingerprint deviation, and more.
 """
 
 from .connectivity import ConnectivityGrouper
+from .energy import EnergyGrouper
 from .formula import FormulaGrouper
 from .isomorphism import RDKitIsomorphismGrouper
 from .job import GrouperJob
@@ -44,6 +45,7 @@ __all__ = [
     "RDKitIsomorphismGrouper",
     "FormulaGrouper",
     "ConnectivityGrouper",
+    "EnergyGrouper",
     "StructureGrouperConfig",
     "to_graph_wrapper",
 ]

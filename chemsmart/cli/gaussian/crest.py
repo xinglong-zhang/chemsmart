@@ -36,6 +36,7 @@ def click_crest_grouper_options(f):
                 "isomorphism",
                 "formula",
                 "connectivity",
+                "energy",
             ],
             case_sensitive=False,
         ),

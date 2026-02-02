@@ -16,11 +16,13 @@ Available strategies:
 - isomorphism: RDKit graph isomorphism
 - formula: Chemical formula grouping
 - connectivity: Molecular connectivity grouping
+- energy: Energy difference grouping
 """
 
 import logging
 
 from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
+from chemsmart.jobs.grouper.energy import EnergyGrouper
 from chemsmart.jobs.grouper.formula import FormulaGrouper
 from chemsmart.jobs.grouper.isomorphism import RDKitIsomorphismGrouper
 from chemsmart.jobs.grouper.rmsd import (
@@ -47,6 +49,7 @@ GROUPER_CLASSES = {
     "isomorphism": RDKitIsomorphismGrouper,
     "formula": FormulaGrouper,
     "connectivity": ConnectivityGrouper,
+    "energy": EnergyGrouper,
 }
 
 # Strategies that support threshold parameter (grouping threshold)
@@ -58,6 +61,7 @@ THRESHOLD_SUPPORTED = {
     "pymolrmsd",
     "tanimoto",
     "torsion",
+    "energy",
 }
 
 # Strategies that support ignore_hydrogens parameter
@@ -90,6 +94,7 @@ class StructureGrouperFactory:
     - "isomorphism": RDKitIsomorphismGrouper
     - "formula": FormulaGrouper
     - "connectivity": ConnectivityGrouper
+    - "energy": EnergyGrouper (energy difference grouping)
     """
 
     @staticmethod
@@ -151,6 +156,7 @@ class StructureGrouperFactory:
                 "pymolrmsd",
                 "tanimoto",
                 "torsion",
+                "energy",
             }:
                 grouper_kwargs["num_groups"] = num_groups
 

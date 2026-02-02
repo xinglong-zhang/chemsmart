@@ -7,6 +7,7 @@ import pytest
 
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
+from chemsmart.jobs.grouper.energy import EnergyGrouper
 from chemsmart.jobs.grouper.formula import FormulaGrouper
 from chemsmart.jobs.grouper.isomorphism import RDKitIsomorphismGrouper
 from chemsmart.jobs.grouper.rmsd import (
@@ -822,6 +823,60 @@ class Test_other_groupers:
         assert (
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
+
+
+class Test_EnergyGrouper:
+    NUM_PROCS = 4
+
+    def test_energy_grouper_raises_error_for_missing_energy(
+        self, methanol_molecules, temp_working_dir
+    ):
+        # methanol_molecules from pubchem don't have energy information
+        with pytest.raises(ValueError) as excinfo:
+            EnergyGrouper(methanol_molecules)
+        assert "missing energy information" in str(excinfo.value)
+
+    def test_energy_grouper_for_crest_conformers(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
+        """Test EnergyGrouper with molecules that have energy information."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+
+        # All CREST conformers should have energy
+        for mol in molecules:
+            assert mol.energy is not None
+
+        assert len(molecules) == 18
+        grouper = EnergyGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=self.NUM_PROCS,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 7
+        assert len(group_indices) == 7
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 7
+
+        expected1 = 1.7839 / 627.509474
+        expected2 = 1.4580 / 627.509474
+
+        diff = grouper._calculate_energy_diff((0, 1))
+        assert np.isclose(diff, expected1, rtol=1e-3)
+        diff = grouper._calculate_energy_diff((1, 2))
+        assert np.isclose(diff, expected2, rtol=1e-3)
+
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = EnergyGrouper(
+            molecules, num_groups=5, num_procs=self.NUM_PROCS
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 5
+        assert len(group_indices) == 5
 
 
 class Testfactory:

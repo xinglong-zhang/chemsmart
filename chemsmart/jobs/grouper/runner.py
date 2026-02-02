@@ -73,6 +73,7 @@ class GrouperJobRunner(JobRunner):
     def _get_grouper_classes(self):
         """Lazy load grouper classes to avoid circular imports."""
         from .connectivity import ConnectivityGrouper
+        from .energy import EnergyGrouper
         from .formula import FormulaGrouper
         from .isomorphism import RDKitIsomorphismGrouper
         from .rmsd import (
@@ -96,6 +97,7 @@ class GrouperJobRunner(JobRunner):
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
+            "energy": EnergyGrouper,
         }
 
     def _create_grouper(self, job):
@@ -121,7 +123,7 @@ class GrouperJobRunner(JobRunner):
             kwargs["threshold"] = job.threshold
             kwargs["num_groups"] = job.num_groups
             kwargs["ignore_hydrogens"] = job.ignore_hydrogens
-        elif strategy in ["tanimoto", "torsion"]:
+        elif strategy in ["tanimoto", "torsion", "energy"]:
             kwargs["threshold"] = job.threshold
             kwargs["num_groups"] = job.num_groups
         elif strategy == "connectivity":
