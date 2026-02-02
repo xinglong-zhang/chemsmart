@@ -207,6 +207,7 @@ class ORCAJobRunner(JobRunner):
 
         This method searches for xyz file references in the input file
         and copies them to the scratch directory if running in scratch mode.
+        Handles both relative and absolute file paths.
 
         Args:
             job: The job object containing input file information
@@ -221,19 +222,32 @@ class ORCAJobRunner(JobRunner):
                 match = re.search(xyz_filename_pattern, line)
                 if match:
                     xyz_file = match.group(1)
-                    if not os.path.exists(xyz_file):
+
+                    # Handle absolute and relative paths
+                    if not os.path.isabs(xyz_file):
+                        # Try relative to job folder first
+                        xyz_file_path = os.path.join(job.folder, xyz_file)
+                        if not os.path.exists(xyz_file_path):
+                            # Try relative to current working directory
+                            xyz_file_path = os.path.abspath(xyz_file)
+                    else:
+                        xyz_file_path = xyz_file
+
+                    if not os.path.exists(xyz_file_path):
                         raise FileNotFoundError(
-                            f"XYZ file {xyz_file} does not exist."
+                            f"XYZ file {xyz_file} does not exist at {xyz_file_path}."
                         )
 
                     # copy to scratch if running in scratch
                     if self.scratch and self.scratch_dir:
+                        # Use basename for scratch location
+                        xyz_basename = os.path.basename(xyz_file_path)
                         xyz_file_scratch = os.path.join(
-                            self.running_directory, xyz_file
+                            self.running_directory, xyz_basename
                         )
-                        copy(xyz_file, xyz_file_scratch)
+                        copy(xyz_file_path, xyz_file_scratch)
                         logger.info(
-                            f"Copied {xyz_file} to {self.running_directory}."
+                            f"Copied {xyz_file_path} to {xyz_file_scratch}."
                         )
 
     def _write_input(self, job):

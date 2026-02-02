@@ -1970,6 +1970,8 @@ class ORCANEBJobSettings(ORCAJobSettings):
         Raises:
             AssertionError: If nimages is not set or geometry files are missing
         """
+        import os
+
         assert self.nimages, "The number of images is missing!"
         lines = [
             "%neb",
@@ -1979,12 +1981,18 @@ class ORCANEBJobSettings(ORCAJobSettings):
             self.ending_xyzfile
         ), "No valid input geomertry is given!"
         if self.restarting_xyzfile:
-            lines.append(f'Restart_ALLXYZFile "{self.restarting_xyzfile}"')
+            # Use basename for scratch compatibility
+            restart_file = os.path.basename(self.restarting_xyzfile)
+            lines.append(f'Restart_ALLXYZFile "{restart_file}"')
         else:
             assert self.ending_xyzfile, "No end geometry file is given!"
-            lines.append(f'NEB_END_XYZFile "{self.ending_xyzfile}"')
+            # Use basename for scratch compatibility
+            ending_file = os.path.basename(self.ending_xyzfile)
+            lines.append(f'NEB_END_XYZFile "{ending_file}"')
             lines.append(f"PREOPT_ENDS {self.preopt_ends}")
             if self.intermediate_xyzfile:
-                lines.append(f'NEB_TS_XYZFILE "{self.intermediate_xyzfile}"')
+                # Use basename for scratch compatibility
+                intermediate_file = os.path.basename(self.intermediate_xyzfile)
+                lines.append(f'NEB_TS_XYZFILE "{intermediate_file}"')
         lines.append("END")
         return "\n".join(lines)

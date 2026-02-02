@@ -656,7 +656,8 @@ class ORCAInputWriter(InputWriter):
 
         Generates the %NEB block with NEB-specific options including number
         of images, geometry files, and optimization settings. Only writes
-        the block if NEB-specific settings are present.
+        the block if NEB-specific settings are present. Uses basenames for
+        file paths to work with scratch directory execution.
 
         Args:
             f: File object to write to
@@ -669,6 +670,8 @@ class ORCAInputWriter(InputWriter):
             PREOPT_ENDS True
             end
         """
+        import os
+
         neb_settings_keys = self.settings.__dict__.keys()
         from chemsmart.jobs.orca.settings import ORCAJobSettings
 
@@ -691,11 +694,19 @@ class ORCAInputWriter(InputWriter):
             if key == "nimages":
                 f.write(f"{key.upper()} {value}\n")
             if key == "ending_xyzfile":
-                f.write(f'NEB_END_XYZFILE "{value}"\n')
+                # Use basename for scratch compatibility
+                ending_file = os.path.basename(value)
+                f.write(f'NEB_END_XYZFILE "{ending_file}"\n')
             if key == "starting_xyz":
                 pass
             if key == "intermediate_xyzfile":
-                f.write(f'NEB_TS_XYZFILE "{value}"\n')
+                # Use basename for scratch compatibility
+                intermediate_file = os.path.basename(value)
+                f.write(f'NEB_TS_XYZFILE "{intermediate_file}"\n')
+            if key == "restarting_xyzfile":
+                # Use basename for scratch compatibility
+                restart_file = os.path.basename(value)
+                f.write(f'Restart_ALLXYZFile "{restart_file}"\n')
             if key == "preopt_ends":
                 if value:
                     f.write("PREOPT_ENDS True\n")
