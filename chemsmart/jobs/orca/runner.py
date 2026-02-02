@@ -200,17 +200,26 @@ class ORCAJobRunner(JobRunner):
 
     def _copy_over_xyz_files(self, job):
         """
-        Copy xyz files from run directory to scratch directory.
+        Copy xyz files from job directory to scratch directory.
 
         This method searches for xyz file references in the input file
         and copies them to the scratch directory if running in scratch mode.
-        Handles both relative and absolute file paths.
+        Particularly important for NEB calculations which require multiple
+        geometry files (ending_xyzfile, intermediate_xyzfile, restarting_xyzfile).
+
+        Handles both relative and absolute file paths by:
+        1. Resolving relative paths against the job folder
+        2. Falling back to current working directory if not found
+        3. Copying files to scratch using only basenames
+
+        Note: Must be called AFTER _write_input() so the input file exists
+        and can be parsed for XYZ file references.
 
         Args:
             job: The job object containing input file information
 
         Raises:
-            FileNotFoundError: If referenced xyz file does not exist
+            FileNotFoundError: If referenced xyz file does not exist at resolved path
         """
         from chemsmart.utils.repattern import xyz_filename_pattern
 
@@ -256,8 +265,17 @@ class ORCAJobRunner(JobRunner):
         """
         Write the input file for the job.
 
+        Creates the ORCA input file in the running directory (scratch or job folder).
+        After writing the input, automatically copies any referenced XYZ files to
+        scratch directory if scratch is enabled. This is essential for NEB jobs
+        that reference multiple geometry files.
+
         Args:
             job: The job object to write input for
+
+        Note:
+            XYZ file copying happens after input writing so the input file can
+            be parsed to discover file references.
         """
         from chemsmart.jobs.orca.writer import ORCAInputWriter
 
