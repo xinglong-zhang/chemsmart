@@ -17,6 +17,7 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
+
 @gaussian.group("scan", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_gaussian_jobtype_options
