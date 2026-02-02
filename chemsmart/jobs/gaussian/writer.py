@@ -497,7 +497,7 @@ class GaussianInputWriter(InputWriter):
 
     def _append_job_specific_info(self, f):
         """
-        Write job-type-specific information to the input file.
+        Write jobtype-specific information to the input file.
 
         Appends calculation-specific data required for specialized
         job types like NCI analysis, WBI calculations, and RESP

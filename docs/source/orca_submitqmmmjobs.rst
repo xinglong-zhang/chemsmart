@@ -47,7 +47,7 @@ Job Type and Theory Level
       -  Type
       -  Description
 
-   -  -  ``-j, --job-type``
+   -  -  ``-j, --jobtype``
       -  Choice
       -  Multiscale calculation type: QMMM, QM/QM2, QM/QM2/MM, MOL-CRYSTAL-QMMM, IONIC-CRYSTAL-QMMM
 
@@ -287,7 +287,7 @@ You can also configure QM/MM settings in your project YAML file. Create a ``qmmm
    high_level_functional: B3LYP
    high_level_basis: def2-SVP
    low_level_force_field: amber99
-   job_type: opt
+   jobtype: opt
    embedding_type: electronic
    delete_la_double_counting: true
 

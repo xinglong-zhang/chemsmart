@@ -347,10 +347,10 @@ def str_indices_range_to_list(str_indices):
     and converts them to a list of individual indices. All 1-indexed.
 
     Supported formats:
-        '1:9' -> gives [1,2,3,4,5,6,7,8]
+        '1:9' -> gives [1,2,3,4,5,6,7,8] (exclusive end, Python slice style)
         '1,2,4' -> gives [1,2,4]
-        '1-9' -> gives [1,2,3,4,5,6,7,8]
-        '[1-9]' -> gives [1,2,3,4,5,6,7,8]
+        '1-9' -> gives [1,2,3,4,5,6,7,8,9] (inclusive end, range style)
+        '[1-9]' -> gives [1,2,3,4,5,6,7,8,9] (inclusive end, range style)
 
     Args:
         str_indices (str): String representation of indices in supported formats.
@@ -358,27 +358,74 @@ def str_indices_range_to_list(str_indices):
     Returns:
         list: List of individual integer indices.
     """
+    # Strip brackets if present
+    str_indices = str_indices.strip()
+    if str_indices.startswith("[") and str_indices.endswith("]"):
+        str_indices = str_indices[1:-1]
+
     list_indices = []
-    if "[" in str_indices:
-        str_indices = str_indices.replace("[", "")
-    if "]" in str_indices:
-        str_indices = str_indices.replace("]", "")
+
+    # Check if this is a comma-separated list (handles both single values and ranges)
     if "," in str_indices:
-        str_indices_split = str_indices.split(",")
-        for i in str_indices_split:
-            list_indices.append(int(i))
-    if ":" in str_indices:
+        parts = str_indices.split(",")
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part and not part.startswith("-"):
+                # This is a range like "1-9" or "1--1" (1 to -1)
+                # Use split with maxsplit=1 to handle negative end values
+                range_parts = part.split("-", 1)
+                if len(range_parts) == 2 and range_parts[0]:
+                    start = int(range_parts[0])
+                    end = int(range_parts[1])
+                    list_indices.extend(range(start, end + 1))  # inclusive
+                else:
+                    # Just a negative number
+                    list_indices.append(int(part))
+            else:
+                # Single index (could be negative)
+                list_indices.append(int(part))
+        # Check if this is a colon-separated slice like "1:9" or ":"
+    elif ":" in str_indices:
         str_indices_split = str_indices.split(":")
-        start_index = int(str_indices_split[0])
-        end_index = int(str_indices_split[-1])
-        for i in range(start_index, end_index):
-            list_indices.append(i)
-    if "-" in str_indices:
-        str_indices_split = str_indices.split("-")
-        start_index = int(str_indices_split[0])
-        end_index = int(str_indices_split[-1])
-        for i in range(start_index, end_index):
-            list_indices.append(i)
+        # Handle empty parts in slice notation
+        start_str = str_indices_split[0].strip()
+        end_str = (
+            str_indices_split[-1].strip() if len(str_indices_split) > 1 else ""
+        )
+
+        # For ":" we return empty list (means all indices, handled by caller)
+        if not start_str and not end_str:
+            return []  # Special case: ":" means all
+
+        start_index = int(start_str) if start_str else 1
+        # Exclusive end for slice notation
+        if end_str:
+            end_index = int(end_str)
+            list_indices = list(range(start_index, end_index))
+        else:
+            # Open-ended like "5:" - return empty to signal open-ended
+            return []
+    # Check if this is a hyphen-separated range like "1-9" (no commas)
+    elif "-" in str_indices and not str_indices.startswith("-"):
+        # Must check it's not a negative number
+        # Use split with maxsplit=1 to handle negative end values like "1--1"
+        parts = str_indices.split("-", 1)
+        if len(parts) == 2 and parts[0]:
+            start_index = int(parts[0])
+            end_index = int(parts[1])
+            # Inclusive end for range notation
+            list_indices = list(range(start_index, end_index + 1))
+        else:
+            # Just a negative number
+            if str_indices:
+                list_indices.append(int(str_indices))
+    else:
+        # Single index
+        if str_indices:
+            list_indices.append(int(str_indices))
+
     return list_indices
 
 
@@ -447,17 +494,21 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
 
 def convert_string_index_from_1_based_to_0_based(
     index: Union[str, int, slice],
+    total_count: int = None,
+    allow_duplicates: bool = True,
+    allow_out_of_range: bool = True,
 ) -> Union[int, slice, list]:
     """
     Convert string index from 1-based to 0-based indexing.
-
-    Handles single indices, slices, and negative indices. Supports
-    various input formats including user-defined ranges.
-
     Args:
         index (Union[str, int, slice]): String representing an index or slice,
                                        e.g., "1", "2:5", "3:10:2", "-1",
-                                       or user-defined ranges like "1-2,5".
+                                       or user-defined ranges like "1-2,5", "1,-1".
+        total_count (int, optional): Total number of items, used for validation.
+        allow_duplicates (bool, optional): If True, allows duplicate indices.
+            Defaults to True.
+        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+            Defaults to True.
 
     Returns:
         Union[int, slice, list]: Integer, slice, or list adjusted for
@@ -466,31 +517,450 @@ def convert_string_index_from_1_based_to_0_based(
     Raises:
         ValueError: If index is 0 (invalid for 1-based indexing).
     """
-    try:
-        # Try numeric index
-        index_int = int(index)
-    except (TypeError, ValueError):
-        try:
-            index_list = string2index_1based(index)
-        except ValueError:
-            # Last resort: user-defined ranges
-            index_list = get_list_from_string_range(index)
-            # convert back to 0-based indexing
-            index_list = [i - 1 for i in index_list]
-    else:
-        # Only runs if int() succeeded
-        if index_int == 0:
+    # If already an int or slice, handle directly
+    if isinstance(index, int):
+        if index == 0:
             raise ValueError(
-                f"Index {index_int} is out of range, as 1-indexing is used!\n "
+                f"Index {index} is out of range, as 1-indexing is used!\n "
                 f"Please provide a positive integer.\n"
             )
-        elif index_int < 0:
-            # If negative index, return as is
-            return index_int
+        elif index < 0:
+            return index  # Negative indices stay as-is
         else:
-            # Convert to 0-based indexing
-            return index_int - 1  # Convert to 0-based indexing
-    return index_list
+            return index - 1  # Convert to 0-based
+
+    if isinstance(index, slice):
+        return index  # Already processed
+
+    # String index - use the new unified parser
+    if isinstance(index, str):
+        return parse_index_specification(
+            index, total_count, allow_duplicates, allow_out_of_range
+        )
+
+    raise ValueError(f"Invalid index type: {type(index)}")
+
+
+def parse_index_specification(
+    index_spec: str,
+    total_count: int = None,
+    allow_duplicates: bool = True,
+    allow_out_of_range: bool = True,
+) -> Union[int, slice, list]:
+    """
+    Parse index specification string and return appropriate Python type.
+
+    This function integrates both ASE-style index specifications (using colons)
+    and free-format index specifications (using commas and hyphens). It handles
+    1-based indexing and converts to 0-based for Python.
+
+    Supported formats:
+        ASE-style (colon-based slicing):
+            ':' -> all indices (returns slice(None, None))
+            '1' -> first item (returns 0)
+            '-1' -> last item (returns -1)
+            '1:5' -> items 1-4, exclusive end (returns slice(0, 4))
+            '1:5:2' -> items 1, 3 with step 2 (returns slice(0, 4, 2))
+            '::2' -> every 2nd item (returns slice(None, None, 2))
+            '5:' -> from 5th to end (returns slice(4, None))
+            ':5' -> from start to 4th (returns slice(None, 4))
+
+        Free-format (comma and hyphen based):
+            '1,3,5' -> specific items (returns [0, 2, 4])
+            '1-5' -> items 1-5, inclusive (returns [0, 1, 2, 3, 4])
+            '1-3,5,7-9' -> mixed ranges (returns [0, 1, 2, 4, 6, 7, 8])
+            '1,-1' -> first and last (returns [0, -1])
+
+    Args:
+        index_spec (str): String specification of indices.
+        total_count (int, optional): Total number of items, used for resolving
+            negative indices to positive ones if needed.
+        allow_duplicates (bool, optional): If True, allows duplicate indices in
+            the result. If False, raises ValueError when duplicates are found.
+            Defaults to True.
+        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+            If False, raises ValueError when indices are out of bounds.
+            Defaults to True.
+
+    Returns:
+        Union[int, slice, list]: Appropriate Python type for indexing.
+            - int: for single indices
+            - slice: for colon-based ranges
+            - list: for comma-separated or hyphen-range specifications
+
+    Raises:
+        ValueError: If index is 0 (1-based indexing doesn't allow 0)
+                   or if format is invalid.
+
+    Examples:
+        >>> parse_index_specification(':')
+        slice(None, None, None)
+        >>> parse_index_specification('1')
+        0
+        >>> parse_index_specification('-1')
+        -1
+        >>> parse_index_specification('-1', total_count=5)
+        4
+        >>> parse_index_specification('1:5')
+        slice(0, 4, None)
+        >>> parse_index_specification('1,3,5')
+        [0, 2, 4]
+        >>> parse_index_specification('1-5')
+        [0, 1, 2, 3, 4]
+        >>> parse_index_specification('1,-1')
+        [0, -1]
+        >>> parse_index_specification('1,-1', total_count=5)
+        [0, 4]
+    """
+    if not isinstance(index_spec, str):
+        raise ValueError(
+            f"Index specification must be a string, got {type(index_spec)}"
+        )
+
+    index_spec = index_spec.strip()
+
+    # Strip brackets if present (for compatibility with formats like "[1-3]")
+    if index_spec.startswith("[") and index_spec.endswith("]"):
+        index_spec = index_spec[1:-1].strip()
+
+    # Check if this contains commas - if so, it's a free-format list
+    if "," in index_spec:
+        # Parse as free-format list (can include negative indices and ranges)
+        parts = index_spec.split(",")
+        indices = []
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            # Check if this part is a range like "1-5"
+            if "-" in part and not part.startswith("-"):
+                # Split carefully to handle negative numbers
+                # "1-5" should split to ["1", "5"]
+                # "1--1" should split to ["1", "-1"]
+                range_match = part.split("-", 1)
+                if len(range_match) == 2 and range_match[0]:
+                    try:
+                        start = int(range_match[0])
+                        end = int(range_match[1])
+
+                        # Validate 1-based indexing
+                        if start == 0 or end == 0:
+                            raise ValueError(
+                                "Index cannot be 0 in 1-based indexing"
+                            )
+
+                        # Handle positive ranges
+                        if start > 0 and end > 0:
+                            # Inclusive range, convert to 0-based
+                            indices.extend(range(start - 1, end))
+                        else:
+                            # If either is negative, add them separately
+                            indices.append(start - 1 if start > 0 else start)
+                            indices.append(end - 1 if end > 0 else end)
+                    except ValueError as e:
+                        if "invalid literal" in str(e):
+                            raise ValueError(f"Invalid range format: {part}")
+                        raise
+                else:
+                    # Just a negative number like "-1"
+                    idx = int(part)
+                    if idx == 0:
+                        raise ValueError(
+                            "Index cannot be 0 in 1-based indexing"
+                        )
+                    indices.append(idx if idx < 0 else idx - 1)
+            else:
+                # Single index (could be negative)
+                idx = int(part)
+                if idx == 0:
+                    raise ValueError("Index cannot be 0 in 1-based indexing")
+                # Convert to 0-based if positive
+                indices.append(idx if idx < 0 else idx - 1)
+
+        # Apply validation if needed
+        if total_count is not None:
+            _validate_parsed_indices(
+                indices, total_count, allow_duplicates, allow_out_of_range
+            )
+
+            # Apply filtering if out of range is allowed
+            if allow_out_of_range:
+                indices = _filter_out_of_range_indices(indices, total_count)
+
+            # Normalize negative indices to positive 0-based equivalents
+            # This ensures downstream code can safely do `idx + 1` for 1-based conversion
+            indices = _normalize_negative_indices(indices, total_count)
+
+        return indices
+
+    # Check if this is a colon-based slice (ASE-style)
+    elif ":" in index_spec:
+        return string2index_1based(index_spec)
+
+    # Check if this is a hyphen-based range (free-format, no commas)
+    elif "-" in index_spec and not index_spec.startswith("-"):
+        # This is a range like "1-5" (inclusive)
+        parts = index_spec.split("-", 1)
+        if len(parts) == 2 and parts[0]:
+            start = int(parts[0])
+            end = int(parts[1])
+
+            if start == 0 or end == 0:
+                raise ValueError("Index cannot be 0 in 1-based indexing")
+
+            if start > 0 and end > 0:
+                # Inclusive range, convert to 0-based
+                result = list(range(start - 1, end))
+                if total_count is not None:
+                    _validate_parsed_indices(
+                        result,
+                        total_count,
+                        allow_duplicates,
+                        allow_out_of_range,
+                    )
+                    if allow_out_of_range:
+                        result = _filter_out_of_range_indices(
+                            result, total_count
+                        )
+                    # Normalize negative indices to positive 0-based equivalents
+                    result = _normalize_negative_indices(result, total_count)
+                return result
+            else:
+                # Handle mixed positive/negative
+                result = []
+                result.append(start - 1 if start > 0 else start)
+                result.append(end - 1 if end > 0 else end)
+                if total_count is not None:
+                    _validate_parsed_indices(
+                        result,
+                        total_count,
+                        allow_duplicates,
+                        allow_out_of_range,
+                    )
+                    if allow_out_of_range:
+                        result = _filter_out_of_range_indices(
+                            result, total_count
+                        )
+                    # Normalize negative indices to positive 0-based equivalents
+                    result = _normalize_negative_indices(result, total_count)
+                return result
+        else:
+            # Just a negative number
+            idx = int(index_spec)
+            if idx == 0:
+                raise ValueError("Index cannot be 0 in 1-based indexing")
+            if total_count is not None:
+                _validate_parsed_indices(
+                    idx, total_count, allow_duplicates, allow_out_of_range
+                )
+                # Normalize negative indices to positive 0-based equivalents
+                idx = _normalize_negative_indices(idx, total_count)
+            return idx
+
+        # Single index (no special characters)
+
+    else:
+        idx = int(index_spec)
+        if idx == 0:
+            raise ValueError("Index cannot be 0 in 1-based indexing")
+            # Convert to 0-based if positive
+        result = idx if idx < 0 else idx - 1
+
+        # Apply validation if needed
+        if total_count is not None:
+            _validate_parsed_indices(
+                result, total_count, allow_duplicates, allow_out_of_range
+            )
+
+            # Normalize negative indices to positive 0-based equivalents
+            # This ensures downstream code can safely do `idx + 1` for 1-based conversion
+            result = _normalize_negative_indices(result, total_count)
+
+        return result
+
+
+def _validate_parsed_indices(
+    indices, total_count, allow_duplicates, allow_out_of_range
+):
+    """
+    Helper function to validate parsed indices for duplicates and bounds.
+
+    Args:
+        indices: The parsed indices (int, list, or slice)
+        total_count: Total number of items available
+        allow_duplicates: Whether to allow duplicate indices
+        allow_out_of_range: Whether to allow out-of-range indices
+
+    Raises:
+        ValueError: If validation fails
+    """
+    if isinstance(indices, list):
+        # Check for duplicates - convert negative indices to positive for comparison
+        if not allow_duplicates:
+            # Convert all indices to positive indices for duplicate checking
+            normalized_indices = []
+            for idx in indices:
+                if idx < 0:
+                    # Convert negative index to positive equivalent
+                    normalized_idx = total_count + idx
+                else:
+                    normalized_idx = idx
+                normalized_indices.append(normalized_idx)
+
+            # Check for duplicates in normalized indices
+            if len(normalized_indices) != len(set(normalized_indices)):
+                # Find which original indices are duplicates
+                duplicate_positions = []
+                seen_normalized = {}
+                for i, (orig_idx, norm_idx) in enumerate(
+                    zip(indices, normalized_indices)
+                ):
+                    if norm_idx in seen_normalized:
+                        # Both the current and previously seen indices point to same structure
+                        duplicate_positions.extend(
+                            [seen_normalized[norm_idx], i]
+                        )
+                    seen_normalized[norm_idx] = i
+
+                # Get the original indices that are duplicates (convert back to 1-based for error message)
+                duplicate_indices_1based = []
+                for pos in set(duplicate_positions):
+                    orig_idx = indices[pos]
+                    duplicate_indices_1based.append(
+                        orig_idx + 1 if orig_idx >= 0 else orig_idx
+                    )
+
+                raise ValueError(
+                    f"Index overlap detected. Indices {sorted(set(duplicate_indices_1based))} point to the same structures."
+                )
+
+        # Check bounds for each index in the list
+        if not allow_out_of_range:
+            for idx in indices:
+                _validate_single_index_bounds(idx, total_count)
+
+    elif isinstance(indices, int):
+        # Check bounds for single index
+        if not allow_out_of_range:
+            _validate_single_index_bounds(indices, total_count)
+
+    # Note: slice objects are not validated for bounds as Python handles them gracefully
+
+
+def _filter_out_of_range_indices(indices, total_count):
+    """
+    Filter out indices that are out of range, keeping only valid ones.
+
+    Args:
+        indices: List of indices to filter (or single index)
+        total_count: Total number of items available
+
+    Returns:
+        List of valid indices, or raises error if no valid indices remain
+
+    Raises:
+        ValueError: If all indices are out of range
+    """
+    if isinstance(indices, list):
+        valid_indices = [
+            idx for idx in indices if _is_index_in_bounds(idx, total_count)
+        ]
+        if not valid_indices:
+            raise ValueError(
+                f"All specified indices are out of range. File has {total_count} structures."
+            )
+        return valid_indices
+    else:
+        # Single index
+        if _is_index_in_bounds(indices, total_count):
+            return indices
+        else:
+            raise ValueError(
+                f"Index is out of range. File has {total_count} structures."
+            )
+
+
+def _is_index_in_bounds(idx, total_count):
+    """
+    Helper function to check if an index is within bounds without raising an exception.
+
+    Args:
+        idx: The index to check (0-based)
+        total_count: Total number of items available
+
+    Returns:
+        bool: True if index is valid, False otherwise
+    """
+    if isinstance(idx, int):
+        if idx >= 0:
+            return idx < total_count
+        else:
+            return abs(idx) <= total_count
+    return True  # Non-integer indices are considered valid
+
+
+def _normalize_negative_indices(indices, total_count):
+    """
+    Convert negative indices to their positive 0-based equivalents.
+
+    This helper ensures that downstream code can safely convert indices back
+    to 1-based by doing `idx + 1` without producing incorrect results for
+    negative indices.
+
+    Args:
+        indices: The indices to normalize (int, list, or slice)
+        total_count: Total number of items available
+
+    Returns:
+        Normalized indices with negatives converted to positive 0-based equivalents
+
+    Examples:
+        >>> _normalize_negative_indices(-1, 5)
+        4
+        >>> _normalize_negative_indices([0, -1], 5)
+        [0, 4]
+        >>> _normalize_negative_indices([0, 2, -1], 5)
+        [0, 2, 4]
+    """
+    if isinstance(indices, list):
+        normalized = []
+        for idx in indices:
+            if idx < 0:
+                normalized.append(total_count + idx)
+            else:
+                normalized.append(idx)
+        return normalized
+    elif isinstance(indices, int):
+        if indices < 0:
+            return total_count + indices
+        else:
+            return indices
+    else:
+        # slice objects are not normalized
+        return indices
+
+
+def _validate_single_index_bounds(idx, total_count):
+    """
+    Helper function to validate a single index against bounds.
+
+    Args:
+        idx: The index to validate (0-based)
+        total_count: Total number of items available
+
+    Raises:
+        ValueError: If index is out of bounds
+    """
+    if isinstance(idx, int):
+        if idx >= 0 and idx >= total_count:
+            raise ValueError(
+                f"Index {idx + 1} is out of range. File has {total_count} structures."
+            )
+        elif idx < 0 and abs(idx) > total_count:
+            raise ValueError(
+                f"Negative index {idx} is out of range. File has {total_count} structures."
+            )
 
 
 def return_objects_from_string_index(list_of_objects, index):
