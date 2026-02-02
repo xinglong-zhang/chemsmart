@@ -164,8 +164,8 @@ NEB Options
       -  Description
 
    -  -  ``-o, --pre-optimization``
-      -  bool
-      -  Whether to optimize input geometries (accepts True/False). [default: False]
+      -  flag
+      -  Pre-optimize endpoint geometries before NEB calculation. [default: False]
 
    -  -  ``-a, --semiempirical``
       -  choice
@@ -182,13 +182,13 @@ Standard NEB calculation:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -A XTB2
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -a XTB2
 
 NEB with climbing image:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-CI -e product.xyz -A XTB1
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-CI -e product.xyz -a XTB1
 
 NEB with intermediate guess:
 
@@ -206,7 +206,37 @@ NEB with geometry pre-optimization:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -o True -a XTB2
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -o -a XTB2
+
+Advanced Usage
+==============
+
+With custom number of images:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-CI -e product.xyz -n 16 -a XTB2
+
+Using absolute paths for geometry files:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f /path/to/reactant.xyz -c 0 -m 2 neb \
+     -j NEB-CI -n 16 -e /path/to/product.xyz -o -a xtb0
+
+With intermediate TS guess and pre-optimization:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb \
+     -j NEB-TS -e product.xyz -i ts_initial_guess.xyz -o -a XTB2 -n 12
+
+Running on specific server with scratch:
+
+.. code:: bash
+
+   chemsmart sub -s my_server orca -p project -f reactant.xyz -c 0 -m 1 neb \
+     -j NEB-CI -e product.xyz -a XTB1
 
 Job Types
 =========
@@ -246,6 +276,30 @@ Requirements
 -  At minimum, NEB requires reactant and product geometries
 -  For TS searches, use NEB-TS or NEB-CI job types
 -  Semiempirical methods (XTB) are recommended for initial exploration
+
+Important Notes
+===============
+
+**File Paths**
+
+-  All XYZ file paths (``-f``, ``-e``, ``-i``, ``-r``) can be specified as absolute or relative paths
+-  Relative paths are resolved relative to the job folder
+-  Files are automatically copied to scratch directory when scratch execution is enabled
+-  File references in the ORCA input use basenames only for portability
+
+**Scratch Directory Execution**
+
+-  When running with scratch enabled (default for most servers), all geometry files are automatically copied to the
+   scratch directory
+-  This ensures ORCA can find all required files during execution
+-  After job completion, all output files are copied back to the job folder
+-  No manual file management is required
+
+**Pre-optimization Flag**
+
+-  Use ``-o`` flag alone to enable pre-optimization (no True/False value needed)
+-  Example: ``neb -j NEB-TS -e product.xyz -o`` will pre-optimize endpoint geometries
+-  Omit the ``-o`` flag to skip pre-optimization (default behavior)
 
 *************
  Modred Jobs
