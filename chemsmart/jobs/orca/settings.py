@@ -567,18 +567,14 @@ class ORCAJobSettings(MolecularJobSettings):
         level_of_theory = ""
 
         # detect whether this is a QMMM-type job to relax some validations
-        job_type_val = getattr(self, "job_type", None) or getattr(
-            self, "jobtype", None
-        )
-        is_qmmm = False
-        if job_type_val and (
-            "qm" in str(job_type_val).lower()
-            and "mm" in str(job_type_val).lower()
+        if (
+            self.jobtype is not None
+            and "qm" in str(self.jobtype).lower()
+            and "mm" in str(self.jobtype).lower()
         ):
-            try:
-                is_qmmm = True
-            except Exception:
-                is_qmmm = False
+            is_qmmm = True
+        else:
+            is_qmmm = False
 
         if self.ab_initio is not None and self.functional is not None:
             raise ValueError(
@@ -1323,7 +1319,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         Raises:
             AssertionError: If required parameters are missing or invalid
         """
-        jobtype = self.job_type.upper()
+        jobtype = self.jobtype.upper()
         if jobtype in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
             assert (
                 self.mult_high is None
@@ -1674,7 +1670,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         #         self.low_level_force_field is not None
         # ), f"Force field file missing for {self.jobtype} job!"
         if self.jobtype and self.jobtype.upper() in [
-            "QMMM" "QM/MM",
+            "QMMM",
+            "QM/MM",
             "QM/QM2/MM",
             "IONIC-CRYSTAL-QMMM",
         ]:

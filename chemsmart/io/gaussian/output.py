@@ -1723,40 +1723,44 @@ class Gaussian16Output(GaussianFileMixin):
         low_level = []
         for i, line in enumerate(self.contents):
             if "Symbolic Z-matrix:" in line:
+                # First ONIOM format: coordinates start 4 lines after the header
                 if "Charge" not in self.contents[i + 4]:
+                    atom_index = 1
                     for j_line in self.contents[i + 4 :]:
                         if len(j_line) == 0:
                             break
                         if len(j_line) > 4:
-                            if (
-                                j_line.split()[1] == "-1"
-                                or j_line.split()[1] == "0"
-                            ):
-                                layer = str(j_line.split()[5])
+                            tokens = j_line.split()
+                            if tokens[1] == "-1" or tokens[1] == "0":
+                                layer = str(tokens[5])
                             else:
-                                layer = str(j_line.split()[4])
+                                layer = str(tokens[4])
                             if layer == "H":
-                                high_level.append(i + 4)
+                                high_level.append(atom_index)
                             elif layer == "M":
-                                medium_level.append(i + 4)
+                                medium_level.append(atom_index)
                             elif layer == "L":
-                                low_level.append(i + 4)
-                            i += 1
+                                low_level.append(atom_index)
+                            atom_index += 1
                 else:
+                    # Alternative ONIOM format: coordinates start 7 lines after the header
+                    atom_index = 1
                     for j_line in self.contents[i + 7 :]:
                         if len(j_line) == 0:
                             break
                         if len(j_line) > 4:
-                            if j_line.split()[1] == -1:
-                                layer = str(j_line.split()[5])
+                            tokens = j_line.split()
+                            if tokens[1] == "-1" or tokens[1] == "0":
+                                layer = str(tokens[5])
                             else:
-                                layer = str(j_line.split()[4])
+                                layer = str(tokens[4])
                             if layer == "H":
-                                high_level.append(layer)
+                                high_level.append(atom_index)
                             elif layer == "M":
-                                medium_level.append(layer)
+                                medium_level.append(atom_index)
                             elif layer == "L":
-                                low_level.append(layer)
+                                low_level.append(atom_index)
+                            atom_index += 1
         partition = {}
         for level_name, level_list in [
             ("high level atoms", high_level),

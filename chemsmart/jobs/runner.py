@@ -93,22 +93,14 @@ class JobRunner(RegistryMixin):
 
     @scratch_dir.setter
     def scratch_dir(self, value):
-        """Set the scratch_dir and clear the cache if needed."""
+        """Allow explicit setting of scratch_dir."""
         if value is not None:
-            # Expand user path and validate
-            value = os.path.expanduser(value)
+            value = os.path.expanduser(value)  # Expand '~' to absolute path
             if not os.path.exists(value):
                 raise FileNotFoundError(
-                    f"Cannot set scratch_dir: directory does not exist: {value}"
+                    f"Specified scratch dir does not exist: {value}"
                 )
-            logger.info(f"Manually setting scratch_dir to: {value}")
-        else:
-            logger.info("Clearing scratch_dir to None")
-
-        # Update the underlying value
         self._scratch_dir = value
-        # Clear the cache to force recomputation next time if needed
-        self._set_scratch.cache_clear()
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):

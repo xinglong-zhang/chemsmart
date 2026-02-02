@@ -142,8 +142,8 @@ gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
 # we'd want to avoid erroneous partial matches, eg.,
 # freqency (spelling error eg)
 gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
-
-# Pattern to find multiple consecutive spaces in strings
+element_partition_split_pattern = r"[\s:_-]+"
+element_non_alpha_pattern = r"[^A-Za-z]"
 multiple_spaces_pattern = r"\s+"
 
 

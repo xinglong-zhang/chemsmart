@@ -223,6 +223,7 @@ def create_qmmm_subcommand(parent_command):
         freeze_atoms = ctx.obj.get("parent_freeze_atoms", None)
         parent_kwargs = ctx.obj.get("parent_kwargs", {})
         parent_settings = ctx.obj.get("parent_settings", None)
+        parent_jobtype = ctx.obj.get("parent_jobtype", None)
 
         # Build QMMM settings in proper order:
         # 1. Start with project QMMM settings (from YAML)
@@ -257,46 +258,9 @@ def create_qmmm_subcommand(parent_command):
                 parent_settings, keywords=always_inherit_from_parent
             )
 
-        #     for attr, value in parent_settings.__dict__.items():
-        #         # Only copy if:
-        #         # 1. QMMM settings has this attribute
-        #         # 2. It's not a QMMM-specific attribute (those will be set from CLI or project)
-        #         # 3. The value is not None (don't overwrite with None)
-        #         if hasattr(qmmm_settings, attr) and value is not None:
-        #             # Skip QMMM-specific attributes - these come from project or CLI
-        #             qmmm_specific_attrs = {
-        #                 'jobtype', 'high_level_functional', 'high_level_basis',
-        #                 'high_level_force_field', 'medium_level_functional',
-        #                 'medium_level_basis', 'medium_level_force_field',
-        #                 'low_level_functional', 'low_level_basis',
-        #                 'low_level_force_field', 'charge_total', 'real_multiplicity',
-        #                 'int_charge', 'int_multiplicity', 'model_charge',
-        #                 'model_multiplicity', 'high_level_atoms', 'medium_level_atoms',
-        #                 'low_level_atoms', 'bonded_atoms', 'scale_factors'
-        #             }
-        #
-        #             if attr not in qmmm_specific_attrs:
-        #                 # Check if qmmm_settings already has a non-None value from project
-        #                 current_value = getattr(qmmm_settings, attr, None)
-        #                 # If project didn't set it (None or not set), inherit from parent
-        #                 if current_value is None:
-        #                     setattr(qmmm_settings, attr, value)
-        #                     logger.debug(f"  Inherited {attr} from parent: {value}")
-        #
-        #     logger.debug(f"Inherited attributes from parent settings: modred={qmmm_settings.modred}, "
-        #                 f"custom_solvent={qmmm_settings.custom_solvent}")
-        # else:
-        #     # No parent settings - try to merge with job_settings from file if available
-        #     if job_settings is not None:
-        #         logger.debug("No parent settings; merging job_settings from file")
-        #         try:
-        #             qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
-        #         except Exception as exc:
-        #             logger.debug(f"qmmm_settings.merge with job_settings failed: {exc}")
-
         # Set jobtype inferred from parent command
         if jobtype is not None:
-            qmmm_settings.job_type = jobtype
+            qmmm_settings.jobtype = jobtype
             logger.debug(f"Inferred jobtype from parent command: {jobtype}")
 
         # Step 3: Apply CLI options to qmmm_settings (these override project and parent)
@@ -371,6 +335,25 @@ def create_qmmm_subcommand(parent_command):
             molecule.bonded_atoms = ast.literal_eval(bonded_atoms)
         if scale_factors is not None:
             molecule.scale_factors = ast.literal_eval(scale_factors)
+
+        if parent_settings is not None:
+            inherited_keywords = [
+                "modred",
+                "custom_solvent",
+                "append_additional_info",
+                "additional_route_parameters",
+            ]
+            try:
+                qmmm_settings = qmmm_settings.merge(
+                    parent_settings, keywords=inherited_keywords
+                )
+            except Exception as exc:
+                logger.debug(
+                    "Failed to merge parent settings into QMMM: %s", exc
+                )
+
+        if parent_jobtype is not None:
+            qmmm_settings.parent_jobtype = parent_jobtype
 
         logger.info(f"QMMM job settings: {qmmm_settings.__dict__}")
 

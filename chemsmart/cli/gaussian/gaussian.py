@@ -663,20 +663,42 @@ def gaussian(
             from chemsmart.io.molecules.structure import QMMMMolecule
 
             converted = []
-            for m in molecules:
+            for idx, m in enumerate(molecules):
                 if isinstance(m, QMMMMolecule):
                     converted.append(m)
-                else:
+                    continue
+
+                try:
                     converted.append(QMMMMolecule(molecule=m))
+                except (TypeError, AttributeError, ValueError) as exc:
+                    logger.debug(
+                        "QMMM wrap via molecule= failed at index %s: %s; retrying dict-based init",
+                        idx,
+                        exc,
+                    )
+                    try:
+                        converted.append(
+                            QMMMMolecule(**getattr(m, "__dict__", {}))
+                        )
+                    except Exception as exc2:
+                        logger.warning(
+                            "Failed to convert molecule %s (idx %s) to QMMMMolecule: %s; leaving original",
+                            getattr(m, "label", idx),
+                            idx,
+                            exc2,
+                        )
+                        converted.append(m)
+
             molecules = converted
             logger.debug(
                 "Converted molecules to QMMMMolecule for qmmm subcommand."
             )
-    except Exception:
+    except Exception as exc:
         # Non-fatal: if anything goes wrong, keep original molecules and
         # let the qmmm subcommand attempt conversion itself.
         logger.debug(
-            "Could not convert molecules to QMMMMolecule at group level."
+            "Could not convert molecules to QMMMMolecule at group level: %s",
+            exc,
         )
 
     # store objects

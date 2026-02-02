@@ -186,7 +186,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         )
 
     # populate job settings for different jobs
-    all_project_configs = {}  # store all job settings in a dict\
+    all_project_configs = {}  # store all job settings in a dict
 
     # check if solv settings exist
     solv_config = project_config.get("solv", None)
@@ -260,7 +260,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             logger.debug(
                 f"Updating qmmm job settings: {all_project_configs[job]} with {qmmm_config}"
             )

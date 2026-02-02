@@ -1434,6 +1434,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     def __init__(
         self,
         jobtype=None,
+        parent_jobtype=None,
         high_level_functional=None,
         high_level_basis=None,
         high_level_force_field=None,
@@ -1521,6 +1522,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         """
         super().__init__(**kwargs)
         self.jobtype = jobtype
+        self.parent_jobtype = parent_jobtype
         self.high_level_functional = high_level_functional
         self.high_level_basis = high_level_basis
         self.high_level_force_field = high_level_force_field
@@ -1621,19 +1623,21 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             route_string += self.dieze_tag
 
         # Add job type
-        jobtype = self.jobtype.lower() if self.jobtype else None
-        if jobtype == "opt":
+        parent_jobtype = (
+            self.parent_jobtype.lower() if self.parent_jobtype else None
+        )
+        if parent_jobtype == "opt":
             route_string += " opt"
-        elif jobtype == "scan" or jobtype == "modred":
+        elif parent_jobtype == "scan" or parent_jobtype == "modred":
             route_string += " opt=modredundant"
-        elif jobtype == "ts":
+        elif parent_jobtype == "ts":
             route_string += " opt=(ts,calcfc,noeigentest)"
-        elif jobtype == "irc":
+        elif parent_jobtype == "irc":
             route_string += " irc"
         # sp doesn't add any keyword
 
         # Add freq if enabled (and not already a freq job)
-        if (self.freq or self.numfreq) and jobtype != "freq":
+        if (self.freq or self.numfreq) and parent_jobtype != "freq":
             route_string += " freq"
 
         # Add ONIOM level of theory string

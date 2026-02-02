@@ -29,18 +29,5 @@ __all__ = [
     "scan",
     "sp",
     "ts",
-    "qmmm",
-    "neb",
-]
-__all__ = [
-    "inp",
-    "irc",
-    "modred",
-    "opt",
-    "orca",
-    "scan",
-    "sp",
-    "ts",
-    "qmmm",
     "neb",
 ]
