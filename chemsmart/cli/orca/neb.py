@@ -59,15 +59,14 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-o",
     "--pre-optimization",
-    type=bool,
+    is_flag=True,
     default=False,
     show_default=True,
-    help="Whether to optimize the input geometries (accepts True/False).",
+    help="Whether to optimize the input geometries.",
 )
 @click.option(
     "-a",
     "--semiempirical",
-    "-A",
     type=click.Choice(
         [
             "XTB0",
@@ -101,10 +100,10 @@ def neb(
 
     Examples:
         Standard NEB calculation:
-        $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -A XTB2
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -a XTB2
 
         NEB with climbing image for precise TS location:
-        $ chemsmart sub orca -f reactant.xyz neb -j NEB-CI -e product.xyz -A XTB1
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB-CI -e product.xyz -a XTB1
 
         NEB with intermediate TS guess:
         $ chemsmart sub orca -f reactant.xyz neb -j NEB-CI -e product.xyz -i ts_guess.xyz
@@ -113,7 +112,7 @@ def neb(
         $ chemsmart sub orca -f reactant.xyz neb -j NEB -r restart.allxyz
 
         Pre-optimize endpoint geometries:
-        $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -o -A XTB2
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -o -a XTB2
 
     Args:
         jobtype: NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
