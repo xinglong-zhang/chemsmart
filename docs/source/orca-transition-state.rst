@@ -130,7 +130,7 @@ NEB Options
       -  Type
       -  Description
 
-   -  -  ``-j, --job-type``
+   -  -  ``-j, --jobtype``
       -  choice
       -  NEB calculation type: NEB, NEB-CI, NEB-TS, FAST-NEB-TS, TIGHT-NEB-TS, LOOSE-NEB, ZOOM-NEB, ZOOM-NEB-CI,
          ZOOM-NEB-TS, NEB-IDPP

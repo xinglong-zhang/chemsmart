@@ -201,7 +201,7 @@ class ORCAProjectSettings(RegistryMixin):
         settings = ORCANEBJobSettings(
             **settings.__dict__
         )  # convert settings to ORCANEBJobSettings
-        settings.job_type = "neb"
+        settings.jobtype = "neb"
         settings.freq = False
         return settings
 
