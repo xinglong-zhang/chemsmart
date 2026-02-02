@@ -216,20 +216,6 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], gas_config
             )
-            try:
-                # Try updating with gas_config first
-                all_project_configs[job] = update_dict_with_existing_keys(
-                    all_project_configs[job], gas_config
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Updating job '{job}' with gas_config failed ({e}). "
-                    f"Falling back to qmmm_config."
-                )
-                # Fallback: try updating with qmmm_config
-                all_project_configs[job] = update_dict_with_existing_keys(
-                    all_project_configs[job], qmmm_config
-                )
         for job in sp_job:  # jobs using solv config
             all_project_configs[job] = (
                 default_config.copy()
