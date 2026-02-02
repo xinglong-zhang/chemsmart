@@ -332,6 +332,13 @@ class GaussianTrajJob(GaussianJob):
             jobs_to_run = self.incomplete_structure_run_jobs[
                 : self.num_structures_to_run
             ]
+
+        # Check if jobs should be run in serial based on jobrunner flag
+        if self.jobrunner and self.jobrunner.run_in_serial:
+            logger.info("Running trajectory structure jobs in serial mode (one after another)")
+        else:
+            logger.info("Running trajectory structure jobs using default behavior")
+
         for job in jobs_to_run:
             job.run()
 

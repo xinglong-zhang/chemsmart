@@ -8,8 +8,12 @@ These calculations analyze molecular fragmentation along reaction
 coordinates by computing energies of fragments and whole molecules.
 """
 
+import logging
+
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.utils import get_list_from_string_range
+
+logger = logging.getLogger(__name__)
 
 
 class GaussianDIASJob(GaussianJob):
@@ -345,6 +349,12 @@ class GaussianDIASJob(GaussianJob):
         points along the reaction coordinate. These calculations
         provide reference energies for DI-AS analysis.
         """
+        # Check if jobs should be run in serial based on jobrunner flag
+        if self.jobrunner and self.jobrunner.run_in_serial:
+            logger.info("Running molecule jobs in serial mode (one after another)")
+        else:
+            logger.info("Running molecule jobs using default behavior")
+
         for job in self.all_molecules_jobs:
             job.run()
 
@@ -356,6 +366,12 @@ class GaussianDIASJob(GaussianJob):
         Fragment 1 energies are used with fragment 2 and complete
         molecule energies to compute dissociation energies.
         """
+        # Check if jobs should be run in serial based on jobrunner flag
+        if self.jobrunner and self.jobrunner.run_in_serial:
+            logger.info("Running fragment 1 jobs in serial mode (one after another)")
+        else:
+            logger.info("Running fragment 1 jobs using default behavior")
+
         for job in self.fragment1_jobs:
             job.run()
 
@@ -367,6 +383,12 @@ class GaussianDIASJob(GaussianJob):
         These calculations complete the energy data needed for
         DI-AS fragmentation analysis.
         """
+        # Check if jobs should be run in serial based on jobrunner flag
+        if self.jobrunner and self.jobrunner.run_in_serial:
+            logger.info("Running fragment 2 jobs in serial mode (one after another)")
+        else:
+            logger.info("Running fragment 2 jobs using default behavior")
+
         for job in self.fragment2_jobs:
             job.run()
 

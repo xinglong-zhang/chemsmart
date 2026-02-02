@@ -166,9 +166,17 @@ class GaussianLinkJob(GaussianJob):
                 f"Running {direction_names.get(len(irc_jobs), 'reverse')} IRC link calculation"
             )
 
-            for job in irc_jobs:
-                logger.debug(f"Running IRC job: {job.settings.jobtype}")
-                job.run()
+            # Check if jobs should be run in serial based on jobrunner flag
+            if self.jobrunner and self.jobrunner.run_in_serial:
+                logger.info("Running IRC jobs in serial mode (one after another)")
+                for job in irc_jobs:
+                    logger.debug(f"Running IRC job: {job.settings.jobtype}")
+                    job.run()
+            else:
+                logger.info("Running IRC jobs using default behavior")
+                for job in irc_jobs:
+                    logger.debug(f"Running IRC job: {job.settings.jobtype}")
+                    job.run()
         else:
             super()._run(**kwargs)
 

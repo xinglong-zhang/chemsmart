@@ -150,6 +150,12 @@ class GaussianQRCJob(GaussianJob):
         Execute both QRC jobs (forward and reverse) sequentially.
         Runs the QRC forward and reverse jobs for the current molecule.
         """
+        # Check if jobs should be run in serial based on jobrunner flag
+        if self.jobrunner and self.jobrunner.run_in_serial:
+            logger.info("Running QRC jobs in serial mode (one after another)")
+        else:
+            logger.info("Running QRC jobs using default behavior")
+
         for job in self.both_qrc_jobs:
             job.run()
 
