@@ -218,12 +218,12 @@ class RMSDGrouper(MoleculeGrouper):
         grouping_end_time = time.time()
         grouping_time = grouping_end_time - grouping_start_time
 
-        # Save full matrix (after grouping to include auto-determined threshold)
-        self._save_rmsd_matrix(rmsd_matrix, matrix_filename, grouping_time)
-
-        # Cache the results to avoid recomputation
+        # Cache the results BEFORE saving (so Groups sheet can be populated)
         self._cached_groups = groups
         self._cached_group_indices = index_groups
+
+        # Save full matrix (after grouping to include auto-determined threshold)
+        self._save_rmsd_matrix(rmsd_matrix, matrix_filename, grouping_time)
 
         return groups, index_groups
 
@@ -610,6 +610,35 @@ class RMSDGrouper(MoleculeGrouper):
                 adjusted_width = min(max_length + 2, 18)
                 worksheet.column_dimensions[column_letter].width = (
                     adjusted_width
+                )
+
+            # Add Groups sheet
+            groups = self._cached_groups
+            index_groups = self._cached_group_indices
+
+            if groups is not None and index_groups is not None:
+                groups_data = []
+                for i, indices in enumerate(index_groups):
+                    # Get conformer IDs if available
+                    if self.conformer_ids is not None:
+                        member_labels = [
+                            self.conformer_ids[idx] for idx in indices
+                        ]
+                    else:
+                        member_labels = [str(idx + 1) for idx in indices]
+
+                    groups_data.append(
+                        {
+                            "Group": i + 1,
+                            "Members": ", ".join(member_labels),
+                        }
+                    )
+
+                groups_df = pd.DataFrame(groups_data)
+                groups_df.to_excel(writer, sheet_name="Groups", index=False)
+
+                logger.info(
+                    f"Groups sheet added with {len(groups)} groups to {filename}"
                 )
 
         logger.info(f"RMSD matrix saved to {filename}")

@@ -69,19 +69,15 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             use_rdkit_fp (bool): Legacy parameter. If True, sets fingerprint_type="rdkit".
                 If False, sets fingerprint_type="rdk".
             label (str): Label/name for output files. Defaults to None.
-            ignore_hydrogens (bool): Not supported for this grouper. Must be False.
+            ignore_hydrogens (bool): Whether to remove hydrogens before fingerprint
+                calculation. Defaults to False.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
         super().__init__(
             molecules, num_procs, label=label, conformer_ids=conformer_ids
         )
 
-        # Check for unsupported ignore_hydrogens
-        if ignore_hydrogens:
-            raise ValueError(
-                "TanimotoSimilarityGrouper does not support ignore_hydrogens=True. "
-                "Molecular fingerprints require complete molecular structure information."
-            )
+        self.ignore_hydrogens = ignore_hydrogens
 
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
@@ -108,6 +104,9 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         for mol in self.molecules:
             rdkit_mol = mol.to_rdkit()
             if rdkit_mol is not None:
+                # Remove hydrogens if requested
+                if self.ignore_hydrogens:
+                    rdkit_mol = Chem.RemoveHs(rdkit_mol)
                 self.rdkit_molecules.append(rdkit_mol)
                 self.valid_molecules.append(mol)
 
@@ -532,7 +531,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     def _write_groups_sheet(self, writer, groups, index_groups):
         """Write groups information to a separate sheet."""
         groups_data = []
-        for i, (group, indices) in enumerate(zip(groups, index_groups)):
+        for i, indices in enumerate(index_groups):
             if self.conformer_ids is not None:
                 member_labels = [self.conformer_ids[idx] for idx in indices]
             else:
@@ -541,11 +540,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             groups_data.append(
                 {
                     "Group": i + 1,
-                    "Members": len(group),
-                    "Indices": str(member_labels),
-                    "Representative": (
-                        member_labels[0] if member_labels else "N/A"
-                    ),
+                    "Members": ", ".join(member_labels),
                 }
             )
 

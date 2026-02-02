@@ -551,7 +551,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
     def _write_groups_sheet(self, writer, groups, index_groups):
         """Write groups information to a separate sheet."""
         groups_data = []
-        for i, (group, indices) in enumerate(zip(groups, index_groups)):
+        for i, indices in enumerate(index_groups):
             if self.conformer_ids is not None:
                 member_labels = [self.conformer_ids[idx] for idx in indices]
             else:
@@ -560,11 +560,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             groups_data.append(
                 {
                     "Group": i + 1,
-                    "Members": len(group),
-                    "Indices": str(member_labels),
-                    "Representative": (
-                        member_labels[0] if member_labels else "N/A"
-                    ),
+                    "Members": ", ".join(member_labels),
                 }
             )
 

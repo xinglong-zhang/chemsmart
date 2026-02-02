@@ -123,12 +123,24 @@ class GrouperJobRunner(JobRunner):
             kwargs["threshold"] = job.threshold
             kwargs["num_groups"] = job.num_groups
             kwargs["ignore_hydrogens"] = job.ignore_hydrogens
-        elif strategy in ["tanimoto", "torsion", "energy"]:
+        elif strategy == "torsion":
+            kwargs["threshold"] = job.threshold
+            kwargs["num_groups"] = job.num_groups
+            kwargs["ignore_hydrogens"] = job.ignore_hydrogens
+        elif strategy in ["tanimoto", "isomorphism"]:
+            kwargs["threshold"] = (
+                job.threshold if strategy == "tanimoto" else None
+            )
+            kwargs["num_groups"] = (
+                job.num_groups if strategy == "tanimoto" else None
+            )
+            kwargs["ignore_hydrogens"] = job.ignore_hydrogens
+        elif strategy == "energy":
             kwargs["threshold"] = job.threshold
             kwargs["num_groups"] = job.num_groups
         elif strategy == "connectivity":
-            kwargs["threshold"] = job.threshold
-        # isomorphism and formula don't need threshold
+            kwargs["ignore_hydrogens"] = job.ignore_hydrogens
+        # formula doesn't need threshold or ignore_hydrogens
 
         # Add any additional kwargs from job
         kwargs.update(job.grouper_kwargs)

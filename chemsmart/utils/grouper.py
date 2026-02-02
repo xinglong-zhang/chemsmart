@@ -73,6 +73,8 @@ IGNORE_HYDROGENS_SUPPORTED = {
     "pymolrmsd",
     "connectivity",
     "torsion",
+    "tanimoto",
+    "isomorphism",
 }
 
 
@@ -138,6 +140,37 @@ class StructureGrouperFactory:
         grouper_cls = GROUPER_CLASSES[strategy]
         logger.info(f"Using {strategy} grouping strategy.")
 
+        # Validate threshold parameter
+        if threshold is not None and strategy not in THRESHOLD_SUPPORTED:
+            raise ValueError(
+                f"Strategy '{strategy}' does not support threshold parameter. "
+                f"Strategies supporting threshold: {sorted(THRESHOLD_SUPPORTED)}"
+            )
+
+        # Validate num_groups parameter
+        num_groups_supported = {
+            "rmsd",
+            "hrmsd",
+            "spyrmsd",
+            "irmsd",
+            "pymolrmsd",
+            "tanimoto",
+            "torsion",
+            "energy",
+        }
+        if num_groups is not None and strategy not in num_groups_supported:
+            raise ValueError(
+                f"Strategy '{strategy}' does not support num_groups parameter. "
+                f"Strategies supporting num_groups: {sorted(num_groups_supported)}"
+            )
+
+        # Validate ignore_hydrogens parameter
+        if ignore_hydrogens and strategy not in IGNORE_HYDROGENS_SUPPORTED:
+            raise ValueError(
+                f"Strategy '{strategy}' does not support ignore_hydrogens parameter. "
+                f"Strategies supporting ignore_hydrogens: {sorted(IGNORE_HYDROGENS_SUPPORTED)}"
+            )
+
         # Build kwargs for the grouper
         grouper_kwargs = {
             "molecules": structures,
@@ -148,16 +181,7 @@ class StructureGrouperFactory:
         # Add threshold/num_groups for strategies that support it
         if strategy in THRESHOLD_SUPPORTED:
             grouper_kwargs["threshold"] = threshold
-            if strategy in {
-                "rmsd",
-                "hrmsd",
-                "spyrmsd",
-                "irmsd",
-                "pymolrmsd",
-                "tanimoto",
-                "torsion",
-                "energy",
-            }:
+            if strategy in num_groups_supported:
                 grouper_kwargs["num_groups"] = num_groups
 
         # Add ignore_hydrogens for strategies that support it

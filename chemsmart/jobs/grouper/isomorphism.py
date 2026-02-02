@@ -38,6 +38,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         num_procs: int = 1,
+        ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
         **kwargs,
@@ -48,12 +49,15 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
+            ignore_hydrogens (bool): Whether to remove hydrogens before
+                isomorphism comparison. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule.
         """
         super().__init__(
             molecules, num_procs, label=label, conformer_ids=conformer_ids
         )
+        self.ignore_hydrogens = ignore_hydrogens
 
     def _mol_to_rdkit(self, mol: Molecule):
         """Convert Molecule to RDKit mol object."""
@@ -76,6 +80,11 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                     from rdkit.Chem import rdDetermineBonds
 
                     rdDetermineBonds.DetermineConnectivity(rdkit_mol)
+
+                # Remove hydrogens if requested
+                if self.ignore_hydrogens:
+                    rdkit_mol = Chem.RemoveHs(rdkit_mol)
+
             return rdkit_mol
         except Exception as e:
             logger.warning(f"Failed to convert molecule to RDKit: {e}")
@@ -221,7 +230,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
             # Sheet 2: Groups detail
             groups_data = []
-            for i, (mol_hash, indices) in enumerate(zip(hashes, index_groups)):
+            for i, indices in enumerate(index_groups):
                 if self.conformer_ids is not None:
                     member_labels = [
                         self.conformer_ids[idx] for idx in indices
@@ -232,11 +241,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                 groups_data.append(
                     {
                         "Group": i + 1,
-                        "Members": len(indices),
-                        "Indices": str(member_labels),
-                        "Representative": (
-                            member_labels[0] if member_labels else "N/A"
-                        ),
+                        "Members": ", ".join(member_labels),
                     }
                 )
 

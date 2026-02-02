@@ -210,12 +210,12 @@ class EnergyGrouper(MoleculeGrouper):
         grouping_end_time = time.time()
         grouping_time = grouping_end_time - grouping_start_time
 
-        # Save energy difference matrix
-        self._save_energy_matrix(energy_matrix, matrix_filename, grouping_time)
-
-        # Cache the results
+        # Cache the results BEFORE saving (so Groups sheet can be populated)
         self._cached_groups = groups
         self._cached_group_indices = index_groups
+
+        # Save energy difference matrix
+        self._save_energy_matrix(energy_matrix, matrix_filename, grouping_time)
 
         return groups, index_groups
 
@@ -559,33 +559,21 @@ class EnergyGrouper(MoleculeGrouper):
 
             if groups is not None and index_groups is not None:
                 groups_data = []
-                for i, (group, indices) in enumerate(
-                    zip(groups, index_groups)
-                ):
-                    # Sort by energy within each group
-                    mol_idx_pairs = list(zip(group, indices))
-                    sorted_pairs = sorted(
-                        mol_idx_pairs, key=lambda x: x[0].energy
+                for i, indices in enumerate(index_groups):
+                    # Get conformer IDs if available
+                    if self.conformer_ids is not None:
+                        member_labels = [
+                            self.conformer_ids[idx] for idx in indices
+                        ]
+                    else:
+                        member_labels = [str(idx + 1) for idx in indices]
+
+                    groups_data.append(
+                        {
+                            "Group": i + 1,
+                            "Members": ", ".join(member_labels),
+                        }
                     )
-
-                    for rank, (mol, original_idx) in enumerate(sorted_pairs):
-                        # Get conformer ID if available
-                        if (
-                            self.conformer_ids is not None
-                            and original_idx < len(self.conformer_ids)
-                        ):
-                            conf_id = self.conformer_ids[original_idx]
-                        else:
-                            conf_id = str(original_idx + 1)
-
-                        groups_data.append(
-                            {
-                                "Group": i + 1,
-                                "Rank_in_Group": rank + 1,
-                                "Conformer_ID": conf_id,
-                                "Energy(Hartree)": mol.energy,
-                            }
-                        )
 
                 groups_df = pd.DataFrame(groups_data)
                 groups_df.to_excel(writer, sheet_name="Groups", index=False)

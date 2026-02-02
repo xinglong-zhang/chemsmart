@@ -177,11 +177,7 @@ class FormulaGrouper(MoleculeGrouper):
                     {
                         "Group": i + 1,
                         "Formula": formula,
-                        "Members": len(indices),
-                        "Indices": str(member_labels),
-                        "Representative": (
-                            member_labels[0] if member_labels else "N/A"
-                        ),
+                        "Members": ", ".join(member_labels),
                     }
                 )
 

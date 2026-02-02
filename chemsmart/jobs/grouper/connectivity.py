@@ -31,7 +31,6 @@ class ConnectivityGrouper(MoleculeGrouper):
         molecules (Iterable[Molecule]): Inherited; collection of molecules to
             group.
         num_procs (int): Inherited; number of worker processes.
-        threshold (float): Buffer for bond cutoff distance.
         adjust_H (bool): Whether to adjust hydrogen bond detection.
         ignore_hydrogens (bool): Whether to exclude hydrogen atoms from comparison.
     """
@@ -40,7 +39,6 @@ class ConnectivityGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         num_procs: int = 1,
-        threshold=None,  # Buffer for bond cutoff
         adjust_H: bool = True,
         ignore_hydrogens: bool = False,
         label: str = None,
@@ -53,7 +51,6 @@ class ConnectivityGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
-            threshold (float): Buffer for bond cutoff distance. Defaults to 0.0.
             adjust_H (bool): Whether to adjust hydrogen bond detection.
                 Defaults to True.
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from
@@ -64,9 +61,6 @@ class ConnectivityGrouper(MoleculeGrouper):
         super().__init__(
             molecules, num_procs, label=label, conformer_ids=conformer_ids
         )
-        if threshold is None:
-            threshold = 0.0
-        self.threshold = threshold  # Buffer for bond cutoff
         self.adjust_H = adjust_H
         self.ignore_hydrogens = ignore_hydrogens
 
@@ -135,9 +129,9 @@ class ConnectivityGrouper(MoleculeGrouper):
             f"[{self.__class__.__name__}] Converting {n} molecules to graphs..."
         )
 
-        # Parallel graph conversion
+        # Parallel graph conversion (use fixed bond_cutoff_buffer=0.0)
         self.graphs = Parallel(n_jobs=self.num_procs)(
-            delayed(to_graph_wrapper)(mol, self.threshold, self.adjust_H)
+            delayed(to_graph_wrapper)(mol, 0.0, self.adjust_H)
             for mol in molecules_list
         )
 
@@ -290,11 +284,7 @@ class ConnectivityGrouper(MoleculeGrouper):
                 groups_data.append(
                     {
                         "Group": i + 1,
-                        "Members": len(indices),
-                        "Indices": str(member_labels),
-                        "Representative": (
-                            member_labels[0] if member_labels else "N/A"
-                        ),
+                        "Members": ", ".join(member_labels),
                     }
                 )
 
@@ -305,6 +295,6 @@ class ConnectivityGrouper(MoleculeGrouper):
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(threshold={self.threshold}, "
+            f"{self.__class__.__name__}("
             f"num_procs={self.num_procs}, ignore_hydrogens={self.ignore_hydrogens})"
         )
