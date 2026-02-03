@@ -12,16 +12,17 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
-from chemsmart.utils.cli import MyCommand
+from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("sp", cls=MyCommand)
+@orca.group("sp", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click.pass_context
-def sp(ctx, **kwargs):
+def sp(ctx, skip_completed, **kwargs):
     """
     Run ORCA single point energy calculations.
 
@@ -49,7 +50,15 @@ def sp(ctx, **kwargs):
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
     logger.info(f"Final single point settings: {sp_settings.__dict__}")
 
-    # validate charge and multiplicity consistency
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = sp_settings
+    ctx.obj["parent_jobtype"] = "sp"
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # validate charge and multiplicity consistency only for direct sp jobs
     check_charge_and_multiplicity(sp_settings)
 
     # get molecules from context
@@ -79,6 +88,7 @@ def sp(ctx, **kwargs):
                 molecule=molecule,
                 settings=sp_settings,
                 label=final_label,
+                skip_completed=skip_completed,
                 **kwargs,
             )
             jobs.append(job)
@@ -96,7 +106,11 @@ def sp(ctx, **kwargs):
             molecule=molecule,
             settings=sp_settings,
             label=label,
+            skip_completed=skip_completed,
             **kwargs,
         )
         logger.debug(f"Created ORCA single point job: {job}")
         return job
+
+
+create_orca_qmmm_subcommand(sp)
