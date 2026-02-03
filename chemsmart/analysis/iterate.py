@@ -282,7 +282,6 @@ class SkeletonPreprocessor(BasePreprocessor):
             # Mode 2: Auto-detect substituent
             return self._run_auto_detect()
 
-
     def _find_non_skeleton_branches(self) -> list[list[int]]:
         """
         Find all branches from link_index that don't contain any skeleton atoms.
@@ -517,7 +516,9 @@ class IterateAnalyzer:
         )
 
         # Combine skeleton and optimized substituent
-        combined_mol = self._combine_molecules(self.skeleton, optimized_substituent)
+        combined_mol = self._combine_molecules(
+            self.skeleton, optimized_substituent
+        )
 
         return combined_mol
 
@@ -1156,5 +1157,3 @@ class IterateAnalyzer:
         optimal_sub[:, 1:4] = optimal_sub_positions
 
         return optimal_sub
-
-

@@ -60,6 +60,13 @@ chemistry software.
 
 .. toctree::
    :maxdepth: 2
+   :caption: ITERATE
+
+   iterate-cli-options
+   iterate-structure-generation
+
+.. toctree::
+   :maxdepth: 2
    :caption: Thermochemistry
 
    thermochemistry-analysis

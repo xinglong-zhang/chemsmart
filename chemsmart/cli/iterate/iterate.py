@@ -2,10 +2,10 @@
 Here is a docstring made on the top of the hill in Kau Sai Chau
 """
 
-import re
 import functools
 import logging
 import os
+import re
 
 import click
 import tomlkit
@@ -329,7 +329,7 @@ def _parse_index_string(
     # Handle single integer
     if isinstance(value, int):
         if value <= 0:
-             raise click.BadParameter(
+            raise click.BadParameter(
                 f"{entry_type.capitalize()} entry {idx + 1}: Found invalid index {value} in '{field_name}'. "
                 f"Index must be positive (1-based).",
                 param_hint="'-f' / '--filename'",
@@ -341,9 +341,11 @@ def _parse_index_string(
         parsed_indices = None
         if isinstance(value, str):
             parsed_indices = get_list_from_string_range(value)
-        elif isinstance(value, list) and all(isinstance(x, int) for x in value):
-             # Already a list of ints (though TOML parser usually handles this, sometimes flexible)
-             parsed_indices = value
+        elif isinstance(value, list) and all(
+            isinstance(x, int) for x in value
+        ):
+            # Already a list of ints (though TOML parser usually handles this, sometimes flexible)
+            parsed_indices = value
 
         if parsed_indices:
             # S2 Check: Validate positive non-zero indices
@@ -354,7 +356,7 @@ def _parse_index_string(
                     param_hint="'-f' / '--filename'",
                 )
             return parsed_indices
-        
+
     except click.BadParameter:
         raise
     except Exception:
@@ -381,12 +383,12 @@ def validate_config(config: dict, filename: str) -> dict:
         Raw configuration dictionary from parsed file
     filename : str
         Path to configuration file (for error messages)
-    
+
     Returns
     -------
     dict
         Validated and normalized configuration
-    
+
     Raises
     ------
     click.BadParameter
@@ -441,13 +443,17 @@ def validate_config(config: dict, filename: str) -> dict:
 
     # Business Logic Validation
     _validate_business_logic(
-        validated_config["skeletons"], validated_config["substituents"], filename
+        validated_config["skeletons"],
+        validated_config["substituents"],
+        filename,
     )
 
     return validated_config
 
 
-def _validate_business_logic(skeletons: list, substituents: list, filename: str):
+def _validate_business_logic(
+    skeletons: list, substituents: list, filename: str
+):
     """
     Orchestrate business logic checks for all entities.
     """
@@ -504,7 +510,9 @@ def _rule_file_path_required(entry: dict, idx: int, filename: str):
         )
 
 
-def _rule_skeleton_indices_must_contain_link(entry: dict, idx: int, filename: str):
+def _rule_skeleton_indices_must_contain_link(
+    entry: dict, idx: int, filename: str
+):
     """
     Rule: If skeleton_indices is specified, link_index must be included in it.
     """

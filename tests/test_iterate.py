@@ -1,7 +1,6 @@
 import os
 
 import numpy as np
-import pytest
 import tomlkit
 
 from chemsmart.cli.iterate.iterate import validate_config
@@ -35,7 +34,8 @@ def test_iterate_integration_workflow(
 
         # 2. Setup Job Settings
         job_settings = IterateJobSettings(
-            config_file=iterate_integration_config_file, method="lagrange_multipliers"
+            config_file=iterate_integration_config_file,
+            method="lagrange_multipliers",
         )
         job_settings.skeleton_list = config["skeletons"]
         job_settings.substituent_list = config["substituents"]
@@ -163,7 +163,8 @@ def test_iterate_timeout(
 
         # 2. Setup Job with very short timeout
         job_settings = IterateJobSettings(
-            config_file=iterate_timeout_config_file, method="lagrange_multipliers"
+            config_file=iterate_timeout_config_file,
+            method="lagrange_multipliers",
         )
         job_settings.skeleton_list = config["skeletons"]
         job_settings.substituent_list = config["substituents"]
@@ -174,7 +175,7 @@ def test_iterate_timeout(
         job = IterateJob(
             settings=job_settings,
             jobrunner=jobrunner,
-            nprocs=1, # Use 1 proc to ensure we hit it
+            nprocs=1,  # Use 1 proc to ensure we hit it
             timeout=0.00000001,  # Ultra short timeout
             outputfile=str(output_file),
         )
@@ -186,18 +187,20 @@ def test_iterate_timeout(
         # 5. Verify results
         # Check logs for timeout warning
         # Expected log from runner.py: "Timeout ({timeout}s) for combination: {label}"
-        
+
         # We need to construct the label to search for
         # Carbene1_34_OTf_8
         label = "Carbene1_34_OTf_8"
-        
+
         found_timeout_log = False
         for record in caplog.records:
             if "Timeout" in record.message and label in record.message:
                 found_timeout_log = True
                 break
-        
-        assert found_timeout_log, f"Timeout warning log not found for the combination {label}. Logs: {[r.message for r in caplog.records]}"
+
+        assert (
+            found_timeout_log
+        ), f"Timeout warning log not found for the combination {label}. Logs: {[r.message for r in caplog.records]}"
 
     finally:
         os.chdir(original_cwd)
@@ -224,12 +227,13 @@ def test_iterate_template_generation(tmp_path, iterate_template_file):
         expected_content = f.read()
 
     # Normalize newlines and strip whitespace for robust comparison
-    assert generated_content.strip() == expected_content.strip(), (
-        "Generated template does not match expected template content."
-    )
+    assert (
+        generated_content.strip() == expected_content.strip()
+    ), "Generated template does not match expected template content."
 
     # 4. Verify it is valid TOML
     import tomlkit
+
     parsed = tomlkit.parse(generated_content)
     assert "skeletons" in parsed
     assert "substituents" in parsed
@@ -251,7 +255,9 @@ def test_iterate_validation_fails_on_invalid_link_index(
     runner = CliRunner()
     # Pass obj={} to initialize context object, required by MyGroup middleware
     result = runner.invoke(
-        iterate, ["-f", iterate_invalid_skeleton_link_index_config_file], obj={}
+        iterate,
+        ["-f", iterate_invalid_skeleton_link_index_config_file],
+        obj={},
     )
 
     assert result.exit_code != 0
@@ -259,7 +265,8 @@ def test_iterate_validation_fails_on_invalid_link_index(
     # We check for key parts of the error message
     assert "Invalid value" in result.output
     assert (
-        "The link_index [6] is not included in 'skeleton_indices'" in result.output
+        "The link_index [6] is not included in 'skeleton_indices'"
+        in result.output
     )
 
 
@@ -413,7 +420,6 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
         # This one should PASS, but our loop expects FAILURES.
         # We will add it to a separate test if needed, or invert logic here.
         # Sticking to FAILURE cases here.
-        
         # Case 11: Label with space
         (
             """
@@ -429,14 +435,18 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
 
     runner = CliRunner()
 
-    for idx, (config_content, expected_fragments, case_name) in enumerate(test_cases):
+    for idx, (config_content, expected_fragments, case_name) in enumerate(
+        test_cases
+    ):
         config_file = tmp_path / f"test_config_{idx}.toml"
         with open(config_file, "w") as f:
             f.write(config_content)
 
         result = runner.invoke(iterate, ["-f", str(config_file)], obj={})
 
-        assert result.exit_code != 0, f"Case '{case_name}' failed to raise error"
+        assert (
+            result.exit_code != 0
+        ), f"Case '{case_name}' failed to raise error"
         assert (
             "Invalid value" in result.output
         ), f"Case '{case_name}' missing generic invalid value message"
@@ -453,8 +463,9 @@ def test_iterate_runner_bounds_validation(tmp_path):
     (S2) Check: indices > num_atoms checking LOGS, not exceptions.
     """
     from unittest.mock import MagicMock, patch
-    from chemsmart.jobs.iterate.runner import IterateJobRunner
+
     from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.iterate.runner import IterateJobRunner
 
     # Setup wrapper for the test
     runner = IterateJobRunner(fake=True)
@@ -464,18 +475,23 @@ def test_iterate_runner_bounds_validation(tmp_path):
     mock_mol = MagicMock(spec=Molecule)
     mock_mol.num_atoms = 5
     # Configure mock to return itself when from_filepath is called
-    
-    with patch("chemsmart.io.molecules.structure.Molecule.from_filepath", return_value=mock_mol), \
-         patch("chemsmart.jobs.iterate.runner.logger") as mock_logger:
+
+    with (
+        patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            return_value=mock_mol,
+        ),
+        patch("chemsmart.jobs.iterate.runner.logger") as mock_logger,
+    ):
 
         # Case 1: Skelton link_index out of bounds
         config_1 = {
             "file_path": "dummy.xyz",
             "label": "skel1",
-            "link_index": [6], # > 5
+            "link_index": [6],  # > 5
         }
         res, label = runner._load_molecule(config_1, "skeleton", 0)
-        
+
         assert res is None
         assert label == "skel1"
         # Check logs for "out of bounds"
@@ -488,33 +504,34 @@ def test_iterate_runner_bounds_validation(tmp_path):
                 break
         assert found_error, "Failed to log out-of-bounds link_index error"
 
-
         # Case 2: Skeleton skeleton_indices out of bounds
         config_2 = {
             "file_path": "dummy.xyz",
             "label": "skel2",
-            "link_index": [1], # Valid
-            "skeleton_indices": [1, 2, 8] # 8 > 5
+            "link_index": [1],  # Valid
+            "skeleton_indices": [1, 2, 8],  # 8 > 5
         }
         res, label = runner._load_molecule(config_2, "skeleton", 1)
-        
+
         assert res is None
         assert label == "skel2"
-        
+
         found_error = False
         for call_args in mock_logger.error.call_args_list:
             msg = call_args[0][0]
             if "out of bounds" in msg and "skeleton_indices [8]" in msg:
                 found_error = True
                 break
-        assert found_error, "Failed to log out-of-bounds skeleton_indices error"
+        assert (
+            found_error
+        ), "Failed to log out-of-bounds skeleton_indices error"
 
         # Case 3: Valid input
         config_3 = {
             "file_path": "dummy.xyz",
             "label": "skel3",
             "link_index": [1],
-            "skeleton_indices": [1, 2, 3]
+            "skeleton_indices": [1, 2, 3],
         }
         res, label = runner._load_molecule(config_3, "skeleton", 2)
         assert res is not None
@@ -534,12 +551,16 @@ def test_iterate_cli_pipeline_success(
     3. Verify output file exists and matches expected content.
     This ensures that the CLI entry point correctly orchestrates the job runner.
     """
-    from click.testing import CliRunner
-    from chemsmart.cli.iterate.iterate import iterate
     import os
 
+    from click.testing import CliRunner
+
+    from chemsmart.cli.iterate.iterate import iterate
+
     # Use the renamed config file which represents a valid CLI happy path
-    config_file = os.path.join(iterate_configs_directory, "cli_happy_path.toml")
+    config_file = os.path.join(
+        iterate_configs_directory, "cli_happy_path.toml"
+    )
     expected_output_file = os.path.join(
         iterate_expected_output_directory, "cli_happy_path.xyz"
     )
@@ -562,8 +583,12 @@ def test_iterate_cli_pipeline_success(
             obj={},
         )
 
-        assert result.exit_code == 0, f"CLI execution failed. Output:\n{result.output}"
-        assert os.path.exists(output_xyz_path), "Output XYZ file was not generated."
+        assert (
+            result.exit_code == 0
+        ), f"CLI execution failed. Output:\n{result.output}"
+        assert os.path.exists(
+            output_xyz_path
+        ), "Output XYZ file was not generated."
 
         # Verify content matches
         with open(expected_output_file, "r") as f_exp:
@@ -586,6 +611,3 @@ def test_iterate_cli_pipeline_success(
 
     finally:
         os.chdir(original_cwd)
-
-
-

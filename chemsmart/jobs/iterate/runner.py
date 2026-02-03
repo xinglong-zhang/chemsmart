@@ -253,78 +253,91 @@ class IterateJobRunner(JobRunner):
         manager = multiprocessing.Manager()
         result_queue = manager.Queue()
 
-        # State tracking
-        pending_combinations = combinations.copy()
-        # pid -> (process, combination, start_time)
-        active_processes: dict[
-            int, tuple[multiprocessing.Process, IterateCombination, float]
-        ] = {}
+        try:
+            # State tracking
+            pending_combinations = combinations.copy()
+            # process_id -> (process, combination, start_time)
+            # Use id(p) instead of p.pid as key to avoid potential None pid issues
+            active_processes: dict[
+                int, tuple[multiprocessing.Process, IterateCombination, float]
+            ] = {}
 
-        while pending_combinations or active_processes:
-            # 1. Fill up empty slots
-            while pending_combinations and len(active_processes) < max_workers:
-                comb = pending_combinations.pop(0)
-                p = multiprocessing.Process(
-                    target=_run_combination_worker,
-                    args=(comb, result_queue),
-                    daemon=True,
-                )
-                p.start()
-                active_processes[p.pid] = (p, comb, time.time())
+            while pending_combinations or active_processes:
+                # 1. Fill up empty slots
+                while (
+                    pending_combinations
+                    and len(active_processes) < max_workers
+                ):
+                    comb = pending_combinations.pop(0)
+                    p = multiprocessing.Process(
+                        target=_run_combination_worker,
+                        args=(comb, result_queue),
+                        daemon=True,
+                    )
+                    p.start()
+                    active_processes[id(p)] = (p, comb, time.time())
 
-            # 2. Check for results in queue
+                # 2. Check for results in queue
+                while not result_queue.empty():
+                    try:
+                        # Grab all available data
+                        lbl, mol = result_queue.get_nowait()
+                        results_dict[lbl] = mol
+                    except Exception:  # Empty or other error
+                        break
+
+                # 3. Monitor running processes
+                current_time = time.time()
+                pids_to_remove = []
+
+                for proc_id, (p, comb, start_time) in active_processes.items():
+                    if not p.is_alive():
+                        # Process finished naturally (or crashed).
+                        # Result should be in queue (handled above or next loop before exit)
+                        p.join()
+                        pids_to_remove.append(proc_id)
+                    else:
+                        # Check timeout
+                        if (current_time - start_time) > timeout:
+                            logger.warning(
+                                f"Timeout ({timeout}s) for {comb.label} (pid {p.pid}). Terminating..."
+                            )
+                            p.terminate()
+                            # Give it a tiny bit to terminate gracefully-ish
+                            p.join(timeout=0.5)
+                            if p.is_alive():
+                                logger.warning(
+                                    f"Process {p.pid} stuck, killing..."
+                                )
+                                p.kill()  # SIGKILL
+                                # Must join after kill to reap zombie process
+                                p.join(timeout=1.0)
+
+                            timed_out_labels.append(comb.label)
+                            results_dict[comb.label] = (
+                                None  # Explicitly mark as failed/timeout
+                            )
+                            pids_to_remove.append(proc_id)
+
+                # 4. Cleanup removed processes
+                for proc_id in pids_to_remove:
+                    del active_processes[proc_id]
+
+                # 5. Sleep briefly to yield CPU
+                if active_processes:
+                    time.sleep(0.1)
+
+            # Double check queue one last time just in case
             while not result_queue.empty():
                 try:
-                    # Grab all available data
                     lbl, mol = result_queue.get_nowait()
                     results_dict[lbl] = mol
-                except Exception:  # Empty or other error
+                except Exception:
                     break
 
-            # 3. Monitor running processes
-            current_time = time.time()
-            pids_to_remove = []
-
-            for pid, (p, comb, start_time) in active_processes.items():
-                if not p.is_alive():
-                    # Process finished naturally (or crashed).
-                    # Result should be in queue (handled above or next loop before exit)
-                    p.join()
-                    pids_to_remove.append(pid)
-                else:
-                    # Check timeout
-                    if (current_time - start_time) > timeout:
-                        logger.warning(
-                            f"Timeout ({timeout}s) for {comb.label} (pid {pid}). Terminating..."
-                        )
-                        p.terminate()
-                        # Give it a tiny bit to terminate gracefully-ish
-                        p.join(timeout=0.5)
-                        if p.is_alive():
-                            logger.warning(
-                                f"Process {pid} stuck, killing..."
-                            )
-                            p.kill()  # SIGKILL
-
-                        timed_out_labels.append(comb.label)
-                        results_dict[comb.label] = None  # Explicitly mark as failed/timeout
-                        pids_to_remove.append(pid)
-
-            # 4. Cleanup removed processes
-            for pid in pids_to_remove:
-                del active_processes[pid]
-
-            # 5. Sleep briefly to yield CPU
-            if active_processes:
-                time.sleep(0.1)
-
-        # Double check queue one last time just in case
-        while not result_queue.empty():
-            try:
-                lbl, mol = result_queue.get_nowait()
-                results_dict[lbl] = mol
-            except Exception:
-                break
+        finally:
+            # Properly shutdown the Manager to avoid resource leaks
+            manager.shutdown()
 
         # Check for missing results (crashes that didn't write to queue)
         for comb in combinations:
@@ -417,10 +430,10 @@ class IterateJobRunner(JobRunner):
                     f"(file_path), skipping."
                 )
                 return None, label
-            
+
             # S2 Check: Validate indices against atom count
             num_atoms = molecule.num_atoms
-            
+
             # Validate link_index
             link_indices = mol_config.get("link_index")
             # Ensure it is a list if not None (normalized in CLI, but for safety in runner)
@@ -428,27 +441,29 @@ class IterateJobRunner(JobRunner):
                 if isinstance(link_indices, int):
                     link_indices = [link_indices]
                 # If string or other, it should have been caught by CLI, but we assume it might be raw here if skipped CLI
-            
+
             if link_indices:
                 invalid_links = [i for i in link_indices if i > num_atoms]
                 if invalid_links:
-                     logger.error(
+                    logger.error(
                         f"{mol_type.capitalize()} '{label}': link_index {invalid_links} "
                         f"out of bounds. Molecule has {num_atoms} atoms."
                     )
-                     return None, label
+                    return None, label
 
             # Validate skeleton_indices (only for skeletons)
             if mol_type == "skeleton":
                 skel_indices = mol_config.get("skeleton_indices")
-                 # Ensure list
-                if skel_indices is not None and not isinstance(skel_indices, list):
-                     if isinstance(skel_indices, int):
+                # Ensure list
+                if skel_indices is not None and not isinstance(
+                    skel_indices, list
+                ):
+                    if isinstance(skel_indices, int):
                         skel_indices = [skel_indices]
 
                 if skel_indices:
-                     invalid_skels = [i for i in skel_indices if i > num_atoms]
-                     if invalid_skels:
+                    invalid_skels = [i for i in skel_indices if i > num_atoms]
+                    if invalid_skels:
                         logger.error(
                             f"{mol_type.capitalize()} '{label}': skeleton_indices {invalid_skels} "
                             f"out of bounds. Molecule has {num_atoms} atoms."
@@ -507,7 +522,7 @@ class IterateJobRunner(JobRunner):
                     f"Skeleton '{skel_label}' has no link_index, skipping."
                 )
                 continue
-            
+
             valid_skeletons.append((skeleton, skel_label, skel_config))
 
         valid_substituents = []
@@ -519,16 +534,14 @@ class IterateJobRunner(JobRunner):
                 continue
 
             # sub_label is returned by _load_molecule
-            sub_link_index = sub_config.get(
-                "link_index"
-            )  # list[int], 1-based
+            sub_link_index = sub_config.get("link_index")  # list[int], 1-based
 
             if not sub_link_index:
                 logger.warning(
                     f"Substituent '{sub_label}' has no link_index, skipping."
                 )
                 continue
-            
+
             valid_substituents.append((substituent, sub_label, sub_config))
 
         for skeleton, skel_label, skel_config in valid_skeletons:
