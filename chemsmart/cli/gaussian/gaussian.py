@@ -315,6 +315,138 @@ def click_gaussian_td_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_qmmm_options(f):
+    """Common click options for QMMM jobs."""
+
+    @click.option(
+        "-hx",
+        "--high-level-functional",
+        type=str,
+        help="High-level layer functional.",
+    )
+    @click.option(
+        "-hb",
+        "--high-level-basis",
+        type=str,
+        help="High-level layer basis.",
+    )
+    @click.option(
+        "-hf",
+        "--high-level-force-field",
+        type=str,
+        help="High-level layer force field.",
+    )
+    @click.option(
+        "-mx",
+        "--medium-level-functional",
+        type=str,
+        help="Medium-level layer functional.",
+    )
+    @click.option(
+        "-mb",
+        "--medium-level-basis",
+        type=str,
+        help="Medium-level layer basis.",
+    )
+    @click.option(
+        "-mf",
+        "--Medium-level-force-field",
+        type=str,
+        help="Medium-level layer force field.",
+    )
+    @click.option(
+        "-lx",
+        "--low-level-functional",
+        type=str,
+        help="Low level layer functional.",
+    )
+    @click.option(
+        "-lb",
+        "--low-level-basis",
+        type=str,
+        help="Low level layer basis.",
+    )
+    @click.option(
+        "-lf",
+        "--low-level-force-field",
+        type=str,
+        help="Low level layer force field.",
+    )
+    @click.option(
+        "-cr",
+        "--real-charge",
+        type=int,
+        help="Charge of real system.",
+    )
+    @click.option(
+        "-mr",
+        "--real-multiplicity",
+        type=int,
+        help="Spin multiplicity of real system.",
+    )
+    @click.option(
+        "-ci",
+        "--int-charge",
+        type=int,
+        help="Charge of intermediate system.",
+    )
+    @click.option(
+        "-mi",
+        "--int-multiplicity",
+        type=int,
+        help="Spin multiplicity of intermediate system.",
+    )
+    @click.option(
+        "-cm",
+        "--model-charge",
+        type=int,
+        help="Charge of model system.",
+    )
+    @click.option(
+        "-mm",
+        "--model-multiplicity",
+        type=int,
+        help="Spin multiplicity of model system.",
+    )
+    @click.option(
+        "-ha",
+        "--high-level-atoms",
+        type=str,
+        help="Atom indices for high level.",
+    )
+    @click.option(
+        "-ma",
+        "--medium-level-atoms",
+        type=str,
+        help="Atom indices for medium level.",
+    )
+    @click.option(
+        "-la",
+        "--low-level-atoms",
+        type=str,
+        help="Atom indices for low level.",
+    )
+    @click.option(
+        "-b",
+        "--bonded-atoms",
+        type=str,
+        help="List of tuples of the bonds to be cut, specified by "
+        "two atomic indexes in each tuple, e.g., (1,2), (3,4)",
+    )
+    @click.option(
+        "-s",
+        "--scale-factors",
+        type=dict,
+        help="A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom "
+        "pair indices and the value is a list of scale factors for (low, medium, high).",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @click.group(cls=MyGroup)
 @click_gaussian_options
 @click_filename_options
@@ -480,6 +612,52 @@ def gaussian(
 
     logger.debug(f"Obtained molecules: {molecules}")
     logger.debug(f"Molecule indices: {molecule_indices}")
+
+    # If the user requested the qmmm subcommand, ensure molecules are
+    # represented as QMMMMolecule so the subcommand sees QMMM-specific
+    # attributes early (e.g., high_level_atoms, bonded_atoms).
+    try:
+        if ctx.invoked_subcommand == "qmmm":
+            from chemsmart.io.molecules.structure import QMMMMolecule
+
+            converted = []
+            for idx, m in enumerate(molecules):
+                if isinstance(m, QMMMMolecule):
+                    converted.append(m)
+                    continue
+
+                try:
+                    converted.append(QMMMMolecule(molecule=m))
+                except (TypeError, AttributeError, ValueError) as exc:
+                    logger.debug(
+                        "QMMM wrap via molecule= failed at index %s: %s; retrying dict-based init",
+                        idx,
+                        exc,
+                    )
+                    try:
+                        converted.append(
+                            QMMMMolecule(**getattr(m, "__dict__", {}))
+                        )
+                    except Exception as exc2:
+                        logger.warning(
+                            "Failed to convert molecule %s (idx %s) to QMMMMolecule: %s; leaving original",
+                            getattr(m, "label", idx),
+                            idx,
+                            exc2,
+                        )
+                        converted.append(m)
+
+            molecules = converted
+            logger.debug(
+                "Converted molecules to QMMMMolecule for qmmm subcommand."
+            )
+    except Exception as exc:
+        # Non-fatal: if anything goes wrong, keep original molecules and
+        # let the qmmm subcommand attempt conversion itself.
+        logger.debug(
+            "Could not convert molecules to QMMMMolecule at group level: %s",
+            exc,
+        )
 
     # store objects
     ctx.obj["project_settings"] = project_settings

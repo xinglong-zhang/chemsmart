@@ -1,5 +1,11 @@
+import pytest
+
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
+from chemsmart.jobs.gaussian.settings import (
+    GaussianJobSettings,
+    GaussianQMMMJobSettings,
+)
 from chemsmart.jobs.settings import read_molecular_job_yaml
 
 
@@ -109,6 +115,274 @@ class TestGaussianJobSettings:
         assert settings.basis == "def2-svp"
         assert settings.solvent_model is None
         assert settings.solvent_id is None
+
+
+class TestGaussianQMMMJobSettings:
+    def test_qmmm_settings(self):
+        settings1 = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+            freq=True,
+        )
+        print(settings1.route_string)
+        assert settings1.route_string == "# opt freq oniom(b3lyp/6-31g(d):uff)"
+
+        settings2 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="sp",
+        )
+        assert (
+            settings2.route_string
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff)"
+        )
+
+        settings3 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            high_level_force_field="uff",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="sp",
+        )
+        # assert settings3.route_string == "# oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
+        # ValueError: For high level of theory, one should specify only functional/basis or force field!
+        with pytest.raises(ValueError):
+            settings3.route_string
+
+        # settings with solvent specification
+        settings4 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            solvent_model="smd",
+            solvent_id="toluene",
+            parent_jobtype="sp",
+        )
+        assert (
+            settings4.route_string
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for opt job
+        settings5 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+            freq=True,
+            solvent_model="smd",
+            solvent_id="toluene",
+        )
+        assert (
+            settings5.route_string
+            == "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for ts job
+        settings5 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            freq=True,
+            solvent_model="smd",
+            solvent_id="toluene",
+        )
+        assert (
+            settings5.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for ts job
+        settings6 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            freq=False,
+            numfreq=True,
+            solvent_model="smd",
+            solvent_id="toluene",
+        )
+        assert (
+            settings6.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+    def test_qmmm_settings_for_atoms(self, gaussian_inputs_test_directory):
+        mol1 = QMMMMolecule(molecule=Molecule.from_pubchem("81184"))
+
+        settings1 = QMMMMolecule(
+            symbols=mol1.symbols,
+            positions=mol1.positions,
+            high_level_atoms=[1, 2, 3, 8, 9, 10],
+            bonded_atoms=[[1, 2], [2, 3], [8, 9], [9, 10]],
+        )
+        assert settings1.high_level_atoms == [1, 2, 3, 8, 9, 10]
+        assert settings1.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
+
+        # Test for 3-layer ONIOM calculation with example input dppeFeCl2_phenyldioxazolone_qmmm.com
+        # mol2 = QMMM(molecule=Molecule._read_gaussian_inputfile(
+        #     os.path.join(
+        #         gaussian_inputs_test_directory,
+        #         "qmmm/dppeFeCl2_phenyldioxazolone_qmmm.com",
+        #     ),
+        # ))
+        # settings2 = QMMM(
+        #     symbols=mol2.symbols,
+        #     positions=mol2.positions,
+        #     high_level_atoms="[18-28,29-39,40-50,51-61,62-72]",
+        #     medium_level_atoms=[1, 2, 3, 16],
+        #     bonded_atoms=[[2, 18], [2, 29], [1, 40], [1, 51], [16, 62]],
+        # )
+        # assert settings2.high_level_atoms == list(range(18, 29)) + list(
+        #     range(29, 40)
+        # ) + list(range(40, 51)) + list(range(51, 62)) + list(range(62, 73))
+        # assert settings2.medium_level_atoms == [1, 2, 3, 16]
+        # assert settings2.low_level_atoms == list(range(4, 16)) + [17]
+
+    def test_qmmm_settings_for_charge_and_multiplicity(self):
+        # test cases for 3-layer ONIOM model
+        settings1 = GaussianQMMMJobSettings(
+            jobtype="opt",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        assert (
+            settings1.charge_and_multiplicity_string
+            == "0 1 0 1 0 1 0 1 0 1 0 1"
+        )
+
+        settings2 = GaussianQMMMJobSettings(
+            jobtype="sp",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            int_charge=1,
+            int_multiplicity=3,
+        )
+        assert (
+            settings2.charge_and_multiplicity_string
+            == "0 1 1 3 1 3 1 3 1 3 1 3"
+        )
+
+        settings3 = GaussianQMMMJobSettings(
+            jobtype="ts",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            int_charge=-1,
+            int_multiplicity=2,
+            model_charge=0,
+            model_multiplicity=1,
+        )
+        assert (
+            settings3.charge_and_multiplicity_string
+            == "0 1 -1 2 -1 2 0 1 0 1 0 1"
+        )
+
+        # test cases for 2-layer ONIOM model
+
+        settings4 = GaussianQMMMJobSettings(
+            jobtype="opt",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        assert settings4.charge_and_multiplicity_string == "0 1 0 1 0 1"
+
+        settings5 = GaussianQMMMJobSettings(
+            jobtype="sp",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            real_charge=0,
+            real_multiplicity=1,
+            model_charge=-1,
+            model_multiplicity=2,
+        )
+        assert settings5.charge_and_multiplicity_string == "0 1 -1 2 -1 2"
 
 
 class TestGaussianRoute:
