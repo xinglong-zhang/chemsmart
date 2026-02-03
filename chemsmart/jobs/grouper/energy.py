@@ -532,6 +532,10 @@ class EnergyGrouper(MoleculeGrouper):
                 )
                 row += 1
 
+            # Number of processors
+            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
+            row += 1
+
             if grouping_time is not None:
                 worksheet[f"A{row}"] = (
                     f"Grouping Time: {grouping_time:.2f} seconds"

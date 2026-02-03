@@ -24,7 +24,6 @@ from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import kabsch_align
 
 from .runner import MoleculeGrouper
@@ -96,7 +95,7 @@ class RMSDGrouper(MoleculeGrouper):
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
             raise ValueError(
-                "Cannot specify both threshold (-t) and num_groups (-N). Please use only one."
+                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
             )
 
         if threshold is None and num_groups is None:
@@ -584,9 +583,20 @@ class RMSDGrouper(MoleculeGrouper):
             row += 1
 
             # IRMSDGrouper specific parameters
-            if hasattr(self, "check_stereo"):
-                worksheet[f"A{row}"] = f"Check Stereo: {self.check_stereo}"
+            actual_inversion = getattr(self, "_actual_inversion", None)
+            if actual_inversion is not None:
+                worksheet[f"A{row}"] = f"Inversion: {actual_inversion}"
                 row += 1
+
+            # SpyRMSDGrouper specific parameters
+            cache = getattr(self, "cache", None)
+            if cache is not None:
+                worksheet[f"A{row}"] = f"Cache: {cache}"
+                row += 1
+
+            # Number of processors
+            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
+            row += 1
 
             if grouping_time is not None:
                 worksheet[f"A{row}"] = (
@@ -932,11 +942,10 @@ class SpyRMSDGrouper(RMSDGrouper):
 
 class IRMSDGrouper(RMSDGrouper):
     """
-    Invariant RMSD (iRMSD) Grouper.
+    Invariant RMSD (iRMSD) Grouper using external irmsd package.
 
     This grouper computes the permutation-invariant RMSD between molecular
-    structures. The implementation exactly follows the Fortran CREST code:
-    https://github.com/crest-lab/crest (src/sorting/irmsd_module.f90)
+    structures by calling the external 'irmsd' command-line tool via subprocess.
 
     The iRMSD algorithm:
     - Assigns canonical atom identities independent of input atom order
@@ -944,125 +953,25 @@ class IRMSDGrouper(RMSDGrouper):
     - Solves the linear sum assignment problem (LSAP, Hungarian algorithm)
     - Handles false enantiomers via z-mirror checking
 
+    Requirements:
+        The 'irmsd' package must be installed in a separate conda environment
+        with numpy>=2.0. Set environment variable to specify the irmsd location:
+
+        Option 1: Set IRMSD_CONDA_ENV to the conda environment name
+            export IRMSD_CONDA_ENV=irmsd_env
+
+        Option 2: Set IRMSD_PATH to the full path of the irmsd executable
+            export IRMSD_PATH=/path/to/conda/envs/irmsd_env/bin/irmsd
+
+        Setup example:
+            conda create -n irmsd_env python=3.10 numpy>=2.0
+            conda activate irmsd_env
+            pip install irmsd
+            conda deactivate
+            export IRMSD_CONDA_ENV=irmsd_env
+
     Reference: J. Chem. Inf. Model. 2025, 65, 4501-4511
     """
-
-    # Rotation matrices - exactly as defined in Fortran CREST
-    # Fortran uses column-major order, these are transposed for Python's row-major
-    # In Fortran: reshape([1,0,0, 0,-1,0, 0,0,-1], [3,3]) gives column-major
-    # To apply: mol_xyz = matmul(R, mol_xyz) in Fortran = mol_xyz @ R.T in Python (for row vectors)
-    # But Fortran stores xyz as (3, nat), so matmul(R, xyz) works directly
-    # In Python with xyz as (nat, 3), we do xyz @ R.T
-    Rx180 = np.array([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]])
-    Ry180 = np.array([[-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]])
-    Rz180 = np.array([[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]])
-    Rx90 = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]])
-    Ry90 = np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]])
-    Rz90 = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    Rx90T = Rx90.T
-    Ry90T = Ry90.T
-    Rz90T = Rz90.T
-
-    # D3 covalent radii (in Angstroms) for connectivity detection
-    _COVALENT_RADII_D3 = {
-        1: 0.32,
-        2: 0.46,
-        3: 1.20,
-        4: 0.94,
-        5: 0.77,
-        6: 0.75,
-        7: 0.71,
-        8: 0.63,
-        9: 0.64,
-        10: 0.67,
-        11: 1.40,
-        12: 1.25,
-        13: 1.13,
-        14: 1.04,
-        15: 1.10,
-        16: 1.02,
-        17: 0.99,
-        18: 0.96,
-        19: 1.76,
-        20: 1.54,
-        21: 1.33,
-        22: 1.22,
-        23: 1.21,
-        24: 1.10,
-        25: 1.07,
-        26: 1.04,
-        27: 1.00,
-        28: 0.99,
-        29: 1.01,
-        30: 1.09,
-        31: 1.12,
-        32: 1.09,
-        33: 1.15,
-        34: 1.10,
-        35: 1.14,
-        36: 1.17,
-        37: 1.89,
-        38: 1.67,
-        39: 1.47,
-        40: 1.39,
-        41: 1.32,
-        42: 1.24,
-        43: 1.15,
-        44: 1.13,
-        45: 1.13,
-        46: 1.08,
-        47: 1.15,
-        48: 1.23,
-        49: 1.28,
-        50: 1.26,
-        51: 1.26,
-        52: 1.23,
-        53: 1.32,
-        54: 1.31,
-        55: 2.09,
-        56: 1.76,
-        57: 1.62,
-        58: 1.47,
-        59: 1.58,
-        60: 1.57,
-        61: 1.56,
-        62: 1.55,
-        63: 1.51,
-        64: 1.52,
-        65: 1.51,
-        66: 1.50,
-        67: 1.49,
-        68: 1.49,
-        69: 1.48,
-        70: 1.53,
-        71: 1.46,
-        72: 1.37,
-        73: 1.31,
-        74: 1.23,
-        75: 1.18,
-        76: 1.16,
-        77: 1.11,
-        78: 1.12,
-        79: 1.13,
-        80: 1.32,
-        81: 1.30,
-        82: 1.30,
-        83: 1.36,
-        84: 1.31,
-        85: 1.38,
-        86: 1.42,
-        87: 2.01,
-        88: 1.81,
-        89: 1.67,
-        90: 1.58,
-        91: 1.52,
-        92: 1.53,
-        93: 1.54,
-        94: 1.55,
-    }
-
-    _CN_K1 = 16.0
-    _CN_K2 = 4.0 / 3.0
 
     def __init__(
         self,
@@ -1072,10 +981,25 @@ class IRMSDGrouper(RMSDGrouper):
         num_procs: int = 1,
         align_molecules: bool = False,
         ignore_hydrogens: bool = False,
-        check_stereo: str = "auto",
+        inversion: str = "auto",
         label: str = None,
+        conformer_ids: List[str] = None,
         **kwargs,
     ):
+        """
+        Initialize IRMSDGrouper.
+
+        Args:
+            molecules: Collection of molecules to group.
+            threshold: RMSD threshold for grouping (default: 0.125).
+            num_groups: Number of groups to create (alternative to threshold).
+            num_procs: Number of processes (note: external calls are sequential).
+            align_molecules: Not used (irmsd handles alignment internally).
+            ignore_hydrogens: Whether to use only heavy atoms (--heavy flag).
+            inversion: Inversion check mode: 'on', 'off', or 'auto' (default).
+            label: Label for output files.
+            conformer_ids: Custom IDs for each molecule.
+        """
         if threshold is None and num_groups is None:
             threshold = 0.125
         super().__init__(
@@ -1086,694 +1010,213 @@ class IRMSDGrouper(RMSDGrouper):
             align_molecules,
             ignore_hydrogens,
             label=label,
+            conformer_ids=conformer_ids,
         )
-        self._pt = PeriodicTable()
-        self.check_stereo = (
-            check_stereo.lower() if isinstance(check_stereo, str) else "auto"
+        self.inversion = (
+            inversion.lower() if isinstance(inversion, str) else "auto"
         )
-        self._check_stereo_enabled = self.check_stereo != "off"
-        logger.info(
-            "Using native Python iRMSD implementation with APSP algorithm"
-        )
+        self._irmsd_cmd = self._find_irmsd_command()
+        if self._irmsd_cmd:
+            logger.info(f"Using irmsd command: {self._irmsd_cmd}")
+        else:
+            raise RuntimeError(
+                "irmsd command not found. IRMSDGrouper requires the irmsd package.\n\n"
+                "Quick setup (one-line command):\n"
+                "  conda create -n irmsd_env python=3.10 'numpy>=2.0' -y && "
+                "conda run -n irmsd_env pip install irmsd\n\n"
+                "Then set environment variable:\n"
+                "  export IRMSD_CONDA_ENV=irmsd_env\n\n"
+                "To make it permanent, add to ~/.zshrc or ~/.bashrc,\n"
+                "then run: source ~/.zshrc or source ~/.bashrc"
+            )
 
-    def _get_covalent_radius(self, atomic_number: int) -> float:
-        return self._COVALENT_RADII_D3.get(atomic_number, 1.5)
-
-    def _compute_cn_d3(
-        self, atomic_numbers: np.ndarray, positions: np.ndarray
-    ) -> np.ndarray:
-        n_atoms = len(atomic_numbers)
-        cn = np.zeros(n_atoms, dtype=np.float64)
-        cov_radii = np.array(
-            [self._get_covalent_radius(z) for z in atomic_numbers]
-        )
-        for i in range(n_atoms):
-            for j in range(i + 1, n_atoms):
-                rij = np.linalg.norm(positions[i] - positions[j])
-                if rij < 1e-6:
-                    continue
-                rcov_sum = cov_radii[i] + cov_radii[j]
-                arg = -self._CN_K1 * (self._CN_K2 * rcov_sum / rij - 1.0)
-                cn_contrib = 1.0 / (1.0 + np.exp(arg))
-                cn[i] += cn_contrib
-                cn[j] += cn_contrib
-        return cn
-
-    def _build_connectivity_matrix(
-        self,
-        atomic_numbers: np.ndarray,
-        positions: np.ndarray,
-        cn_threshold: float = 0.5,
-    ) -> np.ndarray:
-        n_atoms = len(atomic_numbers)
-        connectivity = np.zeros((n_atoms, n_atoms), dtype=np.int32)
-        cov_radii = np.array(
-            [self._get_covalent_radius(z) for z in atomic_numbers]
-        )
-        for i in range(n_atoms):
-            for j in range(i + 1, n_atoms):
-                rij = np.linalg.norm(positions[i] - positions[j])
-                if rij < 1e-6:
-                    continue
-                rcov_sum = cov_radii[i] + cov_radii[j]
-                arg = -self._CN_K1 * (self._CN_K2 * rcov_sum / rij - 1.0)
-                cn_contrib = 1.0 / (1.0 + np.exp(arg))
-                if cn_contrib > cn_threshold:
-                    connectivity[i, j] = 1
-                    connectivity[j, i] = 1
-        return connectivity
-
-    def _floyd_warshall_apsp(self, connectivity: np.ndarray) -> np.ndarray:
-        n = connectivity.shape[0]
-        INF = n + 1
-        dist = np.full((n, n), INF, dtype=np.int32)
-        np.fill_diagonal(dist, 0)
-        dist[connectivity == 1] = 1
-        for k in range(n):
-            for i in range(n):
-                for j in range(n):
-                    if dist[i, k] + dist[k, j] < dist[i, j]:
-                        dist[i, j] = dist[i, k] + dist[k, j]
-        return dist
-
-    def _compute_apsp_invariants_fortran(
-        self, atomic_numbers: np.ndarray, dist_matrix: np.ndarray
-    ) -> np.ndarray:
+    def _find_irmsd_command(self) -> Optional[str]:
         """
-        Compute APSP invariants following the Fortran CREST implementation.
+        Find the irmsd command, checking multiple sources.
 
-        The Fortran algorithm:
-        1. Start with rinv = 1 for all atoms
-        2. For each distance d from 1 to maxdist:
-           - For each atom j, sum up rinv[k] for all k where dist[k,j] == d
-           - Add this to rinv[j]
-        3. Rank atoms by their final rinv values (higher = lower rank number)
-        """
-        n = len(atomic_numbers)
-        max_dist = int(
-            np.max(dist_matrix[dist_matrix < n + 1])
-        )  # Exclude INF values
-
-        rinv = np.ones(n, dtype=np.float64)
-
-        for d in range(1, max_dist + 1):
-            tmp_rinv = np.zeros(n, dtype=np.float64)
-            for j in range(n):
-                for k in range(n):
-                    if dist_matrix[k, j] == d:
-                        tmp_rinv[j] += rinv[k]
-            rinv += tmp_rinv
-
-        # Convert to invariants (higher rinv = lower rank number)
-        # We'll use negative rinv so that sorting gives correct order
-        return rinv
-
-    def _compute_canonical_ranks(
-        self, atomic_numbers: np.ndarray, positions: np.ndarray
-    ) -> np.ndarray:
-        """
-        Compute canonical atom ranks following Fortran CREST implementation.
-
-        Uses APSP (All-Pairs-Shortest-Path) based invariants with:
-        - APSP distance-based invariant
-        - Atomic number
-        - Number of hydrogen neighbors
-
-        This matches Fortran: inv = inv*1000 + ati*10 + hneigh
-        """
-        connectivity = self._build_connectivity_matrix(
-            atomic_numbers, positions
-        )
-        dist_matrix = self._floyd_warshall_apsp(connectivity)
-
-        # Get APSP-based invariants
-        rinv = self._compute_apsp_invariants_fortran(
-            atomic_numbers, dist_matrix
-        )
-
-        # Count hydrogen neighbors for each atom
-        h_neighbors = np.zeros(len(atomic_numbers), dtype=np.int32)
-        for i in range(len(atomic_numbers)):
-            for j in range(len(atomic_numbers)):
-                if (
-                    connectivity[i, j] == 1 and atomic_numbers[j] == 1
-                ):  # H is atomic number 1
-                    h_neighbors[i] += 1
-
-        # Update invariants with atomic number and H neighbor count (like Fortran)
-        # inv = inv * 1000 + ati * 10 + hneigh
-        invariants = rinv * 1000 + atomic_numbers * 10 + h_neighbors
-
-        # Rank by invariant value (higher invariant = lower rank number)
-        sorted_indices = np.argsort(-invariants)
-        ranks = np.zeros(len(atomic_numbers), dtype=np.int32)
-
-        current_rank = 1
-        prev_inv = None
-        for i, idx in enumerate(sorted_indices):
-            if prev_inv is not None and not np.isclose(
-                invariants[idx], prev_inv, rtol=1e-9
-            ):
-                current_rank = i + 1
-            ranks[idx] = current_rank
-            prev_inv = invariants[idx]
-
-        return ranks
-
-    def _compute_canonical_ranks_both(
-        self,
-        atomic_numbers1: np.ndarray,
-        positions1: np.ndarray,
-        atomic_numbers2: np.ndarray,
-        positions2: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Compute canonical ranks for both molecules.
+        Priority:
+        1. IRMSD_PATH environment variable (full path to irmsd executable)
+        2. IRMSD_CONDA_ENV environment variable (conda environment name)
+        3. irmsd in current PATH
 
         Returns:
-            ranks1, ranks2: canonical rank arrays for both molecules
+            Full path to irmsd command, or None if not found.
         """
-        ranks1 = self._compute_canonical_ranks(atomic_numbers1, positions1)
-        ranks2 = self._compute_canonical_ranks(atomic_numbers2, positions2)
-        return ranks1, ranks2
+        import os
+        import shutil
 
-    def _fallback_ranks(self, atomic_numbers: np.ndarray) -> np.ndarray:
-        """
-        Fallback ranking using only atom types (like Fortran fallbackranks).
+        # Option 1: IRMSD_PATH environment variable
+        irmsd_path = os.environ.get("IRMSD_PATH")
+        if (
+            irmsd_path
+            and os.path.isfile(irmsd_path)
+            and os.access(irmsd_path, os.X_OK)
+        ):
+            return irmsd_path
 
-        This is used when canonical ranking is not available or fails.
-        """
-        unique_types = sorted(set(atomic_numbers))
-        type_to_rank = {t: i + 1 for i, t in enumerate(unique_types)}
-        return np.array(
-            [type_to_rank[z] for z in atomic_numbers], dtype=np.int32
-        )
-
-    def _get_atomic_masses(self, symbols):
-        return np.array([self._pt.to_atomic_mass(s) for s in symbols])
-
-    def _compute_cma_and_shift(self, coords, masses):
-        total_mass = np.sum(masses) + 1e-20
-        cma = np.sum(coords * masses[:, np.newaxis], axis=0) / total_mass
-        return coords - cma, cma
-
-    def _compute_inertia_tensor(self, coords, masses):
-        t = np.array([i * 1e-10 for i in range(1, 7)])
-        for m, r in zip(masses, coords):
-            x, y, z = r
-            t[0] += m * (y**2 + z**2)
-            t[1] -= m * x * y
-            t[2] += m * (z**2 + x**2)
-            t[3] -= m * z * x
-            t[4] -= m * y * z
-            t[5] += m * (x**2 + y**2)
-        return np.array(
-            [[t[0], t[1], t[3]], [t[1], t[2], t[4]], [t[3], t[4], t[5]]]
-        )
-
-    def _compute_rotational_constants(self, inertia):
-        icm2MHz = 2.9979245e4
-        Aamu2icm = 16.8576522
-        eig, evec = np.linalg.eigh(inertia)
-        evec[np.abs(evec) < 1e-9] = 0.0
-        rot = np.zeros(3)
-        for i in range(3):
-            rot[i] = 0.0 if eig[i] < 3e-4 else icm2MHz * Aamu2icm / eig[i]
-        return rot, evec
-
-    def _check_unique_axes(self, rot, thr=0.01):
-        """Check which rotational axes are unique.
-
-        Exactly matches Fortran uniqueax subroutine:
-
-        diff(1) = abs(rot(2)/rot(1) - 1.0)  ! B/A
-        diff(2) = abs(rot(3)/rot(1) - 1.0)  ! C/A
-        diff(3) = abs(rot(3)/rot(2) - 1.0)  ! C/B
-
-        unique(1) = diff(1) > thr AND diff(2) > thr  (A unique)
-        unique(2) = diff(1) > thr AND diff(3) > thr  (B unique)
-        unique(3) = diff(2) > thr AND diff(3) > thr  (C unique)
-
-        In Python (0-indexed):
-        rot[0] = A, rot[1] = B, rot[2] = C
-        """
-        unique = np.array([False, False, False])
-
-        # Avoid division by zero
-        if rot[0] < 1e-10 or rot[1] < 1e-10:
-            return unique, 3
-
-        # Match Fortran exactly (note: Fortran is 1-indexed)
-        # diff(1) = rot(2)/rot(1) = rot[1]/rot[0] = B/A
-        # diff(2) = rot(3)/rot(1) = rot[2]/rot[0] = C/A
-        # diff(3) = rot(3)/rot(2) = rot[2]/rot[1] = C/B
-        diff = np.array(
-            [
-                abs(rot[1] / rot[0] - 1.0),  # B/A
-                abs(rot[2] / rot[0] - 1.0),  # C/A
-                abs(rot[2] / rot[1] - 1.0),  # C/B
-            ]
-        )
-
-        # unique(1) = diff(1) > thr AND diff(2) > thr
-        if diff[0] > thr and diff[1] > thr:
-            unique[0] = True  # A is unique
-        # unique(2) = diff(1) > thr AND diff(3) > thr
-        if diff[0] > thr and diff[2] > thr:
-            unique[1] = True  # B is unique
-        # unique(3) = diff(2) > thr AND diff(3) > thr
-        if diff[1] > thr and diff[2] > thr:
-            unique[2] = True  # C is unique
-
-        n_unique = np.sum(unique)
-
-        # Fortran logic:
-        # select case(nunique)
-        # case ( 3 ) -> uniquenesscase = 0
-        # case ( 1 ) -> if(unique(1)) uniquenesscase = 1; if(unique(3)) uniquenesscase = 2
-        # case ( 0 ) -> uniquenesscase = 3
-        # end select
-        # Note: B unique (nunique==1, unique(2)==True) falls through with uniquenesscase = 0
-
-        if n_unique == 3:
-            return unique, 0
-        elif n_unique == 1:
-            if unique[0]:  # A unique (Fortran unique(1))
-                return unique, 1
-            elif unique[2]:  # C unique (Fortran unique(3))
-                return unique, 2
-            else:  # B unique - Fortran leaves uniquenesscase = 0
-                return unique, 0
-        elif n_unique == 0:
-            return unique, 3
-        else:  # n_unique == 2
-            return unique, 0  # Fortran default
-
-    def _align_to_principal_axes(self, coords, masses):
-        shifted_coords, _ = self._compute_cma_and_shift(coords, masses)
-        inertia = self._compute_inertia_tensor(shifted_coords, masses)
-        rot, evec = self._compute_rotational_constants(inertia)
-        if np.linalg.det(evec) < 0:
-            evec[:, 0] = -evec[:, 0]
-        return shifted_coords @ evec, rot, evec
-
-    def _rmsd_quaternion(self, ref_coords, mol_coords):
-        n_atoms = len(ref_coords)
-        x = ref_coords.T.copy()
-        y = mol_coords.T.copy()
-        x = x - np.mean(x, axis=1, keepdims=True)
-        y = y - np.mean(y, axis=1, keepdims=True)
-        x_norm = np.sum(x**2)
-        y_norm = np.sum(y**2)
-        R = x @ y.T
-        S = np.array(
-            [
-                [
-                    R[0, 0] + R[1, 1] + R[2, 2],
-                    R[1, 2] - R[2, 1],
-                    R[2, 0] - R[0, 2],
-                    R[0, 1] - R[1, 0],
-                ],
-                [
-                    R[1, 2] - R[2, 1],
-                    R[0, 0] - R[1, 1] - R[2, 2],
-                    R[0, 1] + R[1, 0],
-                    R[0, 2] + R[2, 0],
-                ],
-                [
-                    R[2, 0] - R[0, 2],
-                    R[0, 1] + R[1, 0],
-                    -R[0, 0] + R[1, 1] - R[2, 2],
-                    R[1, 2] + R[2, 1],
-                ],
-                [
-                    R[0, 1] - R[1, 0],
-                    R[0, 2] + R[2, 0],
-                    R[1, 2] + R[2, 1],
-                    -R[0, 0] - R[1, 1] + R[2, 2],
-                ],
-            ]
-        )
-        eigenvalues, _ = np.linalg.eigh(S)
-        lambda_max = eigenvalues[-1]
-        rmsd_sq = max(0.0, (x_norm + y_norm - 2.0 * lambda_max)) / n_atoms
-        return np.sqrt(rmsd_sq)
-
-    def _fallback_ranks_both(self, atomic_numbers1, atomic_numbers2):
-        """
-        Compute fallback ranks for both molecules based on atom types.
-
-        This exactly matches Fortran fallbackranks subroutine.
-        Creates a unified typemap from both molecules, then assigns ranks.
-
-        Returns:
-            ranks1, ranks2: rank arrays for both molecules
-        """
-
-        # Build typemap: collect unique atom types from both molecules
-        typemap = []
-        for at in atomic_numbers1:
-            if at not in typemap:
-                typemap.append(at)
-        for at in atomic_numbers2:
-            if at not in typemap:
-                typemap.append(at)
-
-        # Build reverse typemap: atom_type -> rank
-        rtypemap = {at: i + 1 for i, at in enumerate(typemap)}
-
-        # Assign ranks
-        ranks1 = np.array(
-            [rtypemap[at] for at in atomic_numbers1], dtype=np.int32
-        )
-        ranks2 = np.array(
-            [rtypemap[at] for at in atomic_numbers2], dtype=np.int32
-        )
-
-        return ranks1, ranks2
-
-    def _rank_to_order(self, ranks):
-        """
-        Convert rank array to order array.
-
-        Exactly matches Fortran rank_2_order subroutine.
-        """
-        n = len(ranks)
-        order = np.zeros(n, dtype=np.int32)
-        max_rank = np.max(ranks) if len(ranks) > 0 else 0
-        k = 0
-        for rank in range(1, max_rank + 1):
-            for j in range(n):
-                if ranks[j] == rank:
-                    k += 1
-                    order[j] = k
-        return order
-
-    def _mol_atom_sort(self, coords, masses, current_order, target_order):
-        """
-        Sort molecule atoms from current_order to target_order.
-
-        Exactly matches Fortran molatomsort subroutine.
-        """
-        n = len(current_order)
-        coords_out = coords.copy()
-        masses_out = masses.copy()
-
-        # Create index map: target_order[i] tells us what position atom i should go to
-        index_map = np.zeros(n, dtype=np.int32)
-        for i in range(n):
-            index_map[current_order[i] - 1] = (
-                i  # -1 because Fortran is 1-indexed
+        # Option 2: IRMSD_CONDA_ENV environment variable
+        conda_env = os.environ.get("IRMSD_CONDA_ENV")
+        if conda_env:
+            # Try to find conda base path
+            conda_base = os.environ.get("CONDA_PREFIX_1") or os.environ.get(
+                "CONDA_PREFIX"
             )
-
-        # Reorder atoms
-        for i in range(n):
-            correct_atom = target_order[i] - 1  # -1 for 0-indexing
-            current_position = index_map[correct_atom]
-
-            if i != current_position:
-                # Swap
-                coords_out[[i, current_position]] = coords_out[
-                    [current_position, i]
-                ]
-                masses_out[[i, current_position]] = masses_out[
-                    [current_position, i]
-                ]
-
-                # Update index_map
-                index_map[current_order[i] - 1] = current_position
-                index_map[current_order[current_position] - 1] = i
-
-                # Update current_order
-                current_order[i], current_order[current_position] = (
-                    current_order[current_position],
-                    current_order[i],
-                )
-
-        return coords_out, masses_out
-
-    def _compute_lsap_for_rank_groups(
-        self, ref_coords, mol_coords, ranks, ngroup, nranks
-    ):
-        """
-        Iterate through rank groups and solve LSAP for each.
-
-        Exactly matches Fortran min_rmsd_iterate_through_groups subroutine.
-
-        Returns:
-            iwork: permutation array
-            total_cost: total LSAP cost
-        """
-        n_atoms = len(ranks)
-        iwork = np.arange(n_atoms, dtype=np.int32)  # Initialize to identity
-        total_cost = 0.0
-
-        for rr in range(1, nranks + 1):
-            if ngroup[rr] <= 1:
-                # Skip ranks with only one atom (already assigned)
-                continue
-
-            # Get indices of atoms with this rank
-            ref_indices = np.where(ranks == rr)[0]
-            mol_indices = (
-                ref_indices.copy()
-            )  # Same indices since ranks are equal
-
-            rnknat = len(ref_indices)
-
-            # Build cost matrix (squared distances)
-            cost_matrix = np.zeros((rnknat, rnknat), dtype=np.float32)
-            for ii, ref_idx in enumerate(ref_indices):
-                for jj, mol_idx in enumerate(mol_indices):
-                    diff = ref_coords[ref_idx] - mol_coords[mol_idx]
-                    cost_matrix[ii, jj] = np.sum(diff**2)
-
-            # Solve LSAP using scipy
-            row_ind, col_ind = linear_sum_assignment(cost_matrix)
-
-            # Update iwork with the mapping
-            for ii, jj in zip(row_ind, col_ind):
-                iwork[ref_indices[ii]] = mol_indices[jj]
-                total_cost += cost_matrix[ii, jj]
-
-        return iwork, total_cost
-
-    def _min_rmsd_rotcheck_permute(
-        self,
-        ref_coords,
-        mol_coords,
-        ranks,
-        ngroup,
-        nranks,
-        step,
-        uniquenesscase,
-    ):
-        """
-        Test different orientations and compute LSAP costs.
-
-        Exactly matches Fortran min_rmsd_rotcheck_permute subroutine.
-
-        Returns:
-            vals: array of 16 LSAP costs
-            order_backup: list of 16 permutation arrays
-            mol_coords_backup: list of 16 mol coordinate arrays (for reconstructing later)
-        """
-        INF = np.inf
-        vals = np.full(16, INF)
-        order_backup = [None] * 16
-        mol_coords_backup = [
-            None
-        ] * 16  # Store mol coordinates for each orientation
-
-        mol = mol_coords.copy()
-
-        # ALIGNLOOP: do ii=1,4
-        for ii in range(4):
-            # Test 4 orientations with 180-degree rotations
-
-            # Orientation 1: no rotation (from current state)
-            iwork, cost = self._compute_lsap_for_rank_groups(
-                ref_coords, mol, ranks, ngroup, nranks
-            )
-            vals[0 + 4 * ii] = cost
-            order_backup[0 + 4 * ii] = iwork.copy()
-            mol_coords_backup[0 + 4 * ii] = mol.copy()
-
-            # Orientation 2: Rx180
-            mol = mol @ self.Rx180.T
-            iwork, cost = self._compute_lsap_for_rank_groups(
-                ref_coords, mol, ranks, ngroup, nranks
-            )
-            vals[1 + 4 * ii] = cost
-            order_backup[1 + 4 * ii] = iwork.copy()
-            mol_coords_backup[1 + 4 * ii] = mol.copy()
-
-            # Orientation 3: Ry180 (from Rx180 state)
-            mol = mol @ self.Ry180.T
-            iwork, cost = self._compute_lsap_for_rank_groups(
-                ref_coords, mol, ranks, ngroup, nranks
-            )
-            vals[2 + 4 * ii] = cost
-            order_backup[2 + 4 * ii] = iwork.copy()
-            mol_coords_backup[2 + 4 * ii] = mol.copy()
-
-            # Orientation 4: Rx180 (from Rx180+Ry180 state)
-            mol = mol @ self.Rx180.T
-            iwork, cost = self._compute_lsap_for_rank_groups(
-                ref_coords, mol, ranks, ngroup, nranks
-            )
-            vals[3 + 4 * ii] = cost
-            order_backup[3 + 4 * ii] = iwork.copy()
-            mol_coords_backup[3 + 4 * ii] = mol.copy()
-
-            # Restore: Ry180
-            mol = mol @ self.Ry180.T
-
-            # Handle uniqueness cases - exactly as Fortran
-            if uniquenesscase == 0:
-                # 3 unique principal axes - exit after first iteration
-                break
-            elif uniquenesscase == 1:
-                # Only A unique
-                if ii == 1:
-                    mol = mol @ self.Rx90T.T
-                    break
-                mol = mol @ self.Rx90.T
-            elif uniquenesscase == 2:
-                # Only C unique
-                if ii == 1:
-                    mol = mol @ self.Rz90T.T
-                    break
-                mol = mol @ self.Rz90.T
-            elif uniquenesscase == 3:
-                # Rotationally ambiguous
-                if ii == 0:
-                    mol = mol @ self.Rz90.T
-                elif ii == 1:
-                    mol = mol @ self.Rz90T.T
-                    mol = mol @ self.Ry90.T
-                elif ii == 2:
-                    mol = mol @ self.Ry90T.T
-                    mol = mol @ self.Rx90.T
+            if conda_base:
+                # Go up to envs directory
+                if "envs" in conda_base:
+                    envs_dir = conda_base.rsplit("envs", 1)[0] + "envs"
                 else:
-                    mol = mol @ self.Rx90T.T
-                    break
+                    envs_dir = os.path.join(
+                        os.path.dirname(conda_base), "envs"
+                    )
 
-        return vals, order_backup, mol_coords_backup
+                irmsd_path = os.path.join(envs_dir, conda_env, "bin", "irmsd")
+                if os.path.isfile(irmsd_path) and os.access(
+                    irmsd_path, os.X_OK
+                ):
+                    return irmsd_path
 
-    def _irmsd_core(self, pos1, pos2, atomic_numbers1, atomic_numbers2):
+            # Try common conda locations
+            for base in [
+                os.path.expanduser("~/anaconda3"),
+                os.path.expanduser("~/miniconda3"),
+                "/opt/anaconda3",
+                "/opt/miniconda3",
+                os.path.expanduser("~/.conda"),
+            ]:
+                irmsd_path = os.path.join(
+                    base, "envs", conda_env, "bin", "irmsd"
+                )
+                if os.path.isfile(irmsd_path) and os.access(
+                    irmsd_path, os.X_OK
+                ):
+                    return irmsd_path
+
+        # Option 3: irmsd in current PATH
+        irmsd_in_path = shutil.which("irmsd")
+        if irmsd_in_path:
+            return irmsd_in_path
+
+        return None
+
+    def _write_two_molecules_xyz(
+        self, mol1: Molecule, mol2: Molecule, filepath: str
+    ) -> None:
+        """Write two molecules to a single XYZ file for irmsd compare."""
+        with open(filepath, "w") as f:
+            for mol in [mol1, mol2]:
+                n_atoms = len(mol.chemical_symbols)
+                energy = mol.energy if mol.energy is not None else 0.0
+                f.write(f"{n_atoms}\n")
+                f.write(f"Energy = {energy}\n")
+                for symbol, pos in zip(mol.chemical_symbols, mol.positions):
+                    f.write(
+                        f"{symbol:2s} {pos[0]:15.8f} {pos[1]:15.8f} {pos[2]:15.8f}\n"
+                    )
+
+    def _parse_irmsd_output(
+        self, output: str, parse_inversion: bool = True
+    ) -> Tuple[float, Optional[str]]:
+        """Parse iRMSD value and inversion setting from irmsd compare output.
+
+        Args:
+            output: The stdout from irmsd compare command.
+            parse_inversion: Whether to parse inversion setting (skip if already obtained).
+
+        Returns:
+            Tuple[float, Optional[str]]: RMSD value and actual inversion setting used.
         """
-        Core iRMSD calculation - exactly follows Fortran min_rmsd subroutine.
+        rmsd_value = np.inf
+        actual_inversion = None
 
-        Fortran flow:
-        1. Get/compute ranks (we use canonical ranks from ref)
-        2. If ranks differ, sort mol to match ref (skipped since we use same ranks)
-        3. Count ngroup for each rank
-        4. Call axis() on mol ONLY to align to principal axes
-        5. Call min_rmsd_rotcheck_permute for step 1 (no z-mirror)
-        6. If stereocheck, mirror z, call axis() again, call min_rmsd_rotcheck_permute for step 2
-        7. Select orientation with minimum LSAP cost (minloc of tmprmsd_sym)
-        8. Apply permutation to reorder atoms
-        9. Compute final RMSD with rmsd() function
-        """
-        symbols2 = [self._pt.to_symbol(int(z)) for z in atomic_numbers2]
-        masses2 = np.array([self._pt.to_atomic_mass(s) for s in symbols2])
+        for line in output.split("\n"):
+            if "iRMSD:" in line:
+                parts = line.split()
+                try:
+                    rmsd_value = float(parts[1])
+                except (IndexError, ValueError):
+                    pass
+            elif parse_inversion and "Inversion check:" in line:
+                # Parse "Inversion check: on/off/auto"
+                parts = line.split(":")
+                if len(parts) >= 2:
+                    actual_inversion = parts[1].strip()
 
-        # Step 1: Compute canonical ranks from ref molecule only
-        ranks = self._compute_canonical_ranks(atomic_numbers1, pos1)
-
-        # Step 2: Skipped - we use same ranks for both molecules
-
-        # Step 3: Count ngroup for each rank
-        nranks = int(np.max(ranks))
-        ngroup = np.zeros(nranks + 1, dtype=np.int32)
-        for rank in ranks:
-            if rank > 0:
-                ngroup[rank] += 1
-
-        # Working copy of mol coordinates (ref stays unchanged!)
-        mol_xyz = pos2.copy()
-
-        # Step 4: Initial alignment of mol to principal axes
-        mol_aligned, rotconst, _ = self._align_to_principal_axes(
-            mol_xyz, masses2
-        )
-        _, uniquenesscase = self._check_unique_axes(rotconst)
-
-        # Initialize storage for 32 orientations (16 per step × 2 steps)
-        INF = np.inf
-        tmprmsd_sym = np.full(32, INF)
-        order_backup = [None] * 32
-        mol_coords_backup = [None] * 32
-
-        # Step 5: Run min_rmsd_rotcheck_permute for step 1 (no z-mirror)
-        vals1, orders1, mols1 = self._min_rmsd_rotcheck_permute(
-            pos1, mol_aligned.copy(), ranks, ngroup, nranks, 1, uniquenesscase
-        )
-        tmprmsd_sym[0:16] = vals1
-        for i in range(16):
-            order_backup[i] = orders1[i]
-            mol_coords_backup[i] = mols1[i]
-
-        # Step 6: If stereocheck, mirror z and re-run
-        if self._check_stereo_enabled:
-            mol_inverted = mol_aligned.copy()
-            mol_inverted[:, 2] = -mol_inverted[:, 2]  # Mirror z
-            mol_inverted, _, _ = self._align_to_principal_axes(
-                mol_inverted, masses2
-            )
-
-            vals2, orders2, mols2 = self._min_rmsd_rotcheck_permute(
-                pos1,
-                mol_inverted.copy(),
-                ranks,
-                ngroup,
-                nranks,
-                2,
-                uniquenesscase,
-            )
-            tmprmsd_sym[16:32] = vals2
-            for i in range(16):
-                order_backup[16 + i] = orders2[i]
-                mol_coords_backup[16 + i] = mols2[i]
-
-        # Step 7: Select orientation with minimum LSAP cost
-        best_idx = np.argmin(tmprmsd_sym)
-        best_perm = order_backup[best_idx]
-        best_mol_coords = mol_coords_backup[best_idx]
-
-        # Step 8: Apply permutation to reorder atoms
-        mol_permuted = best_mol_coords[best_perm]
-
-        # Step 9: Compute final RMSD
-        final_rmsd = self._rmsd_quaternion(pos1, mol_permuted)
-
-        return final_rmsd
+        return rmsd_value, actual_inversion
 
     def _calculate_rmsd(self, mol_idx_pair: Tuple[int, int]) -> float:
+        """Calculate iRMSD between two molecules using external irmsd tool."""
+        import subprocess
+        import tempfile
+
         i, j = mol_idx_pair
         mol1, mol2 = self.molecules[i], self.molecules[j]
-        pos1, pos2 = mol1.positions, mol2.positions
+
+        # Check compatibility
         symbols1, symbols2 = mol1.chemical_symbols, mol2.chemical_symbols
         if sorted(symbols1) != sorted(symbols2):
             logger.warning(f"Molecules {i} and {j} have different atom types")
             return np.inf
-        if pos1.shape != pos2.shape:
-            logger.warning(f"Molecules {i} and {j} have different shapes")
+
+        # Create temporary XYZ file with both molecules
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".xyz", delete=False
+        ) as tmp_file:
+            tmp_path = tmp_file.name
+            self._write_two_molecules_xyz(mol1, mol2, tmp_path)
+
+        try:
+            # Build irmsd compare command
+            cmd = [self._irmsd_cmd, "compare", tmp_path, "--ref-idx", "0"]
+
+            # Add inversion option
+            if self.inversion in ["on", "off", "auto"]:
+                cmd.extend(["--inversion", self.inversion])
+
+            # Add heavy atom option if ignoring hydrogens
+            if self.ignore_hydrogens:
+                cmd.append("--heavy")
+
+            # Run irmsd compare
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,  # 60 second timeout per pair
+            )
+
+            if result.returncode != 0:
+                logger.warning(
+                    f"irmsd failed for pair ({i}, {j}): {result.stderr}"
+                )
+                return np.inf
+
+            # Parse output (only parse inversion on first call)
+            need_inversion = not hasattr(self, "_actual_inversion")
+            rmsd_value, actual_inversion = self._parse_irmsd_output(
+                result.stdout, parse_inversion=need_inversion
+            )
+
+            # Store the actual inversion setting (only need to do this once)
+            if actual_inversion:
+                self._actual_inversion = actual_inversion
+
+            return rmsd_value
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"irmsd timed out for pair ({i}, {j})")
             return np.inf
-        if self.ignore_hydrogens:
-            non_h_mask1 = np.array([s != "H" for s in symbols1])
-            non_h_mask2 = np.array([s != "H" for s in symbols2])
-            pos1, pos2 = pos1[non_h_mask1], pos2[non_h_mask2]
-            symbols1 = [s for s in symbols1 if s != "H"]
-            symbols2 = [s for s in symbols2 if s != "H"]
-        atomic_numbers1 = np.array(
-            [self._pt.to_atomic_number(s) for s in symbols1]
-        )
-        atomic_numbers2 = np.array(
-            [self._pt.to_atomic_number(s) for s in symbols2]
-        )
-        return self._irmsd_core(pos1, pos2, atomic_numbers1, atomic_numbers2)
+        except Exception as e:
+            logger.warning(f"irmsd error for pair ({i}, {j}): {e}")
+            return np.inf
+        finally:
+            # Clean up temporary file
+            import os
+
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 class PymolRMSDGrouper(RMSDGrouper):
@@ -1789,11 +1232,18 @@ class PymolRMSDGrouper(RMSDGrouper):
         label: str = None,
         **kwargs,
     ):
+        # PyMOL only supports single-threaded operation
+        if num_procs > 1:
+            raise ValueError(
+                f"PymolRMSDGrouper only supports single-threaded operation (num_procs=1), "
+                f"got num_procs={num_procs}. PyMOL cannot run in parallel."
+            )
+
         super().__init__(
             molecules=molecules,
             threshold=threshold,
             num_groups=num_groups,
-            num_procs=1,
+            num_procs=1,  # Always force to 1 for PyMOL
             align_molecules=True,
             ignore_hydrogens=ignore_hydrogens,
             label=label,

@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 @grouper.command("irmsd", cls=MyCommand)
 @click.option(
-    "--check-stereo",
+    "--inversion",
     type=click.Choice(["auto", "on", "off"], case_sensitive=False),
     default="auto",
-    help="Control stereochemistry/inversion checking: "
+    help="Control coordinate inversion checking: "
     "'auto' (default): automatically detect, 'on': force check, 'off': disable.",
 )
 @click.pass_context
-def irmsd(ctx, check_stereo):
+def irmsd(ctx, inversion):
     """
     Group structures using invariant RMSD (iRMSD).
 
@@ -32,14 +32,14 @@ def irmsd(ctx, check_stereo):
     when calculating RMSD values. This is particularly useful for molecules
     with symmetric groups (e.g., methyl groups, phenyl rings).
 
-    Default threshold: 0.5 Å
+    Default threshold: 0.125 Å
 
     Examples:
         chemsmart run grouper -f conformers.xyz irmsd
-        chemsmart run grouper -f conformers.xyz -T 0.3 irmsd --check-stereo on
+        chemsmart run grouper -f conformers.xyz -T 0.3 irmsd --inversion on
         chemsmart run grouper -f conformers.xyz -N 10 irmsd
     """
-    logger.info(f"Running iRMSD grouping with check_stereo={check_stereo}")
+    logger.info(f"Running iRMSD grouping with inversion={inversion}")
     return create_grouper_job_from_context(
-        ctx, strategy="irmsd", default_threshold=0.5, check_stereo=check_stereo
+        ctx, strategy="irmsd", inversion=inversion
     )

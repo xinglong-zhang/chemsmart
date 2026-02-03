@@ -32,6 +32,4 @@ def rmsd(ctx):
         chemsmart run grouper -f conformers.xyz -N 10 rmsd
     """
     logger.info("Running Kabsch RMSD grouping")
-    return create_grouper_job_from_context(
-        ctx, strategy="rmsd", default_threshold=0.5
-    )
+    return create_grouper_job_from_context(ctx, strategy="rmsd")

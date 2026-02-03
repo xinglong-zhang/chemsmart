@@ -48,7 +48,8 @@ def click_grouper_common_options(f):
         type=float,
         default=None,
         help="Threshold for grouping. If not specified, uses strategy-specific "
-        "defaults: RMSD=0.5, Tanimoto=0.9, TFD=0.1, Connectivity=0.0.",
+        "defaults: RMSD/HRMSD/SpyRMSD/PyMOLRMSD=0.5, iRMSD=0.125, TFD=0.1, "
+        "Tanimoto=0.9, Energy=1.0 (kcal/mol)",
     )
     @click.option(
         "-N",
@@ -416,7 +417,6 @@ def _get_label(label, append_label, base_label):
 def create_grouper_job_from_context(
     ctx,
     strategy: str,
-    default_threshold: float = None,
     **extra_kwargs,
 ):
     """
@@ -428,11 +428,13 @@ def create_grouper_job_from_context(
     Args:
         ctx: Click context object
         strategy: Grouping strategy name (e.g., 'irmsd', 'rmsd', 'tanimoto')
-        default_threshold: Default threshold if not specified by user
-        **extra_kwargs: Strategy-specific arguments (e.g., check_stereo, fingerprint_type)
+        **extra_kwargs: Strategy-specific arguments (e.g., inversion, fingerprint_type)
 
     Returns:
         GrouperJob: Configured grouper job instance
+
+    Note:
+        Default thresholds are set in each Grouper class, not here.
     """
     from chemsmart.jobs.grouper import GrouperJob
 
@@ -443,14 +445,8 @@ def create_grouper_job_from_context(
     num_groups = ctx.obj["num_groups"]
     conformer_ids = ctx.obj.get("conformer_ids")
 
-    # Use threshold from parent command, with strategy-specific default
+    # Use threshold from parent command (None if not specified)
     threshold = ctx.obj["threshold"]
-    if (
-        threshold is None
-        and num_groups is None
-        and default_threshold is not None
-    ):
-        threshold = default_threshold
 
     return GrouperJob(
         molecules=molecules,

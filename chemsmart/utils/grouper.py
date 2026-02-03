@@ -140,6 +140,12 @@ class StructureGrouperFactory:
         grouper_cls = GROUPER_CLASSES[strategy]
         logger.info(f"Using {strategy} grouping strategy.")
 
+        # Validate that threshold and num_groups are mutually exclusive
+        if threshold is not None and num_groups is not None:
+            raise ValueError(
+                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
+            )
+
         # Validate threshold parameter
         if threshold is not None and strategy not in THRESHOLD_SUPPORTED:
             raise ValueError(
@@ -169,6 +175,55 @@ class StructureGrouperFactory:
             raise ValueError(
                 f"Strategy '{strategy}' does not support ignore_hydrogens parameter. "
                 f"Strategies supporting ignore_hydrogens: {sorted(IGNORE_HYDROGENS_SUPPORTED)}"
+            )
+
+        # Validate strategy-specific parameters (only warn if non-default values used with wrong strategy)
+        # inversion is only for irmsd
+        inversion = kwargs.get("inversion")
+        if (
+            inversion is not None
+            and inversion != "auto"
+            and strategy != "irmsd"
+        ):
+            logger.warning(
+                f"Parameter 'inversion={inversion}' is only effective for 'irmsd' strategy, "
+                f"ignored for '{strategy}'."
+            )
+
+        # fingerprint_type is only for tanimoto
+        fingerprint_type = kwargs.get("fingerprint_type")
+        if (
+            fingerprint_type is not None
+            and fingerprint_type != "rdkit"
+            and strategy != "tanimoto"
+        ):
+            logger.warning(
+                f"Parameter 'fingerprint_type={fingerprint_type}' is only effective for 'tanimoto' strategy, "
+                f"ignored for '{strategy}'."
+            )
+
+        # use_weights is only for torsion
+        use_weights = kwargs.get("use_weights")
+        if (
+            use_weights is not None
+            and use_weights is False
+            and strategy != "torsion"
+        ):
+            logger.warning(
+                f"Parameter 'use_weights={use_weights}' is only effective for 'torsion' strategy, "
+                f"ignored for '{strategy}'."
+            )
+
+        # max_dev is only for torsion
+        max_dev = kwargs.get("max_dev")
+        if (
+            max_dev is not None
+            and max_dev != "equal"
+            and strategy != "torsion"
+        ):
+            logger.warning(
+                f"Parameter 'max_dev={max_dev}' is only effective for 'torsion' strategy, "
+                f"ignored for '{strategy}'."
             )
 
         # Build kwargs for the grouper

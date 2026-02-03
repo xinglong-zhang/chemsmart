@@ -364,6 +364,28 @@ class Test_HungarianRMSD_grouper:
         rmsd = grouper._calculate_rmsd((0, 3))
         assert np.isclose(rmsd, 1.8891, rtol=1e-3)
 
+    def test_ignore_hydrogen(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+        grouper = HungarianRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=True,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 12
+        assert len(group_indices) == 12
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 12
+
+        # rmsd calculation from grouper
+        rmsd = grouper._calculate_rmsd((0, 4))
+        assert np.isclose(rmsd, 1.1915, rtol=1e-3)
+
 
 class Test_SpyRMSD_grouper:
     NUM_PROCS = 4
@@ -420,6 +442,30 @@ class Test_SpyRMSD_grouper:
         rmsd = grouper._calculate_rmsd((0, 5))
         assert np.isclose(rmsd, 2.0029, rtol=1e-3)
 
+    def test_ignore_hydrogen(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+        grouper = SpyRMSDGrouper(
+            molecules,
+            threshold=2.5981,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=True,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 3
+        assert len(group_indices) == 3
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 3
+
+        # rmsd calculation from grouper
+        rmsd = grouper._calculate_rmsd((0, 5))
+        assert np.isclose(rmsd, 1.7034, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((0, 6))
+        assert np.isclose(rmsd, 2.6183, rtol=1e-3)
+
 
 class Test_IRMSD_grouper:
     NUM_PROCS = 4
@@ -454,31 +500,53 @@ class Test_IRMSD_grouper:
         assert len(molecules) == 18
         grouper = IRMSDGrouper(
             molecules,
-            threshold=0.125,
+            threshold=0.5,
             num_procs=self.NUM_PROCS,
             ignore_hydrogens=False,
         )
         groups, group_indices = grouper.group()
-        assert len(groups) == 18
-        assert len(group_indices) == 18
+        assert len(groups) == 12
+        assert len(group_indices) == 12
         unique_structures = grouper.unique()
-        assert len(unique_structures) == 18
+        assert len(unique_structures) == 12
 
         # rmsd calculation from grouper
         rmsd = grouper._calculate_rmsd((0, 1))
         assert np.isclose(rmsd, 0.4091, rtol=1e-3)
         rmsd = grouper._calculate_rmsd((0, 2))
-        assert np.isclose(rmsd, 1.4626, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 3))
-        assert np.isclose(rmsd, 2.3927, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 4))
-        assert np.isclose(rmsd, 2.1824, rtol=1e-3)
+        assert np.isclose(rmsd, 1.3925, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((2, 10))
+        assert np.isclose(rmsd, 2.2390, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((8, 16))
+        assert np.isclose(rmsd, 3.4209, rtol=1e-3)
         rmsd = grouper._calculate_rmsd((0, 13))
-        assert np.isclose(rmsd, 3.2087, rtol=1e-3)
+        assert np.isclose(rmsd, 0.8411, rtol=1e-3)
+
+    def test_ignore_hydrogen(
+        self, two_rotated_molecules_xyz_file, temp_working_dir
+    ):
+        xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 2
+        grouper = IRMSDGrouper(
+            molecules,
+            threshold=0.125,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=True,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 2
+        assert len(group_indices) == 2
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 2
+
+        # rmsd calculation from grouper
+        rmsd = grouper._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 0.2294, rtol=1e-3)
 
 
 class Test_PymolRMSD_grouper:
-    NUM_PROCS = 4
+    NUM_PROCS = 1
 
     @classmethod
     def setup_class(cls):
@@ -561,6 +629,38 @@ class Test_PymolRMSD_grouper:
         assert np.isclose(rmsd, 2.309451, rtol=1e-3)
         rmsd = grouper._calculate_rmsd((14, 16))
         assert np.isclose(rmsd, 1.837319, rtol=1e-3)
+
+        # Explicitly cleanup to prevent __del__ from calling quit()
+        if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
+            import shutil
+
+            shutil.rmtree(grouper._temp_dir, ignore_errors=True)
+            grouper._temp_dir = None
+        grouper.cmd = None  # Prevent __del__ from calling quit()
+
+    def test_ignore_hydrogen(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+        grouper = PymolRMSDGrouper(
+            molecules,
+            threshold=0.8203818,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=True,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 5
+        assert len(group_indices) == 5
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 5
+
+        # rmsd calculation from grouper
+        rmsd = grouper._calculate_rmsd((0, 2))
+        assert np.isclose(rmsd, 0.0211, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((1, 4))
+        assert np.isclose(rmsd, 0.7669, rtol=1e-3)
 
         # Explicitly cleanup to prevent __del__ from calling quit()
         if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
@@ -701,6 +801,36 @@ class Test_TorsionFingerprint_grouper:
         assert len(group_indices) == 15
         unique_structures = grouper.unique()
         assert len(unique_structures) == 15
+
+        tfd = grouper._calculate_tfd((0, 2))
+        assert np.isclose(tfd, 0.08229, rtol=1e-3)
+        tfd = grouper._calculate_tfd((0, 7))
+        assert np.isclose(tfd, 0.07727, rtol=1e-3)
+
+    def test_use_maxdev_parameter(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+        grouper = TorsionFingerprintGrouper(
+            molecules,
+            threshold=0.26965,
+            num_procs=self.NUM_PROCS,
+            use_weights=True,
+            max_dev="spec",
+            ignore_hydrogens=False,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 2
+        assert len(group_indices) == 2
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 2
+
+        tfd = grouper._calculate_tfd((0, 1))
+        assert np.isclose(tfd, 0.02027, rtol=1e-3)
+        tfd = grouper._calculate_tfd((3, 4))
+        assert np.isclose(tfd, 0.24365, rtol=1e-3)
 
 
 class Test_other_groupers:

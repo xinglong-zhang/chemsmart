@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 @grouper.command("tanimoto", cls=MyCommand)
 @click.option(
-    "--fingerprint-type",
     "-ft",
+    "--fingerprint-type",
     type=click.Choice(
         [
             "rdkit",
@@ -57,6 +57,5 @@ def tanimoto(ctx, fingerprint_type):
     return create_grouper_job_from_context(
         ctx,
         strategy="tanimoto",
-        default_threshold=0.9,
         fingerprint_type=fingerprint_type,
     )

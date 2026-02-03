@@ -50,7 +50,9 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
             ignore_hydrogens (bool): Whether to remove hydrogens before
-                isomorphism comparison. Defaults to False.
+                isomorphism comparison. Defaults to False. Warning: For some
+                molecules, removing hydrogens may cause kekulization
+                issues. If errors occur, try setting this to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule.
         """
@@ -83,7 +85,24 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
                 # Remove hydrogens if requested
                 if self.ignore_hydrogens:
-                    rdkit_mol = Chem.RemoveHs(rdkit_mol)
+                    try:
+                        rdkit_mol = Chem.RemoveHs(rdkit_mol, sanitize=False)
+                        # Re-sanitize without kekulization to avoid aromatic ring issues
+                        Chem.SanitizeMol(
+                            rdkit_mol,
+                            sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
+                            ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to remove hydrogens: {e}. Using original molecule."
+                        )
+                        # Re-convert without removing hydrogens
+                        rdkit_mol = Chem.MolFromXYZBlock(xyz_string)
+                        if rdkit_mol is not None:
+                            Chem.rdDetermineBonds.DetermineConnectivity(
+                                rdkit_mol
+                            )
 
             return rdkit_mol
         except Exception as e:
@@ -195,11 +214,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                 summary_data.append(
                     {
                         "Group": i + 1,
-                        "Hash/SMILES": (
-                            display_hash[:50] + "..."
-                            if len(str(display_hash)) > 50
-                            else display_hash
-                        ),
+                        "Hash/SMILES": display_hash,  # Show full hash
                         "Count": len(group),
                     }
                 )
@@ -208,7 +223,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             summary_df.to_excel(
                 writer,
                 sheet_name="Isomorphism_Groups",
-                startrow=6,
+                startrow=7,
                 index=False,
             )
 
@@ -222,6 +237,13 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             row += 1
             worksheet[f"A{row}"] = f"Unique Isomorphism Classes: {len(groups)}"
             row += 1
+            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
+            row += 1
+
+            # Number of processors
+            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
+            row += 1
+
             if grouping_time is not None:
                 worksheet[f"A{row}"] = (
                     f"Grouping Time: {grouping_time:.2f} seconds"

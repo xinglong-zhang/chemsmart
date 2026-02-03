@@ -44,10 +44,10 @@ def click_crest_grouper_options(f):
         help="Grouping strategy to use for conformer grouping.",
     )
     @click.option(
-        "--check-stereo",
+        "--inversion",
         type=click.Choice(["auto", "on", "off"], case_sensitive=False),
         default="auto",
-        help="Control stereochemistry/inversion checking in iRMSD grouper. "
+        help="Control coordinate inversion checking in iRMSD grouper: "
         "'auto' (default): automatically detect, 'on': force check, 'off': disable.",
     )
     @click.option(
@@ -75,6 +75,12 @@ def click_crest_grouper_options(f):
         default=True,
         help="Whether to use torsion weights in TFD calculation for torsion grouping.",
     )
+    @click.option(
+        "--max-dev",
+        type=click.Choice(["equal", "spec"], case_sensitive=False),
+        default="equal",
+        help="Normalization method for TFD: 'equal' (default) or 'spec'.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -99,9 +105,10 @@ def crest(
     threshold,
     num_groups,
     grouping_strategy,
-    check_stereo,
+    inversion,
     fingerprint_type,
     use_weights,
+    max_dev,
     skip_completed,
     **kwargs,
 ):
@@ -154,8 +161,9 @@ def crest(
         threshold=threshold,
         num_groups=num_groups,
         num_procs=num_procs,
-        check_stereo=check_stereo,
+        inversion=inversion,
         use_weights=use_weights,
+        max_dev=max_dev,
         fingerprint_type=fingerprint_type,
         skip_completed=skip_completed,
         **kwargs,

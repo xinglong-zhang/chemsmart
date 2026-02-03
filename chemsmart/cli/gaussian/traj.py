@@ -46,9 +46,10 @@ def traj(
     threshold,
     num_groups,
     grouping_strategy,
-    check_stereo,
+    inversion,
     fingerprint_type,
     use_weights,
+    max_dev,
     proportion_structures_to_use,
     **kwargs,
 ):
@@ -101,9 +102,10 @@ def traj(
         num_groups=num_groups,
         ignore_hydrogens=ignore_hydrogens,
         use_weights=use_weights,
+        max_dev=max_dev,
         threshold=threshold,
         fingerprint_type=fingerprint_type,
-        check_stereo=check_stereo,
+        inversion=inversion,
         skip_completed=skip_completed,
         **kwargs,
     )

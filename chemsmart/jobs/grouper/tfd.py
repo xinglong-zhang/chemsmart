@@ -64,15 +64,22 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             num_groups (int): Number of groups to create. When specified,
                 automatically determines threshold to create this many groups.
             num_procs (int): Number of processes for parallel computation.
-            use_weights (bool): Whether to use torsion weights in TFD calculation. Defaults to True.
-            max_dev (str): Normalization method:
-                - 'equal': all torsions normalized using 180.0 (default)
-                - 'spec': each torsion normalized using specific maximal deviation
-            symm_radius (int): Radius for calculating atom invariants. Defaults to 2.
+            use_weights (bool): Whether to use torsion weights in TFD calculation.
+                Weights are based on the number of atoms that depend on the torsion.
+                Defaults to True.
+            max_dev (str): Normalization method for torsion deviations:
+                - 'equal': all torsions normalized using 180.0 degrees (default)
+                - 'spec': each torsion normalized using its specific maximal
+                         deviation as given in the original paper
+            symm_radius (int): Radius for calculating atom invariants used to
+                determine equivalent atoms. Defaults to 2.
             ignore_colinear_bonds (bool): If True, single bonds adjacent to triple bonds
                 are ignored. Defaults to True.
-            ignore_hydrogens (bool): Whether to exclude hydrogen atoms from TFD calculation.
-                Defaults to False.
+            ignore_hydrogens (bool): Whether to remove hydrogen atoms before TFD
+                calculation. Defaults to False. TFD only considers torsions
+                between heavy atoms, so this parameter does not affect the TFD values,
+                Warning: For some molecules, removing hydrogens may cause kekulization
+                issues. If errors occur, try setting this to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
@@ -83,7 +90,13 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
             raise ValueError(
-                "Cannot specify both threshold (-t) and num_groups (-N). Please use only one."
+                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
+            )
+
+        # Validate max_dev parameter
+        if max_dev not in ["equal", "spec"]:
+            raise ValueError(
+                f"max_dev must be either 'equal' or 'spec', got '{max_dev}'"
             )
 
         if threshold is None and num_groups is None:
@@ -121,8 +134,21 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         # Remove hydrogens if ignore_hydrogens is True
         if self.ignore_hydrogens:
-            self.rdkit_mol = Chem.RemoveHs(self.rdkit_mol)
-            logger.info("Removed hydrogen atoms for TFD calculation")
+            try:
+                self.rdkit_mol = Chem.RemoveHs(self.rdkit_mol, sanitize=False)
+                # Re-sanitize without kekulization to avoid aromatic ring issues
+                Chem.SanitizeMol(
+                    self.rdkit_mol,
+                    sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
+                    ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE,
+                )
+                logger.info("Removed hydrogen atoms for TFD calculation")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to remove hydrogens safely: {e}. Using original molecule."
+                )
+                # Reload original molecule
+                self.rdkit_mol = base_mol.to_rdkit()
 
         # Clear existing conformers and add all input molecules as conformers
         self.rdkit_mol.RemoveAllConformers()
@@ -242,6 +268,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         print(f"  - Max deviation: {self.max_dev}")
         print(f"  - Symmetry radius: {self.symm_radius}")
         print(f"  - Ignore colinear bonds: {self.ignore_colinear_bonds}")
+        print(f"  - Ignore hydrogens: {self.ignore_hydrogens}")
 
         # Calculate TFD values with real-time output
         tfd_values = []
@@ -498,11 +525,13 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                     and self._auto_threshold is not None
                 ):
                     worksheet[f"A{row}"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.7f}"
+                        f"Auto-determined Threshold: {self._auto_threshold:.7f} (lower value indicate higher torsional similarity)"
                     )
                     row += 1
             else:
-                worksheet[f"A{row}"] = f"Threshold: {self.threshold}"
+                worksheet[f"A{row}"] = (
+                    f"Threshold: {self.threshold} (lower value indicate higher torsional similarity)"
+                )
                 row += 1
 
             worksheet[f"A{row}"] = f"Use Weights: {self.use_weights}"
@@ -515,17 +544,18 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 f"Ignore Colinear Bonds: {self.ignore_colinear_bonds}"
             )
             row += 1
+            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
+            row += 1
+
+            # Number of processors
+            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
+            row += 1
 
             if grouping_time is not None:
                 worksheet[f"A{row}"] = (
                     f"Grouping Time: {grouping_time:.2f} seconds"
                 )
                 row += 1
-
-            worksheet[f"A{row}"] = (
-                "Lower values indicate higher torsional similarity. Empty cells indicate calculation failures."
-            )
-            row += 1
 
             # Auto-adjust column widths
             for column in worksheet.columns:
@@ -572,11 +602,13 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             return (
                 f"{self.__class__.__name__}(num_groups={self.num_groups}, "
                 f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
-                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius})"
+                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius},"
+                f" ignore_hydrogens={self.ignore_hydrogens})"
             )
         else:
             return (
                 f"{self.__class__.__name__}(threshold={self.threshold}, "
                 f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
-                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius})"
+                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius},"
+                f" ignore_hydrogens={self.ignore_hydrogens})"
             )

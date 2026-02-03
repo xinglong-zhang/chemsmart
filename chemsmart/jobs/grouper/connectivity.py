@@ -259,12 +259,15 @@ class ConnectivityGrouper(MoleculeGrouper):
             row += 1
             worksheet[f"A{row}"] = f"Total Molecules: {n}"
             row += 1
-            worksheet[f"A{row}"] = (
-                f"Unique Connectivity Classes: {len(groups)}"
-            )
+            worksheet[f"A{row}"] = f"adjust H: {self.adjust_H}"
             row += 1
             worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
             row += 1
+
+            # Number of processors
+            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
+            row += 1
+
             if grouping_time is not None:
                 worksheet[f"A{row}"] = (
                     f"Grouping Time: {grouping_time:.2f} seconds"

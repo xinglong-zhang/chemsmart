@@ -47,7 +47,6 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         num_groups=None,  # Number of groups to create (alternative to threshold)
         num_procs: int = 1,
         fingerprint_type: str = "rdkit",
-        use_rdkit_fp: bool = None,  # Legacy support
         label: str = None,  # Label for output files
         ignore_hydrogens: bool = False,
         conformer_ids: List[str] = None,
@@ -66,11 +65,11 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             fingerprint_type (str): Type of fingerprint to use.
                 Options: "rdkit", "rdk", "morgan", "maccs", "atompair",
                 "torsion", "usr", "usrcat". Defaults to "rdkit".
-            use_rdkit_fp (bool): Legacy parameter. If True, sets fingerprint_type="rdkit".
-                If False, sets fingerprint_type="rdk".
             label (str): Label/name for output files. Defaults to None.
             ignore_hydrogens (bool): Whether to remove hydrogens before fingerprint
-                calculation. Defaults to False.
+                calculation. Defaults to False. Warning: For some
+                molecules, removing hydrogens may cause kekulization
+                issues. If errors occur, try setting this to False.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
         """
         super().__init__(
@@ -82,7 +81,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         # Validate that threshold and num_groups are mutually exclusive
         if threshold is not None and num_groups is not None:
             raise ValueError(
-                "Cannot specify both threshold (-t) and num_groups (-N). Please use only one."
+                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
             )
 
         if threshold is None and num_groups is None:
@@ -90,10 +89,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         self.threshold = threshold
         self.num_groups = num_groups
 
-        if use_rdkit_fp is not None:
-            self.fingerprint_type = "rdkit" if use_rdkit_fp else "rdk"
-        else:
-            self.fingerprint_type = fingerprint_type.lower()
+        self.fingerprint_type = fingerprint_type.lower()
 
         # Convert molecules to list for indexing
         self.molecules = list(molecules)
@@ -106,7 +102,19 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             if rdkit_mol is not None:
                 # Remove hydrogens if requested
                 if self.ignore_hydrogens:
-                    rdkit_mol = Chem.RemoveHs(rdkit_mol)
+                    try:
+                        rdkit_mol = Chem.RemoveHs(rdkit_mol, sanitize=False)
+                        # Re-sanitize without kekulization to avoid aromatic ring issues
+                        Chem.SanitizeMol(
+                            rdkit_mol,
+                            sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
+                            ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to remove hydrogens for molecule: {e}. Using original."
+                        )
+                        rdkit_mol = mol.to_rdkit()
                 self.rdkit_molecules.append(rdkit_mol)
                 self.valid_molecules.append(mol)
 
@@ -491,14 +499,19 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                     and self._auto_threshold is not None
                 ):
                     worksheet[f"A{row}"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.7f}"
+                        f"Auto-determined Threshold: {self._auto_threshold:.7f} (A value closer to 1 indicates greater similarity)"
                     )
                     row += 1
             else:
-                worksheet[f"A{row}"] = f"Threshold: {self.threshold}"
+                worksheet[f"A{row}"] = (
+                    f"Threshold: {self.threshold} (A value closer to 1 indicates greater similarity)"
+                )
                 row += 1
 
-            worksheet[f"A{row}"] = f"Number of Processors: {self.num_procs}"
+            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
+            row += 1
+
+            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
             row += 1
 
             if grouping_time is not None:

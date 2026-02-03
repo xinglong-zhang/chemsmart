@@ -22,8 +22,16 @@ logger = logging.getLogger(__name__)
     default=True,
     help="Whether to use torsion weights in TFD calculation. Default=True.",
 )
+@click.option(
+    "--max-dev",
+    type=click.Choice(["equal", "spec"], case_sensitive=False),
+    default="equal",
+    help="Normalization method for torsion deviations. "
+    "'equal': all torsions normalized using 180.0 degrees (default). "
+    "'spec': each torsion normalized using its specific maximal deviation.",
+)
 @click.pass_context
-def tfd(ctx, use_weights):
+def tfd(ctx, use_weights, max_dev):
     """
     Group structures using Torsion Fingerprint Deviation (TFD).
 
@@ -36,9 +44,11 @@ def tfd(ctx, use_weights):
     Examples:
         chemsmart run grouper -f conformers.xyz tfd
         chemsmart run grouper -f conformers.xyz -T 0.2 tfd --no-use-weights
-        chemsmart run grouper -f conformers.xyz -N 10 tfd
+        chemsmart run grouper -f conformers.xyz -N 10 tfd --max-dev spec
     """
-    logger.info(f"Running TFD grouping with use_weights={use_weights}")
+    logger.info(
+        f"Running TFD grouping with use_weights={use_weights}, max_dev={max_dev}"
+    )
     return create_grouper_job_from_context(
-        ctx, strategy="torsion", default_threshold=0.1, use_weights=use_weights
+        ctx, strategy="torsion", use_weights=use_weights, max_dev=max_dev
     )

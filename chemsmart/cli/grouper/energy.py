@@ -35,6 +35,4 @@ def energy(ctx):
         chemsmart run grouper -f conformers.xyz -N 5 energy
     """
     logger.info("Running Energy-based grouping")
-    return create_grouper_job_from_context(
-        ctx, strategy="energy", default_threshold=1.0
-    )
+    return create_grouper_job_from_context(ctx, strategy="energy")

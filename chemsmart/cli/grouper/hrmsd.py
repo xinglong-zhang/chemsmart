@@ -33,6 +33,4 @@ def hrmsd(ctx):
         chemsmart run grouper -f conformers.xyz -N 10 hrmsd
     """
     logger.info("Running Hungarian RMSD grouping")
-    return create_grouper_job_from_context(
-        ctx, strategy="hrmsd", default_threshold=0.5
-    )
+    return create_grouper_job_from_context(ctx, strategy="hrmsd")

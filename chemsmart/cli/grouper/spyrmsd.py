@@ -32,6 +32,4 @@ def spyrmsd(ctx):
         chemsmart run grouper -f conformers.xyz -N 10 spyrmsd
     """
     logger.info("Running spyrmsd grouping")
-    return create_grouper_job_from_context(
-        ctx, strategy="spyrmsd", default_threshold=0.5
-    )
+    return create_grouper_job_from_context(ctx, strategy="spyrmsd")
