@@ -8,7 +8,7 @@ p = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class GaussianComFolder(BaseFolder):
+class GaussianInputFolder(BaseFolder):
     """
     Manager for directories containing Gaussian input files.
     """
@@ -18,6 +18,36 @@ class GaussianComFolder(BaseFolder):
         Initialize Gaussian input folder manager.
         """
         super().__init__(folder=folder)
+
+    @property
+    def all_input_files(self):
+        """
+        Get all Gaussian input files (.com, .gjf) in folder and subfolders.
+        """
+        com_files = (
+            self.get_all_files_in_current_folder_and_subfolders_by_suffix(
+                filetype="com"
+            )
+        )
+        gjf_files = (
+            self.get_all_files_in_current_folder_and_subfolders_by_suffix(
+                filetype="gjf"
+            )
+        )
+        return com_files + gjf_files
+
+    @property
+    def all_input_files_in_current_folder(self):
+        """
+        Get all Gaussian input files (.com, .gjf) in the current folder only.
+        """
+        com_files = self.get_all_files_in_current_folder_by_suffix(
+            filetype="com"
+        )
+        gjf_files = self.get_all_files_in_current_folder_by_suffix(
+            filetype="gjf"
+        )
+        return com_files + gjf_files
 
     @property
     def all_com_files(self):
@@ -52,30 +82,51 @@ class GaussianComFolder(BaseFolder):
         return self.get_all_files_in_current_folder_by_suffix(filetype="gjf")
 
 
-class GaussianLogFolder(BaseFolder):
+class GaussianOutputFolder(BaseFolder):
     """
-    Log folder containing all Gaussian log files for postprocessing.
+    Output folder containing all Gaussian output files for postprocessing.
     """
 
     def __init__(self, folder):
         """
-        Initialize Gaussian log folder manager.
+        Initialize Gaussian output folder manager.
         """
         super().__init__(folder=folder)
 
     @property
-    def all_logfiles(self):
+    def all_output_files(self):
         """
-        Get all log files in the folder, including subfolders.
+        Get all Gaussian output files in the folder, including subfolders.
+        """
+        return self.get_all_output_files_in_current_folder_and_subfolders_by_program(
+            program="gaussian"
+        )
+
+    @property
+    def all_output_files_in_current_folder(self):
+        """
+        Get all Gaussian output files in the current folder.
+        """
+        return self.get_all_output_files_in_current_folder_by_program(
+            program="gaussian"
+        )
+
+    @property
+    def all_log_files(self):
+        """
+        Get all .log files in the folder, including subfolders.
+        Uses suffix-based detection (fast but may miss .out files).
+        For content-based detection, use all_output_files instead.
         """
         return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="log"
         )
 
     @property
-    def all_logfiles_in_current_folder(self):
+    def all_log_files_in_current_folder(self):
         """
-        Get all log files in the folder.
+        Get all .log files in the current folder.
+        Uses suffix-based detection (fast but may miss .out files).
         """
         return self.get_all_files_in_current_folder_by_suffix(filetype="log")
 
@@ -85,7 +136,7 @@ class GaussianLogFolder(BaseFolder):
         Get all molecules in the folder.
         """
         molecules = []
-        for file in self.all_logfiles:
+        for file in self.all_output_files:
             output_file = Gaussian16Output(file)
             molecules.append(output_file.molecule)
         return molecules
@@ -93,10 +144,10 @@ class GaussianLogFolder(BaseFolder):
     @property
     def total_service_units(self):
         """
-        Get all service units used in all the log files contained in the folder.
+        Get all service units used in all the output files contained in the folder.
         """
         total_service_units = 0
-        for file in self.all_logfiles:
+        for file in self.all_output_files:
             output_file = Gaussian16Output(file)
             core_hours = output_file.total_core_hours
             total_service_units += core_hours
@@ -104,10 +155,10 @@ class GaussianLogFolder(BaseFolder):
 
     def write_job_runtime(self, job_runtime_file="job_runtime.txt"):
         """
-        Generate runtime report for all log files in the folder.
+        Generate runtime report for all output files in the folder.
         """
         with open(job_runtime_file, "w") as f:
-            for file in self.all_logfiles:
+            for file in self.all_output_files:
                 output_file = Gaussian16Output(file)
                 core_hours = output_file.total_core_hours
                 f.write(
@@ -118,13 +169,3 @@ class GaussianLogFolder(BaseFolder):
                 f"TOTAL core-hours in folder {self.folder} is: "
                 f"{self.total_service_units}\n"
             )
-
-    # def assemble_database(self, database_file='database.json'):
-    #     """Assemble a database from all log files in the folder."""
-    #     database = {}
-    #     for file in self.all_logfiles:
-    #         output_file = Gaussian16Output(file)
-    #         database[file] = output_file.__dict__
-    #     with open(database_file, 'w') as f:
-    #         json.dump(database, f, indent=4)
-    #     return database

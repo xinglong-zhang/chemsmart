@@ -1420,13 +1420,154 @@ class FolderMixin:
     Mixin class for folder operations and file discovery.
 
     Provides methods for searching and filtering files within directories
-    based on file extensions, regular expressions, and other criteria.
+    based on contents, file extensions, regular expressions, and other criteria.
     Supports both current directory and recursive subdirectory searches.
 
     Attributes:
         folder (str): Path to the base directory. Consumers are expected to
             set this attribute (e.g., via BaseFolder or a subclass).
     """
+
+    @property
+    def folderpath(self):
+        """
+        Get the absolute path of the folder.
+
+        Returns:
+            str: Absolute folder path.
+        """
+        return os.path.abspath(self.folder)
+
+    def _get_all_output_files_by_program(self, program=None, recursive=False):
+        """
+        Obtain a list of quantum chemistry output files by program.
+        File discovery is performed in two stages:
+        (1) lightweight suffix-based filtering for efficiency;
+        (2) program detection using get_program_type_from_file method.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+            recursive (bool): Whether to search recursively in subdirectories.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        from chemsmart.utils.io import (
+            ALL_SUFFIXES,
+            PROGRAM_INFO,
+            get_program_type_from_file,
+        )
+
+        candidate_files = []
+        if recursive:
+            for subdir, _dirs, files in os.walk(self.folder):
+                for file in files:
+                    filepath = os.path.join(subdir, file)
+                    # Skip empty files
+                    if os.stat(filepath).st_size == 0:
+                        continue
+                    if program is None:
+                        if file.endswith(ALL_SUFFIXES):
+                            candidate_files.append(filepath)
+                    else:
+                        if file.endswith(
+                            tuple(PROGRAM_INFO[program]["suffixes"])
+                        ):
+                            candidate_files.append(filepath)
+        else:
+            for file in os.listdir(self.folder):
+                filepath = os.path.join(self.folder, file)
+                # Skip directories and empty files
+                if not os.path.isfile(filepath):
+                    continue
+                if os.stat(filepath).st_size == 0:
+                    continue
+                # Filter by suffix first for efficiency
+                if program is None:
+                    if file.endswith(ALL_SUFFIXES):
+                        candidate_files.append(filepath)
+                else:
+                    if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
+                        candidate_files.append(filepath)
+
+        matched_files = []
+        for filepath in candidate_files:
+            detected_program = get_program_type_from_file(filepath)
+            if detected_program == "unknown":
+                continue
+            if program is None or detected_program == program:
+                matched_files.append(filepath)
+        return matched_files
+
+    def get_all_output_files_in_current_folder_by_program(self, program=None):
+        """
+        Obtain a list of quantum chemistry output files in the current folder by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=False
+        )
+
+    def get_all_output_files_in_current_folder_and_subfolders_by_program(
+        self, program=None
+    ):
+        """
+        Obtain quantum chemistry output files in folder and all subfolders by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=True
+        )
+
+    def is_program_calculation_directory(self, program):
+        """
+        Check if the current folder contains output files from a specific program.
+
+        Args:
+            program (str): Target QC program (e.g., "xtb", "crest", "gaussian", "orca").
+
+        Returns:
+            bool: True if the folder contains at least one output file from
+                  the specified program, False otherwise.
+        """
+        if not os.path.isdir(self.folder):
+            return False
+        return bool(
+            self.get_all_output_files_in_current_folder_by_program(program)
+        )
+
+    def get_program_type_from_folder(self):
+        """
+        Detect the type of calculation folder based on programs.
+
+        Returns:
+            str: Program name ("xtb", "crest"), "mixed" if multiple programs detected,
+             or "unknown" if the format cannot be detected.
+        """
+        from chemsmart.utils.io import PROGRAMS_WITH_FOLDER_DETECTION
+
+        programs = []
+        for program in PROGRAMS_WITH_FOLDER_DETECTION:
+            if self.is_program_calculation_directory(program):
+                programs.append(program)
+        if len(programs) == 1:
+            return programs[0]
+        elif len(programs) > 1:
+            return "mixed"
+        return "unknown"
 
     def get_all_files_in_current_folder_by_suffix(self, filetype):
         """

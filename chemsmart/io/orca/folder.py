@@ -8,7 +8,7 @@ p = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class ORCAInpFolder(BaseFolder):
+class ORCAInputFolder(BaseFolder):
     """
     Input folder containing all ORCA input files for postprocessing.
 
@@ -23,10 +23,10 @@ class ORCAInpFolder(BaseFolder):
         Args:
             folder (str): Parent folder for all input files
         """
-        self.folder = folder
+        super().__init__(folder=folder)
 
     @property
-    def all_inpfiles(self):
+    def all_input_files(self):
         """
         Get all ORCA input files in the folder and subfolders.
 
@@ -38,7 +38,7 @@ class ORCAInpFolder(BaseFolder):
         )
 
     @property
-    def all_inpfiles_in_current_folder(self):
+    def all_input_files_in_current_folder(self):
         """
         Get all ORCA input files in the current folder only.
 
@@ -47,8 +47,26 @@ class ORCAInpFolder(BaseFolder):
         """
         return self.get_all_files_in_current_folder_by_suffix(filetype="inp")
 
+    @property
+    def all_inp_files(self):
+        """
+        Get all ORCA input files in the folder and subfolders.
+        Alias for all_input_files for consistency with file_converter.
+        """
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
+            filetype="inp"
+        )
 
-class ORCAOutFolder(BaseFolder):
+    @property
+    def all_inpfiles_in_current_folder(self):
+        """
+        Get all ORCA input files in the current folder only.
+        Deprecated: Use all_input_files_in_current_folder instead.
+        """
+        return self.get_all_files_in_current_folder_by_suffix(filetype="inp")
+
+
+class ORCAOutputFolder(BaseFolder):
     """
     Output folder containing all ORCA output files for postprocessing.
 
@@ -63,12 +81,38 @@ class ORCAOutFolder(BaseFolder):
         Args:
             folder (str): Parent folder for all output files
         """
-        self.folder = folder
+        super().__init__(folder=folder)
 
     @property
-    def all_outfiles(self):
+    def all_output_files(self):
         """
         Get all ORCA output files in the folder and subfolders.
+
+        Returns:
+            list: Paths to all ORCA output files found recursively
+        """
+        return self.get_all_output_files_in_current_folder_and_subfolders_by_program(
+            program="orca"
+        )
+
+    @property
+    def all_output_files_in_current_folder(self):
+        """
+        Get all ORCA output files in the current folder only.
+
+        Returns:
+            list: Paths to all ORCA output files in current directory
+        """
+        return self.get_all_output_files_in_current_folder_by_program(
+            program="orca"
+        )
+
+    @property
+    def all_out_files(self):
+        """
+        Get all .out files in the folder and subfolders.
+        Uses suffix-based detection (fast but less flexible).
+        For content-based detection, use all_output_files instead.
 
         Returns:
             list: Paths to all .out files found recursively
@@ -78,9 +122,10 @@ class ORCAOutFolder(BaseFolder):
         )
 
     @property
-    def all_outfiles_in_current_folder(self):
+    def all_out_files_in_current_folder(self):
         """
-        Get all ORCA output files in the current folder only.
+        Get all .out files in the current folder only.
+        Uses suffix-based detection (fast but less flexible).
 
         Returns:
             list: Paths to all .out files in current directory
@@ -96,7 +141,7 @@ class ORCAOutFolder(BaseFolder):
             float: Total core-hours consumed by all calculations in folder
         """
         total_service_units = 0
-        for file in self.all_outfiles:
+        for file in self.all_output_files:
             output_file = ORCAOutput(file)
             core_hours = output_file.total_core_hours
             total_service_units += core_hours
@@ -113,7 +158,7 @@ class ORCAOutFolder(BaseFolder):
             job_runtime_file (str): Output file name for runtime summary
         """
         with open(job_runtime_file, "w") as f:
-            for file in self.all_outfiles:
+            for file in self.all_output_files:
                 output_file = ORCAOutput(file)
                 core_hours = output_file.total_core_hours
                 f.write(
@@ -122,13 +167,3 @@ class ORCAOutFolder(BaseFolder):
             f.write(
                 f"TOTAL core-hours in folder {self.folder} is: {self.total_service_units}\n"
             )
-
-    # def assemble_database(self, database_file='database.json'):
-    #     """Assemble a database from all log files in the folder."""
-    #     database = {}
-    #     for file in self.all_outfiles:
-    #         output_file = ORCAOutput(file)
-    #         database[file] = output_file.__dict__
-    #     with open(database_file, 'w') as f:
-    #         json.dump(database, f, indent=4)
-    #     return database
