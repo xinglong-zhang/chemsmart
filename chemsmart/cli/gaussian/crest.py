@@ -94,12 +94,10 @@ def crest(
     coordinates,
     step_size,
     num_steps,
-    # grouper common options
     ignore_hydrogens,
     num_procs,
     threshold,
     num_groups,
-    # crest grouper options
     grouping_strategy,
     check_stereo,
     fingerprint_type,

@@ -39,6 +39,7 @@ dependencies = [
     "scikit-learn>=1.6.1",
     "pytest_mock>=3.14.0",
     "pyvoro>=1.3.2",  # Note: pyvoro requires Python < 3.12
+    "spyrmsd>=0.8.0",  # For symmetry-corrected RMSD calculations
 ]
 
 [project.optional-dependencies]

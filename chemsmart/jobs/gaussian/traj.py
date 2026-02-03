@@ -128,7 +128,10 @@ class GaussianTrajJob(GaussianJob):
         self.molecules = molecules[-last_num_structures:]
         if grouping_strategy is not None:
             self.grouper = StructureGrouperFactory.create(
-                self.molecules, strategy=self.grouping_strategy, **kwargs
+                self.molecules,
+                strategy=self.grouping_strategy,
+                label=label,
+                **kwargs,
             )
             self.grouper.group()
         else:

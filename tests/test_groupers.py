@@ -444,7 +444,7 @@ class Test_IRMSD_grouper:
 
         # rmsd calculation from grouper
         rmsd = grouper._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 0.21249, rtol=1e-3)
+        assert np.isclose(rmsd, 0.2294, rtol=1e-3)
 
     def test_irmsd_grouper_for_crest_molecules(
         self, multiple_molecules_xyz_file, temp_working_dir
@@ -467,14 +467,14 @@ class Test_IRMSD_grouper:
         # rmsd calculation from grouper
         rmsd = grouper._calculate_rmsd((0, 1))
         assert np.isclose(rmsd, 0.4091, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 4))
-        assert np.isclose(rmsd, 1.8202, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((1, 2))
+        rmsd = grouper._calculate_rmsd((0, 2))
         assert np.isclose(rmsd, 1.4626, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((11, 17))
-        assert np.isclose(rmsd, 0.4497, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((16, 17))
-        assert np.isclose(rmsd, 3.1502, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((0, 3))
+        assert np.isclose(rmsd, 2.3927, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((0, 4))
+        assert np.isclose(rmsd, 2.1824, rtol=1e-3)
+        rmsd = grouper._calculate_rmsd((0, 13))
+        assert np.isclose(rmsd, 3.2087, rtol=1e-3)
 
 
 class Test_PymolRMSD_grouper:
