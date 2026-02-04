@@ -78,7 +78,7 @@ class ORCAOutFolder(BaseFolder):
         )
 
     @property
-    def all_logfiles_in_current_folder(self):
+    def all_outfiles_in_current_folder(self):
         """
         Get all ORCA output files in the current folder only.
 

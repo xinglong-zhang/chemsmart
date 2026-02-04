@@ -1,0 +1,14 @@
+# Default Gaussian settings for calculations for project ring strain (rs)
+gas:
+  functional: mn15
+  basis: def2svp
+solv: 
+  functional: mn15
+  basis: def2qzvp
+  freq: False
+qmmm:
+  high_level_functional: MN15
+  high_level_basis: def2svp
+  medium_level_functional: PBEPBE
+  medium_level_basis: 6-31g(d,p)/auto
+  low_level_force_field: AMBER=HardFirst
