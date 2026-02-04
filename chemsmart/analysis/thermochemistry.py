@@ -6,6 +6,7 @@ from functools import cached_property
 import numpy as np
 from ase import units
 
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
@@ -18,7 +19,6 @@ from chemsmart.utils.constants import (
 )
 from chemsmart.utils.io import (
     get_program_type_from_file,
-    get_program_type_from_folder,
 )
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
@@ -153,7 +153,9 @@ class Thermochemistry:
     def file_object(self):
         """Open the file and return the file object."""
         if self.filename is None:
-            program = get_program_type_from_folder(self.folder)
+            program = BaseFolder(
+                folder=self.folder
+            ).get_program_type_from_folder()
         else:
             program = get_program_type_from_file(self.filename)
         if program == "gaussian":

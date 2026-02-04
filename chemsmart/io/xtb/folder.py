@@ -2,7 +2,6 @@ import logging
 import os
 
 from chemsmart.io.folder import BaseFolder
-from chemsmart.utils.io import find_output_files_in_directory
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +42,8 @@ class XTBFolder(BaseFolder):
 
     def _xtb_out(self):
         """Return the path to the main XTB output file."""
-        xtbout = find_output_files_in_directory(
-            self.folder, program="xtb", recursive=False
+        xtbout = self.get_all_output_files_in_current_folder_by_program(
+            program="xtb"
         )
         return xtbout[0] if xtbout else None
 

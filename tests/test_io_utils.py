@@ -10,11 +10,8 @@ from chemsmart.utils.io import (
     clean_duplicate_structure,
     clean_label,
     convert_string_indices_to_pymol_id_indices,
-    find_output_files_in_directory,
     get_program_type_from_file,
-    get_program_type_from_folder,
     increment_numbers,
-    is_program_calculation_directory,
     load_molecules_from_paths,
     match_outfile_pattern,
     remove_keyword,
@@ -132,77 +129,6 @@ class TestGetOutfileFormat:
         result = get_program_type_from_file(temp_name)
         assert result == "unknown"
         os.unlink(f.name)
-
-
-class TestFindOutputFilesInDirectory:
-    """Tests for the find_output_files_in_directory function."""
-
-    def test_find_gaussian_outputs(self, gaussian_outputs_test_directory):
-        """Test finding Gaussian output files."""
-        gaussian_output_files = find_output_files_in_directory(
-            gaussian_outputs_test_directory, program="gaussian"
-        )
-        assert len(gaussian_output_files) > 0
-
-    def test_find_orca_outputs(self, orca_outputs_directory):
-        """Test finding ORCA output files."""
-        orca_output_files = find_output_files_in_directory(
-            orca_outputs_directory, program="orca"
-        )
-        assert len(orca_output_files) > 0
-
-    def test_find_xtb_outputs_non_recursive(self, xtb_outputs_directory):
-        """Test finding xTB output files with non-recursive search."""
-        xtb_output_files = find_output_files_in_directory(
-            xtb_outputs_directory, program="xtb", recursive=False
-        )
-        assert not xtb_output_files
-
-    def test_find_xtb_outputs_recursive(self, xtb_outputs_directory):
-        """Test finding xTB output files with recursive search."""
-        result = find_output_files_in_directory(
-            xtb_outputs_directory, program="xtb", recursive=True
-        )
-        # Recursive should find files in subdirectories
-        assert len(result) > 0
-
-
-class TestIsProgramCalculationDirectory:
-    """Tests for the is_program_calculation_directory function."""
-
-    def test_xtb_output_directory(self, xtb_outputs_directory):
-        """Test detection of xTB output directory."""
-        assert not is_program_calculation_directory(
-            xtb_outputs_directory, "xtb"
-        )
-
-    def test_xtb_co2_calculation_directory(self, xtb_co2_outfolder):
-        """Test detection of xTB calculation directory for CO2."""
-        assert is_program_calculation_directory(xtb_co2_outfolder, "xtb")
-
-    def test_not_xtb_directory(self, gaussian_outputs_test_directory):
-        """Test that Gaussian directory is not detected as xTB."""
-        assert not is_program_calculation_directory(
-            gaussian_outputs_test_directory, "xtb"
-        )
-
-
-class TestGetOutFolderFormat:
-    """Tests for the get_program_type_from_folder function."""
-
-    def test_xtb_output_detection(self, xtb_water_outfolder):
-        """Test detection of xTB calculation folder."""
-        result = get_program_type_from_folder(xtb_water_outfolder)
-        assert result == "xtb"
-
-    def test_unknown_folder(self):
-        """Test unknown folder type."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Create some random files
-            with open(os.path.join(temp_dir, "random.txt"), "w") as f:
-                f.write("Random content\n")
-            result = get_program_type_from_folder(temp_dir)
-            assert result == "unknown"
 
 
 class TestCleanDuplicateStructure:
