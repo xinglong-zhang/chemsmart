@@ -9,13 +9,11 @@ from chemsmart.cli.job import (
     click_folder_options,
     click_job_options,
 )
+from chemsmart.io.folder import BaseFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import (
-    find_output_files_in_directory,
-    get_program_type_from_file,
-)
+from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
 
@@ -231,8 +229,10 @@ def thermochemistry(
                 f"Unsupported filetype {filetype} for thermochemistry.\n"
                 f"Please choose one of ['gaussian', 'orca']."
             )
-        files = find_output_files_in_directory(
-            directory=directory, program=filetype.lower()
+        files = BaseFolder(
+            folder=directory
+        ).get_all_output_files_in_current_folder_by_program(
+            program=filetype.lower()
         )
         for file in files:
             job = ThermochemistryJob.from_filename(

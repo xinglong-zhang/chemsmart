@@ -3,10 +3,13 @@ import os
 
 from chemsmart.io.file import SDFFile
 from chemsmart.io.folder import BaseFolder
-from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
+from chemsmart.io.gaussian.folder import (
+    GaussianInputFolder,
+    GaussianOutputFolder,
+)
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.io.orca.folder import ORCAInpFolder, ORCAOutFolder
+from chemsmart.io.orca.folder import ORCAInputFolder, ORCAOutputFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xyz.folder import XYZFolder
@@ -81,20 +84,20 @@ class FileConverter:
             output_filetype (str): Target output format.
         """
         if type == "log":
-            g16_folder = GaussianLogFolder(folder=directory)
-            all_files = g16_folder.all_logfiles
+            g16_folder = GaussianOutputFolder(folder=directory)
+            all_files = g16_folder.all_log_files
         elif type == "com":
-            g16_folder = GaussianComFolder(folder=directory)
+            g16_folder = GaussianInputFolder(folder=directory)
             all_files = g16_folder.all_com_files
         elif type == "gjf":
-            g16_folder = GaussianComFolder(folder=directory)
+            g16_folder = GaussianInputFolder(folder=directory)
             all_files = g16_folder.all_gjf_files
         elif type == "out":
-            orca_folder = ORCAOutFolder(folder=directory)
-            all_files = orca_folder.all_outfiles
+            orca_folder = ORCAOutputFolder(folder=directory)
+            all_files = orca_folder.all_out_files
         elif type == "inp":
-            orca_folder = ORCAInpFolder(folder=directory)
-            all_files = orca_folder.all_inpfiles
+            orca_folder = ORCAInputFolder(folder=directory)
+            all_files = orca_folder.all_inp_files
         elif type == "xyz":
             xyz_folder = XYZFolder(folder=directory)
             all_files = xyz_folder.all_xyzfiles
