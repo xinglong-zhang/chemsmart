@@ -122,20 +122,25 @@ class EnergyGrouper(MoleculeGrouper):
                     "Energy grouping requires all molecules to have energy values."
                 )
 
-    def _calculate_energy_diff(self, idx_pair: Tuple[int, int]) -> float:
+    def _calculate_energy_diff(
+        self, idx_pair: Tuple[int, int]
+    ) -> Tuple[float, float]:
         """
-        Calculate absolute energy difference between two molecules.
+        Calculate energy difference between two molecules.
 
         Args:
             idx_pair (Tuple[int, int]): Tuple of molecule indices (i, j).
 
         Returns:
-            float: Absolute energy difference in Hartree.
+            Tuple[float, float]: (relative energy difference, absolute energy difference) in Hartree.
+                - Relative: E_j - E_i (positive means j has higher energy than i)
+                - Absolute: |E_j - E_i| (for threshold comparison)
         """
         i, j = idx_pair
         energy_i = self.molecules[i].energy
         energy_j = self.molecules[j].energy
-        return abs(energy_i - energy_j)
+        relative_diff = energy_j - energy_i  # Positive if j has higher energy
+        return relative_diff, abs(relative_diff)
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
@@ -161,20 +166,25 @@ class EnergyGrouper(MoleculeGrouper):
             f"[{self.__class__.__name__}] Starting calculation for {n} molecules ({total_pairs} pairs)"
         )
 
-        # Calculate energy differences
-        energy_diff_values = []
+        # Calculate energy differences (both relative and absolute)
+        energy_diff_relative = []  # For output matrix (with sign)
+        energy_diff_absolute = []  # For threshold comparison
         for idx, (i, j) in enumerate(indices):
-            diff = self._calculate_energy_diff((i, j))
-            energy_diff_values.append(diff)
+            rel_diff, abs_diff = self._calculate_energy_diff((i, j))
+            energy_diff_relative.append(rel_diff)
+            energy_diff_absolute.append(abs_diff)
             print(
                 f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, "
-                f"Energy Diff= {diff:.10f} Hartree ({diff * HARTREE_TO_KCAL:.4f} kcal/mol)"
+                f"Energy Diff= {rel_diff:+.10f} Hartree ({rel_diff * HARTREE_TO_KCAL:+.4f} kcal/mol)"
             )
 
-        # Build full energy difference matrix for output
+        # Build full energy difference matrix for output (with sign, relative to smaller index)
+        # matrix[i,j] = E_j - E_i (positive means j has higher energy)
+        # matrix[j,i] = E_i - E_j (negative of the above)
         energy_matrix = np.zeros((n, n))
-        for (i, j), diff in zip(indices, energy_diff_values):
-            energy_matrix[i, j] = energy_matrix[j, i] = diff
+        for (i, j), rel_diff in zip(indices, energy_diff_relative):
+            energy_matrix[i, j] = rel_diff  # E_j - E_i
+            energy_matrix[j, i] = -rel_diff  # E_i - E_j
 
         # Create output directory
         if self.label:
@@ -199,11 +209,11 @@ class EnergyGrouper(MoleculeGrouper):
         # Choose grouping strategy based on parameters
         if self.num_groups is not None:
             groups, index_groups = self._group_by_num_groups(
-                energy_matrix, energy_diff_values, indices
+                energy_matrix, energy_diff_absolute, indices
             )
         else:
             groups, index_groups = self._group_by_threshold(
-                energy_diff_values, indices
+                energy_diff_absolute, indices
             )
 
         # Calculate total grouping time
@@ -499,11 +509,15 @@ class EnergyGrouper(MoleculeGrouper):
             # Add header information
             row = 1
             worksheet[f"A{row}"] = (
-                f"Full Energy Difference Matrix ({n}x{n}) - {self.__class__.__name__}"
+                f"Relative Energy Difference Matrix ({n}x{n}) - {self.__class__.__name__}"
             )
             row += 1
             worksheet[f"A{row}"] = (
-                "Values are absolute energy differences in kcal/mol"
+                "Values are relative energy differences in kcal/mol: matrix[i,j] = E_j - E_i"
+            )
+            row += 1
+            worksheet[f"A{row}"] = (
+                "Positive value means column molecule has higher energy than row molecule"
             )
             row += 1
             worksheet[f"A{row}"] = (

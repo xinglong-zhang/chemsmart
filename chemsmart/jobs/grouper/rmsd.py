@@ -102,6 +102,7 @@ class RMSDGrouper(MoleculeGrouper):
             threshold = 0.5
         self.threshold = threshold  # RMSD threshold for grouping
         self.num_groups = num_groups  # Number of groups to create
+        self._auto_threshold = None  # Will be set if num_groups is used
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
         # Cache sorted chemical symbols as sets for faster comparison
@@ -554,16 +555,13 @@ class RMSDGrouper(MoleculeGrouper):
             )
             row += 1
 
-            # Threshold or num_groups
-            if hasattr(self, "num_groups") and self.num_groups is not None:
+            # Threshold or num_groups (both are base class attributes)
+            if self.num_groups is not None:
                 worksheet[f"A{row}"] = (
                     f"Requested Groups (-N): {self.num_groups}"
                 )
                 row += 1
-                if (
-                    hasattr(self, "_auto_threshold")
-                    and self._auto_threshold is not None
-                ):
+                if self._auto_threshold is not None:
                     worksheet[f"A{row}"] = (
                         f"Auto-determined Threshold: {self._auto_threshold:.7f} Å"
                     )
@@ -572,26 +570,20 @@ class RMSDGrouper(MoleculeGrouper):
                 worksheet[f"A{row}"] = f"Threshold: {self.threshold} Å"
                 row += 1
 
-            # Parameters specific to different groupers
-            worksheet[f"A{row}"] = (
-                f"Align Molecules: {getattr(self, 'align_molecules', 'N/A')}"
-            )
+            # Parameters common to all RMSD groupers
+            worksheet[f"A{row}"] = f"Align Molecules: {self.align_molecules}"
             row += 1
-            worksheet[f"A{row}"] = (
-                f"Ignore Hydrogens: {getattr(self, 'ignore_hydrogens', False)}"
-            )
+            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
             row += 1
 
             # IRMSDGrouper specific parameters
-            actual_inversion = getattr(self, "_actual_inversion", None)
-            if actual_inversion is not None:
-                worksheet[f"A{row}"] = f"Inversion: {actual_inversion}"
+            if isinstance(self, IRMSDGrouper):
+                worksheet[f"A{row}"] = f"Inversion: {self._actual_inversion}"
                 row += 1
 
             # SpyRMSDGrouper specific parameters
-            cache = getattr(self, "cache", None)
-            if cache is not None:
-                worksheet[f"A{row}"] = f"Cache: {cache}"
+            if isinstance(self, SpyRMSDGrouper):
+                worksheet[f"A{row}"] = f"Cache: {self.cache}"
                 row += 1
 
             # Number of processors
@@ -1015,6 +1007,7 @@ class IRMSDGrouper(RMSDGrouper):
         self.inversion = (
             inversion.lower() if isinstance(inversion, str) else "auto"
         )
+        self._actual_inversion = None  # Will be set from first irmsd output
         self._irmsd_cmd = self._find_irmsd_command()
         if self._irmsd_cmd:
             logger.info(f"Using irmsd command: {self._irmsd_cmd}")
@@ -1192,7 +1185,7 @@ class IRMSDGrouper(RMSDGrouper):
                 return np.inf
 
             # Parse output (only parse inversion on first call)
-            need_inversion = not hasattr(self, "_actual_inversion")
+            need_inversion = self._actual_inversion is None
             rmsd_value, actual_inversion = self._parse_irmsd_output(
                 result.stdout, parse_inversion=need_inversion
             )
@@ -1253,6 +1246,7 @@ class PymolRMSDGrouper(RMSDGrouper):
         self._xyz_files = []
         self._mol_names = []
         self._alignment_cache = {}
+        self.cmd = None  # Will be set in _init_pymol()
         self._init_pymol()
         self._prepare_molecules()
 
@@ -1319,12 +1313,12 @@ class PymolRMSDGrouper(RMSDGrouper):
         import shutil
 
         try:
-            if hasattr(self, "cmd"):
+            if self.cmd is not None:
                 self.cmd.quit()
         except Exception:
             pass
         try:
-            if hasattr(self, "_temp_dir") and self._temp_dir:
+            if self._temp_dir is not None:
                 shutil.rmtree(self._temp_dir, ignore_errors=True)
         except Exception:
             pass

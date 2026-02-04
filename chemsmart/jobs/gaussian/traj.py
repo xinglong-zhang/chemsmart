@@ -122,15 +122,27 @@ class GaussianTrajJob(GaussianJob):
 
         # proportion of the traj from last portion to obtain structures
         self.proportion_to_opt = proportion_structures_to_use
+        total_structures = len(molecules)
         last_num_structures = int(
-            round(len(molecules) * proportion_structures_to_use, 1)
+            round(total_structures * proportion_structures_to_use, 1)
         )
         self.molecules = molecules[-last_num_structures:]
+
+        # Calculate original indices for the selected structures
+        # e.g., if total=18 and selecting last 9, original indices are 10-18 (1-based)
+        start_original_index = (
+            total_structures - last_num_structures + 1
+        )  # 1-based
+        self._original_conformer_ids = [
+            str(start_original_index + i) for i in range(last_num_structures)
+        ]
+
         if grouping_strategy is not None:
             self.grouper = StructureGrouperFactory.create(
                 self.molecules,
                 strategy=self.grouping_strategy,
                 label=label,
+                conformer_ids=self._original_conformer_ids,
                 **kwargs,
             )
             self.grouper.group()

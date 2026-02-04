@@ -103,6 +103,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             threshold = 0.1
         self.threshold = threshold
         self.num_groups = num_groups
+        self._auto_threshold = None  # Will be set if num_groups is used
         self.use_weights = use_weights
         self.max_dev = max_dev
         self.symm_radius = symm_radius
@@ -515,15 +516,12 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             )
             row += 1
 
-            if hasattr(self, "num_groups") and self.num_groups is not None:
+            if self.num_groups is not None:
                 worksheet[f"A{row}"] = (
                     f"Requested Groups (-N): {self.num_groups}"
                 )
                 row += 1
-                if (
-                    hasattr(self, "_auto_threshold")
-                    and self._auto_threshold is not None
-                ):
+                if self._auto_threshold is not None:
                     worksheet[f"A{row}"] = (
                         f"Auto-determined Threshold: {self._auto_threshold:.7f} (lower value indicate higher torsional similarity)"
                     )
