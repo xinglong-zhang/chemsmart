@@ -77,11 +77,31 @@ class XTBFolder(BaseFolder):
         return False
 
     def _xtb_out(self):
-        """Return the path to the main XTB output file."""
+        """
+        Return the path to the main XTB output file.
+
+        If multiple xTB output files are found, logs a warning and returns
+        the most recently modified one.
+
+        Returns:
+            str | None: Path to the xTB output file, or None if not found.
+        """
         xtbout = self.get_all_output_files_in_current_folder_by_program(
             program="xtb"
         )
-        return xtbout[0] if xtbout else None
+        if not xtbout:
+            return None
+        if len(xtbout) > 1:
+            # Sort by modification time (most recent first)
+            xtbout_sorted = sorted(
+                xtbout, key=lambda f: os.path.getmtime(f), reverse=True
+            )
+            logger.warning(
+                f"Multiple xTB output files found in {self.folder}, "
+                f"using the most recent one: {os.path.basename(xtbout_sorted[0])}"
+            )
+            return xtbout_sorted[0]
+        return xtbout[0]
 
     def _xtbopt_log(self):
         """Return the path to optimization trajectory log file."""
