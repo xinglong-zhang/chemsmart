@@ -1178,6 +1178,12 @@ def xyz_directory(structure_test_directory):
 
 
 @pytest.fixture()
+def ts_conformers_log_directory(structure_test_directory):
+    """Directory containing TS conformer log files (ch_1c_para_c1.log to c5.log)."""
+    return os.path.join(structure_test_directory, "conformers", "log")
+
+
+@pytest.fixture()
 def single_molecule_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_best.xyz")
 
