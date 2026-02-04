@@ -1452,12 +1452,23 @@ class FolderMixin:
 
         Returns:
             list[str]: Full file paths matching the specified program.
+
+        Raises:
+            ValueError: If an unsupported program name is provided.
         """
         from chemsmart.utils.io import (
             ALL_SUFFIXES,
             PROGRAM_INFO,
             get_program_type_from_file,
         )
+
+        # Validate program parameter
+        if program is not None and program not in PROGRAM_INFO:
+            valid_programs = ", ".join(sorted(PROGRAM_INFO))
+            raise ValueError(
+                f"Unsupported program '{program}'. "
+                f"Supported programs: {valid_programs}."
+            )
 
         candidate_files = []
         if recursive:
