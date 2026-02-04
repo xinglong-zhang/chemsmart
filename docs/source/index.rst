@@ -78,6 +78,14 @@ chemistry software.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Grouper Tool
+
+   grouper-cli-options
+   grouper-strategies
+   grouper-crest-or-traj-workflow
+
+.. toctree::
+   :maxdepth: 2
    :caption: NCIPLOT
 
    nciplot-tutorial
