@@ -11,6 +11,7 @@ from chemsmart.cli.job import (
     click_job_options,
 )
 from chemsmart.io.folder import BaseFolder
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
@@ -249,20 +250,14 @@ def thermochemistry(
     if directory:
         if filetype.lower() == "xtb":
             # First check if the directory itself is an xTB calculation folder
-            if BaseFolder(folder=directory).is_program_calculation_directory(
-                program=filetype.lower()
-            ):
+            if XTBFolder(folder=directory).is_xtb_calculation_directory:
                 # Single xTB calculation directory provided
                 folders.append(directory)
             else:
                 # Directory containing multiple xTB calculation subdirectories
                 for entry in os.listdir(directory):
                     subdir = os.path.join(directory, entry)
-                    if BaseFolder(
-                        folder=subdir
-                    ).is_program_calculation_directory(
-                        program=filetype.lower()
-                    ):
+                    if XTBFolder(folder=subdir).is_xtb_calculation_directory:
                         folders.append(subdir)
             if not folders:
                 raise click.UsageError(

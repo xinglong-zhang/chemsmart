@@ -707,6 +707,7 @@ class TestXTBFolder:
         """Test XTBFolder with CO2 ohess calculation output."""
         assert os.path.exists(xtb_co2_outfolder)
         co2_folder = XTBFolder(xtb_co2_outfolder)
+        assert co2_folder.is_xtb_calculation_directory
 
         assert co2_folder._xtb_out() is not None
         assert os.path.basename(co2_folder._xtb_out()) == "co2_ohess.out"
@@ -755,6 +756,7 @@ class TestXTBFolder:
         cyclopentadienyl_anion_folder = XTBFolder(
             xtb_cyclopentadienyl_anion_outfolder
         )
+        assert cyclopentadienyl_anion_folder.is_xtb_calculation_directory
 
         assert cyclopentadienyl_anion_folder._xtb_out() is not None
         assert (
@@ -797,6 +799,7 @@ class TestXTBFolder:
         """Test XTBFolder with p-benzyne sp calculation output."""
         assert os.path.exists(xtb_p_benzyne_sp_outfolder)
         p_benzyne_sp_folder = XTBFolder(xtb_p_benzyne_sp_outfolder)
+        assert p_benzyne_sp_folder.is_xtb_calculation_directory
 
         assert p_benzyne_sp_folder._xtb_out() is not None
         assert (
