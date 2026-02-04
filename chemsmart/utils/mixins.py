@@ -1564,6 +1564,11 @@ class FolderMixin:
         """
         Detect the type of calculation folder based on programs.
 
+        Note:
+            Folder-level detection is currently only supported for xtb and crest
+            programs. Other supported programs like gaussian and orca require
+            file-level detection (see get_program_type_from_file).
+
         Returns:
             str: Program name ("xtb", "crest"), "mixed" if multiple programs detected,
              or "unknown" if the format cannot be detected.
