@@ -27,42 +27,24 @@ class ORCAInputFolder(BaseFolder):
 
     @property
     def all_input_files(self):
-        """
-        Get all ORCA input files in the folder and subfolders.
-
-        Returns:
-            list: Paths to all .inp files found recursively
-        """
-        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
-            filetype="inp"
-        )
+        """Get all ORCA input files in the folder and subfolders."""
+        return self.all_inp_files
 
     @property
     def all_input_files_in_current_folder(self):
-        """
-        Get all ORCA input files in the current folder only.
-
-        Returns:
-            list: Paths to all .inp files in current directory
-        """
-        return self.get_all_files_in_current_folder_by_suffix(filetype="inp")
+        """Get all ORCA input files in the current folder only."""
+        return self.all_inp_files_in_current_folder
 
     @property
     def all_inp_files(self):
-        """
-        Get all ORCA input files in the folder and subfolders.
-        Alias for all_input_files for consistency with file_converter.
-        """
+        """Get all .inp files in the folder and subfolders."""
         return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="inp"
         )
 
     @property
-    def all_inpfiles_in_current_folder(self):
-        """
-        Get all ORCA input files in the current folder only.
-        Deprecated: Use all_input_files_in_current_folder instead.
-        """
+    def all_inp_files_in_current_folder(self):
+        """Get all .inp files in the current folder only."""
         return self.get_all_files_in_current_folder_by_suffix(filetype="inp")
 
 
@@ -85,51 +67,28 @@ class ORCAOutputFolder(BaseFolder):
 
     @property
     def all_output_files(self):
-        """
-        Get all ORCA output files in the folder and subfolders.
-
-        Returns:
-            list: Paths to all ORCA output files found recursively
-        """
+        """Get all ORCA output files in the folder and subfolders."""
         return self.get_all_output_files_in_current_folder_and_subfolders_by_program(
             program="orca"
         )
 
     @property
     def all_output_files_in_current_folder(self):
-        """
-        Get all ORCA output files in the current folder only.
-
-        Returns:
-            list: Paths to all ORCA output files in current directory
-        """
+        """Get all ORCA output files in the current folder only."""
         return self.get_all_output_files_in_current_folder_by_program(
             program="orca"
         )
 
     @property
     def all_out_files(self):
-        """
-        Get all .out files in the folder and subfolders.
-        Uses suffix-based detection (fast but less flexible).
-        For content-based detection, use all_output_files instead.
-
-        Returns:
-            list: Paths to all .out files found recursively
-        """
+        """Get all .out files in the folder and subfolders."""
         return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="out"
         )
 
     @property
     def all_out_files_in_current_folder(self):
-        """
-        Get all .out files in the current folder only.
-        Uses suffix-based detection (fast but less flexible).
-
-        Returns:
-            list: Paths to all .out files in current directory
-        """
+        """Get all .out files in the current folder only."""
         return self.get_all_files_in_current_folder_by_suffix(filetype="out")
 
     @property

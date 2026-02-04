@@ -21,64 +21,39 @@ class GaussianInputFolder(BaseFolder):
 
     @property
     def all_input_files(self):
-        """
-        Get all Gaussian input files (.com, .gjf) in folder and subfolders.
-        """
-        com_files = (
-            self.get_all_files_in_current_folder_and_subfolders_by_suffix(
-                filetype="com"
-            )
-        )
-        gjf_files = (
-            self.get_all_files_in_current_folder_and_subfolders_by_suffix(
-                filetype="gjf"
-            )
-        )
-        return com_files + gjf_files
+        """Get all Gaussian input files in folder and subfolders."""
+        return self.all_com_files + self.all_gjf_files
 
     @property
     def all_input_files_in_current_folder(self):
-        """
-        Get all Gaussian input files (.com, .gjf) in the current folder only.
-        """
-        com_files = self.get_all_files_in_current_folder_by_suffix(
-            filetype="com"
+        """Get all Gaussian input files in the current folder only."""
+        return (
+            self.all_com_files_in_current_folder
+            + self.all_gjf_files_in_current_folder
         )
-        gjf_files = self.get_all_files_in_current_folder_by_suffix(
-            filetype="gjf"
-        )
-        return com_files + gjf_files
 
     @property
     def all_com_files(self):
-        """
-        Get all .com files in folder and subfolders.
-        """
+        """Get all .com files in folder and subfolders."""
         return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="com"
         )
 
     @property
     def all_com_files_in_current_folder(self):
-        """
-        Get all .com files in the current folder only.
-        """
+        """Get all .com files in the current folder only."""
         return self.get_all_files_in_current_folder_by_suffix(filetype="com")
 
     @property
     def all_gjf_files(self):
-        """
-        Get all .gjf files in folder and subfolders.
-        """
+        """Get all .gjf files in folder and subfolders."""
         return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="gjf"
         )
 
     @property
     def all_gjf_files_in_current_folder(self):
-        """
-        Get all .gjf files in the current folder only.
-        """
+        """Get all .gjf files in the current folder only."""
         return self.get_all_files_in_current_folder_by_suffix(filetype="gjf")
 
 
@@ -95,40 +70,41 @@ class GaussianOutputFolder(BaseFolder):
 
     @property
     def all_output_files(self):
-        """
-        Get all Gaussian output files in the folder, including subfolders.
-        """
+        """Get all Gaussian output files in the folder and subfolders."""
         return self.get_all_output_files_in_current_folder_and_subfolders_by_program(
             program="gaussian"
         )
 
     @property
     def all_output_files_in_current_folder(self):
-        """
-        Get all Gaussian output files in the current folder.
-        """
+        """Get all Gaussian output files in the current folder only."""
         return self.get_all_output_files_in_current_folder_by_program(
             program="gaussian"
         )
 
     @property
     def all_log_files(self):
-        """
-        Get all .log files in the folder, including subfolders.
-        Uses suffix-based detection (fast but may miss .out files).
-        For content-based detection, use all_output_files instead.
-        """
+        """Get all .log files in the folder and subfolders."""
         return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="log"
         )
 
     @property
     def all_log_files_in_current_folder(self):
-        """
-        Get all .log files in the current folder.
-        Uses suffix-based detection (fast but may miss .out files).
-        """
+        """Get all .log files in the current folder only."""
         return self.get_all_files_in_current_folder_by_suffix(filetype="log")
+
+    @property
+    def all_out_files(self):
+        """Get all .out files in the folder and subfolders."""
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
+            filetype="out"
+        )
+
+    @property
+    def all_out_files_in_current_folder(self):
+        """Get all .out files in the current folder only."""
+        return self.get_all_files_in_current_folder_by_suffix(filetype="out")
 
     @property
     def all_molecules(self):
