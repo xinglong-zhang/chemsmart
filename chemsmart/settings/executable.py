@@ -277,9 +277,8 @@ class XTBExecutable(Executable):
     executable paths and configurations.
     """
 
-    PROGRAM = "XTB"  # all CAPS as required by 
+    PROGRAM = "XTB"  # all CAPS as required by
     # server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
-    
 
     def __init__(self, executable_folder=None, **kwargs):
         """

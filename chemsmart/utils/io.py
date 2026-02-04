@@ -284,7 +284,7 @@ def line_of_integer_followed_by_floats(line) -> bool:
     return all(float_pattern.fullmatch(t) for t in tokens[1:])
 
 
-def match_outfile_pattern(line) -> str | None:
+def match_outfile_pattern(line):
     """
     Match a line of text to known quantum chemistry program signatures.
 
@@ -300,7 +300,7 @@ def match_outfile_pattern(line) -> str | None:
     return None
 
 
-def get_program_type_from_file(filepath) -> str:
+def get_program_type_from_file(filepath):
     """
     Detect the type of quantum chemistry output file.
 
@@ -335,87 +335,6 @@ def get_program_type_from_file(filepath) -> str:
     logger.debug(
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
-    return "unknown"
-
-
-def find_output_files_in_directory(directory, program=None, recursive=False):
-    """
-    Find quantum chemistry output files in a directory by program.
-
-    Args:
-        directory (str): Path to the directory to search.
-        program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
-                              If None, searches for all supported programs.
-        recursive (bool): If True, searches recursively in subdirectories.
-                         Defaults to True.
-
-    Returns:
-        list[str]: List of file paths matching the specified program.
-    """
-    directory = os.path.abspath(directory)
-    candidate_files = []
-    if recursive:
-        for subdir, _, files in os.walk(directory):
-            for file in files:
-                if program is None:
-                    if file.endswith(ALL_SUFFIXES):
-                        candidate_files.append(os.path.join(subdir, file))
-                else:
-                    if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
-                        candidate_files.append(os.path.join(subdir, file))
-    else:
-        files = os.listdir(directory)
-        for file in files:
-            if program is None:
-                if file.endswith(ALL_SUFFIXES):
-                    candidate_files.append(os.path.join(directory, file))
-            else:
-                if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
-                    candidate_files.append(os.path.join(directory, file))
-
-    matched_files = []
-    for file in candidate_files:
-        detected_program = get_program_type_from_file(file)
-        if detected_program == "unknown":
-            continue
-        if program is None or detected_program == program:
-            matched_files.append(file)
-    return matched_files
-
-
-def is_program_calculation_directory(directory, program):
-    """
-    Check if a directory contains output files from a specific program.
-
-    Args:
-        directory (str): Path to the directory to check.
-        program (str): Target QC program (e.g., "xtb", "crest").
-
-    Returns:
-        bool: True if the directory contains at least one output file from
-              the specified program, False otherwise.
-    """
-    if not os.path.isdir(directory):
-        return False
-    return bool(
-        find_output_files_in_directory(directory, program, recursive=False)
-    )
-
-
-def get_program_type_from_folder(directory) -> str:
-    """
-    Detect the type of quantum chemistry calculation folder.
-
-    Args:
-        directory (str): Path to the directory to check.
-
-    Returns:
-        str: Program name ("xtb", "crest") or "unknown"
-             if the format cannot be detected.
-    """
-    for program in PROGRAMS_WITH_FOLDER_DETECTION:
-        if is_program_calculation_directory(directory, program):
-            return program
     return "unknown"
 
 

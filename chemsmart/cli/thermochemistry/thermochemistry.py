@@ -10,14 +10,11 @@ from chemsmart.cli.job import (
     click_folder_options,
     click_job_options,
 )
+from chemsmart.io.folder import BaseFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import (
-    find_output_files_in_directory,
-    get_program_type_from_file,
-    is_program_calculation_directory,
-)
+from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
 
@@ -252,8 +249,8 @@ def thermochemistry(
     if directory:
         if filetype.lower() == "xtb":
             # First check if the directory itself is an xTB calculation folder
-            if is_program_calculation_directory(
-                directory=directory, program=filetype.lower()
+            if BaseFolder(folder=directory).is_program_calculation_directory(
+                program=filetype.lower()
             ):
                 # Single xTB calculation directory provided
                 folders.append(directory)
@@ -261,8 +258,10 @@ def thermochemistry(
                 # Directory containing multiple xTB calculation subdirectories
                 for entry in os.listdir(directory):
                     subdir = os.path.join(directory, entry)
-                    if is_program_calculation_directory(
-                        directory=subdir, program=filetype.lower()
+                    if BaseFolder(
+                        folder=subdir
+                    ).is_program_calculation_directory(
+                        program=filetype.lower()
                     ):
                         folders.append(subdir)
             if not folders:
@@ -285,8 +284,10 @@ def thermochemistry(
                 )
                 logger.debug(f"Job settings: {job_settings.__dict__}")
         elif filetype.lower() in {"gaussian", "orca"}:
-            files = find_output_files_in_directory(
-                directory=directory, program=filetype.lower(), recursive=False
+            files = BaseFolder(
+                folder=directory
+            ).get_all_output_files_in_current_folder_by_program(
+                program=filetype.lower()
             )
             for file in files:
                 job = ThermochemistryJob.from_filename(
