@@ -25,7 +25,7 @@ source with consistent atom ordering.
 hrmsd (Hungarian RMSD)
 ======================
 
-RMSD with optimal atom mapping using the Hungarian algorithm.
+RMSD with optimal atom mapping using the Hungarian algorithm (*J. Chem. Inf. Model. 2014, 54, 518*).
 
 .. code:: bash
 
@@ -39,7 +39,7 @@ ordering may differ.
 spyrmsd
 =======
 
-RMSD calculation using the spyrmsd library with symmetry handling.
+RMSD calculation using the spyrmsd library with symmetry handling (*J. Cheminformatics 2020, 12, 49*).
 
 .. code:: bash
 
@@ -52,7 +52,8 @@ Handles molecular symmetry and equivalent atom permutations using graph isomorph
 irmsd (Invariant RMSD)
 ======================
 
-Invariant RMSD that considers molecular symmetry and equivalent atom permutations.
+Invariant RMSD that considers molecular symmetry and equivalent atom permutations (*J. Chem. Inf. Model. 2025, 65,
+4501*).
 
 .. code:: bash
 
@@ -82,7 +83,8 @@ installation instructions in the README.
 pymolrmsd
 =========
 
-PyMOL-based RMSD alignment using the ``align`` command.
+PyMOL-based RMSD alignment using the ``align`` command (*Schrödinger, L. The PyMOL Molecular Graphics Development
+Component, Version 1.8; 2015*).
 
 .. code:: bash
 
@@ -99,7 +101,7 @@ Uses PyMOL's powerful alignment algorithm. Note that PyMOL only supports single-
 tfd (Torsion Fingerprint Deviation)
 ===================================
 
-Compare conformers based on their torsion angle fingerprints.
+Compare conformers based on their torsion angle fingerprints (*J. Chem. Inf. Model. 2012, 52, 1499*).
 
 .. code:: bash
 
