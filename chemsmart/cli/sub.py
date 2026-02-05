@@ -49,6 +49,29 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Print the generated command.",
 )
+@click.option(
+    "--mkl-threads",
+    type=int,
+    default=None,
+    help="Number of MKL threads (xTB only).",
+)
+@click.option(
+    "--omp-threads",
+    type=int,
+    default=None,
+    help="Number of OMP threads (xTB only).",
+)
+@click.option(
+    "--omp-stacksize",
+    type=str,
+    default=None,
+    help="OMP stack size (xTB only).",
+)
+@click.option(
+    "--stack-unlimited/--no-stack-unlimited",
+    default=True,
+    help="Whether to set ulimit -s unlimited (xTB only).",
+)
 def sub(
     ctx,
     server,
@@ -65,6 +88,10 @@ def sub(
     verbose,
     test,
     print_command,
+    mkl_threads,
+    omp_threads,
+    omp_stacksize,
+    stack_unlimited,
     **kwargs,
 ):
     """
@@ -96,6 +123,10 @@ def sub(
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
+        mkl_threads=mkl_threads,
+        omp_threads=omp_threads,
+        omp_stacksize=omp_stacksize,
+        stack_unlimited=stack_unlimited,
     )
 
     # Log the scratch value for debugging purposes
@@ -144,6 +175,10 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "verbose",
             "test",
             "print_command",
+            "mkl_threads",
+            "omp_threads",
+            "omp_stacksize",
+            "stack_unlimited",
         ]
 
         for keyword in keywords_not_in_run:

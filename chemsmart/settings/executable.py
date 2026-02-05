@@ -79,8 +79,11 @@ class Executable(RegistryMixin):
         server_yaml = YAMLFile(filename=server_yaml_file)
 
         # Extract configuration for the specific program
-        executable_folder = os.path.expanduser(
-            server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
+        exe_folder_raw = server_yaml.yaml_contents_dict[cls.PROGRAM][
+            "EXEFOLDER"
+        ]
+        executable_folder = (
+            os.path.expanduser(exe_folder_raw) if exe_folder_raw else None
         )
         local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "LOCAL_RUN", False
@@ -264,3 +267,40 @@ class NCIPLOTExecutable(Executable):
         if self.executable_folder is not None:
             executable_path = os.path.join(self.executable_folder, "nciplot")
             return executable_path
+
+
+class XTBExecutable(Executable):
+    """
+    Executable handler for XTB semiempirical quantum chemistry software.
+
+    This class provides specific implementation for managing XTB
+    executable paths and configurations.
+    """
+
+    PROGRAM = "XTB"  # all CAPS as required by
+    # server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
+
+    def __init__(self, executable_folder=None, **kwargs):
+        """
+        Initialize XTBExecutable instance.
+
+        Args:
+            executable_folder (str, optional): Path to XTB executable directory.
+            **kwargs: Additional arguments passed to parent Executable class.
+        """
+        super().__init__(executable_folder=executable_folder, **kwargs)
+
+    def get_executable(self):
+        """
+        Get the full path to the XTB executable.
+
+        Returns:
+            str: Full path to xtb executable if executable_folder is set,
+                 otherwise just "xtb" to use the one from conda environment.
+        """
+        if self.executable_folder is not None:
+            executable_path = os.path.join(self.executable_folder, "xtb")
+            return executable_path
+        else:
+            # Use xtb from conda environment (in PATH)
+            return "xtb"

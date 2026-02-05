@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 
 import click
 
@@ -9,13 +10,12 @@ from chemsmart.cli.job import (
     click_folder_options,
     click_job_options,
 )
+from chemsmart.io.folder import BaseFolder
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import (
-    find_output_files_in_directory,
-    get_program_type_from_file,
-)
+from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
 
@@ -167,8 +167,11 @@ def thermochemistry(
     """
     CLI subcommand for running thermochemistry jobs using the chemsmart framework.
 
-    This command allows you to compute thermochemistry for Gaussian or ORCA
-    output files.
+    This command allows you to compute thermochemistry for Gaussian, ORCA,
+    or xTB output files.
+
+    For Gaussian/ORCA, use -f (filenames) or -d with -t gaussian/orca.
+    For xTB, use -d (directory) with -t xtb.
 
     Examples:
     `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log
@@ -180,16 +183,34 @@ def thermochemistry(
     -o thermochemistry_results.dat`
     will compute thermochemistry for all Gaussian output files in the specified
     directory and save to `thermochemistry_results.dat`.
+
+    `chemsmart run thermochemistry -d /path/to/xtb_folders -t xtb -T 298.15`
+    will compute thermochemistry for xTB calculations in directories or subdirectories.
     """
     # validate input
+    if not directory and not filenames:
+        raise click.UsageError(
+            "Must specify either --directory (-d) or --filenames (-f)."
+        )
     if directory and filenames:
-        raise ValueError(
-            "Cannot specify both --directory and --filenames. Choose one."
+        raise click.UsageError(
+            "Cannot specify both --directory (-d) and --filenames (-f). Choose one."
         )
     if directory and not filetype:
-        raise ValueError("Must specify --filetype when using --directory.")
+        raise click.UsageError(
+            "Must specify --filetype (-t) when using --directory (-d)."
+        )
+
+    # XTB-specific validation: only directory is allowed, not filenames
+    if filetype and filetype.lower() == "xtb":
+        if filenames:
+            raise click.UsageError(
+                "For xTB thermochemistry, use --directory (-d) instead of "
+                "--filenames (-f). Each subdirectory should contain one xTB calculation."
+            )
+
     if cutoff_entropy_grimme and cutoff_entropy_truhlar:
-        raise ValueError(
+        raise click.UsageError(
             "Cannot specify both --cutoff-entropy-grimme and "
             "--cutoff-entropy-truhlar. Please choose one."
         )
@@ -224,28 +245,62 @@ def thermochemistry(
     # Initialize list to store jobs
     jobs = []
     files = []
+    folders = []
 
     if directory:
-        if filetype.lower() not in {"gaussian", "orca"}:
-            raise ValueError(
-                f"Unsupported filetype {filetype} for thermochemistry.\n"
-                f"Please choose one of ['gaussian', 'orca']."
+        if filetype.lower() == "xtb":
+            # First check if the directory itself is an xTB calculation folder
+            if XTBFolder(folder=directory).is_xtb_calculation_directory:
+                # Single xTB calculation directory provided
+                folders.append(directory)
+            else:
+                # Directory containing multiple xTB calculation subdirectories
+                for entry in os.listdir(directory):
+                    subdir = os.path.join(directory, entry)
+                    if XTBFolder(folder=subdir).is_xtb_calculation_directory:
+                        folders.append(subdir)
+            if not folders:
+                raise click.UsageError(
+                    f"No xTB calculation folders found in '{directory}'.\n"
+                    f"Expected to find directories containing xTB output files."
+                )
+            for folder_path in folders:
+                job = ThermochemistryJob.from_folder(
+                    foldername=folder_path,
+                    settings=job_settings,
+                    skip_completed=skip_completed,
+                )
+                if outputfile is not None:
+                    job_settings.overwrite = False
+                    job_settings.write_header = False
+                jobs.append(job)
+                logger.info(
+                    f"Created thermochemistry job for folder: {folder_path}"
+                )
+                logger.debug(f"Job settings: {job_settings.__dict__}")
+        elif filetype.lower() in {"gaussian", "orca"}:
+            files = BaseFolder(
+                folder=directory
+            ).get_all_output_files_in_current_folder_by_program(
+                program=filetype.lower()
             )
-        files = find_output_files_in_directory(
-            directory=directory, program=filetype.lower()
-        )
-        for file in files:
-            job = ThermochemistryJob.from_filename(
-                filename=file,
-                settings=job_settings,
-                skip_completed=skip_completed,
+            for file in files:
+                job = ThermochemistryJob.from_filename(
+                    filename=file,
+                    settings=job_settings,
+                    skip_completed=skip_completed,
+                )
+                if outputfile is not None:
+                    job_settings.overwrite = False
+                    job_settings.write_header = False
+                jobs.append(job)
+                logger.info(f"Created thermochemistry job for file: {file}")
+                logger.debug(f"Job settings: {job_settings.__dict__}")
+        else:
+            raise click.UsageError(
+                f"Unsupported filetype '{filetype}' for thermochemistry.\n"
+                f"Please choose one of ['gaussian', 'orca', 'xtb']."
             )
-            if outputfile is not None:
-                job_settings.overwrite = False
-                job_settings.write_header = False
-            jobs.append(job)
-            logger.info(f"Created thermochemistry job for file: {file}")
-            logger.debug(f"Job settings: {job_settings.__dict__}")
 
     elif filenames:
         for file in filenames:

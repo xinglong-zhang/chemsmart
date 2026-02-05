@@ -1,0 +1,18 @@
+# Default XTB settings for calculations
+sp:
+  job_type: sp
+  gfn_version: gfn2
+opt:
+  job_type: opt
+  gfn_version: gfn2
+  optimization_level: normal
+hess:
+  job_type: hess
+  gfn_version: gfn2
+  opt: False
+  grad: False
+md:
+  job_type: md
+  gfn_version: gfnff
+  opt: False
+

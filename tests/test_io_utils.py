@@ -108,7 +108,7 @@ class TestMatchOutfilePattern:
 
 
 class TestGetOutfileFormat:
-    """Tests for the get_outfile_format function."""
+    """Tests for the get_program_type_from_file function."""
 
     def test_gaussian_output_detection(self, gaussian_singlet_opt_outfile):
         """Test detection of Gaussian output file."""

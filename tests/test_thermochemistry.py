@@ -11,6 +11,7 @@ from chemsmart.analysis.thermochemistry import (
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -793,6 +794,91 @@ class TestThermochemistryCO2:
         ]
         assert mol.is_linear
         assert orca_out.num_vibration_modes == 4
+
+    def test_thermochemistry_co2_xtb_output(self, xtb_co2_outfolder):
+        """Values from xTB output
+                   -------------------------------------------------
+                  |                Geometry Summary                 |
+                   -------------------------------------------------
+
+              molecular mass/u    :       44.0095457
+           center of mass at/Å    :       -0.0000000       0.0000000       0.0000000
+          moments of inertia/u·Å² :       -0.3040259E-14   0.4185248E+02   0.4185248E+02
+        rotational constants/cm⁻¹ :       -0.5544801E+16   0.4027869E+00   0.4027869E+00
+        ...
+                   -------------------------------------------------
+                  |               Frequency Printout                |
+                   -------------------------------------------------
+         vibrational frequencies (cm⁻¹)
+        eigval :        0.00     0.00     0.00     0.00     0.00   600.31
+        eigval :      600.31  1424.78  2593.07
+        ...
+                   -------------------------------------------------
+                  |             Thermodynamic Functions             |
+                   -------------------------------------------------
+
+        din symmetry found (for desy threshold:  0.10E+00) used in thermo
+
+                  ...................................................
+                  :                      SETUP                      :
+                  :.................................................:
+                  :  # frequencies                           4      :
+                  :  # imaginary freq.                       0      :
+                  :  linear?                              true      :
+                  :  only rotor calc.                    false      :
+                  :  symmetry                              din      :
+                  :  rotational number                       2      :
+                  :  scaling factor                  1.0000000      :
+                  :  rotor cutoff                   50.0000000 cm⁻¹ :
+                  :  imag. cutoff                  -20.0000000 cm⁻¹ :
+                  :.................................................:
+        """
+        assert os.path.exists(xtb_co2_outfolder)
+        xtb_out = XTBOutput(folder=xtb_co2_outfolder)
+        assert xtb_out.normal_termination
+        assert xtb_out.jobtype == "opt"
+        assert xtb_out.num_atoms == 3
+        mol = xtb_out.molecule
+        assert mol.empirical_formula == "CO2"
+        assert xtb_out.multiplicity == 1
+        assert np.isclose(xtb_out.energies[-1], -10.3084523)
+        assert np.isclose(
+            mol.most_abundant_mass, 43.98982923914
+        )  # use_weighted_mass=False
+        assert np.isclose(
+            mol.natural_abundance_weighted_mass, 44.0095457453718
+        )  # use_weighted_mass=True
+        assert np.isclose(xtb_out.mass, 44.0095457)
+        assert np.allclose(
+            xtb_out.moments_of_inertia,
+            [
+                -0.3040259e-14,
+                0.4185248e02,
+                0.4185248e02,
+            ],
+        )  # in amu Å^2
+        assert np.allclose(
+            mol.moments_of_inertia_weighted_mass,
+            [4.13590306e-25, 41.8524765, 41.8524765],
+        )  # use_weighted_mass=True
+        assert np.allclose(
+            mol.moments_of_inertia_most_abundant_mass,
+            [4.91559911e-25, 41.8407304, 41.8407304],
+        )  # use_weighted_mass=False
+        assert xtb_out.rotational_symmetry_number == 2
+        assert xtb_out.rotational_constants_in_wavenumbers == [
+            -0.5544801e16,
+            0.4027869,
+            0.4027869,
+        ]
+        assert xtb_out.vibrational_frequencies == [
+            600.31,
+            600.31,
+            1424.78,
+            2593.07,
+        ]
+        assert mol.is_linear
+        assert xtb_out.num_vib_frequencies == 4
 
     def test_thermochemistry_co2_qrrho(self, gaussian_co2_opt_outfile):
         """Values from Goodvibes, as a reference:
@@ -1587,6 +1673,48 @@ class TestThermochemistryHe:
         assert mol.is_monoatomic
         assert orca_out.num_vibration_modes == 0
 
+    def test_thermochemistry_he_xtb_output(self, xtb_he_outfolder):
+        """Values from xtb output
+                   -------------------------------------------------
+                  |               Frequency Printout                |
+                   -------------------------------------------------
+         vibrational frequencies (cm⁻¹)
+        eigval :        0.50     0.50     0.50
+        ...
+                   -------------------------------------------------
+                  |             Thermodynamic Functions             |
+                   -------------------------------------------------
+
+        Kh  symmetry found (for desy threshold:  0.10E+00) used in thermo
+
+                  ...................................................
+                  :                      SETUP                      :
+                  :.................................................:
+                  :  # frequencies                           0      :
+                  :  # imaginary freq.                       0      :
+                  :  linear?                              true      :
+                  :  only rotor calc.                     true      :
+                  :  symmetry                               Kh      :
+                  :  rotational number                       1      :
+                  :  scaling factor                  1.0000000      :
+                  :  rotor cutoff                   50.0000000 cm⁻¹ :
+                  :  imag. cutoff                  -20.0000000 cm⁻¹ :
+                  :.................................................:
+        """
+        assert os.path.exists(xtb_he_outfolder)
+        xtb_out = XTBOutput(folder=xtb_he_outfolder)
+        assert xtb_out.normal_termination
+        assert xtb_out.jobtype == "hess"
+        assert xtb_out.num_atoms == 1
+        mol = xtb_out.molecule
+        assert mol.empirical_formula == "He"
+        assert xtb_out.multiplicity == 1
+        assert np.isclose(xtb_out.energies[-1], -1.743126632946)
+        assert xtb_out.rotational_symmetry_number == 1
+        assert xtb_out.vibrational_frequencies == []
+        assert mol.is_monoatomic
+        assert xtb_out.num_vib_frequencies == 0
+
     def test_thermochemistry_he_qrrho(self, gaussian_he_opt_outfile):
         """Values from Goodvibes, as a reference:
                 goodvibes -f 1000 -c 0.5 -t 598.15 -q --bav "conf" he.log
@@ -1888,6 +2016,75 @@ class TestThermochemistryH2O:
         assert not mol.is_monoatomic
         assert not mol.is_linear
         assert orca_out.num_vibration_modes == 3
+
+    def test_thermochemistry_water_xtb_output(self, xtb_water_outfolder):
+        """Values from xTB output
+                   -------------------------------------------------
+                  |                Geometry Summary                 |
+                   -------------------------------------------------
+
+              molecular mass/u    :       18.0152864
+           center of mass at/Å    :       -0.0000011      -0.0000006      -0.3156363
+          moments of inertia/u·Å² :        0.5795334E+00   0.1202080E+01   0.1781614E+01
+        rotational constants/cm⁻¹ :        0.2908828E+02   0.1402372E+02   0.9462003E+01
+        ...
+                   -------------------------------------------------
+                  |               Frequency Printout                |
+                   -------------------------------------------------
+         projected vibrational frequencies (cm⁻¹)
+        eigval :       -0.00    -0.00     0.00     0.00     0.00     0.00
+        eigval :     1539.30  3643.51  3651.71
+        ...
+                   -------------------------------------------------
+                  |             Thermodynamic Functions             |
+                   -------------------------------------------------
+
+        c2v symmetry found (for desy threshold:  0.10E+00) used in thermo
+
+                  ...................................................
+                  :                      SETUP                      :
+                  :.................................................:
+                  :  # frequencies                           3      :
+                  :  # imaginary freq.                       0      :
+                  :  linear?                             false      :
+                  :  only rotor calc.                    false      :
+                  :  symmetry                              c2v      :
+                  :  rotational number                       2      :
+                  :  scaling factor                  1.0000000      :
+                  :  rotor cutoff                   50.0000000 cm⁻¹ :
+                  :  imag. cutoff                  -20.0000000 cm⁻¹ :
+                  :.................................................:
+        """
+        assert os.path.exists(xtb_water_outfolder)
+        xtb_out = XTBOutput(folder=xtb_water_outfolder)
+        assert xtb_out.normal_termination
+        assert xtb_out.jobtype == "opt"
+        assert xtb_out.num_atoms == 3
+        mol = xtb_out.molecule
+        assert mol.empirical_formula == "H2O"
+        assert xtb_out.multiplicity == 1
+        assert np.isclose(xtb_out.energies[-1], -5.070544443465)
+        assert np.isclose(
+            mol.most_abundant_mass, 18.010564684029998
+        )  # use_weighted_mass=False
+        assert np.isclose(
+            mol.natural_abundance_weighted_mass, 18.015286432429832
+        )  # use_weighted_mass=True
+        assert np.isclose(xtb_out.mass, 18.0152864)
+        assert xtb_out.rotational_symmetry_number == 2
+        assert xtb_out.rotational_constants_in_wavenumbers == [
+            29.08828,
+            14.02372,
+            9.462003,
+        ]
+        assert xtb_out.vibrational_frequencies == [
+            1539.30,
+            3643.51,
+            3651.71,
+        ]
+        assert not mol.is_monoatomic
+        assert not mol.is_linear
+        assert xtb_out.num_vib_frequencies == 3
 
     def test_thermochemistry_water_qrrho(self, gaussian_mp2_outputfile):
         """Values from Goodvibes, as a reference:

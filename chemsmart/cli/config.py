@@ -346,10 +346,52 @@ def nciplot(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/bin/nciplot", folder)
 
 
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    required=False,
+    default=None,
+    help="Path to a custom xTB folder. Only needed if using a custom xTB installation.",
+)
+def xtb(ctx, folder):
+    """
+    Configure paths to a custom xTB installation.
+
+    By default, xTB from the chemsmart conda environment is used,
+    so no configuration is needed. Only use this command if you want
+    to use a custom xTB installation.
+
+    Examples:
+        chemsmart config xtb --folder <XTBFOLDER>
+    """
+    cfg = ctx.obj["cfg"]
+
+    if folder is None:
+        logger.info(
+            "No custom xTB folder provided. "
+            "Using xTB from chemsmart conda environment (default)."
+        )
+        return
+
+    if "~" in folder:
+        folder = os.path.expanduser(folder)
+
+    if not os.path.exists(os.path.abspath(folder)):
+        logger.error(f"xTB folder not found: {folder}")
+        return
+
+    logger.info(f"Configuring custom xTB with folder: {folder}")
+    update_yaml_files(cfg.chemsmart_server, "null", folder)
+
+
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
 config.add_command(nciplot)
+config.add_command(xtb)
 
 if __name__ == "__main__":
     config()

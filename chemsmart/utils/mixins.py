@@ -24,6 +24,7 @@ from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.io.xtb.route import XTBRoute
 
 
 class FileMixin:
@@ -1253,6 +1254,144 @@ class ORCAFileMixin(FileMixin):
         )
 
 
+class XTBFileMixin(FileMixin):
+    """
+    Mixin class for xTB computational chemistry files.
+
+    Extends FileMixin with xTB-specific functionality including
+    route string parsing, job type detection, and settings extraction.
+    Handles xTB file formats and calculation parameters.
+    """
+
+    @property
+    def route_string(self):
+        """
+        Get the route string from xTB main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Route string for xTB calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get route string from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed xTB route object from route string.
+
+        Creates an XTBRoute object from the route string to
+        provide structured access to calculation parameters.
+
+        Returns:
+            XTBRoute: Parsed xTB route object.
+        """
+        return XTBRoute(route_string=self.route_string)
+
+    @property
+    def jobtype(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type (e.g. 'sp', 'opt', 'hess', 'md')
+        """
+        return self.route_object.jobtype
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def optimization_level(self):
+        """
+        Extract optimization level from route string.
+
+        Returns:
+            str or None: Optimization level (e.g., 'loose', 'normal', 'tight')
+        """
+        return self.route_object.optimization_level
+
+    @property
+    def solvent_model(self):
+        """
+        Extract solvent model from route string.
+
+        Returns:
+            str or None: Solvent model (e.g., 'alpb', 'gbsa', 'cosmo')
+        """
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """
+        Extract solvent identity from route string.
+
+        Returns:
+            str or None: Solvent identity (e.g., 'water', 'toluene')
+        """
+        return self.route_object.solvent_id
+
+    @property
+    def charge(self):
+        """
+        Extract molecular charge from route string.
+
+        Returns:
+            int or None: Molecular charge
+        """
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """
+        Extract number of unpaired electrons from route string.
+
+        Returns:
+            int or None: Number of unpaired electrons (Nalpha - Nbeta)
+        """
+        return self.route_object.uhf
+
+    @property
+    def freq(self):
+        """
+        Check if frequency calculation is requested.
+
+        Returns:
+            bool: True if frequency calculation is specified
+        """
+        return self.route_object.freq
+
+    @property
+    def grad(self):
+        """
+        Check if gradient calculation is requested.
+
+        Returns:
+            bool: True if gradient calculation is specified
+        """
+        return self.route_object.grad
+
+
 class YAMLFileMixin(FileMixin):
     """
     Mixin class for YAML file handling and parsing.
@@ -1420,13 +1559,170 @@ class FolderMixin:
     Mixin class for folder operations and file discovery.
 
     Provides methods for searching and filtering files within directories
-    based on file extensions, regular expressions, and other criteria.
+    based on contents, file extensions, regular expressions, and other criteria.
     Supports both current directory and recursive subdirectory searches.
 
     Attributes:
         folder (str): Path to the base directory. Consumers are expected to
             set this attribute (e.g., via BaseFolder or a subclass).
     """
+
+    @property
+    def folderpath(self):
+        """
+        Get the absolute path of the folder.
+
+        Returns:
+            str: Absolute folder path.
+        """
+        return os.path.abspath(self.folder)
+
+    def _get_all_output_files_by_program(self, program=None, recursive=False):
+        """
+        Obtain a list of quantum chemistry output files by program.
+        File discovery is performed in two stages:
+        (1) lightweight suffix-based filtering for efficiency;
+        (2) program detection using get_program_type_from_file method.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+            recursive (bool): Whether to search recursively in subdirectories.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+
+        Raises:
+            ValueError: If an unsupported program name is provided.
+        """
+        from chemsmart.utils.io import (
+            ALL_SUFFIXES,
+            PROGRAM_INFO,
+            get_program_type_from_file,
+        )
+
+        # Validate program parameter
+        if program is not None and program not in PROGRAM_INFO:
+            valid_programs = ", ".join(sorted(PROGRAM_INFO))
+            raise ValueError(
+                f"Unsupported program '{program}'. "
+                f"Supported programs: {valid_programs}."
+            )
+
+        candidate_files = []
+        if recursive:
+            for subdir, _dirs, files in os.walk(self.folder):
+                for file in files:
+                    filepath = os.path.join(subdir, file)
+                    # Skip empty files
+                    if os.stat(filepath).st_size == 0:
+                        continue
+                    if program is None:
+                        if file.endswith(ALL_SUFFIXES):
+                            candidate_files.append(filepath)
+                    else:
+                        if file.endswith(
+                            tuple(PROGRAM_INFO[program]["suffixes"])
+                        ):
+                            candidate_files.append(filepath)
+        else:
+            for file in os.listdir(self.folder):
+                filepath = os.path.join(self.folder, file)
+                # Skip directories and empty files
+                if not os.path.isfile(filepath):
+                    continue
+                if os.stat(filepath).st_size == 0:
+                    continue
+                # Filter by suffix first for efficiency
+                if program is None:
+                    if file.endswith(ALL_SUFFIXES):
+                        candidate_files.append(filepath)
+                else:
+                    if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
+                        candidate_files.append(filepath)
+
+        matched_files = []
+        for filepath in candidate_files:
+            detected_program = get_program_type_from_file(filepath)
+            if detected_program == "unknown":
+                continue
+            if program is None or detected_program == program:
+                matched_files.append(filepath)
+        return matched_files
+
+    def get_all_output_files_in_current_folder_by_program(self, program=None):
+        """
+        Obtain a list of quantum chemistry output files in the current folder by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=False
+        )
+
+    def get_all_output_files_in_current_folder_and_subfolders_by_program(
+        self, program=None
+    ):
+        """
+        Obtain quantum chemistry output files in folder and all subfolders by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=True
+        )
+
+    def is_program_calculation_directory(self, program):
+        """
+        Check if the current folder contains output files from a specific program.
+
+        Args:
+            program (str): Target QC program (e.g., "xtb", "crest", "gaussian", "orca").
+
+        Returns:
+            bool: True if the folder contains at least one output file from
+                  the specified program, False otherwise.
+        """
+        if not os.path.isdir(self.folder):
+            return False
+        return bool(
+            self.get_all_output_files_in_current_folder_by_program(program)
+        )
+
+    def get_program_type_from_folder(self):
+        """
+        Detect the type of calculation folder based on programs.
+
+        Note:
+            Folder-level detection is currently only supported for xtb and crest
+            programs. Other supported programs like gaussian and orca require
+            file-level detection (see get_program_type_from_file).
+
+        Returns:
+            str: Program name ("xtb", "crest"), "mixed" if multiple programs detected,
+             or "unknown" if the format cannot be detected.
+        """
+        from chemsmart.utils.io import PROGRAMS_WITH_FOLDER_DETECTION
+
+        programs = []
+        for program in PROGRAMS_WITH_FOLDER_DETECTION:
+            if self.is_program_calculation_directory(program):
+                programs.append(program)
+        if len(programs) == 1:
+            return programs[0]
+        elif len(programs) > 1:
+            return "mixed"
+        return "unknown"
 
     def get_all_files_in_current_folder_by_suffix(self, filetype):
         """
