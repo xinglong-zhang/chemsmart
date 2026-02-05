@@ -431,16 +431,16 @@ class Submitter(RegistryMixin):
         if self.job.PROGRAM.lower() == "xtb":
             f.write("# XTB specific environment variables\n")
             # MKL_NUM_THREADS
-            if self.job.settings.mkl_threads is not None:
+            if self.job.jobrunner.mkl_threads is not None:
                 f.write(
-                    f"export MKL_NUM_THREADS={self.job.settings.mkl_threads}\n"
+                    f"export MKL_NUM_THREADS={self.job.jobrunner.mkl_threads}\n"
                 )
             else:
                 f.write(f"export MKL_NUM_THREADS={self.server.num_cores}\n")
             # OMP_NUM_THREADS
-            if self.job.settings.omp_threads is not None:
+            if self.job.jobrunner.omp_threads is not None:
                 f.write(
-                    f"export OMP_NUM_THREADS={self.job.settings.omp_threads}\n"
+                    f"export OMP_NUM_THREADS={self.job.jobrunner.omp_threads}\n"
                 )
             else:
                 f.write(f"export OMP_NUM_THREADS={self.server.num_cores}\n")
@@ -449,9 +449,9 @@ class Submitter(RegistryMixin):
                 "export OMP_MAX_ACTIVE_LEVELS=1  # deactivate nested OMP constructs\n"
             )
             # OMP_STACKSIZE
-            if self.job.settings.omp_stacksize is not None:
+            if self.job.jobrunner.omp_stacksize is not None:
                 f.write(
-                    f"export OMP_STACKSIZE={self.job.settings.omp_stacksize}\n"
+                    f"export OMP_STACKSIZE={self.job.jobrunner.omp_stacksize}\n"
                 )
             else:
                 stack_size = min(
@@ -459,7 +459,7 @@ class Submitter(RegistryMixin):
                 )
                 f.write(f"export OMP_STACKSIZE={stack_size}G\n")
             # ulimit -s unlimited
-            if self.job.settings.stack_unlimited is False:
+            if self.job.jobrunner.stack_unlimited is False:
                 pass
             else:
                 f.write("ulimit -s unlimited\n")

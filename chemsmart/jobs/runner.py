@@ -27,6 +27,10 @@ class JobRunner(RegistryMixin):
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
+        mkl_threads (int): Number of MKL threads (for xTB).
+        omp_threads (int): Number of OMP threads (for xTB).
+        omp_stacksize (str): OMP stack size (for xTB).
+        stack_unlimited (bool): Whether to set ulimit -s unlimited (for xTB).
         **kwargs: Additional keyword arguments.
     """
 
@@ -44,6 +48,10 @@ class JobRunner(RegistryMixin):
         num_cores=None,
         num_gpus=None,
         mem_gb=None,
+        mkl_threads=None,
+        omp_threads=None,
+        omp_stacksize=None,
+        stack_unlimited=True,
         **kwargs,
     ):
         if server is None:
@@ -82,6 +90,11 @@ class JobRunner(RegistryMixin):
         else:
             self.mem_gb = self.server.mem_gb
 
+        # Runner configurations for threading and stack
+        self.mkl_threads = mkl_threads
+        self.omp_threads = omp_threads
+        self.omp_stacksize = omp_stacksize
+        self.stack_unlimited = stack_unlimited
         self.kwargs = kwargs
 
     @property
