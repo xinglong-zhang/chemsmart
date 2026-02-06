@@ -1,4 +1,5 @@
 from .base import BaseAssembler
+from .database import Database
 from .export import DataExporter
 from .gaussian import GaussianAssembler
 from .orca import ORCAAssembler
@@ -11,5 +12,6 @@ __all__ = [
     "ORCAAssembler",
     "SingleFileAssembler",
     "AssembledRecord",
+    "Database",
     "DataExporter",
 ]
