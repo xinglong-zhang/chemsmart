@@ -127,6 +127,10 @@ Run DI-AS analysis for atoms 5-17 at every 10th point along an IRC:
 
    chemsmart sub gaussian -p project -f irc.log dias -i 5-17 -n 10
 
+.. note::
+
+   The ``irc.log`` file should be the IRC output from the transition state to the **reactant side**.
+
 ***********
  RESP Jobs
 ***********
