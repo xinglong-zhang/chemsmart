@@ -418,12 +418,6 @@ class TestORCAInputWriter:
         # write input file
         orca_writer.write(target_directory=tmpdir)
         orca_file = os.path.join(tmpdir, "orca_neb.inp")
-        with open(orca_file, "r") as fout:
-            neb_input_content = fout.read()
-            print(neb_input_content)
-        with open(orca_written_neb_file, "r") as fin:
-            reactant_input_content = fin.read()
-            print(reactant_input_content)
 
         assert os.path.isfile(orca_file)
         assert cmp(orca_file, orca_written_neb_file, shallow=False)
