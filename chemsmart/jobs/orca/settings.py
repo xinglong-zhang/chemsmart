@@ -1970,8 +1970,6 @@ class ORCANEBJobSettings(ORCAJobSettings):
         Raises:
             AssertionError: If nimages is not set or geometry files are missing
         """
-        import os
-
         assert self.nimages, "The number of images is missing!"
         lines = [
             "%neb",
