@@ -399,7 +399,8 @@ class TestORCAInputWriter:
         )
         settings = project_settings.neb_settings()
         settings.semiempirical = "GFN2-xTB"
-        settings.jobtype = "NEB-TS"
+        settings.joboption = "NEB-TS"
+        settings.jobtype = "neb"
         settings.nimages = 5
         settings.charge = 0
         settings.multiplicity = 1

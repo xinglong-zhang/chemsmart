@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @click.option(
     "-j",
-    "--jobtype",
+    "--joboption",
     type=click.Choice(
         [
             "NEB",
@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def neb(
     ctx,
-    jobtype,
+    joboption,
     nimages,
     ending_xyzfile,
     intermediate_xyzfile,
@@ -118,7 +118,7 @@ def neb(
         $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -o -a XTB2
 
     Args:
-        jobtype: NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+        joboption: NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
         ending_xyzfile: Product geometry file
         intermediate_xyzfile: Intermediate/TS geometry guess file
         restarting_xyzfile: Restart file from previous calculation
@@ -148,8 +148,8 @@ def neb(
     # suppose project has a non None value, and user does not specify a value (None),
     # then the project value should be used and unmodified, ie, should not be merged.
     # update value only if user specifies a value for the attribute:
-    if jobtype is not None:
-        neb_settings.jobtype = jobtype
+    if joboption is not None:
+        neb_settings.joboption = joboption
     if nimages is not None:
         neb_settings.nimages = nimages
     if ending_xyzfile:
@@ -171,7 +171,7 @@ def neb(
     ctx.obj["parent_kwargs"] = kwargs
     ctx.obj["parent_settings"] = neb_settings
     ctx.obj["modred"] = "modred"
-    ctx.obj["parent_jobtype"] = jobtype
+    ctx.obj["parent_jobtype"] = joboption
 
     if ctx.invoked_subcommand is None:
 

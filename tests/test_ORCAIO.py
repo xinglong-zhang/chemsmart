@@ -2771,22 +2771,22 @@ class TestORCANEBJobSettings:
     def test_init_default(self):
         """Test default initialization."""
         settings = ORCANEBJobSettings()
-        assert settings.jobtype is None
+        assert settings.joboption is None
         assert settings.nimages is None
         assert settings.preopt_ends is False
 
     def test_init_with_parameters(self):
         """Test initialization with parameters."""
         settings = ORCANEBJobSettings(
-            jobtype="NEB-TS", nimages=8, semiempirical="XTB2"
+            joboption="NEB-TS", nimages=8, semiempirical="XTB2"
         )
-        assert settings.jobtype == "NEB-TS"
+        assert settings.joboption == "NEB-TS"
         assert settings.nimages == 8
         assert settings.semiempirical == "XTB2"
 
     def test_route_string_generation(self):
         """Test route string generation."""
-        settings = ORCANEBJobSettings(jobtype="NEB-CI", semiempirical="XTB2")
+        settings = ORCANEBJobSettings(joboption="NEB-CI", semiempirical="XTB2")
         assert settings.route_string == "!  XTB2 NEB-CI"
 
     def test_neb_block_basic(self):
@@ -2813,3 +2813,178 @@ class TestORCANEBJobSettings:
             AssertionError, match="The number of images is missing"
         ):
             _ = settings.neb_block
+
+    def test_equality_identical_settings(self):
+        """Test that identical NEB settings are equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts_guess.xyz",
+            preopt_ends=True,
+            semiempirical="XTB2",
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts_guess.xyz",
+            preopt_ends=True,
+            semiempirical="XTB2",
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        assert settings1 == settings2
+        assert not (settings1 != settings2)
+
+    def test_equality_different_joboption(self):
+        """Test that settings with different joboption are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS", nimages=8, ending_xyzfile="product.xyz"
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-CI", nimages=8, ending_xyzfile="product.xyz"
+        )
+        assert settings1 != settings2
+        assert not (settings1 == settings2)
+
+    def test_equality_different_nimages(self):
+        """Test that settings with different nimages are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS", nimages=8, ending_xyzfile="product.xyz"
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS", nimages=12, ending_xyzfile="product.xyz"
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_intermediate_xyzfile(self):
+        """Test that settings with different intermediate file are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts1.xyz",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts2.xyz",
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_restarting_xyzfile(self):
+        """Test that settings with different restart file are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            restarting_xyzfile="restart1.allxyz",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            restarting_xyzfile="restart2.allxyz",
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_preopt_ends(self):
+        """Test that settings with different preopt_ends are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            preopt_ends=True,
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            preopt_ends=False,
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_semiempirical(self):
+        """Test that settings with different semiempirical method are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            semiempirical="XTB2",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            semiempirical="XTB1",
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_parent_attributes(self):
+        """Test that settings with different parent class attributes are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            functional="B3LYP",
+            basis="def2-SVP",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            functional="PBE0",
+            basis="def2-SVP",
+        )
+        assert settings1 != settings2
+
+    def test_equality_includes_all_neb_attributes(self):
+        """Test that all 7 NEB-specific attributes are included in equality check."""
+        # Create two settings that differ only in each NEB attribute
+        base_kwargs = {
+            "joboption": "NEB-TS",
+            "nimages": 8,
+            "ending_xyzfile": "product.xyz",
+            "intermediate_xyzfile": "ts.xyz",
+            "restarting_xyzfile": "restart.allxyz",
+            "preopt_ends": True,
+            "semiempirical": "XTB2",
+        }
+
+        # Test each attribute individually
+        for attr in [
+            "joboption",
+            "nimages",
+            "ending_xyzfile",
+            "intermediate_xyzfile",
+            "restarting_xyzfile",
+            "preopt_ends",
+            "semiempirical",
+        ]:
+            settings1 = ORCANEBJobSettings(**base_kwargs)
+            modified_kwargs = base_kwargs.copy()
+
+            # Change the attribute to a different value
+            if attr == "joboption":
+                modified_kwargs[attr] = "NEB-CI"
+            elif attr == "nimages":
+                modified_kwargs[attr] = 12
+            elif attr == "preopt_ends":
+                modified_kwargs[attr] = False
+            elif attr == "semiempirical":
+                modified_kwargs[attr] = "XTB1"
+            else:  # file paths
+                modified_kwargs[attr] = "different_file.xyz"
+
+            settings2 = ORCANEBJobSettings(**modified_kwargs)
+            assert (
+                settings1 != settings2
+            ), f"Equality failed for attribute: {attr}"

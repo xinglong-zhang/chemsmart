@@ -1801,7 +1801,7 @@ class ORCANEBJobSettings(ORCAJobSettings):
     - NEB-IDPP: Image-dependent pair potential initialization
 
     Attributes:
-        jobtype (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+        joboption (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
         nimages (int): Number of intermediate images between endpoints
         starting_xyz (str): Reactant geometry file path (inherited)
         ending_xyzfile (str): Product geometry file path
@@ -1814,7 +1814,7 @@ class ORCANEBJobSettings(ORCAJobSettings):
     def __init__(
         self,
         semiempirical=None,
-        jobtype=None,
+        joboption=None,
         nimages=None,
         ending_xyzfile=None,
         intermediate_xyzfile=None,
@@ -1826,7 +1826,7 @@ class ORCANEBJobSettings(ORCAJobSettings):
         Initialize ORCA NEB job settings.
 
         Args:
-            jobtype (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+            joboption (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
             nimages (int): Number of intermediate images in NEB chain
             ending_xyzfile (str): Product geometry file path
             intermediate_xyzfile (str): Initial TS geometry guess file path
@@ -1840,13 +1840,40 @@ class ORCANEBJobSettings(ORCAJobSettings):
             from the main molecule input file.
         """
         super().__init__(**kwargs)
-        self.jobtype = jobtype
+        self.joboption = joboption
         self.nimages = nimages
         self.ending_xyzfile = ending_xyzfile
         self.intermediate_xyzfile = intermediate_xyzfile
         self.restarting_xyzfile = restarting_xyzfile
         self.preopt_ends = preopt_ends
         self.semiempirical = semiempirical
+
+    def __eq__(self, other):
+        """
+        Compare two ORCANEBJobSettings objects for equality.
+
+        Compares all attributes between two ORCA NEB settings objects, including the
+        NEB-specific attributes that are not present in the parent class.
+
+        Args:
+            other (ORCANEBJobSettings): Settings object to compare with.
+
+        Returns:
+            bool or NotImplemented: True if equal, False if different,
+                NotImplemented if types don't match.
+        """
+        if type(self) is not type(other):
+            return NotImplemented
+
+        # Get dictionaries of both objects
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+
+        # Exclude append_additional_info from the comparison (inherited behavior)
+        self_dict.pop("append_additional_info", None)
+        other_dict.pop("append_additional_info", None)
+
+        return self_dict == other_dict
 
     # populate attribute from parent class (optional)
     @property
@@ -1874,19 +1901,6 @@ class ORCANEBJobSettings(ORCAJobSettings):
         if not route_string.startswith("!"):
             route_string += "! "
 
-        # route string depends on job type
-        # determine if route string requires 'opt' keyword
-        if self.jobtype in ("opt", "modred", "scan"):
-            route_string += "Opt"
-        elif self.jobtype == "ts":
-            route_string += (
-                "OptTS"  # Orca keyword for transition state optimization
-            )
-        elif self.jobtype == "irc":
-            route_string += "IRC"
-        elif self.jobtype == "sp":
-            route_string += ""
-
         # add frequency calculation
         # not okay if both freq and numfreq are True
         if self.freq and self.numfreq:
@@ -1900,9 +1914,9 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
         # write level of theory
         if self.semiempirical:
-            route_string += f" {self.semiempirical} {self.jobtype}"
+            route_string += f" {self.semiempirical} {self.joboption}"
         else:
-            route_string += f" {self._get_level_of_theory()} {self.jobtype}"
+            route_string += f" {self._get_level_of_theory()} {self.joboption}"
 
         # write grid information
         if self.defgrid is not None:
