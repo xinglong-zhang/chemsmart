@@ -3289,6 +3289,7 @@ class ORCANEBFile(ORCAOutput):
         for line in self.contents:
             if "THE NEB OPTIMIZATION HAS CONVERGED" in line:
                 return True
+        return False
 
     @property
     def ts_converged(self):
