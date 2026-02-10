@@ -708,8 +708,9 @@ class ORCAInputWriter(InputWriter):
                 restart_file = os.path.basename(value)
                 f.write(f'Restart_ALLXYZFile "{restart_file}"\n')
             if key == "preopt_ends":
-                if value:
-                    f.write("PREOPT_ENDS True\n")
+                # Always write explicit boolean to preserve user setting
+                bool_str = "True" if value else "False"
+                f.write(f"PREOPT_ENDS {bool_str}\n")
         f.write("end\n")
 
     def _write_constrained_atoms(self, f):
