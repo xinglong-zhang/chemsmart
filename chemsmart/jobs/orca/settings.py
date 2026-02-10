@@ -1979,7 +1979,7 @@ class ORCANEBJobSettings(ORCAJobSettings):
         ]
         assert self.restarting_xyzfile or (
             self.ending_xyzfile
-        ), "No valid input geomertry is given!"
+        ), "No valid input geometry is given!"
         if self.restarting_xyzfile:
             # Use basename for scratch compatibility
             restart_file = os.path.basename(self.restarting_xyzfile)
