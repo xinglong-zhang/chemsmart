@@ -3405,7 +3405,7 @@ class ORCANEBFile(ORCAOutput):
     def _get_pre_optimization(self):
         preopt_ends = False
         for line in self.contents:
-            if "Optimization of end points before NEB" and "YES" in line:
+            if "Optimization of end points before NEB" in line and "YES" in line:
                 preopt_ends = True
                 break
         return preopt_ends
