@@ -145,7 +145,8 @@ def neb(
     # suppose project has a non None value, and user does not specify a value (None),
     # then the project value should be used and unmodified, ie, should not be merged.
     # update value only if user specifies a value for the attribute:
-    neb_settings.jobtype = jobtype
+    if jobtype is not None:
+        neb_settings.jobtype = jobtype
     if nimages is not None:
         neb_settings.nimages = nimages
     if ending_xyzfile:
