@@ -2754,7 +2754,7 @@ class TestORCANEB:
         assert orca_neb.ci_energy == -219.0833212
         assert (
             orca_neb.reactant.empirical_formula
-            == orca_neb.reactant.empirical_formula
+            == orca_neb.product.empirical_formula
             == "C72H68NO6P"
         )
         assert orca_neb.ci_max_abs_force == 0.001963

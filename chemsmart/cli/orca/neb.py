@@ -3,15 +3,14 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.orca.orca import orca
-from chemsmart.utils.cli import MyCommand
+from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
+from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("neb", cls=MyCommand)
-@click_job_options
 @click.option(
     "-j",
     "--jobtype",
@@ -77,6 +76,9 @@ logger = logging.getLogger(__name__)
     ),
     help="Semiempirical method for NEB calculation.",
 )
+@orca.group("neb", cls=MyGroup, invoke_without_command=True)
+@click_job_options
+@click_orca_jobtype_options
 @click.pass_context
 def neb(
     ctx,
@@ -87,6 +89,7 @@ def neb(
     restarting_xyzfile,
     pre_optimization,
     semiempirical,
+    skip_completed=None,
     **kwargs,
 ):
     """
@@ -159,23 +162,61 @@ def neb(
     if semiempirical:
         neb_settings.semiempirical = semiempirical
 
-    check_charge_and_multiplicity(neb_settings)
+    # merge project settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
+    # Store parent context for potential qmmm subcommand
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_freeze_atoms"] = None  # modred doesn't have freeze_atoms
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = neb_settings
+    ctx.obj["modred"] = "modred"
+    ctx.obj["parent_jobtype"] = jobtype
 
-    logger.debug(f"Label for job: {label}")
+    if ctx.invoked_subcommand is None:
 
-    # get molecule
-    molecules = ctx.obj[
-        "molecules"
-    ]  # use all molecules as a list for crest jobs
-    molecule = molecules[-1]  # get last molecule from list of molecules
+        check_charge_and_multiplicity(neb_settings)
 
-    logger.info(f"NEB job settings from project: {neb_settings.__dict__}")
+        logger.debug(f"Label for job: {label}")
 
-    from chemsmart.jobs.orca.neb import ORCANEBJob
+        # get molecule
+        molecules = ctx.obj[
+            "molecules"
+        ]  # use all molecules as a list for crest jobs
 
-    return ORCANEBJob(
-        molecule=molecule,
-        settings=neb_settings,
-        label=label,
-        **kwargs,
-    )
+        logger.info(f"NEB job settings from project: {neb_settings.__dict__}")
+
+        from chemsmart.jobs.orca.neb import ORCANEBJob
+
+        # Get the original molecule indices from context
+        molecule_indices = ctx.obj["molecule_indices"]
+
+        # Handle multiple molecules: create one job per molecule
+        if len(molecules) > 1 and molecule_indices is not None:
+            logger.info(f"Creating {len(molecules)} NEB jobs")
+            jobs = []
+            for molecule, idx in zip(molecules, molecule_indices):
+                molecule_label = f"{label}_idx{idx}"
+                logger.info(
+                    f"Running modred for molecule {idx}: {molecule} with label {molecule_label}"
+                )
+
+                job = ORCANEBJob(
+                    molecule=molecule,
+                    settings=neb_settings,
+                    label=label,
+                    **kwargs,
+                )
+                jobs.append(job)
+            return jobs
+        else:
+            # Single molecule case
+            molecule = molecules[-1]
+            return ORCANEBJob(
+                molecule=molecule,
+                settings=neb_settings,
+                label=label,
+                **kwargs,
+            )
+
+
+create_orca_qmmm_subcommand(neb)
