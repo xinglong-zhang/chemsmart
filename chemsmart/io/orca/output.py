@@ -3289,6 +3289,7 @@ class ORCANEBFile(ORCAOutput):
         for line in self.contents:
             if "THE NEB OPTIMIZATION HAS CONVERGED" in line:
                 return True
+        return False
 
     @property
     def ts_converged(self):
@@ -3405,7 +3406,7 @@ class ORCANEBFile(ORCAOutput):
     def _get_pre_optimization(self):
         preopt_ends = False
         for line in self.contents:
-            if "Optimization of end points before NEB" and "YES" in line:
+            if "Optimization of end points before NEB" in line and "YES" in line:
                 preopt_ends = True
                 break
         return preopt_ends

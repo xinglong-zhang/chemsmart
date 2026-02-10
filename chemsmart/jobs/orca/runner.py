@@ -230,7 +230,20 @@ class ORCAJobRunner(JobRunner):
 
         with open(input_file_to_read, "r") as f:
             for line in f:
+                # First, try the generic XYZ filename pattern (typically matches *.xyz)
                 match = re.search(xyz_filename_pattern, line)
+
+                # If no match was found, handle NEB restart files which often use
+                # Restart_ALLXYZFile with *.allxyz geometries.
+                if not match and "Restart_ALLXYZFile" in line:
+                    # Extract a filename ending with .allxyz from the line. This is
+                    # intentionally narrow in scope to avoid changing behavior for
+                    # other line types while still supporting NEB restarts.
+                    restart_allxyz_match = re.search(
+                        r'([^\s"]+\.allxyz)', line, re.IGNORECASE
+                    )
+                    if restart_allxyz_match:
+                        match = restart_allxyz_match
                 if match:
                     xyz_file = match.group(1)
 
