@@ -379,20 +379,21 @@ class MoleculeGrouper(ABC):
         Returns:
             List[Molecule]: List of unique representative molecules (lowest energy from each group).
         """
-        import os
 
         # Use cached results if available, otherwise compute and cache
         if (
             self._cached_groups is not None
             and self._cached_group_indices is not None
         ):
-            print(f"[{self.__class__.__name__}] Using cached grouping results")
+            logger.info(
+                f"[{self.__class__.__name__}] Using cached grouping results"
+            )
             groups, group_indices = (
                 self._cached_groups,
                 self._cached_group_indices,
             )
         else:
-            print(
+            logger.info(
                 f"[{self.__class__.__name__}] Computing groups for unique method"
             )
             groups, group_indices = self.group()

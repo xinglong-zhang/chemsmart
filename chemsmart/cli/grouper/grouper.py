@@ -106,7 +106,7 @@ def grouper(
 
     Examples:
         chemsmart run grouper -f conformers.xyz irmsd
-        chemsmart run grouper -f conformers.xyz -T 0.5 irmsd --check-stereo on
+        chemsmart run grouper -f conformers.xyz -T 0.5 irmsd --inversion on
         chemsmart run grouper -d . -t log -T 0.5 irmsd
         chemsmart run grouper -f conformers.xyz -T 0.1 tfd --use-weights
         chemsmart run grouper -f conformers.xyz -N 10 tanimoto --fingerprint-type morgan
@@ -394,7 +394,10 @@ def _extract_gibbs_energy(g16_output) -> float | None:
                 thermal_correction = float(line.split()[-1])
                 break
             except (ValueError, IndexError):
-                pass
+                # Failed to parse thermal correction value, continue searching
+                logger.debug(
+                    f"Failed to parse thermal correction from line: {line.strip()}"
+                )
 
     if thermal_correction is None:
         return None

@@ -261,22 +261,22 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
         total_pairs = len(indices)
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Starting TFD calculation for {n} conformers ({total_pairs} pairs)"
         )
-        print(f"  - TFD threshold: {self.threshold}")
-        print(f"  - Use weights: {self.use_weights}")
-        print(f"  - Max deviation: {self.max_dev}")
-        print(f"  - Symmetry radius: {self.symm_radius}")
-        print(f"  - Ignore colinear bonds: {self.ignore_colinear_bonds}")
-        print(f"  - Ignore hydrogens: {self.ignore_hydrogens}")
+        logger.info(f"  - TFD threshold: {self.threshold}")
+        logger.info(f"  - Use weights: {self.use_weights}")
+        logger.info(f"  - Max deviation: {self.max_dev}")
+        logger.info(f"  - Symmetry radius: {self.symm_radius}")
+        logger.info(f"  - Ignore colinear bonds: {self.ignore_colinear_bonds}")
+        logger.info(f"  - Ignore hydrogens: {self.ignore_hydrogens}")
 
         # Calculate TFD values with real-time output
         tfd_values = []
         for idx, (i, j) in enumerate(indices):
             tfd = self._calculate_tfd((i, j))
             tfd_values.append(tfd)
-            print(
+            logger.info(
                 f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, TFD= {tfd:.7f}"
             )
 
@@ -324,7 +324,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Found {len(groups)} groups using TFD"
         )
 
@@ -373,7 +373,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
     def _group_by_num_groups(self, tfd_values, indices, n):
         """Automatic grouping to create specified number of groups."""
         if self.num_groups >= n:
-            print(
+            logger.info(
                 f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
             )
             groups = [[mol] for mol in self.molecules]
@@ -383,7 +383,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         threshold = self._find_optimal_tfd_threshold(tfd_values, indices, n)
         self._auto_threshold = threshold
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
         )
 
@@ -395,7 +395,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
         actual_groups = len(groups)
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
         )
 
@@ -564,6 +564,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                         if cell.value:
                             max_length = max(max_length, len(str(cell.value)))
                     except (TypeError, AttributeError):
+                        # Skip cells that cannot be converted to string for width calculation
                         pass
                 adjusted_width = min(max_length + 2, 18)
                 worksheet.column_dimensions[column_letter].width = (

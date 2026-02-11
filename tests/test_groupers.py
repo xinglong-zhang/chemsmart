@@ -597,6 +597,7 @@ class Test_PymolRMSD_grouper:
             pymol.finish_launching(["pymol", "-qc"])
             cmd.reinitialize()
         except Exception:
+            # PyMOL may not be installed; tests will be skipped via @pytest.mark.skipif
             pass
 
     def teardown_method(self, method):
@@ -607,6 +608,7 @@ class Test_PymolRMSD_grouper:
             # Delete all objects instead of reinitialize to keep session alive
             cmd.delete("all")
         except Exception:
+            # Ignore cleanup errors if PyMOL is not available
             pass
 
     def test_pymolrmsd_grouper_for_rotated_molecules(
@@ -732,6 +734,7 @@ class Test_PymolRMSD_grouper:
 
             cmd.reinitialize()
         except Exception:
+            # Ignore cleanup errors if PyMOL is not available
             pass
 
 
@@ -1271,6 +1274,7 @@ class Testfactory:
 
             cmd.reinitialize()
         except Exception:
+            # Ignore cleanup errors if PyMOL is not available
             pass
 
 
@@ -1292,7 +1296,7 @@ class Test_grouper_utility_functions:
             num_procs=1,
             label="test_num_groups",
         )
-        groups, group_indices = grouper.group()
+        _, _ = grouper.group()
 
         # Check that Excel file was created in the temp_working_dir
         expected_file = os.path.join(
@@ -1439,7 +1443,7 @@ class Test_conformer_ids_functionality:
             label="ts_conformers_test",
             conformer_ids=conformer_ids,
         )
-        groups, group_indices = grouper.group()
+        _, _ = grouper.group()
 
         # Verify conformer_ids are stored
         assert grouper.conformer_ids == conformer_ids
@@ -1503,7 +1507,7 @@ class Test_output_file_generation:
             num_procs=1,
             label="info_test",
         )
-        groups, group_indices = grouper.group()
+        _, _ = grouper.group()
         grouper.unique()  # Generates xyz files
 
         output_dir = "info_test_group_result"
@@ -1614,7 +1618,7 @@ class Test_output_file_generation:
             label="log_energy_test",
             conformer_ids=conformer_ids,
         )
-        groups, group_indices = grouper.group()
+        _, _ = grouper.group()
         grouper.unique()  # Generates xyz files
 
         # Check group file
@@ -1809,7 +1813,7 @@ class Test_label_and_append_label:
             num_procs=self.NUM_PROCS,
             label="my_custom_label",
         )
-        groups, group_indices = grouper.group()
+        _, _ = grouper.group()
 
         # Check output directory uses custom label
         output_dir = "my_custom_label_group_result"
@@ -1898,7 +1902,7 @@ class Test_label_and_append_label:
             num_procs=self.NUM_PROCS,
             label="numgroups_test",
         )
-        groups, group_indices = grouper.group()
+        _, _ = grouper.group()
 
         output_dir = "numgroups_test_group_result"
         assert os.path.exists(output_dir)

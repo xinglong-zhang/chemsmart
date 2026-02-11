@@ -110,7 +110,7 @@ Trajectory Options
 
    -  -  ``-x, --proportion-structures-to-use``
       -  float
-      -  Proportion of trajectory to use (0.0 < x <= 1.0, default: 0.1)
+      -  Proportion of trajectory to use (0.0 < x <= 1.0, default: 0.1) At least one structure is always selected.
 
 .. warning::
 

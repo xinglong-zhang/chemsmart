@@ -126,6 +126,12 @@ class GaussianTrajJob(GaussianJob):
         last_num_structures = int(
             round(total_structures * proportion_structures_to_use, 1)
         )
+        # Clamp to valid range: at least 1, at most total_structures
+        # This prevents edge cases where rounding gives 0 (molecules[-0:] = full list)
+        # or exceeds total (defensive check)
+        last_num_structures = max(
+            1, min(last_num_structures, total_structures)
+        )
         self.molecules = molecules[-last_num_structures:]
 
         # Calculate original indices for the selected structures

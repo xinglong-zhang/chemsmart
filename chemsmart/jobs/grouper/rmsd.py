@@ -162,7 +162,7 @@ class RMSDGrouper(MoleculeGrouper):
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
         total_pairs = len(indices)
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Starting calculation for {n} molecules ({total_pairs} pairs)"
         )
 
@@ -171,7 +171,7 @@ class RMSDGrouper(MoleculeGrouper):
         for idx, (i, j) in enumerate(indices):
             rmsd = self._calculate_rmsd((i, j))
             rmsd_values.append(rmsd)
-            print(
+            logger.info(
                 f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, RMSD= {rmsd:.7f}"
             )
 
@@ -310,7 +310,7 @@ class RMSDGrouper(MoleculeGrouper):
 
         if self.num_groups >= n:
             # If requesting more groups than molecules, each molecule is its own group
-            print(
+            logger.info(
                 f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
             )
             groups = [[mol] for mol in self.molecules]
@@ -323,7 +323,7 @@ class RMSDGrouper(MoleculeGrouper):
         # Store the auto-determined threshold for summary reporting
         self._auto_threshold = threshold
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
         )
 
@@ -337,7 +337,7 @@ class RMSDGrouper(MoleculeGrouper):
         groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
         actual_groups = len(groups)
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
         )
 
@@ -604,8 +604,14 @@ class RMSDGrouper(MoleculeGrouper):
                     try:
                         if cell.value:
                             max_length = max(max_length, len(str(cell.value)))
-                    except (TypeError, AttributeError):
-                        pass
+                    except (TypeError, AttributeError) as exc:
+                        # Some cell values may not be convertible to string/len;
+                        # skip them but log at debug level for diagnostics.
+                        logger.debug(
+                            "Skipping cell %s when auto-adjusting width: %r",
+                            getattr(cell, "coordinate", "?"),
+                            exc,
+                        )
                 adjusted_width = min(max_length + 2, 18)
                 worksheet.column_dimensions[column_letter].width = (
                     adjusted_width
@@ -822,7 +828,6 @@ class SpyRMSDGrouper(RMSDGrouper):
         adjacency matrices are generated exactly the same way as the
         original spyrmsd package.
         """
-        import os
         import tempfile
 
         from spyrmsd import io as spy_io
@@ -1035,7 +1040,7 @@ class IRMSDGrouper(RMSDGrouper):
         Returns:
             Full path to irmsd command, or None if not found.
         """
-        import os
+
         import shutil
 
         # Option 1: IRMSD_PATH environment variable
@@ -1128,6 +1133,7 @@ class IRMSDGrouper(RMSDGrouper):
                 try:
                     rmsd_value = float(parts[1])
                 except (IndexError, ValueError):
+                    # Failed to parse RMSD value from output line, continue searching
                     pass
             elif parse_inversion and "Inversion check:" in line:
                 # Parse "Inversion check: on/off/auto"
@@ -1204,11 +1210,10 @@ class IRMSDGrouper(RMSDGrouper):
             return np.inf
         finally:
             # Clean up temporary file
-            import os
-
             try:
                 os.unlink(tmp_path)
             except OSError:
+                # Ignore cleanup errors
                 pass
 
 
@@ -1312,16 +1317,24 @@ class PymolRMSDGrouper(RMSDGrouper):
     def __del__(self):
         import shutil
 
+        # Clean up PyMOL session
         try:
             if self.cmd is not None:
                 self.cmd.quit()
         except Exception:
-            pass
+            logger.debug(
+                "Error while quitting PyMOL cmd in __del__", exc_info=True
+            )
+
+        # Clean up temporary directory
         try:
             if self._temp_dir is not None:
                 shutil.rmtree(self._temp_dir, ignore_errors=True)
         except Exception:
-            pass
+            logger.debug(
+                "Error while removing temporary directory in __del__",
+                exc_info=True,
+            )
 
     def __repr__(self):
         return (

@@ -162,7 +162,7 @@ class EnergyGrouper(MoleculeGrouper):
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
         total_pairs = len(indices)
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Starting calculation for {n} molecules ({total_pairs} pairs)"
         )
 
@@ -173,7 +173,7 @@ class EnergyGrouper(MoleculeGrouper):
             rel_diff, abs_diff = self._calculate_energy_diff((i, j))
             energy_diff_relative.append(rel_diff)
             energy_diff_absolute.append(abs_diff)
-            print(
+            logger.info(
                 f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, "
                 f"Energy Diff= {rel_diff:+.10f} Hartree ({rel_diff * HARTREE_TO_KCAL:+.4f} kcal/mol)"
             )
@@ -316,7 +316,7 @@ class EnergyGrouper(MoleculeGrouper):
         n = len(self.molecules)
 
         if self.num_groups >= n:
-            print(
+            logger.info(
                 f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
             )
             groups = [[mol] for mol in self.molecules]
@@ -330,7 +330,7 @@ class EnergyGrouper(MoleculeGrouper):
         # Store in kcal/mol for reporting
         self._auto_threshold = threshold_hartree * HARTREE_TO_KCAL
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Auto-determined threshold: {self._auto_threshold:.4f} kcal/mol "
             f"({threshold_hartree:.10f} Hartree) to create {self.num_groups} groups"
         )
@@ -345,7 +345,7 @@ class EnergyGrouper(MoleculeGrouper):
         groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
         actual_groups = len(groups)
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
         )
 
@@ -565,6 +565,7 @@ class EnergyGrouper(MoleculeGrouper):
                         if len(str(cell.value)) > max_length:
                             max_length = len(str(cell.value))
                     except Exception:
+                        # Skip cells that cannot be converted to string for width calculation
                         pass
                 adjusted_width = min(max_length + 2, 20)
                 worksheet.column_dimensions[column_letter].width = (

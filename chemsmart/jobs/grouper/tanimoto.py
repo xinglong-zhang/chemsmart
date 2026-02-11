@@ -187,7 +187,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         grouping_start_time = time.time()
 
         n = len(self.molecules)
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Starting fingerprint calculation for {n} molecules using {self.fingerprint_type} fingerprints"
         )
 
@@ -207,7 +207,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         if num_valid == 0:
             return [], []  # No valid molecules
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Computing Tanimoto similarities for {num_valid} valid molecules"
         )
 
@@ -336,7 +336,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         n = len(valid_indices)
 
         if self.num_groups >= n:
-            print(
+            logger.info(
                 f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
             )
             groups = [[self.valid_molecules[i]] for i in range(n)]
@@ -354,7 +354,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         )
         self._auto_threshold = threshold
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
         )
 
@@ -364,7 +364,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         )
         actual_groups = len(groups)
 
-        print(
+        logger.info(
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
         )
 
@@ -527,6 +527,8 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                         if cell.value:
                             max_length = max(max_length, len(str(cell.value)))
                     except (TypeError, AttributeError):
+                        # Ignore cells whose values cannot be converted to string/length;
+                        # they are not needed for computing the column width.
                         pass
                 adjusted_width = min(max_length + 2, 18)
                 worksheet.column_dimensions[column_letter].width = (
