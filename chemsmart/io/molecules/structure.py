@@ -1273,7 +1273,7 @@ class Molecule:
         """
         Return string representation of molecule.
         """
-        return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
+        return f"{self.__class__.__name__}<{self.chemical_formula},energy: {self.energy}>"
 
     def __str__(self):
         """
