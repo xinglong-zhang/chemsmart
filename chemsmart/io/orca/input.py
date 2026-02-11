@@ -6,6 +6,7 @@ from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.repattern import (
+    allxyz_filename_pattern,
     orca_qm_h_bond_length_pattern,
     standard_coord_pattern,
     xyz_filename_pattern,
@@ -548,6 +549,7 @@ class ORCANEBInput(ORCAInput):
             elif "neb_ts_xyzfile" in line.lower():
                 neb_ts_xyzile = match.group(1)
             elif "restart_allxyzfile" in line.lower():
+                match = re.search(allxyz_filename_pattern, line)
                 restart_allxyzfile = match.group(1)
             elif line.startswith("* xyzfile"):
                 neb_starting_xyz = match.group(1)
