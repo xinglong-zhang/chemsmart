@@ -610,6 +610,65 @@ class Server(RegistryMixin):
             p = subprocess.Popen(shlex.split(command), cwd=job.folder)
         return p.wait()
 
+    def submit_array_job(self, jobs, num_nodes=None, test=False, cli_args=None, **kwargs):
+        """
+        Submit a list of jobs as an array job to the scheduler.
+
+        Creates and submits an array job where independent jobs are distributed
+        across multiple nodes for parallel execution.
+
+        Args:
+            jobs (list): List of Job instances to submit as an array.
+            num_nodes (int): Number of nodes to request for parallel execution.
+            test (bool): If True, only creates scripts without actual submission.
+                Defaults to False.
+            cli_args: Command line arguments for the jobs.
+            **kwargs: Additional submission parameters.
+        """
+        if not jobs:
+            logger.warning("No jobs to submit")
+            return
+        
+        # Use first job as template for checking
+        first_job = jobs[0]
+        
+        # Check for duplicate jobs
+        self._check_running_jobs(first_job)
+        
+        # Write array job submission script
+        submitter = self.get_submitter(first_job, **kwargs)
+        submitter.write_array_job(jobs=jobs, num_nodes=num_nodes, cli_args=cli_args)
+        
+        # Submit the array job
+        if not test:
+            self._submit_array_job(first_job, submitter)
+
+    def _submit_array_job(self, job, submitter):
+        """
+        Submit an array job to the scheduler.
+
+        Args:
+            job: Template job instance.
+            submitter: Submitter instance with array job script.
+
+        Returns:
+            int: Exit code from the submission command.
+        """
+        command = self.submit_command
+        if command is None:
+            raise ValueError(
+                f"Cannot submit job on {self} "
+                f"since no submit command is defined."
+            )
+        command += f" {submitter.array_submit_script}"
+        logger.info(f"Submitting array job with command: {command}")
+        if "<" in command or ">" in command or "|" in command:
+            # Use shell=True if the command has shell operators
+            p = subprocess.Popen(command, shell=True)
+        else:
+            p = subprocess.Popen(shlex.split(command), cwd=job.folder)
+        return p.wait()
+
 
 class YamlServerSettings(Server):
     """
