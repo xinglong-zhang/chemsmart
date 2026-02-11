@@ -2,12 +2,11 @@ import logging
 import os
 import tempfile
 
+import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
 from pytest_mock import MockerFixture
-
-# from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
@@ -1323,12 +1322,49 @@ def pymol_mo_jobrunner(pbs_server):
 
 ## conformers for testing
 @pytest.fixture()
-def methanol_molecules():
+def methanol_molecule():
+    symbols = ["C", "O", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [0.000000, 0.000000, 0.000000],  # C
+            [1.430000, 0.000000, 0.000000],  # O
+            [1.109545, 0.904936, 0.000000],  # H (hydroxyl)
+            [-0.363849, 1.027479, 0.000000],  # H
+            [-0.363849, -0.513740, 0.889823],  # H
+            [-0.363849, -0.513740, -0.889823],  # H
+        ],
+        dtype=float,
+    )
+    methanol = Molecule(symbols=symbols, positions=coords)
+    return methanol
+
+
+@pytest.fixture()
+def ethanol_molecule():
+    symbols = ["C", "C", "O", "H", "H", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [0.000000, 0.000000, 0.000000],  # C1
+            [1.540000, 0.000000, 0.000000],  # C2
+            [2.090000, 1.430000, 0.000000],  # O
+            [-0.540000, 0.900000, 0.000000],  # H1
+            [-0.540000, -0.450000, 0.890000],  # H2
+            [-0.540000, -0.450000, -0.890000],  # H3
+            [1.540000, -0.900000, 0.890000],  # H4
+            [1.540000, -0.900000, -0.890000],  # H5
+            [2.640000, 1.430000, 0.890000],  # H (hydroxyl)
+        ],
+        dtype=float,
+    )
+    ethanol = Molecule(symbols=symbols, positions=coords)
+    return ethanol
+
+
+@pytest.fixture()
+def methanol_molecules(methanol_molecule):
     # molecules for testing
     # methanol
-    methanol = Molecule.from_pubchem(identifier="CO")
-    # f = open("methanol.xyz", "w")
-    # methanol.write_coordinates(f)
+    methanol = methanol_molecule
 
     # rotated methanol
     ase_atoms = methanol.to_ase()
@@ -1377,13 +1413,13 @@ def constrained_atoms():
 
 
 @pytest.fixture()
-def methanol_and_ethanol():
+def methanol_and_ethanol(methanol_molecule, ethanol_molecule):
     # molecules for testing
     # methanol
-    methanol = Molecule.from_pubchem(identifier="CO")
+    methanol = methanol_molecule
 
     # ethanol
-    ethanol = Molecule.from_pubchem(identifier="CCO")
+    ethanol = ethanol_molecule
 
     methanol_and_ethanol = [methanol, ethanol]
     return methanol_and_ethanol
