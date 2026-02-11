@@ -1120,7 +1120,7 @@ class Molecule:
 
         Args:
             filename (str): Output file path
-            format (str): File format ('xyz' or 'com'). Default 'xyz'
+            format (str): File format ('xyz', 'com', or 'pdb'). Default 'xyz'
             mode (str): File write mode. Default 'w'
             **kwargs: Additional keyword arguments for format-specific writers
 
@@ -1131,6 +1131,8 @@ class Molecule:
             self.write_xyz(filename, mode=mode, **kwargs)
         elif format.lower() == "com":
             self.write_com(filename, **kwargs)
+        elif format.lower() == "pdb":
+            self.write_pdb(filename, mode=mode, **kwargs)
         # elif format.lower() == "mol":
         #     self.write_mol(filename, **kwargs)
         else:
@@ -1188,6 +1190,47 @@ class Molecule:
                 f.write(f"{charge} {multiplicity}\n")
             self.write_coordinates(f, program="gaussian")
             f.write("\n")
+
+    def write_pdb(
+        self,
+        filename,
+        mode="w",
+        confId=-1,
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+        **kwargs,
+    ):
+        """
+        Write molecule to PDB format file.
+
+        Args:
+            filename (str): Output PDB file path
+            mode (str): File write mode. Default 'w'
+            confId (int): Conformer ID to export (-1 = default conformer)
+            flavor (int): Formatting options for PDB output:
+                - flavor & 1: Write MODEL/ENDMDL lines around each record
+                - flavor & 2: Don't write any CONECT records
+                - flavor & 4: Write CONECT records in both directions
+                - flavor & 8: Don't use multiple CONECTs to encode bond order
+                - flavor & 16: Write MASTER record
+                - flavor & 32: Write TER record
+            add_bonds (bool): Flag to add bonds to molecule or not. Default True.
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Adjust bond distances to H atoms.
+            **kwargs: Additional keyword arguments (unused)
+        """
+        pdb_block = self.to_pdb(
+            confId=confId,
+            flavor=flavor,
+            add_bonds=add_bonds,
+            bond_cutoff_buffer=bond_cutoff_buffer,
+            adjust_H=adjust_H,
+        )
+        with open(filename, mode) as f:
+            logger.info(f"Writing PDB file to {filename}")
+            f.write(pdb_block)
 
     def _write_gaussian_coordinates(self, f):
         """
@@ -1355,6 +1398,63 @@ class Molecule:
 
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
+
+    def to_pdb(
+        self,
+        confId=-1,
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+    ):
+        """
+        Convert molecule to PDB format string.
+
+        Args:
+            confId (int): Conformer ID to export (-1 = default conformer)
+            flavor (int): Formatting options for PDB output:
+                - flavor & 1: Write MODEL/ENDMDL lines around each record
+                - flavor & 2: Don't write any CONECT records
+                - flavor & 4: Write CONECT records in both directions
+                - flavor & 8: Don't use multiple CONECTs to encode bond order
+                - flavor & 16: Write MASTER record
+                - flavor & 32: Write TER record
+            add_bonds (bool): Flag to add bonds to molecule or not. Default True.
+                If bond detection fails, will retry without bonds.
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Adjust bond distances to H atoms.
+
+        Returns:
+            str: PDB format string representation of the molecule
+
+        Note:
+            If bond detection fails due to kekulization issues, the method
+            will automatically retry without bonds and log a warning.
+        """
+        # Try to create an RDKit molecule with bonds first
+        try:
+            rdkit_mol = self.to_rdkit(
+                add_bonds=add_bonds,
+                bond_cutoff_buffer=bond_cutoff_buffer,
+                adjust_H=adjust_H,
+            )
+            return Chem.MolToPDBBlock(rdkit_mol, confId=confId, flavor=flavor)
+        except (
+            Chem.AtomKekulizeException,
+            Chem.KekulizeException,
+        ) as kekulize_error:
+            # If kekulization fails, retry without bonds
+            if add_bonds:
+                logger.warning(
+                    f"Bond detection failed with kekulization error: {kekulize_error}. "
+                    "Retrying PDB conversion without bonds."
+                )
+                rdkit_mol = self.to_rdkit(add_bonds=False)
+                return Chem.MolToPDBBlock(
+                    rdkit_mol, confId=confId, flavor=flavor
+                )
+            else:
+                raise
 
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
