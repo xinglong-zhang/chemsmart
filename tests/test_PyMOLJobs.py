@@ -12,7 +12,10 @@ from chemsmart.jobs.mol.movie import PyMOLMovieJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
-from chemsmart.utils.cluster import is_pubchem_network_available
+from chemsmart.utils.cluster import (
+    is_pubchem_api_available,
+    is_pubchem_network_available,
+)
 
 
 @pytest.fixture(scope="session")
@@ -114,8 +117,8 @@ class TestPyMOLJobs:
         assert os.path.exists(pse_file)
 
     @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
+        not is_pubchem_network_available() and not is_pubchem_api_available(),
+        reason="Network/API to pubchem is unavailable",
     )
     def test_pymol_visualization_job_on_pubchem_id(
         self, tmpdir, pymol_visualization_jobrunner
@@ -137,8 +140,8 @@ class TestPyMOLJobs:
         assert os.path.exists(pse_file)
 
     @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
+        not is_pubchem_network_available() and not is_pubchem_api_available(),
+        reason="Network/API to pubchem is unavailable",
     )
     def test_pymol_visualization_job_on_smiles(
         self, tmpdir, pymol_visualization_jobrunner
