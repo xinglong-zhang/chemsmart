@@ -138,7 +138,8 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
     stop=stop_after_attempt(5),  # Retry up to 5 times
     wait=wait_exponential(multiplier=2, min=2, max=20) + wait_random(0, 2),
     # Wait 2, 4, 8, 16 seconds (max 20s) + random 0-2s
-    retry=retry_if_exception(_retryable_pubchem),  # Retry on timeout
+    retry=retry_if_exception(_retryable_pubchem),
+    # Retry on timeout, retryable HTTP errors, and other network-related RequestExceptions
     before_sleep=lambda retry_state: logger.debug(
         f"Retrying PubChem search (attempt {retry_state.attempt_number}) "
         f"after {retry_state.idle_for}s..."

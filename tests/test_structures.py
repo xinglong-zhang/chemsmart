@@ -18,7 +18,6 @@ from chemsmart.io.molecules.structure import (
     QMMMMolecule,
 )
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.utils import cmp_with_ignore
 
 
@@ -970,10 +969,6 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
-    @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
-    )
     def test_stereochemistry_handling(self, methyl3hexane_molecule):
         """Test preservation of stereochemical information."""
         methyl_3_hexane = methyl3hexane_molecule
