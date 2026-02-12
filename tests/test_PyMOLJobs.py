@@ -117,7 +117,7 @@ class TestPyMOLJobs:
         assert os.path.exists(pse_file)
 
     @pytest.mark.skipif(
-        not is_pubchem_network_available() and not is_pubchem_api_available(),
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
         reason="Network/API to pubchem is unavailable",
     )
     def test_pymol_visualization_job_on_pubchem_id(
@@ -140,7 +140,7 @@ class TestPyMOLJobs:
         assert os.path.exists(pse_file)
 
     @pytest.mark.skipif(
-        not is_pubchem_network_available() and not is_pubchem_api_available(),
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
         reason="Network/API to pubchem is unavailable",
     )
     def test_pymol_visualization_job_on_smiles(
