@@ -18,6 +18,7 @@ from chemsmart.io.molecules.structure import (
     QMMMMolecule,
 )
 from chemsmart.io.xyz.xyzfile import XYZFile
+from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.utils import cmp_with_ignore
 
 
@@ -1023,6 +1024,19 @@ class TestChemicalFeatures:
         rdkit_mol = chiral_mol.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) != []
 
+        chiral_mol2 = Molecule.from_pubchem(
+            "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
+        )
+        assert chiral_mol2.is_chiral
+        rdkit_mol2 = chiral_mol2.to_rdkit()
+        assert Chem.FindMolChiralCenters(rdkit_mol2) != []
+
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
+    def test_more_stereochemistry_handling(self, methyl3hexane_molecule):
+        """Test preservation of stereochemical information with PubChem."""
         chiral_mol2 = Molecule.from_pubchem(
             "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
         )
