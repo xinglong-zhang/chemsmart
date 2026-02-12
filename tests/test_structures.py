@@ -1028,10 +1028,10 @@ class TestChemicalFeatures:
         assert Chem.FindMolChiralCenters(rdkit_mol) != []
 
     @pytest.mark.skipif(
-        not is_pubchem_network_available() or is_pubchem_api_available(),
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
         reason="Network to pubchem is unavailable",
     )
-    def test_more_stereochemistry_handling(self, methyl3hexane_molecule):
+    def test_more_stereochemistry_handling(self):
         """Test preservation of stereochemical information with PubChem."""
         chiral_mol2 = Molecule.from_pubchem(
             "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
