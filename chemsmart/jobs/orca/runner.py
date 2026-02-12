@@ -20,6 +20,7 @@ from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import ORCAExecutable
 from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.repattern import allxyz_filename_pattern
 
 pt = PeriodicTable()
 
@@ -240,7 +241,7 @@ class ORCAJobRunner(JobRunner):
                     # intentionally narrow in scope to avoid changing behavior for
                     # other line types while still supporting NEB restarts.
                     restart_allxyz_match = re.search(
-                        r'([^\s"]+\.allxyz)', line, re.IGNORECASE
+                        allxyz_filename_pattern, line, re.IGNORECASE
                     )
                     if restart_allxyz_match:
                         match = restart_allxyz_match
