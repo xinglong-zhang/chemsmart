@@ -34,6 +34,23 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+"""429 – Too Many Requests
+You’re being rate-limited. 
+Retrying later (ideally respecting Retry-After if present) is appropriate.
+
+500 – Internal Server Error
+The server had an unexpected problem. Often transient.
+
+502 – Bad Gateway
+A gateway/proxy (load balancer) got an invalid response from an upstream server. 
+Often transient.
+
+503 – Service Unavailable
+Server is overloaded or down for maintenance. Often transient.
+
+504 – Gateway Timeout
+A gateway/proxy timed out waiting for an upstream server. Often transient.
+"""
 
 
 def _retryable_pubchem(exc: BaseException) -> bool:
@@ -69,9 +86,7 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
         requests.exceptions.HTTPError: For HTTP-related errors (e.g., 404, 400).
         requests.exceptions.RequestException: For other network issues.
     """
-    if suffix in ("2d", "3d"):
-        suffix = "sdf?record_type=" + suffix
-    # else suffix is already a full path like "conformers/JSON"
+    suffix = "sdf?record_type=" + suffix
 
     if field == "conformers":
         # Conformer searches don't use the "compound" endpoint
