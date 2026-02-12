@@ -10,10 +10,10 @@ from chemsmart.jobs.iterate.settings import IterateJobSettings
 
 
 def test_iterate_integration_workflow(
+    tmpdir,
     iterate_integration_config_file,
     iterate_input_directory,
     iterate_expected_output_file,
-    tmp_path,
 ):
     """
     Test the full Iterate workflow (Integration Test):
@@ -42,7 +42,7 @@ def test_iterate_integration_workflow(
 
         # 3. Setup Job
         # Use a temporary file for output
-        output_file = tmp_path / "test_output"
+        output_file = tmpdir / "test_output"
 
         jobrunner = IterateJobRunner()
         job = IterateJob(
@@ -139,7 +139,7 @@ def test_iterate_integration_workflow(
 def test_iterate_timeout(
     iterate_timeout_config_file,
     iterate_input_directory,
-    tmp_path,
+    tmpdir,
     caplog,
 ):
     """
@@ -169,7 +169,7 @@ def test_iterate_timeout(
         job_settings.skeleton_list = config["skeletons"]
         job_settings.substituent_list = config["substituents"]
 
-        output_file = tmp_path / "timeout_output"
+        output_file = tmpdir / "timeout_output"
 
         jobrunner = IterateJobRunner()
         job = IterateJob(
@@ -206,14 +206,14 @@ def test_iterate_timeout(
         os.chdir(original_cwd)
 
 
-def test_iterate_template_generation(tmp_path, iterate_template_file):
+def test_iterate_template_generation(tmpdir, iterate_template_file):
     """
     Test that the iterate configuration template is generated correctly and matches the golden copy.
     """
     from chemsmart.utils.iterate import generate_template
 
     # 1. Generate template
-    generated_path = tmp_path / "test_template.toml"
+    generated_path = tmpdir / "test_template.toml"
     generate_template(str(generated_path))
 
     # 2. Assert file exists
@@ -270,7 +270,7 @@ def test_iterate_validation_fails_on_invalid_link_index(
     )
 
 
-def test_iterate_validation_failures_comprehensive(tmp_path):
+def test_iterate_validation_failures_comprehensive(tmpdir):
     """
     Test various validation failure scenarios using dynamically generated configs.
     Covers missing required fields and forbidden keys.
@@ -438,7 +438,7 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
     for idx, (config_content, expected_fragments, case_name) in enumerate(
         test_cases
     ):
-        config_file = tmp_path / f"test_config_{idx}.toml"
+        config_file = tmpdir / f"test_config_{idx}.toml"
         with open(config_file, "w") as f:
             f.write(config_content)
 
@@ -457,7 +457,7 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             )
 
 
-def test_iterate_runner_bounds_validation(tmp_path):
+def test_iterate_runner_bounds_validation(tmpdir):
     """
     Test that IterateJobRunner correctly validates indices against molecule size.
     (S2) Check: indices > num_atoms checking LOGS, not exceptions.
@@ -542,7 +542,7 @@ def test_iterate_cli_pipeline_success(
     iterate_configs_directory,
     iterate_input_directory,
     iterate_expected_output_directory,
-    tmp_path,
+    tmpdir,
 ):
     """
     Test the full Iterate pipeline via the CLI:
@@ -566,7 +566,7 @@ def test_iterate_cli_pipeline_success(
     )
 
     # Define output path in tmp directory (without extension for -o argument)
-    output_base_path = str(tmp_path / "cli_happy_path_out")
+    output_base_path = str(tmpdir / "cli_happy_path_out")
     output_xyz_path = output_base_path + ".xyz"
 
     # Change CWD to input directory so relative paths in configuration work
