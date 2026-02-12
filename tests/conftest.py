@@ -1655,3 +1655,63 @@ def capture_log(caplog):
     """
     caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog
+
+
+############ Iterate Fixtures ##################
+@pytest.fixture()
+def iterate_test_directory(test_data_directory):
+    """Returns the absolute path to tests/data/IterateTests."""
+    return os.path.join(test_data_directory, "IterateTests")
+
+
+@pytest.fixture()
+def iterate_input_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/input."""
+    return os.path.join(iterate_test_directory, "input")
+
+
+@pytest.fixture()
+def iterate_expected_output_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output."""
+    return os.path.join(iterate_test_directory, "expected_output")
+
+
+@pytest.fixture()
+def iterate_configs_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs."""
+    return os.path.join(iterate_test_directory, "configs")
+
+
+@pytest.fixture()
+def iterate_integration_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/integration_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "integration_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_timeout_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/timeout_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "timeout_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_template_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/iterate_template.toml."""
+    return os.path.join(iterate_configs_directory, "iterate_template.toml")
+
+
+@pytest.fixture()
+def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/invalid_skeleton_link_index.toml."""
+    return os.path.join(
+        iterate_configs_directory, "invalid_skeleton_link_index.toml"
+    )
+
+
+@pytest.fixture()
+def iterate_expected_output_file(iterate_expected_output_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output/integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    return os.path.join(
+        iterate_expected_output_directory,
+        "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+    )

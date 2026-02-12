@@ -155,3 +155,4 @@ pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
 # version release
 version_pattern = r'(version\s*=\s*")[^"]+(")'
 release_pattern = r'(release\s*=\s*")[^"]+(")'
+safe_label_pattern = r"^[a-zA-Z0-9_\-\.]+$"

@@ -1,0 +1,11 @@
+[[skeletons]]
+# Invalid: link_index 6 is NOT in skeleton_indices [1-5]
+file_path = "dummy_skeleton.xyz"
+label = "invalid_link_index_skeleton"
+link_index = "6"
+skeleton_indices = "1-5"
+
+[[substituents]]
+file_path = "dummy_substituent.xyz"
+label = "dummy_substituent"
+link_index = "1"
