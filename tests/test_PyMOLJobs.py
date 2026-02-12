@@ -121,9 +121,9 @@ class TestPyMOLJobs:
         self, tmpdir, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_pubchem("8028")
-        job.label = "thf"
-        job.runner = pymol_visualization_jobrunner
+        job = PyMOLVisualizationJob.from_pubchem(
+            "8028", label="thf", jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
 
         # run job
@@ -144,11 +144,11 @@ class TestPyMOLJobs:
         self, tmpdir, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_pubchem("C1=CC=C(C=C1)C2=NOC(=O)O2")
-        job.label = "phenyldioxazolone"
-        # pymol label should avoid "," which is a separator for commands,
-        # such as e.g., 3-Phenyl-1,4,2-dioxazol-5-one
-        job.runner = pymol_visualization_jobrunner
+        job = PyMOLVisualizationJob.from_pubchem(
+            "C1=CC=C(C=C1)C2=NOC(=O)O2",
+            label="phenyldioxazolone",
+            jobrunner=pymol_visualization_jobrunner,
+        )
         job.set_folder(tmpdir)
 
         # run job
