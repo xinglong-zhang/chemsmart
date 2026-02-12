@@ -19,6 +19,7 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
+    wait_random,
 )
 
 from chemsmart.io.molecules.structure import Molecule
@@ -102,12 +103,11 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
     return response.text  # Already UTF-8 decoded by requests
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=64)
 @retry(
-    stop=stop_after_attempt(3),  # Retry up to 3 times
-    wait=wait_exponential(
-        multiplier=1, min=2, max=10
-    ),  # Wait 2, 4, then 8 seconds
+    stop=stop_after_attempt(5),  # Retry up to 3 times
+    wait=wait_exponential(multiplier=1, min=2, max=20)
+    + wait_random(0, 2),  # Wait 2, 4, then 8 seconds
     retry=retry_if_exception_type(Timeout),  # Retry on timeout
     before_sleep=lambda retry_state: logger.debug(
         f"Retrying PubChem search (attempt {retry_state.attempt_number}) "

@@ -1955,8 +1955,10 @@ class TestGaussianWBIOutput:
         assert len(g16_output.standard_orientations) == 1
         assert len(g16_output.all_structures) == 1
 
-    def test_molecules(self):
-        mol = Molecule.from_pubchem("241")  # benzene molecule
+    def test_molecules(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile
+        )  # benzene molecule
         assert mol.is_aromatic
 
 
