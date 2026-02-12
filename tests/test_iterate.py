@@ -5,7 +5,6 @@ import tomlkit
 
 from chemsmart.cli.iterate.iterate import validate_config
 from chemsmart.jobs.iterate.job import IterateJob
-from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
 
 
@@ -14,6 +13,7 @@ def test_iterate_integration_workflow(
     iterate_integration_config_file,
     iterate_input_directory,
     iterate_expected_output_file,
+    iterate_jobrunner,
 ):
     """
     Test the full Iterate workflow (Integration Test):
@@ -44,7 +44,7 @@ def test_iterate_integration_workflow(
         # Use a temporary file for output
         output_file = tmpdir / "test_output"
 
-        jobrunner = IterateJobRunner()
+        jobrunner = iterate_jobrunner
         job = IterateJob(
             settings=job_settings,
             jobrunner=jobrunner,
@@ -139,6 +139,7 @@ def test_iterate_integration_workflow(
 def test_iterate_timeout(
     iterate_timeout_config_file,
     iterate_input_directory,
+    iterate_jobrunner,
     tmpdir,
     caplog,
 ):
@@ -171,7 +172,7 @@ def test_iterate_timeout(
 
         output_file = tmpdir / "timeout_output"
 
-        jobrunner = IterateJobRunner()
+        jobrunner = iterate_jobrunner
         job = IterateJob(
             settings=job_settings,
             jobrunner=jobrunner,
