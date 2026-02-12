@@ -199,11 +199,12 @@ class TestThermochemistry:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_scratch,
+        orca_co2_output,
     ):
         # set scratch
         gaussian_jobrunner_scratch.scratch_dir = tmpdir
 
-        mol = Molecule.from_pubchem("280")
+        mol = Molecule.from_filepath(orca_co2_output)
         tmp_path = os.path.join(tmpdir, "CO2.com")
 
         os.chdir(tmpdir)
