@@ -105,7 +105,7 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
 
 @lru_cache(maxsize=64)
 @retry(
-    stop=stop_after_attempt(5),  # Retry up to 3 times
+    stop=stop_after_attempt(5),  # Retry up to 5 times
     wait=wait_exponential(multiplier=2, min=2, max=20) + wait_random(0, 2),
     # Wait 2, 4, 8, 16 seconds (max 20s) + random 0-2s
     retry=retry_if_exception_type(Timeout),  # Retry on timeout
