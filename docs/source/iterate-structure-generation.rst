@@ -121,7 +121,7 @@ To generate a separate file for each valid combination (useful for subsequent di
 
 .. code:: bash
 
-   chemsmart run iterate -f my_config.toml --separate-outputs -d ./output_dir -P 4
+   chemsmart run iterate -f my_config.toml --separate-outputs -d ./output_dir -np 4
 
 This will: 1. Use 4 parallel processes to speed up generation. 2. Save each generated molecule as an individual file in
 ``./output_dir``.

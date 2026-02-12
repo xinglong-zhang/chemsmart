@@ -5,12 +5,12 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from chemsmart.analysis.iterate import (
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.iterate.iterate import (
     IterateAnalyzer,
     SkeletonPreprocessor,
     SubstituentPreprocessor,
 )
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 
 if TYPE_CHECKING:
