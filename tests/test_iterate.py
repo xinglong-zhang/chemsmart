@@ -562,7 +562,6 @@ def test_iterate_cli_pipeline_success(
     3. Verify output file exists and matches expected content.
     This ensures that the CLI entry point correctly orchestrates the job runner.
     """
-    import os
 
     from click.testing import CliRunner
 
