@@ -589,8 +589,6 @@ def test_iterate_cli_pipeline_success(
         result = runner.invoke(
             iterate,
             [
-                "-s",
-                server_yaml_file,
                 "-f",
                 config_file,
                 "-o",
