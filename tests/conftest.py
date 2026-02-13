@@ -1,7 +1,7 @@
 import logging
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -34,10 +34,14 @@ def chemsmart_templates_config(mocker):
     """
     # Locate templates: chemsmart/settings/templates/.chemsmart
     package_root = Path(__file__).resolve().parent.parent
-    template_dir = package_root / "chemsmart" / "settings" / "templates" / ".chemsmart"
+    template_dir = (
+        package_root / "chemsmart" / "settings" / "templates" / ".chemsmart"
+    )
 
     if not template_dir.exists():
-        raise FileNotFoundError(f"Template directory not found: {template_dir}")
+        raise FileNotFoundError(
+            f"Template directory not found: {template_dir}"
+        )
 
     # Patch the Class attribute
     mocker.patch(
@@ -47,6 +51,7 @@ def chemsmart_templates_config(mocker):
 
     # Patch the global instance in runner.py
     from chemsmart.settings.user import ChemsmartUserSettings
+
     new_settings = ChemsmartUserSettings()
     mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
     # Patch other module-level user_settings singletons used by the CLI path
@@ -54,6 +59,7 @@ def chemsmart_templates_config(mocker):
     mocker.patch("chemsmart.settings.executable.user_settings", new_settings)
 
     return template_dir
+
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)

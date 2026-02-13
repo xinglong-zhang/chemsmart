@@ -1,14 +1,14 @@
 import os
 
-import pytest
 import numpy as np
+import pytest
 import tomlkit
-
-pytestmark = pytest.mark.usefixtures("chemsmart_templates_config")
 
 from chemsmart.cli.iterate.iterate import validate_config
 from chemsmart.jobs.iterate.job import IterateJob
 from chemsmart.jobs.iterate.settings import IterateJobSettings
+
+pytestmark = pytest.mark.usefixtures("chemsmart_templates_config")
 
 
 def test_iterate_integration_workflow(
