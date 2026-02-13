@@ -1708,7 +1708,8 @@ def iterate_template_file(iterate_configs_directory):
 
 @pytest.fixture()
 def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
-    """Returns the absolute path to tests/data/IterateTests/configs/invalid_skeleton_link_index.toml."""
+    """Returns the absolute path to tests/data/IterateTests/configs/
+    invalid_skeleton_link_index.toml."""
     return os.path.join(
         iterate_configs_directory, "invalid_skeleton_link_index.toml"
     )
@@ -1716,7 +1717,8 @@ def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
 
 @pytest.fixture()
 def iterate_expected_output_file(iterate_expected_output_directory):
-    """Returns the absolute path to tests/data/IterateTests/expected_output/integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    """Returns the absolute path to tests/data/IterateTests/expected_output/
+    integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
     return os.path.join(
         iterate_expected_output_directory,
         "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",

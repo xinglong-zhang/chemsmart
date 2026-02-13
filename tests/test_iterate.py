@@ -63,44 +63,59 @@ def test_iterate_integration_workflow(
         # Compare generated output with expected output
         # Semantic comparison (atoms and coordinates) is preferred over byte-comparison
         # to robustly handle floating point formatting differences in XYZ files
+        from chemsmart.io.xyz.xyzfile import XYZFile
 
-        # Helper to parse multi-structure XYZ
-        def parse_multi_xyz(filepath):
-            structures = []
-            with open(filepath, "r") as f:
-                lines = f.readlines()
+        generated_xyz = XYZFile(generated_output_path)
+        generated_structures = generated_xyz.get_molecules(
+            index=":", return_list=True
+        )
+        generated_structures_comments = generated_xyz.get_comments(
+            index=":", return_list=True
+        )
+        # attach comment to structure as molecule.info for easier comparison
+        for mol, comment in zip(
+            generated_structures, generated_structures_comments
+        ):
+            mol.info["comment"] = comment
 
-            i = 0
-            while i < len(lines):
-                try:
-                    num_atoms = int(lines[i].strip())
-                    label = lines[i + 1].strip()
-                    atoms = []
-                    coords = []
-                    for j in range(num_atoms):
-                        parts = lines[i + 2 + j].split()
-                        atoms.append(parts[0])
-                        coords.append([float(x) for x in parts[1:4]])
+        expected_xyz = XYZFile(iterate_expected_output_file)
+        expected_structures = expected_xyz.get_molecules(
+            index=":", return_list=True
+        )
+        expected_structures_comments = expected_xyz.get_comments(
+            index=":", return_list=True
+        )
+        for mol, comment in zip(
+            expected_structures, expected_structures_comments
+        ):
+            mol.info["comment"] = comment
 
-                    structures.append(
-                        {
-                            "label": label,
-                            "atoms": atoms,
-                            "coords": np.array(coords),
-                        }
-                    )
-                    i += 2 + num_atoms
-                except (ValueError, IndexError):
-                    break
-            return structures
+        # avoid silent truncation by zip()
+        assert len(generated_structures) == len(
+            generated_structures_comments
+        ), (
+            f"Generated molecules/comments length mismatch: "
+            f"{len(generated_structures)} != {len(generated_structures_comments)}"
+        )
+        assert len(expected_structures) == len(expected_structures_comments), (
+            f"Expected molecules/comments length mismatch: "
+            f"{len(expected_structures)} != {len(expected_structures_comments)}"
+        )
 
-        generated_structures = parse_multi_xyz(generated_output_path)
-        expected_structures = parse_multi_xyz(iterate_expected_output_file)
+        # attach comment to structure as molecule.info for easier comparison
+        for mol, comment in zip(
+            generated_structures, generated_structures_comments
+        ):
+            mol.info["comment"] = (comment or "").strip()
 
-        # Sort structures by label to ensure order-independent comparison
-        # (multiprocessing or config order might vary generation sequence)
-        generated_structures.sort(key=lambda x: x["label"])
-        expected_structures.sort(key=lambda x: x["label"])
+        for mol, comment in zip(
+            expected_structures, expected_structures_comments
+        ):
+            mol.info["comment"] = (comment or "").strip()
+
+        # Sort structures by comment to ensure order-independent comparison
+        generated_structures.sort(key=lambda m: (m.info.get("comment") or ""))
+        expected_structures.sort(key=lambda m: (m.info.get("comment") or ""))
 
         assert len(generated_structures) == len(expected_structures), (
             f"Number of generated structures ({len(generated_structures)}) "
@@ -108,27 +123,22 @@ def test_iterate_integration_workflow(
         )
 
         for gen, exp in zip(generated_structures, expected_structures):
-            # Compare labels
-            assert (
-                gen["label"] == exp["label"]
-            ), f"Label mismatch: {gen['label']} != {exp['label']}"
+            # Compare labels/comments
+            assert gen.info.get("comment") == exp.info.get(
+                "comment"
+            ), f"Comment mismatch: {gen.info.get('comment')} != {exp.info.get('comment')}"
 
-            # Compare atom count
-            assert len(gen["atoms"]) == len(
-                exp["atoms"]
-            ), f"Atom count mismatch for {gen['label']}: {len(gen['atoms'])} != {len(exp['atoms'])}"
+            # Compare atom symbols
+            assert list(gen.symbols) == list(
+                exp.symbols
+            ), f"Atom symbols mismatch for {gen.info.get('comment')}"
 
-            # Compare atom symbols (ensure composition is correct)
-            assert (
-                gen["atoms"] == exp["atoms"]
-            ), f"Atom symbols mismatch for {gen['label']}"
-
-            # Check coordinates
+            # Compare coordinates
             np.testing.assert_allclose(
-                gen["coords"],
-                exp["coords"],
+                np.asarray(gen.positions, dtype=float),
+                np.asarray(exp.positions, dtype=float),
                 atol=1e-5,
-                err_msg=f"Coordinate mismatch for {gen['label']}",
+                err_msg=f"Coordinate mismatch for {gen.info.get('comment')}",
             )
 
     finally:
