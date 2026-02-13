@@ -1,0 +1,25 @@
+[[skeletons]]
+file_path = "./carbene1_opt.com"
+label = "Carbene1"
+link_index = "34,7,8"
+skeleton_indices = "7,10,18,34,8"
+
+[[skeletons]]
+file_path = "./carbene2_opt.gjf"
+label = "Carbene2"
+link_index = "4-7,17"
+
+[[skeletons]]
+file_path = "./carbene3_opt.xyz"
+label = "Carbene3"
+link_index = "40"
+
+[[substituents]]
+file_path = "./OTf_opt.xyz"
+label = "OTf"
+link_index = "8"
+
+[[substituents]]
+file_path = "./ome_opt.log"
+label = "ome"
+link_index = "1"

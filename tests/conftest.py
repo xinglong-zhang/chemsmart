@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -11,6 +12,7 @@ from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
     PyMOLHybridVisualizationJobRunner,
@@ -22,6 +24,42 @@ from chemsmart.jobs.mol.runner import (
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
+
+
+@pytest.fixture()
+def chemsmart_templates_config(mocker):
+    """
+    Point USER_CONFIG_DIR to the local templates directory.
+    This avoids creating a mock directory and instead uses the provided templates.
+    """
+    # Locate templates: chemsmart/settings/templates/.chemsmart
+    package_root = Path(__file__).resolve().parent.parent
+    template_dir = (
+        package_root / "chemsmart" / "settings" / "templates" / ".chemsmart"
+    )
+
+    if not template_dir.exists():
+        raise FileNotFoundError(
+            f"Template directory not found: {template_dir}"
+        )
+
+    # Patch the Class attribute
+    mocker.patch(
+        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
+        str(template_dir),
+    )
+
+    # Patch the global instance in runner.py
+    from chemsmart.settings.user import ChemsmartUserSettings
+
+    new_settings = ChemsmartUserSettings()
+    mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
+    # Patch other module-level user_settings singletons used by the CLI path
+    mocker.patch("chemsmart.settings.server.user_settings", new_settings)
+    mocker.patch("chemsmart.settings.executable.user_settings", new_settings)
+
+    return template_dir
+
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
@@ -1320,6 +1358,16 @@ def pymol_mo_jobrunner(pbs_server):
     return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
+@pytest.fixture()
+def iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def fake_iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
 ## pytest fixtures for molecules
 @pytest.fixture()
 def methanol_molecule():
@@ -1655,3 +1703,65 @@ def capture_log(caplog):
     """
     caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog
+
+
+############ Iterate Fixtures ##################
+@pytest.fixture()
+def iterate_test_directory(test_data_directory):
+    """Returns the absolute path to tests/data/IterateTests."""
+    return os.path.join(test_data_directory, "IterateTests")
+
+
+@pytest.fixture()
+def iterate_input_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/input."""
+    return os.path.join(iterate_test_directory, "input")
+
+
+@pytest.fixture()
+def iterate_expected_output_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output."""
+    return os.path.join(iterate_test_directory, "expected_output")
+
+
+@pytest.fixture()
+def iterate_configs_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs."""
+    return os.path.join(iterate_test_directory, "configs")
+
+
+@pytest.fixture()
+def iterate_integration_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/integration_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "integration_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_timeout_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/timeout_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "timeout_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_template_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/iterate_template.toml."""
+    return os.path.join(iterate_configs_directory, "iterate_template.toml")
+
+
+@pytest.fixture()
+def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/
+    invalid_skeleton_link_index.toml."""
+    return os.path.join(
+        iterate_configs_directory, "invalid_skeleton_link_index.toml"
+    )
+
+
+@pytest.fixture()
+def iterate_expected_output_file(iterate_expected_output_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output/
+    integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    return os.path.join(
+        iterate_expected_output_directory,
+        "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+    )
