@@ -1,7 +1,9 @@
 import logging
 import multiprocessing
 import os
+import queue
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
@@ -255,7 +257,7 @@ class IterateJobRunner(JobRunner):
 
         try:
             # State tracking
-            pending_combinations = combinations.copy()
+            pending_combinations = deque(combinations)
             # process_id -> (process, combination, start_time)
             # Use id(p) instead of p.pid as key to avoid potential None pid issues
             active_processes: dict[
@@ -268,7 +270,7 @@ class IterateJobRunner(JobRunner):
                     pending_combinations
                     and len(active_processes) < max_workers
                 ):
-                    comb = pending_combinations.pop(0)
+                    comb = pending_combinations.popleft()
                     p = multiprocessing.Process(
                         target=_run_combination_worker,
                         args=(comb, result_queue),
@@ -278,12 +280,14 @@ class IterateJobRunner(JobRunner):
                     active_processes[id(p)] = (p, comb, time.time())
 
                 # 2. Check for results in queue
-                while not result_queue.empty():
+                while True:
                     try:
                         # Grab all available data
                         lbl, mol = result_queue.get_nowait()
                         results_dict[lbl] = mol
-                    except Exception:  # Empty or other error
+                    except queue.Empty:
+                        break
+                    except Exception:
                         break
 
                 # 3. Monitor running processes
@@ -328,10 +332,12 @@ class IterateJobRunner(JobRunner):
                     time.sleep(0.1)
 
             # Double check queue one last time just in case
-            while not result_queue.empty():
+            while True:
                 try:
                     lbl, mol = result_queue.get_nowait()
                     results_dict[lbl] = mol
+                except queue.Empty:
+                    break
                 except Exception:
                     break
 
@@ -513,9 +519,6 @@ class IterateJobRunner(JobRunner):
             skel_link_indices = skel_config.get(
                 "link_index"
             )  # list[int], 1-based
-            skeleton_indices = skel_config.get(
-                "skeleton_indices"
-            )  # list[int] or None
 
             if not skel_link_indices:
                 logger.warning(

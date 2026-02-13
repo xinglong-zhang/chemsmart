@@ -14,7 +14,7 @@
 #                       If not specified, all atoms except link_index are kept
 #                       IMPORTANT: If specified, link_index MUST be included in skeleton_indices, otherwise an error will occur.
 #
-# Note: Strings should be quoted. Arrays of tables [[name]] are used for lists.
+# Note: Index values may be provided as integers, lists, or strings (ranges/comma-separated).
 
 # ==============================================================================
 # SKELETONS

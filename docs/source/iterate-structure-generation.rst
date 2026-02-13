@@ -2,7 +2,7 @@
  Structure Generation
 ######################
 
-This section describes how to use the ``iterate`` command to systematic generate molecular libraries.
+This section describes how to use the ``iterate`` command to systematically generate molecular libraries.
 
 **********
  Overview

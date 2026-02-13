@@ -375,7 +375,30 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             ["Found invalid index <= 0", "skeleton_indices"],
             "Skeleton negative skeleton_indices",
         ),
-        # Case 8: Substituent multiple link_indices (S3 Check)
+        # Case 8: Empty skeleton_indices (S2 Check - Updated)
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = "1"
+            skeleton_indices = []
+            """,
+            ["Found empty list in 'skeleton_indices'", "Skeleton entry 1"],
+            "Skeleton empty skeleton_indices",
+        ),
+        # Case 9: Empty link_index (S2 Check - Updated)
+        (
+            """
+            [[skeletons]]
+            file_path = "skel.xyz"
+            label = "s1"
+            link_index = []
+            """,
+            ["Found empty list in 'link_index'", "Skeleton entry 1"],
+            "Skeleton empty link_index",
+        ),
+        # Case 10: Substituent multiple link_indices (S3 Check)
         (
             """
             [[skeletons]]
@@ -390,7 +413,7 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             ["Multiple values found in 'link_index'", "exactly one link atom"],
             "Substituent multiple link_index",
         ),
-        # Case 9: Skeleton label with invalid characters (S4 Check: Safe Label)
+        # Case 11: Skeleton label with invalid characters (S4 Check: Safe Label)
         (
             """
             [[skeletons]]
@@ -401,7 +424,7 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             ["Contains invalid characters", "Allowed characters"],
             "Skeleton label unsafe characters",
         ),
-        # Case 10: Substituent label with invalid characters (S4 Check: Safe Label)
+        # Case 12: Substituent label with invalid characters (S4 Check: Safe Label)
         (
             """
             [[skeletons]]
@@ -416,11 +439,11 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             ["Contains invalid characters", "Allowed characters"],
             "Substituent label unsafe characters",
         ),
-        # Case 11: Valid complex label (Testing allowed chars)
+        # Case 13: Valid complex label (Testing allowed chars)
         # This one should PASS, but our loop expects FAILURES.
         # We will add it to a separate test if needed, or invert logic here.
         # Sticking to FAILURE cases here.
-        # Case 11: Label with space
+        # Case 13: Label with space
         (
             """
             [[skeletons]]
