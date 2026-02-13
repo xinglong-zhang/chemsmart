@@ -452,10 +452,6 @@ def test_iterate_validation_failures_comprehensive(tmpdir):
             ["Contains invalid characters", "Allowed characters"],
             "Substituent label unsafe characters",
         ),
-        # Case 13: Valid complex label (Testing allowed chars)
-        # This one should PASS, but our loop expects FAILURES.
-        # We will add it to a separate test if needed, or invert logic here.
-        # Sticking to FAILURE cases here.
         # Case 13: Label with space
         (
             """

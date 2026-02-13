@@ -49,6 +49,9 @@ def chemsmart_templates_config(mocker):
     from chemsmart.settings.user import ChemsmartUserSettings
     new_settings = ChemsmartUserSettings()
     mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
+    # Patch other module-level user_settings singletons used by the CLI path
+    mocker.patch("chemsmart.settings.server.user_settings", new_settings)
+    mocker.patch("chemsmart.settings.executable.user_settings", new_settings)
 
     return template_dir
 
