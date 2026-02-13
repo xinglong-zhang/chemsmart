@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 import tomlkit
 
-pytestmark = pytest.mark.usefixtures("mock_chemsmart_home")
+pytestmark = pytest.mark.usefixtures("chemsmart_templates_config")
 
 from chemsmart.cli.iterate.iterate import validate_config
 from chemsmart.jobs.iterate.job import IterateJob

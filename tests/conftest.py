@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 import tempfile
 
 import numpy as np
@@ -26,40 +27,30 @@ from chemsmart.settings.server import Server
 
 
 @pytest.fixture()
-def mock_chemsmart_home(tmp_path, mocker):
+def chemsmart_templates_config(mocker):
     """
-    Mock the ~/.chemsmart directory for all tests.
-    Redirects USER_CONFIG_DIR to a temp directory and creates necessary structure.
-    This ensures tests run successfully in CI environments (like GitHub Actions)
-    where ~/.chemsmart does not exist.
+    Point USER_CONFIG_DIR to the local templates directory.
+    This avoids creating a mock directory and instead uses the provided templates.
     """
-    # 1. Setup fake home structure
-    fake_home = tmp_path / ".chemsmart"
-    fake_home.mkdir()
-    (fake_home / "server").mkdir()
-    (fake_home / "gaussian").mkdir()
-    (fake_home / "orca").mkdir()
+    # Locate templates: chemsmart/settings/templates/.chemsmart
+    package_root = Path(__file__).resolve().parent.parent
+    template_dir = package_root / "chemsmart" / "settings" / "templates" / ".chemsmart"
 
-    # Create dummy usersettings.yaml
-    with open(fake_home / "usersettings.yaml", "w") as f:
-        f.write("# Mock user settings\n")
+    if not template_dir.exists():
+        raise FileNotFoundError(f"Template directory not found: {template_dir}")
 
-    # 2. Patch the Class attribute so new instances use the specific tmp path
+    # Patch the Class attribute
     mocker.patch(
         "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
-        str(fake_home),
+        str(template_dir),
     )
 
-    # 3. Handle the global instance in runner.py which might have already been initialized
-    # We create a new instance (which reads from our mock path) and inject it.
-    from chemsmart.settings.user import ChemsmartUserSettings
-
-    new_settings = ChemsmartUserSettings()
-
     # Patch the global instance in runner.py
+    from chemsmart.settings.user import ChemsmartUserSettings
+    new_settings = ChemsmartUserSettings()
     mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
 
-    return fake_home
+    return template_dir
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
