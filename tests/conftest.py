@@ -1326,6 +1326,11 @@ def iterate_jobrunner(pbs_server):
     return IterateJobRunner(server=pbs_server, scratch=False)
 
 
+@pytest.fixture()
+def fake_iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
 ## pytest fixtures for molecules
 @pytest.fixture()
 def methanol_molecule():

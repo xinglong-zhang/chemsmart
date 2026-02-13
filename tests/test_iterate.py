@@ -467,7 +467,7 @@ def test_iterate_validation_failures_comprehensive(tmpdir):
             )
 
 
-def test_iterate_runner_bounds_validation(tmpdir):
+def test_iterate_runner_bounds_validation(tmpdir, fake_iterate_jobrunner):
     """
     Test that IterateJobRunner correctly validates indices against molecule size.
     (S2) Check: indices > num_atoms checking LOGS, not exceptions.
@@ -475,10 +475,9 @@ def test_iterate_runner_bounds_validation(tmpdir):
     from unittest.mock import MagicMock, patch
 
     from chemsmart.io.molecules.structure import Molecule
-    from chemsmart.jobs.iterate.runner import IterateJobRunner
 
     # Setup wrapper for the test
-    runner = IterateJobRunner(fake=True)
+    runner = fake_iterate_jobrunner
 
     # Mock Molecule.from_filepath to return a predictable molecule
     # Create a dummy molecule with 5 atoms
