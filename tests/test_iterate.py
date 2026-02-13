@@ -552,6 +552,7 @@ def test_iterate_cli_pipeline_success(
     iterate_input_directory,
     iterate_expected_output_directory,
     tmpdir,
+    server_yaml_file,
 ):
     """
     Test the full Iterate pipeline via the CLI:
@@ -587,7 +588,14 @@ def test_iterate_cli_pipeline_success(
         # Pass obj={} to initialize context object
         result = runner.invoke(
             iterate,
-            ["-f", config_file, "-o", output_base_path],
+            [
+                "-s",
+                server_yaml_file,
+                "-f",
+                config_file,
+                "-o",
+                output_base_path,
+            ],
             obj={},
         )
 
