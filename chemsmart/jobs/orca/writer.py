@@ -11,6 +11,7 @@ import os.path
 
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
+    ORCANEBJobSettings,
     ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
@@ -89,6 +90,7 @@ class ORCAInputWriter(InputWriter):
         self._write_modred_block(f)
         self._write_hessian_block(f)
         self._write_irc_block(f)
+        self._write_neb_block(f)
         self._write_constrained_atoms(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
@@ -523,6 +525,16 @@ class ORCAInputWriter(InputWriter):
         if isinstance(self.settings, ORCAIRCJobSettings):
             self._write_irc_block_for_irc(f)
 
+    def _write_neb_block(self, f):
+        """
+        Write NEB block section if settings is ORCANEBJobSettings.
+
+        Args:
+            f: File object to write to
+        """
+        if isinstance(self.settings, ORCANEBJobSettings):
+            self._write_neb_block_for_neb(f)
+
     def _write_irc_block_for_irc(self, f):
         """Writes the IRC block options.
 
@@ -636,6 +648,69 @@ class ORCAInputWriter(InputWriter):
                     f.write("  SD_Corr_ParabolicFit True\n")
             else:  # all other keys with given values
                 f.write(f"  {key} {value}\n")
+        f.write("end\n")
+
+    def _write_neb_block_for_neb(self, f):
+        """
+        Write ORCA NEB block configuration to input file.
+
+        Generates the %NEB block with NEB-specific options including number
+        of images, geometry files, and optimization settings. Only writes
+        the block if NEB-specific settings are present. Uses basenames for
+        file paths to work with scratch directory execution.
+
+        Args:
+            f: File object to write to
+
+        Example output:
+            %NEB
+            NIMAGES 8
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            PREOPT_ENDS True
+            end
+        """
+        import os
+
+        neb_settings_keys = self.settings.__dict__.keys()
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        parent_settings_keys = ORCAJobSettings().__dict__.keys()
+        neb_specific_keys = set(neb_settings_keys) - set(parent_settings_keys)
+
+        if not any(
+            getattr(self.settings, key) is not None
+            for key in neb_specific_keys
+        ):
+            return
+        neb_specific_keys = sorted(neb_specific_keys)
+        # write neb block if any option value is not None:
+        f.write("%NEB\n")
+
+        for key in neb_specific_keys:
+            value = getattr(self.settings, key)
+            if value is None:
+                continue
+            if key == "nimages":
+                f.write(f"{key.upper()} {value}\n")
+            if key == "ending_xyzfile":
+                # Use basename for scratch compatibility
+                ending_file = os.path.basename(value)
+                f.write(f'NEB_END_XYZFILE "{ending_file}"\n')
+            if key == "starting_xyz":
+                pass
+            if key == "intermediate_xyzfile":
+                # Use basename for scratch compatibility
+                intermediate_file = os.path.basename(value)
+                f.write(f'NEB_TS_XYZFILE "{intermediate_file}"\n')
+            if key == "restarting_xyzfile":
+                # Use basename for scratch compatibility
+                restart_file = os.path.basename(value)
+                f.write(f'Restart_ALLXYZFile "{restart_file}"\n')
+            if key == "preopt_ends":
+                # Always write explicit boolean to preserve user setting
+                bool_str = "True" if value else "False"
+                f.write(f"PREOPT_ENDS {bool_str}\n")
         f.write("end\n")
 
     def _write_constrained_atoms(self, f):

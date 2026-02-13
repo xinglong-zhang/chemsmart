@@ -16,6 +16,7 @@ element_token = r"[A-Z][a-z]?"
 orca_mayer_population_analysis_line_pattern = rf"^\s*(?:\+?\d+)\s+{element_token}(?:\s+{float_pattern_with_exponential}){{6}}\s*$"
 
 xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
+allxyz_filename_pattern = r"([^\s\"']+\.allxyz\b)"
 # \b ensures that the match ends right after xyz
 # and is not followed by something like: xyz1, xyzabc xyz_thing
 # It will match if .xyz is followed by: a space, a quote, end of line, punctuation

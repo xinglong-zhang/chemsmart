@@ -34,6 +34,15 @@
    :show-inheritance:
 
 *******************************
+ chemsmart.cli.orca.neb module
+*******************************
+
+.. automodule:: chemsmart.cli.orca.neb
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+*******************************
  chemsmart.cli.orca.opt module
 *******************************
 

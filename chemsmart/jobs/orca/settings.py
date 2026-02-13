@@ -1779,3 +1779,232 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         other_dict.pop("append_additional_info", None)
 
         return self_dict == other_dict
+
+
+class ORCANEBJobSettings(ORCAJobSettings):
+    """
+    Settings for ORCA Nudged Elastic Band (NEB) calculations.
+
+    NEB finds minimum energy pathways and transition states by optimizing a
+    series of molecular structures (images) connecting reactant and product
+    geometries. Images are connected by spring forces forming an elastic band
+    that converges to the minimum energy pathway.
+
+    Supported NEB job types:
+    - NEB: Standard NEB calculation
+    - NEB-CI: Climbing Image NEB for accurate transition state location
+    - NEB-TS: NEB with transition state optimization
+    - FAST-NEB-TS: Fast convergence variant
+    - TIGHT-NEB-TS: Tight convergence criteria
+    - LOOSE-NEB: Loose convergence for initial screening
+    - ZOOM-NEB: Zoomed NEB for specific pathway regions
+    - NEB-IDPP: Image-dependent pair potential initialization
+
+    Attributes:
+        joboption (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+        nimages (int): Number of intermediate images between endpoints
+        starting_xyz (str): Reactant geometry file path (inherited)
+        ending_xyzfile (str): Product geometry file path
+        intermediate_xyzfile (str): Initial TS guess file path (optional)
+        restarting_xyzfile (str): Restart file for continuation (optional)
+        preopt_ends (bool): Pre-optimize endpoint geometries
+        semiempirical (str): Semiempirical method (XTB0/XTB1/XTB2)
+    """
+
+    def __init__(
+        self,
+        semiempirical=None,
+        joboption=None,
+        nimages=None,
+        ending_xyzfile=None,
+        intermediate_xyzfile=None,
+        restarting_xyzfile=None,
+        preopt_ends=False,
+        **kwargs,
+    ):
+        """
+        Initialize ORCA NEB job settings.
+
+        Args:
+            joboption (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+            nimages (int): Number of intermediate images in NEB chain
+            ending_xyzfile (str): Product geometry file path
+            intermediate_xyzfile (str): Initial TS geometry guess file path
+            restarting_xyzfile (str): Restart file path for continuation
+            preopt_ends (bool): Pre-optimize endpoint geometries before NEB
+            semiempirical (str): Semiempirical method (XTB0, XTB1, XTB2)
+            **kwargs: Additional arguments passed to parent ORCAJobSettings
+
+        Note:
+            Reactant geometry (starting_xyz) is typically set via parent class
+            from the main molecule input file.
+        """
+        super().__init__(**kwargs)
+        self.joboption = joboption
+        self.nimages = nimages
+        self.ending_xyzfile = ending_xyzfile
+        self.intermediate_xyzfile = intermediate_xyzfile
+        self.restarting_xyzfile = restarting_xyzfile
+        self.preopt_ends = preopt_ends
+        self.semiempirical = semiempirical
+
+    def __eq__(self, other):
+        """
+        Compare two ORCANEBJobSettings objects for equality.
+
+        Compares all attributes between two ORCA NEB settings objects, including the
+        NEB-specific attributes that are not present in the parent class.
+
+        Args:
+            other (ORCANEBJobSettings): Settings object to compare with.
+
+        Returns:
+            bool or NotImplemented: True if equal, False if different,
+                NotImplemented if types don't match.
+        """
+        if type(self) is not type(other):
+            return NotImplemented
+
+        # Get dictionaries of both objects
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+
+        # Exclude append_additional_info from the comparison (inherited behavior)
+        self_dict.pop("append_additional_info", None)
+        other_dict.pop("append_additional_info", None)
+
+        return self_dict == other_dict
+
+    # populate attribute from parent class (optional)
+    @property
+    def route_string(self):
+        """
+        Generate ORCA route line for NEB calculation.
+
+        Returns:
+            str: Route string with method and NEB job type
+        """
+        return self._get_neb_route_string()
+
+    def _get_neb_route_string(self):
+        """
+        Generate ORCA route line for NEB calculation.
+
+        Returns:
+            str: Route string combining method and NEB job type
+
+        Examples:
+            "! XTB2 NEB-TS" (with semiempirical)
+            "! B3LYP def2-SVP NEB-CI" (with DFT)
+        """
+        route_string = ""
+        if not route_string.startswith("!"):
+            route_string += "! "
+
+        # add frequency calculation
+        # not okay if both freq and numfreq are True
+        if self.freq and self.numfreq:
+            raise ValueError("Cannot specify both freq and numfreq!")
+
+        if self.freq:
+            route_string += " Freq"
+        elif self.numfreq:
+            route_string += " NumFreq"  # requires numerical frequency,
+            # e.g., in SMD model where analytic Hessian is not available
+
+        # write level of theory
+        if self.semiempirical:
+            route_string += f" {self.semiempirical} {self.joboption}"
+        else:
+            route_string += f" {self._get_level_of_theory()} {self.joboption}"
+
+        # write grid information
+        if self.defgrid is not None:
+            route_string += (
+                f" {self.defgrid}"  # default is 'defgrid2', if not specified
+            )
+
+        # write convergence criteria in simple input/route
+        if self.scf_tol is not None:
+            if not self.scf_tol.lower().endswith("scf"):
+                self.scf_tol += "SCF"
+            route_string += f" {self.scf_tol}"
+
+        # write convergence algorithm if not default
+        if self.scf_algorithm is not None:
+            route_string += f" {self.scf_algorithm}"
+
+        # write solvent if solvation is turned on
+        if self.solvent_model is not None and self.solvent_id is not None:
+            route_string += f" {self.solvent_model}({self.solvent_id})"
+        elif self.solvent_model is not None and self.solvent_id is None:
+            raise ValueError(
+                "Warning: Solvent model is specified but solvent identity "
+                "is missing!"
+            )
+        elif self.solvent_model is None and self.solvent_id is not None:
+            logger.warning(
+                "Warning: Solvent identity is specified but solvent model "
+                "is missing!\nDefaulting to CPCM model."
+            )
+            route_string += f" CPCM({self.solvent_id})"
+        else:
+            pass
+
+        return route_string
+
+    @property
+    def neb_block(self):
+        """
+        Generate ORCA NEB input block.
+
+        Returns:
+            str: Formatted %neb block for ORCA input file
+        """
+        return self._write_neb_block()
+
+    def _write_neb_block(self):
+        """
+        Generate ORCA NEB input block.
+
+        Creates the %neb block with configuration for the NEB calculation
+        including number of images, file paths, and optimization settings.
+
+        Returns:
+            str: Formatted NEB block for ORCA input file
+
+        Example output:
+            %neb
+            NImages 8
+            NEB_END_XYZFILE "product.xyz"
+            PREOPT_ENDS FALSE
+            NEB_TS_XYZFILE "ts_guess.xyz"  # if provided
+            END
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+        """
+        assert self.nimages, "The number of images is missing!"
+        lines = [
+            "%neb",
+            f"NImages {self.nimages}",
+        ]
+        assert self.restarting_xyzfile or (
+            self.ending_xyzfile
+        ), "No valid input geometry is given!"
+        if self.restarting_xyzfile:
+            # Use basename for scratch compatibility
+            restart_file = os.path.basename(self.restarting_xyzfile)
+            lines.append(f'Restart_ALLXYZFile "{restart_file}"')
+        else:
+            assert self.ending_xyzfile, "No end geometry file is given!"
+            # Use basename for scratch compatibility
+            ending_file = os.path.basename(self.ending_xyzfile)
+            lines.append(f'NEB_END_XYZFile "{ending_file}"')
+            lines.append(f"PREOPT_ENDS {self.preopt_ends}")
+            if self.intermediate_xyzfile:
+                # Use basename for scratch compatibility
+                intermediate_file = os.path.basename(self.intermediate_xyzfile)
+                lines.append(f'NEB_TS_XYZFILE "{intermediate_file}"')
+        lines.append("END")
+        return "\n".join(lines)

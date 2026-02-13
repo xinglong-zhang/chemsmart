@@ -1,4 +1,5 @@
 import os
+import shutil
 from filecmp import cmp
 
 from chemsmart.io.molecules.structure import Molecule
@@ -9,6 +10,7 @@ from chemsmart.jobs.orca import (
     ORCASinglePointJob,
     ORCATSJob,
 )
+from chemsmart.jobs.orca.neb import ORCANEBJob
 from chemsmart.jobs.orca.writer import ORCAInputWriter
 from chemsmart.settings.orca import ORCAJobSettings, ORCAProjectSettings
 
@@ -369,3 +371,54 @@ class TestORCAInputWriter:
         orca_file = os.path.join(tmpdir, "orca_he_monoatomic_opt.inp")
         assert os.path.isfile(orca_file)
         assert cmp(orca_file, orca_written_he_monoatomic_opt_file)
+
+    def test_write_neb_input(
+        self,
+        tmpdir,
+        orca_input_nebts_reactant_xyz_file,
+        orca_input_nebts_product_xyz_file,
+        orca_input_nebts_ts_xyz_file,
+        orca_yaml_settings_gas_solv_project_name,
+        orca_jobrunner_no_scratch,
+        orca_written_neb_file,
+    ):
+
+        reactant_xyz_file = tmpdir.join("reactant.xyz")
+        product_xyz_file = tmpdir.join("product.xyz")
+        ts_xyz_file = tmpdir.join("ts.xyz")
+        shutil.copy(orca_input_nebts_reactant_xyz_file, reactant_xyz_file)
+        product_xyz_file = os.path.basename(
+            shutil.copy(orca_input_nebts_product_xyz_file, product_xyz_file)
+        )
+        ts_xyz_file = os.path.basename(
+            shutil.copy(orca_input_nebts_ts_xyz_file, ts_xyz_file)
+        )
+        # get project settings
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.neb_settings()
+        settings.semiempirical = "GFN2-xTB"
+        settings.joboption = "NEB-TS"
+        settings.jobtype = "neb"
+        settings.nimages = 5
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.ending_xyzfile = product_xyz_file
+        settings.intermediate_xyzfile = ts_xyz_file
+        settings.preopt_ends = True
+        job = ORCANEBJob.from_filename(
+            filename=reactant_xyz_file,
+            settings=settings,
+            label="orca_neb",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        assert isinstance(job, ORCANEBJob)
+        orca_writer = ORCAInputWriter(job=job)
+
+        # write input file
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_neb.inp")
+
+        assert os.path.isfile(orca_file)
+        assert cmp(orca_file, orca_written_neb_file, shallow=False)

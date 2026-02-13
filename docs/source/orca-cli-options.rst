@@ -242,6 +242,8 @@ Transition State Search
       -  Intrinsic reaction coordinate calculations
    -  -  ``scan``
       -  Coordinate scanning
+   -  -  ``neb``
+      -  Nudged Elastic Band calculations
 
 Direct Input
 ============

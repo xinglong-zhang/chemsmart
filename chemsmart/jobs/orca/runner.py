@@ -20,6 +20,7 @@ from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import ORCAExecutable
 from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.repattern import allxyz_filename_pattern
 
 pt = PeriodicTable()
 
@@ -60,6 +61,7 @@ class ORCAJobRunner(JobRunner):
         "orcasp",
         "orcairc",
         "orcaqmmm",
+        "orcaneb",
     ]
 
     PROGRAM = "orca"
@@ -134,9 +136,6 @@ class ORCAJobRunner(JobRunner):
             job: The job object to prepare for execution
         """
         self._assign_variables(job)
-        if self.scratch and os.path.exists(job.inputfile):
-            # copy input file to scratch directory
-            self._copy_over_xyz_files(job)
 
     def _assign_variables(self, job):
         """
@@ -202,50 +201,105 @@ class ORCAJobRunner(JobRunner):
 
     def _copy_over_xyz_files(self, job):
         """
-        Copy xyz files from run directory to scratch directory.
+        Copy xyz files from job directory to scratch directory.
 
         This method searches for xyz file references in the input file
         and copies them to the scratch directory if running in scratch mode.
+        Particularly important for NEB calculations which require multiple
+        geometry files (ending_xyzfile, intermediate_xyzfile, restarting_xyzfile).
+
+        Handles both relative and absolute file paths by:
+        1. Resolving relative paths against the job folder
+        2. Falling back to current working directory if not found
+        3. Copying files to scratch using only basenames
+
+        Note: Must be called AFTER _write_input() so the input file exists
+        and can be parsed for XYZ file references.
 
         Args:
             job: The job object containing input file information
 
         Raises:
-            FileNotFoundError: If referenced xyz file does not exist
+            FileNotFoundError: If referenced xyz file does not exist at resolved path
         """
         from chemsmart.utils.repattern import xyz_filename_pattern
 
-        with open(job.inputfile, "r") as f:
+        # Read from the scratch input file location
+        input_file_to_read = (
+            self.job_inputfile if self.scratch else job.inputfile
+        )
+
+        with open(input_file_to_read, "r") as f:
             for line in f:
+                # First, try the generic XYZ filename pattern (typically matches *.xyz)
                 match = re.search(xyz_filename_pattern, line)
+
+                # If no match was found, handle NEB restart files which often use
+                # Restart_ALLXYZFile with *.allxyz geometries.
+                if not match and "Restart_ALLXYZFile" in line:
+                    # Extract a filename ending with .allxyz from the line. This is
+                    # intentionally narrow in scope to avoid changing behavior for
+                    # other line types while still supporting NEB restarts.
+                    restart_allxyz_match = re.search(
+                        allxyz_filename_pattern, line, re.IGNORECASE
+                    )
+                    if restart_allxyz_match:
+                        match = restart_allxyz_match
                 if match:
                     xyz_file = match.group(1)
-                    if not os.path.exists(xyz_file):
+
+                    # Handle absolute and relative paths
+                    if not os.path.isabs(xyz_file):
+                        # Try relative to job folder first
+                        xyz_file_path = os.path.join(job.folder, xyz_file)
+                        if not os.path.exists(xyz_file_path):
+                            # Try relative to current working directory
+                            xyz_file_path = os.path.abspath(xyz_file)
+                    else:
+                        xyz_file_path = xyz_file
+
+                    if not os.path.exists(xyz_file_path):
                         raise FileNotFoundError(
-                            f"XYZ file {xyz_file} does not exist."
+                            f"XYZ file {xyz_file} does not exist at {xyz_file_path}."
                         )
 
                     # copy to scratch if running in scratch
                     if self.scratch and self.scratch_dir:
+                        # Use basename for scratch location
+                        xyz_basename = os.path.basename(xyz_file_path)
                         xyz_file_scratch = os.path.join(
-                            self.running_directory, xyz_file
+                            self.running_directory, xyz_basename
                         )
-                        copy(xyz_file, xyz_file_scratch)
+                        copy(xyz_file_path, xyz_file_scratch)
                         logger.info(
-                            f"Copied {xyz_file} to {self.running_directory}."
+                            f"Copied {xyz_file_path} to {xyz_file_scratch}."
                         )
 
     def _write_input(self, job):
         """
         Write the input file for the job.
 
+        Creates the ORCA input file in the running directory (scratch or job folder).
+        After writing the input, automatically copies any referenced XYZ files to
+        scratch directory if scratch is enabled. This is essential for NEB jobs
+        that reference multiple geometry files.
+
         Args:
             job: The job object to write input for
+
+        Note:
+            XYZ file copying happens after input writing so the input file can
+            be parsed to discover file references.
         """
         from chemsmart.jobs.orca.writer import ORCAInputWriter
 
         input_writer = ORCAInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
+
+        # Copy XYZ files to scratch after writing input file
+        # Use the actual input file path (self.job_inputfile in scratch)
+        if self.scratch and os.path.exists(self.job_inputfile):
+            self._copy_over_xyz_files(job)
 
     def _get_command(self, job):
         """

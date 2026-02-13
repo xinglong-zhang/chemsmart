@@ -6,8 +6,10 @@ from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.repattern import (
+    allxyz_filename_pattern,
     orca_qm_h_bond_length_pattern,
     standard_coord_pattern,
+    xyz_filename_pattern,
 )
 
 logger = logging.getLogger(__name__)
@@ -505,3 +507,72 @@ class ORCAQMMMInput(ORCAInput):
                 block["force field"] = force_field
 
         return block
+
+
+class ORCANEBInput(ORCAInput):
+    @property
+    def starting_xyzfile(self):
+        starting_xyzfile, _, _, _ = self._get_geometries()
+        return starting_xyzfile
+
+    @property
+    def ending_xyzfile(self):
+        _, ending_xyzfile, _, _ = self._get_geometries()
+        return ending_xyzfile
+
+    @property
+    def ts_xyzfile(self):
+        _, _, ts_xyzfile, _ = self._get_geometries()
+        return ts_xyzfile
+
+    @property
+    def restarting_allxyzfile(self):
+        _, _, _, restarting_allxyzfile = self._get_geometries()
+        return restarting_allxyzfile
+
+    @property
+    def nimages(self):
+        return self._get_number_of_images()
+
+    @property
+    def pre_optimization(self):
+        return self._get_pre_optimization_status()
+
+    def _get_geometries(self):
+        neb_starting_xyz = neb_end_xyzile = neb_ts_xyzile = (
+            restart_allxyzfile
+        ) = None
+        for line in self.contents:
+            match = re.search(xyz_filename_pattern, line)
+            if "neb_end_xyzfile" in line.lower():
+                neb_end_xyzile = match.group(1)
+            elif "neb_ts_xyzfile" in line.lower():
+                neb_ts_xyzile = match.group(1)
+            elif "restart_allxyzfile" in line.lower():
+                match = re.search(allxyz_filename_pattern, line)
+                restart_allxyzfile = match.group(1)
+            elif line.startswith("* xyzfile"):
+                neb_starting_xyz = match.group(1)
+            elif self.coordinate_lines:
+                neb_starting_xyz = self.coordinate_lines
+        return (
+            neb_starting_xyz,
+            neb_end_xyzile,
+            neb_ts_xyzile,
+            restart_allxyzfile,
+        )
+
+    def _get_number_of_images(self):
+        nimages = None
+        for line in self.contents:
+            if "nimages" in line.lower():
+                nimages = int(line.split()[-1])
+        return nimages
+
+    def _get_pre_optimization_status(self):
+        pre_opt = False
+        for line in self.contents:
+            line = line.lower()
+            if "preopt_ends" in line and "true" in line:
+                pre_opt = True
+        return pre_opt
