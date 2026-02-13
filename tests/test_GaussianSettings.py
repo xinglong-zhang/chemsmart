@@ -245,8 +245,16 @@ class TestGaussianQMMMJobSettings:
             == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
         )
 
-    def test_qmmm_settings_for_atoms(self, gaussian_inputs_test_directory):
-        mol1 = QMMMMolecule(molecule=Molecule.from_pubchem("81184"))
+    def test_qmmm_settings_for_atoms(
+        self,
+        gaussian_inputs_test_directory,
+        gaussian_semiempirical_pm6_output_file,
+    ):
+        mol1 = QMMMMolecule(
+            molecule=Molecule.from_filepath(
+                gaussian_semiempirical_pm6_output_file
+            )
+        )
 
         settings1 = QMMMMolecule(
             symbols=mol1.symbols,
