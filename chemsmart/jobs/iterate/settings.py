@@ -19,7 +19,7 @@ class IterateJobSettings:
         Parameters
         ----------
         config_file : str, optional
-            Path to the YAML configuration file.
+            Path to the TOML configuration file.
         method : str, optional
             Mathematical method to use for position optimization. Default is 'lagrange_multipliers'.
         sphere_direction_samples_num : int, optional
