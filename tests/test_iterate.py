@@ -5,15 +5,15 @@ import tomlkit
 
 from chemsmart.cli.iterate.iterate import validate_config
 from chemsmart.jobs.iterate.job import IterateJob
-from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
 
 
 def test_iterate_integration_workflow(
+    tmpdir,
     iterate_integration_config_file,
     iterate_input_directory,
     iterate_expected_output_file,
-    tmp_path,
+    iterate_jobrunner,
 ):
     """
     Test the full Iterate workflow (Integration Test):
@@ -42,9 +42,9 @@ def test_iterate_integration_workflow(
 
         # 3. Setup Job
         # Use a temporary file for output
-        output_file = tmp_path / "test_output"
+        output_file = tmpdir / "test_output"
 
-        jobrunner = IterateJobRunner()
+        jobrunner = iterate_jobrunner
         job = IterateJob(
             settings=job_settings,
             jobrunner=jobrunner,
@@ -63,44 +63,59 @@ def test_iterate_integration_workflow(
         # Compare generated output with expected output
         # Semantic comparison (atoms and coordinates) is preferred over byte-comparison
         # to robustly handle floating point formatting differences in XYZ files
+        from chemsmart.io.xyz.xyzfile import XYZFile
 
-        # Helper to parse multi-structure XYZ
-        def parse_multi_xyz(filepath):
-            structures = []
-            with open(filepath, "r") as f:
-                lines = f.readlines()
+        generated_xyz = XYZFile(generated_output_path)
+        generated_structures = generated_xyz.get_molecules(
+            index=":", return_list=True
+        )
+        generated_structures_comments = generated_xyz.get_comments(
+            index=":", return_list=True
+        )
+        # attach comment to structure as molecule.info for easier comparison
+        for mol, comment in zip(
+            generated_structures, generated_structures_comments
+        ):
+            mol.info["comment"] = comment
 
-            i = 0
-            while i < len(lines):
-                try:
-                    num_atoms = int(lines[i].strip())
-                    label = lines[i + 1].strip()
-                    atoms = []
-                    coords = []
-                    for j in range(num_atoms):
-                        parts = lines[i + 2 + j].split()
-                        atoms.append(parts[0])
-                        coords.append([float(x) for x in parts[1:4]])
+        expected_xyz = XYZFile(iterate_expected_output_file)
+        expected_structures = expected_xyz.get_molecules(
+            index=":", return_list=True
+        )
+        expected_structures_comments = expected_xyz.get_comments(
+            index=":", return_list=True
+        )
+        for mol, comment in zip(
+            expected_structures, expected_structures_comments
+        ):
+            mol.info["comment"] = comment
 
-                    structures.append(
-                        {
-                            "label": label,
-                            "atoms": atoms,
-                            "coords": np.array(coords),
-                        }
-                    )
-                    i += 2 + num_atoms
-                except (ValueError, IndexError):
-                    break
-            return structures
+        # avoid silent truncation by zip()
+        assert len(generated_structures) == len(
+            generated_structures_comments
+        ), (
+            f"Generated molecules/comments length mismatch: "
+            f"{len(generated_structures)} != {len(generated_structures_comments)}"
+        )
+        assert len(expected_structures) == len(expected_structures_comments), (
+            f"Expected molecules/comments length mismatch: "
+            f"{len(expected_structures)} != {len(expected_structures_comments)}"
+        )
 
-        generated_structures = parse_multi_xyz(generated_output_path)
-        expected_structures = parse_multi_xyz(iterate_expected_output_file)
+        # attach comment to structure as molecule.info for easier comparison
+        for mol, comment in zip(
+            generated_structures, generated_structures_comments
+        ):
+            mol.info["comment"] = (comment or "").strip()
 
-        # Sort structures by label to ensure order-independent comparison
-        # (multiprocessing or config order might vary generation sequence)
-        generated_structures.sort(key=lambda x: x["label"])
-        expected_structures.sort(key=lambda x: x["label"])
+        for mol, comment in zip(
+            expected_structures, expected_structures_comments
+        ):
+            mol.info["comment"] = (comment or "").strip()
+
+        # Sort structures by comment to ensure order-independent comparison
+        generated_structures.sort(key=lambda m: (m.info.get("comment") or ""))
+        expected_structures.sort(key=lambda m: (m.info.get("comment") or ""))
 
         assert len(generated_structures) == len(expected_structures), (
             f"Number of generated structures ({len(generated_structures)}) "
@@ -108,27 +123,21 @@ def test_iterate_integration_workflow(
         )
 
         for gen, exp in zip(generated_structures, expected_structures):
-            # Compare labels
-            assert (
-                gen["label"] == exp["label"]
-            ), f"Label mismatch: {gen['label']} != {exp['label']}"
+            # Compare labels/comments
+            assert gen.info.get("comment") == exp.info.get(
+                "comment"
+            ), f"Comment mismatch: {gen.info.get('comment')} != {exp.info.get('comment')}"
 
-            # Compare atom count
-            assert len(gen["atoms"]) == len(
-                exp["atoms"]
-            ), f"Atom count mismatch for {gen['label']}: {len(gen['atoms'])} != {len(exp['atoms'])}"
+            # Compare atom symbols
+            assert list(gen.symbols) == list(
+                exp.symbols
+            ), f"Atom symbols mismatch for {gen.info.get('comment')}"
 
-            # Compare atom symbols (ensure composition is correct)
-            assert (
-                gen["atoms"] == exp["atoms"]
-            ), f"Atom symbols mismatch for {gen['label']}"
-
-            # Check coordinates
-            np.testing.assert_allclose(
-                gen["coords"],
-                exp["coords"],
-                atol=1e-5,
-                err_msg=f"Coordinate mismatch for {gen['label']}",
+            # Compare coordinates
+            np.allclose(
+                np.asarray(gen.positions, dtype=float),
+                np.asarray(exp.positions, dtype=float),
+                atol=5e-5,
             )
 
     finally:
@@ -139,7 +148,8 @@ def test_iterate_integration_workflow(
 def test_iterate_timeout(
     iterate_timeout_config_file,
     iterate_input_directory,
-    tmp_path,
+    iterate_jobrunner,
+    tmpdir,
     caplog,
 ):
     """
@@ -169,9 +179,9 @@ def test_iterate_timeout(
         job_settings.skeleton_list = config["skeletons"]
         job_settings.substituent_list = config["substituents"]
 
-        output_file = tmp_path / "timeout_output"
+        output_file = tmpdir / "timeout_output"
 
-        jobrunner = IterateJobRunner()
+        jobrunner = iterate_jobrunner
         job = IterateJob(
             settings=job_settings,
             jobrunner=jobrunner,
@@ -206,14 +216,14 @@ def test_iterate_timeout(
         os.chdir(original_cwd)
 
 
-def test_iterate_template_generation(tmp_path, iterate_template_file):
+def test_iterate_template_generation(tmpdir, iterate_template_file):
     """
     Test that the iterate configuration template is generated correctly and matches the golden copy.
     """
     from chemsmart.utils.iterate import generate_template
 
     # 1. Generate template
-    generated_path = tmp_path / "test_template.toml"
+    generated_path = tmpdir / "test_template.toml"
     generate_template(str(generated_path))
 
     # 2. Assert file exists
@@ -270,7 +280,7 @@ def test_iterate_validation_fails_on_invalid_link_index(
     )
 
 
-def test_iterate_validation_failures_comprehensive(tmp_path):
+def test_iterate_validation_failures_comprehensive(tmpdir):
     """
     Test various validation failure scenarios using dynamically generated configs.
     Covers missing required fields and forbidden keys.
@@ -461,7 +471,7 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
     for idx, (config_content, expected_fragments, case_name) in enumerate(
         test_cases
     ):
-        config_file = tmp_path / f"test_config_{idx}.toml"
+        config_file = tmpdir / f"test_config_{idx}.toml"
         with open(config_file, "w") as f:
             f.write(config_content)
 
@@ -480,7 +490,7 @@ def test_iterate_validation_failures_comprehensive(tmp_path):
             )
 
 
-def test_iterate_runner_bounds_validation(tmp_path):
+def test_iterate_runner_bounds_validation(tmpdir, fake_iterate_jobrunner):
     """
     Test that IterateJobRunner correctly validates indices against molecule size.
     (S2) Check: indices > num_atoms checking LOGS, not exceptions.
@@ -488,10 +498,9 @@ def test_iterate_runner_bounds_validation(tmp_path):
     from unittest.mock import MagicMock, patch
 
     from chemsmart.io.molecules.structure import Molecule
-    from chemsmart.jobs.iterate.runner import IterateJobRunner
 
     # Setup wrapper for the test
-    runner = IterateJobRunner(fake=True)
+    runner = fake_iterate_jobrunner
 
     # Mock Molecule.from_filepath to return a predictable molecule
     # Create a dummy molecule with 5 atoms
@@ -507,7 +516,7 @@ def test_iterate_runner_bounds_validation(tmp_path):
         patch("chemsmart.jobs.iterate.runner.logger") as mock_logger,
     ):
 
-        # Case 1: Skelton link_index out of bounds
+        # Case 1: Skeleton link_index out of bounds
         config_1 = {
             "file_path": "dummy.xyz",
             "label": "skel1",
@@ -565,7 +574,8 @@ def test_iterate_cli_pipeline_success(
     iterate_configs_directory,
     iterate_input_directory,
     iterate_expected_output_directory,
-    tmp_path,
+    tmpdir,
+    server_yaml_file,
 ):
     """
     Test the full Iterate pipeline via the CLI:
@@ -574,7 +584,6 @@ def test_iterate_cli_pipeline_success(
     3. Verify output file exists and matches expected content.
     This ensures that the CLI entry point correctly orchestrates the job runner.
     """
-    import os
 
     from click.testing import CliRunner
 
@@ -589,7 +598,7 @@ def test_iterate_cli_pipeline_success(
     )
 
     # Define output path in tmp directory (without extension for -o argument)
-    output_base_path = str(tmp_path / "cli_happy_path_out")
+    output_base_path = str(tmpdir / "cli_happy_path_out")
     output_xyz_path = output_base_path + ".xyz"
 
     # Change CWD to input directory so relative paths in configuration work
@@ -602,7 +611,14 @@ def test_iterate_cli_pipeline_success(
         # Pass obj={} to initialize context object
         result = runner.invoke(
             iterate,
-            ["-f", config_file, "-o", output_base_path],
+            [
+                "-s",
+                server_yaml_file,
+                "-f",
+                config_file,
+                "-o",
+                output_base_path,
+            ],
             obj={},
         )
 

@@ -11,8 +11,11 @@ This section describes how to use the ``iterate`` command to systematically gene
 The ``iterate`` tool automates the process of attaching substituents to skeleton molecules. It is designed to generate a
 library of structures by combinatorially attaching a list of substituents to specific sites on a list of skeletons.
 
-The tool handles: - Alignment of the substituent to the specified attachment vector. - Rotation optimization to minimize
-steric clashes (using algorithms like Lagrange multipliers). - Batch processing with parallel execution.
+The tool handles:
+
+-  Alignment of the substituent to the specified attachment vector.
+-  Rotation optimization to minimize steric clashes (using algorithms like Lagrange multipliers).
+-  Batch processing with parallel execution.
 
 ********************
  Configuration File

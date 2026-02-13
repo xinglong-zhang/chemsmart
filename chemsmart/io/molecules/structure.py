@@ -98,6 +98,9 @@ class Molecule:
         self._energy = energy
         self.forces = forces
         self.velocities = velocities
+        if info is None:
+            # initialise info as empty dict if it is None
+            info = dict()
         self.info = info
         self._num_atoms = len(self.symbols)
 

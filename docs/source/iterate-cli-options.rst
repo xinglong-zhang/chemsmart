@@ -49,7 +49,7 @@ Job Control Options
       -  string
       -  Path to the TOML configuration file (required)
 
-   -  -  ``-P, --nprocs``
+   -  -  ``-np, --nprocs``
       -  int
       -  Number of parallel processes to use (default: 1)
 

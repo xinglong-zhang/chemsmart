@@ -11,6 +11,7 @@ from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
     PyMOLHybridVisualizationJobRunner,
@@ -1320,6 +1321,16 @@ def pymol_mo_jobrunner(pbs_server):
     return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
+@pytest.fixture()
+def iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def fake_iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
 ## pytest fixtures for molecules
 @pytest.fixture()
 def methanol_molecule():
@@ -1702,7 +1713,8 @@ def iterate_template_file(iterate_configs_directory):
 
 @pytest.fixture()
 def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
-    """Returns the absolute path to tests/data/IterateTests/configs/invalid_skeleton_link_index.toml."""
+    """Returns the absolute path to tests/data/IterateTests/configs/
+    invalid_skeleton_link_index.toml."""
     return os.path.join(
         iterate_configs_directory, "invalid_skeleton_link_index.toml"
     )
@@ -1710,7 +1722,8 @@ def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
 
 @pytest.fixture()
 def iterate_expected_output_file(iterate_expected_output_directory):
-    """Returns the absolute path to tests/data/IterateTests/expected_output/integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    """Returns the absolute path to tests/data/IterateTests/expected_output/
+    integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
     return os.path.join(
         iterate_expected_output_directory,
         "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
