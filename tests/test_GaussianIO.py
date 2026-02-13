@@ -1456,7 +1456,7 @@ class TestGaussian16Output:
             0,
             0,
         ]
-        assert g16_frozen.optimized_structure.energy == -804.614710796
+        assert g16_frozen.optimized_structure.energy == -804.614710796 * units.Hartree
         assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
         assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
         assert np.allclose(
@@ -1558,7 +1558,7 @@ class TestGaussian16Output:
         # since use_frozen is False, this is not included in the output structure
         assert g16_hide_frozen.optimized_structure.frozen_atoms is None
 
-        assert g16_hide_frozen.optimized_structure.energy == -804.614710796
+        assert g16_hide_frozen.optimized_structure.energy == -804.614710796 * units.Hartree
         assert (
             g16_hide_frozen.num_vib_modes
             == g16_hide_frozen.num_vib_frequencies

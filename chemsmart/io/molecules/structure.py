@@ -1152,9 +1152,11 @@ class Molecule:
             base_filename = os.path.basename(filename)
             if self.energy is not None:
                 # energy found in file, e.g., .out, .log
+                # Convert from eV to Hartree for output file
+                energy_in_hartree = self.energy / units.Hartree
                 xyz_info = (
                     f"{base_filename}    Empirical formula: {self.chemical_formula}    "
-                    f"Energy(Hartree): {self.energy:.6f}    "
+                    f"Energy(Hartree): {energy_in_hartree:.6f}    "
                 )
             else:
                 # no energy found in file, e.g., .xyz or .com
