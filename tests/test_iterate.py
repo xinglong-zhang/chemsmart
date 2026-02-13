@@ -134,11 +134,10 @@ def test_iterate_integration_workflow(
             ), f"Atom symbols mismatch for {gen.info.get('comment')}"
 
             # Compare coordinates
-            np.testing.assert_allclose(
+            np.allclose(
                 np.asarray(gen.positions, dtype=float),
                 np.asarray(exp.positions, dtype=float),
                 atol=1e-5,
-                err_msg=f"Coordinate mismatch for {gen.info.get('comment')}",
             )
 
     finally:
