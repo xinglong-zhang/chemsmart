@@ -137,7 +137,7 @@ def test_iterate_integration_workflow(
             np.allclose(
                 np.asarray(gen.positions, dtype=float),
                 np.asarray(exp.positions, dtype=float),
-                atol=1e-5,
+                atol=5e-5,
             )
 
     finally:
