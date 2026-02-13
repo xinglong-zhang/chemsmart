@@ -41,7 +41,7 @@ ITERATE_TEMPLATE = """# Chemsmart Iterate Configuration Template
 #                       If not specified, all atoms except link_index are kept
 #                       IMPORTANT: If specified, link_index MUST be included in skeleton_indices, otherwise an error will occur.
 #
-# Note: Strings should be quoted. Arrays of tables [[name]] are used for lists.
+# Note: Index values may be provided as integers, lists, or strings (ranges/comma-separated).
 
 # ==============================================================================
 # SKELETONS
@@ -179,7 +179,15 @@ def _parse_index_string(
             # Already a list of ints (though TOML parser usually handles this, sometimes flexible)
             parsed_indices = value
 
-        if parsed_indices:
+        if parsed_indices is not None:
+            # S2 Check: Validate not empty
+            if len(parsed_indices) == 0:
+                raise click.BadParameter(
+                    f"{entry_type.capitalize()} entry {idx + 1}: Found empty list in '{field_name}'. "
+                    f"At least one index must be provided.",
+                    param_hint="'-f' / '--filename'",
+                )
+
             # S2 Check: Validate positive non-zero indices
             if any(i <= 0 for i in parsed_indices):
                 raise click.BadParameter(
