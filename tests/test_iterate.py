@@ -495,7 +495,7 @@ def test_iterate_runner_bounds_validation(tmpdir):
         patch("chemsmart.jobs.iterate.runner.logger") as mock_logger,
     ):
 
-        # Case 1: Skelton link_index out of bounds
+        # Case 1: Skeleton link_index out of bounds
         config_1 = {
             "file_path": "dummy.xyz",
             "label": "skel1",
