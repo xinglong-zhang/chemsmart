@@ -24,6 +24,43 @@ from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
+
+@pytest.fixture()
+def mock_chemsmart_home(tmp_path, mocker):
+    """
+    Mock the ~/.chemsmart directory for all tests.
+    Redirects USER_CONFIG_DIR to a temp directory and creates necessary structure.
+    This ensures tests run successfully in CI environments (like GitHub Actions)
+    where ~/.chemsmart does not exist.
+    """
+    # 1. Setup fake home structure
+    fake_home = tmp_path / ".chemsmart"
+    fake_home.mkdir()
+    (fake_home / "server").mkdir()
+    (fake_home / "gaussian").mkdir()
+    (fake_home / "orca").mkdir()
+
+    # Create dummy usersettings.yaml
+    with open(fake_home / "usersettings.yaml", "w") as f:
+        f.write("# Mock user settings\n")
+
+    # 2. Patch the Class attribute so new instances use the specific tmp path
+    mocker.patch(
+        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
+        str(fake_home),
+    )
+
+    # 3. Handle the global instance in runner.py which might have already been initialized
+    # We create a new instance (which reads from our mock path) and inject it.
+    from chemsmart.settings.user import ChemsmartUserSettings
+
+    new_settings = ChemsmartUserSettings()
+
+    # Patch the global instance in runner.py
+    mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
+
+    return fake_home
+
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
 # def go_to_tmpdir(request):

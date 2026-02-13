@@ -1,7 +1,10 @@
 import os
 
+import pytest
 import numpy as np
 import tomlkit
+
+pytestmark = pytest.mark.usefixtures("mock_chemsmart_home")
 
 from chemsmart.cli.iterate.iterate import validate_config
 from chemsmart.jobs.iterate.job import IterateJob
@@ -575,7 +578,6 @@ def test_iterate_cli_pipeline_success(
     iterate_input_directory,
     iterate_expected_output_directory,
     tmpdir,
-    server_yaml_file,
 ):
     """
     Test the full Iterate pipeline via the CLI:
@@ -612,8 +614,6 @@ def test_iterate_cli_pipeline_success(
         result = runner.invoke(
             iterate,
             [
-                "-s",
-                server_yaml_file,
                 "-f",
                 config_file,
                 "-o",
