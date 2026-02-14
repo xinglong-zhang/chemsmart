@@ -5,7 +5,6 @@ Groups molecules by molecular connectivity (graph isomorphism).
 """
 
 import logging
-import os
 from typing import Iterable, List, Tuple
 
 import networkx as nx
@@ -13,8 +12,9 @@ import pandas as pd
 from joblib import Parallel, delayed
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.utils import to_graph_wrapper
 
-from .runner import MoleculeGrouper, to_graph_wrapper
+from .base import MoleculeGrouper
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ class ConnectivityGrouper(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         """
@@ -57,9 +58,14 @@ class ConnectivityGrouper(MoleculeGrouper):
                 graph comparison. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
+            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
-            molecules, num_procs, label=label, conformer_ids=conformer_ids
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
         self.adjust_H = adjust_H
         self.ignore_hydrogens = ignore_hydrogens
@@ -215,86 +221,53 @@ class ConnectivityGrouper(MoleculeGrouper):
         index_groups: List[List[int]],
         grouping_time: float = None,
     ):
-        """Save connectivity grouping results to Excel file."""
+        """Save connectivity grouping results to file using ResultsRecorder."""
         n = sum(len(g) for g in groups)
 
-        # Create output directory
-        if self.label:
-            output_dir = f"{self.label}_group_result"
-        else:
-            output_dir = "group_result"
-        os.makedirs(output_dir, exist_ok=True)
+        # Build header info
+        header_info = [
+            ("", f"Connectivity Grouping Results - {self.__class__.__name__}"),
+            ("Total Molecules", n),
+            ("adjust H", self.adjust_H),
+            ("Ignore Hydrogens", self.ignore_hydrogens),
+            ("Num Procs", self.num_procs),
+        ]
 
-        # Create filename
-        label_prefix = f"{self.label}_" if self.label else ""
-        filename = os.path.join(
-            output_dir,
-            f"{label_prefix}{self.__class__.__name__}.xlsx",
+        if grouping_time is not None:
+            header_info.append(
+                ("Grouping Time", f"{grouping_time:.2f} seconds")
+            )
+
+        # Use ResultsRecorder to save
+        recorder = self._get_results_recorder()
+
+        # Build summary data for main sheet
+        summary_data = []
+        for i, group in enumerate(groups):
+            summary_data.append(
+                {
+                    "Group": i + 1,
+                    "Members": len(group),
+                }
+            )
+        summary_df = pd.DataFrame(summary_data)
+
+        # Build sheets data using recorder's method
+        sheets_data = {
+            "Connectivity_Groups": summary_df,
+            "Groups": recorder.build_groups_dataframe(index_groups, n),
+        }
+
+        # For connectivity, we write summary_df with header info
+        # Need custom handling since it's not a matrix
+        recorder.record_results(
+            grouper_name=self.__class__.__name__,
+            header_info=header_info,
+            sheets_data=sheets_data,
+            matrix_data=None,
+            suffix=None,
+            startrow=7,
         )
-
-        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # Sheet 1: Summary
-            summary_data = []
-            for i, group in enumerate(groups):
-                summary_data.append(
-                    {
-                        "Group": i + 1,
-                        "Members": len(group),
-                    }
-                )
-
-            summary_df = pd.DataFrame(summary_data)
-            summary_df.to_excel(
-                writer,
-                sheet_name="Connectivity_Groups",
-                startrow=7,
-                index=False,
-            )
-
-            worksheet = writer.sheets["Connectivity_Groups"]
-            row = 1
-            worksheet[f"A{row}"] = (
-                f"Connectivity Grouping Results - {self.__class__.__name__}"
-            )
-            row += 1
-            worksheet[f"A{row}"] = f"Total Molecules: {n}"
-            row += 1
-            worksheet[f"A{row}"] = f"adjust H: {self.adjust_H}"
-            row += 1
-            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
-            row += 1
-
-            # Number of processors
-            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
-            row += 1
-
-            if grouping_time is not None:
-                worksheet[f"A{row}"] = (
-                    f"Grouping Time: {grouping_time:.2f} seconds"
-                )
-                row += 1
-
-            # Sheet 2: Groups detail
-            groups_data = []
-            for i, indices in enumerate(index_groups):
-                if self.conformer_ids is not None:
-                    member_labels = [
-                        self.conformer_ids[idx] for idx in indices
-                    ]
-                else:
-                    member_labels = [str(idx + 1) for idx in indices]
-
-                groups_data.append(
-                    {
-                        "Group": i + 1,
-                        "Members": ", ".join(member_labels),
-                    }
-                )
-
-            groups_df = pd.DataFrame(groups_data)
-            groups_df.to_excel(writer, sheet_name="Groups", index=False)
-
-        logger.info(f"Connectivity grouping results saved to {filename}")
 
     def __repr__(self):
         return (

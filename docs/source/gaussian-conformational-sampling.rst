@@ -70,7 +70,7 @@ Process 10 lowest-energy conformers:
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f crest_conformers.xyz -l structure_from_lowest -c 0 -m 1 crest -j opt -N 10
+   chemsmart sub gaussian -p project -f crest_conformers.xyz -l structure_from_lowest -c 0 -m 1 crest -j opt -n 10
 
 Output files are named ``structure_from_lowest_opt_c1`` through ``structure_from_lowest_opt_c10``.
 

@@ -6,6 +6,11 @@ clustering tasks including RMSD-based grouping, fingerprint similarity,
 torsion fingerprint deviation, and more.
 """
 
+from .base import (
+    MoleculeGrouper,
+    ResultsRecorder,
+    StructureGrouperConfig,
+)
 from .connectivity import ConnectivityGrouper
 from .energy import EnergyGrouper
 from .formula import FormulaGrouper
@@ -20,12 +25,7 @@ from .rmsd import (
     RMSDGrouperSharedMemory,
     SpyRMSDGrouper,
 )
-from .runner import (
-    GrouperJobRunner,
-    MoleculeGrouper,
-    StructureGrouperConfig,
-    to_graph_wrapper,
-)
+from .runner import GrouperJobRunner
 from .tanimoto import TanimotoSimilarityGrouper
 from .tfd import TorsionFingerprintGrouper
 
@@ -33,6 +33,7 @@ __all__ = [
     "GrouperJob",
     "GrouperJobRunner",
     "MoleculeGrouper",
+    "ResultsRecorder",
     "RMSDGrouper",
     "BasicRMSDGrouper",
     "HungarianRMSDGrouper",
@@ -47,5 +48,4 @@ __all__ = [
     "ConnectivityGrouper",
     "EnergyGrouper",
     "StructureGrouperConfig",
-    "to_graph_wrapper",
 ]

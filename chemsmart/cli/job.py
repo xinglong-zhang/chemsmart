@@ -172,32 +172,6 @@ def click_filename_options(f):
     return wrapper_common_options
 
 
-def click_file_label_options(f):
-    """Common click options for specifying file label and append-label via CLI."""
-
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="Write user input filename for the job (without extension). "
-        "Special characters such as apostrophe, comma, asterisk etc should be avoided.",
-    )
-    @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="Name to be appended to file for the job. "
-        "Special characters such as apostrophe, comma, asterisk etc should be avoided.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
-
-
 def click_file_label_and_index_options(f):
     """Common click options for specifying file label, append-label, and index via CLI."""
 

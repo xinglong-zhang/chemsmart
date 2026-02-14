@@ -19,14 +19,13 @@ from multiprocessing import RawArray
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
-import pandas as pd
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.utils.utils import kabsch_align
+from chemsmart.utils.utils import find_irmsd_command, kabsch_align
 
-from .runner import MoleculeGrouper
+from .base import MoleculeGrouper
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +55,15 @@ class RMSDGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold=None,  # RMSD threshold for grouping
-        num_groups=None,  # Number of groups to create (alternative to threshold)
+        threshold=None,
+        num_groups=None,
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
-        label: str = None,  # Label for output files
-        conformer_ids: List[str] = None,  # Custom conformer IDs for labeling
-        **kwargs,  # Option to ignore H atoms for grouping
+        label: str = None,
+        conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
+        **kwargs,
     ):
         """
         Initialize RMSD-based molecular grouper.
@@ -81,6 +81,7 @@ class RMSDGrouper(MoleculeGrouper):
                 RMSD calculation. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
+            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
 
         Note:
             Uses complete linkage clustering: a structure joins a group only if
@@ -89,7 +90,11 @@ class RMSDGrouper(MoleculeGrouper):
             group through intermediate "bridge" structures.
         """
         super().__init__(
-            molecules, num_procs, label=label, conformer_ids=conformer_ids
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
 
         # Validate that threshold and num_groups are mutually exclusive
@@ -180,27 +185,6 @@ class RMSDGrouper(MoleculeGrouper):
         for (i, j), rmsd in zip(indices, rmsd_values):
             rmsd_matrix[i, j] = rmsd_matrix[j, i] = rmsd
 
-        # Save RMSD matrix to group_result folder
-        # Use label for folder name if provided
-        if self.label:
-            output_dir = f"{self.label}_group_result"
-        else:
-            output_dir = "group_result"
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Create filename based on label, grouper type and threshold/num_groups
-        label_prefix = f"{self.label}_" if self.label else ""
-        if self.num_groups is not None:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_N{self.num_groups}.xlsx",
-            )
-        else:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_T{self.threshold}.xlsx",
-            )
-
         # Choose grouping strategy based on parameters (do this first to set _auto_threshold)
         if self.num_groups is not None:
             groups, index_groups = self._group_by_num_groups(
@@ -219,8 +203,8 @@ class RMSDGrouper(MoleculeGrouper):
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
-        # Save full matrix (after grouping to include auto-determined threshold)
-        self._save_rmsd_matrix(rmsd_matrix, matrix_filename, grouping_time)
+        # Save full matrix using ResultsRecorder
+        self._save_rmsd_matrix(rmsd_matrix, grouping_time=grouping_time)
 
         return groups, index_groups
 
@@ -511,142 +495,73 @@ class RMSDGrouper(MoleculeGrouper):
     def _save_rmsd_matrix(
         self,
         rmsd_matrix: np.ndarray,
-        filename: str,
+        filename: str = None,
         grouping_time: float = None,
     ):
-        """Save RMSD matrix to Excel file with 7 decimal precision."""
+        """Save RMSD matrix to file using ResultsRecorder."""
         n = rmsd_matrix.shape[0]
 
-        # Change extension to .xlsx if it's .txt
-        if filename.endswith(".txt"):
-            filename = filename[:-4] + ".xlsx"
-        elif not filename.endswith(".xlsx"):
-            filename = filename + ".xlsx"
+        # Use ResultsRecorder to save
+        recorder = self._get_results_recorder()
+        labels = recorder.get_labels(n)
 
-        # Create DataFrame with labels - use conformer_ids if available
-        if self.conformer_ids is not None and len(self.conformer_ids) == n:
-            row_labels = self.conformer_ids
-            col_labels = self.conformer_ids
+        # Build header info
+        header_info = [
+            ("", f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}"),
+        ]
+
+        if self.num_groups is not None:
+            header_info.append(("Requested Groups (-N)", self.num_groups))
+            if self._auto_threshold is not None:
+                header_info.append(
+                    (
+                        "Auto-determined Threshold",
+                        f"{self._auto_threshold:.7f} Å",
+                    )
+                )
         else:
-            row_labels = [str(i + 1) for i in range(n)]
-            col_labels = [str(j + 1) for j in range(n)]
+            header_info.append(("Threshold", f"{self.threshold} Å"))
 
-        # Replace inf with string "∞" for display
-        matrix_display = np.where(np.isinf(rmsd_matrix), np.nan, rmsd_matrix)
-        df = pd.DataFrame(matrix_display, index=row_labels, columns=col_labels)
+        header_info.append(("Align Molecules", self.align_molecules))
+        header_info.append(("Ignore Hydrogens", self.ignore_hydrogens))
 
-        # Create Excel writer with openpyxl engine
-        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # Write matrix to 'RMSD_Matrix' sheet starting from row 8 to leave room for header info
-            df.to_excel(
-                writer,
-                sheet_name="RMSD_Matrix",
-                startrow=8,
-                float_format="%.7f",
+        # IRMSDGrouper specific parameters
+        if isinstance(self, IRMSDGrouper):
+            header_info.append(("Inversion", self._actual_inversion))
+
+        # SpyRMSDGrouper specific parameters
+        if isinstance(self, SpyRMSDGrouper):
+            header_info.append(("Cache", self.cache))
+
+        header_info.append(("Num Procs", self.num_procs))
+
+        if grouping_time is not None:
+            header_info.append(
+                ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
-            # Get the worksheet to add header information
-            worksheet = writer.sheets["RMSD_Matrix"]
-
-            # Add header information
-            row = 1
-            worksheet[f"A{row}"] = (
-                f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}"
+        # Build sheets data
+        sheets_data = {}
+        index_groups = self._cached_group_indices
+        if index_groups is not None:
+            sheets_data["Groups"] = recorder.build_groups_dataframe(
+                index_groups, n
             )
-            row += 1
 
-            # Threshold or num_groups (both are base class attributes)
-            if self.num_groups is not None:
-                worksheet[f"A{row}"] = (
-                    f"Requested Groups (-N): {self.num_groups}"
-                )
-                row += 1
-                if self._auto_threshold is not None:
-                    worksheet[f"A{row}"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.7f} Å"
-                    )
-                    row += 1
-            else:
-                worksheet[f"A{row}"] = f"Threshold: {self.threshold} Å"
-                row += 1
+        # Determine suffix
+        if self.num_groups is not None:
+            suffix = f"N{self.num_groups}"
+        else:
+            suffix = f"T{self.threshold}"
 
-            # Parameters common to all RMSD groupers
-            worksheet[f"A{row}"] = f"Align Molecules: {self.align_molecules}"
-            row += 1
-            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
-            row += 1
-
-            # IRMSDGrouper specific parameters
-            if isinstance(self, IRMSDGrouper):
-                worksheet[f"A{row}"] = f"Inversion: {self._actual_inversion}"
-                row += 1
-
-            # SpyRMSDGrouper specific parameters
-            if isinstance(self, SpyRMSDGrouper):
-                worksheet[f"A{row}"] = f"Cache: {self.cache}"
-                row += 1
-
-            # Number of processors
-            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
-            row += 1
-
-            if grouping_time is not None:
-                worksheet[f"A{row}"] = (
-                    f"Grouping Time: {grouping_time:.2f} seconds"
-                )
-                row += 1
-
-            # Auto-adjust column widths
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if cell.value:
-                            max_length = max(max_length, len(str(cell.value)))
-                    except (TypeError, AttributeError) as exc:
-                        # Some cell values may not be convertible to string/len;
-                        # skip them but log at debug level for diagnostics.
-                        logger.debug(
-                            "Skipping cell %s when auto-adjusting width: %r",
-                            getattr(cell, "coordinate", "?"),
-                            exc,
-                        )
-                adjusted_width = min(max_length + 2, 18)
-                worksheet.column_dimensions[column_letter].width = (
-                    adjusted_width
-                )
-
-            # Add Groups sheet
-            groups = self._cached_groups
-            index_groups = self._cached_group_indices
-
-            if groups is not None and index_groups is not None:
-                groups_data = []
-                for i, indices in enumerate(index_groups):
-                    # Get conformer IDs if available
-                    if self.conformer_ids is not None:
-                        member_labels = [
-                            self.conformer_ids[idx] for idx in indices
-                        ]
-                    else:
-                        member_labels = [str(idx + 1) for idx in indices]
-
-                    groups_data.append(
-                        {
-                            "Group": i + 1,
-                            "Members": ", ".join(member_labels),
-                        }
-                    )
-
-                groups_df = pd.DataFrame(groups_data)
-                groups_df.to_excel(writer, sheet_name="Groups", index=False)
-
-                logger.info(
-                    f"Groups sheet added with {len(groups)} groups to {filename}"
-                )
-
-        logger.info(f"RMSD matrix saved to {filename}")
+        recorder.record_results(
+            grouper_name=self.__class__.__name__,
+            header_info=header_info,
+            sheets_data=sheets_data,
+            matrix_data=("RMSD_Matrix", rmsd_matrix, labels),
+            suffix=suffix,
+            startrow=8,
+        )
 
 
 class BasicRMSDGrouper(RMSDGrouper):
@@ -702,6 +617,8 @@ class HungarianRMSDGrouper(RMSDGrouper):
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
         label: str = None,
+        conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         super().__init__(
@@ -712,6 +629,8 @@ class HungarianRMSDGrouper(RMSDGrouper):
             align_molecules,
             ignore_hydrogens,
             label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
 
     def _calculate_rmsd(self, idx_pair):
@@ -788,6 +707,7 @@ class SpyRMSDGrouper(RMSDGrouper):
         cache: bool = True,
         label: str = None,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         """
@@ -803,6 +723,7 @@ class SpyRMSDGrouper(RMSDGrouper):
             cache: Whether to cache graph isomorphisms.
             label: Label for output files.
             conformer_ids: Custom IDs for each molecule.
+            output_format: Output format ('xlsx', 'csv', 'txt').
         """
         super().__init__(
             molecules,
@@ -813,6 +734,7 @@ class SpyRMSDGrouper(RMSDGrouper):
             ignore_hydrogens,
             label=label,
             conformer_ids=conformer_ids,
+            output_format=output_format,
         )
         self.cache = cache
         self.minimize = align_molecules  # spyrmsd uses 'minimize' parameter
@@ -981,6 +903,7 @@ class IRMSDGrouper(RMSDGrouper):
         inversion: str = "auto",
         label: str = None,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         """
@@ -996,6 +919,7 @@ class IRMSDGrouper(RMSDGrouper):
             inversion: Inversion check mode: 'on', 'off', or 'auto' (default).
             label: Label for output files.
             conformer_ids: Custom IDs for each molecule.
+            output_format: Output format ('xlsx', 'csv', 'txt').
         """
         if threshold is None and num_groups is None:
             threshold = 0.125
@@ -1008,12 +932,13 @@ class IRMSDGrouper(RMSDGrouper):
             ignore_hydrogens,
             label=label,
             conformer_ids=conformer_ids,
+            output_format=output_format,
         )
         self.inversion = (
             inversion.lower() if isinstance(inversion, str) else "auto"
         )
         self._actual_inversion = None  # Will be set from first irmsd output
-        self._irmsd_cmd = self._find_irmsd_command()
+        self._irmsd_cmd = find_irmsd_command()
         if self._irmsd_cmd:
             logger.info(f"Using irmsd command: {self._irmsd_cmd}")
         else:
@@ -1027,75 +952,6 @@ class IRMSDGrouper(RMSDGrouper):
                 "To make it permanent, add to ~/.zshrc or ~/.bashrc,\n"
                 "then run: source ~/.zshrc or source ~/.bashrc"
             )
-
-    def _find_irmsd_command(self) -> Optional[str]:
-        """
-        Find the irmsd command, checking multiple sources.
-
-        Priority:
-        1. IRMSD_PATH environment variable (full path to irmsd executable)
-        2. IRMSD_CONDA_ENV environment variable (conda environment name)
-        3. irmsd in current PATH
-
-        Returns:
-            Full path to irmsd command, or None if not found.
-        """
-
-        import shutil
-
-        # Option 1: IRMSD_PATH environment variable
-        irmsd_path = os.environ.get("IRMSD_PATH")
-        if (
-            irmsd_path
-            and os.path.isfile(irmsd_path)
-            and os.access(irmsd_path, os.X_OK)
-        ):
-            return irmsd_path
-
-        # Option 2: IRMSD_CONDA_ENV environment variable
-        conda_env = os.environ.get("IRMSD_CONDA_ENV")
-        if conda_env:
-            # Try to find conda base path
-            conda_base = os.environ.get("CONDA_PREFIX_1") or os.environ.get(
-                "CONDA_PREFIX"
-            )
-            if conda_base:
-                # Go up to envs directory
-                if "envs" in conda_base:
-                    envs_dir = conda_base.rsplit("envs", 1)[0] + "envs"
-                else:
-                    envs_dir = os.path.join(
-                        os.path.dirname(conda_base), "envs"
-                    )
-
-                irmsd_path = os.path.join(envs_dir, conda_env, "bin", "irmsd")
-                if os.path.isfile(irmsd_path) and os.access(
-                    irmsd_path, os.X_OK
-                ):
-                    return irmsd_path
-
-            # Try common conda locations
-            for base in [
-                os.path.expanduser("~/anaconda3"),
-                os.path.expanduser("~/miniconda3"),
-                "/opt/anaconda3",
-                "/opt/miniconda3",
-                os.path.expanduser("~/.conda"),
-            ]:
-                irmsd_path = os.path.join(
-                    base, "envs", conda_env, "bin", "irmsd"
-                )
-                if os.path.isfile(irmsd_path) and os.access(
-                    irmsd_path, os.X_OK
-                ):
-                    return irmsd_path
-
-        # Option 3: irmsd in current PATH
-        irmsd_in_path = shutil.which("irmsd")
-        if irmsd_in_path:
-            return irmsd_in_path
-
-        return None
 
     def _write_two_molecules_xyz(
         self, mol1: Molecule, mol2: Molecule, filepath: str
@@ -1228,6 +1084,8 @@ class PymolRMSDGrouper(RMSDGrouper):
         num_procs: int = 1,
         ignore_hydrogens: bool = False,
         label: str = None,
+        conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         # PyMOL only supports single-threaded operation
@@ -1245,6 +1103,8 @@ class PymolRMSDGrouper(RMSDGrouper):
             align_molecules=True,
             ignore_hydrogens=ignore_hydrogens,
             label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
             **kwargs,
         )
         self._temp_dir = None
@@ -1356,10 +1216,15 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         super().__init__(
-            molecules, num_procs, label=label, conformer_ids=conformer_ids
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
         self.threshold = threshold
         self.align_molecules = align_molecules

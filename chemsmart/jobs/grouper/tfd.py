@@ -5,17 +5,15 @@ Groups molecular conformers based on torsion angle similarity using TFD.
 """
 
 import logging
-import os
 from typing import Iterable, List, Tuple
 
 import numpy as np
-import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import TorsionFingerprints
 
 from chemsmart.io.molecules.structure import Molecule
 
-from .runner import MoleculeGrouper
+from .base import MoleculeGrouper
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +50,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         """
@@ -82,9 +81,14 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 issues. If errors occur, try setting this to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
+            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
-            molecules, num_procs, label=label, conformer_ids=conformer_ids
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
 
         # Validate that threshold and num_groups are mutually exclusive
@@ -297,28 +301,8 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         grouping_time = time.time() - grouping_start_time
 
-        # Save TFD matrix
-        if self.label:
-            output_dir = f"{self.label}_group_result"
-        else:
-            output_dir = "group_result"
-        os.makedirs(output_dir, exist_ok=True)
-
-        label_prefix = f"{self.label}_" if self.label else ""
-        if self.num_groups is not None:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_N{self.num_groups}.xlsx",
-            )
-        else:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_T{self.threshold}.xlsx",
-            )
-
-        self._save_tfd_matrix(
-            tfd_matrix, matrix_filename, grouping_time, groups, index_groups
-        )
+        # Save TFD matrix using ResultsRecorder
+        self._save_tfd_matrix(tfd_matrix, grouping_time, groups, index_groups)
 
         # Cache results
         self._cached_groups = groups
@@ -473,128 +457,77 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
     def _save_tfd_matrix(
         self,
         tfd_matrix: np.ndarray,
-        filename: str,
         grouping_time: float = None,
         groups: List[List[Molecule]] = None,
         index_groups: List[List[int]] = None,
     ):
-        """Save TFD matrix to Excel file."""
+        """Save TFD matrix to file using ResultsRecorder."""
         n = tfd_matrix.shape[0]
 
-        if filename.endswith(".txt"):
-            filename = filename[:-4] + ".xlsx"
-        elif not filename.endswith(".xlsx"):
-            filename = filename + ".xlsx"
+        # Use ResultsRecorder to save
+        recorder = self._get_results_recorder()
+        labels = recorder.get_labels(n)
 
-        if self.conformer_ids is not None and len(self.conformer_ids) == n:
-            row_labels = self.conformer_ids
-            col_labels = self.conformer_ids
-        else:
-            row_labels = [str(i + 1) for i in range(n)]
-            col_labels = [str(j + 1) for j in range(n)]
+        # Build header info (matches original format)
+        header_info = [
+            ("", f"Full TFD Matrix ({n}x{n}) - {self.__class__.__name__}"),
+            ("", "Based on Schulz-Gasch et al., JCIM, 1499-1512 (2012)"),
+        ]
 
-        matrix_display = np.where(np.isinf(tfd_matrix), np.nan, tfd_matrix)
-        df = pd.DataFrame(matrix_display, index=row_labels, columns=col_labels)
-
-        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            df.to_excel(
-                writer,
-                sheet_name="TFD_Matrix",
-                startrow=12,
-                float_format="%.7f",
-            )
-
-            worksheet = writer.sheets["TFD_Matrix"]
-
-            row = 1
-            worksheet[f"A{row}"] = (
-                f"Full TFD Matrix ({n}x{n}) - {self.__class__.__name__}"
-            )
-            row += 1
-            worksheet[f"A{row}"] = (
-                "Based on Schulz-Gasch et al., JCIM, 1499-1512 (2012)"
-            )
-            row += 1
-
-            if self.num_groups is not None:
-                worksheet[f"A{row}"] = (
-                    f"Requested Groups (-N): {self.num_groups}"
-                )
-                row += 1
-                if self._auto_threshold is not None:
-                    worksheet[f"A{row}"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.7f} (lower value indicate higher torsional similarity)"
+        if self.num_groups is not None:
+            header_info.append(("Requested Groups (-N)", self.num_groups))
+            if self._auto_threshold is not None:
+                header_info.append(
+                    (
+                        "Auto-determined Threshold",
+                        f"{self._auto_threshold:.7f} (lower value indicate higher torsional similarity)",
                     )
-                    row += 1
-            else:
-                worksheet[f"A{row}"] = (
-                    f"Threshold: {self.threshold} (lower value indicate higher torsional similarity)"
                 )
-                row += 1
-
-            worksheet[f"A{row}"] = f"Use Weights: {self.use_weights}"
-            row += 1
-            worksheet[f"A{row}"] = f"Max Deviation: {self.max_dev}"
-            row += 1
-            worksheet[f"A{row}"] = f"Symmetry Radius: {self.symm_radius}"
-            row += 1
-            worksheet[f"A{row}"] = (
-                f"Ignore Colinear Bonds: {self.ignore_colinear_bonds}"
-            )
-            row += 1
-            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
-            row += 1
-
-            # Number of processors
-            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
-            row += 1
-
-            if grouping_time is not None:
-                worksheet[f"A{row}"] = (
-                    f"Grouping Time: {grouping_time:.2f} seconds"
+        else:
+            header_info.append(
+                (
+                    "Threshold",
+                    f"{self.threshold} (lower value indicate higher torsional similarity)",
                 )
-                row += 1
-
-            # Auto-adjust column widths
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if cell.value:
-                            max_length = max(max_length, len(str(cell.value)))
-                    except (TypeError, AttributeError):
-                        # Skip cells that cannot be converted to string for width calculation
-                        pass
-                adjusted_width = min(max_length + 2, 18)
-                worksheet.column_dimensions[column_letter].width = (
-                    adjusted_width
-                )
-
-            # Add Groups sheet if groups are provided
-            if groups is not None and index_groups is not None:
-                self._write_groups_sheet(writer, groups, index_groups)
-
-        logger.info(f"TFD matrix saved to {filename}")
-
-    def _write_groups_sheet(self, writer, groups, index_groups):
-        """Write groups information to a separate sheet."""
-        groups_data = []
-        for i, indices in enumerate(index_groups):
-            if self.conformer_ids is not None:
-                member_labels = [self.conformer_ids[idx] for idx in indices]
-            else:
-                member_labels = [str(idx + 1) for idx in indices]
-
-            groups_data.append(
-                {
-                    "Group": i + 1,
-                    "Members": ", ".join(member_labels),
-                }
             )
 
-        groups_df = pd.DataFrame(groups_data)
-        groups_df.to_excel(writer, sheet_name="Groups", index=False)
+        header_info.extend(
+            [
+                ("Use Weights", self.use_weights),
+                ("Max Deviation", self.max_dev),
+                ("Symmetry Radius", self.symm_radius),
+                ("Ignore Colinear Bonds", self.ignore_colinear_bonds),
+                ("Ignore Hydrogens", self.ignore_hydrogens),
+                ("Num Procs", self.num_procs),
+            ]
+        )
+
+        if grouping_time is not None:
+            header_info.append(
+                ("Grouping Time", f"{grouping_time:.2f} seconds")
+            )
+
+        # Build sheets data using recorder's method
+        sheets_data = {}
+        if groups is not None and index_groups is not None:
+            sheets_data["Groups"] = recorder.build_groups_dataframe(
+                index_groups, n
+            )
+
+        # Determine suffix
+        if self.num_groups is not None:
+            suffix = f"N{self.num_groups}"
+        else:
+            suffix = f"T{self.threshold}"
+
+        recorder.record_results(
+            grouper_name=self.__class__.__name__,
+            header_info=header_info,
+            sheets_data=sheets_data,
+            matrix_data=("TFD_Matrix", tfd_matrix, labels),
+            suffix=suffix,
+            startrow=12,  # Match original TFD output format
+        )
 
     def __repr__(self):
         if self.num_groups is not None:

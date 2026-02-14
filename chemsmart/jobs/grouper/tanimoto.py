@@ -1,23 +1,21 @@
 """
-Tanimoto fingerprint similarity-based molecular grouping.
+Tanimoto similarity-based molecular grouping.
 
-Groups molecules based on fingerprint similarity using Tanimoto coefficient.
+Groups molecules by fingerprint similarity using Tanimoto coefficient.
 """
 
 import logging
-import os
 from multiprocessing.pool import ThreadPool
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
-import pandas as pd
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdMolDescriptors
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
 
 from chemsmart.io.molecules.structure import Molecule
 
-from .runner import MoleculeGrouper
+from .base import MoleculeGrouper
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +48,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         label: str = None,  # Label for output files
         ignore_hydrogens: bool = False,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         """
@@ -71,9 +70,14 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 molecules, removing hydrogens may cause kekulization
                 issues. If errors occur, try setting this to False.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
+            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
-            molecules, num_procs, label=label, conformer_ids=conformer_ids
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
 
         self.ignore_hydrogens = ignore_hydrogens
@@ -255,38 +259,18 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         grouping_end_time = time.time()
         grouping_time = grouping_end_time - grouping_start_time
 
-        # Save Tanimoto matrix to group_result folder
-        if self.label:
-            output_dir = f"{self.label}_group_result"
-        else:
-            output_dir = "group_result"
-        os.makedirs(output_dir, exist_ok=True)
+        # Cache results
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
 
-        label_prefix = f"{self.label}_" if self.label else ""
-        if self.num_groups is not None:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_N{self.num_groups}.xlsx",
-            )
-        else:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_T{self.threshold}.xlsx",
-            )
-
-        # Save full matrix
+        # Save full matrix using ResultsRecorder
         self._save_tanimoto_matrix(
             similarity_matrix,
-            matrix_filename,
             valid_indices,
             grouping_time,
             groups,
             index_groups,
         )
-
-        # Cache results
-        self._cached_groups = groups
-        self._cached_group_indices = index_groups
 
         return groups, index_groups
 
@@ -442,19 +426,13 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     def _save_tanimoto_matrix(
         self,
         tanimoto_matrix: np.ndarray,
-        filename: str,
         valid_indices: List[int],
         grouping_time: float = None,
         groups: List[List[Molecule]] = None,
         index_groups: List[List[int]] = None,
     ):
-        """Save Tanimoto similarity matrix to Excel file."""
+        """Save Tanimoto similarity matrix to file using ResultsRecorder."""
         n = len(self.molecules)
-
-        if filename.endswith(".txt"):
-            filename = filename[:-4] + ".xlsx"
-        elif not filename.endswith(".xlsx"):
-            filename = filename + ".xlsx"
 
         # Create full matrix with invalid molecules marked as NaN
         full_matrix = np.full((n, n), np.nan)
@@ -462,103 +440,65 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             for j, idx_j in enumerate(valid_indices):
                 full_matrix[idx_i, idx_j] = tanimoto_matrix[i, j]
 
-        # Create DataFrame with labels
-        if self.conformer_ids is not None and len(self.conformer_ids) == n:
-            row_labels = self.conformer_ids
-            col_labels = self.conformer_ids
-        else:
-            row_labels = [str(i + 1) for i in range(n)]
-            col_labels = [str(j + 1) for j in range(n)]
+        # Use ResultsRecorder to save
+        recorder = self._get_results_recorder()
+        labels = recorder.get_labels(n)
 
-        df = pd.DataFrame(full_matrix, index=row_labels, columns=col_labels)
+        # Build header info
+        header_info = [
+            (
+                "",
+                f"Full Tanimoto Similarity Matrix ({n}x{n}) - {self.__class__.__name__}",
+            ),
+            ("Fingerprint Type", self.fingerprint_type),
+        ]
 
-        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            df.to_excel(
-                writer,
-                sheet_name="Tanimoto_Matrix",
-                startrow=8,
-                float_format="%.7f",
-            )
-
-            worksheet = writer.sheets["Tanimoto_Matrix"]
-
-            row = 1
-            worksheet[f"A{row}"] = (
-                f"Full Tanimoto Similarity Matrix ({n}x{n}) - {self.__class__.__name__}"
-            )
-            row += 1
-            worksheet[f"A{row}"] = f"Fingerprint Type: {self.fingerprint_type}"
-            row += 1
-
-            if self.num_groups is not None:
-                worksheet[f"A{row}"] = (
-                    f"Requested Groups (-N): {self.num_groups}"
-                )
-                row += 1
-                if self._auto_threshold is not None:
-                    worksheet[f"A{row}"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.7f} (A value closer to 1 indicates greater similarity)"
+        if self.num_groups is not None:
+            header_info.append(("Requested Groups (-N)", self.num_groups))
+            if self._auto_threshold is not None:
+                header_info.append(
+                    (
+                        "Auto-determined Threshold",
+                        f"{self._auto_threshold:.7f} (A value closer to 1 indicates greater similarity)",
                     )
-                    row += 1
-            else:
-                worksheet[f"A{row}"] = (
-                    f"Threshold: {self.threshold} (A value closer to 1 indicates greater similarity)"
                 )
-                row += 1
-
-            worksheet[f"A{row}"] = f"Ignore Hydrogens: {self.ignore_hydrogens}"
-            row += 1
-
-            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
-            row += 1
-
-            if grouping_time is not None:
-                worksheet[f"A{row}"] = (
-                    f"Grouping Time: {grouping_time:.2f} seconds"
+        else:
+            header_info.append(
+                (
+                    "Threshold",
+                    f"{self.threshold} (A value closer to 1 indicates greater similarity)",
                 )
-                row += 1
-
-            # Auto-adjust column widths
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if cell.value:
-                            max_length = max(max_length, len(str(cell.value)))
-                    except (TypeError, AttributeError):
-                        # Ignore cells whose values cannot be converted to string/length;
-                        # they are not needed for computing the column width.
-                        pass
-                adjusted_width = min(max_length + 2, 18)
-                worksheet.column_dimensions[column_letter].width = (
-                    adjusted_width
-                )
-
-            # Add Groups sheet if groups are provided
-            if groups is not None and index_groups is not None:
-                self._write_groups_sheet(writer, groups, index_groups)
-
-        logger.info(f"Tanimoto matrix saved to {filename}")
-
-    def _write_groups_sheet(self, writer, groups, index_groups):
-        """Write groups information to a separate sheet."""
-        groups_data = []
-        for i, indices in enumerate(index_groups):
-            if self.conformer_ids is not None:
-                member_labels = [self.conformer_ids[idx] for idx in indices]
-            else:
-                member_labels = [str(idx + 1) for idx in indices]
-
-            groups_data.append(
-                {
-                    "Group": i + 1,
-                    "Members": ", ".join(member_labels),
-                }
             )
 
-        groups_df = pd.DataFrame(groups_data)
-        groups_df.to_excel(writer, sheet_name="Groups", index=False)
+        header_info.append(("Ignore Hydrogens", self.ignore_hydrogens))
+        header_info.append(("Num Procs", self.num_procs))
+
+        if grouping_time is not None:
+            header_info.append(
+                ("Grouping Time", f"{grouping_time:.2f} seconds")
+            )
+
+        # Build sheets data using recorder's method
+        sheets_data = {}
+        if index_groups is not None:
+            sheets_data["Groups"] = recorder.build_groups_dataframe(
+                index_groups, n
+            )
+
+        # Determine suffix
+        if self.num_groups is not None:
+            suffix = f"N{self.num_groups}"
+        else:
+            suffix = f"T{self.threshold}"
+
+        recorder.record_results(
+            grouper_name=self.__class__.__name__,
+            header_info=header_info,
+            sheets_data=sheets_data,
+            matrix_data=("Tanimoto_Matrix", full_matrix, labels),
+            suffix=suffix,
+            startrow=8,
+        )
 
     def __repr__(self):
         if self.num_groups is not None:

@@ -14,7 +14,7 @@ import re
 import click
 
 from chemsmart.cli.job import (
-    click_file_label_options,
+    click_file_label_and_index_options,
     click_filenames_options,
     click_folder_options,
 )
@@ -59,6 +59,13 @@ def click_grouper_common_options(f):
         help="Target number of groups to return. This uses adaptive threshold "
         "finding to return approximately this many unique structures.",
     )
+    @click.option(
+        "-o",
+        "--output-format",
+        type=click.Choice(["xlsx", "csv", "txt"], case_sensitive=False),
+        default="xlsx",
+        help="Output file format for results. Default is xlsx.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -68,7 +75,7 @@ def click_grouper_common_options(f):
 
 @click.group(name="grouper", cls=MyGroup)
 @click_filenames_options
-@click_file_label_options
+@click_file_label_and_index_options
 @click_grouper_common_options
 @click_folder_options
 @click.pass_context
@@ -81,8 +88,10 @@ def grouper(
     num_procs,
     threshold,
     num_groups,
+    output_format,
     directory,
     filetype,
+    **kwargs,
 ):
     """
     Group/cluster molecular structures based on various similarity metrics.
@@ -96,7 +105,7 @@ def grouper(
     - spyrmsd: spyrmsd-based RMSD
     - pymolrmsd: PyMOL-based RMSD alignment
 
-    Common options (-f, -T, -N, -np, -ih) go BEFORE the subcommand.
+    Common options (-f, -T, -N, -np, -ih, -o) go BEFORE the subcommand.
     Strategy-specific options go AFTER the subcommand.
 
     Input modes:
@@ -110,6 +119,7 @@ def grouper(
         chemsmart run grouper -d . -t log -T 0.5 irmsd
         chemsmart run grouper -f conformers.xyz -T 0.1 tfd --use-weights
         chemsmart run grouper -f conformers.xyz -N 10 tanimoto --fingerprint-type morgan
+        chemsmart run grouper -f conformers.xyz -o csv rmsd
     """
     ctx.ensure_object(dict)
 
@@ -118,6 +128,7 @@ def grouper(
     ctx.obj["num_procs"] = num_procs
     ctx.obj["threshold"] = threshold
     ctx.obj["num_groups"] = num_groups
+    ctx.obj["output_format"] = output_format
     ctx.obj["conformer_ids"] = None  # Will be set only in directory mode
 
     # Validate input
@@ -450,6 +461,7 @@ def create_grouper_job_from_context(
 
     # Use threshold from parent command (None if not specified)
     threshold = ctx.obj["threshold"]
+    output_format = ctx.obj.get("output_format", "xlsx")
 
     return GrouperJob(
         molecules=molecules,
@@ -460,5 +472,6 @@ def create_grouper_job_from_context(
         num_procs=num_procs,
         label=f"{label}_{strategy}",
         conformer_ids=conformer_ids,
+        output_format=output_format,
         **extra_kwargs,
     )

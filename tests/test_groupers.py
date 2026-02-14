@@ -1,6 +1,5 @@
 import os
 import shutil
-import tempfile
 
 import numpy as np
 import pytest
@@ -21,27 +20,10 @@ from chemsmart.jobs.grouper.rmsd import (
 from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
 from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 from chemsmart.utils.grouper import StructureGrouperFactory
-from chemsmart.utils.utils import kabsch_align
+from chemsmart.utils.utils import find_irmsd_command, kabsch_align
 
 
-@pytest.fixture
-def temp_working_dir():
-    """
-    Pytest fixture to create a temporary directory and change to it for testing.
-    This prevents group_result folders from being created in the project directory.
-    """
-    original_dir = os.getcwd()
-    temp_dir = tempfile.mkdtemp()
-
-    try:
-        os.chdir(temp_dir)
-        yield temp_dir
-    finally:
-        os.chdir(original_dir)
-        # Clean up the temporary directory
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_BasicRMSD_grouper_and_basic_functionality:
     NUM_PROCS = 4
 
@@ -313,6 +295,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         assert np.isclose(rmsd, 0.611, rtol=1e-3)
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_HungarianRMSD_grouper:
     NUM_PROCS = 4
 
@@ -387,6 +370,7 @@ class Test_HungarianRMSD_grouper:
         assert np.isclose(rmsd, 1.1915, rtol=1e-3)
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_SpyRMSD_grouper:
     NUM_PROCS = 4
 
@@ -467,44 +451,10 @@ class Test_SpyRMSD_grouper:
         assert np.isclose(rmsd, 2.6183, rtol=1e-3)
 
 
-def _irmsd_available():
-    """Check if irmsd command is available."""
-    import os
-
-    # Check IRMSD_PATH
-    irmsd_path = os.environ.get("IRMSD_PATH")
-    if (
-        irmsd_path
-        and os.path.isfile(irmsd_path)
-        and os.access(irmsd_path, os.X_OK)
-    ):
-        return True
-
-    # Check IRMSD_CONDA_ENV
-    conda_env = os.environ.get("IRMSD_CONDA_ENV")
-    if conda_env:
-        conda_base = os.environ.get("CONDA_PREFIX_1") or os.environ.get(
-            "CONDA_PREFIX"
-        )
-        if conda_base:
-            if "envs" in conda_base:
-                envs_dir = conda_base.rsplit("envs", 1)[0] + "envs"
-            else:
-                envs_dir = os.path.join(os.path.dirname(conda_base), "envs")
-            irmsd_path = os.path.join(envs_dir, conda_env, "bin", "irmsd")
-            if os.path.isfile(irmsd_path) and os.access(irmsd_path, os.X_OK):
-                return True
-
-    # Check PATH
-    if shutil.which("irmsd"):
-        return True
-
-    return False
-
-
 @pytest.mark.skipif(
-    not _irmsd_available(), reason="irmsd command not available"
+    not find_irmsd_command(), reason="irmsd command not available"
 )
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_IRMSD_grouper:
     NUM_PROCS = 4
 
@@ -583,6 +533,7 @@ class Test_IRMSD_grouper:
         assert np.isclose(rmsd, 0.2294, rtol=1e-3)
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_PymolRMSD_grouper:
     NUM_PROCS = 1
 
@@ -734,6 +685,7 @@ class Test_PymolRMSD_grouper:
             pass
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_Tanimoto_similarity_grouper:
     NUM_PROCS = 4
 
@@ -797,6 +749,7 @@ class Test_Tanimoto_similarity_grouper:
         assert len(unique_structures) == 14
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_TorsionFingerprint_grouper:
     NUM_PROCS = 4
 
@@ -886,6 +839,7 @@ class Test_TorsionFingerprint_grouper:
         assert np.isclose(tfd, 0.24365, rtol=1e-3)
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_other_groupers:
     NUM_PROCS = 4
 
@@ -1000,6 +954,7 @@ class Test_other_groupers:
         ), "Molecules should form two groups based on RCM similarity."
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_EnergyGrouper:
     NUM_PROCS = 4
 
@@ -1192,6 +1147,7 @@ class Test_EnergyGrouper:
                 )
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Testfactory:
 
     def test_structure_grouper_factory_energy(
@@ -1219,7 +1175,7 @@ class Testfactory:
         assert isinstance(spyrmsd_grouper, RMSDGrouper)
 
         # irmsd requires external command, skip if not available
-        if _irmsd_available():
+        if find_irmsd_command():
             irmsd_grouper = factory.create(
                 methanol_molecules, strategy="irmsd"
             )
@@ -1273,6 +1229,7 @@ class Testfactory:
             pass
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_grouper_utility_functions:
     """Test utility functions and helper methods in groupers."""
 
@@ -1355,6 +1312,7 @@ class Test_grouper_utility_functions:
                 assert unique_mols[i].energy == min_energy_mol.energy
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_grouper_complete_linkage:
     """Test complete linkage clustering behavior."""
 
@@ -1390,6 +1348,7 @@ class Test_grouper_complete_linkage:
                             )
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_conformer_ids_functionality:
     """Test conformer_ids parameter functionality."""
 
@@ -1484,6 +1443,7 @@ class Test_conformer_ids_functionality:
         assert expected_ids[-1] == "18"  # Last selected is original index 18
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_output_file_generation:
     """Test that grouper generates correct output files."""
 
@@ -1660,6 +1620,7 @@ class Test_output_file_generation:
         assert energies_found > 0, "No energies found in output file"
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_edge_cases:
     """Test edge cases and boundary conditions."""
 
@@ -1762,6 +1723,7 @@ class Test_edge_cases:
         assert rmsd == np.inf or rmsd == float("inf")
 
 
+@pytest.mark.usefixtures("temp_working_dir")
 class Test_label_and_append_label:
     """Test -l (label) and -a (append_label) parameter functionality."""
 

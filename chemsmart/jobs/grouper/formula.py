@@ -5,7 +5,6 @@ Groups molecules by their molecular formula.
 """
 
 import logging
-import os
 from collections import defaultdict
 from typing import Iterable, List, Tuple
 
@@ -13,7 +12,7 @@ import pandas as pd
 
 from chemsmart.io.molecules.structure import Molecule
 
-from .runner import MoleculeGrouper
+from .base import MoleculeGrouper
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +37,7 @@ class FormulaGrouper(MoleculeGrouper):
         num_procs: int = 1,
         label: str = None,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         """
@@ -49,9 +49,14 @@ class FormulaGrouper(MoleculeGrouper):
                 consistency).
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule.
+            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
-            molecules, num_procs, label=label, conformer_ids=conformer_ids
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
@@ -107,89 +112,57 @@ class FormulaGrouper(MoleculeGrouper):
         index_groups: List[List[int]],
         grouping_time: float = None,
     ):
-        """Save formula grouping results to Excel file."""
+        """Save formula grouping results to file using ResultsRecorder."""
         n = len(list(self.molecules))
 
-        # Create output directory
-        if self.label:
-            output_dir = f"{self.label}_group_result"
-        else:
-            output_dir = "group_result"
-        os.makedirs(output_dir, exist_ok=True)
+        # Build header info
+        header_info = [
+            ("", f"Formula Grouping Results - {self.__class__.__name__}"),
+            ("Total Molecules", n),
+            ("Unique Formulas", len(formulas)),
+            ("Num Procs", self.num_procs),
+        ]
 
-        # Create filename
-        label_prefix = f"{self.label}_" if self.label else ""
-        filename = os.path.join(
-            output_dir,
-            f"{label_prefix}{self.__class__.__name__}.xlsx",
+        if grouping_time is not None:
+            header_info.append(
+                ("Grouping Time", f"{grouping_time:.2f} seconds")
+            )
+
+        # Use ResultsRecorder to save
+        recorder = self._get_results_recorder()
+
+        # Build formula summary data
+        formula_data = []
+        for i, formula in enumerate(formulas):
+            formula_data.append(
+                {
+                    "Formula": formula,
+                    "Count": len(groups[i]),
+                }
+            )
+        formula_df = pd.DataFrame(formula_data)
+
+        # Build groups dataframe with Formula column using recorder's method
+        groups_df = recorder.build_groups_dataframe(
+            index_groups, n, extra_columns={"Formula": formulas}
         )
+        # Reorder columns to put Formula before Members
+        groups_df = groups_df[["Group", "Formula", "Members"]]
 
-        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # Sheet 1: Formula summary
-            formula_data = []
-            for i, formula in enumerate(formulas):
-                formula_data.append(
-                    {
-                        "Formula": formula,
-                        "Count": len(groups[i]),
-                    }
-                )
+        # Build sheets data
+        sheets_data = {
+            "Formulas": formula_df,
+            "Groups": groups_df,
+        }
 
-            formula_df = pd.DataFrame(formula_data)
-
-            # Write with header info
-            formula_df.to_excel(
-                writer,
-                sheet_name="Formulas",
-                startrow=6,
-                index=False,
-            )
-
-            worksheet = writer.sheets["Formulas"]
-            row = 1
-            worksheet[f"A{row}"] = (
-                f"Formula Grouping Results - {self.__class__.__name__}"
-            )
-            row += 1
-            worksheet[f"A{row}"] = f"Total Molecules: {n}"
-            row += 1
-            worksheet[f"A{row}"] = f"Unique Formulas: {len(formulas)}"
-            row += 1
-
-            # Number of processors
-            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
-            row += 1
-
-            if grouping_time is not None:
-                worksheet[f"A{row}"] = (
-                    f"Grouping Time: {grouping_time:.2f} seconds"
-                )
-                row += 1
-
-            # Sheet 2: Groups detail
-            groups_data = []
-            for i, (formula, indices) in enumerate(
-                zip(formulas, index_groups)
-            ):
-                if self.conformer_ids is not None:
-                    member_labels = [
-                        self.conformer_ids[idx] for idx in indices
-                    ]
-                else:
-                    member_labels = [str(idx + 1) for idx in indices]
-
-                groups_data.append(
-                    {
-                        "Group": i + 1,
-                        "Formula": formula,
-                        "Members": ", ".join(member_labels),
-                    }
-                )
-
-            groups_df = pd.DataFrame(groups_data)
-            groups_df.to_excel(writer, sheet_name="Groups", index=False)
-
-        logger.info(f"Formula grouping results saved to {filename}")
+        recorder.record_results(
+            grouper_name=self.__class__.__name__,
+            header_info=header_info,
+            sheets_data=sheets_data,
+            matrix_data=None,
+            suffix=None,
+            startrow=6,
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__}(num_procs={self.num_procs})"

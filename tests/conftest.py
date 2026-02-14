@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import tempfile
 
 import pytest
@@ -23,6 +24,26 @@ from chemsmart.jobs.mol.runner import (
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
+
+
+############ Common Fixtures ##################
+@pytest.fixture
+def temp_working_dir():
+    """
+    Pytest fixture to create a temporary directory and change to it for testing.
+    This prevents group_result folders from being created in the project directory.
+    """
+    original_dir = os.getcwd()
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        os.chdir(temp_dir)
+        yield temp_dir
+    finally:
+        os.chdir(original_dir)
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)

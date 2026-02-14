@@ -63,6 +63,10 @@ These options are shared across all grouping strategies and must be placed BEFOR
       -  flag
       -  Ignore hydrogen atoms in grouping calculations
 
+   -  -  ``-o, --output-format``
+      -  string
+      -  Output format for group results (xlsx, csv, txt, default: xyz)
+
 **********************
  Available Strategies
 **********************

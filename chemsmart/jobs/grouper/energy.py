@@ -6,16 +6,14 @@ based on energy differences using a threshold or target number of groups.
 """
 
 import logging
-import os
 import time
 from typing import Iterable, List, Tuple
 
 import numpy as np
-import pandas as pd
 
 from chemsmart.io.molecules.structure import Molecule
 
-from .runner import MoleculeGrouper
+from .base import MoleculeGrouper
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +48,7 @@ class EnergyGrouper(MoleculeGrouper):
         num_procs: int = 1,
         label: str = None,
         conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
         **kwargs,
     ):
         """
@@ -66,13 +65,18 @@ class EnergyGrouper(MoleculeGrouper):
                 but kept for API consistency). Defaults to 1.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
+            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
 
         Note:
             Uses complete linkage clustering: a structure joins a group only if
             its energy difference to ALL existing members is below the threshold.
         """
         super().__init__(
-            molecules, num_procs, label=label, conformer_ids=conformer_ids
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
         )
 
         # Validate that threshold and num_groups are mutually exclusive
@@ -186,26 +190,6 @@ class EnergyGrouper(MoleculeGrouper):
             energy_matrix[i, j] = rel_diff  # E_j - E_i
             energy_matrix[j, i] = -rel_diff  # E_i - E_j
 
-        # Create output directory
-        if self.label:
-            output_dir = f"{self.label}_group_result"
-        else:
-            output_dir = "group_result"
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Create filename based on label, grouper type and threshold/num_groups
-        label_prefix = f"{self.label}_" if self.label else ""
-        if self.num_groups is not None:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_N{self.num_groups}.xlsx",
-            )
-        else:
-            matrix_filename = os.path.join(
-                output_dir,
-                f"{label_prefix}{self.__class__.__name__}_T{self.threshold}.xlsx",
-            )
-
         # Choose grouping strategy based on parameters
         if self.num_groups is not None:
             groups, index_groups = self._group_by_num_groups(
@@ -224,8 +208,8 @@ class EnergyGrouper(MoleculeGrouper):
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
-        # Save energy difference matrix
-        self._save_energy_matrix(energy_matrix, matrix_filename, grouping_time)
+        # Save energy difference matrix using ResultsRecorder
+        self._save_energy_matrix(energy_matrix, grouping_time)
 
         return groups, index_groups
 
@@ -467,141 +451,82 @@ class EnergyGrouper(MoleculeGrouper):
     def _save_energy_matrix(
         self,
         energy_matrix: np.ndarray,
-        filename: str,
         grouping_time: float = None,
     ):
-        """Save energy difference matrix to Excel file (in kcal/mol units)."""
+        """Save energy difference matrix to file using ResultsRecorder (in kcal/mol units)."""
         n = energy_matrix.shape[0]
 
-        # Ensure .xlsx extension
-        if filename.endswith(".txt"):
-            filename = filename[:-4] + ".xlsx"
-        elif not filename.endswith(".xlsx"):
-            filename = filename + ".xlsx"
-
-        # Create DataFrame with labels - use conformer_ids if available
-        if self.conformer_ids is not None and len(self.conformer_ids) == n:
-            row_labels = self.conformer_ids
-            col_labels = self.conformer_ids
-        else:
-            row_labels = [str(i + 1) for i in range(n)]
-            col_labels = [str(j + 1) for j in range(n)]
+        # Use ResultsRecorder to save
+        recorder = self._get_results_recorder()
+        labels = recorder.get_labels(n)
 
         # Convert energy matrix from Hartree to kcal/mol for output
         energy_matrix_kcal = energy_matrix * HARTREE_TO_KCAL
-        df = pd.DataFrame(
-            energy_matrix_kcal, index=row_labels, columns=col_labels
+
+        # Build header info
+        header_info = [
+            (
+                "",
+                f"Relative Energy Difference Matrix ({n}x{n}) - {self.__class__.__name__}",
+            ),
+            (
+                "",
+                "Values are relative energy differences in kcal/mol: matrix[i,j] = E_j - E_i",
+            ),
+            (
+                "",
+                "Positive value means column molecule has higher energy than row molecule",
+            ),
+            ("Conversion", f"1 Hartree = {HARTREE_TO_KCAL} kcal/mol"),
+        ]
+
+        if self.num_groups is not None:
+            header_info.append(("Requested Groups (-N)", self.num_groups))
+            if self._auto_threshold is not None:
+                header_info.append(
+                    (
+                        "Auto-determined Threshold",
+                        f"{self._auto_threshold:.4f} kcal/mol ({self._auto_threshold * KCAL_TO_HARTREE:.10f} Hartree)",
+                    )
+                )
+        else:
+            header_info.append(
+                (
+                    "Threshold",
+                    f"{self.threshold:.4f} kcal/mol ({self.threshold_hartree:.10f} Hartree)",
+                )
+            )
+
+        header_info.append(("Num Procs", self.num_procs))
+
+        if grouping_time is not None:
+            header_info.append(
+                ("Grouping Time", f"{grouping_time:.2f} seconds")
+            )
+
+        # Build sheets data using recorder's method
+        sheets_data = {}
+        index_groups = self._cached_group_indices
+        if index_groups is not None:
+            sheets_data["Groups"] = recorder.build_groups_dataframe(
+                index_groups, n
+            )
+
+        # Determine suffix
+        if self.num_groups is not None:
+            suffix = f"N{self.num_groups}"
+        else:
+            suffix = f"T{self.threshold}"
+
+        recorder.record_results(
+            grouper_name=self.__class__.__name__,
+            header_info=header_info,
+            sheets_data=sheets_data,
+            matrix_data=("Energy_Matrix", energy_matrix_kcal, labels),
+            suffix=suffix,
+            startrow=8,
+            float_format="%.4f",
         )
-
-        # Create Excel writer
-        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # Write matrix to 'Energy_Matrix' sheet starting from row 8
-            df.to_excel(
-                writer,
-                sheet_name="Energy_Matrix",
-                startrow=8,
-                float_format="%.4f",
-            )
-
-            # Get the worksheet to add header information
-            worksheet = writer.sheets["Energy_Matrix"]
-
-            # Add header information
-            row = 1
-            worksheet[f"A{row}"] = (
-                f"Relative Energy Difference Matrix ({n}x{n}) - {self.__class__.__name__}"
-            )
-            row += 1
-            worksheet[f"A{row}"] = (
-                "Values are relative energy differences in kcal/mol: matrix[i,j] = E_j - E_i"
-            )
-            row += 1
-            worksheet[f"A{row}"] = (
-                "Positive value means column molecule has higher energy than row molecule"
-            )
-            row += 1
-            worksheet[f"A{row}"] = (
-                f"Conversion: 1 Hartree = {HARTREE_TO_KCAL} kcal/mol"
-            )
-            row += 1
-
-            # Threshold or num_groups
-            if self.num_groups is not None:
-                worksheet[f"A{row}"] = (
-                    f"Requested Groups (-N): {self.num_groups}"
-                )
-                row += 1
-                if self._auto_threshold is not None:
-                    # _auto_threshold is already in kcal/mol
-                    worksheet[f"A{row}"] = (
-                        f"Auto-determined Threshold: {self._auto_threshold:.4f} kcal/mol "
-                        f"({self._auto_threshold * KCAL_TO_HARTREE:.10f} Hartree)"
-                    )
-                    row += 1
-            else:
-                # self.threshold is in kcal/mol (user input)
-                worksheet[f"A{row}"] = (
-                    f"Threshold: {self.threshold:.4f} kcal/mol "
-                    f"({self.threshold_hartree:.10f} Hartree)"
-                )
-                row += 1
-
-            # Number of processors
-            worksheet[f"A{row}"] = f"Num Procs: {self.num_procs}"
-            row += 1
-
-            if grouping_time is not None:
-                worksheet[f"A{row}"] = (
-                    f"Grouping Time: {grouping_time:.2f} seconds"
-                )
-                row += 1
-
-            # Auto-adjust column widths
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except Exception:
-                        # Skip cells that cannot be converted to string for width calculation
-                        pass
-                adjusted_width = min(max_length + 2, 20)
-                worksheet.column_dimensions[column_letter].width = (
-                    adjusted_width
-                )
-
-            # Now add Groups sheet
-            groups = self._cached_groups
-            index_groups = self._cached_group_indices
-
-            if groups is not None and index_groups is not None:
-                groups_data = []
-                for i, indices in enumerate(index_groups):
-                    # Get conformer IDs if available
-                    if self.conformer_ids is not None:
-                        member_labels = [
-                            self.conformer_ids[idx] for idx in indices
-                        ]
-                    else:
-                        member_labels = [str(idx + 1) for idx in indices]
-
-                    groups_data.append(
-                        {
-                            "Group": i + 1,
-                            "Members": ", ".join(member_labels),
-                        }
-                    )
-
-                groups_df = pd.DataFrame(groups_data)
-                groups_df.to_excel(writer, sheet_name="Groups", index=False)
-
-                logger.info(
-                    f"Groups sheet added with {len(groups)} groups to {filename}"
-                )
-
-        logger.info(f"Energy matrix saved to {filename}")
 
     def __repr__(self):
         if self.num_groups is not None:
