@@ -30,7 +30,7 @@ CREST Options
       -  string
       -  Job type: opt, ts, modred, scan, sp (required)
 
-   -  -  ``-N, --num-confs-to-run``
+   -  -  ``-n, --num-confs-to-run``
       -  int
       -  Number of conformers to process
 
@@ -104,7 +104,7 @@ Trajectory Options
       -  string
       -  Job type: opt, ts, modred, scan, sp (required)
 
-   -  -  ``-N, --num-structures-to-run``
+   -  -  ``-n, --num-structures-to-run``
       -  int
       -  Number of unique structures to process
 

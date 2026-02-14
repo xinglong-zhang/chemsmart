@@ -135,8 +135,11 @@ class GrouperJob(Job):
         return os.path.join(self.folder, f"{self.job_basename}.err")
 
     def _job_is_complete(self) -> bool:
-        """Check if the grouper job has completed successfully."""
-        return os.path.exists(self.outputfile)
+        """Check if the grouper job has completed successfully.
+
+        Checks if output directory exists.
+        """
+        return os.path.exists(self.output_dir)
 
     def is_complete(self) -> bool:
         """Check if grouping job is complete."""

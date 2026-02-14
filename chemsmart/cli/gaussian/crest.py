@@ -93,6 +93,14 @@ def click_crest_grouper_options(f):
 @click_gaussian_jobtype_options
 @click_grouper_common_options
 @click_crest_grouper_options
+@click.option(
+    "-n",
+    "--num-confs-to-run",
+    type=int,
+    default=None,
+    help="Number of lowest-energy conformers to submit for calculation. "
+    "If not specified, all conformers will be submitted.",
+)
 @click.pass_context
 def crest(
     ctx,
@@ -110,9 +118,17 @@ def crest(
     use_weights,
     max_dev,
     skip_completed,
+    num_confs_to_run,
     **kwargs,
 ):
     """CLI subcommand for running Gaussian CREST jobs."""
+
+    # Validate mutual exclusivity of -g and -n
+    if grouping_strategy is not None and num_confs_to_run is not None:
+        raise click.UsageError(
+            "Options -g/--grouping-strategy and -n/--num-confs-to-run are mutually exclusive. "
+            "Use -g to group conformers, or -n to select lowest-energy conformers, but not both."
+        )
 
     # get jobrunner for running Gaussian crest jobs
     jobrunner = ctx.obj["jobrunner"]
@@ -161,6 +177,7 @@ def crest(
         threshold=threshold,
         num_groups=num_groups,
         num_procs=num_procs,
+        num_confs_to_run=num_confs_to_run,
         inversion=inversion,
         use_weights=use_weights,
         max_dev=max_dev,

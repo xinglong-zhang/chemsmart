@@ -470,7 +470,6 @@ class Test_SpyRMSD_grouper:
 def _irmsd_available():
     """Check if irmsd command is available."""
     import os
-    import shutil
 
     # Check IRMSD_PATH
     irmsd_path = os.environ.get("IRMSD_PATH")
@@ -635,7 +634,6 @@ class Test_PymolRMSD_grouper:
 
         # Explicitly cleanup to prevent __del__ from calling quit()
         if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
-            import shutil
 
             shutil.rmtree(grouper._temp_dir, ignore_errors=True)
             grouper._temp_dir = None
@@ -673,7 +671,6 @@ class Test_PymolRMSD_grouper:
 
         # Explicitly cleanup to prevent __del__ from calling quit()
         if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
-            import shutil
 
             shutil.rmtree(grouper._temp_dir, ignore_errors=True)
             grouper._temp_dir = None
@@ -705,7 +702,6 @@ class Test_PymolRMSD_grouper:
 
         # Explicitly cleanup to prevent __del__ from calling quit()
         if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
-            import shutil
 
             shutil.rmtree(grouper._temp_dir, ignore_errors=True)
             grouper._temp_dir = None
@@ -1239,7 +1235,6 @@ class Testfactory:
             hasattr(pymolrmsd_grouper, "_temp_dir")
             and pymolrmsd_grouper._temp_dir
         ):
-            import shutil
 
             shutil.rmtree(pymolrmsd_grouper._temp_dir, ignore_errors=True)
             pymolrmsd_grouper._temp_dir = None

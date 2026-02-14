@@ -455,11 +455,17 @@ class MoleculeGrouper(ABC):
                     # Write the molecule coordinates
                     f.write(f"{mol.num_atoms}\n")
 
+                    # Determine original index label (use conformer_id if available)
+                    if self.conformer_ids is not None:
+                        original_label = self.conformer_ids[original_idx]
+                    else:
+                        original_label = str(original_idx + 1)
+
                     # Create comment line with energy info and original molecule index
                     if mol.energy is not None:
-                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_idx+1} Energy(Hartree): {mol.energy:.8f}"
+                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_label} Energy(Hartree): {mol.energy:.8f}"
                     else:
-                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_idx+1} Energy: N/A"
+                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_label} Energy: N/A"
 
                     f.write(f"{comment}\n")
 
