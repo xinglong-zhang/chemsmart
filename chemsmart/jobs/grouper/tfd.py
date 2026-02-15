@@ -1,0 +1,546 @@
+"""
+Torsion Fingerprint Deviation (TFD) based molecular grouping.
+
+Groups molecular conformers based on torsion angle similarity using TFD.
+"""
+
+import logging
+from typing import Iterable, List, Tuple
+
+import numpy as np
+from rdkit import Chem
+from rdkit.Chem import TorsionFingerprints
+
+from chemsmart.io.molecules.structure import Molecule
+
+from .base import MoleculeGrouper
+
+logger = logging.getLogger(__name__)
+
+
+class TorsionFingerprintGrouper(MoleculeGrouper):
+    """
+    Groups conformers based on Torsion Fingerprint Deviation (TFD).
+
+    TFD is a measure of the similarity of the torsion angles of rotatable
+    bonds between conformers. Lower values indicate higher similarity.
+
+    Reference: Schulz-Gasch et al., JCIM, 1499-1512 (2012)
+
+    Attributes:
+        threshold (float): TFD threshold for grouping (lower values = more similar).
+        num_groups (int): Number of groups to create (alternative to threshold).
+        num_procs (int): Number of processes for parallel computation.
+        use_weights (bool): Whether to use torsion weights in TFD calculation.
+        max_dev (str): Normalization method ('equal' or 'spec').
+        symm_radius (int): Radius for calculating atom invariants.
+        ignore_colinear_bonds (bool): Whether to ignore single bonds adjacent to triple bonds.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold: float = None,
+        num_groups: int = None,
+        num_procs: int = 1,
+        use_weights: bool = True,
+        max_dev: str = "equal",
+        symm_radius: int = 2,
+        ignore_colinear_bonds: bool = True,
+        ignore_hydrogens: bool = False,
+        label: str = None,
+        conformer_ids: List[str] = None,
+        output_format: str = "xlsx",
+        **kwargs,
+    ):
+        """
+        Initialize TFD-based conformer grouper.
+
+        Args:
+            molecules (Iterable[Molecule]): Collection of molecule conformers to group.
+            threshold (float): TFD threshold for grouping. Lower values indicate more
+                similar torsion patterns. Defaults to 0.1. Ignored if num_groups is specified.
+            num_groups (int): Number of groups to create. When specified,
+                automatically determines threshold to create this many groups.
+            num_procs (int): Number of processes for parallel computation.
+            use_weights (bool): Whether to use torsion weights in TFD calculation.
+                Weights are based on the number of atoms that depend on the torsion.
+                Defaults to True.
+            max_dev (str): Normalization method for torsion deviations:
+                - 'equal': all torsions normalized using 180.0 degrees (default)
+                - 'spec': each torsion normalized using its specific maximal
+                         deviation as given in the original paper
+            symm_radius (int): Radius for calculating atom invariants used to
+                determine equivalent atoms. Defaults to 2.
+            ignore_colinear_bonds (bool): If True, single bonds adjacent to triple bonds
+                are ignored. Defaults to True.
+            ignore_hydrogens (bool): Whether to remove hydrogen atoms before TFD
+                calculation. Defaults to False. TFD only considers torsions
+                between heavy atoms, so this parameter does not affect the TFD values,
+                Warning: For some molecules, removing hydrogens may cause kekulization
+                issues. If errors occur, try setting this to False.
+            label (str): Label/name for output files. Defaults to None.
+            conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
+            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+        """
+        super().__init__(
+            molecules,
+            num_procs,
+            label=label,
+            conformer_ids=conformer_ids,
+            output_format=output_format,
+        )
+
+        # Validate that threshold and num_groups are mutually exclusive
+        if threshold is not None and num_groups is not None:
+            raise ValueError(
+                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
+            )
+
+        # Validate max_dev parameter
+        if max_dev not in ["equal", "spec"]:
+            raise ValueError(
+                f"max_dev must be either 'equal' or 'spec', got '{max_dev}'"
+            )
+
+        if threshold is None and num_groups is None:
+            threshold = 0.1
+        self.threshold = threshold
+        self.num_groups = num_groups
+        self._auto_threshold = None  # Will be set if num_groups is used
+        self.use_weights = use_weights
+        self.max_dev = max_dev
+        self.symm_radius = symm_radius
+        self.ignore_colinear_bonds = ignore_colinear_bonds
+        self.ignore_hydrogens = ignore_hydrogens
+
+        # Convert to list for indexing
+        self.molecules = list(molecules)
+        self._prepare_conformer_molecule()
+
+    def _prepare_conformer_molecule(self):
+        """
+        Prepare a single RDKit molecule with multiple conformers from input molecules.
+
+        This assumes all input molecules are conformers of the same chemical structure.
+        """
+        if not self.molecules:
+            self.rdkit_mol = None
+            self.valid_conformer_ids = []
+            return
+
+        # Use the first molecule as the base structure
+        base_mol = self.molecules[0]
+        self.rdkit_mol = base_mol.to_rdkit()
+
+        if self.rdkit_mol is None:
+            self.valid_conformer_ids = []
+            return
+
+        # Remove hydrogens if ignore_hydrogens is True
+        if self.ignore_hydrogens:
+            try:
+                self.rdkit_mol = Chem.RemoveHs(self.rdkit_mol, sanitize=False)
+                # Re-sanitize without kekulization to avoid aromatic ring issues
+                Chem.SanitizeMol(
+                    self.rdkit_mol,
+                    sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
+                    ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE,
+                )
+                logger.info("Removed hydrogen atoms for TFD calculation")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to remove hydrogens safely: {e}. Using original molecule."
+                )
+                # Reload original molecule
+                self.rdkit_mol = base_mol.to_rdkit()
+
+        # Clear existing conformers and add all input molecules as conformers
+        self.rdkit_mol.RemoveAllConformers()
+        self.valid_conformer_ids = []
+
+        # Get heavy atom indices for filtering positions if ignore_hydrogens
+        if self.ignore_hydrogens:
+            heavy_atom_indices = [
+                i
+                for i, sym in enumerate(base_mol.chemical_symbols)
+                if sym != "H"
+            ]
+        else:
+            heavy_atom_indices = None
+
+        for i, mol in enumerate(self.molecules):
+            try:
+                # Get positions, filtering out hydrogens if needed
+                if self.ignore_hydrogens and heavy_atom_indices is not None:
+                    positions = mol.positions[heavy_atom_indices]
+                    num_atoms = len(heavy_atom_indices)
+                else:
+                    positions = mol.positions
+                    num_atoms = mol.num_atoms
+
+                # Convert molecule positions to RDKit conformer
+                conf = Chem.Conformer(num_atoms)
+                for atom_idx, pos in enumerate(positions):
+                    conf.SetAtomPosition(atom_idx, pos)
+
+                # Add conformer to the molecule
+                conf_id = self.rdkit_mol.AddConformer(conf, assignId=True)
+                self.valid_conformer_ids.append(conf_id)
+
+            except Exception as e:
+                logger.warning(f"Failed to add conformer {i}: {str(e)}")
+                continue
+
+        logger.info(
+            f"Prepared molecule with {len(self.valid_conformer_ids)} valid conformers"
+            + (" (hydrogens ignored)" if self.ignore_hydrogens else "")
+        )
+
+    def _calculate_tfd(self, conf_pair: Tuple[int, int]) -> float:
+        """
+        Calculate TFD between two conformers.
+
+        Args:
+            conf_pair (Tuple[int, int]): Indices of conformers to compare.
+
+        Returns:
+            float: TFD value between the conformers.
+        """
+        if self.rdkit_mol is None or len(self.valid_conformer_ids) == 0:
+            return float("inf")
+
+        i, j = conf_pair
+
+        try:
+            conf_id1 = self.valid_conformer_ids[i]
+            conf_id2 = self.valid_conformer_ids[j]
+
+            tfd_values = TorsionFingerprints.GetTFDBetweenConformers(
+                self.rdkit_mol,
+                confIds1=[conf_id1],
+                confIds2=[conf_id2],
+                useWeights=self.use_weights,
+                maxDev=self.max_dev,
+                symmRadius=self.symm_radius,
+                ignoreColinearBonds=self.ignore_colinear_bonds,
+            )
+
+            return tfd_values[0] if tfd_values else float("inf")
+
+        except Exception as e:
+            logger.warning(
+                f"TFD calculation failed for conformers {i}, {j}: {str(e)}"
+            )
+            return float("inf")
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """
+        Group conformers based on TFD similarity.
+
+        Returns:
+            Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
+                - List of molecule groups (each group is a list of molecules)
+                - List of index groups (corresponding indices for each group)
+        """
+        import time
+
+        grouping_start_time = time.time()
+
+        n = len(self.molecules)
+
+        if n == 0:
+            return [], []
+
+        if n == 1:
+            return [self.molecules], [[0]]
+
+        if self.rdkit_mol is None or len(self.valid_conformer_ids) == 0:
+            logger.warning(
+                "No valid conformers found, each molecule becomes its own group"
+            )
+            return [[mol] for mol in self.molecules], [[i] for i in range(n)]
+
+        # Generate conformer pairs for TFD calculation
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        total_pairs = len(indices)
+
+        logger.info(
+            f"[{self.__class__.__name__}] Starting TFD calculation for {n} conformers ({total_pairs} pairs)"
+        )
+        logger.info(f"  - TFD threshold: {self.threshold}")
+        logger.info(f"  - Use weights: {self.use_weights}")
+        logger.info(f"  - Max deviation: {self.max_dev}")
+        logger.info(f"  - Symmetry radius: {self.symm_radius}")
+        logger.info(f"  - Ignore colinear bonds: {self.ignore_colinear_bonds}")
+        logger.info(f"  - Ignore hydrogens: {self.ignore_hydrogens}")
+
+        # Calculate TFD values with real-time output
+        tfd_values = []
+        for idx, (i, j) in enumerate(indices):
+            tfd = self._calculate_tfd((i, j))
+            tfd_values.append(tfd)
+            logger.info(
+                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, TFD= {tfd:.7f}"
+            )
+
+        # Build full TFD matrix
+        tfd_matrix = np.zeros((n, n))
+        for (i, j), tfd in zip(indices, tfd_values):
+            tfd_matrix[i, j] = tfd_matrix[j, i] = tfd
+
+        # Choose grouping strategy
+        if self.num_groups is not None:
+            groups, index_groups = self._group_by_num_groups(
+                tfd_values, indices, n
+            )
+        else:
+            groups, index_groups = self._group_by_threshold(
+                tfd_values, indices, n
+            )
+
+        grouping_time = time.time() - grouping_start_time
+
+        # Save TFD matrix using ResultsRecorder
+        self._save_tfd_matrix(tfd_matrix, grouping_time, groups, index_groups)
+
+        # Cache results
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+
+        logger.info(
+            f"[{self.__class__.__name__}] Found {len(groups)} groups using TFD"
+        )
+
+        return groups, index_groups
+
+    def _group_by_threshold(self, tfd_values, indices, n):
+        """Threshold-based grouping for TFD using complete linkage."""
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), tfd in zip(indices, tfd_values):
+            if tfd <= self.threshold:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
+        return groups, index_groups
+
+    def _complete_linkage_grouping(self, adj_matrix, n):
+        """Perform complete linkage grouping."""
+        assigned = [False] * n
+        groups = []
+        index_groups = []
+
+        for i in range(n - 1, -1, -1):
+            if assigned[i]:
+                continue
+            current_group = [i]
+            assigned[i] = True
+
+            for j in range(i - 1, -1, -1):
+                if assigned[j]:
+                    continue
+                can_join = all(
+                    adj_matrix[j, member] for member in current_group
+                )
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+
+            current_group.sort()
+            groups.append([self.molecules[idx] for idx in current_group])
+            index_groups.append(current_group)
+
+        groups.reverse()
+        index_groups.reverse()
+        return groups, index_groups
+
+    def _group_by_num_groups(self, tfd_values, indices, n):
+        """Automatic grouping to create specified number of groups."""
+        if self.num_groups >= n:
+            logger.info(
+                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
+            )
+            groups = [[mol] for mol in self.molecules]
+            index_groups = [[i] for i in range(n)]
+            return groups, index_groups
+
+        threshold = self._find_optimal_tfd_threshold(tfd_values, indices, n)
+        self._auto_threshold = threshold
+
+        logger.info(
+            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
+        )
+
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), tfd in zip(indices, tfd_values):
+            if tfd <= threshold:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
+        actual_groups = len(groups)
+
+        logger.info(
+            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
+        )
+
+        if actual_groups > self.num_groups:
+            groups, index_groups = self._merge_groups_to_target(
+                groups, index_groups
+            )
+
+        return groups, index_groups
+
+    def _find_optimal_tfd_threshold(self, tfd_values, indices, n):
+        """Find threshold using binary search."""
+        sorted_tfd = sorted([tfd for tfd in tfd_values if not np.isinf(tfd)])
+
+        if not sorted_tfd:
+            return 0.0
+
+        low, high = 0, len(sorted_tfd) - 1
+        best_threshold = sorted_tfd[-1]
+
+        while low <= high:
+            mid = (low + high) // 2
+            threshold = sorted_tfd[mid]
+
+            adj_matrix = np.zeros((n, n), dtype=bool)
+            for (idx_i, idx_j), tfd in zip(indices, tfd_values):
+                if tfd <= threshold:
+                    adj_matrix[idx_i, idx_j] = adj_matrix[idx_j, idx_i] = True
+
+            num_groups_found = self._count_groups(adj_matrix, n)
+
+            if num_groups_found == self.num_groups:
+                return threshold
+            elif num_groups_found > self.num_groups:
+                low = mid + 1
+            else:
+                best_threshold = threshold
+                high = mid - 1
+
+        return best_threshold
+
+    def _count_groups(self, adj_matrix, n):
+        """Count number of groups using complete linkage."""
+        assigned = [False] * n
+        num_groups = 0
+        for i in range(n):
+            if assigned[i]:
+                continue
+            current_group = [i]
+            assigned[i] = True
+            for j in range(i + 1, n):
+                if assigned[j]:
+                    continue
+                can_join = all(adj_matrix[j, m] for m in current_group)
+                if can_join:
+                    current_group.append(j)
+                    assigned[j] = True
+            num_groups += 1
+        return num_groups
+
+    def _merge_groups_to_target(self, groups, index_groups):
+        """Merge groups to reach target number."""
+        while len(groups) > self.num_groups:
+            min_idx = min(range(len(groups)), key=lambda i: len(groups[i]))
+            largest_idx = max(
+                range(len(groups)),
+                key=lambda i: len(groups[i]) if i != min_idx else -1,
+            )
+            groups[largest_idx].extend(groups[min_idx])
+            index_groups[largest_idx].extend(index_groups[min_idx])
+            groups.pop(min_idx)
+            index_groups.pop(min_idx)
+        return groups, index_groups
+
+    def _save_tfd_matrix(
+        self,
+        tfd_matrix: np.ndarray,
+        grouping_time: float = None,
+        groups: List[List[Molecule]] = None,
+        index_groups: List[List[int]] = None,
+    ):
+        """Save TFD matrix to file using ResultsRecorder."""
+        n = tfd_matrix.shape[0]
+
+        # Use ResultsRecorder to save
+        recorder = self._get_results_recorder()
+        labels = recorder.get_labels(n)
+
+        # Build header info (matches original format)
+        header_info = [
+            ("", f"Full TFD Matrix ({n}x{n}) - {self.__class__.__name__}"),
+            ("", "Based on Schulz-Gasch et al., JCIM, 1499-1512 (2012)"),
+        ]
+
+        if self.num_groups is not None:
+            header_info.append(("Requested Groups (-N)", self.num_groups))
+            if self._auto_threshold is not None:
+                header_info.append(
+                    (
+                        "Auto-determined Threshold",
+                        f"{self._auto_threshold:.7f} (lower value indicate higher torsional similarity)",
+                    )
+                )
+        else:
+            header_info.append(
+                (
+                    "Threshold",
+                    f"{self.threshold} (lower value indicate higher torsional similarity)",
+                )
+            )
+
+        header_info.extend(
+            [
+                ("Use Weights", self.use_weights),
+                ("Max Deviation", self.max_dev),
+                ("Symmetry Radius", self.symm_radius),
+                ("Ignore Colinear Bonds", self.ignore_colinear_bonds),
+                ("Ignore Hydrogens", self.ignore_hydrogens),
+                ("Num Procs", self.num_procs),
+            ]
+        )
+
+        if grouping_time is not None:
+            header_info.append(
+                ("Grouping Time", f"{grouping_time:.2f} seconds")
+            )
+
+        # Build sheets data using recorder's method
+        sheets_data = {}
+        if groups is not None and index_groups is not None:
+            sheets_data["Groups"] = recorder.build_groups_dataframe(
+                index_groups, n
+            )
+
+        # Determine suffix
+        if self.num_groups is not None:
+            suffix = f"N{self.num_groups}"
+        else:
+            suffix = f"T{self.threshold}"
+
+        recorder.record_results(
+            grouper_name=self.__class__.__name__,
+            header_info=header_info,
+            sheets_data=sheets_data,
+            matrix_data=("TFD_Matrix", tfd_matrix, labels),
+            suffix=suffix,
+            startrow=12,  # Match original TFD output format
+        )
+
+    def __repr__(self):
+        if self.num_groups is not None:
+            return (
+                f"{self.__class__.__name__}(num_groups={self.num_groups}, "
+                f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
+                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius},"
+                f" ignore_hydrogens={self.ignore_hydrogens})"
+            )
+        else:
+            return (
+                f"{self.__class__.__name__}(threshold={self.threshold}, "
+                f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
+                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius},"
+                f" ignore_hydrogens={self.ignore_hydrogens})"
+            )
