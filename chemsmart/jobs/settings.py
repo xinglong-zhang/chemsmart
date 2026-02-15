@@ -27,6 +27,7 @@ class MolecularJobSettings:
         title=None,
         solvent_model=None,
         solvent_id=None,
+        additional_solvent_options=None,
         additional_route_parameters=None,
         route_to_be_written=None,
         modred=None,
@@ -53,6 +54,7 @@ class MolecularJobSettings:
         self.title = title
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
+        self.additional_solvent_options = additional_solvent_options
         self.additional_route_parameters = additional_route_parameters
         self.route_to_be_written = route_to_be_written
         self.modred = modred
@@ -87,9 +89,12 @@ class MolecularJobSettings:
     def remove_solvent(self):
         self.solvent_model = None
         self.solvent_id = None
+        self.additional_solvent_options = None
         self.custom_solvent = None
 
-    def update_solvent(self, solvent_model=None, solvent_id=None):
+    def update_solvent(
+        self, solvent_model=None, solvent_id=None, solvent_options=None
+    ):
         """Update solvent model and solvent identity for implicit solvation.
 
         Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
@@ -101,6 +106,9 @@ class MolecularJobSettings:
 
         if solvent_id is not None:
             self.solvent_id = solvent_id
+
+        if solvent_options is not None:
+            self.additional_solvent_options = solvent_options
 
     def _check_solvent(self, solvent_model):
         pass

@@ -494,6 +494,7 @@ def click_gaussian_qmmm_options(f):
 @click_filename_options
 @click_file_label_and_index_options
 @click_gaussian_settings_options
+@click_gaussian_solvent_options
 @click_pubchem_options
 @click.pass_context
 def gaussian(
@@ -515,7 +516,12 @@ def gaussian(
     custom_solvent,
     dieze_tag,
     forces,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
     pubchem,
+    **kwargs,
 ):
     """CLI subcommand for running Gaussian jobs using the chemsmart framework."""
 
@@ -588,6 +594,18 @@ def gaussian(
     if forces:
         job_settings.forces = forces
         keywords += ("forces",)
+    # solvent options
+    if remove_solvent:
+        job_settings.remove_solvent()
+    if solvent_model is not None:
+        job_settings.solvent_model = solvent_model
+        keywords += ("solvent_model",)
+    if solvent_id is not None:
+        job_settings.solvent_id = solvent_id
+        keywords += ("solvent_id",)
+    if solvent_options is not None:
+        job_settings.additional_solvent_options = solvent_options
+        keywords += ("additional_solvent_options",)
 
     # obtain molecule structure
     molecules = None

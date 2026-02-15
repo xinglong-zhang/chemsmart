@@ -116,6 +116,44 @@ class TestGaussianJobSettings:
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
+    def test_route_string_with_additional_solvent_options(self):
+        """Test route string generation with additional_solvent_options."""
+        # Test with smd, water, and iterative option
+        settings = GaussianJobSettings(
+            job_type="sp",
+            functional="b3lyp",
+            basis="6-31g(d)",
+            solvent_model="smd",
+            solvent_id="water",
+            additional_solvent_options="iterative",
+        )
+        route_string = settings.route_string
+        assert "scrf=(smd,solvent=water,iterative)" in route_string
+
+        # Test with pcm, toluene, and read option
+        settings2 = GaussianJobSettings(
+            job_type="opt",
+            functional="m062x",
+            basis="def2svp",
+            solvent_model="pcm",
+            solvent_id="toluene",
+            additional_solvent_options="read",
+        )
+        route_string2 = settings2.route_string
+        assert "scrf=(pcm,solvent=toluene,read)" in route_string2
+
+        # Test without additional_solvent_options to ensure backward compatibility
+        settings3 = GaussianJobSettings(
+            job_type="sp",
+            functional="b3lyp",
+            basis="6-31g(d)",
+            solvent_model="smd",
+            solvent_id="water",
+        )
+        route_string3 = settings3.route_string
+        assert "scrf=(smd,solvent=water)" in route_string3
+        assert "iterative" not in route_string3
+
 
 class TestGaussianQMMMJobSettings:
     def test_qmmm_settings(self):
@@ -460,6 +498,18 @@ class TestGaussianJobFromComFile:
         com_settings.update_solvent(solvent_model="smd", solvent_id="toluene")
         assert com_settings.solvent_model == "smd"
         assert com_settings.solvent_id == "toluene"
+
+    def test_update_solvent_with_options(self, gaussian_opt_inputfile, tmpdir):
+        com_settings = GaussianJobSettings.from_comfile(gaussian_opt_inputfile)
+        assert com_settings.solvent_model is None
+        assert com_settings.solvent_id is None
+        assert com_settings.additional_solvent_options is None
+        com_settings.update_solvent(
+            solvent_model="smd", solvent_id="water", solvent_options="iterative"
+        )
+        assert com_settings.solvent_model == "smd"
+        assert com_settings.solvent_id == "water"
+        assert com_settings.additional_solvent_options == "iterative"
 
     def test_include_solvent(self, gaussian_opt_inputfile, tmpdir):
         com_settings = GaussianJobSettings.from_filepath(
