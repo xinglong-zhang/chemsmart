@@ -14,7 +14,7 @@ from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.utils.repattern import (
     gaussian_dias_filename_point_with_fragment1,
     gaussian_dias_filename_point_with_fragment2,
-    gaussian_dias_filename_point_without_fragment,
+    gaussian_dias_filename_point_without_fragment_without_reactant,
     gaussian_dias_filename_with_reactant,
     orca_dias_filename_point_with_fragment1,
     orca_dias_filename_point_with_fragment2,
@@ -428,7 +428,7 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         all_files_full_molecule_indices = []
         # find all files for full molecule
         full_molecule_pattern = re.compile(
-            gaussian_dias_filename_point_without_fragment
+            gaussian_dias_filename_point_without_fragment_without_reactant
         )
 
         # file all the files that match

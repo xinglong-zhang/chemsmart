@@ -98,6 +98,9 @@ class Molecule:
         self._energy = energy
         self.forces = forces
         self.velocities = velocities
+        if info is None:
+            # initialise info as empty dict if it is None
+            info = dict()
         self.info = info
         self._num_atoms = len(self.symbols)
 
@@ -1273,7 +1276,7 @@ class Molecule:
         """
         Return string representation of molecule.
         """
-        return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
+        return f"{self.__class__.__name__}<{self.chemical_formula},energy: {self.energy}>"
 
     def __str__(self):
         """

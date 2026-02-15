@@ -17,6 +17,8 @@ import shlex
 import socket
 import subprocess
 
+import requests
+
 
 class ClusterHelper:
     """
@@ -192,4 +194,29 @@ def is_pubchem_network_available():
         socket.create_connection(("pubchem.ncbi.nlm.nih.gov", 443), timeout=5)
         return True
     except OSError:
+        return False
+
+
+def is_pubchem_api_available():
+    """
+    Check if PubChem REST API is available and responding.
+
+    Makes a lightweight API request to verify the service is operational
+    and not returning server errors (503, 500, etc.).
+
+    Returns:
+        bool: True if API is available and responding, False if service is
+              down, busy (503), or unreachable.
+    """
+
+    # Use a simple, lightweight endpoint (aspirin - CID 2244)
+    test_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/2244/property/MolecularFormula/JSON"
+
+    try:
+        response = requests.get(test_url, timeout=5)
+        # Accept 200 (success) or even 404 (not found) - both mean API is responding
+        # Reject 503 (busy), 500 (server error), etc.
+        return response.status_code in (200, 404)
+    except (requests.exceptions.RequestException, OSError):
+        # Network error, timeout, or connection failure
         return False

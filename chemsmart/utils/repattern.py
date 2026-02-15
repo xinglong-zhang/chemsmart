@@ -114,9 +114,9 @@ orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 
 # filename pattern for gaussian output files
 
-# filename matches with point pxx but not with fragment fx
+# filename matches with point pxx but not with fragment fx or reactant rx
 # matches from the word "dias" onwards
-gaussian_dias_filename_point_without_fragment = r"(?:.*dias_p(\d+)(?:_((?:(?!f\d).)+))?\.log)|(?:.*_p(\d+)(?:_((?:(?!f\d).)+))?\.log)"
+gaussian_dias_filename_point_without_fragment_without_reactant = r"(?:(?!.*_r[12](?:_|\.)).*dias_p(\d+)(?:_((?:(?!f\d).)+))?\.log)|(?:(?!.*_r[12](?:_|\.)).*_p(\d+)(?:_((?:(?!f\d).)+))?\.log)"
 
 # filename matches with point pxx and fragment f1
 gaussian_dias_filename_point_with_fragment1 = r".*_p(\d+)_(f1)(?:_(.+)?)?\.log"
@@ -155,3 +155,4 @@ pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
 # version release
 version_pattern = r'(version\s*=\s*")[^"]+(")'
 release_pattern = r'(release\s*=\s*")[^"]+(")'
+safe_label_pattern = r"^[a-zA-Z0-9_\-\.]+$"

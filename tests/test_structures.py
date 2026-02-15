@@ -18,7 +18,10 @@ from chemsmart.io.molecules.structure import (
     QMMMMolecule,
 )
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.utils.cluster import is_pubchem_network_available
+from chemsmart.utils.cluster import (
+    is_pubchem_api_available,
+    is_pubchem_network_available,
+)
 from chemsmart.utils.utils import cmp_with_ignore
 
 
@@ -970,13 +973,9 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
-    @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
-    )
-    def test_stereochemistry_handling(self):
+    def test_stereochemistry_handling(self, methyl3hexane_molecule):
         """Test preservation of stereochemical information."""
-        methyl_3_hexane = Molecule.from_pubchem("11507")
+        methyl_3_hexane = methyl3hexane_molecule
         assert np.all(
             methyl_3_hexane.bond_orders
             == [
@@ -1028,6 +1027,12 @@ class TestChemicalFeatures:
         rdkit_mol = chiral_mol.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) != []
 
+    @pytest.mark.skipif(
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
+        reason="Network to pubchem is unavailable",
+    )
+    def test_more_stereochemistry_handling(self):
+        """Test preservation of stereochemical information with PubChem."""
         chiral_mol2 = Molecule.from_pubchem(
             "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
         )
@@ -1397,8 +1402,10 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
 
 
 class TestQMMMinMolecule:
-    def test_atoms_in_levels_wrong_low_level(self, tmpdir):
-        methyl_3_hexane = QMMMMolecule(molecule=Molecule.from_pubchem("11507"))
+    def test_atoms_in_levels_wrong_low_level(
+        self, tmpdir, methyl3hexane_molecule
+    ):
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
         methyl_3_hexane.low_level_atoms = [7, 8, 9]
@@ -1410,9 +1417,13 @@ class TestQMMMinMolecule:
             # should raise error since high + medium + low is not equal to total number of atoms
 
     def test_atoms_in_levels_default_low_level(
-        self, tmpdir, qmmm_written_xyz_file, qmmm_written_xyz_only_file
+        self,
+        tmpdir,
+        qmmm_written_xyz_file,
+        qmmm_written_xyz_only_file,
+        methyl3hexane_molecule,
     ):
-        methyl_3_hexane = QMMMMolecule(molecule=Molecule.from_pubchem("11507"))
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
         methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]

@@ -3,7 +3,7 @@ import re
 from chemsmart.utils.repattern import (
     gaussian_dias_filename_point_with_fragment1,
     gaussian_dias_filename_point_with_fragment2,
-    gaussian_dias_filename_point_without_fragment,
+    gaussian_dias_filename_point_without_fragment_without_reactant,
     gaussian_dias_filename_with_reactant,
     gaussian_freq_keywords_pattern,
     gaussian_opt_keywords_pattern,
@@ -123,7 +123,9 @@ def test_gaussian_route_string_cleaning_patterns():
 
 class TestGaussianDiasRegexPatterns:
     def test_point_without_fragment_matches(self):
-        pattern = re.compile(gaussian_dias_filename_point_without_fragment)
+        pattern = re.compile(
+            gaussian_dias_filename_point_without_fragment_without_reactant
+        )
         assert (
             pattern.match("test_p123_data.log") is not None
         ), "Should match: test_p123_data.log"
@@ -144,7 +146,9 @@ class TestGaussianDiasRegexPatterns:
         ), "Correct groups for test_p123.log"
 
     def test_point_without_fragment_non_matches(self):
-        pattern = re.compile(gaussian_dias_filename_point_without_fragment)
+        pattern = re.compile(
+            gaussian_dias_filename_point_without_fragment_without_reactant
+        )
         assert (
             pattern.match("test_p123_f1_data.log") is None
         ), "Should not match: test_p123_f1_data.log"
@@ -157,6 +161,60 @@ class TestGaussianDiasRegexPatterns:
         assert (
             pattern.match("NiRRBenz_c2_scan_p16_ts_dias_p1_f2.log") is None
         ), "Should not match: NiRRBenz_c2_scan_p16_ts_dias_p1_f2.log"
+
+    def test_point_without_fragment_excludes_reactant(self):
+        """Test that pattern correctly excludes reactant files containing _r1 or _r2."""
+        pattern = re.compile(
+            gaussian_dias_filename_point_without_fragment_without_reactant
+        )
+        # Should NOT match reactant files even if they contain _p
+        assert (
+            pattern.match("test_r1_p.log") is None
+        ), "Should not match: test_r1_p.log (reactant file)"
+        assert (
+            pattern.match("test_r2_p.log") is None
+        ), "Should not match: test_r2_p.log (reactant file)"
+        assert (
+            pattern.match("dias_r1_something.log") is None
+        ), "Should not match: dias_r1_something.log (reactant file)"
+        assert (
+            pattern.match("dias_r2.log") is None
+        ), "Should not match: dias_r2.log (reactant file)"
+        assert (
+            pattern.match("test_p1_r1.log") is None
+        ), "Should not match: test_p1_r1.log (contains reactant marker)"
+        assert (
+            pattern.match("test_p1_r2_suffix.log") is None
+        ), "Should not match: test_p1_r2_suffix.log (contains reactant marker)"
+        assert (
+            pattern.match("NiRRBenz_c2_scan_p16_ts_dias_r1.log") is None
+        ), "Should not match: NiRRBenz_c2_scan_p16_ts_dias_r1.log (reactant file)"
+        # Should NOT match fragment files (f1 or f2)
+        assert (
+            pattern.match("test_p1_f1.log") is None
+        ), "Should not match: test_p1_f1.log (fragment file)"
+        assert (
+            pattern.match("test_p1_f2.log") is None
+        ), "Should not match: test_p1_f2.log (fragment file)"
+        assert (
+            pattern.match("dias_p1_f1_suffix.log") is None
+        ), "Should not match: dias_p1_f1_suffix.log (fragment file)"
+        assert (
+            pattern.match("dias_p1_f2_suffix.log") is None
+        ), "Should not match: dias_p1_f2_suffix.log (fragment file)"
+        assert (
+            pattern.match("NiRRBenz_c2_scan_p16_ts_dias_p1_f1.log") is None
+        ), "Should not match: NiRRBenz_c2_scan_p16_ts_dias_p1_f1.log (fragment file)"
+        assert (
+            pattern.match("NiRRBenz_c2_scan_p16_ts_dias_p1_f2.log") is None
+        ), "Should not match: NiRRBenz_c2_scan_p16_ts_dias_p1_f2.log (fragment file)"
+        # Should still match valid point files
+        assert (
+            pattern.match("test_p1.log") is not None
+        ), "Should match: test_p1.log (valid point file)"
+        assert (
+            pattern.match("dias_p1_suffix.log") is not None
+        ), "Should match: dias_p1_suffix.log (valid point file)"
 
     def test_point_with_fragment1_matches(self):
         pattern = re.compile(gaussian_dias_filename_point_with_fragment1)

@@ -151,6 +151,7 @@ def process_pipeline(ctx, *args, **kwargs):
 for subcommand in subcommands:
     run.add_command(subcommand)
 
+
 if __name__ == "__main__":
     obj: dict[str, str] = {}
     try:

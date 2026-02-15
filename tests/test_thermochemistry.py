@@ -1,7 +1,6 @@
 import os.path
 
 import numpy as np
-import pytest
 from ase import units
 
 from chemsmart.analysis.thermochemistry import (
@@ -14,7 +13,6 @@ from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
-from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.constants import (
     cal_to_joules,
     hartree_to_joules,
@@ -190,20 +188,17 @@ class TestThermochemistry:
             expected_translational_partition_function2,
         )
 
-    @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
-    )
     def test_thermochemistry_co2(
         self,
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_scratch,
+        orca_co2_output,
     ):
         # set scratch
         gaussian_jobrunner_scratch.scratch_dir = tmpdir
 
-        mol = Molecule.from_pubchem("280")
+        mol = Molecule.from_filepath(orca_co2_output)
         tmp_path = os.path.join(tmpdir, "CO2.com")
 
         os.chdir(tmpdir)

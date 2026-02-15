@@ -2,17 +2,18 @@ import logging
 import os
 import shutil
 import tempfile
+from pathlib import Path
 
+import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
 from pytest_mock import MockerFixture
-
-# from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
     PyMOLHybridVisualizationJobRunner,
@@ -26,23 +27,39 @@ from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
 
-############ Common Fixtures ##################
-@pytest.fixture
-def temp_working_dir():
+@pytest.fixture()
+def chemsmart_templates_config(mocker):
     """
-    Pytest fixture to create a temporary directory and change to it for testing.
-    This prevents group_result folders from being created in the project directory.
+    Point USER_CONFIG_DIR to the local templates directory.
+    This avoids creating a mock directory and instead uses the provided templates.
     """
-    original_dir = os.getcwd()
-    temp_dir = tempfile.mkdtemp()
+    # Locate templates: chemsmart/settings/templates/.chemsmart
+    package_root = Path(__file__).resolve().parent.parent
+    template_dir = (
+        package_root / "chemsmart" / "settings" / "templates" / ".chemsmart"
+    )
 
-    try:
-        os.chdir(temp_dir)
-        yield temp_dir
-    finally:
-        os.chdir(original_dir)
-        # Clean up the temporary directory
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    if not template_dir.exists():
+        raise FileNotFoundError(
+            f"Template directory not found: {template_dir}"
+        )
+
+    # Patch the Class attribute
+    mocker.patch(
+        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
+        str(template_dir),
+    )
+
+    # Patch the global instance in runner.py
+    from chemsmart.settings.user import ChemsmartUserSettings
+
+    new_settings = ChemsmartUserSettings()
+    mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
+    # Patch other module-level user_settings singletons used by the CLI path
+    mocker.patch("chemsmart.settings.server.user_settings", new_settings)
+    mocker.patch("chemsmart.settings.executable.user_settings", new_settings)
+
+    return template_dir
 
 
 # each test runs on cwd to its temp dir
@@ -1353,14 +1370,59 @@ def pymol_mo_jobrunner(pbs_server):
     return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
-## conformers for testing
 @pytest.fixture()
-def methanol_molecules():
-    # molecules for testing
-    # methanol
-    methanol = Molecule.from_pubchem(identifier="CO")
-    # f = open("methanol.xyz", "w")
-    # methanol.write_coordinates(f)
+def iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def fake_iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+## pytest fixtures for molecules
+@pytest.fixture()
+def methanol_molecule():
+    symbols = ["C", "O", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [0.000000, 0.000000, 0.000000],  # C
+            [1.430000, 0.000000, 0.000000],  # O
+            [1.109545, 0.904936, 0.000000],  # H (hydroxyl)
+            [-0.363849, 1.027479, 0.000000],  # H
+            [-0.363849, -0.513740, 0.889823],  # H
+            [-0.363849, -0.513740, -0.889823],  # H
+        ],
+        dtype=float,
+    )
+    methanol = Molecule(symbols=symbols, positions=coords)
+    return methanol
+
+
+@pytest.fixture()
+def ethanol_molecule():
+    symbols = ["O", "C", "C", "H", "H", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [-1.1712, 0.2997, 0.0000],
+            [-0.0463, -0.5665, 0.0000],
+            [1.2175, 0.2668, 0.0000],
+            [-0.0958, -1.2120, 0.8819],
+            [-0.0952, -1.1938, -0.8946],
+            [2.1050, -0.3720, -0.0177],
+            [1.2426, 0.9307, -0.8704],
+            [1.2616, 0.9052, 0.8886],
+            [-1.1291, 0.8364, 0.8099],
+        ],
+        dtype=float,
+    )
+    ethanol = Molecule(symbols=symbols, positions=coords)
+    return ethanol
+
+
+@pytest.fixture()
+def methanol_molecules(methanol_molecule):
+    methanol = methanol_molecule
 
     # rotated methanol
     ase_atoms = methanol.to_ase()
@@ -1374,6 +1436,88 @@ def methanol_molecules():
     methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
 
     return methanol_molecules
+
+
+@pytest.fixture()
+def methyl3hexane_molecule():
+    symbols = [
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+    ]
+    coords = np.array(
+        [
+            [0.828, -0.5939, -0.4105],
+            [-0.6074, -0.1292, -0.7341],
+            [1.6188, 0.3738, 0.4896],
+            [-1.5335, 0.0189, 0.4761],
+            [0.8379, -1.9975, 0.2043],
+            [1.7539, 1.7749, -0.0888],
+            [-2.8977, 0.553, 0.0634],
+            [1.3601, -0.6621, -1.3694],
+            [-1.0561, -0.849, -1.4317],
+            [-0.5655, 0.8214, -1.2791],
+            [2.6287, -0.0297, 0.6378],
+            [1.1655, 0.4353, 1.4856],
+            [-1.0999, 0.707, 1.2088],
+            [-1.6692, -0.9475, 0.973],
+            [1.8635, -2.3744, 0.2836],
+            [0.4049, -2.004, 1.2096],
+            [0.2737, -2.7005, -0.4174],
+            [2.1704, 1.7451, -1.1005],
+            [2.4243, 2.3747, 0.5353],
+            [0.7895, 2.2899, -0.1235],
+            [-3.384, -0.1214, -0.6486],
+            [-2.8085, 1.5396, -0.4023],
+            [-3.5477, 0.6486, 0.9389],
+        ]
+    )
+    methyl3hexane = Molecule(symbols=symbols, positions=coords)
+    return methyl3hexane
+
+
+@pytest.fixture()
+def tetrahydrofuran_molecule():
+    symbols = ["O", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [1.2328, -0.0005, 0.0000],
+            [-1.0107, -0.7202, -0.2205],
+            [-1.0102, 0.7210, 0.2205],
+            [0.3936, -1.1560, 0.1374],
+            [0.3946, 1.1557, -0.1375],
+            [-1.7823, -1.3279, 0.2593],
+            [-1.1544, -0.7757, -1.3060],
+            [-1.7812, 1.3292, -0.2593],
+            [-1.1537, 0.7766, 1.3061],
+            [0.4518, -1.4889, 1.1792],
+            [0.7622, -1.9589, -0.5071],
+            [0.4532, 1.4885, -1.1793],
+            [0.7639, 1.9583, 0.5070],
+        ]
+    )
+    thf_molecule = Molecule(symbols=symbols, positions=coords)
+    return thf_molecule
 
 
 @pytest.fixture()
@@ -1409,13 +1553,13 @@ def constrained_atoms():
 
 
 @pytest.fixture()
-def methanol_and_ethanol():
+def methanol_and_ethanol(methanol_molecule, ethanol_molecule):
     # molecules for testing
     # methanol
-    methanol = Molecule.from_pubchem(identifier="CO")
+    methanol = methanol_molecule
 
     # ethanol
-    ethanol = Molecule.from_pubchem(identifier="CCO")
+    ethanol = ethanol_molecule
 
     methanol_and_ethanol = [methanol, ethanol]
     return methanol_and_ethanol
@@ -1571,3 +1715,65 @@ def capture_log(caplog):
     """
     caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog
+
+
+############ Iterate Fixtures ##################
+@pytest.fixture()
+def iterate_test_directory(test_data_directory):
+    """Returns the absolute path to tests/data/IterateTests."""
+    return os.path.join(test_data_directory, "IterateTests")
+
+
+@pytest.fixture()
+def iterate_input_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/input."""
+    return os.path.join(iterate_test_directory, "input")
+
+
+@pytest.fixture()
+def iterate_expected_output_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output."""
+    return os.path.join(iterate_test_directory, "expected_output")
+
+
+@pytest.fixture()
+def iterate_configs_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs."""
+    return os.path.join(iterate_test_directory, "configs")
+
+
+@pytest.fixture()
+def iterate_integration_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/integration_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "integration_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_timeout_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/timeout_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "timeout_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_template_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/iterate_template.toml."""
+    return os.path.join(iterate_configs_directory, "iterate_template.toml")
+
+
+@pytest.fixture()
+def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/
+    invalid_skeleton_link_index.toml."""
+    return os.path.join(
+        iterate_configs_directory, "invalid_skeleton_link_index.toml"
+    )
+
+
+@pytest.fixture()
+def iterate_expected_output_file(iterate_expected_output_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output/
+    integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    return os.path.join(
+        iterate_expected_output_directory,
+        "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+    )
