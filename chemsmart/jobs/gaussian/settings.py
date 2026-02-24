@@ -2042,7 +2042,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         conjugate_base_mol = self._create_conjugate_base_molecule(molecule)
         return protonated_mol, conjugate_base_mol
 
-    def conjugate_base_job_settings(self, molecule):
+    def conjugate_pair_job_settings(self, molecule):
         """Create and return GaussianJobSettings for the conjugate base."""
         return self._create_job_settings(molecule)
 
@@ -2257,13 +2257,9 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
         if self.protonated_charge is not None:
             protonated_mol.charge = self.protonated_charge
-        elif protonated_mol.charge is None:
-            protonated_mol.charge = 0
 
         if self.protonated_multiplicity is not None:
             protonated_mol.multiplicity = self.protonated_multiplicity
-        elif protonated_mol.multiplicity is None:
-            protonated_mol.multiplicity = 1
 
         # Create conjugate base molecule
         conjugate_base_mol = self._create_conjugate_base_molecule(molecule)

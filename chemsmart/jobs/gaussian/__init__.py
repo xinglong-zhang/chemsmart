@@ -20,6 +20,7 @@ from .link import GaussianLinkJob
 from .modred import GaussianModredJob
 from .nci import GaussianNCIJob
 from .opt import GaussianOptJob
+from .pka import GaussianpKaJob
 from .qmmm import GaussianQMMMJob
 from .qrc import GaussianQRCJob
 from .resp import GaussianRESPJob
@@ -47,6 +48,7 @@ __all__ = [
     "GaussianModredJob",
     "GaussianNCIJob",
     "GaussianOptJob",
+    "GaussianpKaJob",
     "GaussianQRCJob",
     "GaussianRESPJob",
     "GaussianJobRunner",
