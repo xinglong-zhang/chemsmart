@@ -194,7 +194,7 @@ def pka(
     return GaussianpKaJob(
         molecule=molecule,
         settings=pka_settings,
-        label=f"{label}_pka",
+        label=label,
         jobrunner=jobrunner,
         skip_completed=skip_completed,
         **kwargs,
