@@ -6,6 +6,10 @@ using Gaussian with a proper thermodynamic cycle:
 1. Gas phase optimization + frequency for both HA and A-
 2. Solution phase single point for both HA and A- at the same level of theory
 
+Two thermodynamic cycles are supported:
+- **proton exchange**: Uses a reference acid to cancel systematic errors (default)
+- **direct**: Uses the absolute free energy of a proton in water
+
 Using the same level of theory ensures proper error cancellation for
 solvation free energy calculations.
 """
@@ -35,18 +39,28 @@ def click_pka_options(f):
         help="1-based index of the proton to remove for deprotonation.",
     )
     @click.option(
+        "-t",
+        "--thermodynamic-cycle",
+        type=click.Choice(["direct", "proton exchange"]),
+        default="proton exchange",
+        help="Thermodynamic cycle type. 'proton exchange' uses a reference acid "
+        "(default). 'direct' uses absolute free energy of H+ in water.",
+    )
+    @click.option(
         "-r",
         "--reference",
         type=str,
         default="water",
-        help="Reference acid/base for pKa calculation (default: water).",
+        help="Reference acid for proton exchange cycle (default: water). "
+        "Ignored when using direct cycle.",
     )
     @click.option(
-        "-t",
-        "--thermodynamic-cycle",
-        type=click.Choice(["direct", "isodesmic"]),
-        default="isodesmic",
-        help="Thermodynamic cycle type (default: isodesmic).",
+        "-dG",
+        "--delta-g-proton",
+        type=float,
+        default=-265.9,
+        help="Absolute free energy of H+ in water (kcal/mol) for direct cycle. "
+        "Default: -265.9 kcal/mol (Tissandier et al., 1998).",
     )
     @click.option(
         "-cc",
@@ -90,8 +104,9 @@ def click_pka_options(f):
 def pka(
     ctx,
     proton_index,
-    reference,
     thermodynamic_cycle,
+    reference,
+    delta_g_proton,
     conjugate_base_charge,
     conjugate_base_multiplicity,
     solvent_model,
@@ -106,15 +121,29 @@ def pka(
     1. Gas phase optimization + frequency for HA and A-
     2. Solution phase single point for HA and A- at the SAME level of theory
 
-    Using the same level of theory ensures proper error cancellation for
-    solvation free energy calculations.
+    Two thermodynamic cycles are available:
+
+    \b
+    - **proton exchange** (default): Uses a reference acid to cancel errors.
+      HA + Ref- → A- + HRef
+      pKa(HA) = pKa(HRef) + ΔG_exchange / (2.303 * R * T)
+
+    \b
+    - **direct**: Uses absolute free energy of H+ in water.
+      pKa = [G(A-)_aq - G(HA)_aq + ΔG°(H+)_aq] / (2.303 * R * T)
+      Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., 1998)
 
     The proton to be removed is specified by --proton-index (1-based).
     The protonated form uses charge and multiplicity from -c and -m options.
     The conjugate base charge defaults to (charge - 1).
 
-    Example:
-        chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -sm SMD -si water
+    \b
+    Examples:
+        # Proton exchange cycle with water as reference
+        chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -tc "proton exchange" -ref water
+
+        # Direct cycle (no reference needed)
+        chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -tc direct
     """
     from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
@@ -147,8 +176,9 @@ def pka(
     # - Solution phase SP uses SAME functional/basis for error cancellation
     pka_settings = GaussianpKaJobSettings(
         proton_index=proton_index,
-        reference=reference,
         thermodynamic_cycle=thermodynamic_cycle,
+        reference=reference,
+        delta_G_proton=delta_g_proton,
         conjugate_base_charge=conjugate_base_charge,
         conjugate_base_multiplicity=conjugate_base_multiplicity,
         solvent_model=solvent_model,
@@ -180,6 +210,7 @@ def pka(
 
     logger.info(f"pKa job settings: {pka_settings.__dict__}")
     logger.info(f"Proton index to remove: {proton_index}")
+    logger.info(f"Thermodynamic cycle: {thermodynamic_cycle}")
     logger.info(
         f"Protonated form (HA): charge={pka_settings.charge}, "
         f"mult={pka_settings.multiplicity}"
@@ -197,6 +228,12 @@ def pka(
         else pka_settings.multiplicity
     )
     logger.info(f"Conjugate base (A-): charge={cb_charge}, mult={cb_mult}")
+
+    if thermodynamic_cycle == "proton exchange":
+        logger.info(f"Reference acid: {reference}")
+    else:
+        logger.info(f"ΔG°(H+)_aq: {delta_g_proton} kcal/mol")
+
     logger.info(
         f"Gas phase optimization: {pka_settings.functional}/{pka_settings.basis}"
     )

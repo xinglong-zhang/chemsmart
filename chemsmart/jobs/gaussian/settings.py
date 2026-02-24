@@ -1956,36 +1956,56 @@ class GaussianpKaJobSettings(GaussianJobSettings):
     and single point jobs in solution phase at the same level of theory to
     ensure proper error cancellation for solvation free energy calculations.
 
+    Two thermodynamic cycles are supported:
+
+    1. **Direct dissociation** (thermodynamic_cycle='direct'):
+       Uses the absolute free energy of a proton in water (ΔG°(H+)_aq).
+       pKa = [G(A-)_aq - G(HA)_aq + ΔG°(H+)_aq] / (2.303 * R * T)
+       Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., J Phys Chem A 1998)
+
+    2. **Proton exchange** (thermodynamic_cycle='proton exchange'):
+       Uses a reference acid (e.g., water) to cancel systematic errors.
+       HA + Ref- → A- + HRef
+       pKa(HA) = pKa(HRef) + ΔG_exchange / (2.303 * R * T)
+
     The pKa calculation workflow:
     1. Optimize HA in gas phase (opt + freq)
     2. Optimize A- in gas phase (opt + freq)
     3. Run SP on optimized HA in solution (same functional/basis as gas)
     4. Run SP on optimized A- in solution (same functional/basis as gas)
-    5. Calculate pKa from thermodynamic cycle:
-       pKa = ΔG_aq / (2.303 * R * T)
-       where ΔG_aq = G(A-)_aq - G(HA)_aq + G(H+)_aq
+    5. Calculate pKa using the selected thermodynamic cycle
 
     Note: Using the same level of theory for both gas and solution phases
     ensures proper cancellation of systematic errors in DFT calculations.
-    The solvation free energy (ΔG_solv) will be mathematically consistent
-    only when the same method is used throughout.
 
     Attributes:
         proton_index (int): 1-based index of the proton to remove for deprotonation.
-        reference (str): Reference acid/base for pKa calculation (e.g., 'water').
+        thermodynamic_cycle (str): Type of thermodynamic cycle ('direct' or 'proton exchange').
+        reference (str): Reference acid for proton exchange cycle (e.g., 'water').
+            Not used when thermodynamic_cycle='direct'.
+        delta_G_proton (float): Absolute free energy of H+ in water (kcal/mol).
+            Only used when thermodynamic_cycle='direct'. Default: -265.9 kcal/mol.
         solvent_model (str): Solvation model for SP calculations (e.g., 'SMD', 'PCM').
         solvent_id (str): Solvent ID for SP calculations (e.g., 'water').
-        thermodynamic_cycle (str): Type of thermodynamic cycle ('direct', 'isodesmic').
         charge (int): Charge of the protonated form (inherited from parent).
         multiplicity (int): Multiplicity of the protonated form (inherited from parent).
         conjugate_base_charge (int): Charge of the conjugate base (typically charge - 1).
         conjugate_base_multiplicity (int): Multiplicity of the conjugate base.
 
+    References:
+        Tissandier MD, Cowen KA, Feng WY, Gundlach E, Cohen MH, Earhart AD,
+        Coe JV, Tuttle TR Jr (1998) The proton's absolute aqueous enthalpy
+        and Gibbs free energy of solvation from cluster-ion solvation data.
+        J Phys Chem A 102:7787-7794.
+
     Example:
         from chemsmart.io.molecules.structure import Molecule
         mol = Molecule.from_filepath("acetic_acid.xyz")
+
+        # Direct dissociation cycle (no reference acid needed)
         settings = GaussianpKaJobSettings(
-            proton_index=10,  # Index of acidic H (1-based)
+            proton_index=10,
+            thermodynamic_cycle="direct",
             charge=0,
             multiplicity=1,
             functional="B3LYP",
@@ -1993,18 +2013,33 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             solvent_model="SMD",
             solvent_id="water"
         )
-        # This will create:
-        # - Gas phase opt+freq jobs for HA and A-
-        # - Solution phase SP jobs for HA and A- at same level of theory
+
+        # Proton exchange cycle (requires reference acid)
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            thermodynamic_cycle="proton exchange",
+            reference="water",
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="6-311+G(d,p)",
+            solvent_model="SMD",
+            solvent_id="water"
+        )
     """
+
+    # Default absolute free energy of H+ in water (kcal/mol)
+    # From Tissandier et al., J Phys Chem A 1998, 102:7787
+    DEFAULT_DELTA_G_PROTON = -265.9
 
     def __init__(
         self,
         proton_index=None,
+        thermodynamic_cycle="proton exchange",
         reference="water",
+        delta_G_proton=None,
         solvent_model="SMD",
         solvent_id="water",
-        thermodynamic_cycle="direct",
         conjugate_base_charge=None,
         conjugate_base_multiplicity=None,
         **kwargs,
@@ -2020,14 +2055,17 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             proton_index (int, optional): 1-based index of the proton to remove
                 for creating the conjugate base. Must be specified before
                 calling create_conjugate_base_molecule().
-            reference (str): Reference acid/base for pKa calculation.
-                Default is 'water'.
+            thermodynamic_cycle (str): Type of thermodynamic cycle to use.
+                Options: 'direct', 'proton exchange'. Default is 'proton exchange'.
+            reference (str): Reference acid for proton exchange cycle.
+                Default is 'water'. Ignored when thermodynamic_cycle='direct'.
+            delta_G_proton (float, optional): Absolute free energy of H+ in water
+                (kcal/mol). Only used when thermodynamic_cycle='direct'.
+                Default is -265.9 kcal/mol (Tissandier et al., 1998).
             solvent_model (str): Solvation model for solution phase SP.
                 Default is 'SMD'.
             solvent_id (str): Solvent ID for solution phase SP.
                 Default is 'water'.
-            thermodynamic_cycle (str): Type of thermodynamic cycle to use.
-                Options: 'direct', 'isodesmic'. Default is 'direct'.
             conjugate_base_charge (int, optional): Charge of the conjugate base.
                 If not specified, defaults to charge - 1.
             conjugate_base_multiplicity (int, optional): Multiplicity of the conjugate base.
@@ -2038,12 +2076,23 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         """
         super().__init__(**kwargs)
         self.proton_index = proton_index
-        self.reference = reference
+        self.thermodynamic_cycle = thermodynamic_cycle
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
-        self.thermodynamic_cycle = thermodynamic_cycle
         self.conjugate_base_charge = conjugate_base_charge
         self.conjugate_base_multiplicity = conjugate_base_multiplicity
+
+        # Set reference only for proton exchange cycle
+        if thermodynamic_cycle == "proton exchange":
+            self.reference = reference
+        else:
+            self.reference = None  # Not needed for direct cycle
+
+        # Set delta_G_proton for direct cycle
+        if delta_G_proton is not None:
+            self.delta_G_proton = delta_G_proton
+        else:
+            self.delta_G_proton = self.DEFAULT_DELTA_G_PROTON
 
     @property
     def protonated_charge(self):

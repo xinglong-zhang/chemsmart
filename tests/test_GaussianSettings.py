@@ -549,10 +549,10 @@ class TestGaussianpKaJobSettings:
         """Test initialization with custom values."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
+            thermodynamic_cycle="proton exchange",
             reference="acetic_acid",
             solvent_model="PCM",
             solvent_id="water",
-            thermodynamic_cycle="isodesmic",
             charge=0,  # Protonated form charge (inherited from parent)
             multiplicity=1,  # Protonated form multiplicity (inherited from parent)
             conjugate_base_charge=-1,
@@ -561,10 +561,10 @@ class TestGaussianpKaJobSettings:
             basis="6-311+G(d,p)",
         )
         assert settings.proton_index == 10
+        assert settings.thermodynamic_cycle == "proton exchange"
         assert settings.reference == "acetic_acid"
         assert settings.solvent_model == "PCM"
         assert settings.solvent_id == "water"
-        assert settings.thermodynamic_cycle == "isodesmic"
         assert settings.charge == 0
         assert settings.multiplicity == 1
         assert settings.protonated_charge == 0
@@ -573,6 +573,51 @@ class TestGaussianpKaJobSettings:
         assert settings.conjugate_base_multiplicity == 1
         assert settings.functional == "B3LYP"
         assert settings.basis == "6-311+G(d,p)"
+
+    def test_direct_cycle_no_reference(self):
+        """Test that direct cycle does not require reference acid."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            thermodynamic_cycle="direct",
+            charge=0,
+            multiplicity=1,
+        )
+        assert settings.thermodynamic_cycle == "direct"
+        assert settings.reference is None  # Not needed for direct cycle
+        assert settings.delta_G_proton == -265.9  # Default value
+
+    def test_direct_cycle_custom_delta_g(self):
+        """Test direct cycle with custom delta_G_proton."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            thermodynamic_cycle="direct",
+            delta_G_proton=-270.0,
+            charge=0,
+            multiplicity=1,
+        )
+        assert settings.delta_G_proton == -270.0
+
+    def test_proton_exchange_cycle_requires_reference(self):
+        """Test that proton exchange cycle uses reference acid."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            thermodynamic_cycle="proton exchange",
+            reference="formic_acid",
+            charge=0,
+            multiplicity=1,
+        )
+        assert settings.thermodynamic_cycle == "proton exchange"
+        assert settings.reference == "formic_acid"
+
+    def test_default_thermodynamic_cycle(self):
+        """Test that default thermodynamic cycle is proton exchange."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            charge=0,
+            multiplicity=1,
+        )
+        assert settings.thermodynamic_cycle == "proton exchange"
+        assert settings.reference == "water"  # Default reference
 
     def test_gas_phase_optimization_settings(self, single_molecule_xyz_file):
         """Test that gas phase optimization has no solvent."""
