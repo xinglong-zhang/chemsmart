@@ -323,7 +323,7 @@ class GaussianpKaJob(GaussianJob):
         protonated_opt_output = self.protonated_job._output()
         if (
             protonated_opt_output is not None
-            and protonated_opt_output.is_complete
+            and protonated_opt_output.normal_termination
         ):
             protonated_mol = protonated_opt_output.molecule
         else:
@@ -333,7 +333,7 @@ class GaussianpKaJob(GaussianJob):
         conjugate_base_opt_output = self.conjugate_base_job._output()
         if (
             conjugate_base_opt_output is not None
-            and conjugate_base_opt_output.is_complete
+            and conjugate_base_opt_output.normal_termination
         ):
             conjugate_base_mol = conjugate_base_opt_output.molecule
         else:
