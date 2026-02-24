@@ -2,8 +2,11 @@ import pytest
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.jobs.gaussian.settings import (
     GaussianJobSettings,
+    GaussianpKaJobSettings,
     GaussianQMMMJobSettings,
 )
 from chemsmart.jobs.settings import read_molecular_job_yaml
@@ -537,3 +540,467 @@ class TestGaussianPBCJob:
         assert settings.functional.lower() == "pbepbe"
         assert settings.basis.lower() == "6-31g(d,p)/auto"
         assert settings.additional_route_parameters.lower() == "scf=tight"
+
+
+class TestGaussianpKaJobSettings:
+    """Tests for GaussianpKaJobSettings class."""
+
+    def test_init_custom_values(self):
+        """Test initialization with custom values."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            reference="acetic_acid",
+            solvation_model="PCM",
+            thermodynamic_cycle="isodesmic",
+            protonated_charge=0,
+            protonated_multiplicity=1,
+            conjugate_base_charge=-1,
+            conjugate_base_multiplicity=1,
+            functional="B3LYP",
+            basis="6-311+G(d,p)",
+        )
+        assert settings.proton_index == 10
+        assert settings.reference == "acetic_acid"
+        assert settings.solvation_model == "PCM"
+        assert settings.thermodynamic_cycle == "isodesmic"
+        assert settings.protonated_charge == 0
+        assert settings.protonated_multiplicity == 1
+        assert settings.conjugate_base_charge == -1
+        assert settings.conjugate_base_multiplicity == 1
+        assert settings.functional == "B3LYP"
+        assert settings.basis == "6-311+G(d,p)"
+
+    def test_create_conjugate_base_molecule(self, single_molecule_xyz_file):
+        """Test creating conjugate base molecule by removing a proton."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+        original_num_atoms = len(mol)
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        assert (
+            len(h_indices) > 0
+        ), "Test molecule must have at least one hydrogen"
+
+        proton_index = h_indices[0]
+        settings = GaussianpKaJobSettings(proton_index=proton_index)
+
+        conjugate_base = settings._create_conjugate_base_molecule(mol)
+
+        # Check that one atom was removed
+        assert len(conjugate_base) == original_num_atoms - 1
+        # Check that charge decreased by 1
+        assert conjugate_base.charge == -1
+        # Check that multiplicity is preserved
+        assert conjugate_base.multiplicity == 1
+
+    def test_create_conjugate_base_molecule_custom_charge(
+        self, single_molecule_xyz_file
+    ):
+        """Test creating conjugate base with custom charge/multiplicity."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 1
+        mol.multiplicity = 2
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            conjugate_base_charge=0,
+            conjugate_base_multiplicity=1,
+        )
+
+        conjugate_base = settings._create_conjugate_base_molecule(mol)
+
+        # Custom values should override defaults
+        assert conjugate_base.charge == 0
+        assert conjugate_base.multiplicity == 1
+
+    def test_create_conjugate_base_molecule_no_proton_index(
+        self, single_molecule_xyz_file
+    ):
+        """Test that error is raised when proton_index is not specified."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        settings = GaussianpKaJobSettings()
+
+        with pytest.raises(ValueError, match="proton_index must be specified"):
+            settings._create_conjugate_base_molecule(mol)
+
+    def test_create_conjugate_base_molecule_invalid_index(
+        self, single_molecule_xyz_file
+    ):
+        """Test that error is raised for out-of-range proton index."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        settings = GaussianpKaJobSettings(proton_index=999)
+
+        with pytest.raises(ValueError, match="out of range"):
+            settings._create_conjugate_base_molecule(mol)
+
+    def test_create_conjugate_base_molecule_not_hydrogen(
+        self, single_molecule_xyz_file
+    ):
+        """Test that error is raised when index is not a hydrogen."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+
+        # Find a non-hydrogen atom index
+        non_h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s != "H"]
+        assert len(non_h_indices) > 0
+
+        settings = GaussianpKaJobSettings(proton_index=non_h_indices[0])
+
+        with pytest.raises(ValueError, match="not hydrogen"):
+            settings._create_conjugate_base_molecule(mol)
+
+    def test_create_job_settings(self, single_molecule_xyz_file):
+        """Test creating job settings for both forms."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+            solvation_model="SMD",
+            solvent_id="water",
+        )
+
+        prot_settings, conj_base_settings = settings._create_job_settings(mol)
+
+        # Check protonated settings
+        assert isinstance(prot_settings, GaussianJobSettings)
+        assert prot_settings.charge == 0
+        assert prot_settings.multiplicity == 1
+        assert prot_settings.functional == "B3LYP"
+        assert prot_settings.basis == "6-31G*"
+        assert prot_settings.jobtype == "opt"
+        assert prot_settings.freq is True
+
+        # Check conjugate base settings
+        assert isinstance(conj_base_settings, GaussianJobSettings)
+        assert conj_base_settings.charge == -1
+        assert conj_base_settings.multiplicity == 1
+        assert conj_base_settings.functional == "B3LYP"
+        assert conj_base_settings.basis == "6-31G*"
+        assert conj_base_settings.jobtype == "opt"
+        assert conj_base_settings.freq is True
+
+    def test_create_molecules(self, single_molecule_xyz_file):
+        """Test creating both protonated and conjugate base molecules."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+        original_num_atoms = len(mol)
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(proton_index=proton_index)
+
+        prot_mol, conj_base_mol = settings._create_molecules(mol)
+
+        # Check protonated molecule
+        assert len(prot_mol) == original_num_atoms
+        assert prot_mol.charge == 0
+        assert prot_mol.multiplicity == 1
+
+        # Check conjugate base molecule
+        assert len(conj_base_mol) == original_num_atoms - 1
+        assert conj_base_mol.charge == -1
+        assert conj_base_mol.multiplicity == 1
+
+    def test_conjugate_base_molecule_method(self, single_molecule_xyz_file):
+        """Test the public conjugate_base_molecule method."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(proton_index=proton_index)
+
+        conjugate_base = settings.conjugate_base_molecule(mol)
+
+        assert len(conjugate_base) == len(mol) - 1
+        assert conjugate_base.charge == -1
+
+    def test_conjugate_pair_molecules_method(self, single_molecule_xyz_file):
+        """Test the public conjugate_pair_molecules method."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(proton_index=proton_index)
+
+        prot_mol, conj_base_mol = settings.conjugate_pair_molecules(mol)
+
+        assert len(prot_mol) == len(mol)
+        assert len(conj_base_mol) == len(mol) - 1
+        assert prot_mol.charge == 0
+        assert conj_base_mol.charge == -1
+
+    def test_conjugate_pair_job_settings_method(
+        self, single_molecule_xyz_file
+    ):
+        """Test the public conjugate_pair_job_settings method."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+        )
+
+        prot_settings, conj_base_settings = (
+            settings.conjugate_pair_job_settings(mol)
+        )
+
+        assert isinstance(prot_settings, GaussianJobSettings)
+        assert isinstance(conj_base_settings, GaussianJobSettings)
+        assert prot_settings.charge == 0
+        assert conj_base_settings.charge == -1
+
+
+class TestGaussianpKaJob:
+    """Tests for GaussianpKaJob class."""
+
+    def test_init_valid_settings(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test initialization with valid pKa settings."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+        )
+
+        job = GaussianpKaJob(
+            molecule=mol,
+            settings=settings,
+            label="test_pka",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        assert isinstance(job, GaussianpKaJob)
+        assert job.TYPE == "g16pka"
+        assert job.label == "test_pka"
+
+    def test_init_invalid_settings_type(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test that error is raised for non-pKa settings."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+
+        settings = GaussianJobSettings(functional="B3LYP", basis="6-31G*")
+
+        with pytest.raises(
+            ValueError, match="must be instance of GaussianpKaJobSettings"
+        ):
+            GaussianpKaJob(
+                molecule=mol,
+                settings=settings,
+                label="test_pka",
+                jobrunner=gaussian_jobrunner_no_scratch,
+            )
+
+    def test_init_no_proton_index(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test that error is raised when proton_index is not specified."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+
+        settings = GaussianpKaJobSettings(functional="B3LYP", basis="6-31G*")
+
+        with pytest.raises(ValueError, match="proton_index must be specified"):
+            GaussianpKaJob(
+                molecule=mol,
+                settings=settings,
+                label="test_pka",
+                jobrunner=gaussian_jobrunner_no_scratch,
+            )
+
+    def test_pka_jobs_property(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test that pka_jobs returns both jobs."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+        )
+
+        job = GaussianpKaJob(
+            molecule=mol,
+            settings=settings,
+            label="test_pka",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        pka_jobs = job.pka_jobs
+        assert len(pka_jobs) == 2
+        assert isinstance(pka_jobs[0], GaussianOptJob)
+        assert isinstance(pka_jobs[1], GaussianOptJob)
+
+    def test_protonated_job_property(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test protonated_job property."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+        )
+
+        job = GaussianpKaJob(
+            molecule=mol,
+            settings=settings,
+            label="test_pka",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        protonated_job = job.protonated_job
+        assert isinstance(protonated_job, GaussianOptJob)
+        assert protonated_job.label == "test_pka_HA"
+        assert protonated_job.settings.charge == 0
+
+    def test_conjugate_base_job_property(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test conjugate_base_job property."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+        )
+
+        job = GaussianpKaJob(
+            molecule=mol,
+            settings=settings,
+            label="test_pka",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        conjugate_base_job = job.conjugate_base_job
+        assert isinstance(conjugate_base_job, GaussianOptJob)
+        assert conjugate_base_job.label == "test_pka_A"
+        assert conjugate_base_job.settings.charge == -1
+
+    def test_protonated_molecule_property(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test protonated_molecule property."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+        original_num_atoms = len(mol)
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(proton_index=proton_index)
+
+        job = GaussianpKaJob(
+            molecule=mol,
+            settings=settings,
+            label="test_pka",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        protonated_mol = job.protonated_molecule
+        assert len(protonated_mol) == original_num_atoms
+        assert protonated_mol.charge == 0
+
+    def test_conjugate_base_molecule_property(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test conjugate_base_molecule property."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+        original_num_atoms = len(mol)
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(proton_index=proton_index)
+
+        job = GaussianpKaJob(
+            molecule=mol,
+            settings=settings,
+            label="test_pka",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        conjugate_base_mol = job.conjugate_base_molecule
+        assert len(conjugate_base_mol) == original_num_atoms - 1
+        assert conjugate_base_mol.charge == -1
+
+    def test_job_labels(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        """Test that job labels are correctly generated."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(proton_index=proton_index)
+
+        job = GaussianpKaJob(
+            molecule=mol,
+            settings=settings,
+            label="acetic_acid_pka",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        protonated_job, conjugate_base_job = job.pka_jobs
+
+        assert protonated_job.label == "acetic_acid_pka_HA"
+        assert conjugate_base_job.label == "acetic_acid_pka_A"
+
+    def test_settings_class(self):
+        """Test settings_class class method."""
+        assert GaussianpKaJob.settings_class() == GaussianpKaJobSettings
