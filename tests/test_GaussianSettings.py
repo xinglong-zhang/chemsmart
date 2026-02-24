@@ -552,8 +552,8 @@ class TestGaussianpKaJobSettings:
             reference="acetic_acid",
             solvation_model="PCM",
             thermodynamic_cycle="isodesmic",
-            protonated_charge=0,
-            protonated_multiplicity=1,
+            charge=0,  # Protonated form charge (inherited from parent)
+            multiplicity=1,  # Protonated form multiplicity (inherited from parent)
             conjugate_base_charge=-1,
             conjugate_base_multiplicity=1,
             functional="B3LYP",
@@ -563,12 +563,31 @@ class TestGaussianpKaJobSettings:
         assert settings.reference == "acetic_acid"
         assert settings.solvation_model == "PCM"
         assert settings.thermodynamic_cycle == "isodesmic"
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
         assert settings.protonated_charge == 0
         assert settings.protonated_multiplicity == 1
         assert settings.conjugate_base_charge == -1
         assert settings.conjugate_base_multiplicity == 1
         assert settings.functional == "B3LYP"
         assert settings.basis == "6-311+G(d,p)"
+
+    def test_protonated_charge_multiplicity_properties(self):
+        """Test that protonated_charge/multiplicity are aliases for charge/multiplicity."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            charge=2,
+            multiplicity=3,
+        )
+        # Properties should return the same values
+        assert settings.protonated_charge == settings.charge
+        assert settings.protonated_multiplicity == settings.multiplicity
+
+        # Setting via property should update the underlying attribute
+        settings.charge = 5
+        assert settings.charge == 5
+        settings.multiplicity = 4
+        assert settings.multiplicity == 4
 
     def test_create_conjugate_base_molecule(self, single_molecule_xyz_file):
         """Test creating conjugate base molecule by removing a proton."""

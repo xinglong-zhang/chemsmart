@@ -1957,6 +1957,10 @@ class GaussianpKaJobSettings(GaussianJobSettings):
     by removing a specified proton from the molecule, with automatic
     adjustment of charge and multiplicity.
 
+    The protonated form uses the inherited charge and multiplicity from
+    the parent GaussianJobSettings class. The conjugate base charge defaults
+    to (charge - 1) and multiplicity defaults to the same as the protonated form.
+
     The pKa calculation workflow:
     1. Optimize the protonated form (HA) with charge q, multiplicity m
     2. Remove the acidic proton to create conjugate base (A-)
@@ -1968,18 +1972,18 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         reference (str): Reference acid/base for pKa calculation (e.g., 'water').
         solvation_model (str): Solvation model to use (e.g., 'SMD', 'PCM').
         thermodynamic_cycle (str): Type of thermodynamic cycle ('direct', 'isodesmic').
-        protonated_charge (int): Charge of the protonated form.
-        protonated_multiplicity (int): Multiplicity of the protonated form.
-        conjugate_base_charge (int): Charge of the conjugate base (typically protonated_charge - 1).
+        charge (int): Charge of the protonated form (inherited from parent).
+        multiplicity (int): Multiplicity of the protonated form (inherited from parent).
+        conjugate_base_charge (int): Charge of the conjugate base (typically charge - 1).
         conjugate_base_multiplicity (int): Multiplicity of the conjugate base.
 
     Example:
         from chemsmart.io.molecules.structure import Molecule
         mol = Molecule.from_filepath("acetic_acid.xyz")
-        mol.charge = 0
-        mol.multiplicity = 1
         settings = GaussianpKaJobSettings(
             proton_index=10,  # Index of acidic H
+            charge=0,
+            multiplicity=1,
             functional="B3LYP",
             basis="6-311+G(d,p)",
             solvation_model="SMD",
@@ -1994,14 +1998,16 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         reference="water",
         solvation_model="SMD",
         thermodynamic_cycle="direct",
-        protonated_charge=None,
-        protonated_multiplicity=None,
         conjugate_base_charge=None,
         conjugate_base_multiplicity=None,
         **kwargs,
     ):
         """
         Initialize Gaussian pKa job settings.
+
+        The protonated form charge and multiplicity are inherited from the
+        parent GaussianJobSettings class via the charge and multiplicity
+        parameters in kwargs.
 
         Args:
             proton_index (int, optional): 1-based index of the proton to remove
@@ -2012,25 +2018,40 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             solvation_model (str): Solvation model to use. Default is 'SMD'.
             thermodynamic_cycle (str): Type of thermodynamic cycle to use.
                 Options: 'direct', 'isodesmic'. Default is 'direct'.
-            protonated_charge (int, optional): Charge of the protonated form.
-                If not specified, uses the molecule's charge.
-            protonated_multiplicity (int, optional): Multiplicity of the protonated form.
-                If not specified, uses the molecule's multiplicity.
             conjugate_base_charge (int, optional): Charge of the conjugate base.
-                If not specified, defaults to protonated_charge - 1.
+                If not specified, defaults to charge - 1.
             conjugate_base_multiplicity (int, optional): Multiplicity of the conjugate base.
-                If not specified, defaults to protonated_multiplicity.
-            **kwargs: Additional keyword arguments passed to GaussianJobSettings.
+                If not specified, defaults to multiplicity.
+            **kwargs: Additional keyword arguments passed to GaussianJobSettings,
+                including charge and multiplicity for the protonated form.
         """
         super().__init__(**kwargs)
         self.proton_index = proton_index
         self.reference = reference
         self.solvation_model = solvation_model
         self.thermodynamic_cycle = thermodynamic_cycle
-        self.protonated_charge = protonated_charge
-        self.protonated_multiplicity = protonated_multiplicity
         self.conjugate_base_charge = conjugate_base_charge
         self.conjugate_base_multiplicity = conjugate_base_multiplicity
+
+    @property
+    def protonated_charge(self):
+        """Charge of the protonated form (alias for inherited charge)."""
+        return self.charge
+
+    @protonated_charge.setter
+    def protonated_charge(self, value):
+        """Set the charge of the protonated form."""
+        self.charge = value
+
+    @property
+    def protonated_multiplicity(self):
+        """Multiplicity of the protonated form (alias for inherited multiplicity)."""
+        return self.multiplicity
+
+    @protonated_multiplicity.setter
+    def protonated_multiplicity(self, value):
+        """Set the multiplicity of the protonated form."""
+        self.multiplicity = value
 
     def conjugate_base_molecule(self, molecule):
         """Create and return the conjugate base molecule."""
@@ -2168,15 +2189,16 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             prot_settings, conj_base_settings = settings.create_job_settings(mol)
         """
         # Determine charge and multiplicity for protonated form
-        if self.protonated_charge is not None:
-            prot_charge = self.protonated_charge
+        # Use self.charge/multiplicity (inherited from parent), fall back to molecule
+        if self.charge is not None:
+            prot_charge = self.charge
         elif molecule.charge is not None:
             prot_charge = molecule.charge
         else:
             prot_charge = 0
 
-        if self.protonated_multiplicity is not None:
-            prot_mult = self.protonated_multiplicity
+        if self.multiplicity is not None:
+            prot_mult = self.multiplicity
         elif molecule.multiplicity is not None:
             prot_mult = molecule.multiplicity
         else:
@@ -2255,11 +2277,15 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         # Create protonated molecule (copy with updated charge/mult if needed)
         protonated_mol = molecule.copy()
 
-        if self.protonated_charge is not None:
-            protonated_mol.charge = self.protonated_charge
+        if self.charge is not None:
+            protonated_mol.charge = self.charge
+        elif protonated_mol.charge is None:
+            protonated_mol.charge = 0
 
-        if self.protonated_multiplicity is not None:
-            protonated_mol.multiplicity = self.protonated_multiplicity
+        if self.multiplicity is not None:
+            protonated_mol.multiplicity = self.multiplicity
+        elif protonated_mol.multiplicity is None:
+            protonated_mol.multiplicity = 1
 
         # Create conjugate base molecule
         conjugate_base_mol = self._create_conjugate_base_molecule(molecule)
