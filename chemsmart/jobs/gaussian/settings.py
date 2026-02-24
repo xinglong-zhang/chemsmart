@@ -1945,3 +1945,327 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 logger.info(f"Difference: {diff}")
 
         return self_dict == other_dict
+
+
+class GaussianpKaJobSettings(GaussianJobSettings):
+    """
+    Specialized settings for Gaussian pKa calculations.
+
+    This class extends GaussianJobSettings to support pKa calculations by
+    creating two optimization jobs: one for the protonated form (HA) and
+    one for the conjugate base (A-). The conjugate base is created
+    by removing a specified proton from the molecule, with automatic
+    adjustment of charge and multiplicity.
+
+    The pKa calculation workflow:
+    1. Optimize the protonated form (HA) with charge q, multiplicity m
+    2. Remove the acidic proton to create conjugate base (A-)
+    3. Optimize the conjugate base with charge q-1, multiplicity m (or adjusted)
+    4. Calculate pKa from the free energy difference
+
+    Attributes:
+        proton_index (int): 1-based index of the proton to remove for deprotonation.
+        reference (str): Reference acid/base for pKa calculation (e.g., 'water').
+        solvation_model (str): Solvation model to use (e.g., 'SMD', 'PCM').
+        thermodynamic_cycle (str): Type of thermodynamic cycle ('direct', 'isodesmic').
+        protonated_charge (int): Charge of the protonated form.
+        protonated_multiplicity (int): Multiplicity of the protonated form.
+        conjugate_base_charge (int): Charge of the conjugate base (typically protonated_charge - 1).
+        conjugate_base_multiplicity (int): Multiplicity of the conjugate base.
+
+    Example:
+        from chemsmart.io.molecules.structure import Molecule
+        mol = Molecule.from_filepath("acetic_acid.xyz")
+        mol.charge = 0
+        mol.multiplicity = 1
+        settings = GaussianpKaJobSettings(
+            proton_index=10,  # Index of acidic H
+            functional="B3LYP",
+            basis="6-311+G(d,p)",
+            solvation_model="SMD",
+            solvent_id="water"
+        )
+        protonated_settings, conjugate_base_settings = settings.create_job_settings(mol)
+    """
+
+    def __init__(
+        self,
+        proton_index=None,
+        reference="water",
+        solvation_model="SMD",
+        thermodynamic_cycle="direct",
+        protonated_charge=None,
+        protonated_multiplicity=None,
+        conjugate_base_charge=None,
+        conjugate_base_multiplicity=None,
+        **kwargs,
+    ):
+        """
+        Initialize Gaussian pKa job settings.
+
+        Args:
+            proton_index (int, optional): 1-based index of the proton to remove
+                for creating the conjugate base. Must be specified before
+                calling create_conjugate_base_molecule().
+            reference (str): Reference acid/base for pKa calculation.
+                Default is 'water'.
+            solvation_model (str): Solvation model to use. Default is 'SMD'.
+            thermodynamic_cycle (str): Type of thermodynamic cycle to use.
+                Options: 'direct', 'isodesmic'. Default is 'direct'.
+            protonated_charge (int, optional): Charge of the protonated form.
+                If not specified, uses the molecule's charge.
+            protonated_multiplicity (int, optional): Multiplicity of the protonated form.
+                If not specified, uses the molecule's multiplicity.
+            conjugate_base_charge (int, optional): Charge of the conjugate base.
+                If not specified, defaults to protonated_charge - 1.
+            conjugate_base_multiplicity (int, optional): Multiplicity of the conjugate base.
+                If not specified, defaults to protonated_multiplicity.
+            **kwargs: Additional keyword arguments passed to GaussianJobSettings.
+        """
+        super().__init__(**kwargs)
+        self.proton_index = proton_index
+        self.reference = reference
+        self.solvation_model = solvation_model
+        self.thermodynamic_cycle = thermodynamic_cycle
+        self.protonated_charge = protonated_charge
+        self.protonated_multiplicity = protonated_multiplicity
+        self.conjugate_base_charge = conjugate_base_charge
+        self.conjugate_base_multiplicity = conjugate_base_multiplicity
+
+    def conjugate_base_molecule(self, molecule):
+        """Create and return the conjugate base molecule."""
+        return self._create_conjugate_base_molecule(molecule)
+
+    def conjugate_pair_molecules(self, molecule):
+        """Create and return both protonated and conjugate base molecules."""
+        protonated_mol = molecule
+        conjugate_base_mol = self._create_conjugate_base_molecule(molecule)
+        return protonated_mol, conjugate_base_mol
+
+    def conjugate_base_job_settings(self, molecule):
+        """Create and return GaussianJobSettings for the conjugate base."""
+        return self._create_job_settings(molecule)
+
+    def _create_conjugate_base_molecule(self, molecule):
+        """
+        Create a conjugate base molecule by removing the specified proton.
+
+        Creates a deep copy of the input molecule and removes the atom at
+        the specified proton_index. The resulting molecule represents the
+        conjugate base (A-) of the original acid (HA).
+
+        Args:
+            molecule (Molecule): The protonated molecule (HA).
+
+        Returns:
+            Molecule: A new molecule with the proton removed (A-).
+
+        Raises:
+            ValueError: If proton_index is not specified or is out of range.
+            ValueError: If the atom at proton_index is not a hydrogen.
+
+        Example:
+            settings = GaussianpKaJobSettings(proton_index=10)
+            conjugate_base_mol = settings.conjugate_base_molecule(acetic_acid)
+        """
+        if self.proton_index is None:
+            raise ValueError(
+                "proton_index must be specified to create conjugate base molecule. "
+                "Use 1-based indexing."
+            )
+
+        # Validate proton_index range (1-based)
+        if self.proton_index < 1 or self.proton_index > len(molecule):
+            raise ValueError(
+                f"proton_index {self.proton_index} is out of range. "
+                f"Molecule has {len(molecule)} atoms (1-indexed: 1 to {len(molecule)})."
+            )
+
+        # Convert to 0-based index for internal use
+        proton_idx_0based = self.proton_index - 1
+
+        # Validate that the atom is a hydrogen
+        atom_symbol = molecule.symbols[proton_idx_0based]
+        if atom_symbol not in ("H", "h"):
+            raise ValueError(
+                f"Atom at index {self.proton_index} is '{atom_symbol}', not hydrogen. "
+                "Only hydrogen atoms can be removed for pKa calculations."
+            )
+
+        # Create lists excluding the proton
+        new_symbols = [
+            s for i, s in enumerate(molecule.symbols) if i != proton_idx_0based
+        ]
+        new_positions = [
+            p
+            for i, p in enumerate(molecule.positions)
+            if i != proton_idx_0based
+        ]
+
+        # Handle frozen_atoms if present
+        new_frozen_atoms = None
+        if molecule.frozen_atoms is not None:
+            new_frozen_atoms = [
+                f
+                for i, f in enumerate(molecule.frozen_atoms)
+                if i != proton_idx_0based
+            ]
+
+        # Import here to avoid circular imports
+        from chemsmart.io.molecules.structure import Molecule
+
+        # Create the conjugate base molecule
+        conjugate_base_mol = Molecule(
+            symbols=new_symbols,
+            positions=new_positions,
+            frozen_atoms=new_frozen_atoms,
+        )
+
+        # Set charge and multiplicity for the conjugate base
+        # By default, removing H+ decreases charge by 1
+        original_charge = molecule.charge if molecule.charge is not None else 0
+        original_mult = (
+            molecule.multiplicity if molecule.multiplicity is not None else 1
+        )
+
+        if self.conjugate_base_charge is not None:
+            conjugate_base_mol.charge = self.conjugate_base_charge
+        else:
+            conjugate_base_mol.charge = original_charge - 1
+
+        if self.conjugate_base_multiplicity is not None:
+            conjugate_base_mol.multiplicity = self.conjugate_base_multiplicity
+        else:
+            # Multiplicity usually stays the same for closed-shell systems
+            conjugate_base_mol.multiplicity = original_mult
+
+        return conjugate_base_mol
+
+    def _create_job_settings(self, molecule):
+        """
+        Create optimization job settings for both protonated and conjugate base forms.
+
+        Generates two GaussianJobSettings objects configured for optimization
+        calculations: one for the protonated form (HA) and one for the
+        conjugate base (A-). Both use the same level of theory but with
+        appropriate charge and multiplicity for each species.
+
+        Args:
+            molecule (Molecule): The protonated molecule (HA) to use as the
+                starting point for both calculations.
+
+        Returns:
+            tuple: A tuple of (protonated_settings, conjugate_base_settings),
+                where each is a GaussianJobSettings object configured for
+                optimization with frequency calculations.
+
+        Example:
+            settings = GaussianpKaJobSettings(
+                proton_index=10,
+                functional="B3LYP",
+                basis="6-311+G(d,p)"
+            )
+            prot_settings, conj_base_settings = settings.create_job_settings(mol)
+        """
+        # Determine charge and multiplicity for protonated form
+        if self.protonated_charge is not None:
+            prot_charge = self.protonated_charge
+        elif molecule.charge is not None:
+            prot_charge = molecule.charge
+        else:
+            prot_charge = 0
+
+        if self.protonated_multiplicity is not None:
+            prot_mult = self.protonated_multiplicity
+        elif molecule.multiplicity is not None:
+            prot_mult = molecule.multiplicity
+        else:
+            prot_mult = 1
+
+        # Create settings for protonated form (HA)
+        protonated_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            semiempirical=self.semiempirical,
+            charge=prot_charge,
+            multiplicity=prot_mult,
+            jobtype="opt",
+            freq=True,  # Need frequencies for thermochemistry
+            solvent_model=self.solvation_model,
+            solvent_id=self.solvent_id,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        # Determine charge and multiplicity for conjugate base
+        if self.conjugate_base_charge is not None:
+            conj_base_charge = self.conjugate_base_charge
+        else:
+            conj_base_charge = prot_charge - 1
+
+        if self.conjugate_base_multiplicity is not None:
+            conj_base_mult = self.conjugate_base_multiplicity
+        else:
+            conj_base_mult = prot_mult
+
+        # Create settings for conjugate base (A-)
+        conjugate_base_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            semiempirical=self.semiempirical,
+            charge=conj_base_charge,
+            multiplicity=conj_base_mult,
+            jobtype="opt",
+            freq=True,  # Need frequencies for thermochemistry
+            solvent_model=self.solvation_model,
+            solvent_id=self.solvent_id,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        return protonated_settings, conjugate_base_settings
+
+    def _create_molecules(self, molecule):
+        """
+        Create both protonated and conjugate base molecule objects.
+
+        Creates a copy of the input molecule with appropriate charge/multiplicity
+        for the protonated form, and generates a new molecule with the proton
+        removed for the conjugate base.
+
+        Args:
+            molecule (Molecule): The original protonated molecule (HA).
+
+        Returns:
+            tuple: A tuple of (protonated_molecule, conjugate_base_molecule).
+
+        Example:
+            settings = GaussianpKaJobSettings(proton_index=10)
+            prot_mol, conj_base_mol = settings.create_molecules(acetic_acid)
+            print(f"HA: {len(prot_mol)} atoms, A-: {len(conj_base_mol)} atoms")
+        """
+        # Create protonated molecule (copy with updated charge/mult if needed)
+        protonated_mol = molecule.copy()
+
+        if self.protonated_charge is not None:
+            protonated_mol.charge = self.protonated_charge
+        elif protonated_mol.charge is None:
+            protonated_mol.charge = 0
+
+        if self.protonated_multiplicity is not None:
+            protonated_mol.multiplicity = self.protonated_multiplicity
+        elif protonated_mol.multiplicity is None:
+            protonated_mol.multiplicity = 1
+
+        # Create conjugate base molecule
+        conjugate_base_mol = self._create_conjugate_base_molecule(molecule)
+
+        return protonated_mol, conjugate_base_mol
