@@ -550,7 +550,8 @@ class TestGaussianpKaJobSettings:
         settings = GaussianpKaJobSettings(
             proton_index=10,
             reference="acetic_acid",
-            solvation_model="PCM",
+            solvent_model="PCM",
+            solvent_id="water",
             thermodynamic_cycle="isodesmic",
             charge=0,  # Protonated form charge (inherited from parent)
             multiplicity=1,  # Protonated form multiplicity (inherited from parent)
@@ -561,7 +562,8 @@ class TestGaussianpKaJobSettings:
         )
         assert settings.proton_index == 10
         assert settings.reference == "acetic_acid"
-        assert settings.solvation_model == "PCM"
+        assert settings.solvent_model == "PCM"
+        assert settings.solvent_id == "water"
         assert settings.thermodynamic_cycle == "isodesmic"
         assert settings.charge == 0
         assert settings.multiplicity == 1
@@ -571,6 +573,68 @@ class TestGaussianpKaJobSettings:
         assert settings.conjugate_base_multiplicity == 1
         assert settings.functional == "B3LYP"
         assert settings.basis == "6-311+G(d,p)"
+
+    def test_gas_phase_optimization_settings(self, single_molecule_xyz_file):
+        """Test that gas phase optimization has no solvent."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+            solvent_model="SMD",
+            solvent_id="water",
+        )
+
+        prot_settings, conj_base_settings = (
+            settings._create_gas_phase_job_settings(mol)
+        )
+
+        # Gas phase should have no solvent
+        assert prot_settings.solvent_model is None
+        assert prot_settings.solvent_id is None
+        assert conj_base_settings.solvent_model is None
+        assert conj_base_settings.solvent_id is None
+        # Should use same functional/basis
+        assert prot_settings.functional == "B3LYP"
+        assert prot_settings.basis == "6-31G*"
+
+    def test_solution_phase_sp_settings(self, single_molecule_xyz_file):
+        """Test that solution phase SP uses same level of theory with solvent."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.charge = 0
+        mol.multiplicity = 1
+
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=proton_index,
+            functional="B3LYP",
+            basis="6-31G*",
+            solvent_model="SMD",
+            solvent_id="water",
+        )
+
+        prot_sp_settings, conj_base_sp_settings = (
+            settings._create_solution_phase_sp_settings(mol)
+        )
+
+        # Solution phase should have solvent
+        assert prot_sp_settings.solvent_model == "SMD"
+        assert prot_sp_settings.solvent_id == "water"
+        assert conj_base_sp_settings.solvent_model == "SMD"
+        assert conj_base_sp_settings.solvent_id == "water"
+        # Should use SAME functional/basis as gas phase for error cancellation
+        assert prot_sp_settings.functional == "B3LYP"
+        assert prot_sp_settings.basis == "6-31G*"
+        assert conj_base_sp_settings.functional == "B3LYP"
+        assert conj_base_sp_settings.basis == "6-31G*"
 
     def test_protonated_charge_multiplicity_properties(self):
         """Test that protonated_charge/multiplicity are aliases for charge/multiplicity."""
@@ -584,9 +648,9 @@ class TestGaussianpKaJobSettings:
         assert settings.protonated_multiplicity == settings.multiplicity
 
         # Setting via property should update the underlying attribute
-        settings.charge = 5
+        settings.protonated_charge = 5
         assert settings.charge == 5
-        settings.multiplicity = 4
+        settings.protonated_multiplicity = 4
         assert settings.multiplicity == 4
 
     def test_create_conjugate_base_molecule(self, single_molecule_xyz_file):
@@ -672,7 +736,7 @@ class TestGaussianpKaJobSettings:
             settings._create_conjugate_base_molecule(mol)
 
     def test_create_job_settings(self, single_molecule_xyz_file):
-        """Test creating job settings for both forms."""
+        """Test creating gas phase job settings for both forms."""
         mol = Molecule.from_filepath(single_molecule_xyz_file)
         mol.charge = 0
         mol.multiplicity = 1
@@ -684,13 +748,13 @@ class TestGaussianpKaJobSettings:
             proton_index=proton_index,
             functional="B3LYP",
             basis="6-31G*",
-            solvation_model="SMD",
+            solvent_model="SMD",
             solvent_id="water",
         )
 
         prot_settings, conj_base_settings = settings._create_job_settings(mol)
 
-        # Check protonated settings
+        # Check protonated settings - GAS PHASE (no solvent)
         assert isinstance(prot_settings, GaussianJobSettings)
         assert prot_settings.charge == 0
         assert prot_settings.multiplicity == 1
@@ -698,8 +762,10 @@ class TestGaussianpKaJobSettings:
         assert prot_settings.basis == "6-31G*"
         assert prot_settings.jobtype == "opt"
         assert prot_settings.freq is True
+        assert prot_settings.solvent_model is None  # Gas phase
+        assert prot_settings.solvent_id is None
 
-        # Check conjugate base settings
+        # Check conjugate base settings - GAS PHASE (no solvent)
         assert isinstance(conj_base_settings, GaussianJobSettings)
         assert conj_base_settings.charge == -1
         assert conj_base_settings.multiplicity == 1
@@ -707,6 +773,8 @@ class TestGaussianpKaJobSettings:
         assert conj_base_settings.basis == "6-31G*"
         assert conj_base_settings.jobtype == "opt"
         assert conj_base_settings.freq is True
+        assert conj_base_settings.solvent_model is None  # Gas phase
+        assert conj_base_settings.solvent_id is None
 
     def test_create_molecules(self, single_molecule_xyz_file):
         """Test creating both protonated and conjugate base molecules."""
@@ -769,7 +837,7 @@ class TestGaussianpKaJobSettings:
     def test_conjugate_pair_job_settings_method(
         self, single_molecule_xyz_file
     ):
-        """Test the public conjugate_pair_job_settings method."""
+        """Test the public conjugate_pair_job_settings method returns gas phase settings."""
         mol = Molecule.from_filepath(single_molecule_xyz_file)
         mol.charge = 0
         mol.multiplicity = 1
@@ -781,6 +849,8 @@ class TestGaussianpKaJobSettings:
             proton_index=proton_index,
             functional="B3LYP",
             basis="6-31G*",
+            solvent_model="SMD",
+            solvent_id="water",
         )
 
         prot_settings, conj_base_settings = (
@@ -791,6 +861,9 @@ class TestGaussianpKaJobSettings:
         assert isinstance(conj_base_settings, GaussianJobSettings)
         assert prot_settings.charge == 0
         assert conj_base_settings.charge == -1
+        # Should be gas phase (no solvent for optimization)
+        assert prot_settings.solvent_model is None
+        assert conj_base_settings.solvent_model is None
 
 
 class TestGaussianpKaJob:

@@ -1951,26 +1951,30 @@ class GaussianpKaJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian pKa calculations.
 
-    This class extends GaussianJobSettings to support pKa calculations by
-    creating two optimization jobs: one for the protonated form (HA) and
-    one for the conjugate base (A-). The conjugate base is created
-    by removing a specified proton from the molecule, with automatic
-    adjustment of charge and multiplicity.
-
-    The protonated form uses the inherited charge and multiplicity from
-    the parent GaussianJobSettings class. The conjugate base charge defaults
-    to (charge - 1) and multiplicity defaults to the same as the protonated form.
+    This class extends GaussianJobSettings to support pKa calculations using
+    a proper thermodynamic cycle. It creates optimization jobs in gas phase
+    and single point jobs in solution phase at the same level of theory to
+    ensure proper error cancellation for solvation free energy calculations.
 
     The pKa calculation workflow:
-    1. Optimize the protonated form (HA) with charge q, multiplicity m
-    2. Remove the acidic proton to create conjugate base (A-)
-    3. Optimize the conjugate base with charge q-1, multiplicity m (or adjusted)
-    4. Calculate pKa from the free energy difference
+    1. Optimize HA in gas phase (opt + freq)
+    2. Optimize A- in gas phase (opt + freq)
+    3. Run SP on optimized HA in solution (same functional/basis as gas)
+    4. Run SP on optimized A- in solution (same functional/basis as gas)
+    5. Calculate pKa from thermodynamic cycle:
+       pKa = ΔG_aq / (2.303 * R * T)
+       where ΔG_aq = G(A-)_aq - G(HA)_aq + G(H+)_aq
+
+    Note: Using the same level of theory for both gas and solution phases
+    ensures proper cancellation of systematic errors in DFT calculations.
+    The solvation free energy (ΔG_solv) will be mathematically consistent
+    only when the same method is used throughout.
 
     Attributes:
         proton_index (int): 1-based index of the proton to remove for deprotonation.
         reference (str): Reference acid/base for pKa calculation (e.g., 'water').
-        solvation_model (str): Solvation model to use (e.g., 'SMD', 'PCM').
+        solvent_model (str): Solvation model for SP calculations (e.g., 'SMD', 'PCM').
+        solvent_id (str): Solvent ID for SP calculations (e.g., 'water').
         thermodynamic_cycle (str): Type of thermodynamic cycle ('direct', 'isodesmic').
         charge (int): Charge of the protonated form (inherited from parent).
         multiplicity (int): Multiplicity of the protonated form (inherited from parent).
@@ -1981,22 +1985,25 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         from chemsmart.io.molecules.structure import Molecule
         mol = Molecule.from_filepath("acetic_acid.xyz")
         settings = GaussianpKaJobSettings(
-            proton_index=10,  # Index of acidic H
+            proton_index=10,  # Index of acidic H (1-based)
             charge=0,
             multiplicity=1,
             functional="B3LYP",
             basis="6-311+G(d,p)",
-            solvation_model="SMD",
+            solvent_model="SMD",
             solvent_id="water"
         )
-        protonated_settings, conjugate_base_settings = settings.create_job_settings(mol)
+        # This will create:
+        # - Gas phase opt+freq jobs for HA and A-
+        # - Solution phase SP jobs for HA and A- at same level of theory
     """
 
     def __init__(
         self,
         proton_index=None,
         reference="water",
-        solvation_model="SMD",
+        solvent_model="SMD",
+        solvent_id="water",
         thermodynamic_cycle="direct",
         conjugate_base_charge=None,
         conjugate_base_multiplicity=None,
@@ -2015,7 +2022,10 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 calling create_conjugate_base_molecule().
             reference (str): Reference acid/base for pKa calculation.
                 Default is 'water'.
-            solvation_model (str): Solvation model to use. Default is 'SMD'.
+            solvent_model (str): Solvation model for solution phase SP.
+                Default is 'SMD'.
+            solvent_id (str): Solvent ID for solution phase SP.
+                Default is 'water'.
             thermodynamic_cycle (str): Type of thermodynamic cycle to use.
                 Options: 'direct', 'isodesmic'. Default is 'direct'.
             conjugate_base_charge (int, optional): Charge of the conjugate base.
@@ -2023,12 +2033,14 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             conjugate_base_multiplicity (int, optional): Multiplicity of the conjugate base.
                 If not specified, defaults to multiplicity.
             **kwargs: Additional keyword arguments passed to GaussianJobSettings,
-                including charge and multiplicity for the protonated form.
+                including charge and multiplicity for the protonated form,
+                and functional/basis for both gas and solution phases.
         """
         super().__init__(**kwargs)
         self.proton_index = proton_index
         self.reference = reference
-        self.solvation_model = solvation_model
+        self.solvent_model = solvent_model
+        self.solvent_id = solvent_id
         self.thermodynamic_cycle = thermodynamic_cycle
         self.conjugate_base_charge = conjugate_base_charge
         self.conjugate_base_multiplicity = conjugate_base_multiplicity
@@ -2064,8 +2076,12 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         return protonated_mol, conjugate_base_mol
 
     def conjugate_pair_job_settings(self, molecule):
-        """Create and return GaussianJobSettings for the conjugate base."""
-        return self._create_job_settings(molecule)
+        """Create and return GaussianJobSettings for gas phase optimization."""
+        return self._create_gas_phase_job_settings(molecule)
+
+    def conjugate_pair_sp_job_settings(self, molecule):
+        """Create and return GaussianJobSettings for solution phase SP."""
+        return self._create_solution_phase_sp_settings(molecule)
 
     def _create_conjugate_base_molecule(self, molecule):
         """
@@ -2163,13 +2179,20 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         return conjugate_base_mol
 
     def _create_job_settings(self, molecule):
-        """
-        Create optimization job settings for both protonated and conjugate base forms.
+        """Alias for _create_gas_phase_job_settings for backward compatibility."""
+        return self._create_gas_phase_job_settings(molecule)
 
-        Generates two GaussianJobSettings objects configured for optimization
-        calculations: one for the protonated form (HA) and one for the
-        conjugate base (A-). Both use the same level of theory but with
-        appropriate charge and multiplicity for each species.
+    def _create_gas_phase_job_settings(self, molecule):
+        """
+        Create GAS PHASE optimization job settings for both forms.
+
+        Generates two GaussianJobSettings objects configured for gas phase
+        optimization calculations (no solvent): one for the protonated form (HA)
+        and one for the conjugate base (A-). Both include frequency calculations
+        for thermochemistry.
+
+        Note: Gas phase optimization is essential for proper pKa calculations
+        using the direct thermodynamic cycle approach.
 
         Args:
             molecule (Molecule): The protonated molecule (HA) to use as the
@@ -2178,7 +2201,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         Returns:
             tuple: A tuple of (protonated_settings, conjugate_base_settings),
                 where each is a GaussianJobSettings object configured for
-                optimization with frequency calculations.
+                gas phase optimization with frequency calculations.
 
         Example:
             settings = GaussianpKaJobSettings(
@@ -2186,7 +2209,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 functional="B3LYP",
                 basis="6-311+G(d,p)"
             )
-            prot_settings, conj_base_settings = settings.create_job_settings(mol)
+            prot_settings, conj_base_settings = settings._create_gas_phase_job_settings(mol)
         """
         # Determine charge and multiplicity for protonated form
         # Use self.charge/multiplicity (inherited from parent), fall back to molecule
@@ -2204,7 +2227,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         else:
             prot_mult = 1
 
-        # Create settings for protonated form (HA)
+        # Create settings for protonated form (HA) - GAS PHASE (no solvent)
         protonated_settings = GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
@@ -2214,8 +2237,8 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             multiplicity=prot_mult,
             jobtype="opt",
             freq=True,  # Need frequencies for thermochemistry
-            solvent_model=self.solvation_model,
-            solvent_id=self.solvent_id,
+            solvent_model=None,  # GAS PHASE - no solvent
+            solvent_id=None,
             additional_route_parameters=self.additional_route_parameters,
             gen_genecp_file=self.gen_genecp_file,
             heavy_elements=self.heavy_elements,
@@ -2234,7 +2257,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         else:
             conj_base_mult = prot_mult
 
-        # Create settings for conjugate base (A-)
+        # Create settings for conjugate base (A-) - GAS PHASE (no solvent)
         conjugate_base_settings = GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
@@ -2244,8 +2267,8 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             multiplicity=conj_base_mult,
             jobtype="opt",
             freq=True,  # Need frequencies for thermochemistry
-            solvent_model=self.solvation_model,
-            solvent_id=self.solvent_id,
+            solvent_model=None,  # GAS PHASE - no solvent
+            solvent_id=None,
             additional_route_parameters=self.additional_route_parameters,
             gen_genecp_file=self.gen_genecp_file,
             heavy_elements=self.heavy_elements,
@@ -2291,3 +2314,107 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         conjugate_base_mol = self._create_conjugate_base_molecule(molecule)
 
         return protonated_mol, conjugate_base_mol
+
+    def _create_sp_job_settings(self, molecule):
+        """Alias for _create_solution_phase_sp_settings for backward compatibility."""
+        return self._create_solution_phase_sp_settings(molecule)
+
+    def _create_solution_phase_sp_settings(self, molecule):
+        """
+        Create SOLUTION PHASE single point job settings for both forms.
+
+        Generates two GaussianJobSettings objects configured for solution phase
+        single point calculations: one for the protonated form (HA) and one for
+        the conjugate base (A-).
+
+        IMPORTANT: Uses the SAME functional and basis as the gas phase optimization
+        to ensure proper error cancellation in the solvation free energy calculation.
+        Using different levels of theory for gas and solution phases would lead to
+        mathematically inconsistent ΔG_solv values.
+
+        Args:
+            molecule (Molecule): The protonated molecule (HA) to use as the
+                starting point for both calculations.
+
+        Returns:
+            tuple: A tuple of (protonated_sp_settings, conjugate_base_sp_settings),
+                where each is a GaussianJobSettings object configured for
+                solution phase single point calculations.
+
+        Example:
+            settings = GaussianpKaJobSettings(
+                proton_index=10,
+                functional="B3LYP",
+                basis="6-311+G(d,p)",
+                solvent_model="SMD",
+                solvent_id="water"
+            )
+            prot_sp_settings, conj_base_sp_settings = settings._create_solution_phase_sp_settings(mol)
+        """
+        # Determine charge and multiplicity for protonated form
+        if self.charge is not None:
+            prot_charge = self.charge
+        elif molecule.charge is not None:
+            prot_charge = molecule.charge
+        else:
+            prot_charge = 0
+
+        if self.multiplicity is not None:
+            prot_mult = self.multiplicity
+        elif molecule.multiplicity is not None:
+            prot_mult = molecule.multiplicity
+        else:
+            prot_mult = 1
+
+        # Create settings for protonated form (HA) SP - SOLUTION PHASE
+        # Uses SAME functional/basis as gas phase for error cancellation
+        protonated_sp_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,  # Same as gas phase
+            basis=self.basis,  # Same as gas phase
+            semiempirical=self.semiempirical,
+            charge=prot_charge,
+            multiplicity=prot_mult,
+            jobtype="sp",
+            freq=False,
+            solvent_model=self.solvent_model,  # Solution phase
+            solvent_id=self.solvent_id,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        # Determine charge and multiplicity for conjugate base
+        if self.conjugate_base_charge is not None:
+            conj_base_charge = self.conjugate_base_charge
+        else:
+            conj_base_charge = prot_charge - 1
+
+        if self.conjugate_base_multiplicity is not None:
+            conj_base_mult = self.conjugate_base_multiplicity
+        else:
+            conj_base_mult = prot_mult
+
+        # Create settings for conjugate base (A-) SP - SOLUTION PHASE
+        # Uses SAME functional/basis as gas phase for error cancellation
+        conjugate_base_sp_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,  # Same as gas phase
+            basis=self.basis,  # Same as gas phase
+            semiempirical=self.semiempirical,
+            charge=conj_base_charge,
+            multiplicity=conj_base_mult,
+            jobtype="sp",
+            freq=False,
+            solvent_model=self.solvent_model,  # Solution phase
+            solvent_id=self.solvent_id,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        return protonated_sp_settings, conjugate_base_sp_settings

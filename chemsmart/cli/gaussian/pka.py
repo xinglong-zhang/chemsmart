@@ -2,8 +2,12 @@
 CLI for Gaussian pKa calculations.
 
 This module provides the CLI interface for running pKa calculations
-using Gaussian. It creates two sequential optimization jobs: one for
-the protonated form (HA) and one for the conjugate base (A-).
+using Gaussian with a proper thermodynamic cycle:
+1. Gas phase optimization + frequency for both HA and A-
+2. Solution phase single point for both HA and A- at the same level of theory
+
+Using the same level of theory ensures proper error cancellation for
+solvation free energy calculations.
 """
 
 import functools
@@ -12,7 +16,6 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
-    click_gaussian_solvent_options,
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
@@ -42,8 +45,8 @@ def click_pka_options(f):
         "-t",
         "--thermodynamic-cycle",
         type=click.Choice(["direct", "isodesmic"]),
-        default="direct",
-        help="Thermodynamic cycle type (default: direct).",
+        default="isodesmic",
+        help="Thermodynamic cycle type (default: isodesmic).",
     )
     @click.option(
         "-cc",
@@ -59,6 +62,20 @@ def click_pka_options(f):
         default=None,
         help="Multiplicity of the conjugate base (A-). Defaults to multiplicity.",
     )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default="SMD",
+        help="Solvation model for solution phase SP (default: SMD).",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default="water",
+        help="Solvent ID for solution phase SP (default: water).",
+    )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
@@ -68,7 +85,6 @@ def click_pka_options(f):
 
 @gaussian.command("pka", cls=MyCommand)
 @click_job_options
-@click_gaussian_solvent_options
 @click_pka_options
 @click.pass_context
 def pka(
@@ -78,18 +94,20 @@ def pka(
     thermodynamic_cycle,
     conjugate_base_charge,
     conjugate_base_multiplicity,
-    remove_solvent,
     solvent_model,
     solvent_id,
-    solvent_options,
     skip_completed,
     **kwargs,
 ):
     """
     CLI subcommand for running Gaussian pKa calculations.
 
-    Creates two sequential optimization jobs with frequency calculations:
-    one for the protonated form (HA) and one for the conjugate base (A-).
+    Performs pKa calculations using a proper thermodynamic cycle:
+    1. Gas phase optimization + frequency for HA and A-
+    2. Solution phase single point for HA and A- at the SAME level of theory
+
+    Using the same level of theory ensures proper error cancellation for
+    solvation free energy calculations.
 
     The proton to be removed is specified by --proton-index (1-based).
     The protonated form uses charge and multiplicity from -c and -m options.
@@ -107,7 +125,7 @@ def pka(
     # Get settings from project
     project_settings = ctx.obj["project_settings"]
 
-    # Get base opt settings from project (pKa uses opt+freq)
+    # Get base opt settings from project (pKa uses opt+freq in gas phase)
     opt_settings = project_settings.opt_settings()
 
     # Job settings from CLI keywords
@@ -124,41 +142,31 @@ def pka(
     # Get label for the job
     label = ctx.obj["label"]
 
-    # Create pKa settings - charge and multiplicity are inherited from opt_settings
+    # Create pKa settings
+    # - Gas phase opt uses functional/basis from opt_settings
+    # - Solution phase SP uses SAME functional/basis for error cancellation
     pka_settings = GaussianpKaJobSettings(
         proton_index=proton_index,
         reference=reference,
         thermodynamic_cycle=thermodynamic_cycle,
         conjugate_base_charge=conjugate_base_charge,
         conjugate_base_multiplicity=conjugate_base_multiplicity,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
         # Inherit charge and multiplicity from opt_settings (protonated form)
         charge=opt_settings.charge,
         multiplicity=opt_settings.multiplicity,
-        # Inherit other settings from opt_settings
+        # Inherit level of theory from opt_settings (used for BOTH gas and solution)
         functional=opt_settings.functional,
         basis=opt_settings.basis,
         ab_initio=opt_settings.ab_initio,
         semiempirical=opt_settings.semiempirical,
-        solvent_id=opt_settings.solvent_id,
         additional_route_parameters=opt_settings.additional_route_parameters,
         gen_genecp_file=opt_settings.gen_genecp_file,
         heavy_elements=opt_settings.heavy_elements,
         heavy_elements_basis=opt_settings.heavy_elements_basis,
         light_elements_basis=opt_settings.light_elements_basis,
     )
-
-    # Apply CLI-supplied solvent options
-    if remove_solvent:
-        pka_settings.solvation_model = None
-        pka_settings.solvent_id = None
-    else:
-        if solvent_model is not None:
-            pka_settings.solvation_model = solvent_model
-        if solvent_id is not None:
-            pka_settings.solvent_id = solvent_id
-
-    if solvent_options is not None:
-        pka_settings.additional_solvent_options = solvent_options
 
     # Validate charge and multiplicity for protonated form
     if pka_settings.charge is None:
@@ -173,7 +181,7 @@ def pka(
     logger.info(f"pKa job settings: {pka_settings.__dict__}")
     logger.info(f"Proton index to remove: {proton_index}")
     logger.info(
-        f"Protonated form: charge={pka_settings.charge}, "
+        f"Protonated form (HA): charge={pka_settings.charge}, "
         f"mult={pka_settings.multiplicity}"
     )
 
@@ -188,7 +196,14 @@ def pka(
         if conjugate_base_multiplicity is not None
         else pka_settings.multiplicity
     )
-    logger.info(f"Conjugate base: charge={cb_charge}, mult={cb_mult}")
+    logger.info(f"Conjugate base (A-): charge={cb_charge}, mult={cb_mult}")
+    logger.info(
+        f"Gas phase optimization: {pka_settings.functional}/{pka_settings.basis}"
+    )
+    logger.info(
+        f"Solution phase SP: {pka_settings.functional}/{pka_settings.basis} "
+        f"with {solvent_model}({solvent_id})"
+    )
 
     # Create and return pKa job
     return GaussianpKaJob(

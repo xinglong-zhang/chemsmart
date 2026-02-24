@@ -2,9 +2,12 @@
 Gaussian pKa calculation job implementation.
 
 This module provides the GaussianpKaJob class for performing pKa
-calculations using Gaussian. It creates and runs two sequential
-optimization jobs: one for the protonated form (HA) and one for
-the conjugate base (A-).
+calculations using Gaussian with a proper thermodynamic cycle:
+1. Gas phase optimization + frequency for both HA and A-
+2. Solution phase single point for both HA and A- at the same level of theory
+
+Using the same level of theory ensures proper error cancellation for
+solvation free energy calculations.
 """
 
 import logging
@@ -12,25 +15,30 @@ import logging
 from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
 logger = logging.getLogger(__name__)
 
 
 class GaussianpKaJob(GaussianJob):
     """
-    Gaussian job class for pKa calculations.
+    Gaussian job class for pKa calculations using direct thermodynamic cycle.
 
-    Performs pKa calculations by creating and running two sequential
-    optimization jobs: one for the protonated form (HA) and one for
-    the conjugate base (A-). Both jobs include frequency calculations
-    for thermochemistry.
+    Performs pKa calculations using the following workflow:
+    1. Optimize HA in gas phase (opt + freq) - get G(HA)_gas
+    2. Optimize A- in gas phase (opt + freq) - get G(A-)_gas
+    3. Run SP on optimized HA in solution - get E(HA)_aq
+    4. Run SP on optimized A- in solution - get E(A-)_aq
+    5. Calculate solvation free energies and pKa
 
-    The pKa calculation workflow:
-    1. Create protonated molecule (HA) with charge q
-    2. Create conjugate base molecule (A-) with charge q-1
-    3. Run optimization + frequency on HA
-    4. Run optimization + frequency on A-
-    5. Calculate pKa from free energy difference (post-processing)
+    The thermodynamic cycle:
+        HA(g) → A-(g) + H+(g)     [gas phase]
+         ↓        ↓       ↓       [solvation]
+        HA(aq) → A-(aq) + H+(aq)  [aqueous phase]
+
+    Important: Uses the SAME level of theory (functional/basis) for both
+    gas and solution phases to ensure proper error cancellation in the
+    solvation free energy calculations.
 
     Attributes:
         TYPE (str): Job type identifier ('g16pka').
@@ -53,7 +61,7 @@ class GaussianpKaJob(GaussianJob):
             proton_index=10,
             functional="B3LYP",
             basis="6-311+G(d,p)",
-            solvation_model="SMD",
+            solvent_model="SMD",
             solvent_id="water"
         )
 
@@ -64,11 +72,12 @@ class GaussianpKaJob(GaussianJob):
             jobrunner=jobrunner
         )
 
-        # Run both jobs sequentially
+        # Run all jobs sequentially (gas opt + solution sp)
         job.run()
 
-        # Or access individual jobs
-        protonated_job, conjugate_base_job = job.pka_jobs
+        # Access individual jobs
+        protonated_opt_job, conjugate_base_opt_job = job.opt_jobs  # Gas phase
+        protonated_sp_job, conjugate_base_sp_job = job.sp_jobs     # Solution phase
     """
 
     TYPE = "g16pka"
@@ -119,7 +128,8 @@ class GaussianpKaJob(GaussianJob):
         )
 
         # Cache for the created jobs
-        self._pka_jobs = None
+        self._opt_jobs = None
+        self._sp_jobs = None
 
     @classmethod
     def settings_class(cls):
@@ -158,42 +168,91 @@ class GaussianpKaJob(GaussianJob):
         return conjugate_base_mol
 
     @property
-    def pka_jobs(self):
+    def opt_jobs(self):
         """
-        Get both pKa jobs (protonated and conjugate base).
+        Get both gas phase optimization jobs (protonated and conjugate base).
 
         Returns:
-            tuple: A tuple of (protonated_job, conjugate_base_job),
+            tuple: A tuple of (protonated_opt_job, conjugate_base_opt_job),
                 where each is a GaussianOptJob configured for
-                optimization with frequency calculations.
+                gas phase optimization with frequency calculations.
         """
-        if self._pka_jobs is None:
-            self._pka_jobs = self._prepare_pka_jobs()
-        return self._pka_jobs
+        if self._opt_jobs is None:
+            self._opt_jobs = self._prepare_opt_jobs()
+        return self._opt_jobs
+
+    @property
+    def pka_jobs(self):
+        """Alias for opt_jobs for backward compatibility."""
+        return self.opt_jobs
 
     @property
     def protonated_job(self):
         """
-        Get the optimization job for the protonated form (HA).
+        Get the gas phase optimization job for the protonated form (HA).
 
         Returns:
-            GaussianOptJob: Optimization job for the protonated molecule.
+            GaussianOptJob: Gas phase optimization job for the protonated molecule.
         """
-        return self.pka_jobs[0]
+        return self.opt_jobs[0]
+
+    @property
+    def protonated_opt_job(self):
+        """Alias for protonated_job."""
+        return self.protonated_job
 
     @property
     def conjugate_base_job(self):
         """
-        Get the optimization job for the conjugate base (A-).
+        Get the gas phase optimization job for the conjugate base (A-).
 
         Returns:
-            GaussianOptJob: Optimization job for the conjugate base molecule.
+            GaussianOptJob: Gas phase optimization job for the conjugate base molecule.
         """
-        return self.pka_jobs[1]
+        return self.opt_jobs[1]
 
-    def _prepare_pka_jobs(self):
+    @property
+    def conjugate_base_opt_job(self):
+        """Alias for conjugate_base_job."""
+        return self.conjugate_base_job
+
+    @property
+    def sp_jobs(self):
         """
-        Create optimization jobs for both protonated and conjugate base forms.
+        Get both solution phase SP jobs (protonated and conjugate base).
+
+        Returns:
+            tuple: A tuple of (protonated_sp_job, conjugate_base_sp_job),
+                where each is a GaussianSinglePointJob configured for
+                solution phase single point calculations.
+        """
+        if self._sp_jobs is None:
+            self._sp_jobs = self._prepare_sp_jobs()
+        return self._sp_jobs
+
+    @property
+    def protonated_sp_job(self):
+        """
+        Get the solution phase SP job for the protonated form (HA).
+
+        Returns:
+            GaussianSinglePointJob: Solution phase SP job for the protonated molecule.
+        """
+        return self.sp_jobs[0]
+
+    @property
+    def conjugate_base_sp_job(self):
+        """
+        Get the solution phase SP job for the conjugate base (A-).
+
+        Returns:
+            GaussianSinglePointJob: Solution phase SP job for the conjugate base molecule.
+        """
+        return self.sp_jobs[1]
+
+    def _prepare_opt_jobs(self):
+        """
+        Create GAS PHASE optimization jobs for both protonated and conjugate base forms.
 
         Generates two GaussianOptJob objects, one for the protonated form
         and one for the conjugate base, both configured with appropriate
@@ -240,48 +299,156 @@ class GaussianpKaJob(GaussianJob):
 
         return protonated_job, conjugate_base_job
 
-    def _run_pka_jobs(self):
+    def _prepare_sp_jobs(self):
         """
-        Execute both pKa jobs (protonated and conjugate base) sequentially.
+        Create SP jobs for both protonated and conjugate base forms.
+
+        SP jobs use the optimized geometries from the optimization jobs.
+        This method should only be called after optimization jobs are complete.
+
+        Returns:
+            tuple: A tuple of (protonated_sp_job, conjugate_base_sp_job).
+        """
+        # Get SP job settings
+        protonated_sp_settings, conjugate_base_sp_settings = (
+            self.settings._create_sp_job_settings(self.molecule)
+        )
+
+        # Create job labels
+        protonated_sp_label = f"{self.label}_HA_sp"
+        conjugate_base_sp_label = f"{self.label}_A_sp"
+
+        # Get optimized molecules from completed opt jobs
+        # If opt jobs are complete, use their optimized structures
+        protonated_opt_output = self.protonated_job._output()
+        if (
+            protonated_opt_output is not None
+            and protonated_opt_output.is_complete
+        ):
+            protonated_mol = protonated_opt_output.molecule
+        else:
+            # Fall back to initial molecule if opt not complete
+            protonated_mol = self.protonated_molecule
+
+        conjugate_base_opt_output = self.conjugate_base_job._output()
+        if (
+            conjugate_base_opt_output is not None
+            and conjugate_base_opt_output.is_complete
+        ):
+            conjugate_base_mol = conjugate_base_opt_output.molecule
+        else:
+            # Fall back to initial molecule if opt not complete
+            conjugate_base_mol = self.conjugate_base_molecule
+
+        # Create protonated SP job (HA)
+        protonated_sp_job = GaussianSinglePointJob(
+            molecule=protonated_mol,
+            settings=protonated_sp_settings,
+            label=protonated_sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+        # Create conjugate base SP job (A-)
+        conjugate_base_sp_job = GaussianSinglePointJob(
+            molecule=conjugate_base_mol,
+            settings=conjugate_base_sp_settings,
+            label=conjugate_base_sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+        logger.debug(
+            f"SP jobs created: {protonated_sp_job}, {conjugate_base_sp_job}"
+        )
+
+        return protonated_sp_job, conjugate_base_sp_job
+
+    def _run_opt_jobs(self):
+        """
+        Execute both GAS PHASE optimization jobs (protonated and conjugate base) sequentially.
 
         Runs the optimization + frequency jobs for both the protonated
         form (HA) and the conjugate base (A-) in sequence.
         """
-        for job in self.pka_jobs:
-            logger.info(f"Running pKa job: {job}")
+        for job in self.opt_jobs:
+            logger.info(f"Running gas phase optimization job: {job}")
+            job.run()
+
+    def _run_pka_jobs(self):
+        """Alias for _run_opt_jobs for backward compatibility."""
+        self._run_opt_jobs()
+
+    def _run_sp_jobs(self):
+        """
+        Execute both SOLUTION PHASE SP jobs (protonated and conjugate base) sequentially.
+
+        Runs the SP jobs for both the protonated form (HA) and the
+        conjugate base (A-) in sequence. Should only be called after
+        optimization jobs are complete.
+        """
+        # Clear cached SP jobs to get fresh ones with optimized geometries
+        self._sp_jobs = None
+
+        for job in self.sp_jobs:
+            logger.info(f"Running solution phase SP job: {job}")
             job.run()
 
     def _run(self):
         """
         Execute the pKa calculation.
 
-        Runs both optimization jobs sequentially.
+        Runs gas phase optimization jobs sequentially, then solution phase SP jobs.
         """
-        self._run_pka_jobs()
+        # Run gas phase optimization jobs first
+        self._run_opt_jobs()
+
+        # Run solution phase SP jobs
+        self._run_sp_jobs()
 
     def is_complete(self):
         """
-        Check if both pKa jobs are complete.
+        Check if all pKa jobs are complete.
 
         Returns:
-            bool: True if both protonated and conjugate base jobs
+            bool: True if all optimization jobs and SP jobs
                 have completed successfully.
         """
-        return self._pka_jobs_are_complete()
+        # Check optimization jobs
+        if not self._opt_jobs_are_complete():
+            return False
 
-    def _pka_jobs_are_complete(self):
+        # Check SP jobs
+        return self._sp_jobs_are_complete()
+
+    def _opt_jobs_are_complete(self):
         """
-        Verify completion status of both pKa jobs.
+        Verify completion status of both gas phase optimization jobs.
 
         Returns:
-            bool: True if all pKa jobs are complete.
+            bool: True if all optimization jobs are complete.
         """
-        return all(job.is_complete() for job in self.pka_jobs)
+        return all(job.is_complete() for job in self.opt_jobs)
+
+    def _pka_jobs_are_complete(self):
+        """Alias for _opt_jobs_are_complete for backward compatibility."""
+        return self._opt_jobs_are_complete()
+
+    def _sp_jobs_are_complete(self):
+        """
+        Verify completion status of both solution phase SP jobs.
+
+        Returns:
+            bool: True if all SP jobs are complete.
+        """
+        if self.sp_jobs is None:
+            return False
+        return all(job.is_complete() for job in self.sp_jobs)
 
     @property
     def protonated_output(self):
         """
-        Get the output of the protonated job.
+        Get the output of the protonated gas phase optimization job.
 
         Returns:
             Gaussian16Output or None: Parsed output for the protonated job.
@@ -291,9 +458,29 @@ class GaussianpKaJob(GaussianJob):
     @property
     def conjugate_base_output(self):
         """
-        Get the output of the conjugate base job.
+        Get the output of the conjugate base gas phase optimization job.
 
         Returns:
             Gaussian16Output or None: Parsed output for the conjugate base job.
         """
         return self.conjugate_base_job._output()
+
+    @property
+    def protonated_sp_output(self):
+        """
+        Get the output of the protonated solution phase SP job.
+
+        Returns:
+            Gaussian16Output or None: Parsed output for the protonated SP job.
+        """
+        return self.protonated_sp_job._output()
+
+    @property
+    def conjugate_base_sp_output(self):
+        """
+        Get the output of the conjugate base solution phase SP job.
+
+        Returns:
+            Gaussian16Output or None: Parsed output for the conjugate base SP job.
+        """
+        return self.conjugate_base_sp_job._output()
