@@ -2360,6 +2360,29 @@ class Gaussian16pKaOutput(Gaussian16Output):
             )
         return energy_conversion("j/mol", self.energy_units, gibbs_j_mol)
 
+    @property
+    def thermochemical_properties(self):
+        """
+        Compute and return all thermochemical properties.
+
+        Returns:
+            dict: Dictionary containing thermochemical properties:
+                - electronic_energy: Electronic energy in specified units
+                - zero_point_energy: Zero-point energy in specified units
+                - enthalpy: Enthalpy in specified units
+                - qh_enthalpy: Quasi-harmonic enthalpy in specified units
+                - gibbs_free_energy: Gibbs free energy in specified units
+                - qh_gibbs_free_energy: Quasi-harmonic Gibbs free energy in specified units
+        """
+        return {
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
     def compute_thermochemistry(self):
         """
         Compute all thermochemistry properties.
@@ -2439,6 +2462,131 @@ class Gaussian16pKaOutput(Gaussian16Output):
     # =========================================================================
 
     @classmethod
+    def compute_pka_thermochemistry(
+        cls,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """
+        Compute thermochemistry for pKa species (HA, A-, HB, B-).
+
+        This helper method extracts thermochemical properties from gas-phase
+        frequency calculation files for all species involved in pKa calculations.
+
+        Args:
+            ha_file (str, optional): Path to HA (protonated acid) output file.
+            a_file (str, optional): Path to A- (conjugate base) output file.
+            hb_file (str, optional): Path to HB (reference acid) output file.
+            b_file (str, optional): Path to B- (reference conjugate base) output file.
+            temperature (float): Temperature in Kelvin. Default 298.15 K.
+            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+            pressure (float): Pressure in atm. Default 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
+            cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
+            energy_units (str): Energy units for output. Default 'hartree'.
+
+        Returns:
+            dict: Dictionary containing thermochemistry for each species and settings:
+                - 'settings': Dict of calculation settings
+                - 'HA': Dict with E, qh_G, ZPE, H, qh_H, G, name for protonated acid
+                - 'A': Dict with same keys for conjugate base
+                - 'HB': Dict for reference acid (if provided)
+                - 'B': Dict for reference conjugate base (if provided)
+        """
+        results = {
+            "settings": {
+                "temperature": temperature,
+                "concentration": concentration,
+                "pressure": pressure,
+                "cutoff_entropy_grimme": cutoff_entropy_grimme,
+                "cutoff_enthalpy": cutoff_enthalpy,
+                "energy_units": energy_units,
+            }
+        }
+
+        common_kwargs = {
+            "temperature": temperature,
+            "concentration": concentration,
+            "pressure": pressure,
+            "cutoff_entropy_grimme": cutoff_entropy_grimme,
+            "cutoff_enthalpy": cutoff_enthalpy,
+            "energy_units": energy_units,
+        }
+
+        def get_species_thermo(file_path, name):
+            """Extract thermochemistry for a species."""
+            if file_path is None:
+                return None
+            output = cls(filename=file_path, **common_kwargs)
+            return {
+                "name": name,
+                "E": output.electronic_energy_in_units,
+                "qh_G": output.qh_gibbs_free_energy,
+                "ZPE": output.zero_point_energy_in_units,
+                "H": output.enthalpy_in_units,
+                "qh_H": output.qh_enthalpy_in_units,
+                "G": output.gibbs_free_energy_in_units,
+            }
+
+        if ha_file is not None:
+            results["HA"] = get_species_thermo(ha_file, "HA")
+        if a_file is not None:
+            results["A"] = get_species_thermo(a_file, "A-")
+        if hb_file is not None:
+            results["HB"] = get_species_thermo(hb_file, "HB")
+        if b_file is not None:
+            results["B"] = get_species_thermo(b_file, "B-")
+
+        return results
+
+    @classmethod
+    def from_pka_settings(
+        cls,
+        settings,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+    ):
+        """
+        Create Gaussian16pKaOutput objects from GaussianpKaJobSettings.
+
+        Factory method that creates output objects for pKa species using
+        settings from a GaussianpKaJobSettings object.
+
+        Args:
+            settings: GaussianpKaJobSettings object containing thermochemistry
+                parameters (temperature, concentration, cutoffs, etc.).
+            ha_file (str, optional): Path to HA (protonated acid) output file.
+            a_file (str, optional): Path to A- (conjugate base) output file.
+            hb_file (str, optional): Path to HB (reference acid) output file.
+            b_file (str, optional): Path to B- (reference conjugate base) output file.
+
+        Returns:
+            dict: Dictionary with Gaussian16pKaOutput objects for each species.
+        """
+        return cls.for_pka_species(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=settings.temperature,
+            concentration=settings.concentration,
+            pressure=settings.pressure,
+            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=settings.cutoff_enthalpy,
+            energy_units=settings.energy_units,
+        )
+
+    @classmethod
     def for_pka_species(
         cls,
         ha_file=None,
@@ -2508,287 +2656,69 @@ class Gaussian16pKaOutput(Gaussian16Output):
         return outputs
 
     @classmethod
-    def compute_pka_thermochemistry(
+    def compute_pka(
         cls,
-        ha_file=None,
-        a_file=None,
-        hb_file=None,
-        b_file=None,
-        temperature=298.15,
-        concentration=1.0,
-        pressure=1.0,
-        cutoff_entropy_grimme=100.0,
-        cutoff_enthalpy=100.0,
-        energy_units="hartree",
-    ):
-        """
-        Compute thermochemistry for all pKa species from output files.
-
-        Extracts electronic energies (E) and quasi-harmonic Gibbs free energies
-        (qh-G(T)) from Gaussian optimization output files for pKa calculations.
-
-        Args:
-            ha_file (str, optional): Path to HA (protonated acid) output file.
-            a_file (str, optional): Path to A- (conjugate base) output file.
-            hb_file (str, optional): Path to HB (reference acid) output file.
-            b_file (str, optional): Path to B- (reference conjugate base) output file.
-            temperature (float): Temperature in Kelvin. Default 298.15 K.
-            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
-            pressure (float): Pressure in atm. Default 1.0 atm.
-            cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
-            cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
-            energy_units (str): Energy units for output. Default 'hartree'.
-
-        Returns:
-            dict: Dictionary with thermochemistry data:
-                - 'settings': Thermochemistry settings used
-                - 'HA': Data dict for protonated acid (if ha_file provided)
-                - 'A': Data dict for conjugate base (if a_file provided)
-                - 'HB': Data dict for reference acid (if hb_file provided)
-                - 'B': Data dict for reference conjugate base (if b_file provided)
-
-                Each species dict contains:
-                - 'name': Species name
-                - 'file': Path to output file
-                - 'E': Electronic energy in specified units
-                - 'qh_G': Quasi-harmonic Gibbs free energy
-                - 'ZPE': Zero-point energy
-                - 'H': Enthalpy
-                - 'qh_H': Quasi-harmonic enthalpy
-                - 'G': Gibbs free energy
-
-        Example:
-            results = Gaussian16pKaOutput.compute_pka_thermochemistry(
-                ha_file="acid_opt.log",
-                a_file="base_opt.log",
-                hb_file="ref_acid_opt.log",
-                b_file="ref_base_opt.log",
-                temperature=298.15
-            )
-            print(f"E(HA) = {results['HA']['E']}")
-            print(f"qh-G(A-) = {results['A']['qh_G']}")
-        """
-        outputs = cls.for_pka_species(
-            ha_file=ha_file,
-            a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
-            temperature=temperature,
-            concentration=concentration,
-            pressure=pressure,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-        )
-
-        results = {
-            "settings": {
-                "temperature": temperature,
-                "concentration": concentration,
-                "pressure": pressure,
-                "cutoff_entropy_grimme": cutoff_entropy_grimme,
-                "cutoff_enthalpy": cutoff_enthalpy,
-                "energy_units": energy_units,
-            }
-        }
-
-        species_names = {"HA": "HA", "A": "A-", "HB": "HB", "B": "B-"}
-
-        for key, output in outputs.items():
-            results[key] = {
-                "name": species_names[key],
-                "file": output.filename,
-                "E": output.electronic_energy_in_units,
-                "qh_G": output.qh_gibbs_free_energy,
-                "ZPE": output.zero_point_energy_in_units,
-                "H": output.enthalpy_in_units,
-                "qh_H": output.qh_enthalpy_in_units,
-                "G": output.gibbs_free_energy_in_units,
-            }
-
-        return results
-
-    @classmethod
-    def print_pka_summary(
-        cls,
-        ha_file=None,
-        a_file=None,
-        hb_file=None,
-        b_file=None,
-        temperature=298.15,
-        concentration=1.0,
-        pressure=1.0,
-        cutoff_entropy_grimme=100.0,
-        cutoff_enthalpy=100.0,
-        energy_units="hartree",
-    ):
-        """
-        Print a formatted summary of pKa thermochemistry results.
-
-        Args:
-            ha_file (str, optional): Path to HA (protonated acid) output file.
-            a_file (str, optional): Path to A- (conjugate base) output file.
-            hb_file (str, optional): Path to HB (reference acid) output file.
-            b_file (str, optional): Path to B- (reference conjugate base) output file.
-            temperature (float): Temperature in Kelvin. Default 298.15 K.
-            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
-            pressure (float): Pressure in atm. Default 1.0 atm.
-            cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
-            cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
-            energy_units (str): Energy units for output. Default 'hartree'.
-
-        Example:
-            Gaussian16pKaOutput.print_pka_summary(
-                ha_file="acid_opt.log",
-                a_file="base_opt.log",
-                temperature=298.15
-            )
-        """
-        results = cls.compute_pka_thermochemistry(
-            ha_file=ha_file,
-            a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
-            temperature=temperature,
-            concentration=concentration,
-            pressure=pressure,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-        )
-        settings = results["settings"]
-
-        print("=" * 70)
-        print("pKa Thermochemistry Summary")
-        print("=" * 70)
-        print(f"Temperature: {settings['temperature']} K")
-        print(f"Concentration: {settings['concentration']} mol/L")
-        print(f"Pressure: {settings['pressure']} atm")
-        print(
-            f"Entropy cutoff (Grimme): {settings['cutoff_entropy_grimme']} cm^-1"
-        )
-        print(
-            f"Enthalpy cutoff (Head-Gordon): {settings['cutoff_enthalpy']} cm^-1"
-        )
-        print(f"Energy units: {settings['energy_units']}")
-        print("-" * 70)
-
-        header = f"{'Species':<8} {'E':<20} {'qh-G(T)':<20}"
-        print(header)
-        print("-" * 70)
-
-        for key in ["HA", "A", "HB", "B"]:
-            if key in results:
-                data = results[key]
-                E_str = f"{data['E']:.10f}" if data["E"] is not None else "N/A"
-                G_str = (
-                    f"{data['qh_G']:.10f}"
-                    if data["qh_G"] is not None
-                    else "N/A"
-                )
-                print(f"{data['name']:<8} {E_str:<20} {G_str:<20}")
-
-        print("=" * 70)
-
-    @classmethod
-    def from_pka_settings(
-        cls, settings, ha_file=None, a_file=None, hb_file=None, b_file=None
-    ):
-        """
-        Create pKa outputs from GaussianpKaJobSettings.
-
-        Args:
-            settings (GaussianpKaJobSettings): pKa job settings.
-            ha_file (str, optional): Path to HA output file.
-            a_file (str, optional): Path to A- output file.
-            hb_file (str, optional): Path to HB output file.
-            b_file (str, optional): Path to B- output file.
-
-        Returns:
-            dict: Dictionary with Gaussian16pKaOutput objects for each species.
-        """
-        return cls.for_pka_species(
-            ha_file=ha_file,
-            a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
-            temperature=settings.temperature,
-            concentration=settings.concentration,
-            pressure=settings.pressure,
-            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
-            cutoff_enthalpy=settings.cutoff_enthalpy,
-            energy_units=settings.energy_units,
-        )
-
-    # =========================================================================
-    # pKa Calculation Methods
-    # =========================================================================
-
-    @classmethod
-    def _get_gas_constant(cls, energy_units):
-        """
-        Get gas constant R in specified energy units per Kelvin.
-
-        Uses R from chemsmart.utils.constants (in J/(mol·K)) and converts
-        to the specified energy units.
-
-        Args:
-            energy_units (str): Energy units ('hartree', 'kcal/mol', 'kJ/mol', 'eV').
-
-        Returns:
-            float: Gas constant R in specified units per Kelvin.
-        """
-        from chemsmart.utils.constants import R, energy_conversion
-
-        # R is in J/(mol·K), convert to specified energy units per K
-        # energy_conversion converts energy values, so we convert 1 J/mol to target units
-        # and multiply by R (which is in J/(mol·K))
-        R_in_units = energy_conversion("j/mol", energy_units, R)
-        return R_in_units
-
-    @classmethod
-    def compute_pka_proton_exchange(
-        cls,
-        ha_file,
-        a_file,
-        hb_file,
-        b_file,
+        ha_gas_file,
+        a_gas_file,
+        hb_gas_file,
+        b_gas_file,
+        ha_solv_file,
+        a_solv_file,
+        hb_solv_file,
+        b_solv_file,
         pka_reference,
         temperature=298.15,
         concentration=1.0,
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
-        energy_units="hartree",
     ):
         """
-        Compute pKa using the proton exchange thermodynamic cycle.
+        Compute pKa using the Dual-level Proton Exchange scheme.
 
-        The proton exchange scheme calculates pKa relative to a reference acid:
+        This is the default and recommended method for pKa calculations.
+        It implements a dual-level approach using the proton exchange
+        (isodesmic) thermodynamic cycle:
 
             HA + B⁻ → A⁻ + HB
 
         where:
-            - HA: Target acid (protonated form)
+            - HA: Target acid (protonated form, e.g., 5PQ_Me_ts1)
             - A⁻: Conjugate base of target acid
-            - HB: Reference acid (protonated form)
+            - HB: Reference acid (protonated form, e.g., collidine-H, pKa=6.75)
             - B⁻: Conjugate base of reference acid
 
-        The pKa is computed as:
-            pKa(HA) = pKa(HB) + ΔG_exchange / (2.303 × R × T)
+        The dual-level approach separates:
+        1. **Thermal corrections (G_corr)**: Extracted from gas-phase frequency
+           calculations using quasi-harmonic Gibbs free energy:
+               G_corr = qh-G(T) - E_gas
 
-        where:
-            ΔG_exchange = G(A⁻) + G(HB) - G(HA) - G(B⁻)
+        2. **Solvent energies (E_solv)**: High-level single-point electronic
+           energies calculated in implicit solvent (e.g., SMD).
 
-        This method cancels systematic errors in computational methods by
-        using relative free energies rather than absolute values.
+        3. **Total free energy in solution** for each species:
+               G_aq = E_solv + G_corr
+
+        4. **Reaction free energy** using proton exchange:
+               ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]
+
+        5. **pKa calculation**:
+               pKa = pKa_ref + ΔG_exch / (RT × ln10)
+
+        Note: All energies are converted to kcal/mol before the final pKa step.
+        Conversion factor: 1 Hartree = 627.509 kcal/mol
 
         Args:
-            ha_file (str): Path to HA (target acid) optimization output file.
-            a_file (str): Path to A⁻ (target conjugate base) optimization output file.
-            hb_file (str): Path to HB (reference acid) optimization output file.
-            b_file (str): Path to B⁻ (reference conjugate base) optimization output file.
+            ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
+            a_gas_file (str): Path to A⁻ gas-phase optimization+freq output file.
+            hb_gas_file (str): Path to HB gas-phase optimization+freq output file.
+            b_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
+            ha_solv_file (str): Path to HA solvent single-point output file.
+            a_solv_file (str): Path to A⁻ solvent single-point output file.
+            hb_solv_file (str): Path to HB solvent single-point output file.
+            b_solv_file (str): Path to B⁻ solvent single-point output file.
             pka_reference (float): Experimental pKa of the reference acid HB.
+                Default reference: collidine (pKa = 6.75).
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
             pressure (float): Pressure in atm. Default 1.0 atm.
@@ -2796,374 +2726,254 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 in cm^-1 using Grimme's quasi-RRHO method. Default 100.0.
             cutoff_enthalpy (float): Cutoff frequency for enthalpy
                 in cm^-1 using Head-Gordon's method. Default 100.0.
-            energy_units (str): Energy units for calculations. Default 'hartree'.
-                The calculation always uses quasi-harmonic Gibbs free
-                energies (qh-G(T)) for improved accuracy.
 
         Returns:
             dict: Dictionary containing pKa calculation results:
                 - 'pKa': Computed pKa value of target acid HA
                 - 'pKa_reference': Experimental pKa of reference acid HB
-                - 'delta_G_exchange': ΔG_exchange in specified energy units
                 - 'delta_G_exchange_kcal_mol': ΔG_exchange in kcal/mol
                 - 'temperature': Temperature in Kelvin
-                - 'G_HA': Gibbs free energy of HA
-                - 'G_A': Gibbs free energy of A⁻
-                - 'G_HB': Gibbs free energy of HB
-                - 'G_B': Gibbs free energy of B⁻
-                - 'energy_units': Energy units used
+                - 'G_aq_HA': Aqueous free energy of HA (kcal/mol)
+                - 'G_aq_A': Aqueous free energy of A⁻ (kcal/mol)
+                - 'G_aq_HB': Aqueous free energy of HB (kcal/mol)
+                - 'G_aq_B': Aqueous free energy of B⁻ (kcal/mol)
+                - 'E_solv_HA': Solvent SP energy of HA (Hartree)
+                - 'E_solv_A': Solvent SP energy of A⁻ (Hartree)
+                - 'E_solv_HB': Solvent SP energy of HB (Hartree)
+                - 'E_solv_B': Solvent SP energy of B⁻ (Hartree)
+                - 'G_corr_HA': Thermal correction for HA (Hartree)
+                - 'G_corr_A': Thermal correction for A⁻ (Hartree)
+                - 'G_corr_HB': Thermal correction for HB (Hartree)
+                - 'G_corr_B': Thermal correction for B⁻ (Hartree)
+                - 'E_gas_HA': Gas-phase electronic energy of HA (Hartree)
+                - 'E_gas_A': Gas-phase electronic energy of A⁻ (Hartree)
+                - 'E_gas_HB': Gas-phase electronic energy of HB (Hartree)
+                - 'E_gas_B': Gas-phase electronic energy of B⁻ (Hartree)
 
         Example:
-            # Calculate pKa of phenol using water as reference (pKa = 15.7)
-            result = Gaussian16pKaOutput.compute_pka_proton_exchange(
-                ha_file="phenol_opt.log",
-                a_file="phenolate_opt.log",
-                hb_file="water_opt.log",
-                b_file="hydroxide_opt.log",
-                pka_reference=15.7,
+            # Calculate pKa of 5PQ_Me_ts1 using collidine as reference (pKa=6.75)
+            result = Gaussian16pKaOutput.compute_pka(
+                ha_gas_file="5PQ_Me_ts1_no_pd_opt.log",
+                a_gas_file="5PQ_Me_ts1_b_no_pd_opt.log",
+                hb_gas_file="collidine-H_opt.log",
+                b_gas_file="collidine_opt.log",
+                ha_solv_file="5PQ_Me_ts1_no_pd_opt_sp_smd.log",
+                a_solv_file="5PQ_Me_ts1_b_no_pd_opt_sp_smd.log",
+                hb_solv_file="collidine-H_opt_sp_smd.log",
+                b_solv_file="collidine_opt_sp_smd.log",
+                pka_reference=6.75,
                 temperature=298.15
             )
-            print(f"pKa(phenol) = {result['pKa']:.2f}")
+            print(f"pKa(HA) = {result['pKa']:.2f}")
         """
-        # Get thermochemistry for all species
-        results = cls.compute_pka_thermochemistry(
-            ha_file=ha_file,
-            a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
-            temperature=temperature,
-            concentration=concentration,
-            pressure=pressure,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-        )
+        from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL
 
-        # Validate all species are present
-        required_species = ["HA", "A", "HB", "B"]
-        missing = [s for s in required_species if s not in results]
-        if missing:
-            raise ValueError(
-                f"Missing species for proton exchange calculation: {missing}. "
-                "All four species (HA, A⁻, HB, B⁻) are required."
+        # Helper function to get thermochemistry from gas-phase file
+        def get_gas_phase_data(gas_file):
+            """Extract E_gas and qh-G(T) from gas-phase frequency calculation."""
+            output = cls(
+                filename=gas_file,
+                temperature=temperature,
+                concentration=concentration,
+                pressure=pressure,
+                cutoff_entropy_grimme=cutoff_entropy_grimme,
+                cutoff_enthalpy=cutoff_enthalpy,
             )
+            E_gas = output.electronic_energy_in_units  # in Hartree
+            qh_G = output.qh_gibbs_free_energy  # in Hartree
+            G_corr = qh_G - E_gas  # thermal correction in Hartree
+            return E_gas, qh_G, G_corr
 
-        # Get Gibbs free energies (qh-G only)
-        G_HA = results["HA"]["qh_G"]
-        G_A = results["A"]["qh_G"]
-        G_HB = results["HB"]["qh_G"]
-        G_B = results["B"]["qh_G"]
+        # Helper function to get E_solv from solvent SP file
+        def get_solvent_energy(solv_file):
+            """Extract electronic energy from solvent single-point calculation."""
+            output = Gaussian16Output(filename=solv_file)
+            # Get the last SCF energy (solvent SP)
+            E_solv = output.energies[-1] if output.energies else None
+            if E_solv is None:
+                raise ValueError(
+                    f"Could not extract SCF energy from solvent file: {solv_file}"
+                )
+            return E_solv
 
-        # Calculate ΔG_exchange = G(A⁻) + G(HB) - G(HA) - G(B⁻)
-        delta_G_exchange = G_A + G_HB - G_HA - G_B
+        # Step 1: Get gas-phase data (E_gas, qh-G, G_corr) for all species
+        E_gas_HA, qh_G_HA, G_corr_HA = get_gas_phase_data(ha_gas_file)
+        E_gas_A, qh_G_A, G_corr_A = get_gas_phase_data(a_gas_file)
+        E_gas_HB, qh_G_HB, G_corr_HB = get_gas_phase_data(hb_gas_file)
+        E_gas_B, qh_G_B, G_corr_B = get_gas_phase_data(b_gas_file)
 
-        # Get gas constant in specified units
-        R = cls._get_gas_constant(energy_units)
+        # Step 2: Get solvent SP energies (E_solv) for all species
+        E_solv_HA = get_solvent_energy(ha_solv_file)
+        E_solv_A = get_solvent_energy(a_solv_file)
+        E_solv_HB = get_solvent_energy(hb_solv_file)
+        E_solv_B = get_solvent_energy(b_solv_file)
 
-        # Calculate pKa: pKa(HA) = pKa(HB) + ΔG_exchange / (2.303 × R × T)
-        pka = pka_reference + delta_G_exchange / (2.303 * R * temperature)
+        # Step 3: Calculate G_aq = E_solv + G_corr (in Hartree)
+        G_aq_HA_hartree = E_solv_HA + G_corr_HA
+        G_aq_A_hartree = E_solv_A + G_corr_A
+        G_aq_HB_hartree = E_solv_HB + G_corr_HB
+        G_aq_B_hartree = E_solv_B + G_corr_B
 
-        # Convert ΔG to kcal/mol for reporting
-        from chemsmart.utils.constants import energy_conversion
+        # Step 4: Convert to kcal/mol
+        G_aq_HA = G_aq_HA_hartree * HARTREE_TO_KCAL_MOL
+        G_aq_A = G_aq_A_hartree * HARTREE_TO_KCAL_MOL
+        G_aq_HB = G_aq_HB_hartree * HARTREE_TO_KCAL_MOL
+        G_aq_B = G_aq_B_hartree * HARTREE_TO_KCAL_MOL
 
-        if energy_units.lower() != "kcal/mol":
-            delta_G_kcal = energy_conversion(
-                energy_units, "kcal/mol", delta_G_exchange
-            )
-        else:
-            delta_G_kcal = delta_G_exchange
+        # Step 5: Calculate ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]
+        # in kcal/mol
+        delta_G_exchange = (G_aq_A + G_aq_HB) - (G_aq_HA + G_aq_B)
+
+        # Step 6: Calculate pKa
+        # pKa = pKa_ref + ΔG_exch / (RT × ln10)
+        # R = 1.987204 cal/(mol·K) = 0.001987204 kcal/(mol·K)
+        R_kcal = 0.001987204  # kcal/(mol·K)
+        ln10 = 2.302585093
+
+        pka = pka_reference + delta_G_exchange / (R_kcal * temperature * ln10)
 
         return {
             "pKa": pka,
             "pKa_reference": pka_reference,
-            "delta_G_exchange": delta_G_exchange,
-            "delta_G_exchange_kcal_mol": delta_G_kcal,
+            "delta_G_exchange_kcal_mol": delta_G_exchange,
             "temperature": temperature,
-            "G_HA": G_HA,
-            "G_A": G_A,
-            "G_HB": G_HB,
-            "G_B": G_B,
-            "energy_units": energy_units,
+            # Aqueous free energies (kcal/mol)
+            "G_aq_HA": G_aq_HA,
+            "G_aq_A": G_aq_A,
+            "G_aq_HB": G_aq_HB,
+            "G_aq_B": G_aq_B,
+            # Solvent SP energies (Hartree)
+            "E_solv_HA": E_solv_HA,
+            "E_solv_A": E_solv_A,
+            "E_solv_HB": E_solv_HB,
+            "E_solv_B": E_solv_B,
+            # Thermal corrections (Hartree)
+            "G_corr_HA": G_corr_HA,
+            "G_corr_A": G_corr_A,
+            "G_corr_HB": G_corr_HB,
+            "G_corr_B": G_corr_B,
+            # Gas-phase electronic energies (Hartree)
+            "E_gas_HA": E_gas_HA,
+            "E_gas_A": E_gas_A,
+            "E_gas_HB": E_gas_HB,
+            "E_gas_B": E_gas_B,
         }
 
     @classmethod
-    def compute_pka_direct(
+    def print_pka_summary(
         cls,
-        ha_file,
-        a_file,
-        temperature=298.15,
-        concentration=1.0,
-        pressure=1.0,
-        cutoff_entropy_grimme=100.0,
-        cutoff_enthalpy=100.0,
-        energy_units="hartree",
-        delta_G_proton_aq=-265.9,
-    ):
-        """
-        Compute pKa using the direct thermodynamic cycle.
-
-        The direct scheme uses the absolute free energy of a proton in water:
-
-            HA(aq) → A⁻(aq) + H⁺(aq)
-
-        The pKa is computed as:
-            pKa = [G(A⁻) - G(HA) + ΔG°(H⁺)_aq] / (2.303 × R × T)
-
-        Note: This method is less accurate than the proton exchange scheme
-        because it doesn't benefit from error cancellation.
-
-        Args:
-            ha_file (str): Path to HA (acid) optimization output file.
-            a_file (str): Path to A⁻ (conjugate base) optimization output file.
-            temperature (float): Temperature in Kelvin. Default 298.15 K.
-            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
-            pressure (float): Pressure in atm. Default 1.0 atm.
-            cutoff_entropy_grimme (float): Cutoff for entropy (cm⁻¹). Default 100.0.
-            cutoff_enthalpy (float): Cutoff for enthalpy (cm⁻¹). Default 100.0.
-            energy_units (str): Energy units for output. Default 'hartree'.
-                The calculation always uses quasi-harmonic Gibbs free
-                energies (qh-G(T)) for the solute species.
-            delta_G_proton_aq (float): Absolute free energy of H⁺ in water
-                in kcal/mol. Default -265.9 kcal/mol (Tissandier et al., 1998).
-
-        Returns:
-            dict: Dictionary containing pKa calculation results:
-                - 'pKa': Computed pKa value
-                - 'delta_G_deprotonation': ΔG of deprotonation in specified units
-                - 'delta_G_deprotonation_kcal_mol': ΔG in kcal/mol
-                - 'delta_G_proton_aq': Free energy of H⁺(aq) used
-                - 'temperature': Temperature in Kelvin
-                - 'G_HA': Gibbs free energy of HA
-                - 'G_A': Gibbs free energy of A⁻
-                - 'energy_units': Energy units used
-
-        Example:
-            Gaussian16pKaOutput.compute_pka_direct(
-                ha_file="acetic_acid_opt.log",
-                a_file="acetate_opt.log",
-                temperature=298.15
-            )
-            print(f"pKa = {result['pKa']:.2f}")
-        """
-        from chemsmart.utils.constants import energy_conversion
-
-        # Get thermochemistry for HA and A-
-        results = cls.compute_pka_thermochemistry(
-            ha_file=ha_file,
-            a_file=a_file,
-            temperature=temperature,
-            concentration=concentration,
-            pressure=pressure,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-        )
-
-        # Validate species are present
-        if "HA" not in results:
-            raise ValueError(
-                "HA output file is required for direct pKa calculation."
-            )
-        if "A" not in results:
-            raise ValueError(
-                "A⁻ output file is required for direct pKa calculation."
-            )
-
-        # Get Gibbs free energies (qh-G only)
-        G_HA = results["HA"]["qh_G"]
-        G_A = results["A"]["qh_G"]
-
-        # Convert ΔG°(H⁺)_aq from kcal/mol to specified units
-        delta_G_proton = energy_conversion(
-            "kcal/mol", energy_units, delta_G_proton_aq
-        )
-
-        # Calculate ΔG_deprotonation = G(A⁻) - G(HA) + ΔG°(H⁺)_aq
-        delta_G_deprot = G_A - G_HA + delta_G_proton
-
-        # Get gas constant in specified units
-        R = cls._get_gas_constant(energy_units)
-
-        # Calculate pKa = ΔG_deprotonation / (2.303 × R × T)
-        pka = delta_G_deprot / (2.303 * R * temperature)
-
-        # Convert ΔG to kcal/mol for reporting
-        if energy_units.lower() != "kcal/mol":
-            delta_G_kcal = energy_conversion(
-                energy_units, "kcal/mol", delta_G_deprot
-            )
-        else:
-            delta_G_kcal = delta_G_deprot
-
-        return {
-            "pKa": pka,
-            "delta_G_deprotonation": delta_G_deprot,
-            "delta_G_deprotonation_kcal_mol": delta_G_kcal,
-            "delta_G_proton_aq": delta_G_proton_aq,
-            "temperature": temperature,
-            "G_HA": G_HA,
-            "G_A": G_A,
-            "energy_units": energy_units,
-        }
-
-    @classmethod
-    def print_pka_proton_exchange_summary(
-        cls,
-        ha_file,
-        a_file,
-        hb_file,
-        b_file,
+        ha_gas_file,
+        a_gas_file,
+        hb_gas_file,
+        b_gas_file,
+        ha_solv_file,
+        a_solv_file,
+        hb_solv_file,
+        b_solv_file,
         pka_reference,
         temperature=298.15,
         concentration=1.0,
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
-        energy_units="hartree",
     ):
         """
-        Print a formatted summary of pKa calculation using proton exchange scheme.
+        Print a formatted summary of Dual-level Proton Exchange pKa calculation.
 
         Args:
-            ha_file (str): Path to HA (target acid) output file.
-            a_file (str): Path to A⁻ (target conjugate base) output file.
-            hb_file (str): Path to HB (reference acid) output file.
-            b_file (str): Path to B⁻ (reference conjugate base) output file.
+            ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
+            a_gas_file (str): Path to A⁻ gas-phase optimization+freq output file.
+            hb_gas_file (str): Path to HB gas-phase optimization+freq output file.
+            b_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
+            ha_solv_file (str): Path to HA solvent single-point output file.
+            a_solv_file (str): Path to A⁻ solvent single-point output file.
+            hb_solv_file (str): Path to HB solvent single-point output file.
+            b_solv_file (str): Path to B⁻ solvent single-point output file.
             pka_reference (float): Experimental pKa of the reference acid HB.
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
             pressure (float): Pressure in atm. Default 1.0 atm.
             cutoff_entropy_grimme (float): Cutoff for entropy (cm⁻¹). Default 100.0.
             cutoff_enthalpy (float): Cutoff for enthalpy (cm⁻¹). Default 100.0.
-            energy_units (str): Energy units. Default 'hartree'.
 
         Example:
-            Gaussian16pKaOutput.print_pka_proton_exchange_summary(
-                ha_file="phenol_opt.log",
-                a_file="phenolate_opt.log",
-                hb_file="water_opt.log",
-                b_file="hydroxide_opt.log",
-                pka_reference=15.7,
+            Gaussian16pKaOutput.print_pka_summary(
+                ha_gas_file="5PQ_Me_ts1_no_pd_opt.log",
+                a_gas_file="5PQ_Me_ts1_b_no_pd_opt.log",
+                hb_gas_file="collidine-H_opt.log",
+                b_gas_file="collidine_opt.log",
+                ha_solv_file="5PQ_Me_ts1_no_pd_opt_sp_smd.log",
+                a_solv_file="5PQ_Me_ts1_b_no_pd_opt_sp_smd.log",
+                hb_solv_file="collidine-H_opt_sp_smd.log",
+                b_solv_file="collidine_opt_sp_smd.log",
+                pka_reference=6.75,
                 temperature=298.15
             )
         """
-        result = cls.compute_pka_proton_exchange(
-            ha_file=ha_file,
-            a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
+        result = cls.compute_pka(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            hb_gas_file=hb_gas_file,
+            b_gas_file=b_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            hb_solv_file=hb_solv_file,
+            b_solv_file=b_solv_file,
             pka_reference=pka_reference,
             temperature=temperature,
             concentration=concentration,
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
         )
 
-        gibbs_type = "qh-G(T)"
-
-        print("=" * 70)
-        print("pKa Calculation - Proton Exchange Scheme")
-        print("=" * 70)
+        print("=" * 78)
+        print("pKa Calculation - Dual-level Proton Exchange Scheme")
+        print("=" * 78)
         print("Reaction: HA + B⁻ → A⁻ + HB")
         print(f"Temperature: {temperature} K")
-        print(f"Gibbs free energy type: {gibbs_type}")
-        print(f"Energy units: {energy_units}")
-        print("-" * 70)
-        print("Gibbs Free Energies:")
-        print(f"  G(HA)  = {result['G_HA']:.10f} {energy_units}")
-        print(f"  G(A⁻)  = {result['G_A']:.10f} {energy_units}")
-        print(f"  G(HB)  = {result['G_HB']:.10f} {energy_units}")
-        print(f"  G(B⁻)  = {result['G_B']:.10f} {energy_units}")
-        print("-" * 70)
+        print()
+        print("Method:")
+        print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
+        print("  G_aq = E_solv + G_corr    (aqueous free energy)")
+        print("  ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]")
+        print("  pKa = pKa_ref + ΔG_exch / (RT × ln10)")
+        print("-" * 78)
+        print()
+        print("Gas-Phase Electronic Energies (E_gas, Hartree):")
+        print(f"  HA:  {result['E_gas_HA']:.10f}")
+        print(f"  A⁻:  {result['E_gas_A']:.10f}")
+        print(f"  HB:  {result['E_gas_HB']:.10f}")
+        print(f"  B⁻:  {result['E_gas_B']:.10f}")
+        print()
+        print("Thermal Corrections (G_corr = qh-G - E_gas, Hartree):")
+        print(f"  HA:  {result['G_corr_HA']:.10f}")
+        print(f"  A⁻:  {result['G_corr_A']:.10f}")
+        print(f"  HB:  {result['G_corr_HB']:.10f}")
+        print(f"  B⁻:  {result['G_corr_B']:.10f}")
+        print()
+        print("Solvent Single-Point Energies (E_solv, Hartree):")
+        print(f"  HA:  {result['E_solv_HA']:.10f}")
+        print(f"  A⁻:  {result['E_solv_A']:.10f}")
+        print(f"  HB:  {result['E_solv_HB']:.10f}")
+        print(f"  B⁻:  {result['E_solv_B']:.10f}")
+        print()
+        print("Aqueous Free Energies (G_aq = E_solv + G_corr, kcal/mol):")
+        print(f"  HA:  {result['G_aq_HA']:.4f}")
+        print(f"  A⁻:  {result['G_aq_A']:.4f}")
+        print(f"  HB:  {result['G_aq_HB']:.4f}")
+        print(f"  B⁻:  {result['G_aq_B']:.4f}")
+        print("-" * 78)
+        print()
         print("pKa Calculation:")
-        print("  ΔG_exchange = G(A⁻) + G(HB) - G(HA) - G(B⁻)")
         print(
-            f"             = {result['delta_G_exchange']:.10f} {energy_units}"
-        )
-        print(
-            f"             = {result['delta_G_exchange_kcal_mol']:.4f} kcal/mol"
+            f"  ΔG_exch = {result['delta_G_exchange_kcal_mol']:.4f} kcal/mol"
         )
         print(f"  pKa(HB)_ref = {pka_reference:.2f}")
-        print("  pKa(HA) = pKa(HB) + ΔG_exchange / (2.303 × R × T)")
-        print("-" * 70)
+        print()
         print(f"  *** Computed pKa(HA) = {result['pKa']:.2f} ***")
-        print("=" * 70)
+        print("=" * 78)
 
-    @classmethod
-    def print_pka_direct_summary(
-        cls,
-        ha_file,
-        a_file,
-        temperature=298.15,
-        concentration=1.0,
-        pressure=1.0,
-        cutoff_entropy_grimme=100.0,
-        cutoff_enthalpy=100.0,
-        energy_units="hartree",
-        delta_G_proton_aq=-265.9,
-    ):
-        """
-        Print a formatted summary of pKa calculation using direct scheme.
-
-        Args:
-            ha_file (str): Path to HA (acid) output file.
-            a_file (str): Path to A⁻ (conjugate base) output file.
-            temperature (float): Temperature in Kelvin. Default 298.15 K.
-            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
-            pressure (float): Pressure in atm. Default 1.0 atm.
-            cutoff_entropy_grimme (float): Cutoff for entropy (cm⁻¹). Default 100.0.
-            cutoff_enthalpy (float): Cutoff for enthalpy (cm⁻¹). Default 100.0.
-            energy_units (str): Energy units. Default 'hartree'.
-            delta_G_proton_aq (float): Free energy of H⁺(aq) in kcal/mol.
-                Default -265.9 kcal/mol.
-
-        Example:
-            Gaussian16pKaOutput.print_pka_direct_summary(
-                ha_file="acetic_acid_opt.log",
-                a_file="acetate_opt.log",
-                temperature=298.15
-            )
-        """
-        result = cls.compute_pka_direct(
-            ha_file=ha_file,
-            a_file=a_file,
-            temperature=temperature,
-            concentration=concentration,
-            pressure=pressure,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-            delta_G_proton_aq=delta_G_proton_aq,
-        )
-
-        gibbs_type = "qh-G(T)"
-
-        print("=" * 70)
-        print("pKa Calculation - Direct Scheme")
-        print("=" * 70)
-        print("Reaction: HA(aq) → A⁻(aq) + H⁺(aq)")
-        print(f"Temperature: {temperature} K")
-        print(f"Gibbs free energy type: {gibbs_type}")
-        print(f"Energy units: {energy_units}")
-        print(
-            f"ΔG°(H⁺)_aq: {delta_G_proton_aq} kcal/mol (Tissandier et al., 1998)"
-        )
-        print("-" * 70)
-        print("Gibbs Free Energies:")
-        print(f"  G(HA) = {result['G_HA']:.10f} {energy_units}")
-        print(f"  G(A⁻) = {result['G_A']:.10f} {energy_units}")
-        print("-" * 70)
-        print("pKa Calculation:")
-        print("  ΔG_deprot = G(A⁻) - G(HA) + ΔG°(H⁺)_aq")
-        print(
-            f"           = {result['delta_G_deprotonation']:.10f} {energy_units}"
-        )
-        print(
-            f"           = {result['delta_G_deprotonation_kcal_mol']:.4f} kcal/mol"
-        )
-        print("  pKa = ΔG_deprot / (2.303 × R × T)")
-        print("-" * 70)
-        print(f"  *** Computed pKa = {result['pKa']:.2f} ***")
-        print("=" * 70)
+    # Alias for backward compatibility
+    print_pka_dual_level_summary = print_pka_summary
+    compute_pka_dual_level = compute_pka

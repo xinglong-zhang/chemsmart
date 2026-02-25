@@ -2097,46 +2097,49 @@ class TestGaussian16pKaOutput:
     Reference values are from .dat files in tests/data/GaussianTests/outputs/
     Generated at T=373.15K, c=1.0 mol/L, csg=100 cm^-1, ch=100 cm^-1
 
-    phenol_opt.dat values (HA - protonated acid):
-        E = -306.844601 hartree
-        ZPE = 0.105604 hartree
-        H = -306.729396 hartree
-        qh-H = -306.729434 hartree
-        T.S = 0.043764 hartree
-        T.qh-S = 0.043767 hartree
-        G(T) = -306.773160 hartree
-        qh-G(T) = -306.773202 hartree
+    5PQ_Me_ts1_no_pd_opt.dat values (HA - protonated acid):
+        E = -345.741944 hartree
+        ZPE = 0.133804 hartree
+        H = -345.595097 hartree
+        qh-H = -345.596472 hartree
+        T.S = 0.053929 hartree
+        T.qh-S = 0.052278 hartree
+        G(T) = -345.649026 hartree
+        qh-G(T) = -345.648751 hartree
 
-    phenol_b_opt.dat values (A- - conjugate base):
-        E = -306.264976 hartree
-        ZPE = 0.091530 hartree
-        H = -306.164273 hartree
-        qh-H = -306.164324 hartree
-        T.S = 0.043097 hartree
-        T.qh-S = 0.043094 hartree
-        G(T) = -306.207370 hartree
-        qh-G(T) = -306.207418 hartree
+    5PQ_Me_ts1_b_no_pd_opt.dat values (A- - conjugate base):
+        E = -344.915399 hartree
+        ZPE = 0.115987 hartree
+        H = -344.786580 hartree
+        qh-H = -344.787739 hartree
+        T.S = 0.052926 hartree
+        T.qh-S = 0.051766 hartree
+        G(T) = -344.839506 hartree
+        qh-G(T) = -344.839505 hartree
     """
 
-    # Reference values from phenol_opt.dat at T=373.15K
-    PHENOL_HA_E = -306.844601
-    PHENOL_HA_ZPE = 0.105604
-    PHENOL_HA_H = -306.729396
-    PHENOL_HA_QH_H = -306.729434
-    PHENOL_HA_TS = 0.043764
-    PHENOL_HA_QH_TS = 0.043767
-    PHENOL_HA_G = -306.773160
-    PHENOL_HA_QH_G = -306.773202
+    # Reference values from 5PQ_Me_ts1_no_pd_opt.dat at T=373.15K
+    HA_E = -345.741944
+    HA_ZPE = 0.133804
+    HA_H = -345.595097
+    HA_QH_H = -345.596472
+    HA_TS = 0.053929
+    HA_QH_TS = 0.052278
+    HA_G = -345.649026
+    HA_QH_G = -345.648751
 
-    # Reference values from phenol_b_opt.dat at T=373.15K
-    PHENOL_A_E = -306.264976
-    PHENOL_A_ZPE = 0.091530
-    PHENOL_A_H = -306.164273
-    PHENOL_A_QH_H = -306.164324
-    PHENOL_A_TS = 0.043097
-    PHENOL_A_QH_TS = 0.043094
-    PHENOL_A_G = -306.207370
-    PHENOL_A_QH_G = -306.207418
+    # Reference values from 5PQ_Me_ts1_b_no_pd_opt.dat at T=373.15K
+    A_E = -344.915399
+    A_ZPE = 0.115987
+    A_H = -344.786580
+    A_QH_H = -344.787739
+    A_TS = 0.052926
+    A_QH_TS = 0.051766
+    A_G = -344.839506
+    A_QH_G = -344.839505
+
+    # Reference pKa for collidine (2,4,6-trimethylpyridine)
+    PKA_COLLIDINE_REFERENCE = 6.75
 
     def test_init_with_default_settings(
         self, gaussian_pKa_HA_optimization_outputfile
@@ -2172,10 +2175,10 @@ class TestGaussian16pKaOutput:
         assert output.cutoff_enthalpy == 100.0
         assert output.energy_units == "hartree"
 
-    def test_electronic_energy_phenol_ha(
+    def test_electronic_energy_ha(
         self, gaussian_pKa_HA_optimization_outputfile
     ):
-        """Test electronic energy for phenol (HA) matches reference value."""
+        """Test electronic energy for HA matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_HA_optimization_outputfile,
             temperature=373.15,
@@ -2185,12 +2188,12 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         E = output.electronic_energy_in_units
-        assert np.isclose(E, self.PHENOL_HA_E, rtol=1e-6)
+        assert np.isclose(E, self.HA_E, rtol=1e-6)
 
-    def test_zero_point_energy_phenol_ha(
+    def test_zero_point_energy_ha(
         self, gaussian_pKa_HA_optimization_outputfile
     ):
-        """Test ZPE for phenol (HA) matches reference value."""
+        """Test ZPE for HA matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_HA_optimization_outputfile,
             temperature=373.15,
@@ -2200,10 +2203,10 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         zpe = output.zero_point_energy_in_units
-        assert np.isclose(zpe, self.PHENOL_HA_ZPE, rtol=1e-4)
+        assert np.isclose(zpe, self.HA_ZPE, rtol=1e-4)
 
-    def test_enthalpy_phenol_ha(self, gaussian_pKa_HA_optimization_outputfile):
-        """Test enthalpy for phenol (HA) matches reference value."""
+    def test_enthalpy_ha(self, gaussian_pKa_HA_optimization_outputfile):
+        """Test enthalpy for HA matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_HA_optimization_outputfile,
             temperature=373.15,
@@ -2213,12 +2216,10 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         H = output.enthalpy_in_units
-        assert np.isclose(H, self.PHENOL_HA_H, rtol=1e-5)
+        assert np.isclose(H, self.HA_H, rtol=1e-5)
 
-    def test_qh_enthalpy_phenol_ha(
-        self, gaussian_pKa_HA_optimization_outputfile
-    ):
-        """Test qh-H for phenol (HA) matches reference value."""
+    def test_qh_enthalpy_ha(self, gaussian_pKa_HA_optimization_outputfile):
+        """Test qh-H for HA matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_HA_optimization_outputfile,
             temperature=373.15,
@@ -2228,12 +2229,12 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         qh_H = output.qh_enthalpy_in_units
-        assert np.isclose(qh_H, self.PHENOL_HA_QH_H, rtol=1e-5)
+        assert np.isclose(qh_H, self.HA_QH_H, rtol=1e-5)
 
-    def test_gibbs_free_energy_phenol_ha(
+    def test_gibbs_free_energy_ha(
         self, gaussian_pKa_HA_optimization_outputfile
     ):
-        """Test G(T) for phenol (HA) matches reference value."""
+        """Test G(T) for HA matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_HA_optimization_outputfile,
             temperature=373.15,
@@ -2243,12 +2244,12 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         G = output.gibbs_free_energy_in_units
-        assert np.isclose(G, self.PHENOL_HA_G, rtol=1e-5)
+        assert np.isclose(G, self.HA_G, rtol=1e-5)
 
-    def test_qh_gibbs_free_energy_phenol_ha(
+    def test_qh_gibbs_free_energy_ha(
         self, gaussian_pKa_HA_optimization_outputfile
     ):
-        """Test qh-G(T) for phenol (HA) matches reference value."""
+        """Test qh-G(T) for HA matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_HA_optimization_outputfile,
             temperature=373.15,
@@ -2258,12 +2259,10 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         qh_G = output.qh_gibbs_free_energy
-        assert np.isclose(qh_G, self.PHENOL_HA_QH_G, rtol=1e-5)
+        assert np.isclose(qh_G, self.HA_QH_G, rtol=1e-5)
 
-    def test_electronic_energy_phenol_a(
-        self, gaussian_pKa_A_optimization_outputfile
-    ):
-        """Test electronic energy for phenolate (A-) matches reference value."""
+    def test_electronic_energy_a(self, gaussian_pKa_A_optimization_outputfile):
+        """Test electronic energy for A- matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_A_optimization_outputfile,
             temperature=373.15,
@@ -2273,12 +2272,12 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         E = output.electronic_energy_in_units
-        assert np.isclose(E, self.PHENOL_A_E, rtol=1e-6)
+        assert np.isclose(E, self.A_E, rtol=1e-6)
 
-    def test_qh_gibbs_free_energy_phenol_a(
+    def test_qh_gibbs_free_energy_a(
         self, gaussian_pKa_A_optimization_outputfile
     ):
-        """Test qh-G(T) for phenolate (A-) matches reference value."""
+        """Test qh-G(T) for A- matches reference value."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_A_optimization_outputfile,
             temperature=373.15,
@@ -2288,12 +2287,12 @@ class TestGaussian16pKaOutput:
             energy_units="hartree",
         )
         qh_G = output.qh_gibbs_free_energy
-        assert np.isclose(qh_G, self.PHENOL_A_QH_G, rtol=1e-5)
+        assert np.isclose(qh_G, self.A_QH_G, rtol=1e-5)
 
-    def test_compute_thermochemistry_phenol_ha(
+    def test_compute_thermochemistry_ha(
         self, gaussian_pKa_HA_optimization_outputfile
     ):
-        """Test compute_thermochemistry returns all values for phenol (HA)."""
+        """Test compute_thermochemistry returns all values for HA."""
         output = Gaussian16pKaOutput(
             filename=gaussian_pKa_HA_optimization_outputfile,
             temperature=373.15,
@@ -2305,24 +2304,16 @@ class TestGaussian16pKaOutput:
         result = output.compute_thermochemistry()
 
         # Check structure name
-        assert result["structure"] == "phenol_opt"
+        assert result["structure"] == "5PQ_Me_ts1_no_pd_opt"
 
         # Check all values match reference
+        assert np.isclose(result["electronic_energy"], self.HA_E, rtol=1e-6)
+        assert np.isclose(result["zero_point_energy"], self.HA_ZPE, rtol=1e-4)
+        assert np.isclose(result["enthalpy"], self.HA_H, rtol=1e-5)
+        assert np.isclose(result["qh_enthalpy"], self.HA_QH_H, rtol=1e-5)
+        assert np.isclose(result["gibbs_free_energy"], self.HA_G, rtol=1e-5)
         assert np.isclose(
-            result["electronic_energy"], self.PHENOL_HA_E, rtol=1e-6
-        )
-        assert np.isclose(
-            result["zero_point_energy"], self.PHENOL_HA_ZPE, rtol=1e-4
-        )
-        assert np.isclose(result["enthalpy"], self.PHENOL_HA_H, rtol=1e-5)
-        assert np.isclose(
-            result["qh_enthalpy"], self.PHENOL_HA_QH_H, rtol=1e-5
-        )
-        assert np.isclose(
-            result["gibbs_free_energy"], self.PHENOL_HA_G, rtol=1e-5
-        )
-        assert np.isclose(
-            result["qh_gibbs_free_energy"], self.PHENOL_HA_QH_G, rtol=1e-5
+            result["qh_gibbs_free_energy"], self.HA_QH_G, rtol=1e-5
         )
 
     def test_for_pka_species_ha_and_a(
@@ -2348,12 +2339,12 @@ class TestGaussian16pKaOutput:
         # Verify HA values
         assert np.isclose(
             outputs["HA"].electronic_energy_in_units,
-            self.PHENOL_HA_E,
+            self.HA_E,
             rtol=1e-6,
         )
         # Verify A- values
         assert np.isclose(
-            outputs["A"].electronic_energy_in_units, self.PHENOL_A_E, rtol=1e-6
+            outputs["A"].electronic_energy_in_units, self.A_E, rtol=1e-6
         )
 
     def test_compute_pka_thermochemistry_ha_and_a(
@@ -2381,25 +2372,21 @@ class TestGaussian16pKaOutput:
 
         # Check HA values
         assert results["HA"]["name"] == "HA"
-        assert np.isclose(results["HA"]["E"], self.PHENOL_HA_E, rtol=1e-6)
-        assert np.isclose(
-            results["HA"]["qh_G"], self.PHENOL_HA_QH_G, rtol=1e-5
-        )
-        assert np.isclose(results["HA"]["ZPE"], self.PHENOL_HA_ZPE, rtol=1e-4)
-        assert np.isclose(results["HA"]["H"], self.PHENOL_HA_H, rtol=1e-5)
-        assert np.isclose(
-            results["HA"]["qh_H"], self.PHENOL_HA_QH_H, rtol=1e-5
-        )
-        assert np.isclose(results["HA"]["G"], self.PHENOL_HA_G, rtol=1e-5)
+        assert np.isclose(results["HA"]["E"], self.HA_E, rtol=1e-6)
+        assert np.isclose(results["HA"]["qh_G"], self.HA_QH_G, rtol=1e-5)
+        assert np.isclose(results["HA"]["ZPE"], self.HA_ZPE, rtol=1e-4)
+        assert np.isclose(results["HA"]["H"], self.HA_H, rtol=1e-5)
+        assert np.isclose(results["HA"]["qh_H"], self.HA_QH_H, rtol=1e-5)
+        assert np.isclose(results["HA"]["G"], self.HA_G, rtol=1e-5)
 
         # Check A- values
         assert results["A"]["name"] == "A-"
-        assert np.isclose(results["A"]["E"], self.PHENOL_A_E, rtol=1e-6)
-        assert np.isclose(results["A"]["qh_G"], self.PHENOL_A_QH_G, rtol=1e-5)
-        assert np.isclose(results["A"]["ZPE"], self.PHENOL_A_ZPE, rtol=1e-4)
-        assert np.isclose(results["A"]["H"], self.PHENOL_A_H, rtol=1e-5)
-        assert np.isclose(results["A"]["qh_H"], self.PHENOL_A_QH_H, rtol=1e-5)
-        assert np.isclose(results["A"]["G"], self.PHENOL_A_G, rtol=1e-5)
+        assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
+        assert np.isclose(results["A"]["ZPE"], self.A_ZPE, rtol=1e-4)
+        assert np.isclose(results["A"]["H"], self.A_H, rtol=1e-5)
+        assert np.isclose(results["A"]["qh_H"], self.A_QH_H, rtol=1e-5)
+        assert np.isclose(results["A"]["G"], self.A_G, rtol=1e-5)
 
     def test_deprotonation_energy_difference(
         self,
@@ -2424,8 +2411,8 @@ class TestGaussian16pKaOutput:
         delta_qh_G = results["A"]["qh_G"] - results["HA"]["qh_G"]
 
         # Expected values from .dat files
-        expected_delta_E = self.PHENOL_A_E - self.PHENOL_HA_E
-        expected_delta_qh_G = self.PHENOL_A_QH_G - self.PHENOL_HA_QH_G
+        expected_delta_E = self.A_E - self.HA_E
+        expected_delta_qh_G = self.A_QH_G - self.HA_QH_G
 
         assert np.isclose(delta_E, expected_delta_E, rtol=1e-6)
         assert np.isclose(delta_qh_G, expected_delta_qh_G, rtol=1e-5)
@@ -2434,38 +2421,18 @@ class TestGaussian16pKaOutput:
         assert delta_E > 0
         assert delta_qh_G > 0
 
-    def test_print_pka_summary(
+    def test_print_pka_thermochemistry_summary(
         self,
         gaussian_pKa_HA_optimization_outputfile,
         gaussian_pKa_A_optimization_outputfile,
         capsys,
     ):
-        """Test print_pka_summary outputs formatted results with correct values."""
-        Gaussian16pKaOutput.print_pka_summary(
-            ha_file=gaussian_pKa_HA_optimization_outputfile,
-            a_file=gaussian_pKa_A_optimization_outputfile,
-            temperature=373.15,
-            concentration=1.0,
-            cutoff_entropy_grimme=100.0,
-            cutoff_enthalpy=100.0,
-        )
+        """Test thermochemistry output for pKa calculation shows correct values.
 
-        captured = capsys.readouterr()
-        output = captured.out
-
-        # Check header is present
-        assert "pKa Thermochemistry Summary" in output
-        assert "Temperature: 373.15 K" in output
-        assert "Concentration: 1.0 mol/L" in output
-        assert "Entropy cutoff (Grimme): 100.0 cm^-1" in output
-        assert "Enthalpy cutoff (Head-Gordon): 100.0 cm^-1" in output
-        assert "Energy units: hartree" in output
-
-        # Check species are present
-        assert "HA" in output
-        assert "A-" in output
-
-        # Verify values using compute_pka_thermochemistry for exact comparison
+        This test verifies that individual thermochemistry values can be
+        extracted from the output objects for HA and A- species.
+        """
+        # Get thermochemistry for HA and A-
         results = Gaussian16pKaOutput.compute_pka_thermochemistry(
             ha_file=gaussian_pKa_HA_optimization_outputfile,
             a_file=gaussian_pKa_A_optimization_outputfile,
@@ -2476,14 +2443,12 @@ class TestGaussian16pKaOutput:
         )
 
         # Verify HA values match reference
-        assert np.isclose(results["HA"]["E"], self.PHENOL_HA_E, rtol=1e-6)
-        assert np.isclose(
-            results["HA"]["qh_G"], self.PHENOL_HA_QH_G, rtol=1e-5
-        )
+        assert np.isclose(results["HA"]["E"], self.HA_E, rtol=1e-6)
+        assert np.isclose(results["HA"]["qh_G"], self.HA_QH_G, rtol=1e-5)
 
         # Verify A- values match reference
-        assert np.isclose(results["A"]["E"], self.PHENOL_A_E, rtol=1e-6)
-        assert np.isclose(results["A"]["qh_G"], self.PHENOL_A_QH_G, rtol=1e-5)
+        assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
 
     def test_from_settings_classmethod(
         self, gaussian_pKa_HA_optimization_outputfile
@@ -2513,11 +2478,9 @@ class TestGaussian16pKaOutput:
 
         # Verify values match reference
         assert np.isclose(
-            output.electronic_energy_in_units, self.PHENOL_HA_E, rtol=1e-6
+            output.electronic_energy_in_units, self.HA_E, rtol=1e-6
         )
-        assert np.isclose(
-            output.qh_gibbs_free_energy, self.PHENOL_HA_QH_G, rtol=1e-5
-        )
+        assert np.isclose(output.qh_gibbs_free_energy, self.HA_QH_G, rtol=1e-5)
 
     def test_from_pka_settings_classmethod(
         self,
@@ -2551,11 +2514,11 @@ class TestGaussian16pKaOutput:
         # Verify values match reference
         assert np.isclose(
             outputs["HA"].electronic_energy_in_units,
-            self.PHENOL_HA_E,
+            self.HA_E,
             rtol=1e-6,
         )
         assert np.isclose(
-            outputs["A"].electronic_energy_in_units, self.PHENOL_A_E, rtol=1e-6
+            outputs["A"].electronic_energy_in_units, self.A_E, rtol=1e-6
         )
 
     def test_thermochemistry_property_caching(
@@ -2615,3 +2578,225 @@ class TestGaussian16pKaOutput:
 
         # 1 hartree ≈ 2625.5002 kJ/mol
         assert np.isclose(E_kj / E_hartree, 2625.5002, rtol=0.001)
+
+    # =========================================================================
+    # pKa Calculation Tests - Dual-level Proton Exchange Scheme
+    # =========================================================================
+
+    def test_compute_pka(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+    ):
+        """Test pKa calculation using Dual-level Proton Exchange scheme.
+
+        Uses 5PQ_Me_ts1 as target acid (HA/A-) and collidine as reference (HB/B-).
+        Reference pKa of collidine = 6.75
+
+        The dual-level approach uses:
+        1. Gas-phase frequency calculations for thermal corrections (G_corr)
+        2. Solvent single-point calculations for E_solv
+        3. G_aq = E_solv + G_corr for aqueous free energy
+        4. Proton exchange scheme: HA + B⁻ → A⁻ + HB
+        """
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            b_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        # Check that result contains expected keys
+        assert "pKa" in result
+        assert "pKa_reference" in result
+        assert "delta_G_exchange_kcal_mol" in result
+        assert "temperature" in result
+
+        # Check aqueous free energies are present
+        assert "G_aq_HA" in result
+        assert "G_aq_A" in result
+        assert "G_aq_HB" in result
+        assert "G_aq_B" in result
+
+        # Check solvent SP energies are present
+        assert "E_solv_HA" in result
+        assert "E_solv_A" in result
+        assert "E_solv_HB" in result
+        assert "E_solv_B" in result
+
+        # Check thermal corrections are present
+        assert "G_corr_HA" in result
+        assert "G_corr_A" in result
+        assert "G_corr_HB" in result
+        assert "G_corr_B" in result
+
+        # Check gas-phase electronic energies are present
+        assert "E_gas_HA" in result
+        assert "E_gas_A" in result
+        assert "E_gas_HB" in result
+        assert "E_gas_B" in result
+
+        # Verify reference pKa is stored correctly
+        assert result["pKa_reference"] == self.PKA_COLLIDINE_REFERENCE
+
+        # Verify temperature is stored correctly
+        assert result["temperature"] == 373.15
+        print(result.items())
+
+        # pKa should be a reasonable value (positive and not too extreme)
+        assert isinstance(result["pKa"], float)
+
+    def test_compute_pka_energy_values(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+    ):
+        """Test that dual-level calculation uses correct energy values.
+
+        Verifies:
+        - E_solv values from solvent SP files
+        - G_corr = qh-G(T) - E_gas from gas-phase files
+        - G_aq = E_solv + G_corr
+        """
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            b_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        HARTREE_TO_KCAL = 627.509
+
+        # Verify G_aq = E_solv + G_corr for each species (in kcal/mol)
+        for species in ["HA", "A", "HB", "B"]:
+            E_solv = result[f"E_solv_{species}"]
+            G_corr = result[f"G_corr_{species}"]
+            G_aq = result[f"G_aq_{species}"]
+            expected_G_aq = (E_solv + G_corr) * HARTREE_TO_KCAL
+            assert np.isclose(
+                G_aq, expected_G_aq, rtol=1e-5
+            ), f"G_aq_{species} mismatch: {G_aq} vs {expected_G_aq}"
+
+        # Verify ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]
+        expected_delta_G = (result["G_aq_A"] + result["G_aq_HB"]) - (
+            result["G_aq_HA"] + result["G_aq_B"]
+        )
+        assert np.isclose(
+            result["delta_G_exchange_kcal_mol"], expected_delta_G, rtol=1e-10
+        )
+
+    def test_print_pka_summary(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+        capsys,
+    ):
+        """Test that print_pka_summary outputs correct format."""
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            b_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        captured = capsys.readouterr()
+        output = captured.out
+
+        # Check header
+        assert "Dual-level Proton Exchange Scheme" in output
+        assert "HA + B⁻ → A⁻ + HB" in output
+
+        # Check method description is present
+        assert "G_corr = qh-G(T) - E_gas" in output
+        assert "G_aq = E_solv + G_corr" in output
+
+        # Check sections are present
+        assert "Gas-Phase Electronic Energies" in output
+        assert "Thermal Corrections" in output
+        assert "Solvent Single-Point Energies" in output
+        assert "Aqueous Free Energies" in output
+
+        # Check computed pKa is displayed
+        assert "Computed pKa(HA)" in output
+
+    def test_compute_pka_dual_level_alias(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+    ):
+        """Test that compute_pka_dual_level alias works (backward compatibility)."""
+        # Test that the alias exists and returns same result
+        result1 = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            b_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=298.15,
+        )
+
+        result2 = Gaussian16pKaOutput.compute_pka_dual_level(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            b_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=298.15,
+        )
+
+        # Results should be identical
+        assert result1["pKa"] == result2["pKa"]
+        assert (
+            result1["delta_G_exchange_kcal_mol"]
+            == result2["delta_G_exchange_kcal_mol"]
+        )

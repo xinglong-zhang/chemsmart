@@ -486,7 +486,7 @@ def gaussian_oniom_outputfile(gaussian_outputs_test_directory):
 @pytest.fixture()
 def gaussian_pKa_HA_optimization_outputfile(gaussian_outputs_test_directory):
     gaussian_pka_ha_optimization_outputfile = os.path.join(
-        gaussian_outputs_test_directory, "phenol_opt.log"
+        gaussian_outputs_test_directory, "5PQ_Me_ts1_no_pd_opt.log"
     )
     return gaussian_pka_ha_optimization_outputfile
 
@@ -494,7 +494,7 @@ def gaussian_pKa_HA_optimization_outputfile(gaussian_outputs_test_directory):
 @pytest.fixture()
 def gaussian_pKa_A_optimization_outputfile(gaussian_outputs_test_directory):
     gaussian_pka_a_optimization_outputfile = os.path.join(
-        gaussian_outputs_test_directory, "phenol_b_opt.log"
+        gaussian_outputs_test_directory, "5PQ_Me_ts1_b_no_pd_opt.log"
     )
     return gaussian_pka_a_optimization_outputfile
 
@@ -502,7 +502,8 @@ def gaussian_pKa_A_optimization_outputfile(gaussian_outputs_test_directory):
 @pytest.fixture()
 def gaussian_pKa_HA_single_point_outputfile(gaussian_outputs_test_directory):
     gaussian_pka_ha_single_point_outputfile = os.path.join(
-        gaussian_outputs_test_directory, "phenol_b_opt_wat_smd_water.log"
+        gaussian_outputs_test_directory,
+        "5PQ_Me_ts1_no_pd_opt_sp_smd_generic.log",
     )
     return gaussian_pka_ha_single_point_outputfile
 
@@ -510,7 +511,8 @@ def gaussian_pKa_HA_single_point_outputfile(gaussian_outputs_test_directory):
 @pytest.fixture()
 def gaussian_pKa_A_single_point_outputfile(gaussian_outputs_test_directory):
     gaussian_pka_a_single_point_outputfile = os.path.join(
-        gaussian_outputs_test_directory, "phenol_b_opt_wat_smd_water.log"
+        gaussian_outputs_test_directory,
+        "5PQ_Me_ts1_b_no_pd_opt_sp_smd_generic.log",
     )
     return gaussian_pka_a_single_point_outputfile
 
