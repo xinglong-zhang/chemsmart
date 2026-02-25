@@ -2760,7 +2760,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
         energy_units="hartree",
-        use_qh_gibbs=True,
     ):
         """
         Compute pKa using the proton exchange thermodynamic cycle.
@@ -2793,11 +2792,13 @@ class Gaussian16pKaOutput(Gaussian16Output):
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
             pressure (float): Pressure in atm. Default 1.0 atm.
-            cutoff_entropy_grimme (float): Cutoff for entropy (cm⁻¹). Default 100.0.
-            cutoff_enthalpy (float): Cutoff for enthalpy (cm⁻¹). Default 100.0.
+            cutoff_entropy_grimme (float): Cutoff frequency for entropy
+                in cm^-1 using Grimme's quasi-RRHO method. Default 100.0.
+            cutoff_enthalpy (float): Cutoff frequency for enthalpy
+                in cm^-1 using Head-Gordon's method. Default 100.0.
             energy_units (str): Energy units for calculations. Default 'hartree'.
-            use_qh_gibbs (bool): If True, use quasi-harmonic Gibbs free energy (qh-G).
-                If False, use standard Gibbs free energy (G). Default True.
+                The calculation always uses quasi-harmonic Gibbs free
+                energies (qh-G(T)) for improved accuracy.
 
         Returns:
             dict: Dictionary containing pKa calculation results:
@@ -2811,7 +2812,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 - 'G_HB': Gibbs free energy of HB
                 - 'G_B': Gibbs free energy of B⁻
                 - 'energy_units': Energy units used
-                - 'use_qh_gibbs': Whether qh-G was used
 
         Example:
             # Calculate pKa of phenol using water as reference (pKa = 15.7)
@@ -2848,17 +2848,11 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 "All four species (HA, A⁻, HB, B⁻) are required."
             )
 
-        # Get Gibbs free energies (qh-G or G)
-        if use_qh_gibbs:
-            G_HA = results["HA"]["qh_G"]
-            G_A = results["A"]["qh_G"]
-            G_HB = results["HB"]["qh_G"]
-            G_B = results["B"]["qh_G"]
-        else:
-            G_HA = results["HA"]["G"]
-            G_A = results["A"]["G"]
-            G_HB = results["HB"]["G"]
-            G_B = results["B"]["G"]
+        # Get Gibbs free energies (qh-G only)
+        G_HA = results["HA"]["qh_G"]
+        G_A = results["A"]["qh_G"]
+        G_HB = results["HB"]["qh_G"]
+        G_B = results["B"]["qh_G"]
 
         # Calculate ΔG_exchange = G(A⁻) + G(HB) - G(HA) - G(B⁻)
         delta_G_exchange = G_A + G_HB - G_HA - G_B
@@ -2890,7 +2884,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
             "G_HB": G_HB,
             "G_B": G_B,
             "energy_units": energy_units,
-            "use_qh_gibbs": use_qh_gibbs,
         }
 
     @classmethod
@@ -2904,7 +2897,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
         energy_units="hartree",
-        use_qh_gibbs=True,
         delta_G_proton_aq=-265.9,
     ):
         """
@@ -2929,8 +2921,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
             cutoff_entropy_grimme (float): Cutoff for entropy (cm⁻¹). Default 100.0.
             cutoff_enthalpy (float): Cutoff for enthalpy (cm⁻¹). Default 100.0.
             energy_units (str): Energy units for output. Default 'hartree'.
-            use_qh_gibbs (bool): If True, use quasi-harmonic Gibbs free energy.
-                Default True.
+                The calculation always uses quasi-harmonic Gibbs free
+                energies (qh-G(T)) for the solute species.
             delta_G_proton_aq (float): Absolute free energy of H⁺ in water
                 in kcal/mol. Default -265.9 kcal/mol (Tissandier et al., 1998).
 
@@ -2944,10 +2936,9 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 - 'G_HA': Gibbs free energy of HA
                 - 'G_A': Gibbs free energy of A⁻
                 - 'energy_units': Energy units used
-                - 'use_qh_gibbs': Whether qh-G was used
 
         Example:
-            result = Gaussian16pKaOutput.compute_pka_direct(
+            Gaussian16pKaOutput.compute_pka_direct(
                 ha_file="acetic_acid_opt.log",
                 a_file="acetate_opt.log",
                 temperature=298.15
@@ -2978,13 +2969,9 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 "A⁻ output file is required for direct pKa calculation."
             )
 
-        # Get Gibbs free energies
-        if use_qh_gibbs:
-            G_HA = results["HA"]["qh_G"]
-            G_A = results["A"]["qh_G"]
-        else:
-            G_HA = results["HA"]["G"]
-            G_A = results["A"]["G"]
+        # Get Gibbs free energies (qh-G only)
+        G_HA = results["HA"]["qh_G"]
+        G_A = results["A"]["qh_G"]
 
         # Convert ΔG°(H⁺)_aq from kcal/mol to specified units
         delta_G_proton = energy_conversion(
@@ -3017,7 +3004,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
             "G_HA": G_HA,
             "G_A": G_A,
             "energy_units": energy_units,
-            "use_qh_gibbs": use_qh_gibbs,
         }
 
     @classmethod
@@ -3034,7 +3020,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
         energy_units="hartree",
-        use_qh_gibbs=True,
     ):
         """
         Print a formatted summary of pKa calculation using proton exchange scheme.
@@ -3044,14 +3029,13 @@ class Gaussian16pKaOutput(Gaussian16Output):
             a_file (str): Path to A⁻ (target conjugate base) output file.
             hb_file (str): Path to HB (reference acid) output file.
             b_file (str): Path to B⁻ (reference conjugate base) output file.
-            pka_reference (float): Experimental pKa of reference acid HB.
+            pka_reference (float): Experimental pKa of the reference acid HB.
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
             pressure (float): Pressure in atm. Default 1.0 atm.
             cutoff_entropy_grimme (float): Cutoff for entropy (cm⁻¹). Default 100.0.
             cutoff_enthalpy (float): Cutoff for enthalpy (cm⁻¹). Default 100.0.
             energy_units (str): Energy units. Default 'hartree'.
-            use_qh_gibbs (bool): Use quasi-harmonic Gibbs free energy. Default True.
 
         Example:
             Gaussian16pKaOutput.print_pka_proton_exchange_summary(
@@ -3075,10 +3059,9 @@ class Gaussian16pKaOutput(Gaussian16Output):
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
             energy_units=energy_units,
-            use_qh_gibbs=use_qh_gibbs,
         )
 
-        gibbs_type = "qh-G(T)" if use_qh_gibbs else "G(T)"
+        gibbs_type = "qh-G(T)"
 
         print("=" * 70)
         print("pKa Calculation - Proton Exchange Scheme")
@@ -3119,7 +3102,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
         energy_units="hartree",
-        use_qh_gibbs=True,
         delta_G_proton_aq=-265.9,
     ):
         """
@@ -3134,7 +3116,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
             cutoff_entropy_grimme (float): Cutoff for entropy (cm⁻¹). Default 100.0.
             cutoff_enthalpy (float): Cutoff for enthalpy (cm⁻¹). Default 100.0.
             energy_units (str): Energy units. Default 'hartree'.
-            use_qh_gibbs (bool): Use quasi-harmonic Gibbs free energy. Default True.
             delta_G_proton_aq (float): Free energy of H⁺(aq) in kcal/mol.
                 Default -265.9 kcal/mol.
 
@@ -3154,11 +3135,10 @@ class Gaussian16pKaOutput(Gaussian16Output):
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
             energy_units=energy_units,
-            use_qh_gibbs=use_qh_gibbs,
             delta_G_proton_aq=delta_G_proton_aq,
         )
 
-        gibbs_type = "qh-G(T)" if use_qh_gibbs else "G(T)"
+        gibbs_type = "qh-G(T)"
 
         print("=" * 70)
         print("pKa Calculation - Direct Scheme")
