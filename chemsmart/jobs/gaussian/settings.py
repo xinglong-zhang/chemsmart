@@ -2063,6 +2063,13 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         solvent_id="water",
         conjugate_base_charge=None,
         conjugate_base_multiplicity=None,
+        # Thermochemistry settings for pKa calculation
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
         **kwargs,
     ):
         """
@@ -2103,6 +2110,17 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 If not specified, defaults to charge - 1.
             conjugate_base_multiplicity (int, optional): Multiplicity of the conjugate base (A-).
                 If not specified, defaults to multiplicity.
+            temperature (float): Temperature in Kelvin for thermochemistry calculation.
+                Default is 298.15 K.
+            concentration (float): Concentration in mol/L for thermochemistry.
+                Default is 1.0 mol/L.
+            pressure (float): Pressure in atm for thermochemistry.
+                Default is 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff frequency for entropy in cm^-1
+                using Grimme's quasi-RRHO method. Default is 100.0 cm^-1.
+            cutoff_enthalpy (float): Cutoff frequency for enthalpy in cm^-1
+                using Head-Gordon's quasi-RRHO method. Default is 100.0 cm^-1.
+            energy_units (str): Energy units for output. Default is 'hartree'.
             **kwargs: Additional keyword arguments passed to GaussianJobSettings,
                 including charge and multiplicity for the protonated form,
                 and functional/basis for both gas and solution phases.
@@ -2114,6 +2132,14 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         self.solvent_id = solvent_id
         self.conjugate_base_charge = conjugate_base_charge
         self.conjugate_base_multiplicity = conjugate_base_multiplicity
+
+        # Thermochemistry settings
+        self.temperature = temperature
+        self.concentration = concentration
+        self.pressure = pressure
+        self.cutoff_entropy_grimme = cutoff_entropy_grimme
+        self.cutoff_enthalpy = cutoff_enthalpy
+        self.energy_units = energy_units
 
         if not self.title:
             self.title = "Gaussian pKa calculation job"

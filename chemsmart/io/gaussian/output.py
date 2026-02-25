@@ -2135,3 +2135,587 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
                         all_cells.append(tv_vector)
                 return np.array(all_cells)
         return None
+
+
+class Gaussian16pKaOutput(Gaussian16Output):
+    """
+    Extended Gaussian16Output for pKa calculations with thermochemistry support.
+
+    This class provides methods to extract electronic energy and quasi-harmonic
+    Gibbs free energy from Gaussian optimization output files, which are essential
+    for pKa calculations using thermodynamic cycles.
+
+    The thermochemistry calculations use Grimme's quasi-RRHO method for entropy
+    and Head-Gordon's quasi-RRHO method for enthalpy corrections, matching the
+    behavior of:
+        chemsmart run thermochemistry -f <file> -T <temp> -c <conc> -csg <cutoff> -ch <cutoff>
+
+    Attributes:
+        filename (str): Path to the Gaussian output file.
+        temperature (float): Temperature in Kelvin for thermochemistry. Default 298.15 K.
+        concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+        pressure (float): Pressure in atm. Default 1.0 atm.
+        cutoff_entropy_grimme (float): Cutoff frequency for entropy (cm^-1). Default 100.0.
+        cutoff_enthalpy (float): Cutoff frequency for enthalpy (cm^-1). Default 100.0.
+        energy_units (str): Energy units for output. Default 'hartree'.
+
+    Example:
+        output = Gaussian16pKaOutput(
+            "acetic_acid_opt.log",
+            temperature=333.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100,
+            cutoff_enthalpy=100
+        )
+        E = output.electronic_energy_in_units  # E in hartree
+        G = output.qh_gibbs_free_energy  # qh-G(T) in hartree
+    """
+
+    def __init__(
+        self,
+        filename,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """
+        Initialize Gaussian16pKaOutput with thermochemistry settings.
+
+        Args:
+            filename (str): Path to Gaussian output file.
+            temperature (float): Temperature in Kelvin. Default 298.15 K.
+            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+            pressure (float): Pressure in atm. Default 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff frequency for entropy
+                in cm^-1 using Grimme's quasi-RRHO method. Default 100.0.
+            cutoff_enthalpy (float): Cutoff frequency for enthalpy
+                in cm^-1 using Head-Gordon's method. Default 100.0.
+            energy_units (str): Energy units for output values.
+                Options: 'hartree', 'eV', 'kcal/mol', 'kJ/mol'. Default 'hartree'.
+        """
+        super().__init__(filename=filename)
+        self.temperature = temperature
+        self.concentration = concentration
+        self.pressure = pressure
+        self.cutoff_entropy_grimme = cutoff_entropy_grimme
+        self.cutoff_enthalpy = cutoff_enthalpy
+        self.energy_units = energy_units.lower()
+        self._thermochemistry = None
+
+    @property
+    def thermochemistry(self):
+        """
+        Get or create the Thermochemistry analysis object.
+
+        Returns:
+            Thermochemistry: Configured thermochemistry analysis object.
+
+        Raises:
+            ValueError: If the output file did not terminate normally.
+        """
+        if self._thermochemistry is None:
+            from chemsmart.analysis.thermochemistry import Thermochemistry
+
+            self._thermochemistry = Thermochemistry(
+                filename=self.filename,
+                temperature=self.temperature,
+                concentration=self.concentration,
+                pressure=self.pressure,
+                use_weighted_mass=False,
+                alpha=4,
+                s_freq_cutoff=self.cutoff_entropy_grimme,
+                entropy_method="grimme",
+                h_freq_cutoff=self.cutoff_enthalpy,
+                energy_units=self.energy_units,
+                check_imaginary_frequencies=True,
+            )
+        return self._thermochemistry
+
+    @property
+    def electronic_energy_in_units(self):
+        """
+        Get the electronic energy (E) in specified units.
+
+        This is the raw SCF energy from the Gaussian calculation,
+        converted to the specified energy units.
+
+        Returns:
+            float: Electronic energy in specified units (default: hartree).
+        """
+        from chemsmart.utils.constants import energy_conversion
+
+        # Get electronic energy in J/mol from thermochemistry
+        electronic_energy_j_mol = self.thermochemistry.electronic_energy
+        # Convert to specified units
+        return energy_conversion(
+            "j/mol", self.energy_units, electronic_energy_j_mol
+        )
+
+    @property
+    def qh_gibbs_free_energy(self):
+        """
+        Get the quasi-harmonic Gibbs free energy qh-G(T) in specified units.
+
+        This uses Grimme's quasi-RRHO method for entropy and Head-Gordon's
+        quasi-RRHO method for enthalpy corrections, which is equivalent to
+        running:
+            chemsmart run thermochemistry -f <file> -T <temp> -c <conc> -csg <cutoff> -ch <cutoff>
+
+        The qh-G(T) value corresponds to the quasi-RRHO corrected Gibbs free energy
+        that accounts for low-frequency vibrations using interpolation to free rotor
+        entropy and enthalpy.
+
+        Returns:
+            float: Quasi-harmonic Gibbs free energy in specified units (default: hartree).
+
+        Raises:
+            ValueError: If the file doesn't contain frequency data.
+        """
+        from chemsmart.utils.constants import energy_conversion
+
+        # Get qh-G in J/mol from thermochemistry
+        qh_gibbs_j_mol = self.thermochemistry.qrrho_gibbs_free_energy
+        if qh_gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        # Convert to specified units
+        return energy_conversion("j/mol", self.energy_units, qh_gibbs_j_mol)
+
+    @property
+    def zero_point_energy_in_units(self):
+        """
+        Get the zero-point energy (ZPE) in specified units.
+
+        Returns:
+            float: Zero-point energy in specified units (default: hartree).
+        """
+        from chemsmart.utils.constants import energy_conversion
+
+        zpe_j_mol = self.thermochemistry.zero_point_energy
+        if zpe_j_mol is None:
+            raise ValueError(
+                f"Cannot compute zero-point energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, zpe_j_mol)
+
+    @property
+    def enthalpy_in_units(self):
+        """
+        Get the enthalpy (H) in specified units.
+
+        Returns:
+            float: Enthalpy in specified units (default: hartree).
+        """
+        from chemsmart.utils.constants import energy_conversion
+
+        enthalpy_j_mol = self.thermochemistry.enthalpy
+        if enthalpy_j_mol is None:
+            raise ValueError(
+                f"Cannot compute enthalpy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, enthalpy_j_mol)
+
+    @property
+    def qh_enthalpy_in_units(self):
+        """
+        Get the quasi-harmonic enthalpy qh-H(T) in specified units.
+
+        Returns:
+            float: Quasi-harmonic enthalpy in specified units (default: hartree).
+        """
+        from chemsmart.utils.constants import energy_conversion
+
+        qh_enthalpy_j_mol = self.thermochemistry.qrrho_enthalpy
+        if qh_enthalpy_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-enthalpy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, qh_enthalpy_j_mol)
+
+    @property
+    def gibbs_free_energy_in_units(self):
+        """
+        Get the standard Gibbs free energy G(T) in specified units.
+
+        This is the uncorrected Gibbs free energy without quasi-RRHO corrections.
+
+        Returns:
+            float: Gibbs free energy in specified units (default: hartree).
+        """
+        from chemsmart.utils.constants import energy_conversion
+
+        gibbs_j_mol = self.thermochemistry.gibbs_free_energy
+        if gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, gibbs_j_mol)
+
+    def compute_thermochemistry(self):
+        """
+        Compute all thermochemistry properties.
+
+        Returns:
+            dict: Dictionary containing all thermochemistry values:
+                - structure: Base filename
+                - electronic_energy: E in specified units
+                - zero_point_energy: ZPE in specified units
+                - enthalpy: H in specified units
+                - qh_enthalpy: qh-H(T) in specified units
+                - entropy_times_temperature: T*S in specified units
+                - qh_entropy_times_temperature: T*qh-S in specified units
+                - gibbs_free_energy: G(T) in specified units
+                - qh_gibbs_free_energy: qh-G(T) in specified units
+        """
+        import os
+
+        from chemsmart.utils.constants import energy_conversion
+
+        thermo = self.thermochemistry
+        structure = os.path.splitext(os.path.basename(self.filename))[0]
+
+        return {
+            "structure": structure,
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.entropy_times_temperature,
+                )
+                if thermo.entropy_times_temperature
+                else None
+            ),
+            "qh_entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.qrrho_entropy_times_temperature,
+                )
+                if thermo.qrrho_entropy_times_temperature
+                else None
+            ),
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    @classmethod
+    def from_settings(cls, filename, settings):
+        """
+        Create a Gaussian16pKaOutput from GaussianpKaJobSettings.
+
+        Args:
+            filename (str): Path to Gaussian output file.
+            settings (GaussianpKaJobSettings): pKa job settings containing
+                thermochemistry parameters.
+
+        Returns:
+            Gaussian16pKaOutput: Configured output object.
+        """
+        return cls(
+            filename=filename,
+            temperature=settings.temperature,
+            concentration=settings.concentration,
+            pressure=settings.pressure,
+            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=settings.cutoff_enthalpy,
+            energy_units=settings.energy_units,
+        )
+
+    # =========================================================================
+    # Multi-file pKa thermochemistry support
+    # =========================================================================
+
+    @classmethod
+    def for_pka_species(
+        cls,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """
+        Create Gaussian16pKaOutput objects for multiple pKa species.
+
+        Factory method that creates output objects for all species involved
+        in pKa calculations: HA, A-, and optionally HB, B- for proton exchange.
+
+        Args:
+            ha_file (str, optional): Path to HA (protonated acid) output file.
+            a_file (str, optional): Path to A- (conjugate base) output file.
+            hb_file (str, optional): Path to HB (reference acid) output file.
+            b_file (str, optional): Path to B- (reference conjugate base) output file.
+            temperature (float): Temperature in Kelvin. Default 298.15 K.
+            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+            pressure (float): Pressure in atm. Default 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff frequency for entropy (cm^-1).
+            cutoff_enthalpy (float): Cutoff frequency for enthalpy (cm^-1).
+            energy_units (str): Energy units for output.
+
+        Returns:
+            dict: Dictionary with Gaussian16pKaOutput objects:
+                - 'HA': Output for protonated acid (if ha_file provided)
+                - 'A': Output for conjugate base (if a_file provided)
+                - 'HB': Output for reference acid (if hb_file provided)
+                - 'B': Output for reference conjugate base (if b_file provided)
+
+        Example:
+            outputs = Gaussian16pKaOutput.for_pka_species(
+                ha_file="acid_opt.log",
+                a_file="base_opt.log",
+                temperature=298.15
+            )
+            print(f"E(HA) = {outputs['HA'].electronic_energy_in_units}")
+            print(f"qh-G(A-) = {outputs['A'].qh_gibbs_free_energy}")
+        """
+        outputs = {}
+        common_kwargs = {
+            "temperature": temperature,
+            "concentration": concentration,
+            "pressure": pressure,
+            "cutoff_entropy_grimme": cutoff_entropy_grimme,
+            "cutoff_enthalpy": cutoff_enthalpy,
+            "energy_units": energy_units,
+        }
+
+        if ha_file is not None:
+            outputs["HA"] = cls(filename=ha_file, **common_kwargs)
+        if a_file is not None:
+            outputs["A"] = cls(filename=a_file, **common_kwargs)
+        if hb_file is not None:
+            outputs["HB"] = cls(filename=hb_file, **common_kwargs)
+        if b_file is not None:
+            outputs["B"] = cls(filename=b_file, **common_kwargs)
+
+        return outputs
+
+    @classmethod
+    def compute_pka_thermochemistry(
+        cls,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """
+        Compute thermochemistry for all pKa species from output files.
+
+        Extracts electronic energies (E) and quasi-harmonic Gibbs free energies
+        (qh-G(T)) from Gaussian optimization output files for pKa calculations.
+
+        Args:
+            ha_file (str, optional): Path to HA (protonated acid) output file.
+            a_file (str, optional): Path to A- (conjugate base) output file.
+            hb_file (str, optional): Path to HB (reference acid) output file.
+            b_file (str, optional): Path to B- (reference conjugate base) output file.
+            temperature (float): Temperature in Kelvin. Default 298.15 K.
+            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+            pressure (float): Pressure in atm. Default 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
+            cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
+            energy_units (str): Energy units for output. Default 'hartree'.
+
+        Returns:
+            dict: Dictionary with thermochemistry data:
+                - 'settings': Thermochemistry settings used
+                - 'HA': Data dict for protonated acid (if ha_file provided)
+                - 'A': Data dict for conjugate base (if a_file provided)
+                - 'HB': Data dict for reference acid (if hb_file provided)
+                - 'B': Data dict for reference conjugate base (if b_file provided)
+
+                Each species dict contains:
+                - 'name': Species name
+                - 'file': Path to output file
+                - 'E': Electronic energy in specified units
+                - 'qh_G': Quasi-harmonic Gibbs free energy
+                - 'ZPE': Zero-point energy
+                - 'H': Enthalpy
+                - 'qh_H': Quasi-harmonic enthalpy
+                - 'G': Gibbs free energy
+
+        Example:
+            results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+                ha_file="acid_opt.log",
+                a_file="base_opt.log",
+                hb_file="ref_acid_opt.log",
+                b_file="ref_base_opt.log",
+                temperature=298.15
+            )
+            print(f"E(HA) = {results['HA']['E']}")
+            print(f"qh-G(A-) = {results['A']['qh_G']}")
+        """
+        outputs = cls.for_pka_species(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+
+        results = {
+            "settings": {
+                "temperature": temperature,
+                "concentration": concentration,
+                "pressure": pressure,
+                "cutoff_entropy_grimme": cutoff_entropy_grimme,
+                "cutoff_enthalpy": cutoff_enthalpy,
+                "energy_units": energy_units,
+            }
+        }
+
+        species_names = {"HA": "HA", "A": "A-", "HB": "HB", "B": "B-"}
+
+        for key, output in outputs.items():
+            results[key] = {
+                "name": species_names[key],
+                "file": output.filename,
+                "E": output.electronic_energy_in_units,
+                "qh_G": output.qh_gibbs_free_energy,
+                "ZPE": output.zero_point_energy_in_units,
+                "H": output.enthalpy_in_units,
+                "qh_H": output.qh_enthalpy_in_units,
+                "G": output.gibbs_free_energy_in_units,
+            }
+
+        return results
+
+    @classmethod
+    def print_pka_summary(
+        cls,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """
+        Print a formatted summary of pKa thermochemistry results.
+
+        Args:
+            ha_file (str, optional): Path to HA (protonated acid) output file.
+            a_file (str, optional): Path to A- (conjugate base) output file.
+            hb_file (str, optional): Path to HB (reference acid) output file.
+            b_file (str, optional): Path to B- (reference conjugate base) output file.
+            temperature (float): Temperature in Kelvin. Default 298.15 K.
+            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+            pressure (float): Pressure in atm. Default 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
+            cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
+            energy_units (str): Energy units for output. Default 'hartree'.
+
+        Example:
+            Gaussian16pKaOutput.print_pka_summary(
+                ha_file="acid_opt.log",
+                a_file="base_opt.log",
+                temperature=298.15
+            )
+        """
+        results = cls.compute_pka_thermochemistry(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+        settings = results["settings"]
+
+        print("=" * 70)
+        print("pKa Thermochemistry Summary")
+        print("=" * 70)
+        print(f"Temperature: {settings['temperature']} K")
+        print(f"Concentration: {settings['concentration']} mol/L")
+        print(f"Pressure: {settings['pressure']} atm")
+        print(
+            f"Entropy cutoff (Grimme): {settings['cutoff_entropy_grimme']} cm^-1"
+        )
+        print(
+            f"Enthalpy cutoff (Head-Gordon): {settings['cutoff_enthalpy']} cm^-1"
+        )
+        print(f"Energy units: {settings['energy_units']}")
+        print("-" * 70)
+
+        header = f"{'Species':<8} {'E':<20} {'qh-G(T)':<20}"
+        print(header)
+        print("-" * 70)
+
+        for key in ["HA", "A", "HB", "B"]:
+            if key in results:
+                data = results[key]
+                E_str = f"{data['E']:.10f}" if data["E"] is not None else "N/A"
+                G_str = (
+                    f"{data['qh_G']:.10f}"
+                    if data["qh_G"] is not None
+                    else "N/A"
+                )
+                print(f"{data['name']:<8} {E_str:<20} {G_str:<20}")
+
+        print("=" * 70)
+
+    @classmethod
+    def from_pka_settings(
+        cls, settings, ha_file=None, a_file=None, hb_file=None, b_file=None
+    ):
+        """
+        Create pKa outputs from GaussianpKaJobSettings.
+
+        Args:
+            settings (GaussianpKaJobSettings): pKa job settings.
+            ha_file (str, optional): Path to HA output file.
+            a_file (str, optional): Path to A- output file.
+            hb_file (str, optional): Path to HB output file.
+            b_file (str, optional): Path to B- output file.
+
+        Returns:
+            dict: Dictionary with Gaussian16pKaOutput objects for each species.
+        """
+        return cls.for_pka_species(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=settings.temperature,
+            concentration=settings.concentration,
+            pressure=settings.pressure,
+            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=settings.cutoff_enthalpy,
+            energy_units=settings.energy_units,
+        )

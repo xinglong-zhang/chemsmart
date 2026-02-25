@@ -23,7 +23,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,34 @@ def click_pka_options(f):
         default="water",
         help="Solvent ID for solution phase SP (default: water).",
     )
+    @click.option(
+        "-T",
+        "--temperature",
+        type=float,
+        default=298.15,
+        help="Temperature in Kelvin for thermochemistry calculation (default: 298.15 K).",
+    )
+    @click.option(
+        "-conc",
+        "--concentration",
+        type=float,
+        default=1.0,
+        help="Concentration in mol/L for thermochemistry (default: 1.0 mol/L).",
+    )
+    @click.option(
+        "-csg",
+        "--cutoff-entropy-grimme",
+        type=float,
+        default=100.0,
+        help="Cutoff frequency for entropy (cm^-1) using Grimme's quasi-RRHO method (default: 100).",
+    )
+    @click.option(
+        "-ch",
+        "--cutoff-enthalpy",
+        type=float,
+        default=100.0,
+        help="Cutoff frequency for enthalpy (cm^-1) using Head-Gordon's method (default: 100).",
+    )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
@@ -133,7 +161,7 @@ def click_pka_options(f):
     return wrapper
 
 
-@gaussian.command("pka", cls=MyCommand)
+@gaussian.group("pka", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_pka_options
 @click.pass_context
@@ -152,6 +180,10 @@ def pka(
     conjugate_base_multiplicity,
     solvent_model,
     solvent_id,
+    temperature,
+    concentration,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
     skip_completed,
     **kwargs,
 ):
@@ -166,14 +198,14 @@ def pka(
 
     \b
     - **proton exchange** (default): Uses a reference acid to cancel errors.
-      HA + Ref- → A- + HRef
-      pKa(HA) = pKa(HRef) + ΔG_exchange / (2.303 * R * T)
-
+      HA + B- → A- + HB
+      pKa(HA) = pKa(HB) + ΔG_exchange / (2.303 * R * T)
 
       When using proton exchange, provide a reference acid geometry file
       with --reference (-r) option. This will run optimization and SP
       calculations for both HB and B- alongside HA and A-.
 
+    \b
     - **direct**: Uses absolute free energy of H+ in water.
       pKa = [G(A-)_aq - G(HA)_aq + ΔG°(H+)_aq] / (2.303 * R * T)
       Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., 1998)
@@ -183,14 +215,32 @@ def pka(
     The conjugate base charge defaults to (charge - 1).
 
     \b
+    Subcommands:
+        thermo    Extract thermochemistry (E, qh-G) from completed output files
+
+    \b
     Examples:
-        # Proton exchange cycle with reference acid geometry file
+        # Run pKa job with proton exchange cycle
         chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 \\
             -t "proton exchange" -r water.xyz -rpi 1 -rc 0 -rm 1
 
-        # Direct cycle (no reference needed)
+        # Run pKa job with direct cycle
         chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -t direct
+
+        # Extract thermochemistry from completed jobs
+        chemsmart run gaussian pka thermo -ha acid_opt.log -a base_opt.log -T 298.15
     """
+    # If a subcommand is invoked, don't run the pKa job
+    if ctx.invoked_subcommand is not None:
+        # Store settings in context for subcommands
+        ctx.obj["pka_settings"] = {
+            "temperature": temperature,
+            "concentration": concentration,
+            "cutoff_entropy_grimme": cutoff_entropy_grimme,
+            "cutoff_enthalpy": cutoff_enthalpy,
+        }
+        return
+
     from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 
@@ -254,6 +304,11 @@ def pka(
         conjugate_base_multiplicity=conjugate_base_multiplicity,
         solvent_model=solvent_model,
         solvent_id=solvent_id,
+        # Thermochemistry settings
+        temperature=temperature,
+        concentration=concentration,
+        cutoff_entropy_grimme=cutoff_entropy_grimme,
+        cutoff_enthalpy=cutoff_enthalpy,
         # Inherit charge and multiplicity from opt_settings (protonated form)
         charge=opt_settings.charge,
         multiplicity=opt_settings.multiplicity,
@@ -334,6 +389,10 @@ def pka(
         f"Solution phase SP: {pka_settings.functional}/{pka_settings.basis} "
         f"with {solvent_model}({solvent_id})"
     )
+    logger.info(
+        f"Thermochemistry: T={temperature}K, c={concentration}mol/L, "
+        f"csg={cutoff_entropy_grimme}cm^-1, ch={cutoff_enthalpy}cm^-1"
+    )
 
     # Create and return pKa job
     return GaussianpKaJob(
@@ -343,4 +402,198 @@ def pka(
         jobrunner=jobrunner,
         skip_completed=skip_completed,
         **kwargs,
+    )
+
+
+def click_pka_thermo_options(f):
+    """Click options for pKa thermochemistry extraction."""
+
+    @click.option(
+        "-ha",
+        "--ha-file",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to HA (protonated acid) optimization output file.",
+    )
+    @click.option(
+        "-a",
+        "--a-file",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to A- (conjugate base) optimization output file.",
+    )
+    @click.option(
+        "-hb",
+        "--hb-file",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to HB (reference acid) optimization output file.",
+    )
+    @click.option(
+        "-b",
+        "--b-file",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to B- (reference conjugate base) optimization output file.",
+    )
+    @click.option(
+        "-T",
+        "--temperature",
+        type=float,
+        default=298.15,
+        help="Temperature in Kelvin for thermochemistry calculation (default: 298.15 K).",
+    )
+    @click.option(
+        "-conc",
+        "--concentration",
+        type=float,
+        default=1.0,
+        help="Concentration in mol/L for thermochemistry (default: 1.0 mol/L).",
+    )
+    @click.option(
+        "-csg",
+        "--cutoff-entropy-grimme",
+        type=float,
+        default=100.0,
+        help="Cutoff frequency for entropy (cm^-1) using Grimme's quasi-RRHO method (default: 100).",
+    )
+    @click.option(
+        "-ch",
+        "--cutoff-enthalpy",
+        type=float,
+        default=100.0,
+        help="Cutoff frequency for enthalpy (cm^-1) using Head-Gordon's method (default: 100).",
+    )
+    @click.option(
+        "-u",
+        "--energy-units",
+        type=click.Choice(
+            ["hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
+        ),
+        default="hartree",
+        help="Energy units for output (default: hartree).",
+    )
+    @click.option(
+        "-o",
+        "--output",
+        type=click.Path(),
+        default=None,
+        help="Output file to save results (default: print to stdout).",
+    )
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
+@pka.command("thermo", cls=MyCommand)
+@click_pka_thermo_options
+@click.pass_context
+def thermo(
+    ctx,
+    ha_file,
+    a_file,
+    hb_file,
+    b_file,
+    temperature,
+    concentration,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
+    energy_units,
+    output,
+    **kwargs,
+):
+    """
+    Extract thermochemistry (E and qh-G(T)) from pKa optimization output files.
+
+    This command extracts electronic energies (E) and quasi-harmonic Gibbs free
+    energies (qh-G(T)) from Gaussian optimization output files for pKa calculations.
+
+    The quasi-harmonic corrections use Grimme's quasi-RRHO method for entropy
+    and Head-Gordon's quasi-RRHO method for enthalpy, equivalent to running:
+        chemsmart run thermochemistry -f <file> -T <temp> -c <conc> -csg <cutoff> -ch <cutoff>
+
+    Species files:
+        -ha: HA (protonated acid) output file
+        -a:  A- (conjugate base) output file
+        -hb: HB (reference acid) output file (for proton exchange cycle)
+        -b:  B- (reference conjugate base) output file (for proton exchange cycle)
+
+    \b
+    Examples:
+        # Direct cycle (HA and A- only)
+        chemsmart run gaussian pka thermo -ha acid_opt.log -a base_opt.log -T 298.15
+
+        # Proton exchange cycle (all four species)
+        chemsmart run gaussian pka thermo \\
+            -ha acetic_acid_opt.log -a acetate_opt.log \\
+            -hb water_opt.log -b hydroxide_opt.log \\
+            -T 298.15 -csg 100 -ch 100
+
+        # With custom temperature and units
+        chemsmart run gaussian pka thermo \\
+            -ha acid_opt.log -a base_opt.log \\
+            -T 333.15 -u kcal/mol -o results.txt
+    """
+    from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+    # Validate that at least one file is provided
+    if all(f is None for f in [ha_file, a_file, hb_file, b_file]):
+        raise click.UsageError(
+            "At least one output file must be provided. Use -ha, -a, -hb, or -b options."
+        )
+
+    # Compute and display results
+    if output is not None:
+        # Save to file
+        import sys
+        from io import StringIO
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+        result = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+
+        with open(output, "w") as f:
+            f.write(result)
+        logger.info(f"Results saved to {output}")
+        click.echo(f"Results saved to {output}")
+    else:
+        # Print to stdout
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+
+    # Return the results dictionary for programmatic access
+    return Gaussian16pKaOutput.compute_pka_thermochemistry(
+        ha_file=ha_file,
+        a_file=a_file,
+        hb_file=hb_file,
+        b_file=b_file,
+        temperature=temperature,
+        concentration=concentration,
+        cutoff_entropy_grimme=cutoff_entropy_grimme,
+        cutoff_enthalpy=cutoff_enthalpy,
+        energy_units=energy_units,
     )

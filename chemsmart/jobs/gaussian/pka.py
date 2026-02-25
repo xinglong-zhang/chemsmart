@@ -858,3 +858,176 @@ class GaussianpKaJob(GaussianJob):
         if not self.has_reference_jobs:
             return None
         return self.ref_conjugate_base_sp_job._output()
+
+    # =========================================================================
+    # Thermochemistry extraction
+    # =========================================================================
+
+    def get_pka_outputs(self):
+        """
+        Get Gaussian16pKaOutput objects for completed pKa jobs.
+
+        Creates Gaussian16pKaOutput objects using the output files from
+        completed optimization jobs. This provides access to electronic
+        energies (E) and quasi-harmonic Gibbs free energies (qh-G(T)) for
+        all species.
+
+        Returns:
+            dict: Dictionary with Gaussian16pKaOutput objects:
+                - 'HA': Output for protonated acid
+                - 'A': Output for conjugate base
+                - 'HB': Output for reference acid (if available)
+                - 'B': Output for reference conjugate base (if available)
+
+        Raises:
+            ValueError: If optimization jobs are not complete.
+
+        Example:
+            job = GaussianpKaJob(...)
+            job.run()  # Run all jobs
+
+            outputs = job.get_pka_outputs()
+            print(f"E(HA) = {outputs['HA'].electronic_energy_in_units}")
+            print(f"qh-G(HA) = {outputs['HA'].qh_gibbs_free_energy}")
+            print(f"E(A-) = {outputs['A'].electronic_energy_in_units}")
+            print(f"qh-G(A-) = {outputs['A'].qh_gibbs_free_energy}")
+        """
+        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+        if not self._opt_jobs_are_complete():
+            raise ValueError(
+                "Cannot get thermochemistry: optimization jobs are not complete. "
+                "Run the pKa jobs first using job.run()."
+            )
+
+        # Get output file paths from completed opt jobs
+        ha_file = (
+            self.protonated_job.outputfile if self.protonated_job else None
+        )
+        a_file = (
+            self.conjugate_base_job.outputfile
+            if self.conjugate_base_job
+            else None
+        )
+
+        # Get reference files if available
+        hb_file = None
+        b_file = None
+        if self.has_reference_jobs and self._ref_opt_jobs_are_complete():
+            hb_file = (
+                self.ref_acid_job.outputfile if self.ref_acid_job else None
+            )
+            b_file = (
+                self.ref_conjugate_base_job.outputfile
+                if self.ref_conjugate_base_job
+                else None
+            )
+
+        return Gaussian16pKaOutput.from_pka_settings(
+            settings=self.settings,
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+        )
+
+    def compute_thermochemistry(self):
+        """
+        Compute and return thermochemistry results for all species.
+
+        Convenience method that computes thermochemistry for all pKa species
+        and returns the results dictionary.
+
+        Returns:
+            dict: Dictionary with thermochemistry data for each species.
+                See Gaussian16pKaOutput.compute_pka_thermochemistry() for details.
+        """
+        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+        if not self._opt_jobs_are_complete():
+            raise ValueError(
+                "Cannot compute thermochemistry: optimization jobs are not complete. "
+                "Run the pKa jobs first using job.run()."
+            )
+
+        # Get output file paths from completed opt jobs
+        ha_file = (
+            self.protonated_job.outputfile if self.protonated_job else None
+        )
+        a_file = (
+            self.conjugate_base_job.outputfile
+            if self.conjugate_base_job
+            else None
+        )
+
+        # Get reference files if available
+        hb_file = None
+        b_file = None
+        if self.has_reference_jobs and self._ref_opt_jobs_are_complete():
+            hb_file = (
+                self.ref_acid_job.outputfile if self.ref_acid_job else None
+            )
+            b_file = (
+                self.ref_conjugate_base_job.outputfile
+                if self.ref_conjugate_base_job
+                else None
+            )
+
+        return Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=self.settings.temperature,
+            concentration=self.settings.concentration,
+            pressure=self.settings.pressure,
+            cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=self.settings.cutoff_enthalpy,
+            energy_units=self.settings.energy_units,
+        )
+
+    def print_thermochemistry(self):
+        """Print formatted thermochemistry summary to stdout."""
+        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+        if not self._opt_jobs_are_complete():
+            raise ValueError(
+                "Cannot print thermochemistry: optimization jobs are not complete. "
+                "Run the pKa jobs first using job.run()."
+            )
+
+        # Get output file paths from completed opt jobs
+        ha_file = (
+            self.protonated_job.outputfile if self.protonated_job else None
+        )
+        a_file = (
+            self.conjugate_base_job.outputfile
+            if self.conjugate_base_job
+            else None
+        )
+
+        # Get reference files if available
+        hb_file = None
+        b_file = None
+        if self.has_reference_jobs and self._ref_opt_jobs_are_complete():
+            hb_file = (
+                self.ref_acid_job.outputfile if self.ref_acid_job else None
+            )
+            b_file = (
+                self.ref_conjugate_base_job.outputfile
+                if self.ref_conjugate_base_job
+                else None
+            )
+
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=self.settings.temperature,
+            concentration=self.settings.concentration,
+            pressure=self.settings.pressure,
+            cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=self.settings.cutoff_enthalpy,
+            energy_units=self.settings.energy_units,
+        )
