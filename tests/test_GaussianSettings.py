@@ -550,7 +550,6 @@ class TestGaussianpKaJobSettings:
         settings = GaussianpKaJobSettings(
             proton_index=10,
             thermodynamic_cycle="proton exchange",
-            reference="acetic_acid",
             solvent_model="PCM",
             solvent_id="water",
             charge=0,  # Protonated form charge (inherited from parent)
@@ -562,7 +561,6 @@ class TestGaussianpKaJobSettings:
         )
         assert settings.proton_index == 10
         assert settings.thermodynamic_cycle == "proton exchange"
-        assert settings.reference == "acetic_acid"
         assert settings.solvent_model == "PCM"
         assert settings.solvent_id == "water"
         assert settings.charge == 0
@@ -583,7 +581,7 @@ class TestGaussianpKaJobSettings:
             multiplicity=1,
         )
         assert settings.thermodynamic_cycle == "direct"
-        assert settings.reference is None  # Not needed for direct cycle
+        assert settings.reference_file is None  # Not needed for direct cycle
         assert settings.delta_G_proton == -265.9  # Default value
 
     def test_direct_cycle_custom_delta_g(self):
@@ -597,17 +595,40 @@ class TestGaussianpKaJobSettings:
         )
         assert settings.delta_G_proton == -270.0
 
-    def test_proton_exchange_cycle_requires_reference(self):
-        """Test that proton exchange cycle uses reference acid."""
+    def test_proton_exchange_with_reference_file(
+        self, single_molecule_xyz_file
+    ):
+        """Test proton exchange cycle with reference acid file."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
             thermodynamic_cycle="proton exchange",
-            reference="formic_acid",
+            reference_file=single_molecule_xyz_file,
+            reference_proton_index=1,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="6-31G*",
+        )
+        assert settings.thermodynamic_cycle == "proton exchange"
+        assert settings.reference_file == single_molecule_xyz_file
+        assert settings.reference_proton_index == 1
+        assert settings.reference_charge == 0
+        assert settings.reference_multiplicity == 1
+        assert settings.has_reference_file is True
+
+    def test_proton_exchange_without_reference_file(self):
+        """Test proton exchange cycle without reference file."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            thermodynamic_cycle="proton exchange",
             charge=0,
             multiplicity=1,
         )
         assert settings.thermodynamic_cycle == "proton exchange"
-        assert settings.reference == "formic_acid"
+        assert settings.reference_file is None
+        assert settings.has_reference_file is False
 
     def test_default_thermodynamic_cycle(self):
         """Test that default thermodynamic cycle is proton exchange."""
@@ -617,7 +638,40 @@ class TestGaussianpKaJobSettings:
             multiplicity=1,
         )
         assert settings.thermodynamic_cycle == "proton exchange"
-        assert settings.reference == "water"  # Default reference
+        assert settings.has_reference_file is False
+
+    def test_reference_validation(self, single_molecule_xyz_file):
+        """Test that reference settings validation works."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            thermodynamic_cycle="proton exchange",
+            reference_file=single_molecule_xyz_file,
+            reference_proton_index=1,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+        )
+        # Should not raise
+        settings.validate_reference_settings()
+
+    def test_reference_validation_missing_proton_index(
+        self, single_molecule_xyz_file
+    ):
+        """Test validation fails when reference_proton_index is missing."""
+        settings = GaussianpKaJobSettings(
+            proton_index=10,
+            thermodynamic_cycle="proton exchange",
+            reference_file=single_molecule_xyz_file,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+        )
+        import pytest
+
+        with pytest.raises(ValueError, match="reference_proton_index"):
+            settings.validate_reference_settings()
 
     def test_gas_phase_optimization_settings(self, single_molecule_xyz_file):
         """Test that gas phase optimization has no solvent."""
@@ -697,6 +751,129 @@ class TestGaussianpKaJobSettings:
         assert settings.charge == 5
         settings.protonated_multiplicity = 4
         assert settings.multiplicity == 4
+
+    def test_reference_gas_phase_job_settings(self, single_molecule_xyz_file):
+        """Test reference acid gas phase optimization settings."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        ref_proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=1,
+            thermodynamic_cycle="proton exchange",
+            reference_file=single_molecule_xyz_file,
+            reference_proton_index=ref_proton_index,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="6-31G*",
+            solvent_model="SMD",
+            solvent_id="water",
+        )
+
+        ref_acid_settings, ref_cb_settings = (
+            settings._create_reference_gas_phase_job_settings()
+        )
+
+        # Gas phase should have no solvent
+        assert ref_acid_settings.solvent_model is None
+        assert ref_acid_settings.solvent_id is None
+        assert ref_cb_settings.solvent_model is None
+        assert ref_cb_settings.solvent_id is None
+        # Should use same functional/basis
+        assert ref_acid_settings.functional == "B3LYP"
+        assert ref_acid_settings.basis == "6-31G*"
+        # Check charge/multiplicity
+        assert ref_acid_settings.charge == 0
+        assert ref_acid_settings.multiplicity == 1
+        assert ref_cb_settings.charge == -1  # Default: reference_charge - 1
+        assert ref_cb_settings.multiplicity == 1
+
+    def test_reference_solution_phase_sp_settings(
+        self, single_molecule_xyz_file
+    ):
+        """Test reference acid solution phase SP settings."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        ref_proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=1,
+            thermodynamic_cycle="proton exchange",
+            reference_file=single_molecule_xyz_file,
+            reference_proton_index=ref_proton_index,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="6-31G*",
+            solvent_model="SMD",
+            solvent_id="water",
+        )
+
+        ref_acid_sp_settings, ref_cb_sp_settings = (
+            settings._create_reference_solution_phase_sp_settings()
+        )
+
+        # Solution phase should have solvent
+        assert ref_acid_sp_settings.solvent_model == "SMD"
+        assert ref_acid_sp_settings.solvent_id == "water"
+        assert ref_cb_sp_settings.solvent_model == "SMD"
+        assert ref_cb_sp_settings.solvent_id == "water"
+        # Same functional/basis for error cancellation
+        assert ref_acid_sp_settings.functional == "B3LYP"
+        assert ref_acid_sp_settings.basis == "6-31G*"
+
+    def test_get_reference_molecule(self, single_molecule_xyz_file):
+        """Test loading reference molecule from file."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        ref_proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=1,
+            thermodynamic_cycle="proton exchange",
+            reference_file=single_molecule_xyz_file,
+            reference_proton_index=ref_proton_index,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+        )
+
+        ref_mol = settings.get_reference_molecule()
+        assert ref_mol is not None
+        assert ref_mol.charge == 0
+        assert ref_mol.multiplicity == 1
+        assert len(ref_mol) == len(mol)
+
+    def test_get_reference_conjugate_base_molecule(
+        self, single_molecule_xyz_file
+    ):
+        """Test creating reference conjugate base by removing proton."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        ref_proton_index = h_indices[0]
+
+        settings = GaussianpKaJobSettings(
+            proton_index=1,
+            thermodynamic_cycle="proton exchange",
+            reference_file=single_molecule_xyz_file,
+            reference_proton_index=ref_proton_index,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+        )
+
+        ref_cb_mol = settings.get_reference_conjugate_base_molecule()
+        assert ref_cb_mol is not None
+        assert ref_cb_mol.charge == -1  # Default: reference_charge - 1
+        assert ref_cb_mol.multiplicity == 1
+        assert len(ref_cb_mol) == len(mol) - 1  # One H removed
 
     def test_create_conjugate_base_molecule(self, single_molecule_xyz_file):
         """Test creating conjugate base molecule by removing a proton."""

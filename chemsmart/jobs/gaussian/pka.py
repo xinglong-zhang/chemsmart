@@ -130,6 +130,8 @@ class GaussianpKaJob(GaussianJob):
         # Cache for the created jobs
         self._opt_jobs = None
         self._sp_jobs = None
+        self._ref_opt_jobs = None
+        self._ref_sp_jobs = None
 
     @classmethod
     def settings_class(cls):
@@ -250,6 +252,119 @@ class GaussianpKaJob(GaussianJob):
         """
         return self.sp_jobs[1]
 
+    # =========================================================================
+    # Reference acid (HB) jobs for proton exchange cycle
+    # =========================================================================
+
+    @property
+    def has_reference_jobs(self):
+        """Check if reference acid jobs are configured."""
+        return self.settings.has_reference_file
+
+    @property
+    def reference_molecule(self):
+        """
+        Get the reference acid molecule (HB).
+
+        Returns:
+            Molecule: The reference acid with appropriate charge/multiplicity.
+
+        Raises:
+            ValueError: If reference file is not provided.
+        """
+        return self.settings.get_reference_molecule()
+
+    @property
+    def reference_conjugate_base_molecule(self):
+        """
+        Get the reference conjugate base molecule (B-).
+
+        Returns:
+            Molecule: The reference conjugate base with proton removed.
+
+        Raises:
+            ValueError: If reference settings are invalid.
+        """
+        return self.settings.get_reference_conjugate_base_molecule()
+
+    @property
+    def ref_opt_jobs(self):
+        """
+        Get both gas phase optimization jobs for reference acid (HB and B-).
+
+        Returns:
+            tuple or None: A tuple of (ref_acid_opt_job, ref_conjugate_base_opt_job),
+                or None if no reference file is provided.
+        """
+        if not self.has_reference_jobs:
+            return None
+        if self._ref_opt_jobs is None:
+            self._ref_opt_jobs = self._prepare_ref_opt_jobs()
+        return self._ref_opt_jobs
+
+    @property
+    def ref_acid_job(self):
+        """
+        Get the gas phase optimization job for the reference acid (HB).
+
+        Returns:
+            GaussianOptJob or None: Gas phase optimization job for reference acid.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_opt_jobs[0]
+
+    @property
+    def ref_conjugate_base_job(self):
+        """
+        Get the gas phase optimization job for the reference conjugate base (B-).
+
+        Returns:
+            GaussianOptJob or None: Gas phase optimization job for reference conjugate base.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_opt_jobs[1]
+
+    @property
+    def ref_sp_jobs(self):
+        """
+        Get both solution phase SP jobs for reference acid (HB and B-).
+
+        Returns:
+            tuple or None: A tuple of (ref_acid_sp_job, ref_conjugate_base_sp_job),
+                or None if no reference file is provided.
+        """
+        if not self.has_reference_jobs:
+            return None
+        if self._ref_sp_jobs is None:
+            self._ref_sp_jobs = self._prepare_ref_sp_jobs()
+        return self._ref_sp_jobs
+
+    @property
+    def ref_acid_sp_job(self):
+        """
+        Get the solution phase SP job for the reference acid (HB).
+
+        Returns:
+            GaussianSinglePointJob or None: Solution phase SP job for reference acid.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_sp_jobs[0]
+
+    @property
+    def ref_conjugate_base_sp_job(self):
+        """
+        Get the solution phase SP job for the reference conjugate base (B-).
+
+        Returns:
+            GaussianSinglePointJob or None: Solution phase SP job for reference conjugate base.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_sp_jobs[1]
+
     def _prepare_opt_jobs(self):
         """
         Create GAS PHASE optimization jobs for both protonated and conjugate base forms.
@@ -298,6 +413,130 @@ class GaussianpKaJob(GaussianJob):
         )
 
         return protonated_job, conjugate_base_job
+
+    def _prepare_ref_opt_jobs(self):
+        """
+        Create GAS PHASE optimization jobs for reference acid (HB) and its conjugate base (B-).
+
+        Returns:
+            tuple: A tuple of (ref_acid_job, ref_conjugate_base_job).
+
+        Raises:
+            ValueError: If reference file is not provided.
+        """
+        if not self.has_reference_jobs:
+            raise ValueError(
+                "Cannot prepare reference opt jobs: no reference file provided."
+            )
+
+        # Get reference molecules
+        ref_acid_mol, ref_conjugate_base_mol = (
+            self.settings.reference_pair_molecules()
+        )
+
+        # Get job settings
+        ref_acid_settings, ref_conjugate_base_settings = (
+            self.settings.reference_pair_job_settings()
+        )
+
+        # Create job labels
+        ref_acid_label = f"{self.label}_HB"
+        ref_conjugate_base_label = f"{self.label}_B"
+
+        # Create reference acid job (HB)
+        ref_acid_job = GaussianOptJob(
+            molecule=ref_acid_mol,
+            settings=ref_acid_settings,
+            label=ref_acid_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+        # Create reference conjugate base job (B-)
+        ref_conjugate_base_job = GaussianOptJob(
+            molecule=ref_conjugate_base_mol,
+            settings=ref_conjugate_base_settings,
+            label=ref_conjugate_base_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+        logger.debug(
+            f"Reference pKa jobs created: {ref_acid_job}, {ref_conjugate_base_job}"
+        )
+
+        return ref_acid_job, ref_conjugate_base_job
+
+    def _prepare_ref_sp_jobs(self):
+        """
+        Create SP jobs for reference acid (HB) and its conjugate base (B-).
+
+        SP jobs use the optimized geometries from the reference optimization jobs.
+
+        Returns:
+            tuple: A tuple of (ref_acid_sp_job, ref_conjugate_base_sp_job).
+
+        Raises:
+            ValueError: If reference file is not provided.
+        """
+        if not self.has_reference_jobs:
+            raise ValueError(
+                "Cannot prepare reference SP jobs: no reference file provided."
+            )
+
+        # Get SP job settings
+        ref_acid_sp_settings, ref_conjugate_base_sp_settings = (
+            self.settings.reference_pair_sp_job_settings()
+        )
+
+        # Create job labels
+        ref_acid_sp_label = f"{self.label}_HB_sp"
+        ref_conjugate_base_sp_label = f"{self.label}_B_sp"
+
+        # Get optimized molecules from completed ref opt jobs
+        ref_acid_opt_output = self.ref_acid_job._output()
+        if (
+            ref_acid_opt_output is not None
+            and ref_acid_opt_output.normal_termination
+        ):
+            ref_acid_mol = ref_acid_opt_output.molecule
+        else:
+            # Fall back to initial molecule if opt not complete
+            ref_acid_mol = self.reference_molecule
+
+        ref_conjugate_base_opt_output = self.ref_conjugate_base_job._output()
+        if (
+            ref_conjugate_base_opt_output is not None
+            and ref_conjugate_base_opt_output.normal_termination
+        ):
+            ref_conjugate_base_mol = ref_conjugate_base_opt_output.molecule
+        else:
+            # Fall back to initial molecule if opt not complete
+            ref_conjugate_base_mol = self.reference_conjugate_base_molecule
+
+        # Create reference acid SP job (HB)
+        ref_acid_sp_job = GaussianSinglePointJob(
+            molecule=ref_acid_mol,
+            settings=ref_acid_sp_settings,
+            label=ref_acid_sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+        # Create reference conjugate base SP job (B-)
+        ref_conjugate_base_sp_job = GaussianSinglePointJob(
+            molecule=ref_conjugate_base_mol,
+            settings=ref_conjugate_base_sp_settings,
+            label=ref_conjugate_base_sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+        logger.debug(
+            f"Reference SP jobs created: {ref_acid_sp_job}, {ref_conjugate_base_sp_job}"
+        )
+
+        return ref_acid_sp_job, ref_conjugate_base_sp_job
 
     def _prepare_sp_jobs(self):
         """
@@ -375,6 +614,23 @@ class GaussianpKaJob(GaussianJob):
             logger.info(f"Running gas phase optimization job: {job}")
             job.run()
 
+    def _run_ref_opt_jobs(self):
+        """
+        Execute both GAS PHASE optimization jobs for reference acid (HB and B-) sequentially.
+
+        Runs the optimization + frequency jobs for both the reference acid
+        form (HB) and its conjugate base (B-) in sequence.
+        """
+        if not self.has_reference_jobs:
+            logger.debug(
+                "No reference jobs to run (no reference file provided)"
+            )
+            return
+
+        for job in self.ref_opt_jobs:
+            logger.info(f"Running reference gas phase optimization job: {job}")
+            job.run()
+
     def _run_pka_jobs(self):
         """Alias for _run_opt_jobs for backward compatibility."""
         self._run_opt_jobs()
@@ -394,17 +650,47 @@ class GaussianpKaJob(GaussianJob):
             logger.info(f"Running solution phase SP job: {job}")
             job.run()
 
+    def _run_ref_sp_jobs(self):
+        """
+        Execute both SOLUTION PHASE SP jobs for reference acid (HB and B-) sequentially.
+
+        Runs the SP jobs for both the reference acid form (HB) and its
+        conjugate base (B-) in sequence. Should only be called after
+        reference optimization jobs are complete.
+        """
+        if not self.has_reference_jobs:
+            logger.debug(
+                "No reference SP jobs to run (no reference file provided)"
+            )
+            return
+
+        # Clear cached ref SP jobs to get fresh ones with optimized geometries
+        self._ref_sp_jobs = None
+
+        for job in self.ref_sp_jobs:
+            logger.info(f"Running reference solution phase SP job: {job}")
+            job.run()
+
     def _run(self):
         """
         Execute the pKa calculation.
 
         Runs gas phase optimization jobs sequentially, then solution phase SP jobs.
+        If using proton exchange cycle with reference file, also runs reference acid jobs.
         """
-        # Run gas phase optimization jobs first
+        # Run gas phase optimization jobs for target acid (HA, A-)
         self._run_opt_jobs()
 
-        # Run solution phase SP jobs
+        # Run gas phase optimization jobs for reference acid (HB, B-) if provided
+        if self.has_reference_jobs:
+            self._run_ref_opt_jobs()
+
+        # Run solution phase SP jobs for target acid
         self._run_sp_jobs()
+
+        # Run solution phase SP jobs for reference acid if provided
+        if self.has_reference_jobs:
+            self._run_ref_sp_jobs()
 
     def is_complete(self):
         """
@@ -412,14 +698,24 @@ class GaussianpKaJob(GaussianJob):
 
         Returns:
             bool: True if all optimization jobs and SP jobs
-                have completed successfully.
+                have completed successfully (including reference jobs if provided).
         """
-        # Check optimization jobs
+        # Check target acid optimization jobs
         if not self._opt_jobs_are_complete():
             return False
 
-        # Check SP jobs
-        return self._sp_jobs_are_complete()
+        # Check target acid SP jobs
+        if not self._sp_jobs_are_complete():
+            return False
+
+        # Check reference acid jobs if provided
+        if self.has_reference_jobs:
+            if not self._ref_opt_jobs_are_complete():
+                return False
+            if not self._ref_sp_jobs_are_complete():
+                return False
+
+        return True
 
     def _opt_jobs_are_complete(self):
         """
@@ -429,6 +725,18 @@ class GaussianpKaJob(GaussianJob):
             bool: True if all optimization jobs are complete.
         """
         return all(job.is_complete() for job in self.opt_jobs)
+
+    def _ref_opt_jobs_are_complete(self):
+        """
+        Verify completion status of both reference gas phase optimization jobs.
+
+        Returns:
+            bool: True if all reference optimization jobs are complete,
+                or True if no reference jobs are configured.
+        """
+        if not self.has_reference_jobs:
+            return True
+        return all(job.is_complete() for job in self.ref_opt_jobs)
 
     def _pka_jobs_are_complete(self):
         """Alias for _opt_jobs_are_complete for backward compatibility."""
@@ -444,6 +752,20 @@ class GaussianpKaJob(GaussianJob):
         if self.sp_jobs is None:
             return False
         return all(job.is_complete() for job in self.sp_jobs)
+
+    def _ref_sp_jobs_are_complete(self):
+        """
+        Verify completion status of both reference solution phase SP jobs.
+
+        Returns:
+            bool: True if all reference SP jobs are complete,
+                or True if no reference jobs are configured.
+        """
+        if not self.has_reference_jobs:
+            return True
+        if self.ref_sp_jobs is None:
+            return False
+        return all(job.is_complete() for job in self.ref_sp_jobs)
 
     @property
     def protonated_output(self):
@@ -484,3 +806,55 @@ class GaussianpKaJob(GaussianJob):
             Gaussian16Output or None: Parsed output for the conjugate base SP job.
         """
         return self.conjugate_base_sp_job._output()
+
+    # =========================================================================
+    # Reference acid output properties
+    # =========================================================================
+
+    @property
+    def ref_acid_output(self):
+        """
+        Get the output of the reference acid gas phase optimization job.
+
+        Returns:
+            Gaussian16Output or None: Parsed output for the reference acid job.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_acid_job._output()
+
+    @property
+    def ref_conjugate_base_output(self):
+        """
+        Get the output of the reference conjugate base gas phase optimization job.
+
+        Returns:
+            Gaussian16Output or None: Parsed output for the reference conjugate base job.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_conjugate_base_job._output()
+
+    @property
+    def ref_acid_sp_output(self):
+        """
+        Get the output of the reference acid solution phase SP job.
+
+        Returns:
+            Gaussian16Output or None: Parsed output for the reference acid SP job.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_acid_sp_job._output()
+
+    @property
+    def ref_conjugate_base_sp_output(self):
+        """
+        Get the output of the reference conjugate base solution phase SP job.
+
+        Returns:
+            Gaussian16Output or None: Parsed output for the reference conjugate base SP job.
+        """
+        if not self.has_reference_jobs:
+            return None
+        return self.ref_conjugate_base_sp_job._output()

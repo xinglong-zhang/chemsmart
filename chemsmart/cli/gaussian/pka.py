@@ -49,10 +49,46 @@ def click_pka_options(f):
     @click.option(
         "-r",
         "--reference",
-        type=str,
-        default="water",
-        help="Reference acid for proton exchange cycle (default: water). "
-        "Ignored when using direct cycle.",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to geometry file for reference acid (HB) for proton exchange cycle. "
+        "When provided, optimization and SP calculations will also be run for HB and B-.",
+    )
+    @click.option(
+        "-rpi",
+        "--reference-proton-index",
+        type=int,
+        default=None,
+        help="1-based index of the proton to remove from reference acid (HB). "
+        "Required when --reference is provided.",
+    )
+    @click.option(
+        "-rc",
+        "--reference-charge",
+        type=int,
+        default=None,
+        help="Charge of the reference acid (HB). Required when --reference is provided.",
+    )
+    @click.option(
+        "-rm",
+        "--reference-multiplicity",
+        type=int,
+        default=None,
+        help="Multiplicity of the reference acid (HB). Required when --reference is provided.",
+    )
+    @click.option(
+        "-rcc",
+        "--reference-conjugate-base-charge",
+        type=int,
+        default=None,
+        help="Charge of the reference conjugate base (B-). Defaults to (reference_charge - 1).",
+    )
+    @click.option(
+        "-rcm",
+        "--reference-conjugate-base-multiplicity",
+        type=int,
+        default=None,
+        help="Multiplicity of the reference conjugate base (B-). Defaults to reference_multiplicity.",
     )
     @click.option(
         "-dG",
@@ -106,6 +142,11 @@ def pka(
     proton_index,
     thermodynamic_cycle,
     reference,
+    reference_proton_index,
+    reference_charge,
+    reference_multiplicity,
+    reference_conjugate_base_charge,
+    reference_conjugate_base_multiplicity,
     delta_g_proton,
     conjugate_base_charge,
     conjugate_base_multiplicity,
@@ -128,7 +169,11 @@ def pka(
       HA + Ref- → A- + HRef
       pKa(HA) = pKa(HRef) + ΔG_exchange / (2.303 * R * T)
 
-    \b
+
+      When using proton exchange, provide a reference acid geometry file
+      with --reference (-r) option. This will run optimization and SP
+      calculations for both HB and B- alongside HA and A-.
+
     - **direct**: Uses absolute free energy of H+ in water.
       pKa = [G(A-)_aq - G(HA)_aq + ΔG°(H+)_aq] / (2.303 * R * T)
       Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., 1998)
@@ -139,14 +184,35 @@ def pka(
 
     \b
     Examples:
-        # Proton exchange cycle with water as reference
-        chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -tc "proton exchange" -ref water
+        # Proton exchange cycle with reference acid geometry file
+        chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 \\
+            -t "proton exchange" -r water.xyz -rpi 1 -rc 0 -rm 1
 
         # Direct cycle (no reference needed)
-        chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -tc direct
+        chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -t direct
     """
     from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+
+    # Validate reference acid settings if provided
+    if reference is not None:
+        if thermodynamic_cycle != "proton exchange":
+            raise click.UsageError(
+                "Reference acid file can only be used with 'proton exchange' cycle. "
+                "Use -t 'proton exchange' or remove the -r option."
+            )
+        missing = []
+        if reference_proton_index is None:
+            missing.append("-rpi/--reference-proton-index")
+        if reference_charge is None:
+            missing.append("-rc/--reference-charge")
+        if reference_multiplicity is None:
+            missing.append("-rm/--reference-multiplicity")
+        if missing:
+            raise click.UsageError(
+                f"When --reference is provided, the following options are required: "
+                f"{', '.join(missing)}"
+            )
 
     # Get jobrunner
     jobrunner = ctx.obj["jobrunner"]
@@ -177,7 +243,12 @@ def pka(
     pka_settings = GaussianpKaJobSettings(
         proton_index=proton_index,
         thermodynamic_cycle=thermodynamic_cycle,
-        reference=reference,
+        reference_file=reference,
+        reference_proton_index=reference_proton_index,
+        reference_charge=reference_charge,
+        reference_multiplicity=reference_multiplicity,
+        reference_conjugate_base_charge=reference_conjugate_base_charge,
+        reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
         delta_G_proton=delta_g_proton,
         conjugate_base_charge=conjugate_base_charge,
         conjugate_base_multiplicity=conjugate_base_multiplicity,
@@ -230,7 +301,29 @@ def pka(
     logger.info(f"Conjugate base (A-): charge={cb_charge}, mult={cb_mult}")
 
     if thermodynamic_cycle == "proton exchange":
-        logger.info(f"Reference acid: {reference}")
+        if reference is not None:
+            logger.info(f"Reference acid file: {reference}")
+            logger.info(f"Reference proton index: {reference_proton_index}")
+            logger.info(
+                f"Reference acid (HB): charge={reference_charge}, "
+                f"mult={reference_multiplicity}"
+            )
+            ref_cb_charge = (
+                reference_conjugate_base_charge
+                if reference_conjugate_base_charge is not None
+                else reference_charge - 1
+            )
+            ref_cb_mult = (
+                reference_conjugate_base_multiplicity
+                if reference_conjugate_base_multiplicity is not None
+                else reference_multiplicity
+            )
+            logger.info(
+                f"Reference conjugate base (B-): charge={ref_cb_charge}, "
+                f"mult={ref_cb_mult}"
+            )
+        else:
+            logger.info("No reference acid file provided")
     else:
         logger.info(f"ΔG°(H+)_aq: {delta_g_proton} kcal/mol")
 

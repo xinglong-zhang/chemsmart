@@ -1964,16 +1964,24 @@ class GaussianpKaJobSettings(GaussianJobSettings):
        Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., J Phys Chem A 1998)
 
     2. **Proton exchange** (thermodynamic_cycle='proton exchange'):
-       Uses a reference acid (e.g., water) to cancel systematic errors.
-       HA + Ref- → A- + HRef
-       pKa(HA) = pKa(HRef) + ΔG_exchange / (2.303 * R * T)
+       Uses a reference acid (HB) to cancel systematic errors.
+       HA + B- → A- + HB
+       pKa(HA) = pKa(HB) + ΔG_exchange / (2.303 * R * T)
+
+       When using proton exchange, you can provide a reference acid geometry file
+       via the reference_file parameter. This will run optimization and SP
+       calculations for both HB and B- alongside HA and A-.
 
     The pKa calculation workflow:
     1. Optimize HA in gas phase (opt + freq)
     2. Optimize A- in gas phase (opt + freq)
-    3. Run SP on optimized HA in solution (same functional/basis as gas)
-    4. Run SP on optimized A- in solution (same functional/basis as gas)
-    5. Calculate pKa using the selected thermodynamic cycle
+    3. [If reference_file provided] Optimize HB in gas phase (opt + freq)
+    4. [If reference_file provided] Optimize B- in gas phase (opt + freq)
+    5. Run SP on optimized HA in solution (same functional/basis as gas)
+    6. Run SP on optimized A- in solution (same functional/basis as gas)
+    7. [If reference_file provided] Run SP on optimized HB in solution
+    8. [If reference_file provided] Run SP on optimized B- in solution
+    9. Calculate pKa using the selected thermodynamic cycle
 
     Note: Using the same level of theory for both gas and solution phases
     ensures proper cancellation of systematic errors in DFT calculations.
@@ -1981,8 +1989,13 @@ class GaussianpKaJobSettings(GaussianJobSettings):
     Attributes:
         proton_index (int): 1-based index of the proton to remove for deprotonation.
         thermodynamic_cycle (str): Type of thermodynamic cycle ('direct' or 'proton exchange').
-        reference (str): Reference acid for proton exchange cycle (e.g., 'water').
-            Not used when thermodynamic_cycle='direct'.
+        reference_file (str): Path to geometry file for reference acid (HB).
+            Used only when thermodynamic_cycle='proton exchange'.
+        reference_proton_index (int): 1-based index of proton to remove from HB.
+        reference_charge (int): Charge of the reference acid (HB).
+        reference_multiplicity (int): Multiplicity of the reference acid (HB).
+        reference_conjugate_base_charge (int): Charge of B- (defaults to reference_charge - 1).
+        reference_conjugate_base_multiplicity (int): Multiplicity of B-.
         delta_G_proton (float): Absolute free energy of H+ in water (kcal/mol).
             Only used when thermodynamic_cycle='direct'. Default: -265.9 kcal/mol.
         solvent_model (str): Solvation model for SP calculations (e.g., 'SMD', 'PCM').
@@ -2014,11 +2027,14 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             solvent_id="water"
         )
 
-        # Proton exchange cycle (requires reference acid)
+        # Proton exchange cycle with reference acid geometry file
         settings = GaussianpKaJobSettings(
             proton_index=10,
             thermodynamic_cycle="proton exchange",
-            reference="water",
+            reference_file="water.xyz",
+            reference_proton_index=1,
+            reference_charge=0,
+            reference_multiplicity=1,
             charge=0,
             multiplicity=1,
             functional="B3LYP",
@@ -2036,7 +2052,12 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         self,
         proton_index=None,
         thermodynamic_cycle="proton exchange",
-        reference="water",
+        reference_file=None,
+        reference_proton_index=None,
+        reference_charge=None,
+        reference_multiplicity=None,
+        reference_conjugate_base_charge=None,
+        reference_conjugate_base_multiplicity=None,
         delta_G_proton=None,
         solvent_model="SMD",
         solvent_id="water",
@@ -2057,8 +2078,20 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 calling create_conjugate_base_molecule().
             thermodynamic_cycle (str): Type of thermodynamic cycle to use.
                 Options: 'direct', 'proton exchange'. Default is 'proton exchange'.
-            reference (str): Reference acid for proton exchange cycle.
-                Default is 'water'. Ignored when thermodynamic_cycle='direct'.
+            reference_file (str, optional): Path to geometry file for reference acid (HB)
+                for proton exchange cycle. When provided, optimization and SP
+                calculations will also be run for HB and B-.
+            reference_proton_index (int, optional): 1-based index of the proton to
+                remove from the reference acid (HB) to create its conjugate base (B-).
+                Required when reference_file is provided.
+            reference_charge (int, optional): Charge of the reference acid (HB).
+                Required when reference_file is provided.
+            reference_multiplicity (int, optional): Multiplicity of the reference acid (HB).
+                Required when reference_file is provided.
+            reference_conjugate_base_charge (int, optional): Charge of the reference
+                conjugate base (B-). Defaults to reference_charge - 1.
+            reference_conjugate_base_multiplicity (int, optional): Multiplicity of the
+                reference conjugate base (B-). Defaults to reference_multiplicity.
             delta_G_proton (float, optional): Absolute free energy of H+ in water
                 (kcal/mol). Only used when thermodynamic_cycle='direct'.
                 Default is -265.9 kcal/mol (Tissandier et al., 1998).
@@ -2066,9 +2099,9 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 Default is 'SMD'.
             solvent_id (str): Solvent ID for solution phase SP.
                 Default is 'water'.
-            conjugate_base_charge (int, optional): Charge of the conjugate base.
+            conjugate_base_charge (int, optional): Charge of the conjugate base (A-).
                 If not specified, defaults to charge - 1.
-            conjugate_base_multiplicity (int, optional): Multiplicity of the conjugate base.
+            conjugate_base_multiplicity (int, optional): Multiplicity of the conjugate base (A-).
                 If not specified, defaults to multiplicity.
             **kwargs: Additional keyword arguments passed to GaussianJobSettings,
                 including charge and multiplicity for the protonated form,
@@ -2082,17 +2115,344 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         self.conjugate_base_charge = conjugate_base_charge
         self.conjugate_base_multiplicity = conjugate_base_multiplicity
 
-        # Set reference only for proton exchange cycle
+        if not self.title:
+            self.title = "Gaussian pKa calculation job"
+
+        # Reference acid settings for proton exchange cycle
         if thermodynamic_cycle == "proton exchange":
-            self.reference = reference
+            self.reference_file = reference_file
+            self.reference_proton_index = reference_proton_index
+            self.reference_charge = reference_charge
+            self.reference_multiplicity = reference_multiplicity
+            self.reference_conjugate_base_charge = (
+                reference_conjugate_base_charge
+            )
+            self.reference_conjugate_base_multiplicity = (
+                reference_conjugate_base_multiplicity
+            )
         else:
-            self.reference = None  # Not needed for direct cycle
+            # Not needed for direct cycle
+            self.reference_file = None
+            self.reference_proton_index = None
+            self.reference_charge = None
+            self.reference_multiplicity = None
+            self.reference_conjugate_base_charge = None
+            self.reference_conjugate_base_multiplicity = None
 
         # Set delta_G_proton for direct cycle
         if delta_G_proton is not None:
             self.delta_G_proton = delta_G_proton
         else:
             self.delta_G_proton = self.DEFAULT_DELTA_G_PROTON
+
+    @property
+    def has_reference_file(self):
+        """Check if a reference acid geometry file is provided."""
+        return (
+            self.thermodynamic_cycle == "proton exchange"
+            and self.reference_file is not None
+        )
+
+    def validate_reference_settings(self):
+        """
+        Validate that all required reference acid settings are provided.
+
+        Raises:
+            ValueError: If reference_file is provided but other required
+                settings are missing.
+        """
+        if not self.has_reference_file:
+            return
+
+        missing = []
+        if self.reference_proton_index is None:
+            missing.append("reference_proton_index")
+        if self.reference_charge is None:
+            missing.append("reference_charge")
+        if self.reference_multiplicity is None:
+            missing.append("reference_multiplicity")
+
+        if missing:
+            raise ValueError(
+                f"When reference_file is provided, the following must also be "
+                f"specified: {', '.join(missing)}"
+            )
+
+    def get_reference_molecule(self):
+        """
+        Load and return the reference acid molecule (HB) from file.
+
+        Returns:
+            Molecule: The reference acid molecule with charge/multiplicity set.
+
+        Raises:
+            ValueError: If reference_file is not provided or settings are invalid.
+        """
+        if not self.has_reference_file:
+            raise ValueError(
+                "Reference file not provided. Cannot load reference molecule."
+            )
+
+        self.validate_reference_settings()
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        ref_mol = Molecule.from_filepath(self.reference_file)
+        ref_mol.charge = self.reference_charge
+        ref_mol.multiplicity = self.reference_multiplicity
+        return ref_mol
+
+    def get_reference_conjugate_base_molecule(self):
+        """
+        Create and return the reference conjugate base molecule (B-).
+
+        Returns:
+            Molecule: The reference conjugate base with proton removed.
+
+        Raises:
+            ValueError: If reference settings are invalid.
+        """
+        ref_mol = self.get_reference_molecule()
+        return self._create_reference_conjugate_base_molecule(ref_mol)
+
+    def _create_reference_conjugate_base_molecule(self, reference_molecule):
+        """
+        Create a reference conjugate base molecule by removing the specified proton.
+
+        Args:
+            reference_molecule (Molecule): The reference acid molecule (HB).
+
+        Returns:
+            Molecule: A new molecule with the proton removed (B-).
+
+        Raises:
+            ValueError: If reference_proton_index is invalid.
+        """
+        if self.reference_proton_index is None:
+            raise ValueError(
+                "reference_proton_index must be specified to create reference "
+                "conjugate base molecule. Use 1-based indexing."
+            )
+
+        # Validate reference_proton_index range (1-based)
+        if (
+            self.reference_proton_index < 1
+            or self.reference_proton_index > len(reference_molecule)
+        ):
+            raise ValueError(
+                f"reference_proton_index {self.reference_proton_index} is out of range. "
+                f"Reference molecule has {len(reference_molecule)} atoms "
+                f"(1-indexed: 1 to {len(reference_molecule)})."
+            )
+
+        # Convert to 0-based index for internal use
+        proton_idx_0based = self.reference_proton_index - 1
+
+        # Validate that the atom is a hydrogen
+        atom_symbol = reference_molecule.symbols[proton_idx_0based]
+        if atom_symbol not in ("H", "h"):
+            raise ValueError(
+                f"Atom at reference_proton_index {self.reference_proton_index} is "
+                f"'{atom_symbol}', not hydrogen. Only hydrogen atoms can be removed."
+            )
+
+        # Create lists excluding the proton
+        new_symbols = [
+            s
+            for i, s in enumerate(reference_molecule.symbols)
+            if i != proton_idx_0based
+        ]
+        new_positions = [
+            p
+            for i, p in enumerate(reference_molecule.positions)
+            if i != proton_idx_0based
+        ]
+
+        # Handle frozen_atoms if present
+        new_frozen_atoms = None
+        if reference_molecule.frozen_atoms is not None:
+            new_frozen_atoms = [
+                f
+                for i, f in enumerate(reference_molecule.frozen_atoms)
+                if i != proton_idx_0based
+            ]
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        # Create the reference conjugate base molecule
+        ref_conjugate_base_mol = Molecule(
+            symbols=new_symbols,
+            positions=new_positions,
+            frozen_atoms=new_frozen_atoms,
+        )
+
+        # Set charge and multiplicity for the reference conjugate base
+        if self.reference_conjugate_base_charge is not None:
+            ref_conjugate_base_mol.charge = (
+                self.reference_conjugate_base_charge
+            )
+        else:
+            ref_conjugate_base_mol.charge = self.reference_charge - 1
+
+        if self.reference_conjugate_base_multiplicity is not None:
+            ref_conjugate_base_mol.multiplicity = (
+                self.reference_conjugate_base_multiplicity
+            )
+        else:
+            ref_conjugate_base_mol.multiplicity = self.reference_multiplicity
+
+        return ref_conjugate_base_mol
+
+    def reference_pair_molecules(self):
+        """
+        Create and return both reference acid (HB) and conjugate base (B-) molecules.
+
+        Returns:
+            tuple: A tuple of (reference_acid_mol, reference_conjugate_base_mol).
+        """
+        ref_acid_mol = self.get_reference_molecule()
+        ref_conjugate_base_mol = (
+            self._create_reference_conjugate_base_molecule(ref_acid_mol)
+        )
+        return ref_acid_mol, ref_conjugate_base_mol
+
+    def reference_pair_job_settings(self):
+        """
+        Create GaussianJobSettings for reference acid gas phase optimization.
+
+        Returns:
+            tuple: A tuple of (ref_acid_settings, ref_conjugate_base_settings).
+        """
+        return self._create_reference_gas_phase_job_settings()
+
+    def reference_pair_sp_job_settings(self):
+        """
+        Create GaussianJobSettings for reference acid solution phase SP.
+
+        Returns:
+            tuple: A tuple of (ref_acid_sp_settings, ref_conjugate_base_sp_settings).
+        """
+        return self._create_reference_solution_phase_sp_settings()
+
+    def _create_reference_gas_phase_job_settings(self):
+        """
+        Create GAS PHASE optimization job settings for reference acid pair.
+
+        Returns:
+            tuple: A tuple of (ref_acid_settings, ref_conjugate_base_settings).
+        """
+        self.validate_reference_settings()
+
+        # Reference acid (HB) settings - GAS PHASE (no solvent)
+        ref_acid_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            semiempirical=self.semiempirical,
+            charge=self.reference_charge,
+            multiplicity=self.reference_multiplicity,
+            jobtype="opt",
+            freq=True,
+            solvent_model=None,
+            solvent_id=None,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        # Reference conjugate base (B-) charge/multiplicity
+        if self.reference_conjugate_base_charge is not None:
+            ref_cb_charge = self.reference_conjugate_base_charge
+        else:
+            ref_cb_charge = self.reference_charge - 1
+
+        if self.reference_conjugate_base_multiplicity is not None:
+            ref_cb_mult = self.reference_conjugate_base_multiplicity
+        else:
+            ref_cb_mult = self.reference_multiplicity
+
+        # Reference conjugate base (B-) settings - GAS PHASE (no solvent)
+        ref_conjugate_base_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            semiempirical=self.semiempirical,
+            charge=ref_cb_charge,
+            multiplicity=ref_cb_mult,
+            jobtype="opt",
+            freq=True,
+            solvent_model=None,
+            solvent_id=None,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        return ref_acid_settings, ref_conjugate_base_settings
+
+    def _create_reference_solution_phase_sp_settings(self):
+        """
+        Create SOLUTION PHASE single point job settings for reference acid pair.
+
+        Returns:
+            tuple: A tuple of (ref_acid_sp_settings, ref_conjugate_base_sp_settings).
+        """
+        self.validate_reference_settings()
+
+        # Reference acid (HB) SP settings - SOLUTION PHASE
+        ref_acid_sp_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            semiempirical=self.semiempirical,
+            charge=self.reference_charge,
+            multiplicity=self.reference_multiplicity,
+            jobtype="sp",
+            freq=False,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        # Reference conjugate base (B-) charge/multiplicity
+        if self.reference_conjugate_base_charge is not None:
+            ref_cb_charge = self.reference_conjugate_base_charge
+        else:
+            ref_cb_charge = self.reference_charge - 1
+
+        if self.reference_conjugate_base_multiplicity is not None:
+            ref_cb_mult = self.reference_conjugate_base_multiplicity
+        else:
+            ref_cb_mult = self.reference_multiplicity
+
+        # Reference conjugate base (B-) SP settings - SOLUTION PHASE
+        ref_conjugate_base_sp_settings = GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            semiempirical=self.semiempirical,
+            charge=ref_cb_charge,
+            multiplicity=ref_cb_mult,
+            jobtype="sp",
+            freq=False,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            additional_route_parameters=self.additional_route_parameters,
+            gen_genecp_file=self.gen_genecp_file,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+        )
+
+        return ref_acid_sp_settings, ref_conjugate_base_sp_settings
 
     @property
     def protonated_charge(self):
