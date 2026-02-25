@@ -1,0 +1,24 @@
+Temperature: 373.15 K
+Concentration: 1.0 mol/L
+Entropy Frequency Cut-off: 100.0 cm^-1
+Enthalpy Frequency Cut-off: 100.0 cm^-1
+Damping Function Exponent: 4
+Mass Weighted: Most Abundant Masses
+Energy Unit: hartree
+
+   ------------------------------------------------------------------------------------------------------------
+                                   Quasi-Rigid-Rotor-Harmonic-Oscillator Scheme
+   ------------------------------------------------------------------------------------------------------------
+   - Damping function: Chai and Head-Gordon
+     REF: Chai, J.-D.; Head-Gordon, M. Phys. Chem. Chem. Phys. 2008, 10, 6615-6620
+
+   - Grimme's quasi-RRHO entropy:
+     REF: Grimme, S. J. Chem. Phys. 2011, 134, 064114
+
+   - Head-Gordon's quasi-RRHO enthalpy:
+     REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850
+
+
+Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
+==============================================================================================================================================
+h2o_opt                                    -76.272735   0.021514    -76.246479    -76.246479   0.023861   0.023861    -76.270340    -76.270340

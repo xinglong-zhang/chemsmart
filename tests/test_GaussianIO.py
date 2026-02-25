@@ -9,6 +9,7 @@ from chemsmart.io.gaussian.input import Gaussian16Input, Gaussian16QMMMInput
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
     Gaussian16OutputWithPBC,
+    Gaussian16pKaOutput,
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
@@ -2088,3 +2089,529 @@ class TestGaussianPBCOutputFile:
         # has only "Input orientation:" but no "Standard orientation:"
         assert g16_pbc_2d.standard_orientations is None
         assert g16_pbc_2d.standard_orientations_pbc is None
+
+
+class TestGaussian16pKaOutput:
+    """Tests for Gaussian16pKaOutput class for pKa thermochemistry calculations.
+
+    Reference values are from .dat files in tests/data/GaussianTests/outputs/
+    Generated at T=373.15K, c=1.0 mol/L, csg=100 cm^-1, ch=100 cm^-1
+
+    phenol_opt.dat values (HA - protonated acid):
+        E = -306.844601 hartree
+        ZPE = 0.105604 hartree
+        H = -306.729396 hartree
+        qh-H = -306.729434 hartree
+        T.S = 0.043764 hartree
+        T.qh-S = 0.043767 hartree
+        G(T) = -306.773160 hartree
+        qh-G(T) = -306.773202 hartree
+
+    phenol_b_opt.dat values (A- - conjugate base):
+        E = -306.264976 hartree
+        ZPE = 0.091530 hartree
+        H = -306.164273 hartree
+        qh-H = -306.164324 hartree
+        T.S = 0.043097 hartree
+        T.qh-S = 0.043094 hartree
+        G(T) = -306.207370 hartree
+        qh-G(T) = -306.207418 hartree
+    """
+
+    # Reference values from phenol_opt.dat at T=373.15K
+    PHENOL_HA_E = -306.844601
+    PHENOL_HA_ZPE = 0.105604
+    PHENOL_HA_H = -306.729396
+    PHENOL_HA_QH_H = -306.729434
+    PHENOL_HA_TS = 0.043764
+    PHENOL_HA_QH_TS = 0.043767
+    PHENOL_HA_G = -306.773160
+    PHENOL_HA_QH_G = -306.773202
+
+    # Reference values from phenol_b_opt.dat at T=373.15K
+    PHENOL_A_E = -306.264976
+    PHENOL_A_ZPE = 0.091530
+    PHENOL_A_H = -306.164273
+    PHENOL_A_QH_H = -306.164324
+    PHENOL_A_TS = 0.043097
+    PHENOL_A_QH_TS = 0.043094
+    PHENOL_A_G = -306.207370
+    PHENOL_A_QH_G = -306.207418
+
+    def test_init_with_default_settings(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test initialization with default thermochemistry settings."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile
+        )
+        assert output.filename == gaussian_pKa_HA_optimization_outputfile
+        assert output.temperature == 298.15
+        assert output.concentration == 1.0
+        assert output.pressure == 1.0
+        assert output.cutoff_entropy_grimme == 100.0
+        assert output.cutoff_enthalpy == 100.0
+        assert output.energy_units == "hartree"
+
+    def test_init_with_custom_settings(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test initialization with custom thermochemistry settings."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            pressure=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        assert output.temperature == 373.15
+        assert output.concentration == 1.0
+        assert output.cutoff_entropy_grimme == 100.0
+        assert output.cutoff_enthalpy == 100.0
+        assert output.energy_units == "hartree"
+
+    def test_electronic_energy_phenol_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test electronic energy for phenol (HA) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        E = output.electronic_energy_in_units
+        assert np.isclose(E, self.PHENOL_HA_E, rtol=1e-6)
+
+    def test_zero_point_energy_phenol_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test ZPE for phenol (HA) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        zpe = output.zero_point_energy_in_units
+        assert np.isclose(zpe, self.PHENOL_HA_ZPE, rtol=1e-4)
+
+    def test_enthalpy_phenol_ha(self, gaussian_pKa_HA_optimization_outputfile):
+        """Test enthalpy for phenol (HA) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        H = output.enthalpy_in_units
+        assert np.isclose(H, self.PHENOL_HA_H, rtol=1e-5)
+
+    def test_qh_enthalpy_phenol_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test qh-H for phenol (HA) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_H = output.qh_enthalpy_in_units
+        assert np.isclose(qh_H, self.PHENOL_HA_QH_H, rtol=1e-5)
+
+    def test_gibbs_free_energy_phenol_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test G(T) for phenol (HA) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        G = output.gibbs_free_energy_in_units
+        assert np.isclose(G, self.PHENOL_HA_G, rtol=1e-5)
+
+    def test_qh_gibbs_free_energy_phenol_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test qh-G(T) for phenol (HA) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_G = output.qh_gibbs_free_energy
+        assert np.isclose(qh_G, self.PHENOL_HA_QH_G, rtol=1e-5)
+
+    def test_electronic_energy_phenol_a(
+        self, gaussian_pKa_A_optimization_outputfile
+    ):
+        """Test electronic energy for phenolate (A-) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        E = output.electronic_energy_in_units
+        assert np.isclose(E, self.PHENOL_A_E, rtol=1e-6)
+
+    def test_qh_gibbs_free_energy_phenol_a(
+        self, gaussian_pKa_A_optimization_outputfile
+    ):
+        """Test qh-G(T) for phenolate (A-) matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_G = output.qh_gibbs_free_energy
+        assert np.isclose(qh_G, self.PHENOL_A_QH_G, rtol=1e-5)
+
+    def test_compute_thermochemistry_phenol_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test compute_thermochemistry returns all values for phenol (HA)."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        result = output.compute_thermochemistry()
+
+        # Check structure name
+        assert result["structure"] == "phenol_opt"
+
+        # Check all values match reference
+        assert np.isclose(
+            result["electronic_energy"], self.PHENOL_HA_E, rtol=1e-6
+        )
+        assert np.isclose(
+            result["zero_point_energy"], self.PHENOL_HA_ZPE, rtol=1e-4
+        )
+        assert np.isclose(result["enthalpy"], self.PHENOL_HA_H, rtol=1e-5)
+        assert np.isclose(
+            result["qh_enthalpy"], self.PHENOL_HA_QH_H, rtol=1e-5
+        )
+        assert np.isclose(
+            result["gibbs_free_energy"], self.PHENOL_HA_G, rtol=1e-5
+        )
+        assert np.isclose(
+            result["qh_gibbs_free_energy"], self.PHENOL_HA_QH_G, rtol=1e-5
+        )
+
+    def test_for_pka_species_ha_and_a(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test for_pka_species with HA and A- files."""
+        outputs = Gaussian16pKaOutput.for_pka_species(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        assert "HA" in outputs
+        assert "A" in outputs
+        assert "HB" not in outputs
+        assert "B" not in outputs
+
+        # Verify HA values
+        assert np.isclose(
+            outputs["HA"].electronic_energy_in_units,
+            self.PHENOL_HA_E,
+            rtol=1e-6,
+        )
+        # Verify A- values
+        assert np.isclose(
+            outputs["A"].electronic_energy_in_units, self.PHENOL_A_E, rtol=1e-6
+        )
+
+    def test_compute_pka_thermochemistry_ha_and_a(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test compute_pka_thermochemistry with exact reference values."""
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+
+        # Check settings
+        assert results["settings"]["temperature"] == 373.15
+        assert results["settings"]["concentration"] == 1.0
+        assert results["settings"]["cutoff_entropy_grimme"] == 100.0
+        assert results["settings"]["cutoff_enthalpy"] == 100.0
+        assert results["settings"]["energy_units"] == "hartree"
+
+        # Check HA values
+        assert results["HA"]["name"] == "HA"
+        assert np.isclose(results["HA"]["E"], self.PHENOL_HA_E, rtol=1e-6)
+        assert np.isclose(
+            results["HA"]["qh_G"], self.PHENOL_HA_QH_G, rtol=1e-5
+        )
+        assert np.isclose(results["HA"]["ZPE"], self.PHENOL_HA_ZPE, rtol=1e-4)
+        assert np.isclose(results["HA"]["H"], self.PHENOL_HA_H, rtol=1e-5)
+        assert np.isclose(
+            results["HA"]["qh_H"], self.PHENOL_HA_QH_H, rtol=1e-5
+        )
+        assert np.isclose(results["HA"]["G"], self.PHENOL_HA_G, rtol=1e-5)
+
+        # Check A- values
+        assert results["A"]["name"] == "A-"
+        assert np.isclose(results["A"]["E"], self.PHENOL_A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.PHENOL_A_QH_G, rtol=1e-5)
+        assert np.isclose(results["A"]["ZPE"], self.PHENOL_A_ZPE, rtol=1e-4)
+        assert np.isclose(results["A"]["H"], self.PHENOL_A_H, rtol=1e-5)
+        assert np.isclose(results["A"]["qh_H"], self.PHENOL_A_QH_H, rtol=1e-5)
+        assert np.isclose(results["A"]["G"], self.PHENOL_A_G, rtol=1e-5)
+
+    def test_deprotonation_energy_difference(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test that deprotonation energy difference is calculated correctly.
+
+        ΔE = E(A-) - E(HA) should be positive (deprotonation is endothermic)
+        Δqh-G = qh-G(A-) - qh-G(HA) should also be positive
+        """
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        delta_E = results["A"]["E"] - results["HA"]["E"]
+        delta_qh_G = results["A"]["qh_G"] - results["HA"]["qh_G"]
+
+        # Expected values from .dat files
+        expected_delta_E = self.PHENOL_A_E - self.PHENOL_HA_E
+        expected_delta_qh_G = self.PHENOL_A_QH_G - self.PHENOL_HA_QH_G
+
+        assert np.isclose(delta_E, expected_delta_E, rtol=1e-6)
+        assert np.isclose(delta_qh_G, expected_delta_qh_G, rtol=1e-5)
+
+        # Deprotonation should be endothermic (ΔE > 0)
+        assert delta_E > 0
+        assert delta_qh_G > 0
+
+    def test_print_pka_summary(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        capsys,
+    ):
+        """Test print_pka_summary outputs formatted results with correct values."""
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        captured = capsys.readouterr()
+        output = captured.out
+
+        # Check header is present
+        assert "pKa Thermochemistry Summary" in output
+        assert "Temperature: 373.15 K" in output
+        assert "Concentration: 1.0 mol/L" in output
+        assert "Entropy cutoff (Grimme): 100.0 cm^-1" in output
+        assert "Enthalpy cutoff (Head-Gordon): 100.0 cm^-1" in output
+        assert "Energy units: hartree" in output
+
+        # Check species are present
+        assert "HA" in output
+        assert "A-" in output
+
+        # Verify values using compute_pka_thermochemistry for exact comparison
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        # Verify HA values match reference
+        assert np.isclose(results["HA"]["E"], self.PHENOL_HA_E, rtol=1e-6)
+        assert np.isclose(
+            results["HA"]["qh_G"], self.PHENOL_HA_QH_G, rtol=1e-5
+        )
+
+        # Verify A- values match reference
+        assert np.isclose(results["A"]["E"], self.PHENOL_A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.PHENOL_A_QH_G, rtol=1e-5)
+
+    def test_from_settings_classmethod(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test from_settings class method with GaussianpKaJobSettings."""
+        from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+
+        settings = GaussianpKaJobSettings(
+            proton_index=1,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            charge=0,
+            multiplicity=1,
+        )
+
+        output = Gaussian16pKaOutput.from_settings(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            settings=settings,
+        )
+
+        assert output.temperature == 373.15
+        assert output.concentration == 1.0
+        assert output.cutoff_entropy_grimme == 100.0
+        assert output.cutoff_enthalpy == 100.0
+
+        # Verify values match reference
+        assert np.isclose(
+            output.electronic_energy_in_units, self.PHENOL_HA_E, rtol=1e-6
+        )
+        assert np.isclose(
+            output.qh_gibbs_free_energy, self.PHENOL_HA_QH_G, rtol=1e-5
+        )
+
+    def test_from_pka_settings_classmethod(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test from_pka_settings class method."""
+        from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+
+        settings = GaussianpKaJobSettings(
+            proton_index=1,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            charge=0,
+            multiplicity=1,
+        )
+
+        outputs = Gaussian16pKaOutput.from_pka_settings(
+            settings=settings,
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+        )
+
+        assert "HA" in outputs
+        assert "A" in outputs
+        assert outputs["HA"].temperature == 373.15
+        assert outputs["A"].temperature == 373.15
+
+        # Verify values match reference
+        assert np.isclose(
+            outputs["HA"].electronic_energy_in_units,
+            self.PHENOL_HA_E,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            outputs["A"].electronic_energy_in_units, self.PHENOL_A_E, rtol=1e-6
+        )
+
+    def test_thermochemistry_property_caching(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test that thermochemistry object is cached."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+        )
+
+        # Access thermochemistry twice
+        thermo1 = output.thermochemistry
+        thermo2 = output.thermochemistry
+
+        # Should be the same object (cached)
+        assert thermo1 is thermo2
+
+    def test_energy_units_conversion_kcal_mol(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test energy conversion to kcal/mol."""
+        output_hartree = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="hartree",
+        )
+        output_kcal = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="kcal/mol",
+        )
+
+        E_hartree = output_hartree.electronic_energy_in_units
+        E_kcal = output_kcal.electronic_energy_in_units
+
+        # 1 hartree ≈ 627.5094740631 kcal/mol
+        assert np.isclose(E_kcal / E_hartree, 627.5094740631, rtol=0.001)
+
+    def test_energy_units_conversion_kj_mol(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test energy conversion to kJ/mol."""
+        output_hartree = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="hartree",
+        )
+        output_kj = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="kJ/mol",
+        )
+
+        E_hartree = output_hartree.electronic_energy_in_units
+        E_kj = output_kj.electronic_energy_in_units
+
+        # 1 hartree ≈ 2625.5002 kJ/mol
+        assert np.isclose(E_kj / E_hartree, 2625.5002, rtol=0.001)

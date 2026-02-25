@@ -482,6 +482,71 @@ def gaussian_oniom_outputfile(gaussian_outputs_test_directory):
     return gaussian_oniom_outfile
 
 
+# Gaussian output files for pKa calculations
+@pytest.fixture()
+def gaussian_pKa_HA_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_ha_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "phenol_opt.log"
+    )
+    return gaussian_pka_ha_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_A_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_a_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "phenol_b_opt.log"
+    )
+    return gaussian_pka_a_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HA_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_ha_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "phenol_b_opt_wat_smd_water.log"
+    )
+    return gaussian_pka_ha_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_A_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_a_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "phenol_b_opt_wat_smd_water.log"
+    )
+    return gaussian_pka_a_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HB_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_hb_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine-H_opt.log"
+    )
+    return gaussian_pka_hb_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_B_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_b_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine_opt.log"
+    )
+    return gaussian_pka_b_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HB_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_hb_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine-H_opt_sp_smd_water.log"
+    )
+    return gaussian_pka_hb_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_B_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_b_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine_opt_sp_smd_water.log"
+    )
+    return gaussian_pka_b_single_point_outputfile
+
+
 # Gaussian pbc input files
 @pytest.fixture()
 def gaussian_pbc_test_directory(gaussian_test_directory):
