@@ -2378,6 +2378,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=self.reference_charge,
             multiplicity=self.reference_multiplicity,
             jobtype="opt",
+            title="Gaussian pKa calculation job",
             freq=True,
             solvent_model=None,
             solvent_id=None,
@@ -2408,6 +2409,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=ref_cb_charge,
             multiplicity=ref_cb_mult,
             jobtype="opt",
+            title="Gaussian pKa calculation job",
             freq=True,
             solvent_model=None,
             solvent_id=None,
@@ -2438,6 +2440,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=self.reference_charge,
             multiplicity=self.reference_multiplicity,
             jobtype="sp",
+            title="Gaussian pKa calculation job",
             freq=False,
             solvent_model=self.solvent_model,
             solvent_id=self.solvent_id,
@@ -2468,6 +2471,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=ref_cb_charge,
             multiplicity=ref_cb_mult,
             jobtype="sp",
+            title="Gaussian pKa calculation job",
             freq=False,
             solvent_model=self.solvent_model,
             solvent_id=self.solvent_id,
@@ -2671,6 +2675,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=prot_charge,
             multiplicity=prot_mult,
             jobtype="opt",
+            title="Gaussian pKa calculation job",
             freq=True,  # Need frequencies for thermochemistry
             solvent_model=None,  # GAS PHASE - no solvent
             solvent_id=None,
@@ -2701,6 +2706,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=conj_base_charge,
             multiplicity=conj_base_mult,
             jobtype="opt",
+            title="Gaussian pKa calculation job",
             freq=True,  # Need frequencies for thermochemistry
             solvent_model=None,  # GAS PHASE - no solvent
             solvent_id=None,
@@ -2811,6 +2817,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=prot_charge,
             multiplicity=prot_mult,
             jobtype="sp",
+            title="Gaussian pKa calculation job",
             freq=False,
             solvent_model=self.solvent_model,  # Solution phase
             solvent_id=self.solvent_id,
@@ -2842,6 +2849,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             charge=conj_base_charge,
             multiplicity=conj_base_mult,
             jobtype="sp",
+            title="Gaussian pKa calculation job",
             freq=False,
             solvent_model=self.solvent_model,  # Solution phase
             solvent_id=self.solvent_id,
