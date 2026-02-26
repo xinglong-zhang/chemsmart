@@ -2602,7 +2602,7 @@ class TestGaussian16pKaOutput:
         The dual-level approach uses:
         1. Gas-phase frequency calculations for thermal corrections (G_corr)
         2. Solvent single-point calculations for E_solv
-        3. G_aq = E_solv + G_corr for aqueous free energy
+        3. G_soln = E_solv + G_corr for solution free energy (in Hartree/au)
         4. Proton exchange scheme: HA + B⁻ → A⁻ + HB
         """
         result = Gaussian16pKaOutput.compute_pka(
@@ -2621,32 +2621,33 @@ class TestGaussian16pKaOutput:
         # Check that result contains expected keys
         assert "pKa" in result
         assert "pKa_reference" in result
-        assert "delta_G_exchange_kcal_mol" in result
+        assert "delta_G_soln_kcal_mol" in result
+        assert "delta_G_soln_au" in result
         assert "temperature" in result
 
-        # Check aqueous free energies are present
-        assert "G_aq_HA" in result
-        assert "G_aq_A" in result
-        assert "G_aq_HB" in result
-        assert "G_aq_B" in result
+        # Check solution free energies are present (in Hartree/au)
+        assert "G_soln_HA_au" in result
+        assert "G_soln_A_au" in result
+        assert "G_soln_HB_au" in result
+        assert "G_soln_B_au" in result
 
-        # Check solvent SP energies are present
-        assert "E_solv_HA" in result
-        assert "E_solv_A" in result
-        assert "E_solv_HB" in result
-        assert "E_solv_B" in result
+        # Check solvent SP energies are present (in Hartree/au)
+        assert "E_solv_HA_au" in result
+        assert "E_solv_A_au" in result
+        assert "E_solv_HB_au" in result
+        assert "E_solv_B_au" in result
 
-        # Check thermal corrections are present
-        assert "G_corr_HA" in result
-        assert "G_corr_A" in result
-        assert "G_corr_HB" in result
-        assert "G_corr_B" in result
+        # Check thermal corrections are present (in Hartree/au)
+        assert "G_corr_HA_au" in result
+        assert "G_corr_A_au" in result
+        assert "G_corr_HB_au" in result
+        assert "G_corr_B_au" in result
 
-        # Check gas-phase electronic energies are present
-        assert "E_gas_HA" in result
-        assert "E_gas_A" in result
-        assert "E_gas_HB" in result
-        assert "E_gas_B" in result
+        # Check gas-phase electronic energies are present (in Hartree/au)
+        assert "E_gas_HA_au" in result
+        assert "E_gas_A_au" in result
+        assert "E_gas_HB_au" in result
+        assert "E_gas_B_au" in result
 
         # Verify reference pKa is stored correctly
         assert result["pKa_reference"] == self.PKA_COLLIDINE_REFERENCE
@@ -2671,10 +2672,14 @@ class TestGaussian16pKaOutput:
     ):
         """Test that dual-level calculation uses correct energy values.
 
+        All energies are in Hartree (au) except ΔG_soln which is also
+        provided in kcal/mol for the pKa formula.
+
         Verifies:
-        - E_solv values from solvent SP files
-        - G_corr = qh-G(T) - E_gas from gas-phase files
-        - G_aq = E_solv + G_corr
+        - E_solv values from solvent SP files (Hartree)
+        - G_corr = qh-G(T) - E_gas from gas-phase files (Hartree)
+        - G_soln = E_solv + G_corr (Hartree)
+        - ΔG_soln in both au and kcal/mol
         """
         result = Gaussian16pKaOutput.compute_pka(
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
@@ -2689,24 +2694,31 @@ class TestGaussian16pKaOutput:
             temperature=373.15,
         )
 
-        HARTREE_TO_KCAL = 627.509
+        HARTREE_TO_KCAL = 627.5094740631
 
-        # Verify G_aq = E_solv + G_corr for each species (in kcal/mol)
+        # Verify G_soln = E_solv + G_corr for each species (all in Hartree/au)
         for species in ["HA", "A", "HB", "B"]:
-            E_solv = result[f"E_solv_{species}"]
-            G_corr = result[f"G_corr_{species}"]
-            G_aq = result[f"G_aq_{species}"]
-            expected_G_aq = (E_solv + G_corr) * HARTREE_TO_KCAL
+            E_solv_au = result[f"E_solv_{species}_au"]
+            G_corr_au = result[f"G_corr_{species}_au"]
+            G_soln_au = result[f"G_soln_{species}_au"]
+            expected_G_soln_au = E_solv_au + G_corr_au
             assert np.isclose(
-                G_aq, expected_G_aq, rtol=1e-5
-            ), f"G_aq_{species} mismatch: {G_aq} vs {expected_G_aq}"
+                G_soln_au, expected_G_soln_au, rtol=1e-10
+            ), f"G_soln_{species}_au mismatch: {G_soln_au} vs {expected_G_soln_au}"
 
-        # Verify ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]
-        expected_delta_G = (result["G_aq_A"] + result["G_aq_HB"]) - (
-            result["G_aq_HA"] + result["G_aq_B"]
-        )
+        # Verify ΔG_soln in Hartree (au)
+        # ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]
+        expected_delta_G_au = (
+            result["G_soln_A_au"] + result["G_soln_HB_au"]
+        ) - (result["G_soln_HA_au"] + result["G_soln_B_au"])
         assert np.isclose(
-            result["delta_G_exchange_kcal_mol"], expected_delta_G, rtol=1e-10
+            result["delta_G_soln_au"], expected_delta_G_au, rtol=1e-10
+        )
+
+        # Verify ΔG_soln conversion to kcal/mol
+        expected_delta_G_kcal = expected_delta_G_au * HARTREE_TO_KCAL
+        assert np.isclose(
+            result["delta_G_soln_kcal_mol"], expected_delta_G_kcal, rtol=1e-6
         )
 
     def test_print_pka_summary(
@@ -2721,7 +2733,11 @@ class TestGaussian16pKaOutput:
         gaussian_pKa_B_single_point_outputfile,
         capsys,
     ):
-        """Test that print_pka_summary outputs correct format."""
+        """Test that print_pka_summary outputs correct format.
+
+        All energies should be displayed in Hartree (au) except ΔG_soln
+        which is shown in both au and kcal/mol.
+        """
         Gaussian16pKaOutput.print_pka_summary(
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
             a_gas_file=gaussian_pKa_A_optimization_outputfile,
@@ -2744,13 +2760,19 @@ class TestGaussian16pKaOutput:
 
         # Check method description is present
         assert "G_corr = qh-G(T) - E_gas" in output
-        assert "G_aq = E_solv + G_corr" in output
+        assert "G_soln = E_solv + G_corr" in output
 
-        # Check sections are present
-        assert "Gas-Phase Electronic Energies" in output
+        # Check sections are present with correct units (au)
+        assert "Gas-Phase Electronic Energies (E_gas, au)" in output
         assert "Thermal Corrections" in output
-        assert "Solvent Single-Point Energies" in output
-        assert "Aqueous Free Energies" in output
+        assert "Solvent Single-Point Energies (E_solv, au)" in output
+        assert (
+            "Solution Free Energies (G_soln = E_solv + G_corr, au)" in output
+        )
+
+        # Check ΔG_soln is shown in both units
+        assert "ΔG_soln" in output
+        assert "kcal/mol" in output
 
         # Check computed pKa is displayed
         assert "Computed pKa(HA)" in output
@@ -2797,6 +2819,6 @@ class TestGaussian16pKaOutput:
         # Results should be identical
         assert result1["pKa"] == result2["pKa"]
         assert (
-            result1["delta_G_exchange_kcal_mol"]
-            == result2["delta_G_exchange_kcal_mol"]
+            result1["delta_G_soln_kcal_mol"]
+            == result2["delta_G_soln_kcal_mol"]
         )

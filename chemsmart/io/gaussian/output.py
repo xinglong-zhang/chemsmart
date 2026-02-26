@@ -2691,22 +2691,24 @@ class Gaussian16pKaOutput(Gaussian16Output):
         The dual-level approach separates:
         1. **Thermal corrections (G_corr)**: Extracted from gas-phase frequency
            calculations using quasi-harmonic Gibbs free energy:
-               G_corr = qh-G(T) - E_gas
+               G_corr = qh-G(T) - E_gas  [Hartree]
 
         2. **Solvent energies (E_solv)**: High-level single-point electronic
-           energies calculated in implicit solvent (e.g., SMD).
+           energies calculated in implicit solvent (e.g., SMD). [Hartree]
 
         3. **Total free energy in solution** for each species:
-               G_aq = E_solv + G_corr
+               G_soln = E_solv + G_corr  [Hartree]
 
         4. **Reaction free energy** using proton exchange:
-               ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]
+               ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]
+               Converted to kcal/mol for pKa calculation.
 
         5. **pKa calculation**:
-               pKa = pKa_ref + ΔG_exch / (RT × ln10)
+               pKa = pKa_ref + ΔG_soln / (RT × ln10)
 
-        Note: All energies are converted to kcal/mol before the final pKa step.
-        Conversion factor: 1 Hartree = 627.509 kcal/mol
+        Note: All internal energies are stored in Hartree (au).
+        Only ΔG_soln is converted to kcal/mol for the pKa formula.
+        Conversion factor: 1 Hartree = 627.5094740631 kcal/mol
 
         Args:
             ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
@@ -2728,27 +2730,29 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 in cm^-1 using Head-Gordon's method. Default 100.0.
 
         Returns:
-            dict: Dictionary containing pKa calculation results:
+            dict: Dictionary containing pKa calculation results.
+                All energies in Hartree (au) unless noted otherwise:
                 - 'pKa': Computed pKa value of target acid HA
                 - 'pKa_reference': Experimental pKa of reference acid HB
-                - 'delta_G_exchange_kcal_mol': ΔG_exchange in kcal/mol
+                - 'delta_G_soln_kcal_mol': ΔG_soln in kcal/mol (for pKa calc)
+                - 'delta_G_soln_au': ΔG_soln in Hartree (au)
                 - 'temperature': Temperature in Kelvin
-                - 'G_aq_HA': Aqueous free energy of HA (kcal/mol)
-                - 'G_aq_A': Aqueous free energy of A⁻ (kcal/mol)
-                - 'G_aq_HB': Aqueous free energy of HB (kcal/mol)
-                - 'G_aq_B': Aqueous free energy of B⁻ (kcal/mol)
-                - 'E_solv_HA': Solvent SP energy of HA (Hartree)
-                - 'E_solv_A': Solvent SP energy of A⁻ (Hartree)
-                - 'E_solv_HB': Solvent SP energy of HB (Hartree)
-                - 'E_solv_B': Solvent SP energy of B⁻ (Hartree)
-                - 'G_corr_HA': Thermal correction for HA (Hartree)
-                - 'G_corr_A': Thermal correction for A⁻ (Hartree)
-                - 'G_corr_HB': Thermal correction for HB (Hartree)
-                - 'G_corr_B': Thermal correction for B⁻ (Hartree)
-                - 'E_gas_HA': Gas-phase electronic energy of HA (Hartree)
-                - 'E_gas_A': Gas-phase electronic energy of A⁻ (Hartree)
-                - 'E_gas_HB': Gas-phase electronic energy of HB (Hartree)
-                - 'E_gas_B': Gas-phase electronic energy of B⁻ (Hartree)
+                - 'G_soln_HA_au': Solution free energy of HA (Hartree)
+                - 'G_soln_A_au': Solution free energy of A⁻ (Hartree)
+                - 'G_soln_HB_au': Solution free energy of HB (Hartree)
+                - 'G_soln_B_au': Solution free energy of B⁻ (Hartree)
+                - 'E_solv_HA_au': Solvent SP energy of HA (Hartree)
+                - 'E_solv_A_au': Solvent SP energy of A⁻ (Hartree)
+                - 'E_solv_HB_au': Solvent SP energy of HB (Hartree)
+                - 'E_solv_B_au': Solvent SP energy of B⁻ (Hartree)
+                - 'G_corr_HA_au': Thermal correction for HA (Hartree)
+                - 'G_corr_A_au': Thermal correction for A⁻ (Hartree)
+                - 'G_corr_HB_au': Thermal correction for HB (Hartree)
+                - 'G_corr_B_au': Thermal correction for B⁻ (Hartree)
+                - 'E_gas_HA_au': Gas-phase electronic energy of HA (Hartree)
+                - 'E_gas_A_au': Gas-phase electronic energy of A⁻ (Hartree)
+                - 'E_gas_HB_au': Gas-phase electronic energy of HB (Hartree)
+                - 'E_gas_B_au': Gas-phase electronic energy of B⁻ (Hartree)
 
         Example:
             # Calculate pKa of 5PQ_Me_ts1 using collidine as reference (pKa=6.75)
@@ -2769,8 +2773,13 @@ class Gaussian16pKaOutput(Gaussian16Output):
         from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL
 
         # Helper function to get thermochemistry from gas-phase file
+        # All energies returned in Hartree (au)
         def get_gas_phase_data(gas_file):
-            """Extract E_gas and qh-G(T) from gas-phase frequency calculation."""
+            """Extract E_gas and qh-G(T) from gas-phase frequency calculation.
+
+            Returns:
+                tuple: (E_gas_au, qh_G_au, G_corr_au) all in Hartree
+            """
             output = cls(
                 filename=gas_file,
                 temperature=temperature,
@@ -2779,84 +2788,95 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 cutoff_entropy_grimme=cutoff_entropy_grimme,
                 cutoff_enthalpy=cutoff_enthalpy,
             )
-            E_gas = output.electronic_energy_in_units  # in Hartree
-            qh_G = output.qh_gibbs_free_energy  # in Hartree
-            G_corr = qh_G - E_gas  # thermal correction in Hartree
-            return E_gas, qh_G, G_corr
+            E_gas_au = output.electronic_energy_in_units  # Hartree
+            qh_G_au = output.qh_gibbs_free_energy  # Hartree
+            G_corr_au = qh_G_au - E_gas_au  # Thermal correction in Hartree
+            return E_gas_au, qh_G_au, G_corr_au
 
         # Helper function to get E_solv from solvent SP file
+        # Returns energy in Hartree (au)
         def get_solvent_energy(solv_file):
-            """Extract electronic energy from solvent single-point calculation."""
+            """Extract electronic energy from solvent single-point calculation.
+
+            Returns:
+                float: E_solv in Hartree (au)
+            """
             output = Gaussian16Output(filename=solv_file)
-            # Get the last SCF energy (solvent SP)
-            E_solv = output.energies[-1] if output.energies else None
-            if E_solv is None:
+            # Get the last SCF energy (solvent SP) in Hartree
+            E_solv_au = output.energies[-1] if output.energies else None
+            if E_solv_au is None:
                 raise ValueError(
                     f"Could not extract SCF energy from solvent file: {solv_file}"
                 )
-            return E_solv
+            return E_solv_au
 
         # Step 1: Get gas-phase data (E_gas, qh-G, G_corr) for all species
-        E_gas_HA, qh_G_HA, G_corr_HA = get_gas_phase_data(ha_gas_file)
-        E_gas_A, qh_G_A, G_corr_A = get_gas_phase_data(a_gas_file)
-        E_gas_HB, qh_G_HB, G_corr_HB = get_gas_phase_data(hb_gas_file)
-        E_gas_B, qh_G_B, G_corr_B = get_gas_phase_data(b_gas_file)
+        # All values in Hartree (au)
+        E_gas_HA_au, qh_G_HA_au, G_corr_HA_au = get_gas_phase_data(ha_gas_file)
+        E_gas_A_au, qh_G_A_au, G_corr_A_au = get_gas_phase_data(a_gas_file)
+        E_gas_HB_au, qh_G_HB_au, G_corr_HB_au = get_gas_phase_data(hb_gas_file)
+        E_gas_B_au, qh_G_B_au, G_corr_B_au = get_gas_phase_data(b_gas_file)
 
         # Step 2: Get solvent SP energies (E_solv) for all species
-        E_solv_HA = get_solvent_energy(ha_solv_file)
-        E_solv_A = get_solvent_energy(a_solv_file)
-        E_solv_HB = get_solvent_energy(hb_solv_file)
-        E_solv_B = get_solvent_energy(b_solv_file)
+        # All values in Hartree (au)
+        E_solv_HA_au = get_solvent_energy(ha_solv_file)
+        E_solv_A_au = get_solvent_energy(a_solv_file)
+        E_solv_HB_au = get_solvent_energy(hb_solv_file)
+        E_solv_B_au = get_solvent_energy(b_solv_file)
 
-        # Step 3: Calculate G_aq = E_solv + G_corr (in Hartree)
-        G_aq_HA_hartree = E_solv_HA + G_corr_HA
-        G_aq_A_hartree = E_solv_A + G_corr_A
-        G_aq_HB_hartree = E_solv_HB + G_corr_HB
-        G_aq_B_hartree = E_solv_B + G_corr_B
+        # Step 3: Calculate G_soln = E_solv + G_corr
+        # Solution free energy in Hartree (au)
+        G_soln_HA_au = E_solv_HA_au + G_corr_HA_au
+        G_soln_A_au = E_solv_A_au + G_corr_A_au
+        G_soln_HB_au = E_solv_HB_au + G_corr_HB_au
+        G_soln_B_au = E_solv_B_au + G_corr_B_au
 
-        # Step 4: Convert to kcal/mol
-        G_aq_HA = G_aq_HA_hartree * HARTREE_TO_KCAL_MOL
-        G_aq_A = G_aq_A_hartree * HARTREE_TO_KCAL_MOL
-        G_aq_HB = G_aq_HB_hartree * HARTREE_TO_KCAL_MOL
-        G_aq_B = G_aq_B_hartree * HARTREE_TO_KCAL_MOL
+        # Step 4: Calculate ΔG_soln in Hartree (au)
+        # ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]
+        delta_G_soln_au = (G_soln_A_au + G_soln_HB_au) - (
+            G_soln_HA_au + G_soln_B_au
+        )
 
-        # Step 5: Calculate ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]
-        # in kcal/mol
-        delta_G_exchange = (G_aq_A + G_aq_HB) - (G_aq_HA + G_aq_B)
+        # Step 5: Convert ΔG_soln to kcal/mol for pKa calculation
+        delta_G_soln_kcal_mol = delta_G_soln_au * HARTREE_TO_KCAL_MOL
 
         # Step 6: Calculate pKa
-        # pKa = pKa_ref + ΔG_exch / (RT × ln10)
+        # pKa = pKa_ref + ΔG_soln / (RT × ln10)
         # R = 1.987204 cal/(mol·K) = 0.001987204 kcal/(mol·K)
         R_kcal = 0.001987204  # kcal/(mol·K)
         ln10 = 2.302585093
 
-        pka = pka_reference + delta_G_exchange / (R_kcal * temperature * ln10)
+        pka = pka_reference + delta_G_soln_kcal_mol / (
+            R_kcal * temperature * ln10
+        )
 
         return {
             "pKa": pka,
             "pKa_reference": pka_reference,
-            "delta_G_exchange_kcal_mol": delta_G_exchange,
+            # ΔG_soln in both units (kcal/mol needed for pKa formula)
+            "delta_G_soln_kcal_mol": delta_G_soln_kcal_mol,
+            "delta_G_soln_au": delta_G_soln_au,
             "temperature": temperature,
-            # Aqueous free energies (kcal/mol)
-            "G_aq_HA": G_aq_HA,
-            "G_aq_A": G_aq_A,
-            "G_aq_HB": G_aq_HB,
-            "G_aq_B": G_aq_B,
-            # Solvent SP energies (Hartree)
-            "E_solv_HA": E_solv_HA,
-            "E_solv_A": E_solv_A,
-            "E_solv_HB": E_solv_HB,
-            "E_solv_B": E_solv_B,
-            # Thermal corrections (Hartree)
-            "G_corr_HA": G_corr_HA,
-            "G_corr_A": G_corr_A,
-            "G_corr_HB": G_corr_HB,
-            "G_corr_B": G_corr_B,
-            # Gas-phase electronic energies (Hartree)
-            "E_gas_HA": E_gas_HA,
-            "E_gas_A": E_gas_A,
-            "E_gas_HB": E_gas_HB,
-            "E_gas_B": E_gas_B,
+            # Solution free energies in Hartree (au)
+            "G_soln_HA_au": G_soln_HA_au,
+            "G_soln_A_au": G_soln_A_au,
+            "G_soln_HB_au": G_soln_HB_au,
+            "G_soln_B_au": G_soln_B_au,
+            # Solvent SP energies in Hartree (au)
+            "E_solv_HA_au": E_solv_HA_au,
+            "E_solv_A_au": E_solv_A_au,
+            "E_solv_HB_au": E_solv_HB_au,
+            "E_solv_B_au": E_solv_B_au,
+            # Thermal corrections in Hartree (au)
+            "G_corr_HA_au": G_corr_HA_au,
+            "G_corr_A_au": G_corr_A_au,
+            "G_corr_HB_au": G_corr_HB_au,
+            "G_corr_B_au": G_corr_B_au,
+            # Gas-phase electronic energies in Hartree (au)
+            "E_gas_HA_au": E_gas_HA_au,
+            "E_gas_A_au": E_gas_A_au,
+            "E_gas_HB_au": E_gas_HB_au,
+            "E_gas_B_au": E_gas_B_au,
         }
 
     @classmethod
@@ -2879,6 +2899,9 @@ class Gaussian16pKaOutput(Gaussian16Output):
     ):
         """
         Print a formatted summary of Dual-level Proton Exchange pKa calculation.
+
+        All energies are displayed in Hartree (au) except ΔG_soln which is
+        shown in kcal/mol as required for the pKa formula.
 
         Args:
             ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
@@ -2935,40 +2958,41 @@ class Gaussian16pKaOutput(Gaussian16Output):
         print()
         print("Method:")
         print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
-        print("  G_aq = E_solv + G_corr    (aqueous free energy)")
-        print("  ΔG_exch = [G(A⁻)_aq + G(HB)_aq] - [G(HA)_aq + G(B⁻)_aq]")
-        print("  pKa = pKa_ref + ΔG_exch / (RT × ln10)")
+        print("  G_soln = E_solv + G_corr  (solution free energy)")
+        print(
+            "  ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]"
+        )
+        print("  pKa = pKa_ref + ΔG_soln / (RT × ln10)")
         print("-" * 78)
         print()
-        print("Gas-Phase Electronic Energies (E_gas, Hartree):")
-        print(f"  HA:  {result['E_gas_HA']:.10f}")
-        print(f"  A⁻:  {result['E_gas_A']:.10f}")
-        print(f"  HB:  {result['E_gas_HB']:.10f}")
-        print(f"  B⁻:  {result['E_gas_B']:.10f}")
+        print("Gas-Phase Electronic Energies (E_gas, au):")
+        print(f"  HA:  {result['E_gas_HA_au']:.10f}")
+        print(f"  A⁻:  {result['E_gas_A_au']:.10f}")
+        print(f"  HB:  {result['E_gas_HB_au']:.10f}")
+        print(f"  B⁻:  {result['E_gas_B_au']:.10f}")
         print()
-        print("Thermal Corrections (G_corr = qh-G - E_gas, Hartree):")
-        print(f"  HA:  {result['G_corr_HA']:.10f}")
-        print(f"  A⁻:  {result['G_corr_A']:.10f}")
-        print(f"  HB:  {result['G_corr_HB']:.10f}")
-        print(f"  B⁻:  {result['G_corr_B']:.10f}")
+        print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
+        print(f"  HA:  {result['G_corr_HA_au']:.10f}")
+        print(f"  A⁻:  {result['G_corr_A_au']:.10f}")
+        print(f"  HB:  {result['G_corr_HB_au']:.10f}")
+        print(f"  B⁻:  {result['G_corr_B_au']:.10f}")
         print()
-        print("Solvent Single-Point Energies (E_solv, Hartree):")
-        print(f"  HA:  {result['E_solv_HA']:.10f}")
-        print(f"  A⁻:  {result['E_solv_A']:.10f}")
-        print(f"  HB:  {result['E_solv_HB']:.10f}")
-        print(f"  B⁻:  {result['E_solv_B']:.10f}")
+        print("Solvent Single-Point Energies (E_solv, au):")
+        print(f"  HA:  {result['E_solv_HA_au']:.10f}")
+        print(f"  A⁻:  {result['E_solv_A_au']:.10f}")
+        print(f"  HB:  {result['E_solv_HB_au']:.10f}")
+        print(f"  B⁻:  {result['E_solv_B_au']:.10f}")
         print()
-        print("Aqueous Free Energies (G_aq = E_solv + G_corr, kcal/mol):")
-        print(f"  HA:  {result['G_aq_HA']:.4f}")
-        print(f"  A⁻:  {result['G_aq_A']:.4f}")
-        print(f"  HB:  {result['G_aq_HB']:.4f}")
-        print(f"  B⁻:  {result['G_aq_B']:.4f}")
+        print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
+        print(f"  HA:  {result['G_soln_HA_au']:.10f}")
+        print(f"  A⁻:  {result['G_soln_A_au']:.10f}")
+        print(f"  HB:  {result['G_soln_HB_au']:.10f}")
+        print(f"  B⁻:  {result['G_soln_B_au']:.10f}")
         print("-" * 78)
         print()
         print("pKa Calculation:")
-        print(
-            f"  ΔG_exch = {result['delta_G_exchange_kcal_mol']:.4f} kcal/mol"
-        )
+        print(f"  ΔG_soln = {result['delta_G_soln_au']:.10f} au")
+        print(f"         = {result['delta_G_soln_kcal_mol']:.4f} kcal/mol")
         print(f"  pKa(HB)_ref = {pka_reference:.2f}")
         print()
         print(f"  *** Computed pKa(HA) = {result['pKa']:.2f} ***")
