@@ -1177,7 +1177,7 @@ class TestGaussianpKaJob:
             jobrunner=gaussian_jobrunner_no_scratch,
         )
 
-        pka_jobs = job.pka_jobs
+        pka_jobs = job.opt_jobs
         assert len(pka_jobs) == 2
         assert isinstance(pka_jobs[0], GaussianOptJob)
         assert isinstance(pka_jobs[1], GaussianOptJob)
@@ -1310,7 +1310,7 @@ class TestGaussianpKaJob:
             jobrunner=gaussian_jobrunner_no_scratch,
         )
 
-        protonated_job, conjugate_base_job = job.pka_jobs
+        protonated_job, conjugate_base_job = job.opt_jobs
 
         assert protonated_job.label == "acetic_acid_pka_HA"
         assert conjugate_base_job.label == "acetic_acid_pka_A"

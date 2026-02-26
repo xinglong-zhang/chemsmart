@@ -184,11 +184,6 @@ class GaussianpKaJob(GaussianJob):
         return self._opt_jobs
 
     @property
-    def pka_jobs(self):
-        """Alias for opt_jobs for backward compatibility."""
-        return self.opt_jobs
-
-    @property
     def protonated_job(self):
         """
         Get the gas phase optimization job for the protonated form (HA).
@@ -199,11 +194,6 @@ class GaussianpKaJob(GaussianJob):
         return self.opt_jobs[0]
 
     @property
-    def protonated_opt_job(self):
-        """Alias for protonated_job."""
-        return self.protonated_job
-
-    @property
     def conjugate_base_job(self):
         """
         Get the gas phase optimization job for the conjugate base (A-).
@@ -212,11 +202,6 @@ class GaussianpKaJob(GaussianJob):
             GaussianOptJob: Gas phase optimization job for the conjugate base molecule.
         """
         return self.opt_jobs[1]
-
-    @property
-    def conjugate_base_opt_job(self):
-        """Alias for conjugate_base_job."""
-        return self.conjugate_base_job
 
     @property
     def sp_jobs(self):
@@ -631,10 +616,6 @@ class GaussianpKaJob(GaussianJob):
             logger.info(f"Running reference gas phase optimization job: {job}")
             job.run()
 
-    def _run_pka_jobs(self):
-        """Alias for _run_opt_jobs for backward compatibility."""
-        self._run_opt_jobs()
-
     def _run_sp_jobs(self):
         """
         Execute both SOLUTION PHASE SP jobs (protonated and conjugate base) sequentially.
@@ -737,10 +718,6 @@ class GaussianpKaJob(GaussianJob):
         if not self.has_reference_jobs:
             return True
         return all(job.is_complete() for job in self.ref_opt_jobs)
-
-    def _pka_jobs_are_complete(self):
-        """Alias for _opt_jobs_are_complete for backward compatibility."""
-        return self._opt_jobs_are_complete()
 
     def _sp_jobs_are_complete(self):
         """
