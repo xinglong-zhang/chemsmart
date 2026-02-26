@@ -161,9 +161,92 @@ def click_pka_options(f):
     return wrapper
 
 
+def click_pka_output_options(f):
+    """Click options for parsing pKa output files.
+
+    These options allow users to provide completed Gaussian output files
+    for extracting thermochemistry and computing pKa values using the
+    Dual-level Proton Exchange scheme.
+
+    All energies are in Hartree (au) except ΔG_soln which is converted
+    to kcal/mol for the pKa formula.
+    """
+    # Apply options in reverse order (last applied = first in help)
+    # Reference pKa value
+    f = click.option(
+        "-rp",
+        "--reference-pka",
+        type=float,
+        default=None,
+        help="Experimental pKa of reference acid HB for proton exchange cycle. "
+        "Required when using output file parsing mode with reference acid.",
+    )(f)
+    # Solvent single-point output files
+    f = click.option(
+        "-bs",
+        "--b-solv-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to B⁻ solvent single-point output file.",
+    )(f)
+    f = click.option(
+        "-hbs",
+        "--hb-solv-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to HB solvent single-point output file.",
+    )(f)
+    f = click.option(
+        "-as",
+        "--a-solv-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to A⁻ solvent single-point output file.",
+    )(f)
+    f = click.option(
+        "-has",
+        "--ha-solv-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to HA solvent single-point output file.",
+    )(f)
+    # Gas-phase optimization+frequency output files
+    f = click.option(
+        "-b",
+        "--b-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to B⁻ (reference conjugate base) gas-phase opt+freq output file.",
+    )(f)
+    f = click.option(
+        "-hb",
+        "--hb-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to HB (reference acid) gas-phase opt+freq output file.",
+    )(f)
+    f = click.option(
+        "-a",
+        "--a-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to A⁻ (conjugate base) gas-phase opt+freq output file.",
+    )(f)
+    f = click.option(
+        "-ha",
+        "--ha-output",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to HA (protonated acid) gas-phase opt+freq output file.",
+    )(f)
+
+    return f
+
+
 @gaussian.group("pka", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_pka_options
+@click_pka_output_options
 @click.pass_context
 def pka(
     ctx,
@@ -185,6 +268,16 @@ def pka(
     cutoff_entropy_grimme,
     cutoff_enthalpy,
     skip_completed,
+    # Output file parsing options
+    ha_output,
+    a_output,
+    hb_output,
+    b_output,
+    ha_solv_output,
+    a_solv_output,
+    hb_solv_output,
+    b_solv_output,
+    reference_pka,
     **kwargs,
 ):
     """
@@ -194,29 +287,41 @@ def pka(
     1. Gas phase optimization + frequency for HA and A-
     2. Solution phase single point for HA and A- at the SAME level of theory
 
+    Two modes are available:
+
+    \b
+    **Mode 1: Run new calculations**
+    Provide input geometry files and run optimization + SP calculations.
+
+    \b
+    **Mode 2: Parse existing output files**
+    Provide completed Gaussian output files to compute pKa directly using
+    the Dual-level Proton Exchange scheme. All energies in Hartree (au),
+    except ΔG_soln which is converted to kcal/mol for the pKa formula.
+
     Two thermodynamic cycles are available:
 
     \b
     - **proton exchange** (default): Uses a reference acid to cancel errors.
-      HA + B- → A- + HB
-      pKa(HA) = pKa(HB) + ΔG_exchange / (2.303 * R * T)
-
-      When using proton exchange, provide a reference acid geometry file
-      with --reference (-r) option. This will run optimization and SP
-      calculations for both HB and B- alongside HA and A-.
+      HA + B⁻ → A⁻ + HB
+      pKa(HA) = pKa(HB) + ΔG_soln / (2.303 × R × T)
 
     \b
-    - **direct**: Uses absolute free energy of H+ in water.
-      pKa = [G(A-)_aq - G(HA)_aq + ΔG°(H+)_aq] / (2.303 * R * T)
-      Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., 1998)
-
-    The proton to be removed is specified by --proton-index (1-based).
-    The protonated form uses charge and multiplicity from -c and -m options.
-    The conjugate base charge defaults to (charge - 1).
+    - **direct**: Uses absolute free energy of H⁺ in water.
+      pKa = [G(A⁻)_soln - G(HA)_soln + ΔG°(H⁺)_aq] / (2.303 × R × T)
+      Default ΔG°(H⁺)_aq = -265.9 kcal/mol (Tissandier et al., 1998)
 
     \b
-    Subcommands:
-        thermo    Extract thermochemistry (E, qh-G) from completed output files
+    Output file options (for parsing mode):
+        -ha, --ha-output        HA gas-phase opt+freq output
+        -a,  --a-output         A⁻ gas-phase opt+freq output
+        -hb, --hb-output        HB gas-phase opt+freq output
+        -b,  --b-output         B⁻ gas-phase opt+freq output
+        -has, --ha-solv-output  HA solvent SP output
+        -as,  --a-solv-output   A⁻ solvent SP output
+        -hbs, --hb-solv-output  HB solvent SP output
+        -bs,  --b-solv-output   B⁻ solvent SP output
+        -rpka, --reference-pka  Experimental pKa of reference acid HB
 
     \b
     Examples:
@@ -227,9 +332,96 @@ def pka(
         # Run pKa job with direct cycle
         chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -t direct
 
-        # Extract thermochemistry from completed jobs
-        chemsmart run gaussian pka thermo -ha acid_opt.log -a base_opt.log -T 298.15
+        # Compute pKa from existing output files (Dual-level Proton Exchange)
+        chemsmart run gaussian pka -pi 1 \\
+            -ha 5PQ_Me_ts1_no_pd_opt.log \\
+            -a 5PQ_Me_ts1_b_no_pd_opt.log \\
+            -hb collidine-H_opt.log \\
+            -b collidine_opt.log \\
+            -has 5PQ_Me_ts1_no_pd_opt_sp_smd.log \\
+            -as 5PQ_Me_ts1_b_no_pd_opt_sp_smd.log \\
+            -hbs collidine-H_opt_sp_smd.log \\
+            -bs collidine_opt_sp_smd.log \\
+            -rpka 6.75 -T 298.15
     """
+    # Check if we're in output file parsing mode
+    output_files_provided = any(
+        [
+            ha_output,
+            a_output,
+            hb_output,
+            b_output,
+            ha_solv_output,
+            a_solv_output,
+            hb_solv_output,
+            b_solv_output,
+        ]
+    )
+
+    if output_files_provided:
+        # Output file parsing mode - compute pKa from existing files
+        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+        # Validate required files for proton exchange cycle
+        required_gas = [ha_output, a_output, hb_output, b_output]
+        required_solv = [
+            ha_solv_output,
+            a_solv_output,
+            hb_solv_output,
+            b_solv_output,
+        ]
+
+        missing_gas = []
+        missing_solv = []
+        file_names = ["ha", "a", "hb", "b"]
+
+        for i, (gas, solv, name) in enumerate(
+            zip(required_gas, required_solv, file_names)
+        ):
+            if gas is None:
+                missing_gas.append(f"-{name}/--{name}-output")
+            if solv is None:
+                missing_solv.append(f"-{name}s/--{name}-solv-output")
+
+        if missing_gas or missing_solv:
+            raise click.UsageError(
+                f"For pKa calculation from output files, all 8 files are required.\n"
+                f"Missing gas-phase files: {', '.join(missing_gas) if missing_gas else 'none'}\n"
+                f"Missing solvent SP files: {', '.join(missing_solv) if missing_solv else 'none'}"
+            )
+
+        if reference_pka is None:
+            raise click.UsageError(
+                "When using output file parsing mode, -rpka/--reference-pka is required "
+                "to specify the experimental pKa of the reference acid (HB)."
+            )
+
+        # Compute pKa using Dual-level Proton Exchange scheme
+        logger.info(
+            "Computing pKa from output files using Dual-level Proton Exchange scheme..."
+        )
+        logger.info(f"  Temperature: {temperature} K")
+        logger.info(f"  Reference pKa (HB): {reference_pka}")
+
+        # Print summary
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_gas_file=ha_output,
+            a_gas_file=a_output,
+            hb_gas_file=hb_output,
+            b_gas_file=b_output,
+            ha_solv_file=ha_solv_output,
+            a_solv_file=a_solv_output,
+            hb_solv_file=hb_solv_output,
+            b_solv_file=b_solv_output,
+            pka_reference=reference_pka,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+        )
+
+        return
+
     # If a subcommand is invoked, don't run the pKa job
     if ctx.invoked_subcommand is not None:
         # Store settings in context for subcommands
@@ -544,49 +736,8 @@ def thermo(
             "At least one output file must be provided. Use -ha, -a, -hb, or -b options."
         )
 
-    # Compute and display results
-    if output is not None:
-        # Save to file
-        import sys
-        from io import StringIO
-
-        # Capture stdout
-        old_stdout = sys.stdout
-        sys.stdout = StringIO()
-        Gaussian16pKaOutput.print_pka_summary(
-            ha_file=ha_file,
-            a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
-            temperature=temperature,
-            concentration=concentration,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-        )
-        result = sys.stdout.getvalue()
-        sys.stdout = old_stdout
-
-        with open(output, "w") as f:
-            f.write(result)
-        logger.info(f"Results saved to {output}")
-        click.echo(f"Results saved to {output}")
-    else:
-        # Print to stdout
-        Gaussian16pKaOutput.print_pka_summary(
-            ha_file=ha_file,
-            a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
-            temperature=temperature,
-            concentration=concentration,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-        )
-
-    # Return the results dictionary for programmatic access
-    return Gaussian16pKaOutput.compute_pka_thermochemistry(
+    # Compute thermochemistry results
+    results = Gaussian16pKaOutput.compute_pka_thermochemistry(
         ha_file=ha_file,
         a_file=a_file,
         hb_file=hb_file,
@@ -597,3 +748,54 @@ def thermo(
         cutoff_enthalpy=cutoff_enthalpy,
         energy_units=energy_units,
     )
+
+    # Format output
+    def format_results(results, energy_units):
+        """Format thermochemistry results for display."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("pKa Thermochemistry Extraction")
+        lines.append("=" * 78)
+        lines.append(f"Temperature: {results['settings']['temperature']} K")
+        lines.append(
+            f"Concentration: {results['settings']['concentration']} mol/L"
+        )
+        lines.append(
+            f"Entropy cutoff (Grimme): {results['settings']['cutoff_entropy_grimme']} cm⁻¹"
+        )
+        lines.append(
+            f"Enthalpy cutoff (Head-Gordon): {results['settings']['cutoff_enthalpy']} cm⁻¹"
+        )
+        lines.append(f"Energy units: {energy_units}")
+        lines.append("-" * 78)
+        lines.append("")
+        lines.append(
+            f"{'Species':<10} {'E':<20} {'qh-G(T)':<20} {'G_corr':<20}"
+        )
+        lines.append("-" * 78)
+
+        for species_key in ["HA", "A", "HB", "B"]:
+            if species_key in results:
+                species = results[species_key]
+                E = species["E"]
+                qh_G = species["qh_G"]
+                G_corr = qh_G - E
+                lines.append(
+                    f"{species['name']:<10} {E:<20.10f} {qh_G:<20.10f} {G_corr:<20.10f}"
+                )
+
+        lines.append("=" * 78)
+        return "\n".join(lines)
+
+    output_text = format_results(results, energy_units)
+
+    # Output results
+    if output is not None:
+        with open(output, "w") as f:
+            f.write(output_text)
+        logger.info(f"Results saved to {output}")
+        click.echo(f"Results saved to {output}")
+    else:
+        click.echo(output_text)
+
+    return results
