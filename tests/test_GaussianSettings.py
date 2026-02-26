@@ -974,7 +974,9 @@ class TestGaussianpKaJobSettings:
             solvent_id="water",
         )
 
-        prot_settings, conj_base_settings = settings._create_job_settings(mol)
+        prot_settings, conj_base_settings = (
+            settings._create_gas_phase_job_settings(mol)
+        )
 
         # Check protonated settings - GAS PHASE (no solvent)
         assert isinstance(prot_settings, GaussianJobSettings)

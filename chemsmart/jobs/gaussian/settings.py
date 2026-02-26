@@ -2617,10 +2617,6 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
         return conjugate_base_mol
 
-    def _create_job_settings(self, molecule):
-        """Alias for _create_gas_phase_job_settings for backward compatibility."""
-        return self._create_gas_phase_job_settings(molecule)
-
     def _create_gas_phase_job_settings(self, molecule):
         """
         Create GAS PHASE optimization job settings for both forms.
@@ -2755,10 +2751,6 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         conjugate_base_mol = self._create_conjugate_base_molecule(molecule)
 
         return protonated_mol, conjugate_base_mol
-
-    def _create_sp_job_settings(self, molecule):
-        """Alias for _create_solution_phase_sp_settings for backward compatibility."""
-        return self._create_solution_phase_sp_settings(molecule)
 
     def _create_solution_phase_sp_settings(self, molecule):
         """

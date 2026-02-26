@@ -2654,10 +2654,8 @@ class TestGaussian16pKaOutput:
 
         # Verify temperature is stored correctly
         assert result["temperature"] == 373.15
-        print(result.items())
 
-        # pKa should be a reasonable value (positive and not too extreme)
-        assert isinstance(result["pKa"], float)
+        assert np.isclose(result["pKa"], 52.7025859, rtol=1e-6)
 
     def test_compute_pka_energy_values(
         self,

@@ -535,7 +535,7 @@ class GaussianpKaJob(GaussianJob):
         """
         # Get SP job settings
         protonated_sp_settings, conjugate_base_sp_settings = (
-            self.settings._create_sp_job_settings(self.molecule)
+            self.settings._create_solution_phase_sp_settings(self.molecule)
         )
 
         # Create job labels
