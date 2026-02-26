@@ -543,7 +543,7 @@ class TestGaussianPBCJob:
 
 
 class TestGaussianpKaJobSettings:
-    """Tests for GaussianpKaJobSettings class."""
+    """Tests for GaussianpKaJobSettings and GaussianpKaJob classes."""
 
     def test_init_custom_values(self):
         """Test initialization with custom values."""
@@ -1089,11 +1089,10 @@ class TestGaussianpKaJobSettings:
         assert prot_settings.solvent_model is None
         assert conj_base_settings.solvent_model is None
 
-
-class TestGaussianpKaJob:
-    """Tests for GaussianpKaJob class."""
-
-    def test_init_valid_settings(
+    # ------------------------------------------------------------------
+    # GaussianpKaJob integration tests
+    # ------------------------------------------------------------------
+    def test_job_init_valid_settings(
         self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
     ):
         """Test initialization with valid pKa settings."""
