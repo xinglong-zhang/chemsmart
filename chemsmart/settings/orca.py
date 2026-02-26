@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCAJobSettings,
+    ORCANEBJobSettings,
     ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
@@ -193,6 +194,24 @@ class ORCAProjectSettings(RegistryMixin):
         settings.basis = self.large_basis
         return settings
 
+    def neb_settings(self):
+        """
+        Create default ORCA NEB job settings.
+
+        Returns ORCANEBJobSettings instance with base configuration
+        inherited from main settings and NEB-specific defaults.
+
+        Returns:
+            ORCANEBJobSettings: Default NEB settings with freq disabled
+        """
+        settings = self.main_settings().copy()
+        settings = ORCANEBJobSettings(
+            **settings.__dict__
+        )  # convert settings to ORCANEBJobSettings
+        settings.jobtype = "neb"
+        settings.freq = False
+        return settings
+
     def qmmm_settings(self):
         """ORCA default settings for QMMM job."""
         settings = self.main_settings().copy()
@@ -354,6 +373,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         td_settings,
         wbi_settings,
         qmmm_settings,
+        neb_settings,
     ):
         """
         Initialize YAML-based ORCA project settings.
@@ -368,6 +388,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
             sp_settings: Settings for single point calculations.
             td_settings: Settings for TD-DFT calculations.
             wbi_settings: Settings for Wiberg bond index calculations.
+            neb_settings: Settings for NEB calculations.
         """
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings
@@ -379,6 +400,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
         self._qmmm_settings = qmmm_settings
+        self._neb_settings = neb_settings
 
     def opt_settings(self):
         """
@@ -464,17 +486,25 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def qmmm_settings(self):
         return self._qmmm_settings
 
-    @classmethod
-    def from_yaml(cls, filename):
+    def neb_settings(self):
         """
-        Create project settings from YAML configuration file.
-
-        Args:
-            filename (str): Path to YAML configuration file.
+        Get Nudged Elastic Band calculation settings.
 
         Returns:
-            YamlORCAProjectSettings: Configured project settings instance.
+            ORCANEBJobSettings: Pre-configured NEB calculation settings.
         """
+        if self._neb_settings is None:
+            from copy import deepcopy
+
+            from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+
+            # Fall back to opt settings when no NEB section is provided
+            base_opt = deepcopy(self._opt_settings)
+            self._neb_settings = ORCANEBJobSettings(**base_opt.__dict__)
+        return self._neb_settings
+
+    @classmethod
+    def from_yaml(cls, filename):
         builder = YamlORCAProjectSettingsBuilder(filename=filename)
         return builder.build()
 
@@ -527,6 +557,7 @@ class YamlORCAProjectSettingsBuilder:
         td_settings = self._project_settings_for_job(jobtype="td")
         wbi_settings = self._project_settings_for_job(jobtype="wbi")
         qmmm_settings = self._project_settings_for_job(jobtype="qmmm")
+        neb_settings = self._project_settings_for_job(jobtype="neb")
 
         # Create complete project settings with all job configurations
         project_settings = YamlORCAProjectSettings(
@@ -540,6 +571,7 @@ class YamlORCAProjectSettingsBuilder:
             td_settings=td_settings,
             wbi_settings=wbi_settings,
             qmmm_settings=qmmm_settings,
+            neb_settings=neb_settings,
         )
 
         # Set project name from filename and return
@@ -585,6 +617,7 @@ class YamlORCAProjectSettingsBuilder:
             "irc": ORCAIRCJobSettings,
             "ts": ORCATSJobSettings,
             "qmmm": ORCAQMMMJobSettings,
+            "neb": ORCANEBJobSettings,
         }
 
         try:

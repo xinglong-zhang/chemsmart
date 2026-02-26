@@ -1393,7 +1393,7 @@ def check_charge_and_multiplicity(settings):
     """
     if settings.charge is None or settings.multiplicity is None:
         raise ValueError(
-            "Charge and multiplicity must be set for Gaussian jobs."
+            "Charge and multiplicity must be set for Gaussian/ORCA jobs."
         )
 
 

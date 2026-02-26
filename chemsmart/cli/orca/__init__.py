@@ -10,6 +10,7 @@ single point calculations, and constrained optimizations.
 from .inp import inp
 from .irc import irc
 from .modred import modred
+from .neb import neb
 from .opt import opt
 from .orca import orca
 
@@ -29,4 +30,5 @@ __all__ = [
     "scan",
     "sp",
     "ts",
+    "neb",
 ]

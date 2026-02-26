@@ -80,6 +80,7 @@ class RunScript:
 
         # Needed to remove leading whitespace in the docstring
         contents = inspect.cleandoc(contents)
+        logger.debug(f"{self.cli_args!r}")
 
         f.write(contents)
 

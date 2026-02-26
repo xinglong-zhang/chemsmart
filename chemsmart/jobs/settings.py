@@ -174,11 +174,12 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         "traj",
         "uvvis",
         "wbi",
+        "neb",  # NEB uses gas settings, with NEB-specific options from CLI
     ]
     sp_job = ["sp"]
     td_job = ["td"]
     qmmm_job = ["qmmm"]
-    all_jobs = gas_phase_jobs + sp_job
+    all_jobs = gas_phase_jobs + sp_job + td_job
 
     # read in project config
     with open(filename) as f:

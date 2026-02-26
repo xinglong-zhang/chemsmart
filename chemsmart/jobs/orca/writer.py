@@ -7,10 +7,11 @@ based on job settings and molecular structures.
 """
 
 import logging
-import os.path
+import os
 
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
+    ORCANEBJobSettings,
     ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
@@ -90,6 +91,7 @@ class ORCAInputWriter(InputWriter):
         self._write_modred_block(f)
         self._write_hessian_block(f)
         self._write_irc_block(f)
+        self._write_neb_block(f)
         self._write_constrained_atoms(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
@@ -530,6 +532,16 @@ class ORCAInputWriter(InputWriter):
         if isinstance(self.settings, ORCAIRCJobSettings):
             self._write_irc_block_for_irc(f)
 
+    def _write_neb_block(self, f):
+        """
+        Write NEB block section if settings is ORCANEBJobSettings.
+
+        Args:
+            f: File object to write to
+        """
+        if isinstance(self.settings, ORCANEBJobSettings):
+            self._write_neb_block_for_neb(f)
+
     def _write_irc_block_for_irc(self, f):
         """Writes the IRC block options.
 
@@ -659,6 +671,120 @@ class ORCAInputWriter(InputWriter):
                     f.write("  SD_Corr_ParabolicFit True\n")
             else:  # all other keys with given values
                 f.write(f"  {key} {value}\n")
+        f.write("end\n")
+
+    @property
+    def neb_block(self):
+        """
+        Generate ORCA NEB input block as a string.
+
+        This property is for testing and inspection. Actual file writing
+        is handled by _write_neb_block_for_neb().
+
+        Returns:
+            str: Formatted %NEB block for ORCA input file
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+
+        Example output:
+            %NEB
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            NImages 8
+            PREOPT_ENDS True
+            end
+        """
+        settings = self.settings
+
+        # Validate required settings
+        assert settings.nimages, "The number of images is missing!"
+        assert (
+            settings.restarting_xyzfile or settings.ending_xyzfile
+        ), "No valid input geometry is given!"
+
+        lines = ["%NEB"]
+
+        if settings.restarting_xyzfile:
+            restart_file = os.path.basename(settings.restarting_xyzfile)
+            lines.append(f'Restart_ALLXYZFile "{restart_file}"')
+        else:
+            assert settings.ending_xyzfile, "No end geometry file is given!"
+            ending_file = os.path.basename(settings.ending_xyzfile)
+            lines.append(f'NEB_END_XYZFILE "{ending_file}"')
+
+            if settings.intermediate_xyzfile:
+                intermediate_file = os.path.basename(
+                    settings.intermediate_xyzfile
+                )
+                lines.append(f'NEB_TS_XYZFILE "{intermediate_file}"')
+
+        lines.append(f"NImages {settings.nimages}")
+
+        if not settings.restarting_xyzfile:
+            bool_str = "True" if settings.preopt_ends else "False"
+            lines.append(f"PREOPT_ENDS {bool_str}")
+
+        lines.append("end")
+        return "\n".join(lines)
+
+    def _write_neb_block_for_neb(self, f):
+        """
+        Write ORCA NEB block configuration to input file.
+
+        Generates the %NEB block with NEB-specific options including number
+        of images, geometry files, and optimization settings. Uses basenames
+        for file paths to work with scratch directory execution.
+
+        Args:
+            f: File object to write to
+
+        Example output:
+            %NEB
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            NImages 8
+            PREOPT_ENDS True
+            end
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+        """
+        settings = self.settings
+
+        # Validate required settings
+        assert settings.nimages, "The number of images is missing!"
+        assert (
+            settings.restarting_xyzfile or settings.ending_xyzfile
+        ), "No valid input geometry is given!"
+
+        f.write("%NEB\n")
+
+        if settings.restarting_xyzfile:
+            # Use basename for scratch compatibility
+            restart_file = os.path.basename(settings.restarting_xyzfile)
+            f.write(f'Restart_ALLXYZFile "{restart_file}"\n')
+        else:
+            assert settings.ending_xyzfile, "No end geometry file is given!"
+            # Use basename for scratch compatibility
+            ending_file = os.path.basename(settings.ending_xyzfile)
+            f.write(f'NEB_END_XYZFILE "{ending_file}"\n')
+
+            # Write TS guess file if provided
+            if settings.intermediate_xyzfile:
+                intermediate_file = os.path.basename(
+                    settings.intermediate_xyzfile
+                )
+                f.write(f'NEB_TS_XYZFILE "{intermediate_file}"\n')
+
+        # Write number of images
+        f.write(f"NImages {settings.nimages}\n")
+
+        # Write pre-optimization setting (only when not using restart)
+        if not settings.restarting_xyzfile:
+            bool_str = "True" if settings.preopt_ends else "False"
+            f.write(f"PREOPT_ENDS {bool_str}\n")
+
         f.write("end\n")
 
     def _write_constrained_atoms(self, f):
