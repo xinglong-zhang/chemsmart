@@ -18,6 +18,7 @@ import re
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
+from chemsmart.utils.mixins import delete_atoms_by_indices
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     gaussian_freq_keywords_pattern,
@@ -2557,7 +2558,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 f"Molecule has {len(molecule)} atoms (1-indexed: 1 to {len(molecule)})."
             )
 
-        # Convert to 0-based index for internal use
+        # Convert to 0-based index for validation
         proton_idx_0based = self.proton_index - 1
 
         # Validate that the atom is a hydrogen
@@ -2568,33 +2569,9 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 "Only hydrogen atoms can be removed for pKa calculations."
             )
 
-        # Create lists excluding the proton
-        new_symbols = [
-            s for i, s in enumerate(molecule.symbols) if i != proton_idx_0based
-        ]
-        new_positions = [
-            p
-            for i, p in enumerate(molecule.positions)
-            if i != proton_idx_0based
-        ]
-
-        # Handle frozen_atoms if present
-        new_frozen_atoms = None
-        if molecule.frozen_atoms is not None:
-            new_frozen_atoms = [
-                f
-                for i, f in enumerate(molecule.frozen_atoms)
-                if i != proton_idx_0based
-            ]
-
-        # Import here to avoid circular imports
-        from chemsmart.io.molecules.structure import Molecule
-
-        # Create the conjugate base molecule
-        conjugate_base_mol = Molecule(
-            symbols=new_symbols,
-            positions=new_positions,
-            frozen_atoms=new_frozen_atoms,
+        # Use the universal helper (1-based index)
+        conjugate_base_mol = delete_atoms_by_indices(
+            molecule, self.proton_index, one_based=True
         )
 
         # Set charge and multiplicity for the conjugate base
