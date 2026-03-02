@@ -30,7 +30,7 @@ CREST Options
       -  string
       -  Job type: opt, ts, modred, scan, sp (required)
 
-   -  -  ``-N, --num-confs-to-run``
+   -  -  ``-n, --num-confs-to-run``
       -  int
       -  Number of conformers to process
 
@@ -70,7 +70,7 @@ Process 10 lowest-energy conformers:
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f crest_conformers.xyz -l structure_from_lowest -c 0 -m 1 crest -j opt -N 10
+   chemsmart sub gaussian -p project -f crest_conformers.xyz -l structure_from_lowest -c 0 -m 1 crest -j opt -n 10
 
 Output files are named ``structure_from_lowest_opt_c1`` through ``structure_from_lowest_opt_c10``.
 
@@ -104,13 +104,13 @@ Trajectory Options
       -  string
       -  Job type: opt, ts, modred, scan, sp (required)
 
-   -  -  ``-N, --num-structures-to-run``
+   -  -  ``-n, --num-structures-to-run``
       -  int
       -  Number of unique structures to process
 
    -  -  ``-x, --proportion-structures-to-use``
       -  float
-      -  Proportion of trajectory to use (0.0 < x <= 1.0, default: 0.1)
+      -  Proportion of trajectory to use (0.0 < x <= 1.0, default: 0.1) At least one structure is always selected.
 
 .. warning::
 
@@ -135,65 +135,8 @@ Use the last 30% of trajectory:
  Grouper Options for CREST/Trajectory Jobs
 *******************************************
 
-Apply molecular similarity-based grouping to filter structures:
+Please check
 
-.. code:: bash
+-  :doc:`grouper-crest-or-traj-workflow`
 
-   chemsmart sub gaussian [GAUSSIAN_OPTIONS] crest/traj -j <jobtype> -g <strategy> [OPTIONS]
-
-Grouper Options
-===============
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 15 55
-
-   -  -  Option
-      -  Type
-      -  Description
-
-   -  -  ``-g, --grouping-strategy``
-      -  string
-      -  Strategy: rmsd, tanimoto, formula, isomorphism, connectivity
-
-   -  -  ``-i, --ignore-hydrogens``
-      -  bool
-      -  Ignore H atoms (only for rmsd, default: disabled)
-
-   -  -  ``-t, --threshold``
-      -  float
-      -  Grouping threshold (default: 0.5 for rmsd, 0.9 for tanimoto)
-
-   -  -  ``-p, --num-procs``
-      -  int
-      -  Number of processors (default: 1)
-
-.. note::
-
-   No grouper is used by default. Specify ``-g`` to enable grouping.
-
-Basic Usage
-===========
-
-CREST with RMSD grouping:
-
-.. code:: bash
-
-   chemsmart sub gaussian -p project -f crest_conformers.xyz -c 0 -m 1 crest -j opt -g rmsd -t 1 -p 4
-
-Trajectory with Tanimoto grouping:
-
-.. code:: bash
-
-   chemsmart sub gaussian -p project -f trajectory.xyz -c 0 -m 1 traj -j opt -x 0.5 -g tanimoto
-
-Examples
-========
-
-Use RMSD grouper with tight threshold and hydrogen exclusion:
-
-.. code:: bash
-
-   chemsmart run gaussian -p local -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4 -i
-
-Output files are named ``grouped_opt_c1.com``, ``grouped_opt_c2.com``, etc.
+for more details about this workflow.

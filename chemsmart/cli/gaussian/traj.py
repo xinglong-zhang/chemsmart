@@ -2,11 +2,12 @@ import logging
 
 import click
 
+from chemsmart.cli.gaussian.crest import click_crest_grouper_options
 from chemsmart.cli.gaussian.gaussian import (
-    click_gaussian_grouper_options,
     click_gaussian_jobtype_options,
     gaussian,
 )
+from chemsmart.cli.grouper.grouper import click_grouper_common_options
 from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.gaussian import GaussianTrajJob
 from chemsmart.utils.cli import (
@@ -21,14 +22,15 @@ logger = logging.getLogger(__name__)
 @gaussian.command(cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
-@click_gaussian_grouper_options
+@click_grouper_common_options
+@click_crest_grouper_options
 @click.option(
-    "-N",  # avoid conflict with num_steps if scan
-    "--num-structures-to-run",
+    "-n",
+    "--num-confs-to-run",
     type=int,
     default=None,
-    help="Number of structures from the list of unique structures to "
-    "run the job on.",
+    help="Number of lowest-energy conformers to submit for calculation. "
+    "If not specified, all conformers will be submitted.",
 )
 @click.option(
     "-x",
@@ -47,15 +49,27 @@ def traj(
     coordinates,
     step_size,
     num_steps,
-    num_structures_to_run,
-    grouping_strategy,
-    threshold,
     ignore_hydrogens,
     num_procs,
+    threshold,
+    num_groups,
+    grouping_strategy,
+    inversion,
+    fingerprint_type,
+    use_weights,
+    max_dev,
+    num_confs_to_run,
     proportion_structures_to_use,
     **kwargs,
 ):
     """CLI subcommand for running Gaussian set jobs."""
+
+    # Validate mutual exclusivity of -g and -n
+    if grouping_strategy is not None and num_confs_to_run is not None:
+        raise click.UsageError(
+            "Options -g/--grouping-strategy and -n/--num-confs-to-run are mutually exclusive. "
+            "Use -g to group conformers, or -n to select lowest-energy conformers, but not both."
+        )
 
     # get jobrunner for running Gaussian set jobs
     jobrunner = ctx.obj["jobrunner"]
@@ -100,10 +114,15 @@ def traj(
         jobrunner=jobrunner,
         grouping_strategy=grouping_strategy,
         num_procs=num_procs,
+        num_structures_to_run=num_confs_to_run,
         proportion_structures_to_use=proportion_structures_to_use,
-        num_structures_to_run=num_structures_to_run,
+        num_groups=num_groups,
         ignore_hydrogens=ignore_hydrogens,
+        use_weights=use_weights,
+        max_dev=max_dev,
         threshold=threshold,
+        fingerprint_type=fingerprint_type,
+        inversion=inversion,
         skip_completed=skip_completed,
         **kwargs,
     )
