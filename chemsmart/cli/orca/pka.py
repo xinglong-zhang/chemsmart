@@ -32,8 +32,8 @@ def click_orca_pka_options(f):
         "-pi",
         "--proton-index",
         type=int,
-        required=True,
-        help="1-based index of the proton to remove for deprotonation.",
+        required=False,
+        help="1-based index of the proton to remove for deprotonation. Required when launching new calculations.",
     )
     @click.option(
         "-t",
@@ -370,6 +370,11 @@ def pka(
             "cutoff_enthalpy": cutoff_enthalpy,
         }
         return
+
+    if proton_index is None:
+        raise click.UsageError(
+            "-pi/--proton-index is required when launching new ORCA pKa calculations."
+        )
 
     from chemsmart.jobs.orca.pka import ORCApKaJob
     from chemsmart.jobs.orca.settings import ORCApKaJobSettings

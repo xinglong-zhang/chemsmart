@@ -35,8 +35,8 @@ def click_pka_options(f):
         "-pi",
         "--proton-index",
         type=int,
-        required=True,
-        help="1-based index of the proton to remove for deprotonation.",
+        required=False,
+        help="1-based index of the proton to remove for deprotonation. Required for new calculations only.",
     )
     @click.option(
         "-t",
@@ -350,7 +350,6 @@ def pka(
             -bs collidine_opt_sp_smd.log \\
             -rpka 6.75 -T 298.15
     """
-    # Check if we're in output file parsing mode
     output_files_provided = any(
         [
             ha_output,
@@ -438,6 +437,11 @@ def pka(
             "cutoff_enthalpy": cutoff_enthalpy,
         }
         return
+
+    if proton_index is None:
+        raise click.UsageError(
+            "-pi/--proton-index is required when launching new pKa calculations."
+        )
 
     from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
