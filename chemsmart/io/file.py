@@ -186,7 +186,11 @@ class CDXFile(FileMixin):
     # CDXML atom-colour helpers
     # ------------------------------------------------------------------
 
-    def parse_cdxml_atom_colors(self):
+
+class pKaCDXFile(CDXFile):
+    """Specialized CDXFile subclass for pKa calculations that need to identify"""
+
+    def parse_cdxml_element_colors(self):
         """Parse the CDXML file and return per-atom colour information.
 
         Walks every ``<fragment>`` element in document order and collects
@@ -237,7 +241,7 @@ class CDXFile(FileMixin):
             ) from exc
 
         root = tree.getroot()
-        atoms = []
+        list_of_elements = []
 
         for fragment in root.iter("fragment"):
             # Skip nested fragments (Nicknames / abbreviations) that are
@@ -296,7 +300,7 @@ class CDXFile(FileMixin):
                 except Exception:
                     symbol = "?"
 
-                atoms.append(
+                list_of_elements.append(
                     {
                         "cdxml_id": cdxml_id,
                         "element": element_num,
@@ -307,7 +311,7 @@ class CDXFile(FileMixin):
                     }
                 )
 
-        return atoms
+        return list_of_elements
 
     @staticmethod
     def _find_parent(root, target):
@@ -352,7 +356,7 @@ class CDXFile(FileMixin):
         Raises:
             ValueError: When the proton cannot be identified unambiguously.
         """
-        atoms = self.parse_cdxml_atom_colors()
+        atoms = self.parse_cdxml_element_colors()
 
         if not atoms:
             raise ValueError(f"No atoms found in CDXML file: {self.filename}")

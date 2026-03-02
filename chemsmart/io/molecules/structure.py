@@ -2674,3 +2674,62 @@ class QMMMMolecule(Molecule):
                 return "L"
         else:
             return None
+
+
+class pKaMolecule(Molecule):
+    """
+    Standardise pKa-related objects subclass normal
+    objects (settings, jobrunner, molecule, etc),
+    without affecting the normal molecules.
+
+    the proton index will be attached to the molecule object as an attribute,
+    and the pKa value will be attached as an attribute as well. This allows for
+     easy access to these properties when performing pKa calculations, without
+     affecting the core functionality of the Molecule class for other use cases.
+    """
+
+    def __init__(
+        self,
+        molecule: Molecule = None,
+        pKa=None,
+        **kwargs,
+    ):
+        # store reference to the original molecule early to avoid
+        # __getattr__ recursion when attribute access falls back to it.
+        self.molecule = molecule
+
+        if molecule is not None:
+            # inherit all parameters from the
+            # molecule object including class methods
+            sig = inspect.signature(Molecule.__init__)
+            valid_params = set(sig.parameters.keys()) - {"self"}
+
+            # Keep only attributes of molecule that are valid init
+            # params and override with any explicit kwargs if given
+            init_params = {
+                k: getattr(molecule, k)
+                for k in valid_params
+                if hasattr(molecule, k)
+            }
+            init_params.update(kwargs)
+
+            self.__dict__.update(molecule.__dict__)
+        else:
+            # Otherwise, let pKaMolecule behave like a Molecule itself
+            super().__init__(**kwargs)
+        self.pKa = pKa
+
+    def __getattr__(self, name):
+        # Forward any missing attribute to the underlying Molecule.
+        # Use object.__getattribute__ to avoid re-entering this __getattr__
+        # when accessing self.molecule (which would cause recursion).
+        try:
+            mol = object.__getattribute__(self, "molecule")
+        except AttributeError:
+            raise AttributeError(
+                f"'pKaMolecule' object has no attribute '{name}'"
+            )
+
+        if mol is not None and hasattr(mol, name):
+            return getattr(mol, name)
+        raise AttributeError(f"'pKaMolecule' object has no attribute '{name}'")
