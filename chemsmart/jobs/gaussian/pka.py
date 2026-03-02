@@ -639,6 +639,27 @@ class GaussianpKaJob(GaussianJob):
             logger.info(f"Running solution phase SP job: {job}")
             job.run()
 
+    def _run_ref_sp_jobs(self):
+        """
+        Execute both SOLUTION PHASE SP jobs for reference acid (HB and B-) sequentially.
+
+        Runs the SP jobs for both the reference acid form (HB) and its
+        conjugate base (B-) in sequence. Should only be called after
+        reference optimization jobs are complete.
+        """
+        if not self.has_reference_jobs:
+            logger.debug(
+                "No reference SP jobs to run (no reference file provided)"
+            )
+            return
+
+        # Clear cached ref SP jobs to get fresh ones with optimized geometries
+        self._ref_sp_jobs = None
+
+        for job in self.ref_sp_jobs:
+            logger.info(f"Running reference solution phase SP job: {job}")
+            job.run()
+
     def _make_sp_job_for_role(self, role):
         """Create a single SP job for the given role: 'HA' or 'A'.
 

@@ -70,7 +70,16 @@ def click_pka_options(f):
         type=int,
         default=None,
         help="1-based index of the proton to remove from reference acid (HB). "
-        "Required when --reference is provided.",
+        "Required when --reference is provided (unless the reference file "
+        "is a .cdxml with a coloured proton).",
+    )
+    @click.option(
+        "-rcl",
+        "--reference-color-code",
+        type=int,
+        default=None,
+        help="CDXML colour-table index identifying the proton in the "
+        "reference acid file. Only used when --reference is a .cdx/.cdxml.",
     )
     @click.option(
         "-rc",
@@ -270,6 +279,7 @@ def pka(
     thermodynamic_cycle,
     reference,
     reference_proton_index,
+    reference_color_code,
     reference_charge,
     reference_multiplicity,
     reference_conjugate_base_charge,
@@ -489,9 +499,41 @@ def pka(
                 "Reference acid file can only be used with 'proton exchange' cycle. "
                 "Use -t 'proton exchange' or remove the -r option."
             )
+
+        # Auto-detect reference proton index from CDXML colour
+        if reference_proton_index is None:
+            if reference.endswith((".cdx", ".cdxml")):
+                from chemsmart.io.file import CDXFile
+
+                ref_cdx = CDXFile(filename=reference)
+                try:
+                    reference_proton_index = ref_cdx.get_colored_proton_index(
+                        color_code=reference_color_code
+                    )
+                    logger.info(
+                        f"Detected reference proton index "
+                        f"{reference_proton_index} from CDXML colour "
+                        f"in {reference}."
+                    )
+                except ValueError as exc:
+                    raise click.UsageError(
+                        f"Could not auto-detect reference proton from "
+                        f"CDXML colour: {exc}\n"
+                        "Use -rpi/--reference-proton-index to specify "
+                        "the proton explicitly."
+                    )
+            elif reference_color_code is not None:
+                raise click.UsageError(
+                    "-rcl/--reference-color-code can only be used when "
+                    "--reference is a .cdx/.cdxml file."
+                )
+
         missing = []
         if reference_proton_index is None:
-            missing.append("-rpi/--reference-proton-index")
+            missing.append(
+                "-rpi/--reference-proton-index (or use a .cdxml reference "
+                "with a coloured proton)"
+            )
         if reference_charge is None:
             missing.append("-rc/--reference-charge")
         if reference_multiplicity is None:
