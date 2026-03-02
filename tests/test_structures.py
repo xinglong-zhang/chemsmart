@@ -1892,6 +1892,163 @@ class TestCDXFile:
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
 
+    # ------------------------------------------------------------------
+    # CDXML atom-colour parsing and proton detection tests
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_atom_colors(self, colored_implicit_proton_cdxml_file):
+        """Test that atom colours are parsed correctly from phenol.cdxml.
+
+        Phenol has 7 CDXML atoms (6 C + 1 O).  The O node carries the
+        label ``<s color="0">O</s><s color="4">H</s>`` – the "H" is
+        rendered in colour 4 while the heavy atom keeps colour 0.
+        ``parse_cdxml_atom_colors`` must record this in ``implicit_h_color``.
+        """
+        cdx_file = CDXFile(filename=colored_implicit_proton_cdxml_file)
+        atoms = cdx_file.parse_cdxml_atom_colors()
+
+        assert len(atoms) == 7  # 6C + 1O
+        # First six atoms are carbons with default colour
+        for a in atoms[:6]:
+            assert a["symbol"] == "C"
+            assert a["color"] == 0
+            assert a["implicit_h_color"] is None
+
+        # Last atom is O with a coloured H in its label
+        o_atom = atoms[6]
+        assert o_atom["symbol"] == "O"
+        assert o_atom["color"] == 0
+        assert o_atom["num_hydrogens"] == 1
+        assert o_atom["implicit_h_color"] == 4  # the "H" in "OH"
+
+    def test_parse_cdxml_atom_colors_benzene_no_color(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test parsing benzene CDXML where all atoms have the same colour."""
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_benzene)
+        atoms = cdx_file.parse_cdxml_atom_colors()
+
+        assert len(atoms) == 6  # 6 carbons, no explicit H
+        # All should have colour 0
+        for a in atoms:
+            assert a["color"] == 0
+            assert a["symbol"] == "C"
+
+    def test_get_colored_proton_index_auto_detect(
+        self, colored_proton_cdxml_file
+    ):
+        """Test auto-detection of uniquely coloured proton when that proton appears as an explicit node (default mode)."""
+        cdx_file = CDXFile(filename=colored_proton_cdxml_file)
+        proton_index = cdx_file.get_colored_proton_index()
+        atoms = cdx_file.parse_cdxml_atom_colors()
+
+        assert proton_index == 8
+
+        # Verify it maps to a hydrogen in the generated Molecule
+        mol = cdx_file.get_molecules(index="-1")
+        assert mol.symbols[proton_index - 1] == "H"
+        assert atoms[-1]["color"] == 4
+
+    def test_get_colored_proton_index_user_specified(
+        self, colored_proton_cdxml_file
+    ):
+        """Test user-specified colour mode with phenol functional-group H.
+
+        Colour 4 is the implicit-H span colour in the phenol OH label.
+        """
+        cdx_file = CDXFile(filename=colored_proton_cdxml_file)
+        proton_index = cdx_file.get_colored_proton_index(color_code=4)
+
+        assert proton_index == 8
+
+        mol = cdx_file.get_molecules(index="-1")
+        assert mol.symbols[proton_index - 1] == "H"
+
+    def test_get_colored_proton_index_no_unique_color_raises(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test that auto-detect raises when all atoms share the same colour."""
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_benzene)
+        with pytest.raises(ValueError, match="same colour"):
+            cdx_file.get_colored_proton_index()
+
+    def test_get_colored_proton_index_no_hydrogen_raises(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test that auto-detect raises when coloured atoms are not hydrogen."""
+        cdx_file = CDXFile(filename=complex_molecule_cdxml_file)
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            cdx_file.get_colored_proton_index()
+
+    def test_get_colored_proton_index_invalid_color_code_raises(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """Test that specifying a non-existent colour code raises."""
+        cdx_file = CDXFile(filename=colored_implicit_proton_cdxml_file)
+        with pytest.raises(ValueError, match="No atoms with color code"):
+            cdx_file.get_colored_proton_index(color_code=99)
+
+    def test_get_colored_proton_index_multiple_atoms_same_color_raises(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test that specifying a colour shared by non-H atoms raises."""
+        cdx_file = CDXFile(filename=complex_molecule_cdxml_file)
+        # colour 10 labels 9 carbon/nitrogen atoms, none are hydrogen
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            cdx_file.get_colored_proton_index(color_code=10)
+
+    def test_proton_removal_phenol(self, colored_proton_cdxml_file):
+        """Test that the coloured proton can be removed from the molecule.
+        The coloured proton is an explicit node in the CDXML, so should be removed as a normal atom.
+        Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms)."""
+        cdx_file = CDXFile(filename=colored_proton_cdxml_file)
+        proton_index = cdx_file.get_colored_proton_index()
+        mol = cdx_file.get_molecules(index="-1")
+        assert mol.chemical_formula == "C6H6O"
+        assert mol.num_atoms == 13
+        assert mol.symbols[proton_index - 1] == "H"
+
+    def test_implicit_proton_removal_phenol(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """End-to-end: detect phenol OH proton by colour, remove it.
+
+        Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms).
+        The OH hydrogen is an implicit H on the O node, identified
+        via the coloured "H" span in the label.
+        """
+        from chemsmart.utils.mixins import delete_atoms_by_indices
+
+        cdx_file = CDXFile(filename=colored_implicit_proton_cdxml_file)
+
+        # Detect proton
+        proton_index = cdx_file.get_colored_proton_index()
+        assert proton_index == 13
+
+        # Load molecule
+        mol = cdx_file.get_molecules(index="-1")
+        assert mol.chemical_formula == "C6H6O"
+        assert mol.num_atoms == 13
+        assert mol.symbols[proton_index - 1] == "H"
+
+        # Remove proton → phenoxide
+        phenoxide = delete_atoms_by_indices(mol, proton_index, one_based=True)
+        assert phenoxide.num_atoms == 12
+        assert phenoxide.chemical_formula == "C6H5O"
+
+    def test_functional_group_proton_user_color_phenol(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """User-specified colour for phenol implicit OH hydrogen."""
+        cdx_file = CDXFile(filename=colored_implicit_proton_cdxml_file)
+
+        # colour 4 is the H span colour in phenol.cdxml
+        proton_index = cdx_file.get_colored_proton_index(color_code=4)
+        assert proton_index == 13
+
+        mol = cdx_file.get_molecules(index="-1")
+        assert mol.symbols[proton_index - 1] == "H"
+
 
 def test_qmmm_partition_overlap_raises():
     """Creating a QMMMMolecule with overlapping

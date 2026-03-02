@@ -39,6 +39,16 @@ def click_pka_options(f):
         help="1-based index of the proton to remove for deprotonation. Required for new calculations only.",
     )
     @click.option(
+        "-cl",
+        "--color-code",
+        type=int,
+        default=None,
+        help="CDXML colour-table index identifying the proton to remove. "
+        "When a .cdxml file is used, the proton can be identified by its "
+        "colour instead of --proton-index. If omitted, the uniquely "
+        "coloured hydrogen is auto-detected.",
+    )
+    @click.option(
         "-t",
         "--thermodynamic-cycle",
         type=click.Choice(["direct", "proton exchange"]),
@@ -256,6 +266,7 @@ def click_pka_output_options(f):
 def pka(
     ctx,
     proton_index,
+    color_code,
     thermodynamic_cycle,
     reference,
     reference_proton_index,
@@ -439,9 +450,34 @@ def pka(
         return
 
     if proton_index is None:
-        raise click.UsageError(
-            "-pi/--proton-index is required when launching new pKa calculations."
-        )
+        # Try to auto-detect proton index from CDXML colour
+        filename = ctx.obj.get("filename")
+        if filename and filename.endswith((".cdx", ".cdxml")):
+            from chemsmart.io.file import CDXFile
+
+            cdx_file = CDXFile(filename=filename)
+            try:
+                proton_index = cdx_file.get_colored_proton_index(
+                    color_code=color_code
+                )
+                logger.info(
+                    f"Detected proton index {proton_index} from CDXML "
+                    f"colour in {filename}."
+                )
+            except ValueError as exc:
+                raise click.UsageError(
+                    f"Could not auto-detect proton from CDXML colour: {exc}\n"
+                    "Use -pi/--proton-index to specify the proton explicitly."
+                )
+        elif color_code is not None:
+            raise click.UsageError(
+                "-cl/--color-code can only be used with .cdx/.cdxml files."
+            )
+        else:
+            raise click.UsageError(
+                "-pi/--proton-index is required when launching new pKa "
+                "calculations (or use a .cdxml file with a coloured proton)."
+            )
 
     from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings

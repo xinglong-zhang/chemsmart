@@ -1363,6 +1363,17 @@ def complex_molecule_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def colored_proton_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "phenol.cdxml")
+
+
+@pytest.fixture()
+def colored_implicit_proton_cdxml_file(chemdraw_directory):
+    """Returns the path to a CDXML file with a colored implicit proton, which should be treated as a colored explicit proton."""
+    return os.path.join(chemdraw_directory, "phenol_implicit_proton.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
