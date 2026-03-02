@@ -577,7 +577,7 @@ def pka(
         settings=pka_settings,
         label=job_label,
         skip_completed=skip_completed,
-        parallel=kwargs.get("parallel", False),
+        parallel=kwargs.pop("parallel", False),
         **kwargs,
     )
 
