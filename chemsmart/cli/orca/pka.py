@@ -150,6 +150,11 @@ def click_orca_pka_options(f):
         default=100.0,
         help="Cutoff frequency for enthalpy (cm^-1) using Head-Gordon's method (default: 100).",
     )
+    @click.option(
+        "--parallel/--no-parallel",
+        default=False,
+        help="Run per-species opt->SP pipelines in parallel (default: sequential).",
+    )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
@@ -489,6 +494,7 @@ def pka(
         settings=pka_settings,
         label=job_label,
         skip_completed=skip_completed,
+        parallel=kwargs.get("parallel", False),
         **kwargs,
     )
 

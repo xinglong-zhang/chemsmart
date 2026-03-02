@@ -13,6 +13,7 @@ from chemsmart.io.orca.output import (
     ORCAEngradFile,
     ORCANEBOutput,
     ORCAOutput,
+    ORCApKaOutput,
     ORCAQMMMOutput,
 )
 from chemsmart.io.orca.route import ORCARoute
@@ -3162,3 +3163,64 @@ class TestORCANEBJobSettings:
             assert (
                 settings1 != settings2
             ), f"Equality failed for attribute: {attr}"
+
+
+class TestORCApKaOutput:
+    """Basic tests for ORCApKaOutput (thermochemistry extraction for pKa)."""
+
+    def test_init_with_default_settings(self, orca_he_output_freq):
+        output = ORCApKaOutput(filename=orca_he_output_freq)
+        assert output.filename == orca_he_output_freq
+        assert output.temperature == 298.15
+        assert output.concentration == 1.0
+        assert output.energy_units == "hartree"
+
+    def test_electronic_energy(self, orca_he_output_freq):
+        """Electronic energy should match known value in test output (Hartree)."""
+        output = ORCApKaOutput(filename=orca_he_output_freq)
+        E = output.electronic_energy_in_units
+        # reference value extracted from tests/data/ORCATests/outputs/He_freq.out
+        assert np.isclose(E, -2.899160731389, rtol=1e-8)
+
+
+#     def test_qh_gibbs_free_energy(self, orca_he_output_freq):
+#         """Quasi-harmonic Gibbs free energy should match known value in test output (Hartree)."""
+#         output = ORCApKaOutput(filename=orca_he_output_freq)
+#         qh_G = output.qh_gibbs_free_energy
+#         # reference value extracted from tests/data/ORCATests/outputs/He_freq.out
+#         assert np.isclose(qh_G, -2.91111375, rtol=1e-8)
+#
+#
+# class TestORCApKaJobSettings:
+#     """Tests for ORCApKaJobSettings construction and reference handling."""
+#
+#     def test_init_custom_values(self, single_molecule_xyz_file):
+#         settings = ORCApKaJobSettings(
+#             proton_index=1,
+#             thermodynamic_cycle="proton exchange",
+#             reference_file=single_molecule_xyz_file,
+#             reference_proton_index=1,
+#             reference_charge=0,
+#             reference_multiplicity=1,
+#             charge=0,
+#             multiplicity=1,
+#         )
+#         assert settings.proton_index == 1
+#         assert settings.thermodynamic_cycle == "proton exchange"
+#         assert settings.reference_file == single_molecule_xyz_file
+#         assert settings.reference_proton_index == 1
+#         assert settings.reference_charge == 0
+#         assert settings.reference_multiplicity == 1
+#         assert settings.has_reference_file is True
+#
+#     def test_direct_cycle_no_reference(self):
+#         settings = ORCApKaJobSettings(
+#             proton_index=1,
+#             thermodynamic_cycle="direct",
+#             charge=0,
+#             multiplicity=1,
+#         )
+#         assert settings.thermodynamic_cycle == "direct"
+#         assert settings.reference_file is None
+#         assert settings.delta_G_proton == ORCApKaJobSettings.DEFAULT_DELTA_G_PROTON
+#

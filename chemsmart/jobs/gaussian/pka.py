@@ -89,6 +89,7 @@ class GaussianpKaJob(GaussianJob):
         label=None,
         jobrunner=None,
         skip_completed=True,
+        parallel=False,
         **kwargs,
     ):
         """
@@ -132,6 +133,13 @@ class GaussianpKaJob(GaussianJob):
         self._sp_jobs = None
         self._ref_opt_jobs = None
         self._ref_sp_jobs = None
+
+        # Parallel execution flag
+        self.parallel = bool(parallel)
+        # Lock to protect shared state when running in threads
+        import threading
+
+        self._pka_lock = threading.Lock()
 
     @classmethod
     def settings_class(cls):
@@ -631,34 +639,131 @@ class GaussianpKaJob(GaussianJob):
             logger.info(f"Running solution phase SP job: {job}")
             job.run()
 
-    def _run_ref_sp_jobs(self):
-        """
-        Execute both SOLUTION PHASE SP jobs for reference acid (HB and B-) sequentially.
+    def _make_sp_job_for_role(self, role):
+        """Create a single SP job for the given role: 'HA' or 'A'.
 
-        Runs the SP jobs for both the reference acid form (HB) and its
-        conjugate base (B-) in sequence. Should only be called after
-        reference optimization jobs are complete.
+        This is used by the parallel worker after the corresponding opt job
+        finishes so we can pick up the optimized geometry if available.
         """
-        if not self.has_reference_jobs:
-            logger.debug(
-                "No reference SP jobs to run (no reference file provided)"
+        # Get SP settings for both species
+        protonated_sp_settings, conjugate_base_sp_settings = (
+            self.settings._create_solution_phase_sp_settings(self.molecule)
+        )
+
+        # Choose appropriate settings and molecule based on role
+        if role == "HA":
+            sp_settings = protonated_sp_settings
+            opt_job = self.protonated_job
+            sp_label = f"{self.label}_HA_sp"
+        else:
+            sp_settings = conjugate_base_sp_settings
+            opt_job = self.conjugate_base_job
+            sp_label = f"{self.label}_A_sp"
+
+        # Prefer optimized geometry if opt produced one
+        out = opt_job._output()
+        if out is not None and getattr(out, "normal_termination", False):
+            mol = out.molecule
+        else:
+            # fall back to prepared molecules
+            mol = (
+                self.protonated_molecule
+                if role == "HA"
+                else self.conjugate_base_molecule
             )
-            return
 
-        # Clear cached ref SP jobs to get fresh ones with optimized geometries
-        self._ref_sp_jobs = None
+        sp_job = GaussianSinglePointJob(
+            molecule=mol,
+            settings=sp_settings,
+            label=sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        return sp_job
 
-        for job in self.ref_sp_jobs:
-            logger.info(f"Running reference solution phase SP job: {job}")
-            job.run()
+    def _worker_opt_then_sp(self, opt_job, role, sp_index):
+        """Thread worker: run opt_job, then create and run its SP job.
+
+        sp_index indicates where to store the created sp job in self._sp_jobs.
+        """
+        logger.info(f"[parallel] Running opt job for role={role}: {opt_job}")
+        opt_job.run()
+
+        # create SP job using optimized geometry if available
+        sp_job = self._make_sp_job_for_role(role)
+        logger.info(f"[parallel] Running SP job for role={role}: {sp_job}")
+        sp_job.run()
+
+        # store sp_job into cached list
+        with self._pka_lock:
+            if self._sp_jobs is None:
+                self._sp_jobs = [None, None]
+            self._sp_jobs[sp_index] = sp_job
+
+    def _run_parallel(self):
+        """Run opt->sp for both species in parallel (per-species dependency)."""
+        import threading
+
+        # Ensure opt jobs are created
+        opt_jobs = self.opt_jobs
+
+        # Prepare sp cache
+        with self._pka_lock:
+            self._sp_jobs = [None, None]
+
+        threads = []
+        # HA is index 0, A is index 1
+        threads.append(
+            threading.Thread(
+                target=self._worker_opt_then_sp, args=(opt_jobs[0], "HA", 0)
+            )
+        )
+        threads.append(
+            threading.Thread(
+                target=self._worker_opt_then_sp, args=(opt_jobs[1], "A", 1)
+            )
+        )
+
+        # If reference jobs exist, run them in parallel as well
+        if self.has_reference_jobs:
+            ref_opt_jobs = self.ref_opt_jobs
+            # create ref sp cache
+            with self._pka_lock:
+                self._ref_sp_jobs = [None, None]
+            threads.append(
+                threading.Thread(
+                    target=self._worker_opt_then_sp,
+                    args=(ref_opt_jobs[0], "HB", 0),
+                )
+            )
+            threads.append(
+                threading.Thread(
+                    target=self._worker_opt_then_sp,
+                    args=(ref_opt_jobs[1], "B", 1),
+                )
+            )
+
+        # start all threads
+        for t in threads:
+            t.start()
+        # join
+        for t in threads:
+            t.join()
 
     def _run(self):
         """
         Execute the pKa calculation.
 
-        Runs gas phase optimization jobs sequentially, then solution phase SP jobs.
-        If using proton exchange cycle with reference file, also runs reference acid jobs.
+        Runs gas phase optimization jobs sequentially (default), then solution phase SP jobs.
+        When `self.parallel` is True, run per-species opt->SP pipelines concurrently.
         """
+        if self.parallel:
+            logger.info("Running pKa calculation in parallel mode")
+            # Run target and reference chains in parallel while preserving per-species dependency
+            self._run_parallel()
+            return
+
+        # Default sequential behaviour preserved
         # Run gas phase optimization jobs for target acid (HA, A-)
         self._run_opt_jobs()
 

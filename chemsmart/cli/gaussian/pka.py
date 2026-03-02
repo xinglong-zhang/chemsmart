@@ -154,6 +154,11 @@ def click_pka_options(f):
         default=100.0,
         help="Cutoff frequency for enthalpy (cm^-1) using Head-Gordon's method (default: 100).",
     )
+    @click.option(
+        "--parallel/--no-parallel",
+        default=False,
+        help="Run per-species opt->SP pipelines in parallel (default: sequential).",
+    )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
@@ -268,6 +273,7 @@ def pka(
     cutoff_entropy_grimme,
     cutoff_enthalpy,
     skip_completed,
+    parallel,
     # Output file parsing options
     ha_output,
     a_output,
@@ -593,6 +599,7 @@ def pka(
         label=label,
         jobrunner=jobrunner,
         skip_completed=skip_completed,
+        parallel=parallel,
         **kwargs,
     )
 

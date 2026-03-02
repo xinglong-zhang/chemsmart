@@ -49,6 +49,7 @@ class ORCApKaJob(ORCAJob):
         label=None,
         jobrunner=None,
         skip_completed=True,
+        parallel=False,
         **kwargs,
     ):
         if not isinstance(settings, ORCApKaJobSettings):
@@ -76,6 +77,12 @@ class ORCApKaJob(ORCAJob):
         self._sp_jobs = None
         self._ref_opt_jobs = None
         self._ref_sp_jobs = None
+
+        # parallel support
+        import threading
+
+        self.parallel = bool(parallel)
+        self._pka_lock = threading.Lock()
 
     @classmethod
     def settings_class(cls):
@@ -355,7 +362,93 @@ class ORCApKaJob(ORCAJob):
             logger.info(f"Running reference solution phase SP job: {job}")
             job.run()
 
+    def _make_sp_job_for_role(self, role):
+        # create SP job using optimized geometry if available
+        protonated_sp_settings, conjugate_base_sp_settings = (
+            self.settings._create_solution_phase_sp_settings(self.molecule)
+        )
+        if role == "HA":
+            sp_settings = protonated_sp_settings
+            opt_job = self.protonated_job
+            sp_label = f"{self.label}_HA_sp"
+        else:
+            sp_settings = conjugate_base_sp_settings
+            opt_job = self.conjugate_base_job
+            sp_label = f"{self.label}_A_sp"
+
+        out = opt_job._output()
+        if out is not None and getattr(out, "normal_termination", False):
+            mol = out.molecule
+        else:
+            mol = (
+                self.protonated_molecule
+                if role == "HA"
+                else self.conjugate_base_molecule
+            )
+
+        sp_job = ORCASinglePointJob(
+            molecule=mol,
+            settings=sp_settings,
+            label=sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        return sp_job
+
+    def _worker_opt_then_sp(self, opt_job, role, sp_index):
+        logger.info(f"[parallel] Running opt job for role={role}: {opt_job}")
+        opt_job.run()
+        sp_job = self._make_sp_job_for_role(role)
+        logger.info(f"[parallel] Running SP job for role={role}: {sp_job}")
+        sp_job.run()
+        with self._pka_lock:
+            if self._sp_jobs is None:
+                self._sp_jobs = [None, None]
+            self._sp_jobs[sp_index] = sp_job
+
+    def _run_parallel(self):
+        import threading
+
+        opt_jobs = self.opt_jobs
+        with self._pka_lock:
+            self._sp_jobs = [None, None]
+        threads = []
+        threads.append(
+            threading.Thread(
+                target=self._worker_opt_then_sp, args=(opt_jobs[0], "HA", 0)
+            )
+        )
+        threads.append(
+            threading.Thread(
+                target=self._worker_opt_then_sp, args=(opt_jobs[1], "A", 1)
+            )
+        )
+        if self.has_reference_jobs:
+            ref_opt_jobs = self.ref_opt_jobs
+            with self._pka_lock:
+                self._ref_sp_jobs = [None, None]
+            threads.append(
+                threading.Thread(
+                    target=self._worker_opt_then_sp,
+                    args=(ref_opt_jobs[0], "HB", 0),
+                )
+            )
+            threads.append(
+                threading.Thread(
+                    target=self._worker_opt_then_sp,
+                    args=(ref_opt_jobs[1], "B", 1),
+                )
+            )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
     def _run(self):
+        if self.parallel:
+            logger.info("Running ORCA pKa calculation in parallel mode")
+            self._run_parallel()
+            return
         self._run_opt_jobs()
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
