@@ -1,5 +1,6 @@
 import os
 import shutil
+import tempfile
 
 import numpy as np
 import pytest
@@ -21,6 +22,24 @@ from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
 from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 from chemsmart.utils.grouper import StructureGrouperFactory
 from chemsmart.utils.utils import find_irmsd_command, kabsch_align
+
+
+@pytest.fixture
+def temp_working_dir():
+    """
+    Pytest fixture to create a temporary directory and change to it for testing.
+    This prevents group_result folders from being created in the project directory.
+    """
+    original_dir = os.getcwd()
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        os.chdir(temp_dir)
+        yield temp_dir
+    finally:
+        os.chdir(original_dir)
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @pytest.mark.usefixtures("temp_working_dir")

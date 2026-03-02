@@ -362,44 +362,60 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     def _find_optimal_similarity_threshold(
         self, similarity_values, similarity_matrix, n
     ):
-        """Find similarity threshold using binary search."""
+        """Find similarity threshold using binary search.
+
+        For Tanimoto similarity grouping (adj_matrix = similarity >= threshold):
+        - Higher threshold → more groups (harder to merge, fewer pairs qualify)
+        - Lower threshold → fewer groups (easier to merge, more pairs qualify)
+
+        sorted_similarities is ascending so that binary search can navigate:
+        moving right (higher index) = higher threshold = more groups.
+        """
         sorted_similarities = sorted(
             [sim for sim in similarity_values if not np.isnan(sim)],
-            reverse=True,
         )
 
         if not sorted_similarities:
             return 1.0
 
         low, high = 0, len(sorted_similarities) - 1
+        # Default: lowest threshold → fewest groups (most permissive merging)
         best_threshold = sorted_similarities[0]
 
         while low <= high:
             mid = (low + high) // 2
             threshold = sorted_similarities[mid]
-            adj_matrix = similarity_matrix >= threshold
-            num_groups_found = self._count_groups(adj_matrix, n)
+            num_groups_found = self._count_groups(
+                similarity_matrix, threshold, n
+            )
 
             if num_groups_found == self.num_groups:
                 return threshold
-            elif num_groups_found > self.num_groups:
-                high = mid - 1
-            else:
+            elif num_groups_found < self.num_groups:
+                # Too few groups: need higher threshold (move right)
                 best_threshold = threshold
                 low = mid + 1
+            else:
+                # Too many groups: need lower threshold (move left)
+                high = mid - 1
 
         return best_threshold
 
-    def _count_groups(self, adj_matrix, n):
-        """Count number of groups using complete linkage."""
+    def _count_groups(self, similarity_matrix, threshold, n):
+        """Count number of groups produced by complete linkage at the given threshold.
+
+        Uses the same iteration order as _complete_linkage_grouping (last to first)
+        to ensure the count matches the actual grouping result.
+        """
+        adj_matrix = similarity_matrix >= threshold
         assigned = [False] * n
         num_groups = 0
-        for i in range(n):
+        for i in range(n - 1, -1, -1):
             if assigned[i]:
                 continue
             current_group = [i]
             assigned[i] = True
-            for j in range(i + 1, n):
+            for j in range(i - 1, -1, -1):
                 if assigned[j]:
                     continue
                 can_join = all(adj_matrix[j, m] for m in current_group)
