@@ -10,7 +10,7 @@ from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
-from chemsmart.io.file import CDXFile, pKaCDXFile
+from chemsmart.io.file import CDXFile, PKaCDXFile
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import (
     CoordinateBlock,
@@ -1927,7 +1927,7 @@ class TestpKaCDXFile:
         self, single_molecule_cdxml_file_benzene
     ):
         """Test parsing benzene CDXML where all atoms have the same colour."""
-        cdx_file = pKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
         atoms = cdx_file.parse_cdxml_element_colors()
 
         assert len(atoms) == 6  # 6 carbons, no explicit H
@@ -1940,7 +1940,7 @@ class TestpKaCDXFile:
         self, colored_proton_cdxml_file
     ):
         """Test auto-detection of uniquely coloured proton when that proton appears as an explicit node (default mode)."""
-        cdx_file = pKaCDXFile(filename=colored_proton_cdxml_file)
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
         proton_index = cdx_file.get_colored_proton_index()
         list_of_elements = cdx_file.parse_cdxml_element_colors()
 
@@ -1958,7 +1958,7 @@ class TestpKaCDXFile:
 
         Colour 4 is the implicit-H span colour in the phenol OH label.
         """
-        cdx_file = pKaCDXFile(filename=colored_proton_cdxml_file)
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
         proton_index = cdx_file.get_colored_proton_index(color_code=4)
 
         assert proton_index == 8
@@ -1970,7 +1970,7 @@ class TestpKaCDXFile:
         self, single_molecule_cdxml_file_benzene
     ):
         """Test that auto-detect raises when all atoms share the same colour."""
-        cdx_file = pKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
         with pytest.raises(ValueError, match="same colour"):
             cdx_file.get_colored_proton_index()
 
@@ -1978,7 +1978,7 @@ class TestpKaCDXFile:
         self, complex_molecule_cdxml_file
     ):
         """Test that auto-detect raises when coloured atoms are not hydrogen."""
-        cdx_file = pKaCDXFile(filename=complex_molecule_cdxml_file)
+        cdx_file = PKaCDXFile(filename=complex_molecule_cdxml_file)
         with pytest.raises(ValueError, match="none are hydrogen"):
             cdx_file.get_colored_proton_index()
 
@@ -1986,7 +1986,7 @@ class TestpKaCDXFile:
         self, colored_implicit_proton_cdxml_file
     ):
         """Test that specifying a non-existent colour code raises."""
-        cdx_file = pKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
         with pytest.raises(ValueError, match="No atoms with color code"):
             cdx_file.get_colored_proton_index(color_code=99)
 
@@ -1994,7 +1994,7 @@ class TestpKaCDXFile:
         self, complex_molecule_cdxml_file
     ):
         """Test that specifying a colour shared by non-H atoms raises."""
-        cdx_file = pKaCDXFile(filename=complex_molecule_cdxml_file)
+        cdx_file = PKaCDXFile(filename=complex_molecule_cdxml_file)
         # colour 10 labels 9 carbon/nitrogen atoms, none are hydrogen
         with pytest.raises(ValueError, match="none are hydrogen"):
             cdx_file.get_colored_proton_index(color_code=10)
@@ -2003,7 +2003,7 @@ class TestpKaCDXFile:
         """Test that the coloured proton can be removed from the molecule.
         The coloured proton is an explicit node in the CDXML, so should be removed as a normal atom.
         Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms)."""
-        cdx_file = pKaCDXFile(filename=colored_proton_cdxml_file)
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
         proton_index = cdx_file.get_colored_proton_index()
         mol = cdx_file.get_molecules(index="-1")
         assert mol.chemical_formula == "C6H6O"
@@ -2021,7 +2021,7 @@ class TestpKaCDXFile:
         """
         from chemsmart.utils.mixins import delete_atoms_by_indices
 
-        cdx_file = pKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
 
         # Detect proton
         proton_index = cdx_file.get_colored_proton_index()
@@ -2042,7 +2042,7 @@ class TestpKaCDXFile:
         self, colored_implicit_proton_cdxml_file
     ):
         """User-specified colour for phenol implicit OH hydrogen."""
-        cdx_file = pKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
 
         # colour 4 is the H span colour in phenol.cdxml
         proton_index = cdx_file.get_colored_proton_index(color_code=4)
@@ -2053,7 +2053,7 @@ class TestpKaCDXFile:
 
     # def test_multiple_molecule_cdxml_file_with_colored_proton(self, colored_proton_two_molecule_cdxml_file):
     #     """Test that get_colored_proton_index raises when multiple molecules are present."""
-    #     cdx_file1 = pKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+    #     cdx_file1 = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
     #     print(cdx_file1.molecules)
     #     proton_index = cdx_file1.molecules.get_colored_proton_index()
 

@@ -209,7 +209,7 @@ class CDXFile(FileMixin):
     # ------------------------------------------------------------------
 
 
-class pKaCDXFile(CDXFile):
+class PKaCDXFile(CDXFile):
     """Specialized CDXFile subclass for pKa calculations that need to identify"""
 
     def parse_cdxml_element_colors(self):

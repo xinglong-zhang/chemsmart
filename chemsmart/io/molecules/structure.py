@@ -2676,7 +2676,7 @@ class QMMMMolecule(Molecule):
             return None
 
 
-class pKaMolecule(Molecule):
+class PKaMolecule(Molecule):
     """
     Standardise pKa-related objects subclass normal
     objects (settings, jobrunner, molecule, etc),
@@ -2715,7 +2715,7 @@ class pKaMolecule(Molecule):
 
             self.__dict__.update(molecule.__dict__)
         else:
-            # Otherwise, let pKaMolecule behave like a Molecule itself
+            # Otherwise, let PKaMolecule behave like a Molecule itself
             super().__init__(**kwargs)
         self.pKa = pKa
 
