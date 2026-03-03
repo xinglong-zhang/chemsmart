@@ -126,6 +126,8 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
+	@echo Ensuring ~/.zshrc exists...
+	$(ENV_PREFIX)python -c "from pathlib import Path; Path.home().joinpath('.zshrc').touch(exist_ok=True)"
 ifeq ($(OS),Windows)
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
