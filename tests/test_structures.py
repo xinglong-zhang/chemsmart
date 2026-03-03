@@ -15,6 +15,7 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import (
     CoordinateBlock,
     Molecule,
+    PKaMolecule,
     QMMMMolecule,
 )
 from chemsmart.io.xyz.xyzfile import XYZFile
@@ -1892,6 +1893,8 @@ class TestCDXFile:
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
 
+
+class TestpKaCDXFile:
     # ------------------------------------------------------------------
     # CDXML atom-colour parsing and proton detection tests
     # ------------------------------------------------------------------
@@ -1904,7 +1907,7 @@ class TestCDXFile:
         rendered in colour 4 while the heavy atom keeps colour 0.
         ``parse_cdxml_atom_colors`` must record this in ``implicit_h_color``.
         """
-        cdx_file = CDXFile(filename=colored_implicit_proton_cdxml_file)
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
         atoms = cdx_file.parse_cdxml_element_colors()
 
         assert len(atoms) == 7  # 6C + 1O
@@ -1921,8 +1924,6 @@ class TestCDXFile:
         assert o_atom["num_hydrogens"] == 1
         assert o_atom["implicit_h_color"] == 4  # the "H" in "OH"
 
-
-class TestpKaCDXFile:
     def test_parse_cdxml_atom_colors_benzene_no_color(
         self, single_molecule_cdxml_file_benzene
     ):
@@ -1946,9 +1947,11 @@ class TestpKaCDXFile:
 
         assert proton_index == 8
 
-        # Verify it maps to a hydrogen in the generated Molecule
-        mol = cdx_file.get_molecules(index="-1")
-        assert mol.symbols[proton_index - 1] == "H"
+        # Verify get_pka_molecule returns PKaMolecule with proton_index
+        pka_mol = cdx_file.get_pka_molecule()
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
         assert list_of_elements[-1]["color"] == 4
 
     def test_get_colored_proton_index_user_specified(
@@ -1959,12 +1962,29 @@ class TestpKaCDXFile:
         Colour 4 is the implicit-H span colour in the phenol OH label.
         """
         cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
-        proton_index = cdx_file.get_colored_proton_index(color_code=4)
 
-        assert proton_index == 8
+        # Via get_pka_molecule with color_code
+        pka_mol = cdx_file.get_pka_molecule(color_code=4)
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
 
+    def test_get_pka_molecule_explicit_proton_index(
+        self, colored_proton_cdxml_file
+    ):
+        """Test that an explicit proton_index bypasses colour detection."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
         mol = cdx_file.get_molecules(index="-1")
-        assert mol.symbols[proton_index - 1] == "H"
+
+        # Find any H atom to use as explicit index
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        assert len(h_indices) > 0
+        explicit_idx = h_indices[0]
+
+        pka_mol = cdx_file.get_pka_molecule(proton_index=explicit_idx)
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == explicit_idx
+        assert pka_mol.symbols[explicit_idx - 1] == "H"
 
     def test_get_colored_proton_index_no_unique_color_raises(
         self, single_molecule_cdxml_file_benzene
@@ -2003,12 +2023,22 @@ class TestpKaCDXFile:
         """Test that the coloured proton can be removed from the molecule.
         The coloured proton is an explicit node in the CDXML, so should be removed as a normal atom.
         Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms)."""
+        from chemsmart.utils.mixins import delete_atoms_by_indices
+
         cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
-        proton_index = cdx_file.get_colored_proton_index()
-        mol = cdx_file.get_molecules(index="-1")
-        assert mol.chemical_formula == "C6H6O"
-        assert mol.num_atoms == 13
-        assert mol.symbols[proton_index - 1] == "H"
+        pka_mol = cdx_file.get_pka_molecule()
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.chemical_formula == "C6H6O"
+        assert pka_mol.num_atoms == 13
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+        # Remove proton → phenoxide
+        phenoxide = delete_atoms_by_indices(
+            pka_mol, pka_mol.proton_index, one_based=True
+        )
+        assert phenoxide.num_atoms == 12
+        assert phenoxide.chemical_formula == "C6H5O"
 
     def test_implicit_proton_removal_phenol(
         self, colored_implicit_proton_cdxml_file
@@ -2022,19 +2052,17 @@ class TestpKaCDXFile:
         from chemsmart.utils.mixins import delete_atoms_by_indices
 
         cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
-
-        # Detect proton
-        proton_index = cdx_file.get_colored_proton_index()
-        assert proton_index == 13
-
-        # Load molecule
-        mol = cdx_file.get_molecules(index="-1")
-        assert mol.chemical_formula == "C6H6O"
-        assert mol.num_atoms == 13
-        assert mol.symbols[proton_index - 1] == "H"
+        pka_mol = cdx_file.get_pka_molecule()
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 13
+        assert pka_mol.chemical_formula == "C6H6O"
+        assert pka_mol.num_atoms == 13
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
 
         # Remove proton → phenoxide
-        phenoxide = delete_atoms_by_indices(mol, proton_index, one_based=True)
+        phenoxide = delete_atoms_by_indices(
+            pka_mol, pka_mol.proton_index, one_based=True
+        )
         assert phenoxide.num_atoms == 12
         assert phenoxide.chemical_formula == "C6H5O"
 
@@ -2045,17 +2073,18 @@ class TestpKaCDXFile:
         cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
 
         # colour 4 is the H span colour in phenol.cdxml
-        proton_index = cdx_file.get_colored_proton_index(color_code=4)
-        assert proton_index == 13
+        pka_mol = cdx_file.get_pka_molecule(color_code=4)
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 13
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
 
-        mol = cdx_file.get_molecules(index="-1")
-        assert mol.symbols[proton_index - 1] == "H"
-
-    # def test_multiple_molecule_cdxml_file_with_colored_proton(self, colored_proton_two_molecule_cdxml_file):
+    # def test_multiple_molecule_cdxml_file_with_colored_proton(
+    #     self, colored_proton_two_molecule_cdxml_file
+    # ):
     #     """Test that get_colored_proton_index raises when multiple molecules are present."""
     #     cdx_file1 = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
     #     print(cdx_file1.molecules)
-    #     proton_index = cdx_file1.molecules.get_colored_proton_index()
+    #     proton_index = cdx_file1.molecules[1].get_colored_proton_index
 
 
 class TestQMMMMolecule:

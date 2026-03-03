@@ -463,13 +463,12 @@ def pka(
         # Try to auto-detect proton index from CDXML colour
         filename = ctx.obj.get("filename")
         if filename and filename.endswith((".cdx", ".cdxml")):
-            from chemsmart.io.file import CDXFile
+            from chemsmart.io.file import PKaCDXFile
 
-            cdx_file = CDXFile(filename=filename)
+            cdx_file = PKaCDXFile(filename=filename)
             try:
-                proton_index = cdx_file.get_colored_proton_index(
-                    color_code=color_code
-                )
+                pka_mol = cdx_file.get_pka_molecule(color_code=color_code)
+                proton_index = pka_mol.proton_index
                 logger.info(
                     f"Detected proton index {proton_index} from CDXML "
                     f"colour in {filename}."
@@ -503,13 +502,14 @@ def pka(
         # Auto-detect reference proton index from CDXML colour
         if reference_proton_index is None:
             if reference.endswith((".cdx", ".cdxml")):
-                from chemsmart.io.file import CDXFile
+                from chemsmart.io.file import PKaCDXFile
 
-                ref_cdx = CDXFile(filename=reference)
+                ref_cdx = PKaCDXFile(filename=reference)
                 try:
-                    reference_proton_index = ref_cdx.get_colored_proton_index(
+                    ref_pka_mol = ref_cdx.get_pka_molecule(
                         color_code=reference_color_code
                     )
+                    reference_proton_index = ref_pka_mol.proton_index
                     logger.info(
                         f"Detected reference proton index "
                         f"{reference_proton_index} from CDXML colour "

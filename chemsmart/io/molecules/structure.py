@@ -2362,6 +2362,87 @@ class SDFFile(FileMixin):
         )
 
 
+class PKaMolecule(Molecule):
+    """Molecule subclass for pKa calculations.
+
+    Wraps an existing ``Molecule`` and attaches a resolved
+    ``proton_index`` (1-based) that identifies the acidic proton to
+    be removed during deprotonation.
+
+    The proton index can be supplied explicitly by the user or
+    determined automatically from ChemDraw (CDXML) colour coding.
+
+    Parameters
+    ----------
+    molecule : Molecule
+        The parent molecule whose data is inherited.
+    proton_index : int
+        1-based index of the acidic proton in *molecule*.
+
+    Examples
+    --------
+    >>> mol = Molecule(symbols=["O", "H", "H"],
+    ...                positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    >>> pka_mol = PKaMolecule(molecule=mol, proton_index=2)
+    >>> pka_mol.proton_index
+    2
+    >>> pka_mol.chemical_formula
+    'H2O'
+    """
+
+    def __init__(self, molecule: "Molecule", proton_index: int):
+        if molecule is None:
+            raise ValueError(
+                "A parent Molecule must be provided to PKaMolecule."
+            )
+        if proton_index is None or proton_index < 1:
+            raise ValueError(
+                "proton_index must be a positive 1-based integer."
+            )
+        if proton_index > molecule.num_atoms:
+            raise ValueError(
+                f"proton_index {proton_index} is out of range for a "
+                f"molecule with {molecule.num_atoms} atoms."
+            )
+        atom_symbol = molecule.symbols[proton_index - 1]
+        if atom_symbol != "H":
+            raise ValueError(
+                f"Atom at index {proton_index} is '{atom_symbol}', not 'H'. "
+                "Only hydrogen atoms can be marked as the acidic proton."
+            )
+
+        # Inherit everything from the parent Molecule via __dict__ copy,
+        # then call super().__init__ with the core parameters so that the
+        # Molecule invariants (num_atoms, etc.) are properly initialised.
+        super().__init__(
+            symbols=molecule.symbols,
+            positions=molecule.positions,
+            charge=molecule.charge,
+            multiplicity=molecule.multiplicity,
+            frozen_atoms=molecule.frozen_atoms,
+            pbc_conditions=molecule.pbc_conditions,
+            translation_vectors=molecule.translation_vectors,
+            energy=molecule._energy if hasattr(molecule, "_energy") else None,
+            forces=molecule.forces,
+            velocities=molecule.velocities,
+            info=molecule.info,
+        )
+        self.proton_index = proton_index
+
+    @classmethod
+    def from_molecule_and_proton(cls, molecule: "Molecule", proton_index: int):
+        """Create a ``PKaMolecule`` from an existing ``Molecule``.
+
+        Parameters
+        ----------
+        molecule : Molecule
+            Source molecule.
+        proton_index : int
+            1-based index of the acidic proton.
+        """
+        return cls(molecule=molecule, proton_index=proton_index)
+
+
 class QMMMMolecule(Molecule):
     """
     Standardise QMMM-related objects subclass normal
@@ -2674,62 +2755,3 @@ class QMMMMolecule(Molecule):
                 return "L"
         else:
             return None
-
-
-class PKaMolecule(Molecule):
-    """
-    Standardise pKa-related objects subclass normal
-    objects (settings, jobrunner, molecule, etc),
-    without affecting the normal molecules.
-
-    the proton index will be attached to the molecule object as an attribute,
-    and the pKa value will be attached as an attribute as well. This allows for
-     easy access to these properties when performing pKa calculations, without
-     affecting the core functionality of the Molecule class for other use cases.
-    """
-
-    def __init__(
-        self,
-        molecule: Molecule = None,
-        pKa=None,
-        **kwargs,
-    ):
-        # store reference to the original molecule early to avoid
-        # __getattr__ recursion when attribute access falls back to it.
-        self.molecule = molecule
-
-        if molecule is not None:
-            # inherit all parameters from the
-            # molecule object including class methods
-            sig = inspect.signature(Molecule.__init__)
-            valid_params = set(sig.parameters.keys()) - {"self"}
-
-            # Keep only attributes of molecule that are valid init
-            # params and override with any explicit kwargs if given
-            init_params = {
-                k: getattr(molecule, k)
-                for k in valid_params
-                if hasattr(molecule, k)
-            }
-            init_params.update(kwargs)
-
-            self.__dict__.update(molecule.__dict__)
-        else:
-            # Otherwise, let PKaMolecule behave like a Molecule itself
-            super().__init__(**kwargs)
-        self.pKa = pKa
-
-    def __getattr__(self, name):
-        # Forward any missing attribute to the underlying Molecule.
-        # Use object.__getattribute__ to avoid re-entering this __getattr__
-        # when accessing self.molecule (which would cause recursion).
-        try:
-            mol = object.__getattribute__(self, "molecule")
-        except AttributeError:
-            raise AttributeError(
-                f"'pKaMolecule' object has no attribute '{name}'"
-            )
-
-        if mol is not None and hasattr(mol, name):
-            return getattr(mol, name)
-        raise AttributeError(f"'pKaMolecule' object has no attribute '{name}'")
