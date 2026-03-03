@@ -7,6 +7,7 @@ import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,27 @@ class CDXFile(FileMixin):
         Return all molecules from the ChemDraw file.
         """
         return self._parse_chemdraw_file()
+
+    def get_molecules(self, index="-1", return_list=False):
+        """Return molecule(s) for the requested 1-based ChemDraw index."""
+        molecules = self.molecules
+
+        if index == ":":
+            selection = molecules
+        else:
+            parsed_index = (
+                index
+                if isinstance(index, slice)
+                else string2index_1based(str(index))
+            )
+            if isinstance(parsed_index, slice):
+                selection = molecules[parsed_index]
+            else:
+                selection = molecules[parsed_index]
+
+        if return_list:
+            return selection if isinstance(selection, list) else [selection]
+        return selection
 
     def _parse_chemdraw_file(self):
         """
@@ -558,53 +580,3 @@ class pKaCDXFile(CDXFile):
             f"{proton_index} (implicit_h_color={atom['implicit_h_color']})."
         )
         return proton_index
-
-    def get_molecules(self, index="-1", return_list=False):
-        """
-        Get molecule(s) from the ChemDraw file.
-
-        Args:
-            index (str or int): Index specification:
-                - "-1": Return the last molecule (default)
-                - ":": Return all molecules
-                - "1": Return the first molecule (1-based indexing)
-                - "1:3": Return molecules 1 to 3 (1-based indexing)
-            return_list (bool): If True, always return a list.
-
-        Returns:
-            Molecule or list[Molecule]: Single Molecule or list of Molecules.
-        """
-        molecules = self.molecules
-
-        # Handle index specification
-        if isinstance(index, int):
-            index = str(index)
-
-        if index == ":":
-            # Return all molecules
-            return molecules if return_list else molecules
-
-        if index == "-1":
-            # Return last molecule
-            mol = molecules[-1]
-            return [mol] if return_list else mol
-
-        # Handle 1-based indexing
-        if index.isdigit() or (index.startswith("-") and index[1:].isdigit()):
-            idx = int(index)
-            if idx > 0:
-                # 1-based positive indexing
-                mol = molecules[idx - 1]
-            else:
-                # Negative indexing
-                mol = molecules[idx]
-            return [mol] if return_list else mol
-
-        # Handle slice notation (e.g., "1:3")
-        if ":" in index:
-            parts = index.split(":")
-            start = int(parts[0]) - 1 if parts[0] else 0
-            end = int(parts[1]) if parts[1] else len(molecules)
-            return molecules[start:end]
-
-        raise ValueError(f"Invalid index specification: {index}")
