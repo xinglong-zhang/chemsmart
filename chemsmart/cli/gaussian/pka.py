@@ -32,6 +32,14 @@ def click_pka_options(f):
     """Click options specific to pKa calculations."""
 
     @click.option(
+        "-i",
+        "--input-table",
+        type=str,
+        required=False,
+        help="Table file (.txt or .csv) containing molecules for batch pKa "
+        "calculations. Columns: filepath, proton_index, charge, multiplicity.",
+    )
+    @click.option(
         "-pi",
         "--proton-index",
         type=int,
@@ -274,6 +282,7 @@ def click_pka_output_options(f):
 @click.pass_context
 def pka(
     ctx,
+    input_table,
     proton_index,
     color_code,
     thermodynamic_cycle,
@@ -314,14 +323,22 @@ def pka(
     1. Gas phase optimization + frequency for HA and A-
     2. Solution phase single point for HA and A- at the SAME level of theory
 
-    Two modes are available:
+    Three execution modes are available:
 
     \b
-    **Mode 1: Run new calculations**
-    Provide input geometry files and run optimization + SP calculations.
+    **Mode 1: Single molecule calculation**
+    Provide input geometry file with -f and run optimization + SP calculations.
 
     \b
-    **Mode 2: Parse existing output files**
+    **Mode 2: Table-driven batch calculation**
+    Provide a table file with -i/--input-table containing multiple molecules.
+    Table format (4 columns, whitespace or comma-delimited):
+        filepath    proton_index    charge    multiplicity
+    In this mode, -f, -pi, -c, -m are not required. For proton exchange cycle,
+    reference acid options (-r, -rpi, -rc, -rm) are still mandatory.
+
+    \b
+    **Mode 3: Parse existing output files**
     Provide completed Gaussian output files to compute pKa directly using
     the Dual-level Proton Exchange scheme. All energies in Hartree (au),
     except ΔG_soln which is converted to kcal/mol for the pKa formula.
@@ -352,12 +369,19 @@ def pka(
 
     \b
     Examples:
-        # Run pKa job with proton exchange cycle
+        # Run pKa job with proton exchange cycle (single molecule)
         chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 \\
             -t "proton exchange" -r water.xyz -rpi 1 -rc 0 -rm 1
 
         # Run pKa job with direct cycle
         chemsmart run gaussian -f acetic_acid.xyz -c 0 -m 1 pka -pi 10 -t direct
+
+        # Table-driven batch mode (proton exchange)
+        chemsmart run gaussian -p myproject pka -i molecules.txt \\
+            -t "proton exchange" -r ref_acid.xyz -rpi 5 -rc 0 -rm 1
+
+        # Table-driven batch mode (direct cycle)
+        chemsmart run gaussian -p myproject pka -i molecules.csv -t direct
 
         # Compute pKa from existing output files (Dual-level Proton Exchange)
         chemsmart run gaussian pka -pi 1 \\
@@ -371,6 +395,36 @@ def pka(
             -bs collidine_opt_sp_smd.log \\
             -rpka 6.75 -T 298.15
     """
+    # =========================================================================
+    # Table-driven execution mode
+    # =========================================================================
+    if input_table is not None:
+        return _run_pka_from_table(
+            ctx=ctx,
+            input_table=input_table,
+            thermodynamic_cycle=thermodynamic_cycle,
+            reference=reference,
+            reference_proton_index=reference_proton_index,
+            reference_color_code=reference_color_code,
+            reference_charge=reference_charge,
+            reference_multiplicity=reference_multiplicity,
+            reference_conjugate_base_charge=reference_conjugate_base_charge,
+            reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+            delta_g_proton=delta_g_proton,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            skip_completed=skip_completed,
+            parallel=parallel,
+            **kwargs,
+        )
+
+    # =========================================================================
+    # Output file parsing mode
+    # =========================================================================
     output_files_provided = any(
         [
             ha_output,
@@ -705,6 +759,171 @@ def pka(
     )
 
 
+def _run_pka_from_table(
+    ctx,
+    input_table,
+    thermodynamic_cycle,
+    reference,
+    reference_proton_index,
+    reference_color_code,
+    reference_charge,
+    reference_multiplicity,
+    reference_conjugate_base_charge,
+    reference_conjugate_base_multiplicity,
+    delta_g_proton,
+    solvent_model,
+    solvent_id,
+    temperature,
+    concentration,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
+    skip_completed,
+    parallel,
+    **kwargs,
+):
+    """Run pKa jobs from a table file.
+
+    Table format (4 columns):
+        filepath    proton_index    charge    multiplicity
+
+    For proton exchange cycle, reference acid options are still required.
+    """
+    from pathlib import Path
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+    from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+    from chemsmart.utils.utils import (
+        parse_pka_table,
+        validate_pka_table_entries,
+    )
+
+    # Parse and validate table
+    logger.info(f"Reading pKa jobs from table: {input_table}")
+    try:
+        entries = parse_pka_table(input_table)
+        validate_pka_table_entries(entries, check_file_exists=True)
+    except (FileNotFoundError, ValueError) as e:
+        raise click.UsageError(str(e))
+
+    logger.info(f"Found {len(entries)} entries in table")
+
+    # Validate reference acid options for proton exchange cycle
+    if thermodynamic_cycle == "proton exchange":
+        missing = []
+        if reference is None:
+            missing.append("-r/--reference")
+        if reference_proton_index is None and reference is not None:
+            # Try auto-detect from CDXML
+            if reference.endswith((".cdx", ".cdxml")):
+                from chemsmart.io.file import PKaCDXFile
+
+                try:
+                    ref_cdx = PKaCDXFile(filename=reference)
+                    ref_pka_mol = ref_cdx.get_pka_molecule(
+                        color_code=reference_color_code
+                    )
+                    reference_proton_index = ref_pka_mol.proton_index
+                    logger.info(
+                        f"Detected reference proton index "
+                        f"{reference_proton_index} from CDXML colour."
+                    )
+                except ValueError as exc:
+                    missing.append(
+                        f"-rpi/--reference-proton-index (auto-detect failed: {exc})"
+                    )
+            else:
+                missing.append("-rpi/--reference-proton-index")
+        if reference_charge is None:
+            missing.append("-rc/--reference-charge")
+        if reference_multiplicity is None:
+            missing.append("-rm/--reference-multiplicity")
+
+        if missing:
+            raise click.UsageError(
+                "For proton exchange cycle with table input, the following "
+                "reference acid options are required:\n  "
+                + "\n  ".join(missing)
+            )
+
+    # Get jobrunner and project settings
+    jobrunner = ctx.obj["jobrunner"]
+    project_settings = ctx.obj["project_settings"]
+    opt_settings = project_settings.opt_settings()
+
+    # Merge with CLI keywords
+    job_settings = ctx.obj.get("job_settings")
+    keywords = ctx.obj.get("keywords", {})
+    if job_settings:
+        opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+
+    # Create jobs for each table entry
+    jobs = []
+    for entry in entries:
+        row = entry.to_kwargs(drop_none=False)
+
+        # Load molecule from file (supports aliasing via entry class)
+        filepath = entry.get("filepath") or entry.get("path") or entry.filepath
+        molecule = Molecule.from_filepath(filepath)
+
+        # Derive label from filename
+        label = Path(filepath).stem
+
+        # Create pKa settings for this entry
+        # Charge/multiplicity from table, level of theory from project
+        pka_settings = GaussianpKaJobSettings(
+            proton_index=int(entry.proton_index),
+            thermodynamic_cycle=thermodynamic_cycle,
+            reference_file=reference,
+            reference_proton_index=reference_proton_index,
+            reference_charge=reference_charge,
+            reference_multiplicity=reference_multiplicity,
+            reference_conjugate_base_charge=reference_conjugate_base_charge,
+            reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+            delta_G_proton=delta_g_proton,
+            conjugate_base_charge=None,
+            conjugate_base_multiplicity=None,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            charge=int(entry.charge),
+            multiplicity=int(entry.multiplicity),
+            functional=opt_settings.functional,
+            basis=opt_settings.basis,
+            ab_initio=opt_settings.ab_initio,
+            semiempirical=opt_settings.semiempirical,
+            additional_route_parameters=opt_settings.additional_route_parameters,
+            gen_genecp_file=opt_settings.gen_genecp_file,
+            heavy_elements=opt_settings.heavy_elements,
+            heavy_elements_basis=opt_settings.heavy_elements_basis,
+            light_elements_basis=opt_settings.light_elements_basis,
+        )
+
+        logger.info(
+            f"Creating pKa job for {filepath}: "
+            f"proton_index={entry.proton_index}, "
+            f"charge={entry.charge}, mult={entry.multiplicity}, "
+            f"row_fields={sorted(row.keys())}"
+        )
+
+        job = GaussianpKaJob(
+            molecule=molecule,
+            settings=pka_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            parallel=parallel,
+            **kwargs,
+        )
+        jobs.append(job)
+
+    logger.info(f"Created {len(jobs)} pKa jobs from table")
+    return jobs
+
+
 def click_pka_thermo_options(f):
     """Click options for pKa thermochemistry extraction."""
 
@@ -779,6 +998,13 @@ def click_pka_thermo_options(f):
         type=click.Path(),
         default=None,
         help="Output file to save results (default: print to stdout).",
+    )
+    @click.option(
+        "-O",
+        "--output-table",
+        type=click.Path(),
+        default=None,
+        help="The .txt or .csv files containing the paths to output .log files to extract thermochemistry from. The table should have a header and the following columns: species, gas_file, solv_file. Example:\n\n",
     )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):

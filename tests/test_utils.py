@@ -1272,3 +1272,272 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         objects = ["a", "b", "c"]
         with pytest.raises(IndexError):
             return_objects_and_indices_from_string_index(objects, "10")
+
+
+class TestPKaTableParsing:
+    """Tests for the pKa table parsing utility functions."""
+
+    def test_parse_pka_table_txt(self, tmp_path):
+        """Test parsing a whitespace-delimited .txt table file."""
+        from chemsmart.utils.utils import parse_pka_table
+
+        table_file = tmp_path / "molecules.txt"
+        table_file.write_text(
+            "# filepath proton_index charge multiplicity\n"
+            "filepath proton_index charge multiplicity\n"  # header row
+            "mol1.xyz 10 0 1\n"
+            "mol2.xyz 15 1 2\n"
+            "mol3.xyz 8 -1 1\n"
+        )
+
+        entries = parse_pka_table(str(table_file))
+        assert len(entries) == 3
+        assert entries[0].filepath == "mol1.xyz"
+        assert entries[0].proton_index == 10
+        assert entries[0].charge == 0
+        assert entries[0].multiplicity == 1
+        assert entries[1].filepath == "mol2.xyz"
+        assert entries[1].proton_index == 15
+        assert entries[1].charge == 1
+        assert entries[1].multiplicity == 2
+        assert entries[2].filepath == "mol3.xyz"
+        assert entries[2].proton_index == 8
+        assert entries[2].charge == -1
+        assert entries[2].multiplicity == 1
+
+    def test_parse_pka_table_csv(self, tmp_path):
+        """Test parsing a comma-delimited .csv table file."""
+        from chemsmart.utils.utils import parse_pka_table
+
+        table_file = tmp_path / "molecules.csv"
+        table_file.write_text(
+            "filepath,proton_index,charge,multiplicity\n"
+            "path/to/mol1.xyz,5,0,1\n"
+            "path/to/mol2.xyz,12,-2,3\n"
+        )
+
+        entries = parse_pka_table(str(table_file))
+        assert len(entries) == 2
+        assert entries[0].filepath == "path/to/mol1.xyz"
+        assert entries[0].proton_index == 5
+        assert entries[0].charge == 0
+        assert entries[0].multiplicity == 1
+        assert entries[1].filepath == "path/to/mol2.xyz"
+        assert entries[1].proton_index == 12
+        assert entries[1].charge == -2
+        assert entries[1].multiplicity == 3
+
+    def test_parse_pka_table_skip_comments_and_empty_lines(self, tmp_path):
+        """Test that comments and empty lines are skipped."""
+        from chemsmart.utils.utils import parse_pka_table
+
+        table_file = tmp_path / "molecules.txt"
+        table_file.write_text(
+            "# This is a comment\n"
+            "filepath proton_index charge multiplicity\n"
+            "\n"
+            "mol1.xyz 1 0 1\n"
+            "# Another comment\n"
+            "\n"
+            "mol2.xyz 2 0 1\n"
+        )
+
+        entries = parse_pka_table(str(table_file))
+        assert len(entries) == 2
+
+    def test_parse_pka_table_invalid_column_count(self, tmp_path):
+        """Test that invalid column count raises ValueError."""
+        from chemsmart.utils.utils import parse_pka_table
+
+        table_file = tmp_path / "bad.txt"
+        table_file.write_text(
+            "filepath proton_index charge\n"  # header
+            "mol1.xyz 10 0\n"  # missing multiplicity
+        )
+
+        with pytest.raises(ValueError, match="expected 4 columns"):
+            parse_pka_table(str(table_file))
+
+    def test_parse_pka_table_invalid_integer(self, tmp_path):
+        """Test that invalid integer values raise ValueError."""
+        from chemsmart.utils.utils import parse_pka_table
+
+        table_file = tmp_path / "bad.txt"
+        table_file.write_text(
+            "filepath proton_index charge multiplicity\n"
+            "mol1.xyz abc 0 1\n"  # invalid proton_index
+        )
+
+        with pytest.raises(ValueError, match="not an integer"):
+            parse_pka_table(str(table_file))
+
+    def test_parse_pka_table_empty_raises(self, tmp_path):
+        """Test that empty table raises ValueError."""
+        from chemsmart.utils.utils import parse_pka_table
+
+        table_file = tmp_path / "empty.txt"
+        table_file.write_text("# Only comments\n")
+
+        with pytest.raises(ValueError, match="No valid entries"):
+            parse_pka_table(str(table_file))
+
+    def test_parse_pka_table_file_not_found(self):
+        """Test that missing file raises FileNotFoundError."""
+        from chemsmart.utils.utils import parse_pka_table
+
+        with pytest.raises(FileNotFoundError):
+            parse_pka_table("/nonexistent/path/molecules.txt")
+
+    def test_pka_table_entry_validate_missing_file(self, tmp_path):
+        """Test PKaTableEntry validation catches missing files."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        entry = PKaTableEntry(
+            filepath="/nonexistent/file.xyz",
+            proton_index=10,
+            charge=0,
+            multiplicity=1,
+            row_number=1,
+        )
+
+        with pytest.raises(ValueError, match="File not found"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_invalid_proton_index(self, tmp_path):
+        """Test PKaTableEntry validation catches invalid proton_index."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        # Create a real file for this test
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=0,  # Invalid: must be >= 1
+            charge=0,
+            multiplicity=1,
+        )
+
+        with pytest.raises(ValueError, match="proton_index must be >= 1"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_invalid_multiplicity(self, tmp_path):
+        """Test PKaTableEntry validation catches invalid multiplicity."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge=0,
+            multiplicity=0,  # Invalid: must be >= 1
+        )
+
+        with pytest.raises(ValueError, match="multiplicity must be >= 1"):
+            entry.validate()
+
+    def test_validate_pka_table_entries(self, tmp_path):
+        """Test batch validation of PKaTableEntry list."""
+        from chemsmart.utils.utils import (
+            PKaTableEntry,
+            validate_pka_table_entries,
+        )
+
+        # Create test files
+        file1 = tmp_path / "mol1.xyz"
+        file1.write_text("1\n\nH 0 0 0\n")
+        file2 = tmp_path / "mol2.xyz"
+        file2.write_text("1\n\nH 0 0 0\n")
+
+        entries = [
+            PKaTableEntry(str(file1), 1, 0, 1),
+            PKaTableEntry(str(file2), 2, -1, 2),
+        ]
+
+        # Should not raise
+        result = validate_pka_table_entries(entries, check_file_exists=True)
+        assert result == entries
+
+    def test_pka_table_entry_repr(self):
+        """Test PKaTableEntry string representation."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        entry = PKaTableEntry(
+            filepath="mol.xyz",
+            proton_index=10,
+            charge=0,
+            multiplicity=1,
+        )
+
+        repr_str = repr(entry)
+        assert "PKaTableEntry" in repr_str
+        assert "mol.xyz" in repr_str
+        assert "'proton_index': 10" in repr_str
+        assert "'charge': 0" in repr_str
+        assert "'multiplicity': 1" in repr_str
+
+    def test_pka_table_entry_from_headers_and_row_dynamic(self):
+        """Dynamic header/value mapping should expose row attributes."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        headers = ["ha_file", "proton_index", "charge", "mult", "route"]
+        row = ["mol.xyz", "10", "0", "1", "opt freq"]
+
+        entry = PKaTableEntry.from_headers_and_row(headers, row, row_number=2)
+
+        assert entry.ha_file == "mol.xyz"
+        assert entry.proton_index == "10"  # raw row value preserved
+        assert entry.charge == "0"
+        assert entry.mult == "1"
+        assert entry.route == "opt freq"
+
+    def test_pka_table_entry_dict_and_kwargs_helpers(self):
+        """to_dict/to_kwargs should support forwarding to downstream settings."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        entry = PKaTableEntry(
+            {
+                "filepath": "mol.xyz",
+                "charge": 0,
+                "multiplicity": 1,
+                "extra": None,
+            }
+        )
+
+        data = entry.to_dict()
+        assert data["filepath"] == "mol.xyz"
+        assert data["charge"] == 0
+
+        forwarded = entry.to_kwargs(rename_map={"filepath": "filename"})
+        assert "filename" in forwarded
+        assert forwarded["filename"] == "mol.xyz"
+
+        forwarded_no_none = entry.to_kwargs(drop_none=True)
+        assert "extra" not in forwarded_no_none
+
+    def test_pka_table_entry_alias_resolution(self, tmp_path):
+        """Alias resolution should keep backward-compatible attribute access."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+
+        entry = PKaTableEntry(
+            {
+                "ha_file": str(test_file),
+                "pi": 1,
+                "q": 0,
+                "mult": 1,
+            }
+        )
+
+        # canonical access via aliases
+        assert entry.filepath == str(test_file)
+        assert entry.proton_index == 1
+        assert entry.charge == 0
+        assert entry.multiplicity == 1
+
+        # and validation still passes
+        entry.validate()

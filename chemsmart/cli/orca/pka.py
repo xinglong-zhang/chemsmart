@@ -29,6 +29,14 @@ def click_orca_pka_options(f):
     """Click options specific to ORCA pKa calculations."""
 
     @click.option(
+        "-i",
+        "--input-table",
+        type=str,
+        required=False,
+        help="Table file (.txt or .csv) containing molecules for batch pKa "
+        "calculations. Columns: filepath, proton_index, charge, multiplicity.",
+    )
+    @click.option(
         "-pi",
         "--proton-index",
         type=int,
@@ -256,6 +264,7 @@ def click_orca_pka_output_options(f):
 @click.pass_context
 def pka(
     ctx,
+    input_table,
     proton_index,
     color_code,
     thermodynamic_cycle,
@@ -291,12 +300,22 @@ def pka(
     """
     Run ORCA pKa calculations using the dual-level proton exchange scheme.
 
-    \b
-    **Mode 1: Run new calculations**
-    Provide input geometry and run gas-phase opt+freq and solution-phase SP.
+    Three execution modes are available:
 
     \b
-    **Mode 2: Parse existing output files**
+    **Mode 1: Single molecule calculation**
+    Provide input geometry file with -f and run optimization + SP calculations.
+
+    \b
+    **Mode 2: Table-driven batch calculation**
+    Provide a table file with -i/--input-table containing multiple molecules.
+    Table format (4 columns, whitespace or comma-delimited):
+        filepath    proton_index    charge    multiplicity
+    In this mode, -f, -pi, -c, -m are not required. For proton exchange cycle,
+    reference acid options (-r, -rpi, -rc, -rm) are still mandatory.
+
+    \b
+    **Mode 3: Parse existing output files**
     Provide completed ORCA output files to compute pKa directly.
 
     \b
@@ -306,9 +325,16 @@ def pka(
 
     \b
     Examples:
-        # Run pKa with proton exchange cycle
+        # Run pKa with proton exchange cycle (single molecule)
         chemsmart run orca -f acid.xyz -c 0 -m 1 pka -pi 10 \\
             -r ref_acid.xyz -rpi 1 -rc 0 -rm 1
+
+        # Table-driven batch mode (proton exchange)
+        chemsmart run orca -p myproject pka -i molecules.txt \\
+            -t "proton exchange" -r ref_acid.xyz -rpi 5 -rc 0 -rm 1
+
+        # Table-driven batch mode (direct cycle)
+        chemsmart run orca -p myproject pka -i molecules.csv -t direct
 
         # Compute pKa from existing ORCA output files
         chemsmart run orca pka -pi 1 \\
@@ -318,6 +344,35 @@ def pka(
             -hbs ref_sp.out -bs ref_base_sp.out \\
             -rp 6.75 -T 298.15
     """
+    # =========================================================================
+    # Table-driven execution mode
+    # =========================================================================
+    if input_table is not None:
+        return _run_orca_pka_from_table(
+            ctx=ctx,
+            input_table=input_table,
+            thermodynamic_cycle=thermodynamic_cycle,
+            reference=reference,
+            reference_proton_index=reference_proton_index,
+            reference_color_code=reference_color_code,
+            reference_charge=reference_charge,
+            reference_multiplicity=reference_multiplicity,
+            reference_conjugate_base_charge=reference_conjugate_base_charge,
+            reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+            delta_g_proton=delta_g_proton,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+
+    # =========================================================================
+    # Output file parsing mode
+    # =========================================================================
     # Check if we're in output file parsing mode
     output_files_provided = any(
         [
@@ -602,6 +657,170 @@ def pka(
         parallel=parallel_flag,
         **kwargs,
     )
+
+
+def _run_orca_pka_from_table(
+    ctx,
+    input_table,
+    thermodynamic_cycle,
+    reference,
+    reference_proton_index,
+    reference_color_code,
+    reference_charge,
+    reference_multiplicity,
+    reference_conjugate_base_charge,
+    reference_conjugate_base_multiplicity,
+    delta_g_proton,
+    solvent_model,
+    solvent_id,
+    temperature,
+    concentration,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
+    skip_completed,
+    **kwargs,
+):
+    """Run ORCA pKa jobs from a table file.
+
+    Table format (4 columns):
+        filepath    proton_index    charge    multiplicity
+
+    For proton exchange cycle, reference acid options are still required.
+    """
+    from pathlib import Path
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.orca.pka import ORCApKaJob
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+    from chemsmart.utils.utils import (
+        parse_pka_table,
+        validate_pka_table_entries,
+    )
+
+    # Parse and validate table
+    logger.info(f"Reading ORCA pKa jobs from table: {input_table}")
+    try:
+        entries = parse_pka_table(input_table)
+        validate_pka_table_entries(entries, check_file_exists=True)
+    except (FileNotFoundError, ValueError) as e:
+        raise click.UsageError(str(e))
+
+    logger.info(f"Found {len(entries)} entries in table")
+
+    # Validate reference acid options for proton exchange cycle
+    if thermodynamic_cycle == "proton exchange":
+        missing = []
+        if reference is None:
+            missing.append("-r/--reference")
+        if reference_proton_index is None and reference is not None:
+            # Try auto-detect from CDXML
+            if reference.endswith((".cdx", ".cdxml")):
+                from chemsmart.io.file import PKaCDXFile
+
+                try:
+                    ref_cdx = PKaCDXFile(filename=reference)
+                    ref_pka_mol = ref_cdx.get_pka_molecule(
+                        color_code=reference_color_code
+                    )
+                    reference_proton_index = ref_pka_mol.proton_index
+                    logger.info(
+                        f"Detected reference proton index "
+                        f"{reference_proton_index} from CDXML colour."
+                    )
+                except ValueError as exc:
+                    missing.append(
+                        f"-rpi/--reference-proton-index (auto-detect failed: {exc})"
+                    )
+            else:
+                missing.append("-rpi/--reference-proton-index")
+        if reference_charge is None:
+            missing.append("-rc/--reference-charge")
+        if reference_multiplicity is None:
+            missing.append("-rm/--reference-multiplicity")
+
+        if missing:
+            raise click.UsageError(
+                "For proton exchange cycle with table input, the following "
+                "reference acid options are required:\n  "
+                + "\n  ".join(missing)
+            )
+
+    # Get project settings
+    project_settings = ctx.obj["project_settings"]
+    opt_settings = project_settings.opt_settings()
+
+    # Merge with CLI keywords
+    job_settings = ctx.obj.get("job_settings")
+    keywords = ctx.obj.get("keywords", {})
+    if job_settings:
+        opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+
+    parallel_flag = kwargs.pop("parallel", False)
+
+    # Create jobs for each table entry
+    jobs = []
+    for entry in entries:
+        row = entry.to_kwargs(drop_none=False)
+
+        filepath = entry.get("filepath") or entry.get("path") or entry.filepath
+        molecule = Molecule.from_filepath(filepath)
+
+        label = Path(filepath).stem
+        base_label = label if label.endswith("_pka") else f"{label}_pka"
+
+        pka_settings = ORCApKaJobSettings(
+            proton_index=int(entry.proton_index),
+            thermodynamic_cycle=thermodynamic_cycle,
+            reference_file=reference,
+            reference_proton_index=reference_proton_index,
+            reference_charge=reference_charge,
+            reference_multiplicity=reference_multiplicity,
+            reference_conjugate_base_charge=reference_conjugate_base_charge,
+            reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+            delta_G_proton=delta_g_proton,
+            conjugate_base_charge=None,
+            conjugate_base_multiplicity=None,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            charge=int(entry.charge),
+            multiplicity=int(entry.multiplicity),
+            functional=opt_settings.functional,
+            basis=opt_settings.basis,
+            ab_initio=opt_settings.ab_initio,
+            dispersion=getattr(opt_settings, "dispersion", None),
+            aux_basis=getattr(opt_settings, "aux_basis", None),
+            defgrid=opt_settings.defgrid,
+            semiempirical=opt_settings.semiempirical,
+            additional_route_parameters=opt_settings.additional_route_parameters,
+            gen_genecp_file=opt_settings.gen_genecp_file,
+            heavy_elements=opt_settings.heavy_elements,
+            heavy_elements_basis=opt_settings.heavy_elements_basis,
+            light_elements_basis=opt_settings.light_elements_basis,
+        )
+
+        logger.info(
+            f"Creating ORCA pKa job for {filepath}: "
+            f"proton_index={entry.proton_index}, "
+            f"charge={entry.charge}, mult={entry.multiplicity}, "
+            f"row_fields={sorted(row.keys())}"
+        )
+
+        job = ORCApKaJob(
+            molecule=molecule,
+            settings=pka_settings,
+            label=base_label,
+            skip_completed=skip_completed,
+            parallel=parallel_flag,
+            **kwargs,
+        )
+        jobs.append(job)
+
+    logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
+    return jobs
 
 
 def click_orca_pka_thermo_options(f):

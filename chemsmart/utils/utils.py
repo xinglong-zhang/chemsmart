@@ -1838,3 +1838,458 @@ def convert_string_to_slices(index_str):
         else:
             result.append(int(item) - 1)
     return result
+
+
+# ---------------------------------------------------------------------------
+# pKa Table Parsing Utilities
+# ---------------------------------------------------------------------------
+
+
+class PKaTableEntry:
+    """Generic dynamic table-row abstraction (backward-compatible name).
+
+    The class now supports:
+    - dynamic row attributes from arbitrary table headers
+    - dict-like and attribute-style access
+    - a generic DataFrame-backed ``TabularDataset`` parser layer
+    """
+
+    _ALIASES = {
+        "filepath": ["filepath", "file_path", "path", "ha_file"],
+        "proton_index": ["proton_index", "pi"],
+        "charge": ["charge", "q"],
+        "multiplicity": ["multiplicity", "mult", "m"],
+    }
+
+    class TabularDataset:
+        """Generic DataFrame-backed dataset for high-throughput workflows."""
+
+        def __init__(self, dataframe, source_path=None):
+            self.dataframe = dataframe.reset_index(drop=True)
+            self.source_path = source_path
+
+        @property
+        def columns(self):
+            return list(self.dataframe.columns)
+
+        def __len__(self):
+            return len(self.dataframe)
+
+        def to_entries(self, row_offset=2):
+            entries = []
+            for idx, row in self.dataframe.iterrows():
+                entries.append(
+                    PKaTableEntry(
+                        row.to_dict(),
+                        row_number=idx + row_offset,
+                    )
+                )
+            return entries
+
+        def validate(
+            self,
+            required_fields=None,
+            integer_fields=None,
+            positive_integer_fields=None,
+            path_fields=None,
+            check_file_exists=True,
+        ):
+            required_fields = required_fields or []
+            integer_fields = integer_fields or []
+            positive_integer_fields = positive_integer_fields or []
+            path_fields = path_fields or []
+
+            # Validate required logical fields through alias resolution
+            missing = []
+            for field in required_fields:
+                col = PKaTableEntry.resolve_column(
+                    self.columns,
+                    PKaTableEntry._ALIASES.get(field, [field]),
+                    required=False,
+                )
+                if col is None:
+                    missing.append(field)
+            if missing:
+                raise ValueError(
+                    "Missing required table fields: " + ", ".join(missing)
+                )
+
+            errors = []
+            for idx, row in self.dataframe.iterrows():
+                row_no = idx + 2
+                entry = PKaTableEntry(row.to_dict(), row_number=row_no)
+
+                for field in integer_fields:
+                    value = entry.get_canonical(field)
+                    if value is None:
+                        errors.append(f"Missing {field} (row {row_no})")
+                        continue
+                    try:
+                        int(value)
+                    except (TypeError, ValueError):
+                        errors.append(
+                            f"Invalid integer for {field} at row {row_no}: {value!r}"
+                        )
+
+                for field in positive_integer_fields:
+                    value = entry.get_canonical(field)
+                    if value is None:
+                        errors.append(f"Missing {field} (row {row_no})")
+                        continue
+                    try:
+                        parsed = int(value)
+                        if parsed < 1:
+                            errors.append(
+                                f"{field} must be >= 1 at row {row_no}, got {parsed}"
+                            )
+                    except (TypeError, ValueError):
+                        errors.append(
+                            f"Invalid integer for {field} at row {row_no}: {value!r}"
+                        )
+
+                if check_file_exists:
+                    for field in path_fields:
+                        value = entry.get_canonical(field)
+                        if not value:
+                            errors.append(f"Missing {field} (row {row_no})")
+                            continue
+                        if not os.path.exists(str(value)):
+                            errors.append(
+                                f"File not found for {field} at row {row_no}: {value}"
+                            )
+
+            if errors:
+                raise ValueError(
+                    "Table validation failed:\n" + "\n".join(errors)
+                )
+            return self
+
+    def __init__(self, *args, row_number: int = None, **kwargs):
+        data = {}
+        if len(args) == 4:
+            data.update(
+                {
+                    "filepath": args[0],
+                    "proton_index": args[1],
+                    "charge": args[2],
+                    "multiplicity": args[3],
+                }
+            )
+        elif len(args) == 1 and isinstance(args[0], dict):
+            data.update(args[0])
+        elif len(args) != 0:
+            raise TypeError(
+                "PKaTableEntry accepts either (filepath, proton_index, charge, multiplicity), "
+                "or a single dict, plus keyword fields."
+            )
+
+        data.update(kwargs)
+        self.row_number = row_number
+        self._data = {str(k): v for k, v in data.items() if k != "row_number"}
+
+    @staticmethod
+    def normalize_header(header):
+        """Normalize a table header into snake_case."""
+        header = str(header).strip().lower()
+        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
+        header = re.sub(r"_+", "_", header).strip("_")
+        return header
+
+    @classmethod
+    def resolve_column(cls, columns, candidates, required=True):
+        """Resolve a physical column name from logical candidates."""
+        normalized = {cls.normalize_header(c): c for c in columns}
+        for candidate in candidates:
+            key = cls.normalize_header(candidate)
+            if key in normalized:
+                return normalized[key]
+        if required:
+            raise ValueError(
+                "Could not resolve required column. Tried: "
+                + ", ".join(candidates)
+            )
+        return None
+
+    @classmethod
+    def parse_table(cls, table_path, delimiter=None, comment="#"):
+        """Parse .txt/.csv into a generic TabularDataset."""
+        import pandas as pd
+
+        if not os.path.exists(table_path):
+            raise FileNotFoundError(f"Table file not found: {table_path}")
+
+        sep = delimiter
+        if sep is None:
+            sep = "," if str(table_path).lower().endswith(".csv") else r"\s+"
+
+        try:
+            df = pd.read_csv(
+                table_path,
+                sep=sep,
+                engine="python",
+                comment=comment,
+                skip_blank_lines=True,
+            )
+        except pd.errors.EmptyDataError:
+            raise ValueError(
+                f"No valid entries found in pKa table: {table_path}"
+            )
+
+        if df.empty:
+            raise ValueError(
+                f"No valid entries found in pKa table: {table_path}"
+            )
+
+        df = df.rename(
+            columns={c: cls.normalize_header(c) for c in df.columns}
+        )
+        return cls.TabularDataset(df, source_path=table_path)
+
+    @classmethod
+    def from_headers_and_row(cls, headers, row, row_number: int = None):
+        if len(headers) != len(row):
+            raise ValueError(
+                f"Header/value length mismatch: {len(headers)} headers vs {len(row)} values"
+            )
+        row_dict = {
+            str(h).strip(): v for h, v in zip(headers, row, strict=False)
+        }
+        return cls(row_dict, row_number=row_number)
+
+    def __repr__(self):
+        return (
+            f"PKaTableEntry(row_number={self.row_number}, data={self._data!r})"
+        )
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __setitem__(self, key, value):
+        self._data[str(key)] = value
+
+    def __contains__(self, key):
+        return key in self._data
+
+    def __getattr__(self, name):
+        if name in self._data:
+            return self._data[name]
+        for canonical, aliases in self._ALIASES.items():
+            if name == canonical:
+                for alias in aliases:
+                    if alias in self._data:
+                        return self._data[alias]
+        raise AttributeError(
+            f"'PKaTableEntry' object has no attribute '{name}'"
+        )
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+    def get_canonical(self, canonical, default=None):
+        for key in self._ALIASES.get(canonical, [canonical]):
+            if key in self._data:
+                return self._data[key]
+        return default
+
+    def keys(self):
+        return self._data.keys()
+
+    def items(self):
+        return self._data.items()
+
+    def values(self):
+        return self._data.values()
+
+    def to_dict(self):
+        return dict(self._data)
+
+    def to_kwargs(self, rename_map=None, drop_none=False):
+        out = self.to_dict()
+        if rename_map:
+            out = {rename_map.get(k, k): v for k, v in out.items()}
+        if drop_none:
+            out = {k: v for k, v in out.items() if v is not None}
+        return out
+
+    def validate(self):
+        errors = []
+        row_info = f" (row {self.row_number})" if self.row_number else ""
+
+        filepath = self.get_canonical("filepath")
+        proton_index = self.get_canonical("proton_index")
+        charge = self.get_canonical("charge")
+        multiplicity = self.get_canonical("multiplicity")
+
+        if not filepath:
+            errors.append(f"Empty filepath{row_info}")
+        elif not os.path.exists(str(filepath)):
+            errors.append(f"File not found: {filepath}{row_info}")
+
+        if proton_index is None:
+            errors.append(f"Missing proton_index{row_info}")
+        else:
+            try:
+                proton_index = int(proton_index)
+                if proton_index < 1:
+                    errors.append(
+                        f"proton_index must be >= 1, got {proton_index}{row_info}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(
+                    f"Invalid proton_index: {proton_index!r}{row_info}"
+                )
+
+        if charge is None:
+            errors.append(f"Missing charge{row_info}")
+        else:
+            try:
+                int(charge)
+            except (TypeError, ValueError):
+                errors.append(f"Invalid charge: {charge!r}{row_info}")
+
+        if multiplicity is None:
+            errors.append(f"Missing multiplicity{row_info}")
+        else:
+            try:
+                multiplicity = int(multiplicity)
+                if multiplicity < 1:
+                    errors.append(
+                        f"multiplicity must be >= 1, got {multiplicity}{row_info}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(
+                    f"Invalid multiplicity: {multiplicity!r}{row_info}"
+                )
+
+        if errors:
+            raise ValueError("; ".join(errors))
+
+
+def parse_pka_table(
+    table_path: str,
+    delimiter: str = None,
+    skip_header: bool = True,
+) -> list:
+    """Thin pKa adapter on top of the generic tabular parser layer."""
+    dataset = PKaTableEntry.parse_table(
+        table_path=table_path,
+        delimiter=delimiter,
+        comment="#",
+    )
+
+    try:
+        file_col = PKaTableEntry.resolve_column(
+            dataset.columns,
+            ["filepath", "file_path", "path", "ha_file"],
+        )
+        proton_col = PKaTableEntry.resolve_column(
+            dataset.columns,
+            ["proton_index", "pi"],
+        )
+        charge_col = PKaTableEntry.resolve_column(
+            dataset.columns,
+            ["charge", "q"],
+        )
+        mult_col = PKaTableEntry.resolve_column(
+            dataset.columns,
+            ["multiplicity", "mult", "m"],
+        )
+    except ValueError:
+        # Keep legacy parse-stage error pattern used by tests/callers
+        raise ValueError(
+            "Invalid table format: expected 4 columns "
+            "(filepath, proton_index, charge, multiplicity)."
+        )
+
+    entries = []
+    for idx, row in dataset.dataframe.iterrows():
+        line_num = idx + 2
+        filepath = row[file_col]
+
+        try:
+            proton_index = int(row[proton_col])
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid proton_index at line {line_num}: "
+                f"{row[proton_col]!r} is not an integer"
+            )
+
+        try:
+            charge = int(row[charge_col])
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid charge at line {line_num}: "
+                f"{row[charge_col]!r} is not an integer"
+            )
+
+        try:
+            multiplicity = int(row[mult_col])
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid multiplicity at line {line_num}: "
+                f"{row[mult_col]!r} is not an integer"
+            )
+
+        entries.append(
+            PKaTableEntry(
+                filepath=filepath,
+                proton_index=proton_index,
+                charge=charge,
+                multiplicity=multiplicity,
+                row_number=line_num,
+            )
+        )
+
+    # `skip_header` kept for API compatibility; parser now uses header row.
+    if skip_header and len(entries) >= 0:
+        pass
+
+    if not entries:
+        raise ValueError(f"No valid entries found in pKa table: {table_path}")
+
+    return entries
+
+
+def validate_pka_table_entries(
+    entries: list,
+    check_file_exists: bool = True,
+) -> list:
+    """Validate a list of PKaTableEntry objects.
+
+    Args:
+        entries: List of PKaTableEntry to validate.
+        check_file_exists: If True, verify that each filepath exists.
+
+    Returns:
+        list[PKaTableEntry]: The validated entries (same list, for chaining).
+
+    Raises:
+        ValueError: If any entry fails validation.
+    """
+    all_errors = []
+
+    for entry in entries:
+        try:
+            if check_file_exists:
+                entry.validate()
+            else:
+                # Validate without file existence check
+                if entry.proton_index is None or entry.proton_index < 1:
+                    raise ValueError(
+                        f"Invalid proton_index: {entry.proton_index}"
+                    )
+                if entry.charge is None:
+                    raise ValueError("Missing charge")
+                if entry.multiplicity is None or entry.multiplicity < 1:
+                    raise ValueError(
+                        f"Invalid multiplicity: {entry.multiplicity}"
+                    )
+        except ValueError as e:
+            all_errors.append(str(e))
+
+    if all_errors:
+        raise ValueError(
+            "pKa table validation failed:\n" + "\n".join(all_errors)
+        )
+
+    return entries
