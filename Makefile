@@ -1,12 +1,5 @@
 # Detect the operating system
 OS := $(shell uname -s 2>/dev/null || echo Windows)
-
-# Check if running in Git Bash (MINGW) or MSYS on Windows
-IS_MINGW := $(findstring MINGW,$(OS))
-IS_MSYS := $(findstring MSYS,$(OS))
-# IS_GITBASH will be non-empty if running in Git Bash/MSYS environment
-IS_GITBASH := $(strip $(IS_MINGW)$(IS_MSYS))
-
 ifeq ($(OS),Windows)
     SHELL := cmd
     ENV_PREFIX := $(if $(shell where conda >nul 2>&1 && conda env list | findstr chemsmart >nul 2>&1),conda activate chemsmart && ,)
@@ -145,31 +138,27 @@ ifeq ($(OS),Windows)
 	@echo "  chemsmart config nciplot --folder <path>"
 else
 	@echo Running chemsmart configuration...
-	@echo "Detected OS: $(OS)"
-ifdef IS_GITBASH
-	@echo "Running in Git Bash environment on Windows"
-endif
-	$(ENV_PREFIX)python "$(CHEMSMART_PATH)" config
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
-	$(ENV_PREFIX)python "$(CHEMSMART_PATH)" config server || { $(ECHO) "Error: chemsmart server configuration failed."; exit 1; }
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
 	if [ -n "$$gaussian_folder" ]; then \
 		$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
-		$(ENV_PREFIX)python "$(CHEMSMART_PATH)" config gaussian --folder "$$gaussian_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "$$gaussian_folder"; \
 	else \
 		$(ECHO) "Skipping Gaussian configuration."; \
 	fi; \
 	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
 	if [ -n "$$orca_folder" ]; then \
 		$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
-		$(ENV_PREFIX)python "$(CHEMSMART_PATH)" config orca --folder "$$orca_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
 	else \
 		$(ECHO) "Skipping ORCA configuration."; \
 	fi; \
 	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder; \
 	if [ -n "$$nciplot_folder" ]; then \
 		$(ECHO) "Configuring NCIPLOT with folder: $$nciplot_folder"; \
-		$(ENV_PREFIX)python "$(CHEMSMART_PATH)" config nciplot --folder "$$nciplot_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config nciplot --folder "$$nciplot_folder"; \
 	else \
 		$(ECHO) "Skipping NCIPLOT configuration."; \
 	fi

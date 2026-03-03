@@ -82,6 +82,9 @@ exclude = [".github"]
     "settings/templates/.chemsmart/**",
 ]
 
+[project.scripts]
+chemsmart = "chemsmart.cli.main:main"
+
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]
 extend-ignore = ["E203"]
