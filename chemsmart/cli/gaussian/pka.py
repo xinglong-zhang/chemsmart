@@ -562,7 +562,7 @@ def pka(
 
     # Get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
+    molecule_indices = ctx.obj.get("molecule_indices")
 
     # Get label for the job
     label = ctx.obj["label"]
@@ -674,7 +674,26 @@ def pka(
         f"csg={cutoff_entropy_grimme}cm^-1, ch={cutoff_enthalpy}cm^-1"
     )
 
-    # Create and return pKa job
+    # Create and return pKa job(s)
+    if len(molecules) > 1 and molecule_indices:
+        logger.info(f"Creating {len(molecules)} pKa jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            jobs.append(
+                GaussianpKaJob(
+                    molecule=molecule,
+                    settings=pka_settings,
+                    label=molecule_label,
+                    jobrunner=jobrunner,
+                    skip_completed=skip_completed,
+                    parallel=parallel,
+                    **kwargs,
+                )
+            )
+        return jobs
+
+    molecule = molecules[-1]
     return GaussianpKaJob(
         molecule=molecule,
         settings=pka_settings,

@@ -485,7 +485,7 @@ def pka(
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
+    molecule_indices = ctx.obj.get("molecule_indices")
     label = ctx.obj["label"]
 
     # Create ORCA pKa settings
@@ -570,14 +570,36 @@ def pka(
     )
 
     # Avoid duplicating the _pka suffix if the base label already has it
-    job_label = label if label.endswith("_pka") else f"{label}_pka"
+    base_label = label if label.endswith("_pka") else f"{label}_pka"
+    parallel_flag = kwargs.pop("parallel", False)
+
+    # Create and return pKa job(s)
+    if len(molecules) > 1 and molecule_indices:
+        logger.info(f"Creating {len(molecules)} ORCA pKa jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{base_label}_idx{idx}"
+            jobs.append(
+                ORCApKaJob(
+                    molecule=molecule,
+                    settings=pka_settings,
+                    label=molecule_label,
+                    skip_completed=skip_completed,
+                    parallel=parallel_flag,
+                    **kwargs,
+                )
+            )
+        return jobs
+
+    molecule = molecules[-1]
+    job_label = base_label
 
     return ORCApKaJob(
         molecule=molecule,
         settings=pka_settings,
         label=job_label,
         skip_completed=skip_completed,
-        parallel=kwargs.pop("parallel", False),
+        parallel=parallel_flag,
         **kwargs,
     )
 
