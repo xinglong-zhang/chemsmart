@@ -42,6 +42,24 @@ def click_pka_options(f):
         "table (.txt/.csv) with columns: filepath, proton_index, charge, multiplicity.",
     )
     @click.option(
+        "-O",
+        "--output-table",
+        type=click.Path(exists=True),
+        default=None,
+        required=False,
+        help="Compute pKa from a table of precomputed output files. "
+        "The table must contain columns: basename, ha_gas, a_gas, hb_gas, "
+        "b_gas, ha_sp, a_sp, hb_sp, b_sp, pka_ref. "
+        "Blank reference-acid cells are filled from the previous row.",
+    )
+    @click.option(
+        "--output-results",
+        type=click.Path(),
+        default=None,
+        help="Path to write computed pKa results table (.csv or .txt). "
+        "Used with -O/--output-table. If omitted, results are printed to stdout.",
+    )
+    @click.option(
         "-pi",
         "--proton-index",
         type=int,
@@ -285,6 +303,8 @@ def click_pka_output_options(f):
 def pka(
     ctx,
     input_table,
+    output_table,
+    output_results,
     proton_index,
     color_code,
     thermodynamic_cycle,
@@ -325,15 +345,15 @@ def pka(
     1. Gas phase optimization + frequency for HA and A-
     2. Solution phase single point for HA and A- at the SAME level of theory
 
-    Three execution modes are available:
+    Four execution modes are available:
 
     \b
     **Mode 1: Single molecule calculation**
     Provide input geometry file with -f and run optimization + SP calculations.
 
     \b
-    **Mode 2: Table-driven batch calculation**
-    Enable with -i/--input-table. The table file is taken from the parent
+    **Mode 2: Table-driven batch calculation (job submission)**
+    Enable with -o/--input-table. The table file is taken from the parent
     Gaussian -f/--filename option.
     Table format (4 columns, whitespace or comma-delimited):
         filepath    proton_index    charge    multiplicity
@@ -342,10 +362,18 @@ def pka(
     are still mandatory.
 
     \b
-    **Mode 3: Parse existing output files**
+    **Mode 3: Parse existing output files (single system)**
     Provide completed Gaussian output files to compute pKa directly using
     the Dual-level Proton Exchange scheme. All energies in Hartree (au),
     except ΔG_soln which is converted to kcal/mol for the pKa formula.
+
+    \b
+    **Mode 4: Batch pKa from output table (post-processing)**
+    Provide -O/--output-table with a table of precomputed output file paths.
+    Table columns: basename, ha_gas, a_gas, hb_gas, b_gas, ha_sp, a_sp,
+    hb_sp, b_sp, pka_ref.
+    Blank reference-acid cells are carried forward from the previous row.
+    Use --output-results to write a results table with appended pka column.
 
     Two thermodynamic cycles are available:
 
@@ -398,7 +426,25 @@ def pka(
             -hbs collidine-H_opt_sp_smd.log \\
             -bs collidine_opt_sp_smd.log \\
             -rpka 6.75 -T 298.15
+
+        # Batch pKa from output table (post-processing)
+        chemsmart run gaussian pka -O outputs.csv \\
+            --output-results results.csv -T 298.15
     """
+    # =========================================================================
+    # Output-table post-processing mode (Mode 4)
+    # =========================================================================
+    if output_table is not None:
+        return _run_pka_from_output_table(
+            output_table=output_table,
+            output_results=output_results,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            program="gaussian",
+        )
+
     # =========================================================================
     # Table-driven execution mode
     # =========================================================================
@@ -1009,13 +1055,6 @@ def click_pka_thermo_options(f):
         default=None,
         help="Output file to save results (default: print to stdout).",
     )
-    @click.option(
-        "-O",
-        "--output-table",
-        type=click.Path(),
-        default=None,
-        help="The .txt or .csv files containing the paths to output .log files to extract thermochemistry from. The table should have a header and the following columns: species, gas_file, solv_file. Example:\n\n",
-    )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
@@ -1141,5 +1180,110 @@ def thermo(
         click.echo(f"Results saved to {output}")
     else:
         click.echo(output_text)
+
+    return results
+
+
+def _run_pka_from_output_table(
+    output_table,
+    output_results,
+    temperature,
+    concentration,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
+    program="gaussian",
+):
+    """Compute pKa values from a table of precomputed output files.
+
+    This shared helper implements Mode 4 (batch pKa post-processing).
+    It is called from both Gaussian and ORCA ``pka`` CLI handlers.
+
+    Args:
+        output_table: Path to the output-table file.
+        output_results: Optional path to write results table. If *None*,
+            results are printed to stdout.
+        temperature: Temperature in Kelvin.
+        concentration: Concentration in mol/L.
+        cutoff_entropy_grimme: Grimme quasi-RRHO entropy cutoff (cm⁻¹).
+        cutoff_enthalpy: Head-Gordon enthalpy cutoff (cm⁻¹).
+        program: ``"gaussian"`` or ``"orca"`` – selects the output class.
+    """
+    from chemsmart.utils.utils import (
+        compute_pka_from_output_table,
+        export_pka_results_table,
+        parse_pka_output_table,
+        resolve_pka_output_references,
+    )
+
+    # 1. Parse
+    logger.info(f"Reading pKa output table: {output_table}")
+    try:
+        entries = parse_pka_output_table(output_table)
+    except (FileNotFoundError, ValueError) as e:
+        raise click.UsageError(str(e))
+
+    logger.info(f"Found {len(entries)} entries in output table")
+
+    # 2. Resolve blank reference-acid cells
+    try:
+        resolve_pka_output_references(entries)
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+    # 3. Validate all file paths exist
+    all_errors = []
+    for entry in entries:
+        try:
+            entry.validate(check_file_exists=True)
+        except ValueError as e:
+            all_errors.append(str(e))
+    if all_errors:
+        raise click.UsageError(
+            "Output table validation failed:\n" + "\n".join(all_errors)
+        )
+
+    # 4. Select output class
+    if program == "gaussian":
+        from chemsmart.io.gaussian.output import (
+            Gaussian16pKaOutput as OutputCls,
+        )
+    elif program == "orca":
+        from chemsmart.io.orca.output import ORCApKaOutput as OutputCls
+    else:
+        raise ValueError(f"Unknown program: {program}")
+
+    # 5. Compute
+    logger.info(
+        f"Computing pKa for {len(entries)} systems "
+        f"(T={temperature}K, program={program})"
+    )
+    results = compute_pka_from_output_table(
+        entries=entries,
+        output_cls=OutputCls,
+        temperature=temperature,
+        concentration=concentration,
+        cutoff_entropy_grimme=cutoff_entropy_grimme,
+        cutoff_enthalpy=cutoff_enthalpy,
+    )
+
+    # 6. Export / display
+    if output_results is not None:
+        export_pka_results_table(entries, results, output_results)
+        click.echo(f"pKa results written to {output_results}")
+    else:
+        # Print summary to stdout
+        click.echo("=" * 78)
+        click.echo("Batch pKa Results (Dual-level Proton Exchange)")
+        click.echo("=" * 78)
+        click.echo(f"Temperature: {temperature} K")
+        click.echo(f"{'basename':<30} {'pKa':>10} {'ΔG_soln (kcal/mol)':>20}")
+        click.echo("-" * 78)
+        for entry, result in zip(entries, results):
+            click.echo(
+                f"{entry['basename']:<30} "
+                f"{result['pKa']:>10.2f} "
+                f"{result['delta_G_soln_kcal_mol']:>20.4f}"
+            )
+        click.echo("=" * 78)
 
     return results

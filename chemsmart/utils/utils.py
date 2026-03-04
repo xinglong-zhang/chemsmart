@@ -2276,6 +2276,353 @@ def parse_pka_table(
     return entries
 
 
+# ---------------------------------------------------------------------------
+# pKa Output Table Parsing Utilities (--output-table)
+# ---------------------------------------------------------------------------
+
+
+class PKaOutputTableEntry:
+    """Row abstraction for a pKa output table.
+
+    Each row represents a single system (identified by ``basename``) and
+    carries the file paths of the precomputed thermochemistry outputs
+    (gas-phase opt+freq and solvent single-point) for all four species
+    (HA, A⁻, HB, B⁻) plus the reference pKa value.
+
+    Blank reference-acid cells are resolved by
+    :func:`resolve_pka_output_references` *before* this object is used
+    for computation.
+    """
+
+    # Canonical column name → list of accepted aliases (normalised).
+    _ALIASES = {
+        "basename": ["basename", "name", "label", "system"],
+        "ha_gas": [
+            "ha_gas",
+            "ha_opt",
+            "ha_gas_file",
+            "ha_optimization_output",
+        ],
+        "a_gas": ["a_gas", "a_opt", "a_gas_file", "a_optimization_output"],
+        "hb_gas": [
+            "hb_gas",
+            "hb_opt",
+            "hb_gas_file",
+            "hb_optimization_output",
+        ],
+        "b_gas": ["b_gas", "b_opt", "b_gas_file", "b_optimization_output"],
+        "ha_sp": [
+            "ha_sp",
+            "ha_solv",
+            "ha_solv_file",
+            "ha_single_point_output",
+        ],
+        "a_sp": ["a_sp", "a_solv", "a_solv_file", "a_single_point_output"],
+        "hb_sp": [
+            "hb_sp",
+            "hb_solv",
+            "hb_solv_file",
+            "hb_single_point_output",
+        ],
+        "b_sp": ["b_sp", "b_solv", "b_solv_file", "b_single_point_output"],
+        "pka_ref": ["pka_ref", "pka_reference", "reference_pka", "ref_pka"],
+    }
+
+    # Columns that belong to the reference acid and can be carried forward.
+    _REFERENCE_COLUMNS = ("hb_gas", "b_gas", "hb_sp", "b_sp", "pka_ref")
+
+    def __init__(self, data: dict, row_number: int = None):
+        self.row_number = row_number
+        self._data = {str(k): v for k, v in data.items() if k != "row_number"}
+
+    # -- dict-like access ---------------------------------------------------
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __setitem__(self, key, value):
+        self._data[str(key)] = value
+
+    def __contains__(self, key):
+        return key in self._data
+
+    def __repr__(self):
+        return (
+            f"PKaOutputTableEntry(row={self.row_number}, "
+            f"basename={self._data.get('basename', '?')})"
+        )
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._data:
+            return self._data[name]
+        for canonical, aliases in self._ALIASES.items():
+            if name == canonical:
+                for alias in aliases:
+                    if alias in self._data:
+                        return self._data[alias]
+        raise AttributeError(
+            f"'PKaOutputTableEntry' object has no attribute '{name}'"
+        )
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+    def keys(self):
+        return self._data.keys()
+
+    def items(self):
+        return self._data.items()
+
+    def to_dict(self):
+        return dict(self._data)
+
+    # -- validation ---------------------------------------------------------
+
+    def validate(self, check_file_exists=True):
+        """Validate that all required file paths are present and non-empty."""
+        errors = []
+        row_info = f" (row {self.row_number})" if self.row_number else ""
+
+        if not self._data.get("basename"):
+            errors.append(f"Missing basename{row_info}")
+
+        required_files = [
+            "ha_gas",
+            "a_gas",
+            "hb_gas",
+            "b_gas",
+            "ha_sp",
+            "a_sp",
+            "hb_sp",
+            "b_sp",
+        ]
+        for col in required_files:
+            val = self._data.get(col)
+            if not val or (isinstance(val, float) and np.isnan(val)):
+                errors.append(f"Missing {col}{row_info}")
+            elif check_file_exists and not os.path.exists(str(val)):
+                errors.append(f"File not found for {col}: {val}{row_info}")
+
+        pka_ref = self._data.get("pka_ref")
+        if pka_ref is None or (
+            isinstance(pka_ref, float) and np.isnan(pka_ref)
+        ):
+            errors.append(f"Missing pka_ref{row_info}")
+        else:
+            try:
+                float(pka_ref)
+            except (TypeError, ValueError):
+                errors.append(f"Invalid pka_ref: {pka_ref!r}{row_info}")
+
+        if errors:
+            raise ValueError("; ".join(errors))
+
+
+def parse_pka_output_table(table_path: str, delimiter: str = None) -> list:
+    """Parse an output-table file into a list of :class:`PKaOutputTableEntry`.
+
+    The table must contain a header row.  Columns are resolved by
+    normalised aliases so that both ``ha_gas`` and
+    ``HA_optimization_output`` (etc.) are accepted.
+
+    Args:
+        table_path: Path to the ``.txt`` / ``.csv`` table file.
+        delimiter: Explicit delimiter (auto-detected if *None*).
+
+    Returns:
+        list[PKaOutputTableEntry]: One entry per data row, with column
+        names canonicalised to the first alias in each alias list.
+
+    Raises:
+        FileNotFoundError: If *table_path* does not exist.
+        ValueError: If the table is empty or required columns are missing.
+    """
+    import pandas as pd
+
+    dataset = TabularDataset.parse_table(
+        table_path=table_path,
+        delimiter=delimiter,
+        comment="#",
+    )
+
+    # Resolve physical→canonical column mapping.
+    rename_map = {}
+    for canonical, aliases in PKaOutputTableEntry._ALIASES.items():
+        resolved = TabularDataset.resolve_column(
+            dataset.columns,
+            aliases,
+            required=False,
+        )
+        if resolved is not None:
+            rename_map[resolved] = canonical
+
+    # Ensure at least ``basename`` and the four HA/A columns are present.
+    missing_required = []
+    for col in ("basename", "ha_gas", "a_gas", "ha_sp", "a_sp"):
+        if col not in rename_map.values():
+            missing_required.append(col)
+    if missing_required:
+        raise ValueError(
+            f"Output table is missing required columns: "
+            f"{', '.join(missing_required)}.  "
+            f"Accepted aliases: {PKaOutputTableEntry._ALIASES}"
+        )
+
+    canonical_df = dataset.dataframe.rename(columns=rename_map)
+
+    # Keep only canonical columns that were found.
+    canonical_cols = [
+        c for c in PKaOutputTableEntry._ALIASES if c in canonical_df.columns
+    ]
+    canonical_df = canonical_df[canonical_cols]
+
+    # Replace NaN with None for cleaner downstream handling.
+    canonical_df = canonical_df.where(pd.notnull(canonical_df), None)
+
+    canonical_dataset = TabularDataset(canonical_df, source_path=table_path)
+    entries = canonical_dataset.to_entries(
+        entry_cls=PKaOutputTableEntry,
+        row_offset=2,
+    )
+
+    if not entries:
+        raise ValueError(
+            f"No valid entries found in pKa output table: {table_path}"
+        )
+
+    return entries
+
+
+def resolve_pka_output_references(entries: list) -> list:
+    """Fill blank reference-acid columns by carrying forward from earlier rows.
+
+    For each row, if any of the reference-acid columns
+    (``hb_gas``, ``b_gas``, ``hb_sp``, ``b_sp``, ``pka_ref``) are blank
+    (*None*), the value from the most recently defined non-blank row is
+    used.  This allows users to specify the reference acid only once when
+    the same reference is shared across multiple target species.
+
+    Args:
+        entries: List of :class:`PKaOutputTableEntry` (mutated in place).
+
+    Returns:
+        list[PKaOutputTableEntry]: The same list, for chaining.
+
+    Raises:
+        ValueError: If the first row contains blank reference columns
+            (nothing to carry forward from).
+    """
+    ref_cols = PKaOutputTableEntry._REFERENCE_COLUMNS
+    last_ref = {}
+
+    for entry in entries:
+        for col in ref_cols:
+            val = entry.get(col)
+            if val is not None and not (
+                isinstance(val, float) and np.isnan(val)
+            ):
+                # Current row has a value → remember it.
+                last_ref[col] = val
+            else:
+                # Blank → carry forward.
+                if col not in last_ref:
+                    raise ValueError(
+                        f"Reference column '{col}' is blank in row "
+                        f"{entry.row_number} and no previous value exists "
+                        f"to carry forward."
+                    )
+                entry[col] = last_ref[col]
+
+    return entries
+
+
+def compute_pka_from_output_table(
+    entries: list,
+    output_cls,
+    temperature: float = 298.15,
+    concentration: float = 1.0,
+    cutoff_entropy_grimme: float = 100.0,
+    cutoff_enthalpy: float = 100.0,
+) -> list:
+    """Compute pKa for every row in a parsed output table.
+
+    This is a thin orchestration layer that calls
+    ``output_cls.compute_pka()`` (either ``Gaussian16pKaOutput`` or
+    ``ORCApKaOutput``) for each :class:`PKaOutputTableEntry`.
+
+    Args:
+        entries: Validated & reference-resolved output-table entries.
+        output_cls: The pKa output class with a ``compute_pka`` classmethod
+            (e.g. ``Gaussian16pKaOutput`` or ``ORCApKaOutput``).
+        temperature: Temperature in Kelvin.
+        concentration: Concentration in mol/L.
+        cutoff_entropy_grimme: Grimme quasi-RRHO entropy cutoff (cm⁻¹).
+        cutoff_enthalpy: Head-Gordon enthalpy cutoff (cm⁻¹).
+
+    Returns:
+        list[dict]: One result dict per entry, each containing the
+        ``compute_pka()`` output plus the ``basename`` key.
+    """
+    results = []
+    for entry in entries:
+        pka_result = output_cls.compute_pka(
+            ha_gas_file=entry["ha_gas"],
+            a_gas_file=entry["a_gas"],
+            hb_gas_file=entry["hb_gas"],
+            b_gas_file=entry["b_gas"],
+            ha_solv_file=entry["ha_sp"],
+            a_solv_file=entry["a_sp"],
+            hb_solv_file=entry["hb_sp"],
+            b_solv_file=entry["b_sp"],
+            pka_reference=float(entry["pka_ref"]),
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+        )
+        pka_result["basename"] = entry["basename"]
+        results.append(pka_result)
+    return results
+
+
+def export_pka_results_table(
+    entries: list,
+    results: list,
+    output_path: str,
+) -> None:
+    """Export a table with original columns plus computed pKa values.
+
+    Writes a CSV or whitespace-delimited file (inferred from extension)
+    that appends ``pka`` and ``delta_G_soln_kcal_mol`` columns to the
+    original entry data.
+
+    Args:
+        entries: The parsed output-table entries.
+        results: The list of result dicts from
+            :func:`compute_pka_from_output_table`.
+        output_path: Destination file path (``.csv`` → comma-delimited,
+            otherwise whitespace-delimited).
+    """
+    import pandas as pd
+
+    rows = []
+    for entry, result in zip(entries, results):
+        row = entry.to_dict()
+        row["pka"] = result["pKa"]
+        row["delta_G_soln_kcal_mol"] = result["delta_G_soln_kcal_mol"]
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    if str(output_path).lower().endswith(".csv"):
+        df.to_csv(output_path, index=False)
+    else:
+        df.to_csv(output_path, index=False, sep="\t")
+
+    logger.info(f"pKa results table written to {output_path}")
+
+
 def validate_pka_table_entries(
     entries: list,
     check_file_exists: bool = True,

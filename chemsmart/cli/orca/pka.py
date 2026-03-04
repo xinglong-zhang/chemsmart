@@ -39,6 +39,24 @@ def click_orca_pka_options(f):
         "table (.txt/.csv) with columns: filepath, proton_index, charge, multiplicity.",
     )
     @click.option(
+        "-O",
+        "--output-table",
+        type=click.Path(exists=True),
+        default=None,
+        required=False,
+        help="Compute pKa from a table of precomputed output files. "
+        "The table must contain columns: basename, ha_gas, a_gas, hb_gas, "
+        "b_gas, ha_sp, a_sp, hb_sp, b_sp, pka_ref. "
+        "Blank reference-acid cells are filled from the previous row.",
+    )
+    @click.option(
+        "--output-results",
+        type=click.Path(),
+        default=None,
+        help="Path to write computed pKa results table (.csv or .txt). "
+        "Used with -O/--output-table. If omitted, results are printed to stdout.",
+    )
+    @click.option(
         "-pi",
         "--proton-index",
         type=int,
@@ -267,6 +285,8 @@ def click_orca_pka_output_options(f):
 def pka(
     ctx,
     input_table,
+    output_table,
+    output_results,
     proton_index,
     color_code,
     thermodynamic_cycle,
@@ -302,15 +322,15 @@ def pka(
     """
     Run ORCA pKa calculations using the dual-level proton exchange scheme.
 
-    Three execution modes are available:
+    Four execution modes are available:
 
     \b
     **Mode 1: Single molecule calculation**
     Provide input geometry file with -f and run optimization + SP calculations.
 
     \b
-    **Mode 2: Table-driven batch calculation**
-    Enable with -o/--input-table. The table file is taken from the parent
+    **Mode 2: Table-driven batch calculation (job submission)**
+    Enable with -i/--input-table. The table file is taken from the parent
     ORCA -f/--filename option.
     Table format (4 columns, whitespace or comma-delimited):
         filepath    proton_index    charge    multiplicity
@@ -319,8 +339,16 @@ def pka(
     are still mandatory.
 
     \b
-    **Mode 3: Parse existing output files**
+    **Mode 3: Parse existing output files (single system)**
     Provide completed ORCA output files to compute pKa directly.
+
+    \b
+    **Mode 4: Batch pKa from output table (post-processing)**
+    Provide -O/--output-table with a table of precomputed output file paths.
+    Table columns: basename, ha_gas, a_gas, hb_gas, b_gas, ha_sp, a_sp,
+    hb_sp, b_sp, pka_ref.
+    Blank reference-acid cells are carried forward from the previous row.
+    Use --output-results to write a results table with appended pka column.
 
     \b
     Thermodynamic cycles:
@@ -347,7 +375,27 @@ def pka(
             -has acid_sp.out -as base_sp.out \\
             -hbs ref_sp.out -bs ref_base_sp.out \\
             -rp 6.75 -T 298.15
+
+        # Batch pKa from output table (post-processing)
+        chemsmart run orca pka -O outputs.csv \\
+            --output-results results.csv -T 298.15
     """
+    # =========================================================================
+    # Output-table post-processing mode (Mode 4)
+    # =========================================================================
+    if output_table is not None:
+        from chemsmart.cli.gaussian.pka import _run_pka_from_output_table
+
+        return _run_pka_from_output_table(
+            output_table=output_table,
+            output_results=output_results,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            program="orca",
+        )
+
     # =========================================================================
     # Table-driven execution mode
     # =========================================================================
