@@ -525,7 +525,7 @@ def convert_string_index_from_1_based_to_0_based(
                                 0-based indexing.
 
     Raises:
-        ValueError: If index is 0 (invalid for 1-based indexing).
+        ValueError: If index is 0 or has invalid format.
     """
     # If already an int or slice, handle directly
     if isinstance(index, int):
@@ -1845,6 +1845,108 @@ def convert_string_to_slices(index_str):
 # ---------------------------------------------------------------------------
 
 
+class TabularDataset:
+    """Generic DataFrame-backed dataset for high-throughput workflows."""
+
+    def __init__(self, dataframe, source_path=None):
+        self.dataframe = dataframe.reset_index(drop=True)
+        self.source_path = source_path
+
+    @property
+    def columns(self):
+        return list(self.dataframe.columns)
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def to_entries(self, row_offset=2):
+        entries = []
+        for idx, row in self.dataframe.iterrows():
+            entries.append(
+                PKaTableEntry(
+                    row.to_dict(),
+                    row_number=idx + row_offset,
+                )
+            )
+        return entries
+
+    def validate(
+        self,
+        required_fields=None,
+        integer_fields=None,
+        positive_integer_fields=None,
+        path_fields=None,
+        check_file_exists=True,
+    ):
+        required_fields = required_fields or []
+        integer_fields = integer_fields or []
+        positive_integer_fields = positive_integer_fields or []
+        path_fields = path_fields or []
+
+        # Validate required logical fields through alias resolution
+        missing = []
+        for field in required_fields:
+            col = PKaTableEntry.resolve_column(
+                self.columns,
+                PKaTableEntry._ALIASES.get(field, [field]),
+                required=False,
+            )
+            if col is None:
+                missing.append(field)
+        if missing:
+            raise ValueError(
+                "Missing required table fields: " + ", ".join(missing)
+            )
+
+        errors = []
+        for idx, row in self.dataframe.iterrows():
+            row_no = idx + 2
+            entry = PKaTableEntry(row.to_dict(), row_number=row_no)
+
+            for field in integer_fields:
+                value = entry.get_canonical(field)
+                if value is None:
+                    errors.append(f"Missing {field} (row {row_no})")
+                    continue
+                try:
+                    int(value)
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Invalid integer for {field} at row {row_no}: {value!r}"
+                    )
+
+            for field in positive_integer_fields:
+                value = entry.get_canonical(field)
+                if value is None:
+                    errors.append(f"Missing {field} (row {row_no})")
+                    continue
+                try:
+                    parsed = int(value)
+                    if parsed < 1:
+                        errors.append(
+                            f"{field} must be >= 1 at row {row_no}, got {parsed}"
+                        )
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Invalid integer for {field} at row {row_no}: {value!r}"
+                    )
+
+            if check_file_exists:
+                for field in path_fields:
+                    value = entry.get_canonical(field)
+                    if not value:
+                        errors.append(f"Missing {field} (row {row_no})")
+                        continue
+                    if not os.path.exists(str(value)):
+                        errors.append(
+                            f"File not found for {field} at row {row_no}: {value}"
+                        )
+
+        if errors:
+            raise ValueError("Table validation failed:\n" + "\n".join(errors))
+        return self
+
+
 class PKaTableEntry:
     """Generic dynamic table-row abstraction (backward-compatible name).
 
@@ -1860,109 +1962,6 @@ class PKaTableEntry:
         "charge": ["charge", "q"],
         "multiplicity": ["multiplicity", "mult", "m"],
     }
-
-    class TabularDataset:
-        """Generic DataFrame-backed dataset for high-throughput workflows."""
-
-        def __init__(self, dataframe, source_path=None):
-            self.dataframe = dataframe.reset_index(drop=True)
-            self.source_path = source_path
-
-        @property
-        def columns(self):
-            return list(self.dataframe.columns)
-
-        def __len__(self):
-            return len(self.dataframe)
-
-        def to_entries(self, row_offset=2):
-            entries = []
-            for idx, row in self.dataframe.iterrows():
-                entries.append(
-                    PKaTableEntry(
-                        row.to_dict(),
-                        row_number=idx + row_offset,
-                    )
-                )
-            return entries
-
-        def validate(
-            self,
-            required_fields=None,
-            integer_fields=None,
-            positive_integer_fields=None,
-            path_fields=None,
-            check_file_exists=True,
-        ):
-            required_fields = required_fields or []
-            integer_fields = integer_fields or []
-            positive_integer_fields = positive_integer_fields or []
-            path_fields = path_fields or []
-
-            # Validate required logical fields through alias resolution
-            missing = []
-            for field in required_fields:
-                col = PKaTableEntry.resolve_column(
-                    self.columns,
-                    PKaTableEntry._ALIASES.get(field, [field]),
-                    required=False,
-                )
-                if col is None:
-                    missing.append(field)
-            if missing:
-                raise ValueError(
-                    "Missing required table fields: " + ", ".join(missing)
-                )
-
-            errors = []
-            for idx, row in self.dataframe.iterrows():
-                row_no = idx + 2
-                entry = PKaTableEntry(row.to_dict(), row_number=row_no)
-
-                for field in integer_fields:
-                    value = entry.get_canonical(field)
-                    if value is None:
-                        errors.append(f"Missing {field} (row {row_no})")
-                        continue
-                    try:
-                        int(value)
-                    except (TypeError, ValueError):
-                        errors.append(
-                            f"Invalid integer for {field} at row {row_no}: {value!r}"
-                        )
-
-                for field in positive_integer_fields:
-                    value = entry.get_canonical(field)
-                    if value is None:
-                        errors.append(f"Missing {field} (row {row_no})")
-                        continue
-                    try:
-                        parsed = int(value)
-                        if parsed < 1:
-                            errors.append(
-                                f"{field} must be >= 1 at row {row_no}, got {parsed}"
-                            )
-                    except (TypeError, ValueError):
-                        errors.append(
-                            f"Invalid integer for {field} at row {row_no}: {value!r}"
-                        )
-
-                if check_file_exists:
-                    for field in path_fields:
-                        value = entry.get_canonical(field)
-                        if not value:
-                            errors.append(f"Missing {field} (row {row_no})")
-                            continue
-                        if not os.path.exists(str(value)):
-                            errors.append(
-                                f"File not found for {field} at row {row_no}: {value}"
-                            )
-
-            if errors:
-                raise ValueError(
-                    "Table validation failed:\n" + "\n".join(errors)
-                )
-            return self
 
     def __init__(self, *args, row_number: int = None, **kwargs):
         data = {}
@@ -2043,7 +2042,7 @@ class PKaTableEntry:
         df = df.rename(
             columns={c: cls.normalize_header(c) for c in df.columns}
         )
-        return cls.TabularDataset(df, source_path=table_path)
+        return TabularDataset(df, source_path=table_path)
 
     @classmethod
     def from_headers_and_row(cls, headers, row, row_number: int = None):
