@@ -28,7 +28,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 )
 @click.option(
     "-t",
-    "--type",
+    "--filetype",
     default=None,
     help="Type of file to be converted, if directory is specified.",
 )
@@ -39,7 +39,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-o",
     "--output-filetype",
     default="xyz",
-    help="Type of files to convert to, defaults to .xyz",
+    help="Type of output files to convert to, defaults to .xyz",
 )
 @click.option(
     "-i/",
@@ -52,7 +52,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 @logger_options
 def entry_point(
     directory,
-    type,
+    filetype,
     filename,
     output_filetype,
     include_intermediate_structures,
@@ -66,12 +66,12 @@ def entry_point(
     if directory is not None:
         logger.info(f"Converting files in directory: {directory}")
         assert (
-            type is not None
-        ), "Type of file to be converted must be specified."
+            filetype is not None
+        ), "File extension (--filetype) must be specified when using --directory."
         assert filename is None, "Filename cannot be specified with directory."
         converter = FileConverter(
             directory=directory,
-            type=type,
+            type=filetype,
             output_filetype=output_filetype,
             include_intermediate_structures=include_intermediate_structures,
         )

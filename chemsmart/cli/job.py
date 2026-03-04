@@ -82,6 +82,32 @@ def click_folder_options(f):
     return wrapper_common_options
 
 
+def click_program_folder_options(f):
+    """
+    Common click options for specifying directories and programs via CLI.
+    """
+
+    @click.option(
+        "-d",
+        "--directory",
+        default=None,
+        help="Directory in which to run specific jobs for all files.",
+    )
+    @click.option(
+        "-p",
+        "--program",
+        default=None,
+        type=str,
+        help="Computational chemistry program whose output files should be "
+        "processed.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_molecule_vibrational_displacement_options(f):
     """CLI options for the vibrationally_displaced() method of Molecule object."""
 

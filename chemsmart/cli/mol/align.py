@@ -30,7 +30,8 @@ def align(
     **kwargs,
 ):
     """CLI subcommand for aligning multiple molecule files in PyMOL.
-    In align, the -t option uses file extensions like log, xyz, inp, instead of task types like Gaussian or ORCA to ensure structural visualization for multiple file types.
+    In align, the -t/--filetype option uses file extensions like log, xyz, inp,
+    to match files in a directory for structural visualization.
 
     Examples:
         # Align multiple files
@@ -62,7 +63,7 @@ def align(
 
     if directory and not filetype:
         raise click.BadParameter(
-            "Directory specified but no filetype provided. Use -t/--type to specify file type "
+            "Directory specified but no filetype provided. Use -t/--filetype to specify file extension "
             "(e.g., xyz, log, gjf, mol, inp)."
         )
 
@@ -137,7 +138,7 @@ def align(
         else:
             # This should not happen due to validation above, but keep as safeguard
             raise click.BadParameter(
-                "Directory specified but no filetype provided. Use -t/--type to specify file type."
+                "Directory specified but no filetype provided. Use -t/--filetype to specify file extension."
             )
 
     elif filenames:

@@ -41,7 +41,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 )
 @click.option(
     "-t",
-    "--type",
+    "--filetype",
     default="log",
     help="Type of file to be organized.",
 )
@@ -72,7 +72,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Keep default NA values in Excel file.",
 )
 def entry_point(
-    directory, filename, name, type, cols, skip, row, keep_default_na
+    directory, filename, name, filetype, cols, skip, row, keep_default_na
 ):
     """
     Script for organizing files for supporting information.
@@ -88,7 +88,7 @@ def entry_point(
         directory=directory,
         filename=filename,
         sheetname=name,
-        type=type,
+        type=filetype,
         cols=cols,
         skip=skip,
         row=row,
