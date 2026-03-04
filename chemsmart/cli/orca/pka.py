@@ -31,10 +31,12 @@ def click_orca_pka_options(f):
     @click.option(
         "-i",
         "--input-table",
-        type=str,
+        is_flag=True,
+        default=False,
         required=False,
-        help="Table file (.txt or .csv) containing molecules for batch pKa "
-        "calculations. Columns: filepath, proton_index, charge, multiplicity.",
+        help="Use table-driven batch mode. In this mode, the file provided by "
+        "the parent ORCA -f/--filename option is interpreted as the input "
+        "table (.txt/.csv) with columns: filepath, proton_index, charge, multiplicity.",
     )
     @click.option(
         "-pi",
@@ -308,11 +310,13 @@ def pka(
 
     \b
     **Mode 2: Table-driven batch calculation**
-    Provide a table file with -i/--input-table containing multiple molecules.
+    Enable with -o/--input-table. The table file is taken from the parent
+    ORCA -f/--filename option.
     Table format (4 columns, whitespace or comma-delimited):
         filepath    proton_index    charge    multiplicity
-    In this mode, -f, -pi, -c, -m are not required. For proton exchange cycle,
-    reference acid options (-r, -rpi, -rc, -rm) are still mandatory.
+    In this mode, molecule geometry options are read from table rows. For
+    proton exchange cycle, reference acid options (-r, -rpi, -rc, -rm)
+    are still mandatory.
 
     \b
     **Mode 3: Parse existing output files**
@@ -330,11 +334,11 @@ def pka(
             -r ref_acid.xyz -rpi 1 -rc 0 -rm 1
 
         # Table-driven batch mode (proton exchange)
-        chemsmart run orca -p myproject pka -i molecules.txt \\
+        chemsmart run orca -p myproject -f molecules.txt pka -i \
             -t "proton exchange" -r ref_acid.xyz -rpi 5 -rc 0 -rm 1
 
         # Table-driven batch mode (direct cycle)
-        chemsmart run orca -p myproject pka -i molecules.csv -t direct
+        chemsmart run orca -p myproject -f molecules.csv pka -i -t direct
 
         # Compute pKa from existing ORCA output files
         chemsmart run orca pka -pi 1 \\
@@ -347,10 +351,16 @@ def pka(
     # =========================================================================
     # Table-driven execution mode
     # =========================================================================
-    if input_table is not None:
+    if input_table:
+        input_table_path = ctx.obj.get("filename")
+        if not input_table_path:
+            raise click.UsageError(
+                "Table mode (-i/--input-table) requires parent ORCA -f/--filename "
+                "to specify the table file path."
+            )
         return _run_orca_pka_from_table(
             ctx=ctx,
-            input_table=input_table,
+            input_table=input_table_path,
             thermodynamic_cycle=thermodynamic_cycle,
             reference=reference,
             reference_proton_index=reference_proton_index,
