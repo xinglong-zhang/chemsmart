@@ -1859,87 +1859,125 @@ class TabularDataset:
     def __len__(self):
         return len(self.dataframe)
 
-    def to_entries(self, row_offset=2):
-        entries = []
-        for idx, row in self.dataframe.iterrows():
-            entries.append(
-                PKaTableEntry(
-                    row.to_dict(),
-                    row_number=idx + row_offset,
-                )
+    @staticmethod
+    def normalize_header(header):
+        header = str(header).strip().lower()
+        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
+        header = re.sub(r"_+", "_", header).strip("_")
+        return header
+
+    @classmethod
+    def parse_table(cls, table_path, delimiter=None, comment="#"):
+        """Parse .txt/.csv into a generic TabularDataset."""
+        import pandas as pd
+
+        if not os.path.exists(table_path):
+            raise FileNotFoundError(f"Table file not found: {table_path}")
+
+        sep = delimiter
+        if sep is None:
+            sep = "," if str(table_path).lower().endswith(".csv") else r"\s+"
+
+        try:
+            df = pd.read_csv(
+                table_path,
+                sep=sep,
+                engine="python",
+                comment=comment,
+                skip_blank_lines=True,
             )
-        return entries
+        except pd.errors.EmptyDataError:
+            raise ValueError(f"No valid entries found in table: {table_path}")
+
+        if df.empty:
+            raise ValueError(f"No valid entries found in table: {table_path}")
+
+        df = df.rename(
+            columns={c: cls.normalize_header(c) for c in df.columns}
+        )
+        return cls(df, source_path=table_path)
+
+    @classmethod
+    def resolve_column(cls, columns, candidates, required=True):
+        normalized = {cls.normalize_header(c): c for c in columns}
+        for candidate in candidates:
+            key = cls.normalize_header(candidate)
+            if key in normalized:
+                return normalized[key]
+        if required:
+            raise ValueError(
+                "Could not resolve required column. Tried: "
+                + ", ".join(candidates)
+            )
+        return None
+
+    def to_entries(self, entry_cls, row_offset=2):
+        return [
+            entry_cls(row.to_dict(), row_number=idx + row_offset)
+            for idx, row in self.dataframe.iterrows()
+        ]
 
     def validate(
         self,
-        required_fields=None,
-        integer_fields=None,
-        positive_integer_fields=None,
-        path_fields=None,
+        required_columns=None,
+        integer_columns=None,
+        positive_integer_columns=None,
+        path_columns=None,
         check_file_exists=True,
     ):
-        required_fields = required_fields or []
-        integer_fields = integer_fields or []
-        positive_integer_fields = positive_integer_fields or []
-        path_fields = path_fields or []
+        """Generic dataset-level validation without job-specific logic."""
+        required_columns = required_columns or []
+        integer_columns = integer_columns or []
+        positive_integer_columns = positive_integer_columns or []
+        path_columns = path_columns or []
 
-        # Validate required logical fields through alias resolution
-        missing = []
-        for field in required_fields:
-            col = PKaTableEntry.resolve_column(
-                self.columns,
-                PKaTableEntry._ALIASES.get(field, [field]),
-                required=False,
-            )
-            if col is None:
-                missing.append(field)
+        missing = [col for col in required_columns if col not in self.columns]
         if missing:
             raise ValueError(
-                "Missing required table fields: " + ", ".join(missing)
+                "Missing required table columns: " + ", ".join(missing)
             )
 
         errors = []
         for idx, row in self.dataframe.iterrows():
             row_no = idx + 2
-            entry = PKaTableEntry(row.to_dict(), row_number=row_no)
 
-            for field in integer_fields:
-                value = entry.get_canonical(field)
+            for col in integer_columns:
+                value = row[col]
                 if value is None:
-                    errors.append(f"Missing {field} (row {row_no})")
+                    errors.append(f"Missing {col} (row {row_no})")
                     continue
                 try:
                     int(value)
                 except (TypeError, ValueError):
                     errors.append(
-                        f"Invalid integer for {field} at row {row_no}: {value!r}"
+                        f"Invalid integer for {col} at row {row_no}: {value!r}"
                     )
 
-            for field in positive_integer_fields:
-                value = entry.get_canonical(field)
+            for col in positive_integer_columns:
+                value = row[col]
                 if value is None:
-                    errors.append(f"Missing {field} (row {row_no})")
+                    errors.append(f"Missing {col} (row {row_no})")
                     continue
                 try:
                     parsed = int(value)
                     if parsed < 1:
                         errors.append(
-                            f"{field} must be >= 1 at row {row_no}, got {parsed}"
+                            f"{col} must be >= 1 at row {row_no}, got {parsed}"
                         )
                 except (TypeError, ValueError):
                     errors.append(
-                        f"Invalid integer for {field} at row {row_no}: {value!r}"
+                        f"Invalid integer for {col} at row {row_no}: {value!r}"
                     )
 
             if check_file_exists:
-                for field in path_fields:
-                    value = entry.get_canonical(field)
+                for col in path_columns:
+                    value = row[col]
                     if not value:
-                        errors.append(f"Missing {field} (row {row_no})")
+                        errors.append(f"Missing {col} (row {row_no})")
                         continue
                     if not os.path.exists(str(value)):
                         errors.append(
-                            f"File not found for {field} at row {row_no}: {value}"
+                            f"File not found for {col} at row {row_no}: {value}"
                         )
 
         if errors:
@@ -2011,38 +2049,12 @@ class PKaTableEntry:
 
     @classmethod
     def parse_table(cls, table_path, delimiter=None, comment="#"):
-        """Parse .txt/.csv into a generic TabularDataset."""
-        import pandas as pd
-
-        if not os.path.exists(table_path):
-            raise FileNotFoundError(f"Table file not found: {table_path}")
-
-        sep = delimiter
-        if sep is None:
-            sep = "," if str(table_path).lower().endswith(".csv") else r"\s+"
-
-        try:
-            df = pd.read_csv(
-                table_path,
-                sep=sep,
-                engine="python",
-                comment=comment,
-                skip_blank_lines=True,
-            )
-        except pd.errors.EmptyDataError:
-            raise ValueError(
-                f"No valid entries found in pKa table: {table_path}"
-            )
-
-        if df.empty:
-            raise ValueError(
-                f"No valid entries found in pKa table: {table_path}"
-            )
-
-        df = df.rename(
-            columns={c: cls.normalize_header(c) for c in df.columns}
+        """Backward-compatible shim for generic table parsing."""
+        return TabularDataset.parse_table(
+            table_path=table_path,
+            delimiter=delimiter,
+            comment=comment,
         )
-        return TabularDataset(df, source_path=table_path)
 
     @classmethod
     def from_headers_and_row(cls, headers, row, row_number: int = None):
@@ -2170,76 +2182,91 @@ def parse_pka_table(
     skip_header: bool = True,
 ) -> list:
     """Thin pKa adapter on top of the generic tabular parser layer."""
-    dataset = PKaTableEntry.parse_table(
+    dataset = TabularDataset.parse_table(
         table_path=table_path,
         delimiter=delimiter,
         comment="#",
     )
 
     try:
-        file_col = PKaTableEntry.resolve_column(
+        file_col = TabularDataset.resolve_column(
             dataset.columns,
-            ["filepath", "file_path", "path", "ha_file"],
+            PKaTableEntry._ALIASES["filepath"],
         )
-        proton_col = PKaTableEntry.resolve_column(
+        proton_col = TabularDataset.resolve_column(
             dataset.columns,
-            ["proton_index", "pi"],
+            PKaTableEntry._ALIASES["proton_index"],
         )
-        charge_col = PKaTableEntry.resolve_column(
+        charge_col = TabularDataset.resolve_column(
             dataset.columns,
-            ["charge", "q"],
+            PKaTableEntry._ALIASES["charge"],
         )
-        mult_col = PKaTableEntry.resolve_column(
+        mult_col = TabularDataset.resolve_column(
             dataset.columns,
-            ["multiplicity", "mult", "m"],
+            PKaTableEntry._ALIASES["multiplicity"],
         )
     except ValueError:
-        # Keep legacy parse-stage error pattern used by tests/callers
         raise ValueError(
             "Invalid table format: expected 4 columns "
             "(filepath, proton_index, charge, multiplicity)."
         )
 
-    entries = []
-    for idx, row in dataset.dataframe.iterrows():
-        line_num = idx + 2
-        filepath = row[file_col]
+    # Canonicalize selected columns for generic validation/entry materialization.
+    canonical_df = dataset.dataframe.rename(
+        columns={
+            file_col: "filepath",
+            proton_col: "proton_index",
+            charge_col: "charge",
+            mult_col: "multiplicity",
+        }
+    )[["filepath", "proton_index", "charge", "multiplicity"]]
+
+    canonical_dataset = TabularDataset(canonical_df, source_path=table_path)
+    canonical_dataset.validate(
+        required_columns=[
+            "filepath",
+            "proton_index",
+            "charge",
+            "multiplicity",
+        ],
+        integer_columns=[],
+        positive_integer_columns=[],
+        path_columns=[],
+        check_file_exists=False,
+    )
+
+    entries = canonical_dataset.to_entries(
+        entry_cls=PKaTableEntry, row_offset=2
+    )
+
+    # Coerce numeric fields to preserve historical parse_pka_table behavior.
+    for entry in entries:
+        line_num = entry.row_number if entry.row_number is not None else 0
 
         try:
-            proton_index = int(row[proton_col])
+            entry["proton_index"] = int(entry["proton_index"])
         except (TypeError, ValueError):
             raise ValueError(
                 f"Invalid proton_index at line {line_num}: "
-                f"{row[proton_col]!r} is not an integer"
+                f"{entry['proton_index']!r} is not an integer"
             )
 
         try:
-            charge = int(row[charge_col])
+            entry["charge"] = int(entry["charge"])
         except (TypeError, ValueError):
             raise ValueError(
                 f"Invalid charge at line {line_num}: "
-                f"{row[charge_col]!r} is not an integer"
+                f"{entry['charge']!r} is not an integer"
             )
 
         try:
-            multiplicity = int(row[mult_col])
+            entry["multiplicity"] = int(entry["multiplicity"])
         except (TypeError, ValueError):
             raise ValueError(
                 f"Invalid multiplicity at line {line_num}: "
-                f"{row[mult_col]!r} is not an integer"
+                f"{entry['multiplicity']!r} is not an integer"
             )
 
-        entries.append(
-            PKaTableEntry(
-                filepath=filepath,
-                proton_index=proton_index,
-                charge=charge,
-                multiplicity=multiplicity,
-                row_number=line_num,
-            )
-        )
-
-    # `skip_header` kept for API compatibility; parser now uses header row.
     if skip_header and len(entries) >= 0:
         pass
 
