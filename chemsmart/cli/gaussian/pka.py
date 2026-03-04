@@ -577,17 +577,50 @@ def pka(
 
             cdx_file = PKaCDXFile(filename=filename)
             try:
-                pka_mol = cdx_file.get_pka_molecule(color_code=color_code)
-                proton_index = pka_mol.proton_index
-                logger.info(
-                    f"Detected proton index {proton_index} from CDXML "
-                    f"colour in {filename}."
-                )
+                pka_mols = cdx_file.get_pka_molecules(color_code=color_code)
             except ValueError as exc:
                 raise click.UsageError(
                     f"Could not auto-detect proton from CDXML colour: {exc}\n"
                     "Use -pi/--proton-index to specify the proton explicitly."
                 )
+
+            if len(pka_mols) > 1:
+                # Multi-molecule ChemDraw file → one pKa job per molecule
+                logger.info(
+                    f"Detected {len(pka_mols)} molecules with per-fragment "
+                    f"proton auto-detection in {filename}."
+                )
+                return _run_pka_from_cdxml_molecules(
+                    ctx=ctx,
+                    pka_molecules=pka_mols,
+                    thermodynamic_cycle=thermodynamic_cycle,
+                    reference=reference,
+                    reference_proton_index=reference_proton_index,
+                    reference_color_code=reference_color_code,
+                    reference_charge=reference_charge,
+                    reference_multiplicity=reference_multiplicity,
+                    reference_conjugate_base_charge=reference_conjugate_base_charge,
+                    reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+                    delta_g_proton=delta_g_proton,
+                    conjugate_base_charge=conjugate_base_charge,
+                    conjugate_base_multiplicity=conjugate_base_multiplicity,
+                    solvent_model=solvent_model,
+                    solvent_id=solvent_id,
+                    temperature=temperature,
+                    concentration=concentration,
+                    cutoff_entropy_grimme=cutoff_entropy_grimme,
+                    cutoff_enthalpy=cutoff_enthalpy,
+                    skip_completed=skip_completed,
+                    parallel=parallel,
+                    **kwargs,
+                )
+
+            # Single molecule – use its proton_index and fall through
+            proton_index = pka_mols[0].proton_index
+            logger.info(
+                f"Detected proton index {proton_index} from CDXML "
+                f"colour in {filename}."
+            )
         elif color_code is not None:
             raise click.UsageError(
                 "-cl/--color-code can only be used with .cdx/.cdxml files."
@@ -813,6 +846,154 @@ def pka(
         parallel=parallel,
         **kwargs,
     )
+
+
+def _run_pka_from_cdxml_molecules(
+    ctx,
+    pka_molecules,
+    thermodynamic_cycle,
+    reference,
+    reference_proton_index,
+    reference_color_code,
+    reference_charge,
+    reference_multiplicity,
+    reference_conjugate_base_charge,
+    reference_conjugate_base_multiplicity,
+    delta_g_proton,
+    conjugate_base_charge,
+    conjugate_base_multiplicity,
+    solvent_model,
+    solvent_id,
+    temperature,
+    concentration,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
+    skip_completed,
+    parallel,
+    **kwargs,
+):
+    """Create one GaussianpKaJob per PKaMolecule from a multi-fragment CDXML.
+
+    Each :class:`PKaMolecule` carries its own ``proton_index`` resolved
+    during per-fragment colour detection.  This helper builds the
+    corresponding :class:`GaussianpKaJobSettings` for each molecule and
+    returns the list of jobs.
+
+    Args:
+        ctx: Click context (must contain ``jobrunner``, ``project_settings``,
+            ``job_settings``, ``keywords``, ``label``).
+        pka_molecules: List of :class:`PKaMolecule` instances.
+        (remaining args): Same as the ``pka()`` CLI handler.
+
+    Returns:
+        list[GaussianpKaJob]: One job per molecule.
+    """
+    import os
+
+    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+    from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+
+    # ---- resolve reference acid (shared across all molecules) ----
+    if thermodynamic_cycle == "proton exchange" and reference is not None:
+        if reference_proton_index is None:
+            if reference.endswith((".cdx", ".cdxml")):
+                from chemsmart.io.file import PKaCDXFile
+
+                try:
+                    ref_cdx = PKaCDXFile(filename=reference)
+                    ref_pka_mol = ref_cdx.get_pka_molecule(
+                        color_code=reference_color_code
+                    )
+                    reference_proton_index = ref_pka_mol.proton_index
+                    logger.info(
+                        f"Detected reference proton index "
+                        f"{reference_proton_index} from CDXML colour."
+                    )
+                except ValueError as exc:
+                    raise click.UsageError(
+                        f"Could not auto-detect reference proton: {exc}\n"
+                        "Use -rpi/--reference-proton-index explicitly."
+                    )
+
+        missing = []
+        if reference_proton_index is None:
+            missing.append("-rpi/--reference-proton-index")
+        if reference_charge is None:
+            missing.append("-rc/--reference-charge")
+        if reference_multiplicity is None:
+            missing.append("-rm/--reference-multiplicity")
+        if missing:
+            raise click.UsageError(
+                "When --reference is provided, the following options "
+                "are required: " + ", ".join(missing)
+            )
+
+    # ---- project / job settings ----
+    jobrunner = ctx.obj["jobrunner"]
+    project_settings = ctx.obj["project_settings"]
+    opt_settings = project_settings.opt_settings()
+    job_settings = ctx.obj["job_settings"]
+    keywords = ctx.obj["keywords"]
+    opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+
+    filename = ctx.obj.get("filename", "")
+    base_name = os.path.splitext(os.path.basename(filename))[0]
+
+    # ---- one job per molecule ----
+    jobs = []
+    for idx, pka_mol in enumerate(pka_molecules, start=1):
+        mol_label = f"{base_name}_frag{idx}_pka"
+
+        pka_settings = GaussianpKaJobSettings(
+            proton_index=pka_mol.proton_index,
+            thermodynamic_cycle=thermodynamic_cycle,
+            reference_file=reference,
+            reference_proton_index=reference_proton_index,
+            reference_charge=reference_charge,
+            reference_multiplicity=reference_multiplicity,
+            reference_conjugate_base_charge=reference_conjugate_base_charge,
+            reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+            delta_G_proton=delta_g_proton,
+            conjugate_base_charge=conjugate_base_charge,
+            conjugate_base_multiplicity=conjugate_base_multiplicity,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            charge=opt_settings.charge,
+            multiplicity=opt_settings.multiplicity,
+            functional=opt_settings.functional,
+            basis=opt_settings.basis,
+            ab_initio=opt_settings.ab_initio,
+            semiempirical=opt_settings.semiempirical,
+            additional_route_parameters=opt_settings.additional_route_parameters,
+            gen_genecp_file=opt_settings.gen_genecp_file,
+            heavy_elements=opt_settings.heavy_elements,
+            heavy_elements_basis=opt_settings.heavy_elements_basis,
+            light_elements_basis=opt_settings.light_elements_basis,
+        )
+
+        logger.info(
+            f"Creating pKa job for fragment {idx}: "
+            f"proton_index={pka_mol.proton_index}, "
+            f"label={mol_label}"
+        )
+
+        job = GaussianpKaJob(
+            molecule=pka_mol,
+            settings=pka_settings,
+            label=mol_label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            parallel=parallel,
+            **kwargs,
+        )
+        jobs.append(job)
+
+    logger.info(f"Created {len(jobs)} pKa jobs from multi-fragment CDXML file")
+    return jobs
 
 
 def _run_pka_from_table(

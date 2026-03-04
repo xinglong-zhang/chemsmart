@@ -513,17 +513,49 @@ def pka(
 
             cdx_file = PKaCDXFile(filename=filename)
             try:
-                pka_mol = cdx_file.get_pka_molecule(color_code=color_code)
-                proton_index = pka_mol.proton_index
-                logger.info(
-                    f"Detected proton index {proton_index} from CDXML "
-                    f"colour in {filename}."
-                )
+                pka_mols = cdx_file.get_pka_molecules(color_code=color_code)
             except ValueError as exc:
                 raise click.UsageError(
                     f"Could not auto-detect proton from CDXML colour: {exc}\n"
                     "Use -pi/--proton-index to specify the proton explicitly."
                 )
+
+            if len(pka_mols) > 1:
+                # Multi-molecule ChemDraw file → one pKa job per molecule
+                logger.info(
+                    f"Detected {len(pka_mols)} molecules with per-fragment "
+                    f"proton auto-detection in {filename}."
+                )
+                return _run_orca_pka_from_cdxml_molecules(
+                    ctx=ctx,
+                    pka_molecules=pka_mols,
+                    thermodynamic_cycle=thermodynamic_cycle,
+                    reference=reference,
+                    reference_proton_index=reference_proton_index,
+                    reference_color_code=reference_color_code,
+                    reference_charge=reference_charge,
+                    reference_multiplicity=reference_multiplicity,
+                    reference_conjugate_base_charge=reference_conjugate_base_charge,
+                    reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+                    delta_g_proton=delta_g_proton,
+                    conjugate_base_charge=conjugate_base_charge,
+                    conjugate_base_multiplicity=conjugate_base_multiplicity,
+                    solvent_model=solvent_model,
+                    solvent_id=solvent_id,
+                    temperature=temperature,
+                    concentration=concentration,
+                    cutoff_entropy_grimme=cutoff_entropy_grimme,
+                    cutoff_enthalpy=cutoff_enthalpy,
+                    skip_completed=skip_completed,
+                    **kwargs,
+                )
+
+            # Single molecule – use its proton_index and fall through
+            proton_index = pka_mols[0].proton_index
+            logger.info(
+                f"Detected proton index {proton_index} from CDXML "
+                f"colour in {filename}."
+            )
         elif color_code is not None:
             raise click.UsageError(
                 "-cl/--color-code can only be used with .cdx/.cdxml files."
@@ -715,6 +747,145 @@ def pka(
         parallel=parallel_flag,
         **kwargs,
     )
+
+
+def _run_orca_pka_from_cdxml_molecules(
+    ctx,
+    pka_molecules,
+    thermodynamic_cycle,
+    reference,
+    reference_proton_index,
+    reference_color_code,
+    reference_charge,
+    reference_multiplicity,
+    reference_conjugate_base_charge,
+    reference_conjugate_base_multiplicity,
+    delta_g_proton,
+    conjugate_base_charge,
+    conjugate_base_multiplicity,
+    solvent_model,
+    solvent_id,
+    temperature,
+    concentration,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
+    skip_completed,
+    **kwargs,
+):
+    """Create one ORCApKaJob per PKaMolecule from a multi-fragment CDXML.
+
+    Each :class:`PKaMolecule` carries its own ``proton_index`` resolved
+    during per-fragment colour detection.
+
+    Args:
+        ctx: Click context.
+        pka_molecules: List of :class:`PKaMolecule` instances.
+        (remaining args): Same as the ``pka()`` CLI handler.
+
+    Returns:
+        list[ORCApKaJob]: One job per molecule.
+    """
+    import os
+
+    from chemsmart.jobs.orca.pka import ORCApKaJob
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+    # ---- resolve reference acid (shared across all molecules) ----
+    if thermodynamic_cycle == "proton exchange" and reference is not None:
+        if reference_proton_index is None:
+            if reference.endswith((".cdx", ".cdxml")):
+                from chemsmart.io.file import PKaCDXFile
+
+                try:
+                    ref_cdx = PKaCDXFile(filename=reference)
+                    ref_pka_mol = ref_cdx.get_pka_molecule(
+                        color_code=reference_color_code
+                    )
+                    reference_proton_index = ref_pka_mol.proton_index
+                    logger.info(
+                        f"Detected reference proton index "
+                        f"{reference_proton_index} from CDXML colour."
+                    )
+                except ValueError as exc:
+                    raise click.UsageError(
+                        f"Could not auto-detect reference proton: {exc}\n"
+                        "Use -rpi/--reference-proton-index explicitly."
+                    )
+
+        missing = []
+        if reference_proton_index is None:
+            missing.append("-rpi/--reference-proton-index")
+        if reference_charge is None:
+            missing.append("-rc/--reference-charge")
+        if reference_multiplicity is None:
+            missing.append("-rm/--reference-multiplicity")
+        if missing:
+            raise click.UsageError(
+                "When --reference is provided, the following options "
+                "are required: " + ", ".join(missing)
+            )
+
+    # ---- project / job settings ----
+    project_settings = ctx.obj["project_settings"]
+    opt_settings = project_settings.opt_settings()
+    job_settings = ctx.obj["job_settings"]
+    keywords = ctx.obj["keywords"]
+    opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+
+    filename = ctx.obj.get("filename", "")
+    base_name = os.path.splitext(os.path.basename(filename))[0]
+
+    parallel_flag = kwargs.pop("parallel", False)
+
+    # ---- one job per molecule ----
+    jobs = []
+    for idx, pka_mol in enumerate(pka_molecules, start=1):
+        mol_label = f"{base_name}_frag{idx}_pka"
+
+        pka_settings = ORCApKaJobSettings(
+            proton_index=pka_mol.proton_index,
+            thermodynamic_cycle=thermodynamic_cycle,
+            reference_file=reference,
+            reference_proton_index=reference_proton_index,
+            reference_charge=reference_charge,
+            reference_multiplicity=reference_multiplicity,
+            reference_conjugate_base_charge=reference_conjugate_base_charge,
+            reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
+            delta_G_proton=delta_g_proton,
+            conjugate_base_charge=conjugate_base_charge,
+            conjugate_base_multiplicity=conjugate_base_multiplicity,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            charge=opt_settings.charge,
+            multiplicity=opt_settings.multiplicity,
+            functional=opt_settings.functional,
+            basis=opt_settings.basis,
+        )
+
+        logger.info(
+            f"Creating ORCA pKa job for fragment {idx}: "
+            f"proton_index={pka_mol.proton_index}, "
+            f"label={mol_label}"
+        )
+
+        job = ORCApKaJob(
+            molecule=pka_mol,
+            settings=pka_settings,
+            label=mol_label,
+            skip_completed=skip_completed,
+            parallel=parallel_flag,
+            **kwargs,
+        )
+        jobs.append(job)
+
+    logger.info(
+        f"Created {len(jobs)} ORCA pKa jobs from multi-fragment CDXML file"
+    )
+    return jobs
 
 
 def _run_orca_pka_from_table(

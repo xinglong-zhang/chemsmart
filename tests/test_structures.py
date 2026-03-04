@@ -2078,13 +2078,149 @@ class TestpKaCDXFile:
         assert pka_mol.proton_index == 13
         assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
 
-    # def test_multiple_molecule_cdxml_file_with_colored_proton(
-    #     self, colored_proton_two_molecule_cdxml_file
-    # ):
-    #     """Test that get_colored_proton_index raises when multiple molecules are present."""
-    #     cdx_file1 = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
-    #     print(cdx_file1.molecules)
-    #     proton_index = cdx_file1.molecules[1].get_colored_proton_index
+    # ------------------------------------------------------------------
+    # Per-fragment proton auto-detection tests
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_fragment_colors_single_fragment(
+        self, colored_proton_cdxml_file
+    ):
+        """parse_cdxml_fragment_colors returns one sub-list for single-fragment files."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        assert len(fragments) == 1
+        # Phenol: 6C + 1O + 1H = 8 CDXML atoms
+        assert len(fragments[0]) == 8
+
+    def test_parse_cdxml_fragment_colors_two_fragments(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """parse_cdxml_fragment_colors returns two sub-lists for two-fragment files."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+        mol1 = fragments[0]
+        mol2 = fragments[1]
+
+        assert len(fragments) == 2
+        # Each phenol fragment: 6C + 1O + 1H = 8 CDXML atoms
+        assert len(mol1) == 8
+        assert mol1[-1]["symbol"] == "H"
+        assert mol1[-1]["color"] == 5
+        assert len(mol2) == 8
+        assert mol2[-1]["symbol"] == "H"
+        assert mol2[-1]["color"] == 5
+
+    def test_detect_proton_in_fragment_explicit_h(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """_detect_proton_in_fragment finds explicit H in each fragment."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        for frag_idx, frag_atoms in enumerate(fragments):
+            detection = cdx_file._detect_proton_in_fragment(
+                frag_atoms, fragment_index=frag_idx + 1
+            )
+            assert detection["type"] == "explicit"
+            assert detection["atom"]["symbol"] == "H"
+            # The H is the last atom in each fragment (index 7, 0-based)
+            assert detection["local_idx"] == 7
+
+    def test_detect_proton_in_fragment_uniform_color_raises(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """_detect_proton_in_fragment raises when all atoms share a colour."""
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        assert len(fragments) == 1
+        with pytest.raises(ValueError, match="same colour"):
+            cdx_file._detect_proton_in_fragment(fragments[0], fragment_index=1)
+
+    def test_get_pka_molecules_auto_single_fragment(
+        self, colored_proton_cdxml_file
+    ):
+        """get_pka_molecules_auto returns one PKaMolecule for a single-fragment file."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 1
+        assert isinstance(pka_mols[0], PKaMolecule)
+        # Proton should be H
+        assert pka_mols[0].symbols[pka_mols[0].proton_index - 1] == "H"
+
+    def test_get_pka_molecules_auto_two_fragments(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules_auto returns two PKaMolecules with independent proton detection."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert isinstance(pka_mol, PKaMolecule)
+            assert pka_mol.proton_index >= 1
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_delegates_to_auto(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules() with no args delegates to get_pka_molecules_auto()."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        # No proton_index, no color_code → auto mode
+        pka_mols = cdx_file.get_pka_molecules()
+
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert isinstance(pka_mol, PKaMolecule)
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_with_explicit_proton_index(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules with explicit proton_index applies the same index to all fragments."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        # Find a valid H index in the first molecule
+        mol = cdx_file.molecules[0]
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        pi = h_indices[0]
+
+        pka_mols = cdx_file.get_pka_molecules(proton_index=pi)
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert pka_mol.proton_index == pi
+
+    def test_get_pka_molecules_auto_implicit_h(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """Auto-detection handles implicit/functional-group H (phenol OH)."""
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 1
+        pka_mol = pka_mols[0]
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_fragment_colors_match_flat_colors(
+        self, colored_proton_cdxml_file
+    ):
+        """Fragment colours concatenated should match the flat parse_cdxml_element_colors output."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        flat = cdx_file.parse_cdxml_element_colors()
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        # Concatenate fragment atoms
+        concatenated = []
+        for frag in fragments:
+            concatenated.extend(frag)
+
+        assert len(concatenated) == len(flat)
+        for a, b in zip(concatenated, flat):
+            assert a["cdxml_id"] == b["cdxml_id"]
+            assert a["color"] == b["color"]
+            assert a["symbol"] == b["symbol"]
 
 
 class TestQMMMMolecule:
