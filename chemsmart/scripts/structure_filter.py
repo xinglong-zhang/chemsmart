@@ -7,12 +7,12 @@ criteria such as similarity, energy, or structural features, helping
 to organize and analyze large sets of molecular conformations.
 """
 
-import glob
 import logging
 import os
 
 import click
 
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.grouper import StructureGrouperFactory
 from chemsmart.utils.logger import create_logger
@@ -94,7 +94,9 @@ def entry_point(
         filetype = "log"
 
     # Obtain all structures from files in the directory
-    filenames = glob.glob(f"{directory}/*.{filetype}")
+    filenames = BaseFolder(
+        folder=directory
+    ).get_all_files_in_current_folder_by_suffix(filetype=filetype)
 
     # Sort filenames based on numeric part
     sorted_filenames = sorted(filenames, key=extract_number)

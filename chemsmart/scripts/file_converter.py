@@ -33,6 +33,14 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Type of file to be converted, if directory is specified.",
 )
 @click.option(
+    "-p",
+    "--program",
+    default=None,
+    type=click.Choice(["gaussian", "orca"], case_sensitive=False),
+    help="Computational chemistry program whose output files should be converted. "
+    "Required when converting files with shared extensions.",
+)
+@click.option(
     "-f", "--filename", default=None, help="Input filename to be converted."
 )
 @click.option(
@@ -53,6 +61,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 def entry_point(
     directory,
     filetype,
+    program,
     filename,
     output_filetype,
     include_intermediate_structures,
@@ -72,6 +81,7 @@ def entry_point(
         converter = FileConverter(
             directory=directory,
             type=filetype,
+            program=program,
             output_filetype=output_filetype,
             include_intermediate_structures=include_intermediate_structures,
         )

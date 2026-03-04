@@ -1,4 +1,3 @@
-import glob
 import logging
 import os
 
@@ -9,6 +8,7 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
+from chemsmart.io.folder import BaseFolder
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.io import load_molecules_from_paths, select_items_by_index
 
@@ -118,12 +118,13 @@ def align(
             f"Obtaining files in directory: {directory} for alignment."
         )
         if filetype:
-            filetype_pattern = os.path.join(directory, f"*.{filetype}")
-            matched_files = glob.glob(filetype_pattern)
+            matched_files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_suffix(filetype=filetype)
+            matched_files = sorted(matched_files)
             if not matched_files:
-                logger.warning(f"No files matched pattern: {filetype_pattern}")
                 raise click.BadParameter(
-                    f"No files found matching pattern: {filetype_pattern}"
+                    f"No files found with extension '.{filetype}' in: {directory}"
                 )
 
             # Process all matched files with per-file indexing

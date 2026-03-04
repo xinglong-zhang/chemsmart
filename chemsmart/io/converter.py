@@ -27,20 +27,26 @@ class FileConverter:
     Args:
         directory (str): Directory in which to convert files.
         type (str): Type of file to be converted, if directory is specified.
+        program (str | None): Computational chemistry program whose output files
+            should be converted. Only required when converting files with
+            shared extensions.
         filename (str): Input filename to be converted.
-        output_filetype (str): Type of files to convert to, defaults to .xzy.
+        output_filetype (str): Type of files to convert to, defaults to xyz.
+        include_intermediate_structures (bool): Include intermediate structures.
     """
 
     def __init__(
         self,
         directory=None,
         type=None,
+        program=None,
         filename=None,
         output_filetype="xyz",
         include_intermediate_structures=False,
     ):
         self.directory = directory
         self.type = type
+        self.program = program
         self.filename = filename
         self.output_filetype = output_filetype
         self.include_intermediate_structures = include_intermediate_structures
@@ -56,7 +62,13 @@ class FileConverter:
             logger.info(f"Converting files in directory: {self.directory}")
             assert (
                 self.type is not None
-            ), "Type of file to be converted must be specified."
+            ), "Type of file (--filetype) to be converted must be specified."
+            if self.type == "out" and self.program is None:
+                raise ValueError(
+                    "Both --filetype out and --program must be specified when "
+                    "converting .out files, because both Gaussian and ORCA use "
+                    "this extension. Use --program gaussian or --program orca."
+                )
             self._convert_all_files(
                 self.directory, self.type, self.output_filetype
             )
@@ -93,8 +105,12 @@ class FileConverter:
             g16_folder = GaussianInputFolder(folder=directory)
             all_files = g16_folder.all_gjf_files
         elif type == "out":
-            orca_folder = ORCAOutputFolder(folder=directory)
-            all_files = orca_folder.all_out_files
+            if self.program == "gaussian":
+                g16_folder = GaussianOutputFolder(folder=directory)
+                all_files = g16_folder.all_out_files
+            else:
+                orca_folder = ORCAOutputFolder(folder=directory)
+                all_files = orca_folder.all_out_files
         elif type == "inp":
             orca_folder = ORCAInputFolder(folder=directory)
             all_files = orca_folder.all_inp_files

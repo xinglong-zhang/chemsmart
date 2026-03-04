@@ -57,9 +57,9 @@ def click_pubchem_options(f):
     return wrapper_common_options
 
 
-def click_folder_options(f):
+def click_molecule_folder_options(f):
     """
-    Common click options for specifying directories and file types via CLI.
+    CLI options for directory-based batch processing of molecule structure files.
     """
 
     @click.option(
@@ -82,9 +82,9 @@ def click_folder_options(f):
     return wrapper_common_options
 
 
-def click_program_folder_options(f):
+def click_output_folder_options(f):
     """
-    Common click options for specifying directories and programs via CLI.
+    CLI options for directory-based batch processing of QC program output files.
     """
 
     @click.option(
