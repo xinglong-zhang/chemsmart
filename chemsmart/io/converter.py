@@ -107,10 +107,18 @@ class FileConverter:
         elif type == "out":
             if self.program == "gaussian":
                 g16_folder = GaussianOutputFolder(folder=directory)
-                all_files = g16_folder.all_out_files
+                all_files = [
+                    f
+                    for f in g16_folder.all_output_files
+                    if f.endswith(f".{type}")
+                ]
             else:
                 orca_folder = ORCAOutputFolder(folder=directory)
-                all_files = orca_folder.all_out_files
+                all_files = [
+                    f
+                    for f in orca_folder.all_output_files
+                    if f.endswith(f".{type}")
+                ]
         elif type == "inp":
             orca_folder = ORCAInputFolder(folder=directory)
             all_files = orca_folder.all_inp_files
@@ -134,7 +142,10 @@ class FileConverter:
             elif type == "com" or type == "gjf":
                 outfile = Gaussian16Input(filename=file)
             elif type == "out":
-                outfile = ORCAOutput(filename=file)
+                if self.program == "gaussian":
+                    outfile = Gaussian16Output(filename=file)
+                else:
+                    outfile = ORCAOutput(filename=file)
             elif type == "inp":
                 outfile = ORCAInput(filename=file)
             elif type == "xyz":
@@ -177,7 +188,10 @@ class FileConverter:
         elif self.type == "com" or self.type == "gjf":
             outfile = Gaussian16Input(filename=filename)
         elif self.type == "out":
-            outfile = ORCAOutput(filename=filename)
+            if self.program == "gaussian":
+                outfile = Gaussian16Output(filename=filename)
+            else:
+                outfile = ORCAOutput(filename=filename)
         elif self.type == "inp":
             outfile = ORCAInput(filename=filename)
         elif self.type == "xyz":
