@@ -44,25 +44,13 @@ After configuration, reload your shell:
  For Windows Users
 *******************
 
-Since Windows does not have a ``.zshrc`` file by default, create it first:
-
-.. code:: bash
-
-   touch ~/.zshrc
-
-Then run:
+Run the configuration command:
 
 .. code:: bash
 
    make configure
 
 This sets up ``~/.chemsmart`` and adds environment variables to ``~/.zshrc``.
-
-After configuration, reload your shell:
-
-.. code:: bash
-
-   source ~/.zshrc
 
 .. warning::
 

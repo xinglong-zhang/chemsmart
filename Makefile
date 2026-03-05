@@ -110,13 +110,13 @@ endif
 # === Project Setup ===
 
 .PHONY: install
-install:          ## Install the project in user mode.
-	$(ENV_PREFIX)pip install .  # Normal users (runtime only)
+install:          ## Install the project in user mode (runtime only).
+	$(ENV_PREFIX)pip install .
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: install-dev
-install-dev:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[dev,test,docs]  # install dependencies in dev, test and docs in pyproject.toml
+install-dev:          ## Install the project in development mode (install dependencies in dev, test and docs in pyproject.toml).
+	$(ENV_PREFIX)pip install -e .[dev,test,docs]
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: pre-commit
@@ -126,6 +126,8 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
+	@echo Ensuring ~/.zshrc exists...
+	$(ENV_PREFIX)python -c "from pathlib import Path; Path.home().joinpath('.zshrc').touch(exist_ok=True)"
 ifeq ($(OS),Windows)
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
