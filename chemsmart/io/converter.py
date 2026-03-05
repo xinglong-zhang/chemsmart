@@ -14,6 +14,7 @@ from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xyz.folder import XYZFolder
 from chemsmart.io.xyz.xyzfile import XYZFile
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -183,15 +184,18 @@ class FileConverter:
             output_filetype (str): Target output format.
         """
         logger.info(f"Converting file type: {self.type}")
-        if self.type == "log":
-            outfile = Gaussian16Output(filename=filename)
+        if self.type == "log" or self.type == "out":
+            detected = get_program_type_from_file(filename)
+            if detected == "gaussian":
+                outfile = Gaussian16Output(filename=filename)
+            elif detected == "orca":
+                outfile = ORCAOutput(filename=filename)
+            else:
+                raise ValueError(
+                    f"Could not detect program type for '{filename}'. "
+                )
         elif self.type == "com" or self.type == "gjf":
             outfile = Gaussian16Input(filename=filename)
-        elif self.type == "out":
-            if self.program == "gaussian":
-                outfile = Gaussian16Output(filename=filename)
-            else:
-                outfile = ORCAOutput(filename=filename)
         elif self.type == "inp":
             outfile = ORCAInput(filename=filename)
         elif self.type == "xyz":
