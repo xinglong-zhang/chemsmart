@@ -297,7 +297,7 @@ class Molecule:
     def inchikey(self):
         """
         Return the InChIKey string for the molecule using Open Babel.
-        This provides robust topological perception avoiding artifacts 
+        This provides robust topological perception avoiding artifacts
         from distance-based bond guessing.
         """
         try:
@@ -311,7 +311,9 @@ class Molecule:
         # Build an XYZ string in memory for topological perception
         lines = [str(self.num_atoms), "Created for InChIKey via Open Babel"]
         for s, pos in zip(self.symbols, self.positions):
-            lines.append(f"{s:4s} {pos[0]:15.10f} {pos[1]:15.10f} {pos[2]:15.10f}")
+            lines.append(
+                f"{s:4s} {pos[0]:15.10f} {pos[1]:15.10f} {pos[2]:15.10f}"
+            )
         xyz_string = "\n".join(lines)
 
         ob_mol = pybel.readstring("xyz", xyz_string)
