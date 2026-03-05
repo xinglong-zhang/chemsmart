@@ -49,7 +49,7 @@ This guide covers installing Chemsmart on Windows using Conda PowerShell.
    .. code:: bash
 
       cd chemsmart
-      make env
+      conda env create -f environment.yml
 
 #. Activate the environment:
 
