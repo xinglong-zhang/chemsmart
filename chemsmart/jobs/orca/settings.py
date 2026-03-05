@@ -2056,6 +2056,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
         reference_multiplicity=None,
         reference_conjugate_base_charge=None,
         reference_conjugate_base_multiplicity=None,
+        reference_pka=None,
         delta_G_proton=None,
         solvent_model="CPCM",
         solvent_id="water",
@@ -2083,6 +2084,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
         self.cutoff_entropy_grimme = cutoff_entropy_grimme
         self.cutoff_enthalpy = cutoff_enthalpy
         self.energy_units = energy_units
+        self.reference_pka = reference_pka
 
         if not self.title:
             self.title = "ORCA pKa calculation job"

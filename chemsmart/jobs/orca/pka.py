@@ -411,7 +411,7 @@ class ORCApKaJob(ORCAJob):
             sp_label = f"{self._conjugate_base_label}_sp"
 
         out = opt_job._output()
-        if out is not None and getattr(out, "normal_termination", False):
+        if out is not None and out.normal_termination is True:
             mol = out.molecule
         else:
             mol = (
@@ -602,7 +602,7 @@ class ORCApKaJob(ORCAJob):
             a_solv_file=a_solv,
             hb_solv_file=hb_solv,
             b_solv_file=b_solv,
-            pka_reference=getattr(self.settings, "reference_pka", None),
+            pka_reference=self.settings.reference_pka,
             temperature=self.settings.temperature,
             concentration=self.settings.concentration,
             pressure=self.settings.pressure,

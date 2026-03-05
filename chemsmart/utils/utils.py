@@ -1986,12 +1986,10 @@ class TabularDataset:
 
 
 class PKaTableEntry:
-    """Generic dynamic table-row abstraction (backward-compatible name).
+    """Generic table-row abstraction for pKa job-submission tables.
 
-    The class now supports:
-    - dynamic row attributes from arbitrary table headers
-    - dict-like and attribute-style access
-    - a generic DataFrame-backed ``TabularDataset`` parser layer
+    This refactor keeps backward compatibility for dict-like access while
+    avoiding dynamic attribute lookup.
     """
 
     _ALIASES = {
@@ -2002,6 +2000,17 @@ class PKaTableEntry:
     }
 
     def __init__(self, *args, row_number: int = None, **kwargs):
+        # Explicitly initialized attributes
+        self.row_number = row_number
+        self.filepath = None
+        self.proton_index = None
+        self.charge = None
+        self.multiplicity = None
+
+        # Canonical + non-canonical storage (no dynamic attrs on self)
+        self._data = {}
+        self._extra_data = {}
+
         data = {}
         if len(args) == 4:
             data.update(
@@ -2021,8 +2030,10 @@ class PKaTableEntry:
             )
 
         data.update(kwargs)
-        self.row_number = row_number
-        self._data = {str(k): v for k, v in data.items() if k != "row_number"}
+        for key, value in data.items():
+            if key == "row_number":
+                continue
+            self._set_field(key, value)
 
     @staticmethod
     def normalize_header(header):
@@ -2067,40 +2078,82 @@ class PKaTableEntry:
         }
         return cls(row_dict, row_number=row_number)
 
+    def _canonical_key(self, key):
+        k = str(key)
+        nk = self.normalize_header(k)
+        for canonical, aliases in self._ALIASES.items():
+            if nk == self.normalize_header(canonical):
+                return canonical
+            for alias in aliases:
+                if nk == self.normalize_header(alias):
+                    return canonical
+        return None
+
+    def _set_field(self, key, value):
+        canonical = self._canonical_key(key)
+        if canonical == "filepath":
+            self.filepath = value
+            self._data["filepath"] = value
+        elif canonical == "proton_index":
+            self.proton_index = value
+            self._data["proton_index"] = value
+        elif canonical == "charge":
+            self.charge = value
+            self._data["charge"] = value
+        elif canonical == "multiplicity":
+            self.multiplicity = value
+            self._data["multiplicity"] = value
+        else:
+            key_str = str(key)
+            self._extra_data[key_str] = value
+            self._data[key_str] = value
+
     def __repr__(self):
         return (
             f"PKaTableEntry(row_number={self.row_number}, data={self._data!r})"
         )
 
     def __getitem__(self, key):
-        return self._data[key]
+        if key in self._data:
+            return self._data[key]
+        canonical = self._canonical_key(key)
+        if canonical is not None and canonical in self._data:
+            return self._data[canonical]
+        raise KeyError(key)
 
     def __setitem__(self, key, value):
-        self._data[str(key)] = value
+        self._set_field(key, value)
 
     def __contains__(self, key):
-        return key in self._data
-
-    def __getattr__(self, name):
-        if name in self._data:
-            return self._data[name]
-        for canonical, aliases in self._ALIASES.items():
-            if name == canonical:
-                for alias in aliases:
-                    if alias in self._data:
-                        return self._data[alias]
-        raise AttributeError(
-            f"'PKaTableEntry' object has no attribute '{name}'"
-        )
+        if key in self._data:
+            return True
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return False
+        return canonical in self._data
 
     def get(self, key, default=None):
-        return self._data.get(key, default)
+        if key in self._data:
+            return self._data.get(key, default)
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return default
+        return self._data.get(canonical, default)
 
     def get_canonical(self, canonical, default=None):
-        for key in self._ALIASES.get(canonical, [canonical]):
-            if key in self._data:
-                return self._data[key]
-        return default
+        if canonical == "filepath":
+            return self.filepath if self.filepath is not None else default
+        if canonical == "proton_index":
+            return (
+                self.proton_index if self.proton_index is not None else default
+            )
+        if canonical == "charge":
+            return self.charge if self.charge is not None else default
+        if canonical == "multiplicity":
+            return (
+                self.multiplicity if self.multiplicity is not None else default
+            )
+        return self.get(canonical, default)
 
     def keys(self):
         return self._data.keys()
@@ -2112,7 +2165,12 @@ class PKaTableEntry:
         return self._data.values()
 
     def to_dict(self):
-        return dict(self._data)
+        out = dict(self._extra_data)
+        out["filepath"] = self.filepath
+        out["proton_index"] = self.proton_index
+        out["charge"] = self.charge
+        out["multiplicity"] = self.multiplicity
+        return out
 
     def to_kwargs(self, rename_map=None, drop_none=False):
         out = self.to_dict()
@@ -2126,10 +2184,10 @@ class PKaTableEntry:
         errors = []
         row_info = f" (row {self.row_number})" if self.row_number else ""
 
-        filepath = self.get_canonical("filepath")
-        proton_index = self.get_canonical("proton_index")
-        charge = self.get_canonical("charge")
-        multiplicity = self.get_canonical("multiplicity")
+        filepath = self.filepath
+        proton_index = self.proton_index
+        charge = self.charge
+        multiplicity = self.multiplicity
 
         if not filepath:
             errors.append(f"Empty filepath{row_info}")
@@ -2284,17 +2342,10 @@ def parse_pka_table(
 class PKaOutputTableEntry:
     """Row abstraction for a pKa output table.
 
-    Each row represents a single system (identified by ``basename``) and
-    carries the file paths of the precomputed thermochemistry outputs
-    (gas-phase opt+freq and solvent single-point) for all four species
-    (HA, A⁻, HB, B⁻) plus the reference pKa value.
-
-    Blank reference-acid cells are resolved by
-    :func:`resolve_pka_output_references` *before* this object is used
-    for computation.
+    Uses explicit attributes (initialized to None) instead of dynamic
+    attribute lookup.
     """
 
-    # Canonical column name → list of accepted aliases (normalised).
     _ALIASES = {
         "basename": ["basename", "name", "label", "system"],
         "ha_gas": [
@@ -2328,46 +2379,151 @@ class PKaOutputTableEntry:
         "pka_ref": ["pka_ref", "pka_reference", "reference_pka", "ref_pka"],
     }
 
-    # Columns that belong to the reference acid and can be carried forward.
     _REFERENCE_COLUMNS = ("hb_gas", "b_gas", "hb_sp", "b_sp", "pka_ref")
 
     def __init__(self, data: dict, row_number: int = None):
+        # Explicitly initialized attributes
         self.row_number = row_number
-        self._data = {str(k): v for k, v in data.items() if k != "row_number"}
+        self.basename = None
+        self.ha_gas = None
+        self.a_gas = None
+        self.hb_gas = None
+        self.b_gas = None
+        self.ha_sp = None
+        self.a_sp = None
+        self.hb_sp = None
+        self.b_sp = None
+        self.pka_ref = None
 
-    # -- dict-like access ---------------------------------------------------
+        # Explicit helper attributes requested for pKa workflow clarity
+        self.ha_basename = None
+        self.hb_basename = None
+        self.ha_conjugated_base_label = None
+        self.hb_conjugated_base_label = None
+        self.opt_path = None
+        self.sp_path = None
+
+        self._data = {}
+        self._extra_data = {}
+
+        for key, value in data.items():
+            if key == "row_number":
+                continue
+            self._set_field(key, value)
+
+        self._derive_helper_fields()
+
+    @staticmethod
+    def _normalize_header(header):
+        header = str(header).strip().lower()
+        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
+        header = re.sub(r"_+", "_", header).strip("_")
+        return header
+
+    def _canonical_key(self, key):
+        nk = self._normalize_header(key)
+        for canonical, aliases in self._ALIASES.items():
+            if nk == self._normalize_header(canonical):
+                return canonical
+            for alias in aliases:
+                if nk == self._normalize_header(alias):
+                    return canonical
+        return None
+
+    def _set_field(self, key, value):
+        canonical = self._canonical_key(key)
+        if canonical == "basename":
+            self.basename = value
+            self._data["basename"] = value
+        elif canonical == "ha_gas":
+            self.ha_gas = value
+            self._data["ha_gas"] = value
+        elif canonical == "a_gas":
+            self.a_gas = value
+            self._data["a_gas"] = value
+        elif canonical == "hb_gas":
+            self.hb_gas = value
+            self._data["hb_gas"] = value
+        elif canonical == "b_gas":
+            self.b_gas = value
+            self._data["b_gas"] = value
+        elif canonical == "ha_sp":
+            self.ha_sp = value
+            self._data["ha_sp"] = value
+        elif canonical == "a_sp":
+            self.a_sp = value
+            self._data["a_sp"] = value
+        elif canonical == "hb_sp":
+            self.hb_sp = value
+            self._data["hb_sp"] = value
+        elif canonical == "b_sp":
+            self.b_sp = value
+            self._data["b_sp"] = value
+        elif canonical == "pka_ref":
+            self.pka_ref = value
+            self._data["pka_ref"] = value
+        else:
+            key_str = str(key)
+            self._extra_data[key_str] = value
+            self._data[key_str] = value
+
+    def _derive_helper_fields(self):
+        # HA basename defaults to basename column
+        if self.basename is not None:
+            self.ha_basename = str(self.basename)
+
+        # HB basename derived from hb_gas file stem when available
+        if self.hb_gas is not None:
+            hb_name = os.path.basename(str(self.hb_gas))
+            self.hb_basename = os.path.splitext(hb_name)[0]
+
+        # Conjugated base labels are made explicit
+        if self.ha_basename is not None:
+            self.ha_conjugated_base_label = (
+                f"{self.ha_basename}_conjugated_base"
+            )
+        if self.hb_basename is not None:
+            self.hb_conjugated_base_label = (
+                f"{self.hb_basename}_conjugated_base"
+            )
+
+        # Convenience paths for target acid outputs
+        self.opt_path = self.ha_gas
+        self.sp_path = self.ha_sp
 
     def __getitem__(self, key):
-        return self._data[key]
+        if key in self._data:
+            return self._data[key]
+        canonical = self._canonical_key(key)
+        if canonical is not None and canonical in self._data:
+            return self._data[canonical]
+        raise KeyError(key)
 
     def __setitem__(self, key, value):
-        self._data[str(key)] = value
+        self._set_field(key, value)
+        self._derive_helper_fields()
 
     def __contains__(self, key):
-        return key in self._data
+        if key in self._data:
+            return True
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return False
+        return canonical in self._data
 
     def __repr__(self):
         return (
             f"PKaOutputTableEntry(row={self.row_number}, "
-            f"basename={self._data.get('basename', '?')})"
-        )
-
-    def __getattr__(self, name):
-        if name.startswith("_"):
-            raise AttributeError(name)
-        if name in self._data:
-            return self._data[name]
-        for canonical, aliases in self._ALIASES.items():
-            if name == canonical:
-                for alias in aliases:
-                    if alias in self._data:
-                        return self._data[alias]
-        raise AttributeError(
-            f"'PKaOutputTableEntry' object has no attribute '{name}'"
+            f"basename={self.basename if self.basename is not None else '?'})"
         )
 
     def get(self, key, default=None):
-        return self._data.get(key, default)
+        if key in self._data:
+            return self._data.get(key, default)
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return default
+        return self._data.get(canonical, default)
 
     def keys(self):
         return self._data.keys()
@@ -2376,45 +2532,56 @@ class PKaOutputTableEntry:
         return self._data.items()
 
     def to_dict(self):
-        return dict(self._data)
-
-    # -- validation ---------------------------------------------------------
+        out = dict(self._extra_data)
+        out.update(
+            {
+                "basename": self.basename,
+                "ha_gas": self.ha_gas,
+                "a_gas": self.a_gas,
+                "hb_gas": self.hb_gas,
+                "b_gas": self.b_gas,
+                "ha_sp": self.ha_sp,
+                "a_sp": self.a_sp,
+                "hb_sp": self.hb_sp,
+                "b_sp": self.b_sp,
+                "pka_ref": self.pka_ref,
+            }
+        )
+        return out
 
     def validate(self, check_file_exists=True):
         """Validate that all required file paths are present and non-empty."""
         errors = []
         row_info = f" (row {self.row_number})" if self.row_number else ""
 
-        if not self._data.get("basename"):
+        if self.basename is None:
             errors.append(f"Missing basename{row_info}")
 
         required_files = [
-            "ha_gas",
-            "a_gas",
-            "hb_gas",
-            "b_gas",
-            "ha_sp",
-            "a_sp",
-            "hb_sp",
-            "b_sp",
+            ("ha_gas", self.ha_gas),
+            ("a_gas", self.a_gas),
+            ("hb_gas", self.hb_gas),
+            ("b_gas", self.b_gas),
+            ("ha_sp", self.ha_sp),
+            ("a_sp", self.a_sp),
+            ("hb_sp", self.hb_sp),
+            ("b_sp", self.b_sp),
         ]
-        for col in required_files:
-            val = self._data.get(col)
-            if not val or (isinstance(val, float) and np.isnan(val)):
+        for col, val in required_files:
+            if val is None or (isinstance(val, float) and np.isnan(val)):
                 errors.append(f"Missing {col}{row_info}")
             elif check_file_exists and not os.path.exists(str(val)):
                 errors.append(f"File not found for {col}: {val}{row_info}")
 
-        pka_ref = self._data.get("pka_ref")
-        if pka_ref is None or (
-            isinstance(pka_ref, float) and np.isnan(pka_ref)
+        if self.pka_ref is None or (
+            isinstance(self.pka_ref, float) and np.isnan(self.pka_ref)
         ):
             errors.append(f"Missing pka_ref{row_info}")
         else:
             try:
-                float(pka_ref)
+                float(self.pka_ref)
             except (TypeError, ValueError):
-                errors.append(f"Invalid pka_ref: {pka_ref!r}{row_info}")
+                errors.append(f"Invalid pka_ref: {self.pka_ref!r}{row_info}")
 
         if errors:
             raise ValueError("; ".join(errors))

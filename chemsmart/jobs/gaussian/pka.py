@@ -724,7 +724,7 @@ class GaussianpKaJob(GaussianJob):
 
         # Prefer optimized geometry if opt produced one
         out = opt_job._output()
-        if out is not None and getattr(out, "normal_termination", False):
+        if out is not None and out.normal_termination is True:
             mol = out.molecule
         else:
             # fall back to prepared molecules
