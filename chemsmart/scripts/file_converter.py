@@ -47,7 +47,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-o",
     "--output-filetype",
     default="xyz",
-    help="Type of output files to convert to, defaults to .xyz",
+    help="Type of files to convert to, defaults to .xyz",
 )
 @click.option(
     "-i/",

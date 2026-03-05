@@ -63,7 +63,7 @@ def align(
 
     if directory and not filetype:
         raise click.BadParameter(
-            "Directory specified but no filetype provided. Use -t/--filetype to specify file extension "
+            "Directory specified but no filetype provided. Use -t/--filetype to specify file type "
             "(e.g., xyz, log, gjf, mol, inp)."
         )
 
@@ -139,7 +139,7 @@ def align(
         else:
             # This should not happen due to validation above, but keep as safeguard
             raise click.BadParameter(
-                "Directory specified but no filetype provided. Use -t/--filetype to specify file extension."
+                "Directory specified but no filetype provided. Use -t/--filetype to specify file type."
             )
 
     elif filenames:
