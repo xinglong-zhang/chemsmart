@@ -59,7 +59,7 @@ def click_thermochemistry_options(f):
         help="Concentration in mol/L.",
     )
     @click.option(
-        "-p",
+        "-P",
         "--pressure",
         default=1.0,
         type=float,
