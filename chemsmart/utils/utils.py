@@ -2554,7 +2554,7 @@ class PKaOutputTableEntry:
         errors = []
         row_info = f" (row {self.row_number})" if self.row_number else ""
 
-        if self.basename is None:
+        if self.basename is None or self.basename.strip() == "":
             errors.append(f"Missing basename{row_info}")
 
         required_files = [

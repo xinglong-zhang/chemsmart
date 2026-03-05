@@ -1479,19 +1479,21 @@ class TestPKaTableParsing:
         assert "'multiplicity': 1" in repr_str
 
     def test_pka_table_entry_from_headers_and_row_dynamic(self):
-        """Dynamic header/value mapping should expose row attributes."""
         from chemsmart.utils.utils import PKaTableEntry
 
         headers = ["ha_file", "proton_index", "charge", "mult", "route"]
         row = ["mol.xyz", "10", "0", "1", "opt freq"]
 
-        entry = PKaTableEntry.from_headers_and_row(headers, row, row_number=2)
+        entry = PKaTableEntry.from_headers_and_row(
+            headers, row, row_number=2
+        )._data
+        print(entry)
 
-        assert entry.ha_file == "mol.xyz"
-        assert entry.proton_index == "10"  # raw row value preserved
-        assert entry.charge == "0"
-        assert entry.mult == "1"
-        assert entry.route == "opt freq"
+        assert entry["filepath"] == "mol.xyz"
+        assert entry["proton_index"] == "10"  # raw row value preserved
+        assert entry["charge"] == "0"
+        assert entry["multiplicity"] == "1"
+        assert entry["route"] == "opt freq"
 
     def test_pka_table_entry_dict_and_kwargs_helpers(self):
         """to_dict/to_kwargs should support forwarding to downstream settings."""
