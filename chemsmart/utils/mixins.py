@@ -1475,7 +1475,9 @@ class FolderMixin:
             for subdir, _dirs, files in os.walk(self.folder):
                 for file in files:
                     filepath = os.path.join(subdir, file)
-                    # Skip empty files
+                    # Skip directories and empty files
+                    if not os.path.isfile(filepath):
+                        continue
                     if os.stat(filepath).st_size == 0:
                         continue
                     if program is None:
