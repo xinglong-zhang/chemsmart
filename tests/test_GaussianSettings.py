@@ -1209,7 +1209,7 @@ class TestGaussianpKaJobSettings:
 
         protonated_job = job.protonated_job
         assert isinstance(protonated_job, GaussianOptJob)
-        assert protonated_job.label == "test_pka_HA"
+        assert protonated_job.label == "test_pka"
         assert protonated_job.settings.charge == 0
 
     def test_conjugate_base_job_property(
@@ -1238,7 +1238,7 @@ class TestGaussianpKaJobSettings:
 
         conjugate_base_job = job.conjugate_base_job
         assert isinstance(conjugate_base_job, GaussianOptJob)
-        assert conjugate_base_job.label == "test_pka_A"
+        assert conjugate_base_job.label == "test_pka_cb"
         assert conjugate_base_job.settings.charge == -1
 
     def test_protonated_molecule_property(
@@ -1313,8 +1313,8 @@ class TestGaussianpKaJobSettings:
 
         protonated_job, conjugate_base_job = job.opt_jobs
 
-        assert protonated_job.label == "acetic_acid_pka_HA"
-        assert conjugate_base_job.label == "acetic_acid_pka_A"
+        assert protonated_job.label == "acetic_acid_pka"
+        assert conjugate_base_job.label == "acetic_acid_pka_cb"
 
     def test_settings_class(self):
         """Test settings_class class method."""

@@ -84,6 +84,40 @@ class ORCApKaJob(ORCAJob):
         self.parallel = bool(parallel)
         self._pka_lock = threading.Lock()
 
+    # ------------------------------------------------------------------
+    # Basename helpers for label derivation
+    # ------------------------------------------------------------------
+
+    @property
+    def _acid_basename(self):
+        """Basename for the target acid (HA) – equals ``self.label``."""
+        return self.label
+
+    @property
+    def _conjugate_base_label(self):
+        """Label for the conjugate base (A⁻)."""
+        return f"{self._acid_basename}_cb"
+
+    @property
+    def _ref_basename(self):
+        """Basename for the reference acid (HB), derived from the reference
+        geometry filename so it stays unique when multiple HA share one HB."""
+        import os
+
+        if not self.settings.has_reference_file:
+            return None
+        return os.path.splitext(
+            os.path.basename(self.settings.reference_file)
+        )[0]
+
+    @property
+    def _ref_conjugate_base_label(self):
+        """Label for the reference conjugate base (B⁻)."""
+        ref = self._ref_basename
+        if ref is None:
+            return None
+        return f"{ref}_cb"
+
     @classmethod
     def settings_class(cls):
         return ORCApKaJobSettings
@@ -227,14 +261,14 @@ class ORCApKaJob(ORCAJob):
         protonated_job = ORCAOptJob(
             molecule=protonated_mol,
             settings=protonated_settings,
-            label=f"{self.label}_HA",
+            label=self._acid_basename,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
         conjugate_base_job = ORCAOptJob(
             molecule=conjugate_base_mol,
             settings=conjugate_base_settings,
-            label=f"{self.label}_A",
+            label=self._conjugate_base_label,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
@@ -262,14 +296,14 @@ class ORCApKaJob(ORCAJob):
         protonated_sp_job = ORCASinglePointJob(
             molecule=protonated_mol,
             settings=protonated_sp_settings,
-            label=f"{self.label}_HA_sp",
+            label=f"{self._acid_basename}_sp",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
         conjugate_base_sp_job = ORCASinglePointJob(
             molecule=conjugate_base_mol,
             settings=conjugate_base_sp_settings,
-            label=f"{self.label}_A_sp",
+            label=f"{self._conjugate_base_label}_sp",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
@@ -285,14 +319,14 @@ class ORCApKaJob(ORCAJob):
         ref_acid_job = ORCAOptJob(
             molecule=ref_acid_mol,
             settings=ref_acid_settings,
-            label=f"{self.label}_HB",
+            label=self._ref_basename,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
         ref_cb_job = ORCAOptJob(
             molecule=ref_cb_mol,
             settings=ref_cb_settings,
-            label=f"{self.label}_B",
+            label=self._ref_conjugate_base_label,
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
@@ -319,14 +353,14 @@ class ORCApKaJob(ORCAJob):
         ref_acid_sp_job = ORCASinglePointJob(
             molecule=ref_acid_mol,
             settings=ref_acid_sp_settings,
-            label=f"{self.label}_HB_sp",
+            label=f"{self._ref_basename}_sp",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
         ref_cb_sp_job = ORCASinglePointJob(
             molecule=ref_cb_mol,
             settings=ref_cb_sp_settings,
-            label=f"{self.label}_B_sp",
+            label=f"{self._ref_conjugate_base_label}_sp",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
@@ -370,11 +404,11 @@ class ORCApKaJob(ORCAJob):
         if role == "HA":
             sp_settings = protonated_sp_settings
             opt_job = self.protonated_job
-            sp_label = f"{self.label}_HA_sp"
+            sp_label = f"{self._acid_basename}_sp"
         else:
             sp_settings = conjugate_base_sp_settings
             opt_job = self.conjugate_base_job
-            sp_label = f"{self.label}_A_sp"
+            sp_label = f"{self._conjugate_base_label}_sp"
 
         out = opt_job._output()
         if out is not None and getattr(out, "normal_termination", False):

@@ -141,6 +141,47 @@ class GaussianpKaJob(GaussianJob):
 
         self._pka_lock = threading.Lock()
 
+    # =========================================================================
+    # Basename helpers for label derivation
+    # =========================================================================
+
+    @property
+    def _acid_basename(self):
+        """Basename for the target acid (HA).
+
+        Returns ``self.label`` unchanged so that the protonated job
+        carries the same base name as the parent pKa job.
+        """
+        return self.label
+
+    @property
+    def _conjugate_base_label(self):
+        """Label for the conjugate base (A⁻) derived from the acid basename."""
+        return f"{self._acid_basename}_cb"
+
+    @property
+    def _ref_basename(self):
+        """Basename for the reference acid (HB).
+
+        Derived from the reference geometry filename stem to keep it
+        unique when multiple HA molecules share the same HB.
+        """
+        import os
+
+        if not self.settings.has_reference_file:
+            return None
+        return os.path.splitext(
+            os.path.basename(self.settings.reference_file)
+        )[0]
+
+    @property
+    def _ref_conjugate_base_label(self):
+        """Label for the reference conjugate base (B⁻)."""
+        ref = self._ref_basename
+        if ref is None:
+            return None
+        return f"{ref}_cb"
+
     @classmethod
     def settings_class(cls):
         """
@@ -379,9 +420,9 @@ class GaussianpKaJob(GaussianJob):
             self.settings.conjugate_pair_job_settings(self.molecule)
         )
 
-        # Create job labels
-        protonated_label = f"{self.label}_HA"
-        conjugate_base_label = f"{self.label}_A"
+        # Create job labels (acid basename + _cb for conjugate base)
+        protonated_label = self._acid_basename
+        conjugate_base_label = self._conjugate_base_label
 
         # Create protonated job (HA)
         protonated_job = GaussianOptJob(
@@ -432,9 +473,9 @@ class GaussianpKaJob(GaussianJob):
             self.settings.reference_pair_job_settings()
         )
 
-        # Create job labels
-        ref_acid_label = f"{self.label}_HB"
-        ref_conjugate_base_label = f"{self.label}_B"
+        # Create job labels (ref basename + _cb for conjugate base)
+        ref_acid_label = self._ref_basename
+        ref_conjugate_base_label = self._ref_conjugate_base_label
 
         # Create reference acid job (HB)
         ref_acid_job = GaussianOptJob(
@@ -483,8 +524,8 @@ class GaussianpKaJob(GaussianJob):
         )
 
         # Create job labels
-        ref_acid_sp_label = f"{self.label}_HB_sp"
-        ref_conjugate_base_sp_label = f"{self.label}_B_sp"
+        ref_acid_sp_label = f"{self._ref_basename}_sp"
+        ref_conjugate_base_sp_label = f"{self._ref_conjugate_base_label}_sp"
 
         # Get optimized molecules from completed ref opt jobs
         ref_acid_opt_output = self.ref_acid_job._output()
@@ -547,8 +588,8 @@ class GaussianpKaJob(GaussianJob):
         )
 
         # Create job labels
-        protonated_sp_label = f"{self.label}_HA_sp"
-        conjugate_base_sp_label = f"{self.label}_A_sp"
+        protonated_sp_label = f"{self._acid_basename}_sp"
+        conjugate_base_sp_label = f"{self._conjugate_base_label}_sp"
 
         # Get optimized molecules from completed opt jobs
         # If opt jobs are complete, use their optimized structures
@@ -675,11 +716,11 @@ class GaussianpKaJob(GaussianJob):
         if role == "HA":
             sp_settings = protonated_sp_settings
             opt_job = self.protonated_job
-            sp_label = f"{self.label}_HA_sp"
+            sp_label = f"{self._acid_basename}_sp"
         else:
             sp_settings = conjugate_base_sp_settings
             opt_job = self.conjugate_base_job
-            sp_label = f"{self.label}_A_sp"
+            sp_label = f"{self._conjugate_base_label}_sp"
 
         # Prefer optimized geometry if opt produced one
         out = opt_job._output()
