@@ -274,6 +274,10 @@ endif
 TWINE_REPOSITORY_URL_testpypi := https://test.pypi.org/legacy/
 TWINE_REPOSITORY_URL_pypi := https://upload.pypi.org/legacy/
 
+# Pinned versions for build tools to reduce supply chain risk.
+BUILD_VERSION := 1.4.0
+TWINE_VERSION := 6.2.0
+
 .PHONY: version
 version: ## Show the current package version from chemsmart/VERSION.
 	@echo $(VERSION)
@@ -281,7 +285,7 @@ version: ## Show the current package version from chemsmart/VERSION.
 .PHONY: build
 build: clean ## Build source and wheel distributions.
 	@echo "Building $(PACKAGE_NAME) version $(VERSION)..."
-	$(ENV_PREFIX)python -m pip install --upgrade build twine
+	$(ENV_PREFIX)python -m pip install "build==$(BUILD_VERSION)" "twine==$(TWINE_VERSION)"
 	$(ENV_PREFIX)python -m build
 	$(ENV_PREFIX)python -m twine check dist/*
 
