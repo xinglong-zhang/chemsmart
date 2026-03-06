@@ -289,7 +289,7 @@ build: clean ## Build source and wheel distributions.
 check-clean: ## Fail if git working tree is not clean.
 ifeq ($(OS),Windows)
 	@$(GIT_STATUS_CLEAN_CMD) || ( \
-		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first."; \
+		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first." & \
 		exit 1 \
 	)
 else
@@ -303,7 +303,7 @@ endif
 check-git-tag: ## Fail if git tag v<VERSION> already exists.
 ifeq ($(OS),Windows)
 	@$(GIT_TAG_EXISTS_CMD) && ( \
-		$(ECHO) "Error: git tag v$(VERSION) already exists."; \
+		$(ECHO) "Error: git tag v$(VERSION) already exists." & \
 		exit 1 \
 	) || exit 0
 else
