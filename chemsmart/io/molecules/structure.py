@@ -2411,22 +2411,13 @@ class PKaMolecule(Molecule):
                 "Only hydrogen atoms can be marked as the acidic proton."
             )
 
-        # Inherit everything from the parent Molecule via __dict__ copy,
-        # then call super().__init__ with the core parameters so that the
-        # Molecule invariants (num_atoms, etc.) are properly initialised.
-        super().__init__(
-            symbols=molecule.symbols,
-            positions=molecule.positions,
-            charge=molecule.charge,
-            multiplicity=molecule.multiplicity,
-            frozen_atoms=molecule.frozen_atoms,
-            pbc_conditions=molecule.pbc_conditions,
-            translation_vectors=molecule.translation_vectors,
-            energy=molecule._energy if hasattr(molecule, "_energy") else None,
-            forces=molecule.forces,
-            velocities=molecule.velocities,
-            info=molecule.info,
-        )
+        # Inherit all instance state from the parent Molecule so that any
+        # additional attributes, metadata, cached properties, etc. are
+        # preserved. We perform a shallow copy of the parent's __dict__
+        # rather than re-running Molecule.__init__ with a subset of fields.
+        self.__dict__ = copy.copy(molecule.__dict__)
+
+        # Attach the acidic proton index specific to this wrapper.
         self.proton_index = proton_index
 
     @classmethod
