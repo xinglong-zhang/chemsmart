@@ -1487,7 +1487,6 @@ class TestPKaTableParsing:
         entry = PKaTableEntry.from_headers_and_row(
             headers, row, row_number=2
         )._data
-        print(entry)
 
         assert entry["filepath"] == "mol.xyz"
         assert entry["proton_index"] == "10"  # raw row value preserved
