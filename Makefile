@@ -255,3 +255,110 @@ else
 	@rm -rf .cache .pytest_cache build dist *.egg-info htmlcov .tox .coverage.* docs/_build 2>/dev/null
 endif
 
+
+# === Release ===
+REPOSITORY ?= testpypi
+PACKAGE_NAME := chemsmart
+VERSION_FILE := chemsmart$(SEP)VERSION
+
+ifeq ($(OS),Windows)
+    VERSION := $(shell type $(VERSION_FILE))
+    GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
+    GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >$(NULL) 2>&1
+else
+    VERSION := $(shell cat $(VERSION_FILE))
+    GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
+    GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >/dev/null 2>&1
+endif
+
+TWINE_REPOSITORY_URL_testpypi := https://test.pypi.org/legacy/
+TWINE_REPOSITORY_URL_pypi := https://upload.pypi.org/legacy/
+
+.PHONY: version
+version: ## Show the current package version from chemsmart/VERSION.
+	@echo $(VERSION)
+
+.PHONY: build
+build: clean ## Build source and wheel distributions.
+	@echo "Building $(PACKAGE_NAME) version $(VERSION)..."
+	$(ENV_PREFIX)python -m pip install --upgrade build twine
+	$(ENV_PREFIX)python -m build
+	$(ENV_PREFIX)python -m twine check dist/*
+
+.PHONY: check-clean
+check-clean: ## Fail if git working tree is not clean.
+ifeq ($(OS),Windows)
+	@$(GIT_STATUS_CLEAN_CMD) || ( \
+		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first."; \
+		exit 1 \
+	)
+else
+	@$(GIT_STATUS_CLEAN_CMD) || { \
+		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first."; \
+		exit 1; \
+	}
+endif
+
+.PHONY: check-git-tag
+check-git-tag: ## Fail if git tag v<VERSION> already exists.
+ifeq ($(OS),Windows)
+	@$(GIT_TAG_EXISTS_CMD) && ( \
+		$(ECHO) "Error: git tag v$(VERSION) already exists."; \
+		exit 1 \
+	) || exit 0
+else
+	@$(GIT_TAG_EXISTS_CMD) && { \
+		$(ECHO) "Error: git tag v$(VERSION) already exists."; \
+		exit 1; \
+	} || true
+endif
+
+.PHONY: tag
+tag: check-clean check-git-tag ## Create git tag v<VERSION>.
+	@echo "Creating git tag v$(VERSION)..."
+	git tag v$(VERSION)
+	@echo "Created tag v$(VERSION)"
+	@echo "To push it: git push origin v$(VERSION)"
+
+.PHONY: release-test
+release-test: build ## Build and upload to TestPyPI.
+	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to TestPyPI..."
+	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+	@echo ""
+	@echo "Test install with:"
+	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
+
+.PHONY: release
+release: build ## Build and upload to PyPI. Use REPOSITORY=pypi or REPOSITORY=testpypi.
+	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
+ifeq ($(REPOSITORY),testpypi)
+	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+	@echo ""
+	@echo "Test install with:"
+	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
+else ifeq ($(REPOSITORY),pypi)
+	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
+	@echo ""
+	@echo "Install with:"
+	@echo "python -m pip install $(PACKAGE_NAME)==$(VERSION)"
+else
+	@echo "Error: REPOSITORY must be either 'pypi' or 'testpypi'"
+	@exit 1
+endif
+
+.PHONY: release-tagged
+release-tagged: check-clean check-git-tag build tag ## Build, tag, and upload to PyPI/TestPyPI.
+	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
+ifeq ($(REPOSITORY),testpypi)
+	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+else ifeq ($(REPOSITORY),pypi)
+	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
+else
+	@echo "Error: REPOSITORY must be either 'pypi' or 'testpypi'"
+	@exit 1
+endif
+	@echo "Release complete for version $(VERSION)"
+	@echo "Remember to push commits and tags:"
+	@echo "  git push"
+	@echo "  git push origin v$(VERSION)"
+
