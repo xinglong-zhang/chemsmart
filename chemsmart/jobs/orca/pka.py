@@ -401,7 +401,7 @@ class ORCApKaJob(ORCAJob):
         protonated_sp_settings, conjugate_base_sp_settings = (
             self.settings._create_solution_phase_sp_settings(self.molecule)
         )
-        if role == "HA":
+        if role == "HA" or role == "HB":
             sp_settings = protonated_sp_settings
             opt_job = self.protonated_job
             sp_label = f"{self._acid_basename}_sp"

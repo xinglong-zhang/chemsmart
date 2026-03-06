@@ -225,6 +225,7 @@ class PKaCDXFile(CDXFile):
     focuses on converting CDXML drawings into a representation where
     ionizable sites and their associated protons can be identified reliably.
     """
+
     def parse_cdxml_element_colors(self):
         """Parse the CDXML file and return per-atom colour information.
 
