@@ -268,84 +268,11 @@ class PKaCDXFile(CDXFile):
         from rdkit.Chem import GetPeriodicTable
 
         pt = GetPeriodicTable()
+        root = self._parse_cdxml_root()
 
-        try:
-            tree = ET.parse(self.filename)
-        except ET.ParseError as exc:
-            raise ValueError(
-                f"Failed to parse CDXML file {self.filename}: {exc}"
-            ) from exc
-
-        root = tree.getroot()
         list_of_elements = []
-
-        for fragment in root.iter("fragment"):
-            # Skip nested fragments (Nicknames / abbreviations) that are
-            # children of another <n> element.
-            parent = self._find_parent(root, fragment)
-            if parent is not None and parent.tag == "n":
-                continue
-
-            for node in fragment.findall("n"):
-                # Skip ExternalConnectionPoint nodes
-                if node.get("NodeType") == "ExternalConnectionPoint":
-                    continue
-
-                cdxml_id = node.get("id")
-                element_num = int(node.get("Element", "6"))  # default C
-                color = int(node.get("color", "0"))
-                num_h_attr = node.get("NumHydrogens")
-                num_hydrogens = (
-                    int(num_h_attr) if num_h_attr is not None else None
-                )
-
-                # ---- inspect <t>/<s> text spans ----
-                # Collect (text, color) pairs from all <s> children.
-                spans = []  # list of (text_content, int_color)
-                for t_elem in node.iter("t"):
-                    for s_elem in t_elem.iter("s"):
-                        s_text = (s_elem.text or "").strip()
-                        s_color = int(s_elem.get("color", "0"))
-                        if s_text:
-                            spans.append((s_text, s_color))
-
-                # Determine the atom's own display colour.
-                # Priority: node-level color attribute > first <s> span colour.
-                if color == 0 and spans:
-                    # Use the colour of the first non-"H" span (the heavy-atom
-                    # symbol) as the atom colour, falling back to the first span.
-                    for s_text, s_color in spans:
-                        if s_text.upper() not in ("H",):
-                            color = s_color
-                            break
-                    else:
-                        color = spans[0][1]
-
-                # Detect a functional-group "H" rendered in a *different*
-                # colour from the atom's own colour.  For example the phenol
-                # label ``<s color="0">O</s><s color="4">H</s>`` yields
-                # implicit_h_color = 4.
-                implicit_h_color = None
-                for s_text, s_color in spans:
-                    if "H" in s_text and s_color != color:
-                        implicit_h_color = s_color
-                        break
-
-                try:
-                    symbol = pt.GetElementSymbol(element_num)
-                except Exception:
-                    symbol = "?"
-
-                list_of_elements.append(
-                    {
-                        "cdxml_id": cdxml_id,
-                        "element": element_num,
-                        "color": color,
-                        "symbol": symbol,
-                        "num_hydrogens": num_hydrogens,
-                        "implicit_h_color": implicit_h_color,
-                    }
-                )
+        for fragment in self._iter_top_level_fragments(root):
+            list_of_elements.extend(self._parse_fragment_nodes(fragment, pt))
 
         return list_of_elements
 
@@ -357,6 +284,77 @@ class PKaCDXFile(CDXFile):
                 if child is target:
                     return parent
         return None
+
+    def _parse_cdxml_root(self):
+        """Parse CDXML and return the XML root element."""
+        try:
+            tree = ET.parse(self.filename)
+        except ET.ParseError as exc:
+            raise ValueError(
+                f"Failed to parse CDXML file {self.filename}: {exc}"
+            ) from exc
+        return tree.getroot()
+
+    def _iter_top_level_fragments(self, root):
+        """Yield top-level fragment elements, excluding nested node fragments."""
+        for fragment in root.iter("fragment"):
+            parent = self._find_parent(root, fragment)
+            if parent is not None and parent.tag == "n":
+                continue
+            yield fragment
+
+    def _parse_fragment_nodes(self, fragment, periodic_table):
+        """Convert all valid CDXML nodes in one fragment into atom dicts."""
+        fragment_atoms = []
+        for node in fragment.findall("n"):
+            if node.get("NodeType") == "ExternalConnectionPoint":
+                continue
+
+            cdxml_id = node.get("id")
+            element_num = int(node.get("Element", "6"))
+            color = int(node.get("color", "0"))
+            num_h_attr = node.get("NumHydrogens")
+            num_hydrogens = int(num_h_attr) if num_h_attr is not None else None
+
+            spans = []
+            for t_elem in node.iter("t"):
+                for s_elem in t_elem.iter("s"):
+                    s_text = (s_elem.text or "").strip()
+                    s_color = int(s_elem.get("color", "0"))
+                    if s_text:
+                        spans.append((s_text, s_color))
+
+            if color == 0 and spans:
+                for s_text, s_color in spans:
+                    if s_text.upper() not in ("H",):
+                        color = s_color
+                        break
+                else:
+                    color = spans[0][1]
+
+            implicit_h_color = None
+            for s_text, s_color in spans:
+                if "H" in s_text and s_color != color:
+                    implicit_h_color = s_color
+                    break
+
+            try:
+                symbol = periodic_table.GetElementSymbol(element_num)
+            except Exception:
+                symbol = "?"
+
+            fragment_atoms.append(
+                {
+                    "cdxml_id": cdxml_id,
+                    "element": element_num,
+                    "color": color,
+                    "symbol": symbol,
+                    "num_hydrogens": num_hydrogens,
+                    "implicit_h_color": implicit_h_color,
+                }
+            )
+
+        return fragment_atoms
 
     def get_colored_proton_index(self, color_code=None):
         """Identify the 1-based atom index of a proton marked by colour.
@@ -706,73 +704,11 @@ class PKaCDXFile(CDXFile):
         from rdkit.Chem import GetPeriodicTable
 
         pt = GetPeriodicTable()
+        root = self._parse_cdxml_root()
 
-        try:
-            tree = ET.parse(self.filename)
-        except ET.ParseError as exc:
-            raise ValueError(
-                f"Failed to parse CDXML file {self.filename}: {exc}"
-            ) from exc
-
-        root = tree.getroot()
         fragments_atoms = []
-
-        for fragment in root.iter("fragment"):
-            parent = self._find_parent(root, fragment)
-            if parent is not None and parent.tag == "n":
-                continue
-
-            fragment_atoms = []
-            for node in fragment.findall("n"):
-                if node.get("NodeType") == "ExternalConnectionPoint":
-                    continue
-
-                cdxml_id = node.get("id")
-                element_num = int(node.get("Element", "6"))
-                color = int(node.get("color", "0"))
-                num_h_attr = node.get("NumHydrogens")
-                num_hydrogens = (
-                    int(num_h_attr) if num_h_attr is not None else None
-                )
-
-                spans = []
-                for t_elem in node.iter("t"):
-                    for s_elem in t_elem.iter("s"):
-                        s_text = (s_elem.text or "").strip()
-                        s_color = int(s_elem.get("color", "0"))
-                        if s_text:
-                            spans.append((s_text, s_color))
-
-                if color == 0 and spans:
-                    for s_text, s_color in spans:
-                        if s_text.upper() not in ("H",):
-                            color = s_color
-                            break
-                    else:
-                        color = spans[0][1]
-
-                implicit_h_color = None
-                for s_text, s_color in spans:
-                    if "H" in s_text and s_color != color:
-                        implicit_h_color = s_color
-                        break
-
-                try:
-                    symbol = pt.GetElementSymbol(element_num)
-                except Exception:
-                    symbol = "?"
-
-                fragment_atoms.append(
-                    {
-                        "cdxml_id": cdxml_id,
-                        "element": element_num,
-                        "color": color,
-                        "symbol": symbol,
-                        "num_hydrogens": num_hydrogens,
-                        "implicit_h_color": implicit_h_color,
-                    }
-                )
-
+        for fragment in self._iter_top_level_fragments(root):
+            fragment_atoms = self._parse_fragment_nodes(fragment, pt)
             if fragment_atoms:
                 fragments_atoms.append(fragment_atoms)
 
