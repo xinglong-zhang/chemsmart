@@ -243,12 +243,12 @@ Installation is deemed successful if the commands `make install` and `make confi
 ```bash
 chemsmart --version
 ```
-to get the current version for chemsmart package, and
+to get the current version of CHEMSMART, and
 
 ```bash
 chemsmart --help
 ```
-to get the options for running chemsmart package.
+to get the options for running CHEMSMART package.
 
 ## Usage
 
