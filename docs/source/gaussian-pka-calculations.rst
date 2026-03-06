@@ -143,6 +143,42 @@ For more accurate results, use a reference acid with known pKa:
 
 This additionally runs calculations for the reference acid HB and its conjugate base B⁻.
 
+************************************
+ Batch Processing with Input Tables
+************************************
+
+For high-throughput pKa calculations, you can use a table-driven approach to submit multiple jobs at once.
+
+Using an Input Table
+====================
+
+Provide the ``--input-table`` flag and pass a ``.csv`` or ``.txt`` file to the main ``-f`` option.
+
+.. code:: bash
+
+   chemsmart run gaussian -p my_project -f pka_input_table.csv -i
+
+The input table should contain the following columns:
+
+-  ``filepath``: Path to the input geometry file for the acid (HA).
+-  ``proton_index``: 1-based index of the proton to remove.
+-  ``charge``: Charge of the HA molecule.
+-  ``multiplicity``: Multiplicity of the HA molecule.
+
+Example ``pka_input_table.csv``:
+
+.. code:: text
+
+   filepath,proton_index,charge,multiplicity
+   /path/to/acid1.xyz,12,0,1
+   /path/to/acid2.xyz,8,-1,2
+   /path/to/acid3.cdxml,,0,1
+
+.. note::
+
+   When using a ChemDraw file (``.cdxml``) in the table, you can leave the ``proton_index`` blank to enable automatic
+   proton detection based on atom coloring.
+
 Computing pKa from Existing Output Files
 ========================================
 

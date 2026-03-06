@@ -47,7 +47,7 @@ chemistry software.
    gaussian-conformational-sampling
    gaussian-qrc
    gaussian-electronic-structure
-   gaussian-pka-calculations
+   pka-calculations
    gaussian-qmmm-jobs
    gaussian-other-jobs
 
