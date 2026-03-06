@@ -210,8 +210,21 @@ class CDXFile(FileMixin):
 
 
 class PKaCDXFile(CDXFile):
-    """Specialized CDXFile subclass for pKa calculations that need to identify"""
+    """Specialized ``CDXFile`` subclass used in pKa workflows.
 
+    This class adds utilities on top of :class:`CDXFile` for:
+
+    * parsing ChemDraw CDXML atom colours and element labels,
+    * distinguishing explicitly drawn hydrogens from implicit/functional-group
+      protons based on label structure and colour differences, and
+    * providing structured atom and proton information that can be consumed
+      by higher-level pKa logic (for example, to build :class:`PKaMolecule`
+      instances or similar pKa-aware molecule objects).
+
+    The class does **not** perform the pKa calculation itself; instead it
+    focuses on converting CDXML drawings into a representation where
+    ionizable sites and their associated protons can be identified reliably.
+    """
     def parse_cdxml_element_colors(self):
         """Parse the CDXML file and return per-atom colour information.
 
