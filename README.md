@@ -241,6 +241,11 @@ make clean
 Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
 
 ```bash
+chemsmart --version
+```
+to get the current version for chemsmart package, and
+
+```bash
 chemsmart --help
 ```
 to get the options for running chemsmart package.

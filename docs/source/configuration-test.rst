@@ -20,6 +20,12 @@ Installation and configuration are successful if:
 
    .. code:: bash
 
+      chemsmart --version
+
+   This displays the current version of CHEMSMART.
+
+   .. code:: bash
+
       chemsmart --help
 
-   This displays the available options for running Chemsmart.
+   This displays the available options for running CHEMSMART.
