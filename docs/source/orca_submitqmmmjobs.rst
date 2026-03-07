@@ -689,5 +689,5 @@ For more advanced QM/MM workflows, see:
  See Also
 **********
 
--  :doc:`orca_generalcliforallorcajobs` - General ORCA CLI options
--  :doc:`configuration_setuptheprojectsettings` - Project configuration guide
+-  :doc:`orca-cli-options` - General ORCA CLI options
+-  :doc:`configuration-project-settings` - Project configuration guide

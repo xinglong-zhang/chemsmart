@@ -15,15 +15,153 @@ Key mixin classes:
 - FolderMixin: Directory and file search operations
 """
 
+import copy
 import inspect
 import os
 import re
 from functools import cached_property
 
+import numpy as np
 from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+
+
+def delete_atoms_by_indices(molecule, atom_indices, *, one_based=True):
+    """Return a new Molecule with the specified atoms removed.
+
+    Accepts one or more atom indices, builds a boolean keep-mask, and
+    constructs a fresh ``Molecule`` that contains only the retained
+    atoms.  Per-atom arrays (``frozen_atoms``, ``forces``,
+    ``velocities``, ``vibrational_modes``) are filtered accordingly;
+    per-mode scalars (frequencies, reduced masses, …) are deep-copied
+    unchanged.
+
+    Args:
+        molecule: A ``chemsmart.io.molecules.structure.Molecule`` instance.
+        atom_indices (int | Iterable[int]): Indices of atoms to delete.
+        one_based (bool): If ``True`` (default) the indices are interpreted
+            as 1-based (matching Gaussian / ORCA conventions).  Set to
+            ``False`` for 0-based indexing.
+
+    Returns:
+        Molecule: A new molecule without the deleted atoms.
+
+    Raises:
+        ValueError: If *molecule* is ``None``, *atom_indices* is ``None``,
+            any index is out of range, or removing the atoms would leave
+            an empty molecule.
+        TypeError: If *atom_indices* is neither ``int`` nor iterable.
+    """
+    if molecule is None:
+        raise ValueError("molecule must not be None when deleting atoms")
+    if atom_indices is None:
+        raise ValueError("atom_indices must be provided when deleting atoms")
+
+    # Normalise to a list of ints
+    if isinstance(atom_indices, int):
+        indices = [atom_indices]
+    else:
+        try:
+            indices = list(atom_indices)
+        except TypeError as exc:
+            raise TypeError(
+                "atom_indices must be an int or iterable of ints"
+            ) from exc
+
+    if not indices:
+        return copy.deepcopy(molecule)
+
+    # Convert to 0-based
+    zero_indices: list[int] = []
+    for idx in indices:
+        try:
+            idx_int = int(idx)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Atom index '{idx}' is not a valid integer"
+            ) from exc
+        zero_indices.append(idx_int - 1 if one_based else idx_int)
+
+    zero_indices = sorted(set(zero_indices))
+    total_atoms = len(molecule.symbols)
+
+    for idx in zero_indices:
+        if idx < 0 or idx >= total_atoms:
+            label = idx + 1 if one_based else idx
+            raise ValueError(
+                f"Atom index {label} out of range for molecule "
+                f"with {total_atoms} atoms"
+            )
+
+    # Build keep mask
+    keep_mask = np.ones(total_atoms, dtype=bool)
+    keep_mask[zero_indices] = False
+
+    if not keep_mask.any():
+        raise ValueError(
+            "Deleting the requested atoms would leave an empty molecule"
+        )
+
+    # Lazy import to avoid circular dependencies at module load time
+    from chemsmart.io.molecules.structure import Molecule
+
+    new_symbols = [s for s, k in zip(molecule.symbols, keep_mask) if k]
+    new_positions = np.asarray(molecule.positions)[keep_mask]
+
+    # Helper: filter a per-atom sequence (list / ndarray) or return None
+    def _filter_per_atom(seq):
+        if seq is None:
+            return None
+        if isinstance(seq, np.ndarray):
+            if len(seq) == total_atoms:
+                return seq[keep_mask].copy()
+            return seq.copy()
+        if isinstance(seq, list) and len(seq) == total_atoms:
+            return [v for v, k in zip(seq, keep_mask) if k]
+        return copy.deepcopy(seq)
+
+    new_frozen = _filter_per_atom(molecule.frozen_atoms)
+    new_forces = _filter_per_atom(molecule.forces)
+    new_velocities = _filter_per_atom(molecule.velocities)
+
+    new_vib_modes = None
+    if molecule.vibrational_modes:
+        new_vib_modes = [
+            np.asarray(mode)[keep_mask].copy()
+            for mode in molecule.vibrational_modes
+        ]
+
+    return Molecule(
+        symbols=new_symbols,
+        positions=new_positions,
+        charge=molecule.charge,
+        multiplicity=molecule.multiplicity,
+        frozen_atoms=new_frozen,
+        pbc_conditions=copy.deepcopy(molecule.pbc_conditions),
+        translation_vectors=copy.deepcopy(molecule.translation_vectors),
+        energy=molecule.energy,
+        forces=new_forces,
+        velocities=new_velocities,
+        vibrational_frequencies=copy.deepcopy(
+            molecule.vibrational_frequencies
+        ),
+        vibrational_reduced_masses=copy.deepcopy(
+            molecule.vibrational_reduced_masses
+        ),
+        vibrational_force_constants=copy.deepcopy(
+            molecule.vibrational_force_constants
+        ),
+        vibrational_ir_intensities=copy.deepcopy(
+            molecule.vibrational_ir_intensities
+        ),
+        vibrational_mode_symmetries=copy.deepcopy(
+            molecule.vibrational_mode_symmetries
+        ),
+        vibrational_modes=new_vib_modes,
+        info=copy.deepcopy(molecule.info),
+    )
 
 
 class FileMixin:

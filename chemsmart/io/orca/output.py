@@ -3481,3 +3481,496 @@ class ORCANEBOutput(ORCAOutput):
                     ts_rms_force,
                 )
         return None, None, None, None
+
+
+class ORCApKaOutput(ORCAOutput):
+    """
+    Extended ORCAOutput for pKa calculations with thermochemistry support.
+
+    Mirrors Gaussian16pKaOutput but operates on ORCA output files. Uses the
+    same Thermochemistry analysis engine, which auto-detects file format via
+    Molecule.from_filepath.
+
+    Attributes:
+        temperature (float): Temperature in K. Default 298.15.
+        concentration (float): Concentration in mol/L. Default 1.0.
+        pressure (float): Pressure in atm. Default 1.0.
+        cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.
+        cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.
+        energy_units (str): Energy units for output. Default 'hartree'.
+    """
+
+    def __init__(
+        self,
+        filename,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        super().__init__(filename=filename)
+        self.temperature = temperature
+        self.concentration = concentration
+        self.pressure = pressure
+        self.cutoff_entropy_grimme = cutoff_entropy_grimme
+        self.cutoff_enthalpy = cutoff_enthalpy
+        self.energy_units = energy_units.lower()
+        self._thermochemistry = None
+
+    @property
+    def thermochemistry(self):
+        """Get or create the Thermochemistry analysis object."""
+        if self._thermochemistry is None:
+            from chemsmart.analysis.thermochemistry import Thermochemistry
+
+            self._thermochemistry = Thermochemistry(
+                filename=self.filename,
+                temperature=self.temperature,
+                concentration=self.concentration,
+                pressure=self.pressure,
+                use_weighted_mass=False,
+                alpha=4,
+                s_freq_cutoff=self.cutoff_entropy_grimme,
+                entropy_method="grimme",
+                h_freq_cutoff=self.cutoff_enthalpy,
+                energy_units=self.energy_units,
+                check_imaginary_frequencies=True,
+            )
+        return self._thermochemistry
+
+    @property
+    def electronic_energy_in_units(self):
+        """Electronic energy (E) in specified units."""
+        from chemsmart.utils.constants import energy_conversion
+
+        return energy_conversion(
+            "j/mol",
+            self.energy_units,
+            self.thermochemistry.electronic_energy,
+        )
+
+    @property
+    def qh_gibbs_free_energy(self):
+        """Quasi-harmonic Gibbs free energy qh-G(T) in specified units."""
+        from chemsmart.utils.constants import energy_conversion
+
+        qh_gibbs_j_mol = self.thermochemistry.qrrho_gibbs_free_energy
+        if qh_gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, qh_gibbs_j_mol)
+
+    @property
+    def zero_point_energy_in_units(self):
+        from chemsmart.utils.constants import energy_conversion
+
+        zpe = self.thermochemistry.zero_point_energy
+        if zpe is None:
+            raise ValueError(f"Cannot compute ZPE for {self.filename}.")
+        return energy_conversion("j/mol", self.energy_units, zpe)
+
+    @property
+    def enthalpy_in_units(self):
+        from chemsmart.utils.constants import energy_conversion
+
+        h = self.thermochemistry.enthalpy
+        if h is None:
+            raise ValueError(f"Cannot compute enthalpy for {self.filename}.")
+        return energy_conversion("j/mol", self.energy_units, h)
+
+    @property
+    def qh_enthalpy_in_units(self):
+        from chemsmart.utils.constants import energy_conversion
+
+        qh_h = self.thermochemistry.qrrho_enthalpy
+        if qh_h is None:
+            raise ValueError(
+                f"Cannot compute qh-enthalpy for {self.filename}."
+            )
+        return energy_conversion("j/mol", self.energy_units, qh_h)
+
+    @property
+    def gibbs_free_energy_in_units(self):
+        from chemsmart.utils.constants import energy_conversion
+
+        g = self.thermochemistry.gibbs_free_energy
+        if g is None:
+            raise ValueError(
+                f"Cannot compute Gibbs free energy for {self.filename}."
+            )
+        return energy_conversion("j/mol", self.energy_units, g)
+
+    @property
+    def thermochemical_properties(self):
+        return {
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    def compute_thermochemistry(self):
+        """Compute all thermochemistry properties."""
+        import os
+
+        from chemsmart.utils.constants import energy_conversion
+
+        thermo = self.thermochemistry
+        structure = os.path.splitext(os.path.basename(self.filename))[0]
+
+        return {
+            "structure": structure,
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.entropy_times_temperature,
+                )
+                if thermo.entropy_times_temperature
+                else None
+            ),
+            "qh_entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.qrrho_entropy_times_temperature,
+                )
+                if thermo.qrrho_entropy_times_temperature
+                else None
+            ),
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    # ------------------------------------------------------------------
+    # Factory methods
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_settings(cls, filename, settings):
+        """Create from ORCApKaJobSettings."""
+        return cls(
+            filename=filename,
+            temperature=settings.temperature,
+            concentration=settings.concentration,
+            pressure=settings.pressure,
+            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=settings.cutoff_enthalpy,
+            energy_units=settings.energy_units,
+        )
+
+    @classmethod
+    def from_pka_settings(
+        cls,
+        settings,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+    ):
+        """Create ORCApKaOutput objects for pKa species."""
+        return cls.for_pka_species(
+            ha_file=ha_file,
+            a_file=a_file,
+            hb_file=hb_file,
+            b_file=b_file,
+            temperature=settings.temperature,
+            concentration=settings.concentration,
+            pressure=settings.pressure,
+            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=settings.cutoff_enthalpy,
+            energy_units=settings.energy_units,
+        )
+
+    @classmethod
+    def for_pka_species(
+        cls,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        outputs = {}
+        kw = dict(
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+        if ha_file is not None:
+            outputs["HA"] = cls(filename=ha_file, **kw)
+        if a_file is not None:
+            outputs["A"] = cls(filename=a_file, **kw)
+        if hb_file is not None:
+            outputs["HB"] = cls(filename=hb_file, **kw)
+        if b_file is not None:
+            outputs["B"] = cls(filename=b_file, **kw)
+        return outputs
+
+    @classmethod
+    def compute_pka_thermochemistry(
+        cls,
+        ha_file=None,
+        a_file=None,
+        hb_file=None,
+        b_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """Compute thermochemistry for pKa species (HA, A-, HB, B-)."""
+        results = {
+            "settings": {
+                "temperature": temperature,
+                "concentration": concentration,
+                "pressure": pressure,
+                "cutoff_entropy_grimme": cutoff_entropy_grimme,
+                "cutoff_enthalpy": cutoff_enthalpy,
+                "energy_units": energy_units,
+            }
+        }
+        kw = dict(
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+
+        def _thermo(fp, name):
+            if fp is None:
+                return None
+            out = cls(filename=fp, **kw)
+            return {
+                "name": name,
+                "E": out.electronic_energy_in_units,
+                "qh_G": out.qh_gibbs_free_energy,
+                "ZPE": out.zero_point_energy_in_units,
+                "H": out.enthalpy_in_units,
+                "qh_H": out.qh_enthalpy_in_units,
+                "G": out.gibbs_free_energy_in_units,
+            }
+
+        if ha_file:
+            results["HA"] = _thermo(ha_file, "HA")
+        if a_file:
+            results["A"] = _thermo(a_file, "A-")
+        if hb_file:
+            results["HB"] = _thermo(hb_file, "HB")
+        if b_file:
+            results["B"] = _thermo(b_file, "B-")
+        return results
+
+    # ------------------------------------------------------------------
+    # Dual-level pKa computation
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def compute_pka(
+        cls,
+        ha_gas_file,
+        a_gas_file,
+        hb_gas_file,
+        b_gas_file,
+        ha_solv_file,
+        a_solv_file,
+        hb_solv_file,
+        b_solv_file,
+        pka_reference,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+    ):
+        """
+        Compute pKa using the Dual-level Proton Exchange scheme.
+
+        HA + B⁻ → A⁻ + HB
+
+        Steps:
+            G_corr = qh-G(T) - E_gas
+            G_soln = E_solv + G_corr
+            ΔG_soln = [G(A⁻) + G(HB)] - [G(HA) + G(B⁻)]
+            pKa = pKa_ref + ΔG_soln / (RT ln10)
+        """
+        from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL
+
+        def _gas(fp):
+            out = cls(
+                filename=fp,
+                temperature=temperature,
+                concentration=concentration,
+                pressure=pressure,
+                cutoff_entropy_grimme=cutoff_entropy_grimme,
+                cutoff_enthalpy=cutoff_enthalpy,
+            )
+            E = out.electronic_energy_in_units
+            G = out.qh_gibbs_free_energy
+            return E, G, G - E
+
+        def _solv(fp):
+            out = ORCAOutput(filename=fp)
+            e = out.energies
+            if not e:
+                raise ValueError(
+                    f"Could not extract SCF energy from solvent file: {fp}"
+                )
+            return e[-1]
+
+        E_gas_HA, _, G_corr_HA = _gas(ha_gas_file)
+        E_gas_A, _, G_corr_A = _gas(a_gas_file)
+        E_gas_HB, _, G_corr_HB = _gas(hb_gas_file)
+        E_gas_B, _, G_corr_B = _gas(b_gas_file)
+
+        E_solv_HA = _solv(ha_solv_file)
+        E_solv_A = _solv(a_solv_file)
+        E_solv_HB = _solv(hb_solv_file)
+        E_solv_B = _solv(b_solv_file)
+
+        G_soln_HA = E_solv_HA + G_corr_HA
+        G_soln_A = E_solv_A + G_corr_A
+        G_soln_HB = E_solv_HB + G_corr_HB
+        G_soln_B = E_solv_B + G_corr_B
+
+        dG_au = (G_soln_A + G_soln_HB) - (G_soln_HA + G_soln_B)
+        dG_kcal = dG_au * HARTREE_TO_KCAL_MOL
+
+        R_kcal = 0.001987204
+        ln10 = 2.302585093
+        pka = pka_reference + dG_kcal / (R_kcal * temperature * ln10)
+
+        return {
+            "pKa": pka,
+            "pKa_reference": pka_reference,
+            "delta_G_soln_kcal_mol": dG_kcal,
+            "delta_G_soln_au": dG_au,
+            "temperature": temperature,
+            "G_soln_HA_au": G_soln_HA,
+            "G_soln_A_au": G_soln_A,
+            "G_soln_HB_au": G_soln_HB,
+            "G_soln_B_au": G_soln_B,
+            "E_solv_HA_au": E_solv_HA,
+            "E_solv_A_au": E_solv_A,
+            "E_solv_HB_au": E_solv_HB,
+            "E_solv_B_au": E_solv_B,
+            "G_corr_HA_au": G_corr_HA,
+            "G_corr_A_au": G_corr_A,
+            "G_corr_HB_au": G_corr_HB,
+            "G_corr_B_au": G_corr_B,
+            "E_gas_HA_au": E_gas_HA,
+            "E_gas_A_au": E_gas_A,
+            "E_gas_HB_au": E_gas_HB,
+            "E_gas_B_au": E_gas_B,
+        }
+
+    @classmethod
+    def print_pka_summary(
+        cls,
+        ha_gas_file,
+        a_gas_file,
+        hb_gas_file,
+        b_gas_file,
+        ha_solv_file,
+        a_solv_file,
+        hb_solv_file,
+        b_solv_file,
+        pka_reference,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+    ):
+        """Print formatted pKa summary (Dual-level Proton Exchange)."""
+        r = cls.compute_pka(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            hb_gas_file=hb_gas_file,
+            b_gas_file=b_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            hb_solv_file=hb_solv_file,
+            b_solv_file=b_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+        )
+
+        print("=" * 78)
+        print("pKa Calculation - Dual-level Proton Exchange Scheme (ORCA)")
+        print("=" * 78)
+        print("Reaction: HA + B⁻ → A⁻ + HB")
+        print(f"Temperature: {temperature} K")
+        print()
+        print("Method:")
+        print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
+        print("  G_soln = E_solv + G_corr  (solution free energy)")
+        print(
+            "  ΔG_soln = [G(A⁻)_soln + G(HB)_soln]"
+            " - [G(HA)_soln + G(B⁻)_soln]"
+        )
+        print("  pKa = pKa_ref + ΔG_soln / (RT × ln10)")
+        print("-" * 78)
+        print()
+        print("Gas-Phase Electronic Energies (E_gas, au):")
+        print(f"  HA:  {r['E_gas_HA_au']:.10f}")
+        print(f"  A⁻:  {r['E_gas_A_au']:.10f}")
+        print(f"  HB:  {r['E_gas_HB_au']:.10f}")
+        print(f"  B⁻:  {r['E_gas_B_au']:.10f}")
+        print()
+        print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
+        print(f"  HA:  {r['G_corr_HA_au']:.10f}")
+        print(f"  A⁻:  {r['G_corr_A_au']:.10f}")
+        print(f"  HB:  {r['G_corr_HB_au']:.10f}")
+        print(f"  B⁻:  {r['G_corr_B_au']:.10f}")
+        print()
+        print("Solvent Single-Point Energies (E_solv, au):")
+        print(f"  HA:  {r['E_solv_HA_au']:.10f}")
+        print(f"  A⁻:  {r['E_solv_A_au']:.10f}")
+        print(f"  HB:  {r['E_solv_HB_au']:.10f}")
+        print(f"  B⁻:  {r['E_solv_B_au']:.10f}")
+        print()
+        print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
+        print(f"  HA:  {r['G_soln_HA_au']:.10f}")
+        print(f"  A⁻:  {r['G_soln_A_au']:.10f}")
+        print(f"  HB:  {r['G_soln_HB_au']:.10f}")
+        print(f"  B⁻:  {r['G_soln_B_au']:.10f}")
+        print("-" * 78)
+        print()
+        print("pKa Calculation:")
+        print(f"  ΔG_soln = {r['delta_G_soln_au']:.10f} au")
+        print(f"         = {r['delta_G_soln_kcal_mol']:.4f} kcal/mol")
+        print(f"  pKa(HB)_ref = {pka_reference:.2f}")
+        print()
+        print(f"  *** Computed pKa(HA) = {r['pKa']:.2f} ***")
+        print("=" * 78)
+
+    # Aliases for backward compatibility
+    print_pka_dual_level_summary = print_pka_summary
+    compute_pka_dual_level = compute_pka

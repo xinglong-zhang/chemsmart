@@ -2362,6 +2362,78 @@ class SDFFile(FileMixin):
         )
 
 
+class PKaMolecule(Molecule):
+    """Molecule subclass for pKa calculations.
+
+    Wraps an existing ``Molecule`` and attaches a resolved
+    ``proton_index`` (1-based) that identifies the acidic proton to
+    be removed during deprotonation.
+
+    The proton index can be supplied explicitly by the user or
+    determined automatically from ChemDraw (CDXML) colour coding.
+
+    Parameters
+    ----------
+    molecule : Molecule
+        The parent molecule whose data is inherited.
+    proton_index : int
+        1-based index of the acidic proton in *molecule*.
+
+    Examples
+    --------
+    >>> mol = Molecule(symbols=["O", "H", "H"],
+    ...                positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+    >>> pka_mol = PKaMolecule(molecule=mol, proton_index=2)
+    >>> pka_mol.proton_index
+    2
+    >>> pka_mol.chemical_formula
+    'H2O'
+    """
+
+    def __init__(self, molecule: "Molecule", proton_index: int):
+        if molecule is None:
+            raise ValueError(
+                "A parent Molecule must be provided to PKaMolecule."
+            )
+        if proton_index is None or proton_index < 1:
+            raise ValueError(
+                "proton_index must be a positive 1-based integer."
+            )
+        if proton_index > molecule.num_atoms:
+            raise ValueError(
+                f"proton_index {proton_index} is out of range for a "
+                f"molecule with {molecule.num_atoms} atoms."
+            )
+        atom_symbol = molecule.symbols[proton_index - 1]
+        if atom_symbol != "H":
+            raise ValueError(
+                f"Atom at index {proton_index} is '{atom_symbol}', not 'H'. "
+                "Only hydrogen atoms can be marked as the acidic proton."
+            )
+
+        # Inherit all instance state from the parent Molecule so that any
+        # additional attributes, metadata, cached properties, etc. are
+        # preserved. We perform a shallow copy of the parent's __dict__
+        # rather than re-running Molecule.__init__ with a subset of fields.
+        self.__dict__ = copy.copy(molecule.__dict__)
+
+        # Attach the acidic proton index specific to this wrapper.
+        self.proton_index = proton_index
+
+    @classmethod
+    def from_molecule_and_proton(cls, molecule: "Molecule", proton_index: int):
+        """Create a ``PKaMolecule`` from an existing ``Molecule``.
+
+        Parameters
+        ----------
+        molecule : Molecule
+            Source molecule.
+        proton_index : int
+            1-based index of the acidic proton.
+        """
+        return cls(molecule=molecule, proton_index=proton_index)
+
+
 class QMMMMolecule(Molecule):
     """
     Standardise QMMM-related objects subclass normal
