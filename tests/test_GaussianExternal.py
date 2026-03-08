@@ -10,8 +10,10 @@ Covers the full round-trip:
 """
 
 import os
+import shutil
 import subprocess
 import sys
+import textwrap
 
 import numpy as np
 import pytest
@@ -228,3 +230,113 @@ class TestGaussianExternalIntegration:
 
         # Sanity-check units: EMT Au2 energy is ~few eV; in Ha that's ~0.1-1 Ha
         assert abs(energy_ha) < 10.0, "Energy unexpectedly large; check units"
+
+
+# ── Real Gaussian run ─────────────────────────────────────────────────────
+
+def _find_g16():
+    """Return the g16 executable path, or None if Gaussian is not available."""
+    on_path = shutil.which("g16")
+    if on_path:
+        return on_path
+    gauss_exedir = os.environ.get("GAUSS_EXEDIR", "")
+    candidate = os.path.join(gauss_exedir, "g16")
+    return candidate if os.path.isfile(candidate) else None
+
+
+_G16 = _find_g16()
+
+
+@pytest.mark.skipif(
+    _G16 is None,
+    reason="Gaussian g16 not available (add to PATH or set GAUSS_EXEDIR)",
+)
+class TestGaussianExternalRealRun:
+    """
+    Integration tests that invoke the real g16 binary.
+
+    Each test is skipped automatically when Gaussian is not installed.
+
+    Note on calculator choice
+    -------------------------
+    ASE's ``EMT`` (Effective Medium Theory) is parametrised only for FCC
+    metals (Al, Cu, Ag, Au, Ni, Pd, Pt) and cannot evaluate H.  For H2
+    we use ASE's built-in ``LennardJones`` calculator, which is general-
+    purpose and requires no external model files.
+    """
+
+    def test_h2_lj_external_singlepoint(self, tmp_path):
+        """
+        Full pipeline: LennardJones single-point on H2 via Gaussian External.
+
+        Steps
+        -----
+        1. ``ASEExternalCalculatorScript`` writes ``run_lj.py`` (LJ params
+           chosen so H2 at 0.74 Å sits in the well region).
+        2. A minimal Gaussian ``.com`` file is written whose route line
+           is ``# External="<python_exe> run_lj.py"``.  Using the explicit
+           interpreter path avoids shebang / conda-environment mismatches.
+        3. ``g16`` is invoked; it calls ``run_lj.py`` with the six standard
+           Gaussian External arguments.
+        4. The ``.log`` is checked for ``"Normal termination"`` and a
+           reported energy value.
+        """
+        from ase.calculators.lj import LennardJones
+
+        # ── 1. Write the ASE External script ─────────────────────────────
+        # sigma=0.5 Å places H2 (r=0.74 Å) in the attractive LJ well.
+        script_writer = ASEExternalCalculatorScript(
+            LennardJones,
+            calc_kwargs={"sigma": 0.5, "epsilon": 0.01},
+            script_name="run_lj",
+        )
+        script_path = script_writer.write(str(tmp_path))
+
+        # ── 2. Write the Gaussian .com input ─────────────────────────────
+        # Embed the full interpreter path so Gaussian invokes the right Python,
+        # regardless of what "python" resolves to in the shell that runs g16.
+        # Gaussian calls: <python_exe> <script_path> layer In Out Msg Fchk MatEl
+        external_value = f'"{sys.executable} {script_path}"'
+
+        com_content = textwrap.dedent(f"""\
+            %chk=h2_ext.chk
+            %nprocshared=1
+            %mem=1GB
+            # External={external_value}
+
+            H2 LJ external single-point
+
+            0 1
+            H   0.000000   0.000000   0.000000
+            H   0.000000   0.000000   0.740000
+
+        """)
+        com_file = tmp_path / "h2_ext.com"
+        com_file.write_text(com_content)
+
+        # ── 3. Run g16 ───────────────────────────────────────────────────
+        result = subprocess.run(
+            [_G16, str(com_file)],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path),
+            timeout=120,
+        )
+
+        log_file = tmp_path / "h2_ext.log"
+        log_text = log_file.read_text() if log_file.exists() else "(no log)"
+
+        # ── 4. Assert normal termination and reported energy ─────────────
+        assert "Normal termination" in log_text, (
+            "Gaussian did not terminate normally.\n"
+            f"route: {external_value}\n"
+            f"g16 stdout: {result.stdout[-400:]}\n"
+            f"log tail:\n{log_text[-1500:]}"
+        )
+
+        # Gaussian echoes the energy it received from the External script.
+        assert "Energy=" in log_text, (
+            "No 'Energy=' line found in Gaussian log; "
+            "External script may not have written output correctly.\n"
+            f"log tail:\n{log_text[-1500:]}"
+        )
