@@ -1651,12 +1651,12 @@ class TestPKaTableParsing:
                     "basename": "sys1",
                     "ha_gas": "a1.log",
                     "a_gas": "b1.log",
-                    "hb_gas": "ref.log",
-                    "b_gas": "refbase.log",
+                    "href_gas": "ref.log",
+                    "ref_gas": "refbase.log",
                     "ha_sp": "a1_sp.log",
                     "a_sp": "b1_sp.log",
-                    "hb_sp": "ref_sp.log",
-                    "b_sp": "refbase_sp.log",
+                    "href_sp": "ref_sp.log",
+                    "ref_sp": "refbase_sp.log",
                     "pka_ref": 6.75,
                 },
                 row_number=2,
@@ -1666,12 +1666,12 @@ class TestPKaTableParsing:
                     "basename": "sys2",
                     "ha_gas": "a2.log",
                     "a_gas": "b2.log",
-                    "hb_gas": None,
-                    "b_gas": None,
+                    "href_gas": None,
+                    "ref_gas": None,
                     "ha_sp": "a2_sp.log",
                     "a_sp": "b2_sp.log",
-                    "hb_sp": None,
-                    "b_sp": None,
+                    "href_sp": None,
+                    "ref_sp": None,
                     "pka_ref": None,
                 },
                 row_number=3,
@@ -1681,10 +1681,10 @@ class TestPKaTableParsing:
         resolve_pka_output_references(entries)
 
         # Second row should have inherited reference from first row
-        assert entries[1]["hb_gas"] == "ref.log"
-        assert entries[1]["b_gas"] == "refbase.log"
-        assert entries[1]["hb_sp"] == "ref_sp.log"
-        assert entries[1]["b_sp"] == "refbase_sp.log"
+        assert entries[1]["href_gas"] == "ref.log"
+        assert entries[1]["ref_gas"] == "refbase.log"
+        assert entries[1]["href_sp"] == "ref_sp.log"
+        assert entries[1]["ref_sp"] == "refbase_sp.log"
         assert entries[1]["pka_ref"] == 6.75
 
     def test_resolve_pka_output_references_first_row_blank_raises(self):
@@ -1700,12 +1700,12 @@ class TestPKaTableParsing:
                     "basename": "sys1",
                     "ha_gas": "a.log",
                     "a_gas": "b.log",
-                    "hb_gas": None,
-                    "b_gas": None,
+                    "href_gas": None,
+                    "ref_gas": None,
                     "ha_sp": "a_sp.log",
                     "a_sp": "b_sp.log",
-                    "hb_sp": None,
-                    "b_sp": None,
+                    "href_sp": None,
+                    "ref_sp": None,
                     "pka_ref": None,
                 },
                 row_number=2,
@@ -1728,12 +1728,12 @@ class TestPKaTableParsing:
                     "basename": "sys1",
                     "ha_gas": "a.log",
                     "a_gas": "b.log",
-                    "hb_gas": "ref1.log",
-                    "b_gas": "refbase1.log",
+                    "href_gas": "ref1.log",
+                    "ref_gas": "refbase1.log",
                     "ha_sp": "a_sp.log",
                     "a_sp": "b_sp.log",
-                    "hb_sp": "ref1_sp.log",
-                    "b_sp": "refbase1_sp.log",
+                    "href_sp": "ref1_sp.log",
+                    "ref_sp": "refbase1_sp.log",
                     "pka_ref": 6.75,
                 },
                 row_number=2,
@@ -1743,12 +1743,12 @@ class TestPKaTableParsing:
                     "basename": "sys2",
                     "ha_gas": "a2.log",
                     "a_gas": "b2.log",
-                    "hb_gas": "ref2.log",
-                    "b_gas": None,  # partially blank
+                    "href_gas": "ref2.log",
+                    "ref_gas": None,  # partially blank
                     "ha_sp": "a2_sp.log",
                     "a_sp": "b2_sp.log",
-                    "hb_sp": None,
-                    "b_sp": None,
+                    "href_sp": None,
+                    "ref_sp": None,
                     "pka_ref": 4.5,  # new pka_ref
                 },
                 row_number=3,
@@ -1757,10 +1757,10 @@ class TestPKaTableParsing:
 
         resolve_pka_output_references(entries)
 
-        assert entries[1]["hb_gas"] == "ref2.log"  # kept own value
-        assert entries[1]["b_gas"] == "refbase1.log"  # carried forward
-        assert entries[1]["hb_sp"] == "ref1_sp.log"  # carried forward
-        assert entries[1]["b_sp"] == "refbase1_sp.log"  # carried forward
+        assert entries[1]["href_gas"] == "ref2.log"  # kept own value
+        assert entries[1]["ref_gas"] == "refbase1.log"  # carried forward
+        assert entries[1]["href_sp"] == "ref1_sp.log"  # carried forward
+        assert entries[1]["ref_sp"] == "refbase1_sp.log"  # carried forward
         assert entries[1]["pka_ref"] == 4.5  # kept own value
 
     def test_pka_output_table_entry_validate_valid(self, tmp_path):
@@ -1784,12 +1784,12 @@ class TestPKaTableParsing:
                 "basename": "test",
                 "ha_gas": str(tmp_path / "a.log"),
                 "a_gas": str(tmp_path / "b.log"),
-                "hb_gas": str(tmp_path / "c.log"),
-                "b_gas": str(tmp_path / "d.log"),
+                "href_gas": str(tmp_path / "c.log"),
+                "ref_gas": str(tmp_path / "d.log"),
                 "ha_sp": str(tmp_path / "e.log"),
                 "a_sp": str(tmp_path / "f.log"),
-                "hb_sp": str(tmp_path / "g.log"),
-                "b_sp": str(tmp_path / "h.log"),
+                "href_sp": str(tmp_path / "g.log"),
+                "ref_sp": str(tmp_path / "h.log"),
                 "pka_ref": 6.75,
             },
             row_number=2,
@@ -1807,12 +1807,12 @@ class TestPKaTableParsing:
                 "basename": "test",
                 "ha_gas": "/nonexistent/file.log",
                 "a_gas": "/nonexistent/file2.log",
-                "hb_gas": "/nonexistent/file3.log",
-                "b_gas": "/nonexistent/file4.log",
+                "href_gas": "/nonexistent/file3.log",
+                "ref_gas": "/nonexistent/file4.log",
                 "ha_sp": "/nonexistent/file5.log",
                 "a_sp": "/nonexistent/file6.log",
-                "hb_sp": "/nonexistent/file7.log",
-                "b_sp": "/nonexistent/file8.log",
+                "href_sp": "/nonexistent/file7.log",
+                "ref_sp": "/nonexistent/file8.log",
                 "pka_ref": 6.75,
             },
             row_number=2,
@@ -1830,12 +1830,12 @@ class TestPKaTableParsing:
                 "basename": "",
                 "ha_gas": "a.log",
                 "a_gas": "b.log",
-                "hb_gas": "c.log",
-                "b_gas": "d.log",
+                "href_gas": "c.log",
+                "ref_gas": "d.log",
                 "ha_sp": "e.log",
                 "a_sp": "f.log",
-                "hb_sp": "g.log",
-                "b_sp": "h.log",
+                "href_sp": "g.log",
+                "ref_sp": "h.log",
                 "pka_ref": 6.75,
             },
             row_number=1,
@@ -1969,7 +1969,7 @@ class TestPKaTableParsing:
 
         table_file = tmp_path / "outputs.csv"
         table_file.write_text(
-            "basename,ha_gas,a_gas,hb_gas,b_gas,ha_sp,a_sp,hb_sp,b_sp,pka_ref\n"
+            "basename,ha_gas,a_gas,href_gas,ref_gas,ha_sp,a_sp,href_sp,ref_sp,pka_ref\n"
             f"sys1,{tmp_path}/a1.log,{tmp_path}/b1.log,"
             f"{tmp_path}/ref.log,{tmp_path}/refbase.log,"
             f"{tmp_path}/a1_sp.log,{tmp_path}/b1_sp.log,"
@@ -1986,10 +1986,10 @@ class TestPKaTableParsing:
         resolve_pka_output_references(entries)
 
         # Second row should have inherited reference from first
-        assert entries[1]["hb_gas"] == f"{tmp_path}/ref.log"
-        assert entries[1]["b_gas"] == f"{tmp_path}/refbase.log"
-        assert entries[1]["hb_sp"] == f"{tmp_path}/ref_sp.log"
-        assert entries[1]["b_sp"] == f"{tmp_path}/refbase_sp.log"
+        assert entries[1]["href_gas"] == f"{tmp_path}/ref.log"
+        assert entries[1]["ref_gas"] == f"{tmp_path}/refbase.log"
+        assert entries[1]["href_sp"] == f"{tmp_path}/ref_sp.log"
+        assert entries[1]["ref_sp"] == f"{tmp_path}/refbase_sp.log"
         assert entries[1]["pka_ref"] == 6.75
 
         # Validate all entries

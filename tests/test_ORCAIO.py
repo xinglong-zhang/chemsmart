@@ -3253,12 +3253,12 @@ class TestORCApKaOutput:
         result = ORCApKaOutput.compute_pka(
             ha_gas_file=files["ha_gas"],
             a_gas_file=files["a_gas"],
-            hb_gas_file=files["hb_gas"],
-            b_gas_file=files["b_gas"],
+            href_gas_file=files["hb_gas"],
+            ref_gas_file=files["b_gas"],
             ha_solv_file=files["ha_solv"],
             a_solv_file=files["a_solv"],
-            hb_solv_file=files["hb_solv"],
-            b_solv_file=files["b_solv"],
+            href_solv_file=files["hb_solv"],
+            ref_solv_file=files["b_solv"],
             pka_reference=6.75,
             temperature=298.15,
             concentration=1.0,
@@ -3270,9 +3270,11 @@ class TestORCApKaOutput:
         assert np.isclose(result["E_solv_HA_au"], self.L2_HA_SP_E, rtol=1e-8)
         assert np.isclose(result["E_solv_A_au"], self.L2_A_SP_E, rtol=1e-8)
         assert np.isclose(
-            result["E_solv_HB_au"], self.PHENOL_HB_SP_E, rtol=1e-8
+            result["E_solv_HRef_au"], self.PHENOL_HB_SP_E, rtol=1e-8
         )
-        assert np.isclose(result["E_solv_B_au"], self.PHENOL_B_SP_E, rtol=1e-8)
+        assert np.isclose(
+            result["E_solv_Ref_au"], self.PHENOL_B_SP_E, rtol=1e-8
+        )
 
         # Thermodynamic-cycle energy from combined.dat-derived constants
         # (combined.dat stores rounded values, so allow a small tolerance)

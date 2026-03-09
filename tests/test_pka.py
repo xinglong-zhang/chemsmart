@@ -98,7 +98,7 @@ def test_run_pka_detects_orca_and_dispatches(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     assert "kwargs" in called
-    assert called["kwargs"]["hb_gas_file"] == files["hb.log"]
+    assert called["kwargs"]["href_gas_file"] == files["hb.log"]
 
 
 def test_run_pka_mixed_programs_raises(tmp_path):

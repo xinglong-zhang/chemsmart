@@ -3675,15 +3675,15 @@ class ORCApKaOutput(ORCAOutput):
         settings,
         ha_file=None,
         a_file=None,
-        hb_file=None,
-        b_file=None,
+        href_file=None,
+        ref_file=None,
     ):
         """Create ORCApKaOutput objects for pKa species."""
         return cls.for_pka_species(
             ha_file=ha_file,
             a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
+            href_file=href_file,
+            ref_file=ref_file,
             temperature=settings.temperature,
             concentration=settings.concentration,
             pressure=settings.pressure,
@@ -3697,8 +3697,8 @@ class ORCApKaOutput(ORCAOutput):
         cls,
         ha_file=None,
         a_file=None,
-        hb_file=None,
-        b_file=None,
+        href_file=None,
+        ref_file=None,
         temperature=298.15,
         concentration=1.0,
         pressure=1.0,
@@ -3719,10 +3719,10 @@ class ORCApKaOutput(ORCAOutput):
             outputs["HA"] = cls(filename=ha_file, **kw)
         if a_file is not None:
             outputs["A"] = cls(filename=a_file, **kw)
-        if hb_file is not None:
-            outputs["HB"] = cls(filename=hb_file, **kw)
-        if b_file is not None:
-            outputs["B"] = cls(filename=b_file, **kw)
+        if href_file is not None:
+            outputs["HRef"] = cls(filename=href_file, **kw)
+        if ref_file is not None:
+            outputs["Ref"] = cls(filename=ref_file, **kw)
         return outputs
 
     @classmethod
@@ -3730,8 +3730,8 @@ class ORCApKaOutput(ORCAOutput):
         cls,
         ha_file=None,
         a_file=None,
-        hb_file=None,
-        b_file=None,
+        href_file=None,
+        ref_file=None,
         temperature=298.15,
         concentration=1.0,
         pressure=1.0,
@@ -3739,7 +3739,7 @@ class ORCApKaOutput(ORCAOutput):
         cutoff_enthalpy=100.0,
         energy_units="hartree",
     ):
-        """Compute thermochemistry for pKa species (HA, A-, HB, B-)."""
+        """Compute thermochemistry for pKa species (HA, A-, HRef, Ref-)."""
         results = {
             "settings": {
                 "temperature": temperature,
@@ -3777,10 +3777,10 @@ class ORCApKaOutput(ORCAOutput):
             results["HA"] = _thermo(ha_file, "HA")
         if a_file:
             results["A"] = _thermo(a_file, "A-")
-        if hb_file:
-            results["HB"] = _thermo(hb_file, "HB")
-        if b_file:
-            results["B"] = _thermo(b_file, "B-")
+        if href_file:
+            results["HRef"] = _thermo(href_file, "HRef")
+        if ref_file:
+            results["Ref"] = _thermo(ref_file, "Ref-")
         return results
 
     # ------------------------------------------------------------------
@@ -3792,12 +3792,12 @@ class ORCApKaOutput(ORCAOutput):
         cls,
         ha_gas_file,
         a_gas_file,
-        hb_gas_file,
-        b_gas_file,
+        href_gas_file,
+        ref_gas_file,
         ha_solv_file,
         a_solv_file,
-        hb_solv_file,
-        b_solv_file,
+        href_solv_file,
+        ref_solv_file,
         pka_reference,
         temperature=298.15,
         concentration=1.0,
@@ -3808,12 +3808,12 @@ class ORCApKaOutput(ORCAOutput):
         """
         Compute pKa using the Dual-level Proton Exchange scheme.
 
-        HA + B⁻ → A⁻ + HB
+        HA + Ref⁻ → A⁻ + HRef
 
         Steps:
             G_corr = qh-G(T) - E_gas
             G_soln = E_solv + G_corr
-            ΔG_soln = [G(A⁻) + G(HB)] - [G(HA) + G(B⁻)]
+            ΔG_soln = [G(A⁻) + G(HRef)] - [G(HA) + G(Ref⁻)]
             pKa = pKa_ref + ΔG_soln / (RT ln10)
         """
         from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL
@@ -3842,20 +3842,20 @@ class ORCApKaOutput(ORCAOutput):
 
         E_gas_HA, _, G_corr_HA = _gas(ha_gas_file)
         E_gas_A, _, G_corr_A = _gas(a_gas_file)
-        E_gas_HB, _, G_corr_HB = _gas(hb_gas_file)
-        E_gas_B, _, G_corr_B = _gas(b_gas_file)
+        E_gas_HRef, _, G_corr_HRef = _gas(href_gas_file)
+        E_gas_Ref, _, G_corr_Ref = _gas(ref_gas_file)
 
         E_solv_HA = _solv(ha_solv_file)
         E_solv_A = _solv(a_solv_file)
-        E_solv_HB = _solv(hb_solv_file)
-        E_solv_B = _solv(b_solv_file)
+        E_solv_HRef = _solv(href_solv_file)
+        E_solv_Ref = _solv(ref_solv_file)
 
         G_soln_HA = E_solv_HA + G_corr_HA
         G_soln_A = E_solv_A + G_corr_A
-        G_soln_HB = E_solv_HB + G_corr_HB
-        G_soln_B = E_solv_B + G_corr_B
+        G_soln_HRef = E_solv_HRef + G_corr_HRef
+        G_soln_Ref = E_solv_Ref + G_corr_Ref
 
-        dG_au = (G_soln_A + G_soln_HB) - (G_soln_HA + G_soln_B)
+        dG_au = (G_soln_A + G_soln_HRef) - (G_soln_HA + G_soln_Ref)
         dG_kcal = dG_au * HARTREE_TO_KCAL_MOL
 
         R_kcal = 0.001987204
@@ -3870,20 +3870,20 @@ class ORCApKaOutput(ORCAOutput):
             "temperature": temperature,
             "G_soln_HA_au": G_soln_HA,
             "G_soln_A_au": G_soln_A,
-            "G_soln_HB_au": G_soln_HB,
-            "G_soln_B_au": G_soln_B,
+            "G_soln_HRef_au": G_soln_HRef,
+            "G_soln_Ref_au": G_soln_Ref,
             "E_solv_HA_au": E_solv_HA,
             "E_solv_A_au": E_solv_A,
-            "E_solv_HB_au": E_solv_HB,
-            "E_solv_B_au": E_solv_B,
+            "E_solv_HRef_au": E_solv_HRef,
+            "E_solv_Ref_au": E_solv_Ref,
             "G_corr_HA_au": G_corr_HA,
             "G_corr_A_au": G_corr_A,
-            "G_corr_HB_au": G_corr_HB,
-            "G_corr_B_au": G_corr_B,
+            "G_corr_HRef_au": G_corr_HRef,
+            "G_corr_Ref_au": G_corr_Ref,
             "E_gas_HA_au": E_gas_HA,
             "E_gas_A_au": E_gas_A,
-            "E_gas_HB_au": E_gas_HB,
-            "E_gas_B_au": E_gas_B,
+            "E_gas_HRef_au": E_gas_HRef,
+            "E_gas_Ref_au": E_gas_Ref,
         }
 
     @classmethod
@@ -3891,12 +3891,12 @@ class ORCApKaOutput(ORCAOutput):
         cls,
         ha_gas_file,
         a_gas_file,
-        hb_gas_file,
-        b_gas_file,
+        href_gas_file,
+        ref_gas_file,
         ha_solv_file,
         a_solv_file,
-        hb_solv_file,
-        b_solv_file,
+        href_solv_file,
+        ref_solv_file,
         pka_reference,
         temperature=298.15,
         concentration=1.0,
@@ -3908,12 +3908,12 @@ class ORCApKaOutput(ORCAOutput):
         r = cls.compute_pka(
             ha_gas_file=ha_gas_file,
             a_gas_file=a_gas_file,
-            hb_gas_file=hb_gas_file,
-            b_gas_file=b_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
             ha_solv_file=ha_solv_file,
             a_solv_file=a_solv_file,
-            hb_solv_file=hb_solv_file,
-            b_solv_file=b_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
             pka_reference=pka_reference,
             temperature=temperature,
             concentration=concentration,
@@ -3925,15 +3925,15 @@ class ORCApKaOutput(ORCAOutput):
         print("=" * 78)
         print("pKa Calculation - Dual-level Proton Exchange Scheme (ORCA)")
         print("=" * 78)
-        print("Reaction: HA + B⁻ → A⁻ + HB")
+        print("Reaction: HA + Ref⁻ → A⁻ + HRef")
         print(f"Temperature: {temperature} K")
         print()
         print("Method:")
         print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
         print("  G_soln = E_solv + G_corr  (solution free energy)")
         print(
-            "  ΔG_soln = [G(A⁻)_soln + G(HB)_soln]"
-            " - [G(HA)_soln + G(B⁻)_soln]"
+            "  ΔG_soln = [G(A⁻)_soln + G(HRef)_soln]"
+            " - [G(HA)_soln + G(Ref⁻)_soln]"
         )
         print("  pKa = pKa_ref + ΔG_soln / (RT × ln10)")
         print("-" * 78)
@@ -3941,32 +3941,32 @@ class ORCApKaOutput(ORCAOutput):
         print("Gas-Phase Electronic Energies (E_gas, au):")
         print(f"  HA:  {r['E_gas_HA_au']:.10f}")
         print(f"  A⁻:  {r['E_gas_A_au']:.10f}")
-        print(f"  HB:  {r['E_gas_HB_au']:.10f}")
-        print(f"  B⁻:  {r['E_gas_B_au']:.10f}")
+        print(f"  HRef:  {r['E_gas_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {r['E_gas_Ref_au']:.10f}")
         print()
         print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
         print(f"  HA:  {r['G_corr_HA_au']:.10f}")
         print(f"  A⁻:  {r['G_corr_A_au']:.10f}")
-        print(f"  HB:  {r['G_corr_HB_au']:.10f}")
-        print(f"  B⁻:  {r['G_corr_B_au']:.10f}")
+        print(f"  HRef:  {r['G_corr_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {r['G_corr_Ref_au']:.10f}")
         print()
         print("Solvent Single-Point Energies (E_solv, au):")
         print(f"  HA:  {r['E_solv_HA_au']:.10f}")
         print(f"  A⁻:  {r['E_solv_A_au']:.10f}")
-        print(f"  HB:  {r['E_solv_HB_au']:.10f}")
-        print(f"  B⁻:  {r['E_solv_B_au']:.10f}")
+        print(f"  HRef:  {r['E_solv_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {r['E_solv_Ref_au']:.10f}")
         print()
         print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
         print(f"  HA:  {r['G_soln_HA_au']:.10f}")
         print(f"  A⁻:  {r['G_soln_A_au']:.10f}")
-        print(f"  HB:  {r['G_soln_HB_au']:.10f}")
-        print(f"  B⁻:  {r['G_soln_B_au']:.10f}")
+        print(f"  HRef:  {r['G_soln_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {r['G_soln_Ref_au']:.10f}")
         print("-" * 78)
         print()
         print("pKa Calculation:")
         print(f"  ΔG_soln = {r['delta_G_soln_au']:.10f} au")
         print(f"         = {r['delta_G_soln_kcal_mol']:.4f} kcal/mol")
-        print(f"  pKa(HB)_ref = {pka_reference:.2f}")
+        print(f"  pKa(HRef)_ref = {pka_reference:.2f}")
         print()
         print(f"  *** Computed pKa(HA) = {r['pKa']:.2f} ***")
         print("=" * 78)

@@ -1965,13 +1965,13 @@ class GaussianpKaJobSettings(GaussianJobSettings):
        Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., J Phys Chem A 1998)
 
     2. **Proton exchange** (thermodynamic_cycle='proton exchange'):
-       Uses a reference acid (HB) to cancel systematic errors.
-       HA + B- → A- + HB
-       pKa(HA) = pKa(HB) + ΔG_exchange / (2.303 * R * T)
+       Uses a reference acid (HRef) to cancel systematic errors.
+       HA + Ref- → A- + HRef
+       pKa(HA) = pKa(HRef) + ΔG_exchange / (2.303 * R * T)
 
        When using proton exchange, you can provide a reference acid geometry file
-       via the reference_file parameter. This will run optimization and SP
-       calculations for both HB and B- alongside HA and A-.
+       via the href_file parameter. This will run optimization and SP
+       calculations for both HRef and Ref- alongside HA and A-.
 
     The pKa calculation workflow:
     1. Optimize HA in gas phase (opt + freq)
@@ -1990,13 +1990,13 @@ class GaussianpKaJobSettings(GaussianJobSettings):
     Attributes:
         proton_index (int): 1-based index of the proton to remove for deprotonation.
         thermodynamic_cycle (str): Type of thermodynamic cycle ('direct' or 'proton exchange').
-        reference_file (str): Path to geometry file for reference acid (HB).
+        href_file (str): Path to geometry file for reference acid (HRef).
             Used only when thermodynamic_cycle='proton exchange'.
-        reference_proton_index (int): 1-based index of proton to remove from HB.
-        reference_charge (int): Charge of the reference acid (HB).
-        reference_multiplicity (int): Multiplicity of the reference acid (HB).
-        reference_conjugate_base_charge (int): Charge of B- (defaults to reference_charge - 1).
-        reference_conjugate_base_multiplicity (int): Multiplicity of B-.
+        reference_proton_index (int): 1-based index of proton to remove from HRef.
+        reference_charge (int): Charge of the reference acid (HRef).
+        reference_multiplicity (int): Multiplicity of the reference acid (HRef).
+        reference_conjugate_base_charge (int): Charge of Ref- (defaults to reference_charge - 1).
+        reference_conjugate_base_multiplicity (int): Multiplicity of Ref-.
         delta_G_proton (float): Absolute free energy of H+ in water (kcal/mol).
             Only used when thermodynamic_cycle='direct'. Default: -265.9 kcal/mol.
         solvent_model (str): Solvation model for SP calculations (e.g., 'SMD', 'PCM').
@@ -2088,18 +2088,18 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 Options: 'direct', 'proton exchange'. Default is 'proton exchange'.
             reference_file (str, optional): Path to geometry file for reference acid (HB)
                 for proton exchange cycle. When provided, optimization and SP
-                calculations will also be run for HB and B-.
+                calculations will also be run for HRef and Ref-.
             reference_proton_index (int, optional): 1-based index of the proton to
-                remove from the reference acid (HB) to create its conjugate base (B-).
-                Required when reference_file is provided.
-            reference_charge (int, optional): Charge of the reference acid (HB).
-                Required when reference_file is provided.
-            reference_multiplicity (int, optional): Multiplicity of the reference acid (HB).
-                Required when reference_file is provided.
+                remove from the reference acid (HRef) to create its conjugate base (Ref-).
+                Required when href_file is provided.
+            reference_charge (int, optional): Charge of the reference acid (HRef).
+                Required when href_file is provided.
+            reference_multiplicity (int, optional): Multiplicity of the reference acid (HRef).
+                Required when href_file is provided.
             reference_conjugate_base_charge (int, optional): Charge of the reference
-                conjugate base (B-). Defaults to reference_charge - 1.
+                conjugate base (Ref-). Defaults to reference_charge - 1.
             reference_conjugate_base_multiplicity (int, optional): Multiplicity of the
-                reference conjugate base (B-). Defaults to reference_multiplicity.
+                reference conjugate base (Ref-). Defaults to reference_multiplicity.
             delta_G_proton (float, optional): Absolute free energy of H+ in water
                 (kcal/mol). Only used when thermodynamic_cycle='direct'.
                 Default is -265.9 kcal/mol (Tissandier et al., 1998).
@@ -2207,13 +2207,13 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
     def get_reference_molecule(self):
         """
-        Load and return the reference acid molecule (HB) from file.
+        Load and return the reference acid molecule (HRef) from file.
 
         Returns:
             Molecule: The reference acid molecule with charge/multiplicity set.
 
         Raises:
-            ValueError: If reference_file is not provided or settings are invalid.
+            ValueError: If href_file is not provided or settings are invalid.
         """
         if not self.has_reference_file:
             raise ValueError(
@@ -2231,7 +2231,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
     def get_reference_conjugate_base_molecule(self):
         """
-        Create and return the reference conjugate base molecule (B-).
+        Create and return the reference conjugate base molecule (Ref-).
 
         Returns:
             Molecule: The reference conjugate base with proton removed.
@@ -2247,10 +2247,10 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         Create a reference conjugate base molecule by removing the specified proton.
 
         Args:
-            reference_molecule (Molecule): The reference acid molecule (HB).
+            reference_molecule (Molecule): The reference acid molecule (HRef).
 
         Returns:
-            Molecule: A new molecule with the proton removed (B-).
+            Molecule: A new molecule with the proton removed (Ref-).
 
         Raises:
             ValueError: If reference_proton_index is invalid.
@@ -2332,7 +2332,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
     def reference_pair_molecules(self):
         """
-        Create and return both reference acid (HB) and conjugate base (B-) molecules.
+        Create and return both reference acid (HRef) and conjugate base (Ref-) molecules.
 
         Returns:
             tuple: A tuple of (reference_acid_mol, reference_conjugate_base_mol).

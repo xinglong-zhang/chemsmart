@@ -2608,12 +2608,12 @@ class TestGaussian16pKaOutput:
         result = Gaussian16pKaOutput.compute_pka(
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
             a_gas_file=gaussian_pKa_A_optimization_outputfile,
-            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
             b_gas_file=gaussian_pKa_B_optimization_outputfile,
             ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
             a_solv_file=gaussian_pKa_A_single_point_outputfile,
-            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
-            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
             pka_reference=self.PKA_COLLIDINE_REFERENCE,
             temperature=373.15,
         )
@@ -2628,26 +2628,26 @@ class TestGaussian16pKaOutput:
         # Check solution free energies are present (in Hartree/au)
         assert "G_soln_HA_au" in result
         assert "G_soln_A_au" in result
-        assert "G_soln_HB_au" in result
-        assert "G_soln_B_au" in result
+        assert "G_soln_HRef_au" in result
+        assert "G_soln_Ref_au" in result
 
         # Check solvent SP energies are present (in Hartree/au)
         assert "E_solv_HA_au" in result
         assert "E_solv_A_au" in result
-        assert "E_solv_HB_au" in result
-        assert "E_solv_B_au" in result
+        assert "E_solv_HRef_au" in result
+        assert "E_solv_Ref_au" in result
 
         # Check thermal corrections are present (in Hartree/au)
         assert "G_corr_HA_au" in result
         assert "G_corr_A_au" in result
-        assert "G_corr_HB_au" in result
-        assert "G_corr_B_au" in result
+        assert "G_corr_HRef_au" in result
+        assert "G_corr_Ref_au" in result
 
         # Check gas-phase electronic energies are present (in Hartree/au)
         assert "E_gas_HA_au" in result
         assert "E_gas_A_au" in result
-        assert "E_gas_HB_au" in result
-        assert "E_gas_B_au" in result
+        assert "E_gas_HRef_au" in result
+        assert "E_gas_Ref_au" in result
 
         # Verify reference pKa is stored correctly
         assert result["pKa_reference"] == self.PKA_COLLIDINE_REFERENCE
@@ -2682,12 +2682,12 @@ class TestGaussian16pKaOutput:
         result = Gaussian16pKaOutput.compute_pka(
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
             a_gas_file=gaussian_pKa_A_optimization_outputfile,
-            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
             b_gas_file=gaussian_pKa_B_optimization_outputfile,
             ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
             a_solv_file=gaussian_pKa_A_single_point_outputfile,
-            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
-            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
             pka_reference=self.PKA_COLLIDINE_REFERENCE,
             temperature=373.15,
         )
@@ -2695,7 +2695,7 @@ class TestGaussian16pKaOutput:
         HARTREE_TO_KCAL = 627.5094740631
 
         # Verify G_soln = E_solv + G_corr for each species (all in Hartree/au)
-        for species in ["HA", "A", "HB", "B"]:
+        for species in ["HA", "A", "HRef", "Ref"]:
             E_solv_au = result[f"E_solv_{species}_au"]
             G_corr_au = result[f"G_corr_{species}_au"]
             G_soln_au = result[f"G_soln_{species}_au"]
@@ -2705,10 +2705,10 @@ class TestGaussian16pKaOutput:
             ), f"G_soln_{species}_au mismatch: {G_soln_au} vs {expected_G_soln_au}"
 
         # Verify ΔG_soln in Hartree (au)
-        # ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]
+        # ΔG_soln = [G(A⁻)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref⁻)_soln]
         expected_delta_G_au = (
-            result["G_soln_A_au"] + result["G_soln_HB_au"]
-        ) - (result["G_soln_HA_au"] + result["G_soln_B_au"])
+            result["G_soln_A_au"] + result["G_soln_HRef_au"]
+        ) - (result["G_soln_HA_au"] + result["G_soln_Ref_au"])
         assert np.isclose(
             result["delta_G_soln_au"], expected_delta_G_au, rtol=1e-10
         )
@@ -2739,12 +2739,12 @@ class TestGaussian16pKaOutput:
         Gaussian16pKaOutput.print_pka_summary(
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
             a_gas_file=gaussian_pKa_A_optimization_outputfile,
-            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
             b_gas_file=gaussian_pKa_B_optimization_outputfile,
             ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
             a_solv_file=gaussian_pKa_A_single_point_outputfile,
-            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
-            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
             pka_reference=self.PKA_COLLIDINE_REFERENCE,
             temperature=373.15,
         )
@@ -2754,7 +2754,7 @@ class TestGaussian16pKaOutput:
 
         # Check header
         assert "Dual-level Proton Exchange Scheme" in output
-        assert "HA + B⁻ → A⁻ + HB" in output
+        assert "HA + Ref⁻ → A⁻ + HRef" in output
 
         # Check method description is present
         assert "G_corr = qh-G(T) - E_gas" in output
@@ -2791,12 +2791,12 @@ class TestGaussian16pKaOutput:
         result1 = Gaussian16pKaOutput.compute_pka(
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
             a_gas_file=gaussian_pKa_A_optimization_outputfile,
-            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
             b_gas_file=gaussian_pKa_B_optimization_outputfile,
             ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
             a_solv_file=gaussian_pKa_A_single_point_outputfile,
-            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
-            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
             pka_reference=self.PKA_COLLIDINE_REFERENCE,
             temperature=298.15,
         )
@@ -2804,12 +2804,12 @@ class TestGaussian16pKaOutput:
         result2 = Gaussian16pKaOutput.compute_pka_dual_level(
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
             a_gas_file=gaussian_pKa_A_optimization_outputfile,
-            hb_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
             b_gas_file=gaussian_pKa_B_optimization_outputfile,
             ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
             a_solv_file=gaussian_pKa_A_single_point_outputfile,
-            hb_solv_file=gaussian_pKa_HB_single_point_outputfile,
-            b_solv_file=gaussian_pKa_B_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
             pka_reference=self.PKA_COLLIDINE_REFERENCE,
             temperature=298.15,
         )

@@ -288,16 +288,15 @@ def analyze(
     OutputCls = _resolve_output_cls(output_files)
 
     logger.info("Computing pKa (Dual-level Proton Exchange)...")
-
     OutputCls.print_pka_summary(
         ha_gas_file=ha,
         a_gas_file=a,
-        hb_gas_file=href,
-        b_gas_file=ref,
+        href_gas_file=href,
+        ref_gas_file=ref,
         ha_solv_file=ha_solv,
         a_solv_file=a_solv,
-        hb_solv_file=href_solv,
-        b_solv_file=ref_solv,
+        href_solv_file=href_solv,
+        raef_solv_file=ref_solv,
         pka_reference=reference_pka,
         temperature=shared["temperature"],
         concentration=shared["concentration"],

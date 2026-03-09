@@ -2355,13 +2355,18 @@ class PKaOutputTableEntry:
             "ha_optimization_output",
         ],
         "a_gas": ["a_gas", "a_opt", "a_gas_file", "a_optimization_output"],
-        "hb_gas": [
-            "hb_gas",
-            "hb_opt",
-            "hb_gas_file",
-            "hb_optimization_output",
+        "href_gas": [
+            "href_gas",
+            "href_opt",
+            "href_gas_file",
+            "href_optimization_output",
         ],
-        "b_gas": ["b_gas", "b_opt", "b_gas_file", "b_optimization_output"],
+        "ref_gas": [
+            "ref_gas",
+            "ref_opt",
+            "ref_gas_file",
+            "ref_optimization_output",
+        ],
         "ha_sp": [
             "ha_sp",
             "ha_solv",
@@ -2369,17 +2374,28 @@ class PKaOutputTableEntry:
             "ha_single_point_output",
         ],
         "a_sp": ["a_sp", "a_solv", "a_solv_file", "a_single_point_output"],
-        "hb_sp": [
-            "hb_sp",
-            "hb_solv",
-            "hb_solv_file",
-            "hb_single_point_output",
+        "href_sp": [
+            "href_sp",
+            "href_solv",
+            "href_solv_file",
+            "href_single_point_output",
         ],
-        "b_sp": ["b_sp", "b_solv", "b_solv_file", "b_single_point_output"],
+        "ref_sp": [
+            "ref_sp",
+            "ref_solv",
+            "ref_solv_file",
+            "ref_single_point_output",
+        ],
         "pka_ref": ["pka_ref", "pka_reference", "reference_pka", "ref_pka"],
     }
 
-    _REFERENCE_COLUMNS = ("hb_gas", "b_gas", "hb_sp", "b_sp", "pka_ref")
+    _REFERENCE_COLUMNS = (
+        "href_gas",
+        "ref_gas",
+        "href_sp",
+        "ref_sp",
+        "pka_ref",
+    )
 
     def __init__(self, data: dict, row_number: int = None):
         # Explicitly initialized attributes
@@ -2387,12 +2403,12 @@ class PKaOutputTableEntry:
         self.basename = None
         self.ha_gas = None
         self.a_gas = None
-        self.hb_gas = None
-        self.b_gas = None
+        self.href_gas = None
+        self.ref_gas = None
         self.ha_sp = None
         self.a_sp = None
-        self.hb_sp = None
-        self.b_sp = None
+        self.href_sp = None
+        self.ref_sp = None
         self.pka_ref = None
 
         # Explicit helper attributes requested for pKa workflow clarity
@@ -2441,24 +2457,24 @@ class PKaOutputTableEntry:
         elif canonical == "a_gas":
             self.a_gas = value
             self._data["a_gas"] = value
-        elif canonical == "hb_gas":
-            self.hb_gas = value
-            self._data["hb_gas"] = value
-        elif canonical == "b_gas":
-            self.b_gas = value
-            self._data["b_gas"] = value
+        elif canonical == "href_gas":
+            self.href_gas = value
+            self._data["href_gas"] = value
+        elif canonical == "ref_gas":
+            self.ref_gas = value
+            self._data["ref_gas"] = value
         elif canonical == "ha_sp":
             self.ha_sp = value
             self._data["ha_sp"] = value
         elif canonical == "a_sp":
             self.a_sp = value
             self._data["a_sp"] = value
-        elif canonical == "hb_sp":
-            self.hb_sp = value
-            self._data["hb_sp"] = value
-        elif canonical == "b_sp":
-            self.b_sp = value
-            self._data["b_sp"] = value
+        elif canonical == "href_sp":
+            self.href_sp = value
+            self._data["href_sp"] = value
+        elif canonical == "ref_sp":
+            self.ref_sp = value
+            self._data["ref_sp"] = value
         elif canonical == "pka_ref":
             self.pka_ref = value
             self._data["pka_ref"] = value
@@ -2472,10 +2488,10 @@ class PKaOutputTableEntry:
         if self.basename is not None:
             self.ha_basename = str(self.basename)
 
-        # HB basename derived from hb_gas file stem when available
-        if self.hb_gas is not None:
-            hb_name = os.path.basename(str(self.hb_gas))
-            self.hb_basename = os.path.splitext(hb_name)[0]
+        # HB basename derived from href_gas file stem when available
+        if self.href_gas is not None:
+            href_name = os.path.basename(str(self.href_gas))
+            self.hb_basename = os.path.splitext(href_name)[0]
 
         # Conjugated base labels are made explicit
         if self.ha_basename is not None:
@@ -2538,12 +2554,12 @@ class PKaOutputTableEntry:
                 "basename": self.basename,
                 "ha_gas": self.ha_gas,
                 "a_gas": self.a_gas,
-                "hb_gas": self.hb_gas,
-                "b_gas": self.b_gas,
+                "href_gas": self.href_gas,
+                "ref_gas": self.ref_gas,
                 "ha_sp": self.ha_sp,
                 "a_sp": self.a_sp,
-                "hb_sp": self.hb_sp,
-                "b_sp": self.b_sp,
+                "href_sp": self.href_sp,
+                "ref_sp": self.ref_sp,
                 "pka_ref": self.pka_ref,
             }
         )
@@ -2560,12 +2576,12 @@ class PKaOutputTableEntry:
         required_files = [
             ("ha_gas", self.ha_gas),
             ("a_gas", self.a_gas),
-            ("hb_gas", self.hb_gas),
-            ("b_gas", self.b_gas),
+            ("href_gas", self.href_gas),
+            ("ref_gas", self.ref_gas),
             ("ha_sp", self.ha_sp),
             ("a_sp", self.a_sp),
-            ("hb_sp", self.hb_sp),
-            ("b_sp", self.b_sp),
+            ("href_sp", self.href_sp),
+            ("ref_sp", self.ref_sp),
         ]
         for col, val in required_files:
             if val is None or (isinstance(val, float) and np.isnan(val)):
@@ -2737,12 +2753,12 @@ def compute_pka_from_output_table(
         pka_result = output_cls.compute_pka(
             ha_gas_file=entry["ha_gas"],
             a_gas_file=entry["a_gas"],
-            hb_gas_file=entry["hb_gas"],
-            b_gas_file=entry["b_gas"],
+            href_gas_file=entry["href_gas"],
+            ref_gas_file=entry["ref_gas"],
             ha_solv_file=entry["ha_sp"],
             a_solv_file=entry["a_sp"],
-            hb_solv_file=entry["hb_sp"],
-            b_solv_file=entry["b_sp"],
+            href_solv_file=entry["href_sp"],
+            ref_solv_file=entry["ref_sp"],
             pka_reference=float(entry["pka_ref"]),
             temperature=temperature,
             concentration=concentration,

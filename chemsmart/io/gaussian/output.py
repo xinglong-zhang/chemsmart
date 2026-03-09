@@ -2466,8 +2466,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cls,
         ha_file=None,
         a_file=None,
-        hb_file=None,
-        b_file=None,
+        href_file=None,
+        ref_file=None,
         temperature=298.15,
         concentration=1.0,
         pressure=1.0,
@@ -2484,8 +2484,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Args:
             ha_file (str, optional): Path to HA (protonated acid) output file.
             a_file (str, optional): Path to A- (conjugate base) output file.
-            hb_file (str, optional): Path to HB (reference acid) output file.
-            b_file (str, optional): Path to B- (reference conjugate base) output file.
+            href_file (str, optional): Path to HB (reference acid) output file.
+            ref_file (str, optional): Path to B- (reference conjugate base) output file.
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
             pressure (float): Pressure in atm. Default 1.0 atm.
@@ -2498,8 +2498,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 - 'settings': Dict of calculation settings
                 - 'HA': Dict with E, qh_G, ZPE, H, qh_H, G, name for protonated acid
                 - 'A': Dict with same keys for conjugate base
-                - 'HB': Dict for reference acid (if provided)
-                - 'B': Dict for reference conjugate base (if provided)
+                - 'HRef': Dict for reference acid (if provided)
+                - 'Ref': Dict for reference conjugate base (if provided)
         """
         results = {
             "settings": {
@@ -2540,10 +2540,10 @@ class Gaussian16pKaOutput(Gaussian16Output):
             results["HA"] = get_species_thermo(ha_file, "HA")
         if a_file is not None:
             results["A"] = get_species_thermo(a_file, "A-")
-        if hb_file is not None:
-            results["HB"] = get_species_thermo(hb_file, "HB")
-        if b_file is not None:
-            results["B"] = get_species_thermo(b_file, "B-")
+        if href_file is not None:
+            results["HRef"] = get_species_thermo(href_file, "HRef")
+        if ref_file is not None:
+            results["Ref"] = get_species_thermo(ref_file, "Ref-")
 
         return results
 
@@ -2660,12 +2660,12 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cls,
         ha_gas_file,
         a_gas_file,
-        hb_gas_file,
+        href_gas_file,
         b_gas_file,
         ha_solv_file,
         a_solv_file,
-        hb_solv_file,
-        b_solv_file,
+        href_solv_file,
+        ref_solv_file,
         pka_reference,
         temperature=298.15,
         concentration=1.0,
@@ -2713,12 +2713,12 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Args:
             ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
             a_gas_file (str): Path to A⁻ gas-phase optimization+freq output file.
-            hb_gas_file (str): Path to HB gas-phase optimization+freq output file.
+            href_gas_file (str): Path to HB gas-phase optimization+freq output file.
             b_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
             ha_solv_file (str): Path to HA solvent single-point output file.
             a_solv_file (str): Path to A⁻ solvent single-point output file.
-            hb_solv_file (str): Path to HB solvent single-point output file.
-            b_solv_file (str): Path to B⁻ solvent single-point output file.
+            href_solv_file (str): Path to HB solvent single-point output file.
+            ref_solv_file (str): Path to B⁻ solvent single-point output file.
             pka_reference (float): Experimental pKa of the reference acid HB.
                 Default reference: collidine (pKa = 6.75).
             temperature (float): Temperature in Kelvin. Default 298.15 K.
@@ -2759,12 +2759,12 @@ class Gaussian16pKaOutput(Gaussian16Output):
             result = Gaussian16pKaOutput.compute_pka(
                 ha_gas_file="5PQ_Me_ts1_no_pd_opt.log",
                 a_gas_file="5PQ_Me_ts1_b_no_pd_opt.log",
-                hb_gas_file="collidine-H_opt.log",
+                href_gas_file="collidine-H_opt.log",
                 b_gas_file="collidine_opt.log",
                 ha_solv_file="5PQ_Me_ts1_no_pd_opt_sp_smd.log",
                 a_solv_file="5PQ_Me_ts1_b_no_pd_opt_sp_smd.log",
-                hb_solv_file="collidine-H_opt_sp_smd.log",
-                b_solv_file="collidine_opt_sp_smd.log",
+                href_solv_file="collidine-H_opt_sp_smd.log",
+                ref_solv_file="collidine_opt_sp_smd.log",
                 pka_reference=6.75,
                 temperature=298.15
             )
@@ -2814,27 +2814,31 @@ class Gaussian16pKaOutput(Gaussian16Output):
         # All values in Hartree (au)
         E_gas_HA_au, qh_G_HA_au, G_corr_HA_au = get_gas_phase_data(ha_gas_file)
         E_gas_A_au, qh_G_A_au, G_corr_A_au = get_gas_phase_data(a_gas_file)
-        E_gas_HB_au, qh_G_HB_au, G_corr_HB_au = get_gas_phase_data(hb_gas_file)
-        E_gas_B_au, qh_G_B_au, G_corr_B_au = get_gas_phase_data(b_gas_file)
+        E_gas_HRef_au, qh_G_HRef_au, G_corr_HRef_au = get_gas_phase_data(
+            href_gas_file
+        )
+        E_gas_Ref_au, qh_G_Ref_au, G_corr_Ref_au = get_gas_phase_data(
+            b_gas_file
+        )
 
         # Step 2: Get solvent SP energies (E_solv) for all species
         # All values in Hartree (au)
         E_solv_HA_au = get_solvent_energy(ha_solv_file)
         E_solv_A_au = get_solvent_energy(a_solv_file)
-        E_solv_HB_au = get_solvent_energy(hb_solv_file)
-        E_solv_B_au = get_solvent_energy(b_solv_file)
+        E_solv_HRef_au = get_solvent_energy(href_solv_file)
+        E_solv_Ref_au = get_solvent_energy(ref_solv_file)
 
         # Step 3: Calculate G_soln = E_solv + G_corr
         # Solution free energy in Hartree (au)
         G_soln_HA_au = E_solv_HA_au + G_corr_HA_au
         G_soln_A_au = E_solv_A_au + G_corr_A_au
-        G_soln_HB_au = E_solv_HB_au + G_corr_HB_au
-        G_soln_B_au = E_solv_B_au + G_corr_B_au
+        G_soln_HRef_au = E_solv_HRef_au + G_corr_HRef_au
+        G_soln_Ref_au = E_solv_Ref_au + G_corr_Ref_au
 
         # Step 4: Calculate ΔG_soln in Hartree (au)
         # ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]
-        delta_G_soln_au = (G_soln_A_au + G_soln_HB_au) - (
-            G_soln_HA_au + G_soln_B_au
+        delta_G_soln_au = (G_soln_A_au + G_soln_HRef_au) - (
+            G_soln_HA_au + G_soln_Ref_au
         )
 
         # Step 5: Convert ΔG_soln to kcal/mol for pKa calculation
@@ -2860,23 +2864,23 @@ class Gaussian16pKaOutput(Gaussian16Output):
             # Solution free energies in Hartree (au)
             "G_soln_HA_au": G_soln_HA_au,
             "G_soln_A_au": G_soln_A_au,
-            "G_soln_HB_au": G_soln_HB_au,
-            "G_soln_B_au": G_soln_B_au,
+            "G_soln_HRef_au": G_soln_HRef_au,
+            "G_soln_Ref_au": G_soln_Ref_au,
             # Solvent SP energies in Hartree (au)
             "E_solv_HA_au": E_solv_HA_au,
             "E_solv_A_au": E_solv_A_au,
-            "E_solv_HB_au": E_solv_HB_au,
-            "E_solv_B_au": E_solv_B_au,
+            "E_solv_HRef_au": E_solv_HRef_au,
+            "E_solv_Ref_au": E_solv_Ref_au,
             # Thermal corrections in Hartree (au)
             "G_corr_HA_au": G_corr_HA_au,
             "G_corr_A_au": G_corr_A_au,
-            "G_corr_HB_au": G_corr_HB_au,
-            "G_corr_B_au": G_corr_B_au,
+            "G_corr_HRef_au": G_corr_HRef_au,
+            "G_corr_Ref_au": G_corr_Ref_au,
             # Gas-phase electronic energies in Hartree (au)
             "E_gas_HA_au": E_gas_HA_au,
             "E_gas_A_au": E_gas_A_au,
-            "E_gas_HB_au": E_gas_HB_au,
-            "E_gas_B_au": E_gas_B_au,
+            "E_gas_HRef_au": E_gas_HRef_au,
+            "E_gas_Ref_au": E_gas_Ref_au,
         }
 
     @classmethod
@@ -2884,18 +2888,18 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cls,
         ha_gas_file,
         a_gas_file,
-        hb_gas_file,
+        href_gas_file,
         b_gas_file,
         ha_solv_file,
         a_solv_file,
-        hb_solv_file,
-        b_solv_file,
+        href_solv_file,
+        ref_solv_file,
         pka_reference,
-        temperature=298.15,
-        concentration=1.0,
-        pressure=1.0,
-        cutoff_entropy_grimme=100.0,
-        cutoff_enthalpy=100.0,
+        temperature: float = 298.15,
+        concentration: float = 1.0,
+        pressure: float = 1.0,
+        cutoff_entropy_grimme: float = 100.0,
+        cutoff_enthalpy: float = 100.0,
     ):
         """
         Print a formatted summary of Dual-level Proton Exchange pKa calculation.
@@ -2906,12 +2910,12 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Args:
             ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
             a_gas_file (str): Path to A⁻ gas-phase optimization+freq output file.
-            hb_gas_file (str): Path to HB gas-phase optimization+freq output file.
+            href_gas_file (str): Path to HB gas-phase optimization+freq output file.
             b_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
             ha_solv_file (str): Path to HA solvent single-point output file.
             a_solv_file (str): Path to A⁻ solvent single-point output file.
-            hb_solv_file (str): Path to HB solvent single-point output file.
-            b_solv_file (str): Path to B⁻ solvent single-point output file.
+            href_solv_file (str): Path to HB solvent single-point output file.
+            ref_solv_file (str): Path to B⁻ solvent single-point output file.
             pka_reference (float): Experimental pKa of the reference acid HB.
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
@@ -2923,12 +2927,12 @@ class Gaussian16pKaOutput(Gaussian16Output):
             Gaussian16pKaOutput.print_pka_summary(
                 ha_gas_file="5PQ_Me_ts1_no_pd_opt.log",
                 a_gas_file="5PQ_Me_ts1_b_no_pd_opt.log",
-                hb_gas_file="collidine-H_opt.log",
-                b_gas_file="collidine_opt.log",
+                href_gas_file="collidine-H_opt.log",
+                ref_gas_file="collidine_opt.log",
                 ha_solv_file="5PQ_Me_ts1_no_pd_opt_sp_smd.log",
                 a_solv_file="5PQ_Me_ts1_b_no_pd_opt_sp_smd.log",
-                hb_solv_file="collidine-H_opt_sp_smd.log",
-                b_solv_file="collidine_opt_sp_smd.log",
+                href_solv_file="collidine-H_opt_sp_smd.log",
+                ref_solv_file="collidine_opt_sp_smd.log",
                 pka_reference=6.75,
                 temperature=298.15
             )
@@ -2936,12 +2940,12 @@ class Gaussian16pKaOutput(Gaussian16Output):
         result = cls.compute_pka(
             ha_gas_file=ha_gas_file,
             a_gas_file=a_gas_file,
-            hb_gas_file=hb_gas_file,
+            href_gas_file=href_gas_file,
             b_gas_file=b_gas_file,
             ha_solv_file=ha_solv_file,
             a_solv_file=a_solv_file,
-            hb_solv_file=hb_solv_file,
-            b_solv_file=b_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
             pka_reference=pka_reference,
             temperature=temperature,
             concentration=concentration,
@@ -2953,14 +2957,14 @@ class Gaussian16pKaOutput(Gaussian16Output):
         print("=" * 78)
         print("pKa Calculation - Dual-level Proton Exchange Scheme")
         print("=" * 78)
-        print("Reaction: HA + B⁻ → A⁻ + HB")
+        print("Reaction: HA + Ref⁻ → A⁻ + HRef")
         print(f"Temperature: {temperature} K")
         print()
         print("Method:")
         print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
         print("  G_soln = E_solv + G_corr  (solution free energy)")
         print(
-            "  ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]"
+            "  ΔG_soln = [G(A⁻)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref⁻)_soln]"
         )
         print("  pKa = pKa_ref + ΔG_soln / (RT × ln10)")
         print("-" * 78)
@@ -2968,32 +2972,32 @@ class Gaussian16pKaOutput(Gaussian16Output):
         print("Gas-Phase Electronic Energies (E_gas, au):")
         print(f"  HA:  {result['E_gas_HA_au']:.10f}")
         print(f"  A⁻:  {result['E_gas_A_au']:.10f}")
-        print(f"  HB:  {result['E_gas_HB_au']:.10f}")
-        print(f"  B⁻:  {result['E_gas_B_au']:.10f}")
+        print(f"  HRef:  {result['E_gas_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {result['E_gas_Ref_au']:.10f}")
         print()
         print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
         print(f"  HA:  {result['G_corr_HA_au']:.10f}")
         print(f"  A⁻:  {result['G_corr_A_au']:.10f}")
-        print(f"  HB:  {result['G_corr_HB_au']:.10f}")
-        print(f"  B⁻:  {result['G_corr_B_au']:.10f}")
+        print(f"  HRef:  {result['G_corr_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {result['G_corr_Ref_au']:.10f}")
         print()
         print("Solvent Single-Point Energies (E_solv, au):")
         print(f"  HA:  {result['E_solv_HA_au']:.10f}")
         print(f"  A⁻:  {result['E_solv_A_au']:.10f}")
-        print(f"  HB:  {result['E_solv_HB_au']:.10f}")
-        print(f"  B⁻:  {result['E_solv_B_au']:.10f}")
+        print(f"  HRef:  {result['E_solv_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {result['E_solv_Ref_au']:.10f}")
         print()
         print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
         print(f"  HA:  {result['G_soln_HA_au']:.10f}")
         print(f"  A⁻:  {result['G_soln_A_au']:.10f}")
-        print(f"  HB:  {result['G_soln_HB_au']:.10f}")
-        print(f"  B⁻:  {result['G_soln_B_au']:.10f}")
+        print(f"  HRef:  {result['G_soln_HRef_au']:.10f}")
+        print(f"  Ref⁻:  {result['G_soln_Ref_au']:.10f}")
         print("-" * 78)
         print()
         print("pKa Calculation:")
         print(f"  ΔG_soln = {result['delta_G_soln_au']:.10f} au")
         print(f"         = {result['delta_G_soln_kcal_mol']:.4f} kcal/mol")
-        print(f"  pKa(HB)_ref = {pka_reference:.2f}")
+        print(f"  pKa(HRef)_ref = {pka_reference:.2f}")
         print()
         print(f"  *** Computed pKa(HA) = {result['pKa']:.2f} ***")
         print("=" * 78)

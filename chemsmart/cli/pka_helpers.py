@@ -42,7 +42,7 @@ def click_pka_shared_options(f):
         type=click.Path(exists=True),
         default=None,
         help=(
-            "Path to geometry file for reference acid (HB) for proton "
+            "Path to geometry file for reference acid (HRef) for proton "
             "exchange cycle."
         ),
     )
@@ -53,7 +53,7 @@ def click_pka_shared_options(f):
         default=None,
         help=(
             "1-based index of the proton to remove from reference acid "
-            "(HB). Required when --reference is provided."
+            "(HRef). Required when --reference is provided."
         ),
     )
     @click.option(
@@ -71,21 +71,21 @@ def click_pka_shared_options(f):
         "--reference-charge",
         type=int,
         default=None,
-        help="Charge of the reference acid (HB).",
+        help="Charge of the reference acid (HRef).",
     )
     @click.option(
         "-rm",
         "--reference-multiplicity",
         type=int,
         default=None,
-        help="Multiplicity of the reference acid (HB).",
+        help="Multiplicity of the reference acid (HRef).",
     )
     @click.option(
         "--reference-conjugate-base-charge",
         type=int,
         default=None,
         help=(
-            "Charge of the reference conjugate base (B-). "
+            "Charge of the reference conjugate base (Ref-). "
             "Defaults to (reference_charge - 1)."
         ),
     )
@@ -94,7 +94,7 @@ def click_pka_shared_options(f):
         type=int,
         default=None,
         help=(
-            "Multiplicity of the reference conjugate base (B-). "
+            "Multiplicity of the reference conjugate base (Ref-). "
             "Defaults to reference_multiplicity."
         ),
     )
@@ -322,18 +322,18 @@ def click_pka_thermo_options(f):
         help="Path to A- (conjugate base) optimization output file.",
     )
     @click.option(
-        "-hb",
-        "--hb-file",
+        "-hr",
+        "--href-file",
         type=click.Path(exists=True),
         default=None,
-        help="Path to HB (reference acid) optimization output file.",
+        help="Path to HRef (reference acid) optimization output file.",
     )
     @click.option(
-        "-b",
-        "--b-file",
+        "-r",
+        "--ref-file",
         type=click.Path(exists=True),
         default=None,
-        help="Path to B- (reference conjugate base) optimization output file.",
+        help="Path to Ref- (reference conjugate base) optimization output file.",
     )
     @click.option(
         "-T",
@@ -710,7 +710,7 @@ def format_thermo_results(results, energy_units):
         f"{'Species':<10} {'E':<20} {'qh-G(T)':<20} {'G_corr':<20}",
         "-" * 78,
     ]
-    for key in ["HA", "A", "HB", "B"]:
+    for key in ["HA", "A", "HRef", "Ref"]:
         if key in results:
             sp = results[key]
             E = sp["E"]
