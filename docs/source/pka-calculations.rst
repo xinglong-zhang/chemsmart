@@ -43,23 +43,23 @@ CHEMSMART supports two thermodynamic cycles for pKa calculations:
 
 **1. Proton Exchange (Isodesmic) Cycle** (Default, Recommended)
 
-Uses a reference acid HB with known experimental pKa to cancel systematic errors:
+Uses a reference acid HRef with known experimental pKa to cancel systematic errors:
 
 .. math::
 
-   \text{HA} + \text{B}^{-} \rightarrow \text{A}^{-} + \text{HB}
+   \text{HA} + \text{Ref}^{-} \rightarrow \text{A}^{-} + \text{HRef}
 
 The pKa is computed as:
 
 .. math::
 
-   \text{p}K_{\text{a}}(\text{HA}) = \text{p}K_{\text{a}}(\text{HB}) + \frac{\Delta G_{\text{soln}}}{2.303 \cdot R \cdot T}
+   \text{p}K_{\text{a}}(\text{HA}) = \text{p}K_{\text{a}}(\text{HRef}) + \frac{\Delta G_{\text{soln}}}{2.303 \cdot R \cdot T}
 
 where:
 
 .. math::
 
-   \Delta G_{\text{soln}} = \left[ G(\text{A}^{-})_{\text{soln}} + G(\text{HB})_{\text{soln}} \right] - \left[ G(\text{HA})_{\text{soln}} + G(\text{B}^{-})_{\text{soln}} \right]
+   \Delta G_{\text{soln}} = \left[ G(\text{A}^{-})_{\text{soln}} + G(\text{HRef})_{\text{soln}} \right] - \left[ G(\text{HA})_{\text{soln}} + G(\text{Ref}^{-})_{\text{soln}} \right]
 
 **2. Direct Cycle**
 
@@ -119,15 +119,15 @@ Required columns:
 -  ``a_gas``: Path to the gas-phase optimization output for A⁻.
 -  ``ha_sp``: Path to the solvent single-point output for HA.
 -  ``a_sp``: Path to the solvent single-point output for A⁻.
--  ``hb_gas`` (optional): Path to the gas-phase optimization output for the reference acid HB.
--  ``b_gas`` (optional): Path to the gas-phase optimization output for B⁻.
--  ``hb_sp`` (optional): Path to the solvent single-point output for HB.
--  ``b_sp`` (optional): Path to the solvent single-point output for B⁻.
+-  ``href_gas`` (optional): Path to the gas-phase optimization output for the reference acid HRef.
+-  ``ref_gas`` (optional): Path to the gas-phase optimization output for Ref⁻.
+-  ``href_sp`` (optional): Path to the solvent single-point output for HRef.
+-  ``ref_sp`` (optional): Path to the solvent single-point output for Ref⁻.
 -  ``pka_ref`` (optional): The pKa of the reference acid.
 
 .. note::
 
-   If reference acid columns (``hb_gas``, ``b_gas``, etc.) are left blank for a row, the values from the most recently
+   If reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values from the most recently
    defined reference acid in a previous row will be used. The ``pka_ref`` can also be provided via the ``-rp``
    command-line option.
 
@@ -251,7 +251,7 @@ Thermochemistry Options
 
    -  -  ``-rp``
       -  ``--reference-pka``
-      -  Experimental pKa of HB. Required for output file parsing mode.
+      -  Experimental pKa of HRef. Required for output file parsing mode.
 
 ***************
  Output Format
@@ -264,45 +264,45 @@ When computing pKa from output files, CHEMSMART prints a detailed summary:
    ==============================================================================
    pKa Calculation - Dual-level Proton Exchange Scheme
    ==============================================================================
-   Reaction: HA + B⁻ → A⁻ + HB
+   Reaction: HA + Ref⁻ → A⁻ + HRef
    Temperature: 373.15 K
 
    Method:
      G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)
      G_soln = E_solv + G_corr  (solution free energy)
-     ΔG_soln = [G(A⁻)_soln + G(HB)_soln] - [G(HA)_soln + G(B⁻)_soln]
+     ΔG_soln = [G(A⁻)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref⁻)_soln]
      pKa = pKa_ref + ΔG_soln / (RT × ln10)
    ------------------------------------------------------------------------------
 
    Gas-Phase Electronic Energies (E_gas, au):
      HA:  -345.7419436500
      A⁻:  -344.9153986020
-     HB:  -365.8436493070
-     B⁻:  -365.4561783660
+     HRef:  -365.8436493070
+     Ref⁻:  -365.4561783660
 
    Thermal Corrections (G_corr = qh-G - E_gas, au):
      HA:  0.0931931305
      A⁻:  0.0758935969
-     HB:  0.1404528844
-     B⁻:  0.1267467582
+     HRef:  0.1404528844
+     Ref⁻:  0.1267467582
 
    Solvent Single-Point Energies (E_solv, au):
      HA:  -346.4882221850
      A⁻:  -345.8989956310
-     HB:  -366.5974351550
-     B⁻:  -366.1368369100
+     HRef:  -366.5974351550
+     Ref⁻:  -366.1368369100
 
    Solution Free Energies (G_soln = E_solv + G_corr, au):
      HA:  -346.3950290545
      A⁻:  -345.8231020341
-     HB:  -366.4569822706
-     B⁻:  -366.0100901518
+     HRef:  -366.4569822706
+     Ref⁻:  -366.0100901518
    ------------------------------------------------------------------------------
 
    pKa Calculation:
      ΔG_soln = 0.1250349015 au
             = 78.4606 kcal/mol
-     pKa(HB)_ref = 6.75
+     pKa(HRef)_ref = 6.75
 
      *** Computed pKa(HA) = 52.70 ***
    ==============================================================================
