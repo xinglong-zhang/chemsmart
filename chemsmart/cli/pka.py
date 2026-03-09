@@ -78,8 +78,8 @@ def _auto_discover_pka_files(ha_gas_path, hb_gas_path, program=None):
     Returns
     -------
     dict
-        Keys: ``a_output``, ``b_output``, ``ha_solv_output``,
-        ``a_solv_output``, ``hb_solv_output``, ``b_solv_output``.
+        Keys: ``a``, ``b_output``, ``ha_solv``,
+        ``a_solv``, ``hb_solv_output``, ``b_solv_output``.
         Each value is an existing file path (str).
 
     Raises
@@ -117,9 +117,9 @@ def _auto_discover_pka_files(ha_gas_path, hb_gas_path, program=None):
         return expected  # will be validated later
 
     results = {
-        "a_output": _derive_companion(ha_gas_path, "_cb", extensions),
-        "ha_solv_output": _derive_companion(ha_gas_path, "_sp", extensions),
-        "a_solv_output": _derive_companion(ha_gas_path, "_cb_sp", extensions),
+        "a": _derive_companion(ha_gas_path, "_cb", extensions),
+        "ha_solv": _derive_companion(ha_gas_path, "_sp", extensions),
+        "a_solv": _derive_companion(ha_gas_path, "_cb_sp", extensions),
         "b_output": _derive_companion(hb_gas_path, "_cb", extensions),
         "hb_solv_output": _derive_companion(hb_gas_path, "_sp", extensions),
         "b_solv_output": _derive_companion(hb_gas_path, "_cb_sp", extensions),
@@ -292,10 +292,10 @@ def pka(
     """
     # --- auto-discover missing companion files ---
     optional_files = {
-        "a_output": a_output,
+        "a": a_output,
         "b_output": b_output,
-        "ha_solv_output": ha_solv_output,
-        "a_solv_output": a_solv_output,
+        "ha_solv": ha_solv_output,
+        "a_solv": a_solv_output,
         "hb_solv_output": hb_solv_output,
         "b_solv_output": b_solv_output,
     }
@@ -308,10 +308,10 @@ def pka(
                 optional_files[key] = discovered[key]
                 logger.info(f"Auto-discovered {key}: {discovered[key]}")
 
-    a_output = optional_files["a_output"]
+    a_output = optional_files["a"]
     b_output = optional_files["b_output"]
-    ha_solv_output = optional_files["ha_solv_output"]
-    a_solv_output = optional_files["a_solv_output"]
+    ha_solv_output = optional_files["ha_solv"]
+    a_solv_output = optional_files["a_solv"]
     hb_solv_output = optional_files["hb_solv_output"]
     b_solv_output = optional_files["b_solv_output"]
 

@@ -2421,7 +2421,9 @@ class PKaMolecule(Molecule):
         self.proton_index = proton_index
 
     @classmethod
-    def from_molecule_and_proton(cls, molecule: "Molecule", proton_index: int):
+    def from_molecule_and_proton_index(
+        cls, molecule: "Molecule", proton_index: int
+    ):
         """Create a ``PKaMolecule`` from an existing ``Molecule``.
 
         Parameters
