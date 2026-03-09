@@ -1,16 +1,16 @@
 """
-CLI for Gaussian pKa calculations.
+CLI for Gaussian pKa input generation (job submission).
 
 Subcommands
 -----------
 submit         Submit single-molecule (or multi-fragment CDXML) pKa jobs.
 batch          Table-driven batch job submission.
-analyze        Compute pKa from existing Gaussian output files.
-batch-analyze  Batch pKa post-processing from an output table.
-thermo         Extract thermochemistry (E, qh-G) from output files.
 
 When ``pka`` is invoked without an explicit subcommand the ``submit``
 path is executed automatically for backward compatibility.
+
+Output analysis (analyze, batch-analyze, thermo) lives in the
+backend-independent ``chemsmart run pka`` command.
 """
 
 import logging
@@ -22,14 +22,9 @@ import click
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.pka_helpers import (
-    click_pka_analyze_options,
     click_pka_shared_options,
     click_pka_submit_options,
-    click_pka_thermo_options,
-    format_thermo_results,
     resolve_proton_index,
-    run_pka_from_output_table,
-    validate_analyze_files,
     validate_reference_options,
 )
 from chemsmart.utils.cli import MyCommand, MyGroup
@@ -75,15 +70,12 @@ def pka(
     parallel,
     **kwargs,
 ):
-    """Gaussian pKa calculations.
+    """Gaussian pKa job submission.
 
     \b
     Subcommands:
       submit         Single-molecule job submission (default).
       batch          Table-driven batch submission.
-      analyze        Compute pKa from existing output files.
-      batch-analyze  Batch post-processing from an output table.
-      thermo         Extract E and qh-G(T) from output files.
 
     When invoked without a subcommand the ``submit`` path runs
     automatically, so the following two invocations are equivalent:
@@ -91,6 +83,12 @@ def pka(
     \b
       chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka -pi 10 ...
       chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka submit -pi 10 ...
+
+    \b
+    For output analysis (backend-independent):
+      chemsmart run pka analyze ...
+      chemsmart run pka batch-analyze ...
+      chemsmart run pka thermo ...
 
     \b
     Thermodynamic cycles:
@@ -401,206 +399,6 @@ def batch(ctx, skip_completed, parallel, **kwargs):
 
     logger.info(f"Created {len(jobs)} pKa jobs from table")
     return jobs
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# pka analyze
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@pka.command("analyze", cls=MyCommand)
-@click_pka_analyze_options
-@click.pass_context
-def analyze(
-    ctx,
-    ha,
-    a,
-    href,
-    ref,
-    ha_solv,
-    a_solv,
-    href_solv,
-    ref_solv,
-    reference_pka,
-    **kwargs,
-):
-    """Compute pKa from existing Gaussian output files.
-
-    Uses the Dual-level Proton Exchange scheme.  All energies in
-    Hartree (au); delta_G_soln is converted to kcal/mol for pKa.
-
-    \b
-    Species labels:
-        HA   - target acid           HRef - reference acid
-        A-   - target conjugate base Ref- - reference conjugate base
-
-    \b
-    Reaction:  HA + Ref-  ->  A- + HRef
-
-    \b
-    Required files (8 total):
-        --ha, --a, --href, --ref           gas-phase opt+freq outputs
-        --ha-solv, --a-solv, --href-solv, --ref-solv   solvent SP outputs
-
-    \b
-    Examples:
-      chemsmart run gaussian pka analyze \\
-          -ha acid_opt.log -a base_opt.log \\
-          -hr collidine-H_opt.log -r collidine_opt.log \\
-          -has acid_sp.log -as base_sp.log \\
-          -hrs collidine-H_sp.log -rs collidine_sp.log \\
-          -rp 6.75 -T 298.15
-    """
-    shared = ctx.obj["pka_shared"]
-    validate_analyze_files(
-        ha, a, href, ref, ha_solv, a_solv, href_solv, ref_solv, reference_pka
-    )
-
-    from chemsmart.io.gaussian.output import Gaussian16pKaOutput
-
-    logger.info(
-        "Computing pKa from output files using Dual-level Proton "
-        "Exchange scheme..."
-    )
-    logger.info(f"  Temperature: {shared['temperature']} K")
-    logger.info(f"  Reference pKa (HRef): {reference_pka}")
-
-    Gaussian16pKaOutput.print_pka_summary(
-        ha_gas_file=ha,
-        a_gas_file=a,
-        hb_gas_file=href,
-        b_gas_file=ref,
-        ha_solv_file=ha_solv,
-        a_solv_file=a_solv,
-        hb_solv_file=href_solv,
-        b_solv_file=ref_solv,
-        pka_reference=reference_pka,
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# pka batch-analyze
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@pka.command("batch-analyze", cls=MyCommand)
-@click.option(
-    "-o",
-    "--output-table",
-    type=click.Path(exists=True),
-    required=True,
-    help=(
-        "Table of precomputed output file paths.  Columns: basename, "
-        "ha_gas, a_gas, hb_gas, b_gas, ha_sp, a_sp, hb_sp, b_sp, "
-        "pka_ref."
-    ),
-)
-@click.option(
-    "-O",
-    "--output-results",
-    type=click.Path(),
-    default=None,
-    help="Path to write results table (.csv/.txt).  Stdout if omitted.",
-)
-@click.pass_context
-def batch_analyze(ctx, output_table, output_results, **kwargs):
-    """Batch pKa computation from a table of precomputed output files.
-
-    Blank reference-acid cells in the table are filled from the
-    previous row.
-
-    \b
-    Examples:
-      chemsmart run gaussian pka batch-analyze -o outputs.csv
-      chemsmart run gaussian pka batch-analyze -o outputs.csv \\
-          -O results.csv -T 298.15
-    """
-    shared = ctx.obj["pka_shared"]
-    return run_pka_from_output_table(
-        output_table=output_table,
-        output_results=output_results,
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-        program="gaussian",
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# pka thermo
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@pka.command("thermo", cls=MyCommand)
-@click_pka_thermo_options
-@click.pass_context
-def thermo(
-    ctx,
-    ha_file,
-    a_file,
-    hb_file,
-    b_file,
-    temperature,
-    concentration,
-    cutoff_entropy_grimme,
-    cutoff_enthalpy,
-    energy_units,
-    output,
-    **kwargs,
-):
-    """Extract thermochemistry (E and qh-G(T)) from pKa output files.
-
-    \b
-    Species files:
-        -ha  HA (protonated acid)
-        -a   A- (conjugate base)
-        -hb  HB (reference acid)
-        -b   B- (reference conjugate base)
-
-    \b
-    Examples:
-      chemsmart run gaussian pka thermo \\
-          -ha acid_opt.log -a base_opt.log -T 298.15
-
-      chemsmart run gaussian pka thermo \\
-          -ha acid.log -a base.log -hb ref.log -b ref_base.log \\
-          -T 298.15 -csg 100 -ch 100
-    """
-    from chemsmart.io.gaussian.output import Gaussian16pKaOutput
-
-    if all(f is None for f in [ha_file, a_file, hb_file, b_file]):
-        raise click.UsageError(
-            "At least one output file must be provided. "
-            "Use -ha, -a, -hb, or -b."
-        )
-
-    results = Gaussian16pKaOutput.compute_pka_thermochemistry(
-        ha_file=ha_file,
-        a_file=a_file,
-        hb_file=hb_file,
-        b_file=b_file,
-        temperature=temperature,
-        concentration=concentration,
-        cutoff_entropy_grimme=cutoff_entropy_grimme,
-        cutoff_enthalpy=cutoff_enthalpy,
-        energy_units=energy_units,
-    )
-
-    output_text = format_thermo_results(results, energy_units)
-    if output is not None:
-        with open(output, "w") as f:
-            f.write(output_text)
-        logger.info(f"Results saved to {output}")
-        click.echo(f"Results saved to {output}")
-    else:
-        click.echo(output_text)
-
-    return results
 
 
 # ═══════════════════════════════════════════════════════════════════════

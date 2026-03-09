@@ -1,25 +1,42 @@
+"""
+Backend-independent pKa output analysis.
+
+Registered as ``chemsmart run pka`` — strictly post-processing,
+never invokes Gaussian, ORCA, or any other QC backend.
+
+Subcommands
+-----------
+analyze        Compute pKa from 8 existing output files.
+batch-analyze  Batch pKa from a table of output file paths.
+"""
+
 import logging
 import os
 
 import click
 
+from chemsmart.cli.pka_helpers import (
+    click_pka_analyze_options,
+    run_pka_from_output_table,
+    validate_analyze_files,
+)
+from chemsmart.utils.cli import MyCommand, MyGroup
 from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
 
-# Output extensions tried during auto-discovery, ordered by preference.
+# Extension preference per backend (used by auto-discovery).
 _EXT_MAP = {
     "gaussian": [".log", ".out"],
     "orca": [".out", ".log"],
 }
 
 
-def _detect_program_from_outputs(filepaths):
-    """Detect and validate a unique QC program across all provided outputs.
+# ── internal helpers (kept in this module, not pka_helpers) ─────────────
 
-    Delegates per-file detection to ``get_program_type_from_file`` so
-    output-format parsing remains centralized in ``chemsmart.utils.io``.
-    """
+
+def _detect_program_from_outputs(filepaths):
+    """Detect and validate a unique QC program across supplied outputs."""
     detected = {}
     programs = set()
     for fp in filepaths:
@@ -30,210 +47,106 @@ def _detect_program_from_outputs(filepaths):
 
     if not programs:
         raise click.UsageError(
-            "Could not detect output-file program type from supplied files. "
-            "Supported for pKa analysis: Gaussian and ORCA output files."
+            "Could not detect output-file program type from supplied "
+            "files.  Supported: Gaussian and ORCA output files."
         )
-
     if len(programs) > 1:
-        pairs = ", ".join([f"{k}: {v}" for k, v in detected.items()])
+        pairs = ", ".join(f"{k}: {v}" for k, v in detected.items())
         raise click.UsageError(
-            "Supplied files contain mixed program types. "
-            "Please use outputs from a single QC program (Gaussian or ORCA).\n"
+            "Supplied files contain mixed program types.  "
+            "Use outputs from a single QC program.\n"
             f"Detected: {pairs}"
         )
-
     program = next(iter(programs))
     if program not in {"gaussian", "orca"}:
         raise click.UsageError(
-            f"Detected unsupported program '{program}'. "
-            "Only Gaussian and ORCA are supported for pKa output analysis."
+            f"Detected unsupported program '{program}'.  "
+            "Only Gaussian and ORCA are supported."
         )
     return program
 
 
-def _auto_discover_pka_files(ha_gas_path, hb_gas_path, program=None):
-    """Infer the remaining 6 output paths from the HA and HB gas-phase paths.
+def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
+    """Infer companion output paths from HA and HRef gas-phase paths.
 
-    Naming convention (produced by the pKa job classes):
+    Naming convention produced by the pKa job classes::
 
-    * HA gas  :  ``<acid_basename>.<ext>``
-    * A⁻ gas  :  ``<acid_basename>_cb.<ext>``
-    * HA solv :  ``<acid_basename>_sp.<ext>``
-    * A⁻ solv :  ``<acid_basename>_cb_sp.<ext>``
-    * HB gas  :  ``<ref_basename>.<ext>``
-    * B⁻ gas  :  ``<ref_basename>_cb.<ext>``
-    * HB solv :  ``<ref_basename>_sp.<ext>``
-    * B⁻ solv :  ``<ref_basename>_cb_sp.<ext>``
-
-    Parameters
-    ----------
-    ha_gas_path : str
-        Path to the HA gas-phase output (required).
-    hb_gas_path : str
-        Path to the HB gas-phase output (required).
-    program : str or None
-        ``"gaussian"`` or ``"orca"``.  If *None* the program is
-        auto-detected from *ha_gas_path*.
-
-    Returns
-    -------
-    dict
-        Keys: ``a``, ``b_output``, ``ha_solv``,
-        ``a_solv``, ``hb_solv_output``, ``b_solv_output``.
-        Each value is an existing file path (str).
-
-    Raises
-    ------
-    click.UsageError
-        If any inferred file does not exist on disk.
+        <basename>.<ext>        gas-phase opt+freq
+        <basename>_cb.<ext>     conjugate base gas-phase
+        <basename>_sp.<ext>     solvent single-point
+        <basename>_cb_sp.<ext>  conjugate base solvent SP
     """
     if program is None:
         program = get_program_type_from_file(ha_gas_path)
 
     extensions = _EXT_MAP.get(program, [".log", ".out"])
 
-    def _find(directory, stem, extensions):
-        """Return the first existing path for ``stem`` + one of *extensions*."""
+    def _find(directory, stem):
         for ext in extensions:
             candidate = os.path.join(directory, stem + ext)
             if os.path.isfile(candidate):
                 return candidate
         return None
 
-    def _derive_companion(gas_path, suffix, extensions):
-        """Derive a companion file path from a gas-phase output path.
-
-        ``suffix`` is appended to the stem of *gas_path* (e.g. ``"_cb"``
-        or ``"_sp"``).
-        """
+    def _derive(gas_path, suffix):
         dirpath = os.path.dirname(gas_path) or "."
         stem = os.path.splitext(os.path.basename(gas_path))[0]
-        companion_stem = f"{stem}{suffix}"
-        found = _find(dirpath, companion_stem, extensions)
+        found = _find(dirpath, f"{stem}{suffix}")
         if found is not None:
             return found
-        # Construct the expected path for the error message
-        expected = os.path.join(dirpath, companion_stem + extensions[0])
-        return expected  # will be validated later
+        return os.path.join(dirpath, f"{stem}{suffix}{extensions[0]}")
 
     results = {
-        "a": _derive_companion(ha_gas_path, "_cb", extensions),
-        "ha_solv": _derive_companion(ha_gas_path, "_sp", extensions),
-        "a_solv": _derive_companion(ha_gas_path, "_cb_sp", extensions),
-        "b_output": _derive_companion(hb_gas_path, "_cb", extensions),
-        "hb_solv_output": _derive_companion(hb_gas_path, "_sp", extensions),
-        "b_solv_output": _derive_companion(hb_gas_path, "_cb_sp", extensions),
+        "a": _derive(ha_gas_path, "_cb"),
+        "ha_solv": _derive(ha_gas_path, "_sp"),
+        "a_solv": _derive(ha_gas_path, "_cb_sp"),
+        "ref": _derive(href_gas_path, "_cb"),
+        "href_solv": _derive(href_gas_path, "_sp"),
+        "ref_solv": _derive(href_gas_path, "_cb_sp"),
     }
 
-    # Validate that all inferred files exist
     missing = [
-        f"  {key}: {path}"
-        for key, path in results.items()
-        if not os.path.isfile(path)
+        f"  {k}: {v}" for k, v in results.items() if not os.path.isfile(v)
     ]
     if missing:
         raise click.UsageError(
             "Auto-discovery could not find some companion output files.\n"
             "Missing files:\n" + "\n".join(missing) + "\n\n"
-            "Either provide them explicitly via CLI options or ensure\n"
-            "output files follow the naming convention:\n"
-            "  <basename>_cb.<ext>    (conjugate base)\n"
-            "  <basename>_sp.<ext>    (solvent single-point)\n"
-            "  <basename>_cb_sp.<ext> (conjugate base solvent SP)"
+            "Provide them explicitly or ensure output files follow:\n"
+            "  <basename>_cb.<ext>     (conjugate base)\n"
+            "  <basename>_sp.<ext>     (solvent single-point)\n"
+            "  <basename>_cb_sp.<ext>  (conjugate base solvent SP)"
         )
-
     return results
 
 
-@click.command(name="pka")
-@click.option(
-    "-rp",
-    "--reference-pka",
-    type=float,
-    required=True,
-    help="Experimental pKa of the reference acid HB used in the proton-exchange scheme.",
-)
-@click.option(
-    "-ha",
-    "--ha-output",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to HA (protonated acid) gas-phase optimization/frequency output file.",
-)
-@click.option(
-    "-a",
-    "--a-output",
-    type=click.Path(exists=True),
-    default=None,
-    help=(
-        "Path to A⁻ (conjugate base) gas-phase output file.  "
-        "Auto-discovered as <HA_basename>_cb.<ext> when omitted."
-    ),
-)
-@click.option(
-    "-hb",
-    "--hb-output",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to HB (reference acid) gas-phase optimization/frequency output file.",
-)
-@click.option(
-    "-b",
-    "--b-output",
-    type=click.Path(exists=True),
-    default=None,
-    help=(
-        "Path to B⁻ (reference conjugate base) gas-phase output file.  "
-        "Auto-discovered as <HB_basename>_cb.<ext> when omitted."
-    ),
-)
-@click.option(
-    "-has",
-    "--ha-solv-output",
-    type=click.Path(exists=True),
-    default=None,
-    help=(
-        "Path to HA solvent single-point output file.  "
-        "Auto-discovered as <HA_basename>_sp.<ext> when omitted."
-    ),
-)
-@click.option(
-    "-as",
-    "--a-solv-output",
-    type=click.Path(exists=True),
-    default=None,
-    help=(
-        "Path to A⁻ solvent single-point output file.  "
-        "Auto-discovered as <HA_basename>_cb_sp.<ext> when omitted."
-    ),
-)
-@click.option(
-    "-hbs",
-    "--hb-solv-output",
-    type=click.Path(exists=True),
-    default=None,
-    help=(
-        "Path to HB solvent single-point output file.  "
-        "Auto-discovered as <HB_basename>_sp.<ext> when omitted."
-    ),
-)
-@click.option(
-    "-bs",
-    "--b-solv-output",
-    type=click.Path(exists=True),
-    default=None,
-    help=(
-        "Path to B⁻ solvent single-point output file.  "
-        "Auto-discovered as <HB_basename>_cb_sp.<ext> when omitted."
-    ),
-)
+def _resolve_output_cls(output_files):
+    """Return the correct pKa output class for the detected backend."""
+    program = _detect_program_from_outputs(output_files)
+    logger.info(f"Auto-detected output program: {program}")
+    if program == "gaussian":
+        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+        return Gaussian16pKaOutput
+    else:
+        from chemsmart.io.orca.output import ORCApKaOutput
+
+        return ORCApKaOutput
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# pka group — top-level, backend-independent
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@click.group(name="pka", cls=MyGroup)
 @click.option(
     "-T",
     "--temperature",
     type=float,
     default=298.15,
     show_default=True,
-    help="Temperature in Kelvin used in thermochemistry corrections and pKa calculation.",
+    help="Temperature in Kelvin.",
 )
 @click.option(
     "-conc",
@@ -241,7 +154,7 @@ def _auto_discover_pka_files(ha_gas_path, hb_gas_path, program=None):
     type=float,
     default=1.0,
     show_default=True,
-    help="Concentration in mol/L used in quasi-harmonic thermochemistry.",
+    help="Concentration in mol/L.",
 )
 @click.option(
     "-csg",
@@ -249,7 +162,7 @@ def _auto_discover_pka_files(ha_gas_path, hb_gas_path, program=None):
     type=float,
     default=100.0,
     show_default=True,
-    help="Cutoff frequency (cm^-1) for entropy using Grimme's quasi-RRHO method.",
+    help="Cutoff frequency (cm^-1) for entropy (Grimme quasi-RRHO).",
 )
 @click.option(
     "-ch",
@@ -257,102 +170,224 @@ def _auto_discover_pka_files(ha_gas_path, hb_gas_path, program=None):
     type=float,
     default=100.0,
     show_default=True,
-    help="Cutoff frequency (cm^-1) for enthalpy using Head-Gordon's quasi-RRHO method.",
+    help="Cutoff frequency (cm^-1) for enthalpy (Head-Gordon).",
 )
 @click.pass_context
 def pka(
-    ctx,
-    reference_pka,
-    ha_output,
-    a_output,
-    hb_output,
-    b_output,
-    ha_solv_output,
-    a_solv_output,
-    hb_solv_output,
-    b_solv_output,
-    temperature,
-    concentration,
-    cutoff_entropy_grimme,
-    cutoff_enthalpy,
+    ctx, temperature, concentration, cutoff_entropy_grimme, cutoff_enthalpy
 ):
-    """Analyze pKa from existing outputs without selecting Gaussian/ORCA subcommands.
+    """Backend-independent pKa output analysis.
 
     \b
-    This mode is strictly post-processing and does not submit jobs.
+    This command is strictly post-processing — it never submits
+    or invokes Gaussian / ORCA calculations.
     The QC backend is auto-detected from output-file signatures.
 
     \b
-    Only -ha and -hb are required.  The remaining six output files
-    are auto-discovered from the naming convention:
-      <basename>_cb.<ext>    → conjugate base
-      <basename>_sp.<ext>    → solvent single-point
-      <basename>_cb_sp.<ext> → conjugate base solvent SP
-    Override any auto-discovered path with the corresponding flag.
+    Subcommands:
+      analyze        Compute pKa from existing output files.
+      batch-analyze  Batch pKa from a table of output file paths.
+
+    \b
+    For job submission use the backend-specific subcommands:
+      chemsmart run gaussian ... pka submit ...
+      chemsmart run orca     ... pka submit ...
     """
-    # --- auto-discover missing companion files ---
-    optional_files = {
-        "a": a_output,
-        "b_output": b_output,
-        "ha_solv": ha_solv_output,
-        "a_solv": a_solv_output,
-        "hb_solv_output": hb_solv_output,
-        "b_solv_output": b_solv_output,
-    }
-
-    if any(v is None for v in optional_files.values()):
-        discovered = _auto_discover_pka_files(ha_output, hb_output)
-        # Only fill in values that were not explicitly provided
-        for key in optional_files:
-            if optional_files[key] is None:
-                optional_files[key] = discovered[key]
-                logger.info(f"Auto-discovered {key}: {discovered[key]}")
-
-    a_output = optional_files["a"]
-    b_output = optional_files["b_output"]
-    ha_solv_output = optional_files["ha_solv"]
-    a_solv_output = optional_files["a_solv"]
-    hb_solv_output = optional_files["hb_solv_output"]
-    b_solv_output = optional_files["b_solv_output"]
-
-    output_files = [
-        ha_output,
-        a_output,
-        hb_output,
-        b_output,
-        ha_solv_output,
-        a_solv_output,
-        hb_solv_output,
-        b_solv_output,
-    ]
-
-    program = _detect_program_from_outputs(output_files)
-    logger.info(f"Detected output program: {program}")
-
-    kwargs = dict(
-        ha_gas_file=ha_output,
-        a_gas_file=a_output,
-        hb_gas_file=hb_output,
-        b_gas_file=b_output,
-        ha_solv_file=ha_solv_output,
-        a_solv_file=a_solv_output,
-        hb_solv_file=hb_solv_output,
-        b_solv_file=b_solv_output,
-        pka_reference=reference_pka,
+    ctx.ensure_object(dict)
+    ctx.obj["pka_shared"] = dict(
         temperature=temperature,
         concentration=concentration,
         cutoff_entropy_grimme=cutoff_entropy_grimme,
         cutoff_enthalpy=cutoff_enthalpy,
     )
 
-    if program == "gaussian":
-        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
 
-        Gaussian16pKaOutput.print_pka_summary(**kwargs)
-    else:
-        from chemsmart.io.orca.output import ORCApKaOutput
+# ═══════════════════════════════════════════════════════════════════════
+# pka analyze
+# ═══════════════════════════════════════════════════════════════════════
 
-        ORCApKaOutput.print_pka_summary(**kwargs)
 
-    # Return None so run.process_pipeline skips jobrunner execution.
+@pka.command("analyze", cls=MyCommand)
+@click_pka_analyze_options
+@click.pass_context
+def analyze(
+    ctx,
+    ha,
+    a,
+    href,
+    ref,
+    ha_solv,
+    a_solv,
+    href_solv,
+    ref_solv,
+    reference_pka,
+    **kwargs,
+):
+    """Compute pKa from existing output files (auto-detects backend).
+
+    Uses the Dual-level Proton Exchange scheme.
+
+    \b
+    Species labels:
+        HA   - target acid           HRef - reference acid
+        A-   - target conjugate base Ref- - reference conjugate base
+
+    \b
+    Reaction:  HA + Ref-  ->  A- + HRef
+
+    \b
+    Only -ha and -hr are required.  The remaining six files are
+    auto-discovered from the naming convention:
+      <basename>_cb.<ext>     conjugate base
+      <basename>_sp.<ext>     solvent single-point
+      <basename>_cb_sp.<ext>  conjugate base solvent SP
+    Override any auto-discovered path with the corresponding flag.
+
+    \b
+    Examples:
+      chemsmart run pka analyze \\
+          -ha acid_opt.log -hr collidine-H_opt.log -rp 6.75
+
+      chemsmart run pka analyze \\
+          -ha acid.log -a base.log \\
+          -hr ref.log -r ref_base.log \\
+          -has acid_sp.log -as base_sp.log \\
+          -hrs ref_sp.log -rs ref_base_sp.log \\
+          -rp 6.75 -T 298.15
+    """
+    shared = ctx.obj["pka_shared"]
+
+    # Auto-discover missing companion files when at least -ha and -hr given
+    if ha is not None and href is not None:
+        optional = {
+            "a": a,
+            "ha_solv": ha_solv,
+            "a_solv": a_solv,
+            "ref": ref,
+            "href_solv": href_solv,
+            "ref_solv": ref_solv,
+        }
+        if any(v is None for v in optional.values()):
+            discovered = _auto_discover_pka_files(ha, href)
+            for key in optional:
+                if optional[key] is None:
+                    optional[key] = discovered[key]
+                    logger.info(f"Auto-discovered {key}: {discovered[key]}")
+            a = optional["a"]
+            ha_solv = optional["ha_solv"]
+            a_solv = optional["a_solv"]
+            ref = optional["ref"]
+            href_solv = optional["href_solv"]
+            ref_solv = optional["ref_solv"]
+
+    validate_analyze_files(
+        ha, a, href, ref, ha_solv, a_solv, href_solv, ref_solv, reference_pka
+    )
+
+    output_files = [ha, a, href, ref, ha_solv, a_solv, href_solv, ref_solv]
+    OutputCls = _resolve_output_cls(output_files)
+
+    logger.info("Computing pKa (Dual-level Proton Exchange)...")
+
+    OutputCls.print_pka_summary(
+        ha_gas_file=ha,
+        a_gas_file=a,
+        hb_gas_file=href,
+        b_gas_file=ref,
+        ha_solv_file=ha_solv,
+        a_solv_file=a_solv,
+        hb_solv_file=href_solv,
+        b_solv_file=ref_solv,
+        pka_reference=reference_pka,
+        temperature=shared["temperature"],
+        concentration=shared["concentration"],
+        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
+        cutoff_enthalpy=shared["cutoff_enthalpy"],
+    )
+
+    # Return None so process_pipeline skips jobrunner execution.
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# pka batch-analyze
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pka.command("batch-analyze", cls=MyCommand)
+@click.option(
+    "-o",
+    "--output-table",
+    type=click.Path(exists=True),
+    required=True,
+    help=(
+        "Table of precomputed output file paths.  Columns: basename, "
+        "ha_gas, a_gas, hb_gas, b_gas, ha_sp, a_sp, hb_sp, b_sp, "
+        "pka_ref."
+    ),
+)
+@click.option(
+    "-O",
+    "--output-results",
+    type=click.Path(),
+    default=None,
+    help="Path to write results table (.csv/.txt).  Stdout if omitted.",
+)
+@click.option(
+    "-p",
+    "--program",
+    type=click.Choice(["gaussian", "orca", "auto"]),
+    default="auto",
+    show_default=True,
+    help=(
+        "QC program that produced the output files.  "
+        "'auto' detects from the first file in the table."
+    ),
+)
+@click.pass_context
+def batch_analyze(ctx, output_table, output_results, program, **kwargs):
+    """Batch pKa computation from a table of precomputed output files.
+
+    Blank reference-acid cells are filled from the previous row.
+
+    \b
+    Examples:
+      chemsmart run pka batch-analyze -o outputs.csv
+      chemsmart run pka batch-analyze -o outputs.csv -O results.csv
+    """
+    shared = ctx.obj["pka_shared"]
+
+    # Resolve 'auto' to a concrete backend
+    if program == "auto":
+        # Peek at the first data file in the table to detect the program
+        import csv
+
+        with open(output_table) as fh:
+            reader = csv.DictReader(fh)
+            first_row = next(reader, None)
+        if first_row is None:
+            raise click.UsageError("Output table is empty.")
+        # Try the first non-empty file column
+        for col in ["ha_gas", "a_gas", "hb_gas", "b_gas"]:
+            val = first_row.get(col)
+            if val and os.path.isfile(val):
+                program = get_program_type_from_file(val)
+                break
+        if program == "auto" or program == "unknown":
+            raise click.UsageError(
+                "Could not auto-detect QC program from output table.  "
+                "Use -p gaussian or -p orca."
+            )
+        logger.info(f"Auto-detected program: {program}")
+
+    run_pka_from_output_table(
+        output_table=output_table,
+        output_results=output_results,
+        temperature=shared["temperature"],
+        concentration=shared["concentration"],
+        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
+        cutoff_enthalpy=shared["cutoff_enthalpy"],
+        program=program,
+    )
+
     return None

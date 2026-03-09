@@ -105,7 +105,9 @@ You can also parse a table of pre-computed output files to calculate pKa values 
 
 .. code:: bash
 
-   chemsmart run pka -O pka_output_table.csv --output-results computed_pka.csv -rp 6.75
+   chemsmart run pka batch-analyze \
+       -o pka_output_table.csv \
+       -O computed_pka.csv
 
 The output table (e.g., ``pka_output_table.csv``) must contain columns for the basename and paths to all required output
 files.
@@ -140,19 +142,30 @@ jobs. This is the recommended way to get the pKa value after your calculations a
 
 .. code:: bash
 
-   chemsmart run pka \
+   chemsmart run pka analyze \
        -ha acid_opt.log \
        -a conjugate_base_opt.log \
-       -hb reference_acid_opt.log \
-       -b reference_base_opt.log \
+       -hr reference_acid_opt.log \
+       -r reference_base_opt.log \
        -has acid_sp_smd.log \
        -as conjugate_base_sp_smd.log \
-       -hbs reference_acid_sp_smd.log \
-       -bs reference_base_sp_smd.log \
+       -hrs reference_acid_sp_smd.log \
+       -rs reference_base_sp_smd.log \
        -rp 6.75 \
        -T 298.15
 
 The program will automatically detect whether the output files are from Gaussian or ORCA.
+
+.. note::
+
+   Only ``-ha`` and ``-hr`` are strictly required. The remaining six companion files are auto-discovered from the naming
+   convention:
+
+   -  ``<basename>_cb.<ext>`` — conjugate base
+   -  ``<basename>_sp.<ext>`` — solvent single-point
+   -  ``<basename>_cb_sp.<ext>`` — conjugate base solvent SP
+
+   Override any auto-discovered path with the corresponding flag.
 
 Output File Options
 ===================
@@ -168,20 +181,20 @@ Output File Options
       -  Description
 
    -  -  ``-ha``
-      -  ``--ha-output``
+      -  ``--ha``
       -  HA (protonated acid) gas-phase opt+freq output.
 
    -  -  ``-a``
-      -  ``--a-output``
+      -  ``--a``
       -  A⁻ (conjugate base) gas-phase opt+freq output.
 
-   -  -  ``-hb``
-      -  ``--hb-output``
-      -  HB (reference acid) gas-phase opt+freq output.
+   -  -  ``-hr``
+      -  ``--href``
+      -  HRef (reference acid) gas-phase opt+freq output.
 
-   -  -  ``-b``
-      -  ``--b-output``
-      -  B⁻ (reference conjugate base) gas-phase opt+freq output.
+   -  -  ``-r``
+      -  ``--ref``
+      -  Ref⁻ (reference conjugate base) gas-phase opt+freq output.
 
 **Solvent Single-Point Files:**
 
@@ -194,20 +207,20 @@ Output File Options
       -  Description
 
    -  -  ``-has``
-      -  ``--ha-solv-output``
+      -  ``--ha-solv``
       -  HA solvent single-point output.
 
    -  -  ``-as``
-      -  ``--a-solv-output``
+      -  ``--a-solv``
       -  A⁻ solvent single-point output.
 
-   -  -  ``-hbs``
-      -  ``--hb-solv-output``
-      -  HB solvent single-point output.
+   -  -  ``-hrs``
+      -  ``--href-solv``
+      -  HRef solvent single-point output.
 
-   -  -  ``-bs``
-      -  ``--b-solv-output``
-      -  B⁻ solvent single-point output.
+   -  -  ``-rs``
+      -  ``--ref-solv``
+      -  Ref⁻ solvent single-point output.
 
 Thermochemistry Options
 =======================

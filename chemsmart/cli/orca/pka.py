@@ -1,16 +1,16 @@
 """
-CLI for ORCA pKa calculations.
+CLI for ORCA pKa input generation (job submission).
 
 Subcommands
 -----------
 submit         Submit single-molecule (or multi-fragment CDXML) pKa jobs.
 batch          Table-driven batch job submission.
-analyze        Compute pKa from existing ORCA output files.
-batch-analyze  Batch pKa post-processing from an output table.
-thermo         Extract thermochemistry (E, qh-G) from output files.
 
 When ``pka`` is invoked without an explicit subcommand the ``submit``
 path is executed automatically for backward compatibility.
+
+Output analysis (analyze, batch-analyze, thermo) lives in the
+backend-independent ``chemsmart run pka`` command.
 """
 
 import logging
@@ -22,14 +22,9 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.pka_helpers import (
-    click_pka_analyze_options,
     click_pka_shared_options,
     click_pka_submit_options,
-    click_pka_thermo_options,
-    format_thermo_results,
     resolve_proton_index,
-    run_pka_from_output_table,
-    validate_analyze_files,
     validate_reference_options,
 )
 from chemsmart.utils.cli import MyCommand, MyGroup
@@ -72,18 +67,21 @@ def pka(
     parallel,
     **kwargs,
 ):
-    """ORCA pKa calculations.
+    """ORCA pKa job submission.
 
     \b
     Subcommands:
       submit         Single-molecule job submission (default).
       batch          Table-driven batch submission.
-      analyze        Compute pKa from existing output files.
-      batch-analyze  Batch post-processing from an output table.
-      thermo         Extract E and qh-G(T) from output files.
 
     When invoked without a subcommand the ``submit`` path runs
     automatically.
+
+    \b
+    For output analysis (backend-independent):
+      chemsmart run pka analyze ...
+      chemsmart run pka batch-analyze ...
+      chemsmart run pka thermo ...
 
     \b
     Thermodynamic cycles:
@@ -356,170 +354,6 @@ def batch(ctx, skip_completed, parallel, **kwargs):
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
     return jobs
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# pka analyze
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@pka.command("analyze", cls=MyCommand)
-@click_pka_analyze_options
-@click.pass_context
-def analyze(
-    ctx,
-    ha,
-    a,
-    href,
-    ref,
-    ha_solv,
-    a_solv,
-    href_solv,
-    ref_solv,
-    reference_pka,
-    **kwargs,
-):
-    """Compute pKa from existing ORCA output files.
-
-    \b
-    Examples:
-      chemsmart run orca pka analyze \\
-          -ha acid_opt.out -a base_opt.out \\
-          -hr ref_opt.out -r ref_base_opt.out \\
-          -has acid_sp.out -as base_sp.out \\
-          -hrs ref_sp.out -rs ref_base_sp.out \\
-          -rp 6.75 -T 298.15
-    """
-    shared = ctx.obj["pka_shared"]
-    validate_analyze_files(
-        ha, a, href, ref, ha_solv, a_solv, href_solv, ref_solv, reference_pka
-    )
-
-    from chemsmart.io.orca.output import ORCApKaOutput
-
-    logger.info("Computing pKa from ORCA output files...")
-    ORCApKaOutput.print_pka_summary(
-        ha_gas_file=ha,
-        a_gas_file=a,
-        hb_gas_file=href,
-        b_gas_file=ref,
-        ha_solv_file=ha_solv,
-        a_solv_file=a_solv,
-        hb_solv_file=href_solv,
-        b_solv_file=ref_solv,
-        pka_reference=reference_pka,
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# pka batch-analyze
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@pka.command("batch-analyze", cls=MyCommand)
-@click.option(
-    "-o",
-    "--output-table",
-    type=click.Path(exists=True),
-    required=True,
-    help=(
-        "Table of precomputed output file paths.  Columns: basename, "
-        "ha_gas, a_gas, hb_gas, b_gas, ha_sp, a_sp, hb_sp, b_sp, "
-        "pka_ref."
-    ),
-)
-@click.option(
-    "-O",
-    "--output-results",
-    type=click.Path(),
-    default=None,
-    help="Path to write results table (.csv/.txt).  Stdout if omitted.",
-)
-@click.pass_context
-def batch_analyze(ctx, output_table, output_results, **kwargs):
-    """Batch pKa computation from a table of precomputed ORCA output files.
-
-    \b
-    Examples:
-      chemsmart run orca pka batch-analyze -o outputs.csv
-      chemsmart run orca pka batch-analyze -o outputs.csv \\
-          -O results.csv -T 298.15
-    """
-    shared = ctx.obj["pka_shared"]
-    return run_pka_from_output_table(
-        output_table=output_table,
-        output_results=output_results,
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-        program="orca",
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# pka thermo
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@pka.command("thermo", cls=MyCommand)
-@click_pka_thermo_options
-@click.pass_context
-def thermo(
-    ctx,
-    ha_file,
-    a_file,
-    hb_file,
-    b_file,
-    temperature,
-    concentration,
-    cutoff_entropy_grimme,
-    cutoff_enthalpy,
-    energy_units,
-    output,
-    **kwargs,
-):
-    """Extract thermochemistry (E and qh-G(T)) from ORCA output files.
-
-    \b
-    Examples:
-      chemsmart run orca pka thermo \\
-          -ha acid_opt.out -a base_opt.out -T 298.15
-    """
-    from chemsmart.io.orca.output import ORCApKaOutput
-
-    if all(f is None for f in [ha_file, a_file, hb_file, b_file]):
-        raise click.UsageError(
-            "At least one output file must be provided. "
-            "Use -ha, -a, -hb, or -b."
-        )
-
-    results = ORCApKaOutput.compute_pka_thermochemistry(
-        ha_file=ha_file,
-        a_file=a_file,
-        hb_file=hb_file,
-        b_file=b_file,
-        temperature=temperature,
-        concentration=concentration,
-        cutoff_entropy_grimme=cutoff_entropy_grimme,
-        cutoff_enthalpy=cutoff_enthalpy,
-        energy_units=energy_units,
-    )
-
-    output_text = format_thermo_results(results, energy_units)
-    if output is not None:
-        with open(output, "w") as f:
-            f.write(output_text)
-        logger.info(f"Results saved to {output}")
-        click.echo(f"Results saved to {output}")
-    else:
-        click.echo(output_text)
-
-    return results
 
 
 # ═══════════════════════════════════════════════════════════════════════
