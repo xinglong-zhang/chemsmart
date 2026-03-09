@@ -108,3 +108,5 @@ markers = [
 branch = true
 source = ["chemsmart"]
 
+[project.scripts]
+chemsmart = "chemsmart.cli.main:main"

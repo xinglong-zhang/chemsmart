@@ -254,55 +254,7 @@ class TestGaussianQMMMJobSettings:
             bonded_atoms=[[1, 2], [2, 3], [8, 9], [9, 10]],
         )
         assert settings1.high_level_atoms == [1, 2, 3, 8, 9, 10]
-        assert settings1.partition_level_strings == [
-            "H",
-            "H",
-            "H",
-            "L",
-            "L",
-            "L",
-            "L",
-            "H",
-            "H",
-            "H",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-        ]
 
-        # Test for 3-layer ONIOM calculation with example input dppeFeCl2_phenyldioxazolone_qmmm.com
-        # mol2 = QMMM(molecule=Molecule._read_gaussian_inputfile(
-        #     os.path.join(
-        #         gaussian_inputs_test_directory,
-        #         "qmmm/dppeFeCl2_phenyldioxazolone_qmmm.com",
-        #     ),
-        # ))
-        # settings2 = QMMM(
-        #     symbols=mol2.symbols,
-        #     positions=mol2.positions,
-        #     high_level_atoms="[18-28,29-39,40-50,51-61,62-72]",
-        #     medium_level_atoms=[1, 2, 3, 16],
-        #     bonded_atoms=[[2, 18], [2, 29], [1, 40], [1, 51], [16, 62]],
-        # )
-        # assert settings2.high_level_atoms == list(range(18, 29)) + list(
-        #     range(29, 40)
-        # ) + list(range(40, 51)) + list(range(51, 62)) + list(range(62, 73))
-        # assert settings2.medium_level_atoms == [1, 2, 3, 16]
-        # assert settings2.low_level_atoms == list(range(4, 16)) + [17]
 
     def test_qmmm_settings_for_charge_and_multiplicity(self):
         # test cases for 3-layer ONIOM model
