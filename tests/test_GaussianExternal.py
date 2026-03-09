@@ -15,6 +15,7 @@ import subprocess
 import sys
 import textwrap
 
+
 import numpy as np
 import pytest
 
@@ -338,5 +339,68 @@ class TestGaussianExternalRealRun:
         assert "Energy=" in log_text, (
             "No 'Energy=' line found in Gaussian log; "
             "External script may not have written output correctly.\n"
+            f"log tail:\n{log_text[-1500:]}"
+        )
+
+    def test_h2_lj_external_opt(self, tmp_path):
+        """
+        Full pipeline: LennardJones geometry optimisation on H2 via Gaussian External.
+
+        The route line is ``# opt External=...``, which instructs Gaussian to
+        iterate the geometry while calling the LJ script for energy + gradient
+        at each step.
+        """
+        from ase.calculators.lj import LennardJones
+
+        # ── 1. Write the ASE External script ─────────────────────────────
+        script_writer = ASEExternalCalculatorScript(
+            LennardJones,
+            calc_kwargs={"sigma": 0.5, "epsilon": 0.01},
+            script_name="run_lj",
+        )
+        script_path = script_writer.write(str(tmp_path))
+
+        # ── 2. Write the Gaussian .com input ─────────────────────────────
+        external_value = f'"{sys.executable} {script_path}"'
+
+        com_content = textwrap.dedent(f"""\
+            %chk=h2_ext_opt.chk
+            %nprocshared=1
+            %mem=1GB
+            # opt External={external_value}
+
+            H2 LJ external geometry optimisation
+
+            0 1
+            H   0.000000   0.000000   0.000000
+            H   0.000000   0.000000   0.900000
+
+        """)
+        com_file = tmp_path / "h2_ext_opt.com"
+        com_file.write_text(com_content)
+
+        # ── 3. Run g16 ───────────────────────────────────────────────────
+        result = subprocess.run(
+            [_G16, str(com_file)],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path),
+            timeout=300,
+        )
+
+        log_file = tmp_path / "h2_ext_opt.log"
+        log_text = log_file.read_text() if log_file.exists() else "(no log)"
+
+        # ── 4. Assert normal termination and optimised geometry ──────────
+        assert "Normal termination" in log_text, (
+            "Gaussian did not terminate normally.\n"
+            f"route: {external_value}\n"
+            f"g16 stdout: {result.stdout[-400:]}\n"
+            f"log tail:\n{log_text[-1500:]}"
+        )
+
+        assert "Stationary point found" in log_text, (
+            "Gaussian did not find a stationary point; optimisation may not "
+            "have converged.\n"
             f"log tail:\n{log_text[-1500:]}"
         )
