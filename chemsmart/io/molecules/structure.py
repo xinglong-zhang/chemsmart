@@ -2411,13 +2411,31 @@ class PKaMolecule(Molecule):
                 "Only hydrogen atoms can be marked as the acidic proton."
             )
 
-        # Inherit all instance state from the parent Molecule so that any
-        # additional attributes, metadata, cached properties, etc. are
-        # preserved. We perform a shallow copy of the parent's __dict__
-        # rather than re-running Molecule.__init__ with a subset of fields.
-        self.__dict__ = copy.copy(molecule.__dict__)
+        # Collect valid Molecule.__init__ params from source instance state.
+        sig = inspect.signature(Molecule.__init__)
+        valid_params = set(sig.parameters.keys()) - {"self"}
+        alias_keys = {"positions": "_positions", "energy": "_energy"}
 
-        # Attach the acidic proton index specific to this wrapper.
+        init_params = {}
+        mol_state = molecule.__dict__
+        for key in valid_params:
+            if key in mol_state:
+                init_params[key] = copy.copy(mol_state[key])
+            else:
+                alias = alias_keys.get(key)
+                if alias is not None and alias in mol_state:
+                    init_params[key] = copy.copy(mol_state[alias])
+
+        super().__init__(**init_params)
+
+        # Preserve any additional source attributes not part of __init__.
+        for key, value in mol_state.items():
+            if (
+                key not in {"_positions", "_energy"}
+                and key not in valid_params
+            ):
+                self.__dict__[key] = copy.copy(value)
+
         self.proton_index = proton_index
 
     @classmethod
