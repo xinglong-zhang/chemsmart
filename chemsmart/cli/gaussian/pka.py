@@ -407,42 +407,58 @@ def batch(ctx, skip_completed, parallel, **kwargs):
 
 
 def _build_gaussian_pka_settings(proton_index, shared, opt_settings):
-    """Build a ``GaussianpKaJobSettings`` from shared options and project."""
-    from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+    """Build a ``GaussianpKaJobSettings`` from shared options and project.
+
+    All attributes of *opt_settings* that are accepted by
+    ``GaussianJobSettings.__init__`` are forwarded automatically via
+    ``**kwargs``, so new attributes on ``GaussianJobSettings`` are picked up
+    without any changes here.
+    """
+    import inspect
+
+    from chemsmart.jobs.gaussian.settings import (
+        GaussianJobSettings,
+        GaussianpKaJobSettings,
+    )
+
+    # ── 1. Translate CLI-side shared dict to GaussianpKaJobSettings names ──
+    # Keys that are CLI-only (not constructor params) are dropped.
+    # Two keys have different names between the CLI dict and the constructor.
+    cli_only = {"reference_color_code", "skip_completed"}
+    rename = {
+        "reference": "reference_file",
+        "delta_g_proton": "delta_G_proton",
+    }
+
+    pka_kwargs = {}
+    for k, v in shared.items():
+        if k in cli_only:
+            continue
+        pka_kwargs[rename.get(k, k)] = v
+
+    # ── 2. Forward all GaussianJobSettings attrs from opt_settings ──
+    gs_params = {
+        name
+        for name, param in inspect.signature(
+            GaussianJobSettings.__init__
+        ).parameters.items()
+        if name != "self"
+        and param.kind
+        not in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        )
+    }
+    opt_kwargs = {
+        k: v
+        for k, v in vars(opt_settings).items()
+        if k in gs_params and v is not None
+    }
 
     return GaussianpKaJobSettings(
         proton_index=proton_index,
-        thermodynamic_cycle=shared["thermodynamic_cycle"],
-        reference_file=shared["reference"],
-        reference_proton_index=shared["reference_proton_index"],
-        reference_charge=shared["reference_charge"],
-        reference_multiplicity=shared["reference_multiplicity"],
-        reference_conjugate_base_charge=shared[
-            "reference_conjugate_base_charge"
-        ],
-        reference_conjugate_base_multiplicity=shared[
-            "reference_conjugate_base_multiplicity"
-        ],
-        delta_G_proton=shared["delta_g_proton"],
-        conjugate_base_charge=shared["conjugate_base_charge"],
-        conjugate_base_multiplicity=shared["conjugate_base_multiplicity"],
-        solvent_model=shared["solvent_model"],
-        solvent_id=shared["solvent_id"],
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-        charge=opt_settings.charge,
-        multiplicity=opt_settings.multiplicity,
-        functional=opt_settings.functional,
-        basis=opt_settings.basis,
-        ab_initio=opt_settings.ab_initio,
-        semiempirical=opt_settings.semiempirical,
-        additional_route_parameters=opt_settings.additional_route_parameters,
-        gen_genecp_file=opt_settings.gen_genecp_file,
-        heavy_elements=opt_settings.heavy_elements,
-        heavy_elements_basis=opt_settings.heavy_elements_basis,
-        light_elements_basis=opt_settings.light_elements_basis,
+        **pka_kwargs,
+        **opt_kwargs,
     )
 
 
