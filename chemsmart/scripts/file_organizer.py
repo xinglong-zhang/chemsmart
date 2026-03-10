@@ -88,7 +88,7 @@ def entry_point(
         directory=directory,
         filename=filename,
         sheetname=name,
-        type=filetype,
+        filetype=filetype,
         cols=cols,
         skip=skip,
         row=row,
