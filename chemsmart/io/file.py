@@ -597,85 +597,81 @@ class PKaCDXFile(CDXFile):
     # PKaMolecule factory
     # ------------------------------------------------------------------
 
-    def get_pka_molecule(
+    def get_pka_molecules(
         self,
         proton_index=None,
         color_code=None,
         index="-1",
+        return_list=False,
     ):
-        """Return a :class:`PKaMolecule` with the acidic proton resolved.
+        """Return :class:`PKaMolecule` instance(s) with the acidic proton resolved.
 
-        The proton is identified in priority order:
+        Mirrors the signature and behaviour of :meth:`CDXFile.get_molecules`:
+
+        * ``index='-1'`` (default) – returns a **single** ``PKaMolecule``.
+        * ``index=':'``             – returns a **list** of ``PKaMolecule``.
+        * ``return_list=True``      – always returns a list regardless of
+          *index*.
+
+        Proton detection priority:
 
         1. **User-supplied atom index** – ``proton_index`` (1-based).
         2. **User-supplied colour code** – ``color_code``; the matching
            coloured hydrogen is looked up via
            :meth:`get_colored_proton_index`.
-        3. **Auto-detection** – the uniquely coloured hydrogen is found
-           automatically from the CDXML colour table.
+        3. **Auto-detection** – :meth:`get_pka_molecules_auto` performs
+           per-fragment colour analysis to identify the proton
+           independently in each fragment.
 
         Args:
             proton_index (int | None): Explicit 1-based proton index.
                 Skips all colour-based detection when provided.
             color_code (int | None): CDXML colour-table index.  Used
                 only when *proton_index* is ``None``.
-            index (str): Which molecule to return when the file
-                contains several fragments (``"-1"`` = last, default).
+            index (str | slice): Fragment selector using the same
+                1-based convention as :meth:`CDXFile.get_molecules`
+                (``"-1"`` = last fragment, ``":"`` = all, ``"1"`` =
+                first, etc.).  Defaults to ``"-1"``.
+            return_list (bool): When ``True`` the return value is always
+                a list even if *index* selects a single fragment.
 
         Returns:
-            PKaMolecule: Molecule object with ``proton_index`` attribute.
+            PKaMolecule | list[PKaMolecule]: A single ``PKaMolecule``
+                when *index* selects one fragment and *return_list* is
+                ``False``; a list otherwise.
 
         Raises:
             ValueError: If the proton cannot be identified or validated.
         """
         from chemsmart.io.molecules.structure import PKaMolecule
 
-        mol = self.get_molecules(index=index)
-
-        if proton_index is None:
-            proton_index = self.get_colored_proton_index(
-                color_code=color_code,
-            )
-
-        return PKaMolecule(molecule=mol, proton_index=proton_index)
-
-    def get_pka_molecules(
-        self,
-        proton_index=None,
-        color_code=None,
-    ):
-        """Return all molecules as :class:`PKaMolecule` instances.
-
-        When ``proton_index`` is ``None`` and ``color_code`` is ``None``,
-        per-fragment automatic proton detection is used: each fragment's
-        dominant colour is computed independently, and the uniquely
-        coloured hydrogen in that fragment is selected.
-
-        When ``proton_index`` or ``color_code`` is supplied, the same
-        value is applied to every fragment (legacy behaviour).
-
-        Args:
-            proton_index (int | None): Explicit 1-based proton index.
-            color_code (int | None): CDXML colour-table index.
-
-        Returns:
-            list[PKaMolecule]: One ``PKaMolecule`` per fragment.
-        """
+        # Build the full list of PKaMolecules for all fragments first.
         if proton_index is None and color_code is None:
-            return self.get_pka_molecules_auto()
+            all_pka_mols = self.get_pka_molecules_auto()
+        else:
+            if proton_index is None:
+                proton_index = self.get_colored_proton_index(
+                    color_code=color_code,
+                )
+            all_pka_mols = [
+                PKaMolecule(molecule=mol, proton_index=proton_index)
+                for mol in self.molecules
+            ]
 
-        from chemsmart.io.molecules.structure import PKaMolecule
-
-        if proton_index is None:
-            proton_index = self.get_colored_proton_index(
-                color_code=color_code,
+        # Apply the same index semantics as CDXFile.get_molecules.
+        if index == ":":
+            selection = all_pka_mols
+        else:
+            parsed_index = (
+                index
+                if isinstance(index, slice)
+                else string2index_1based(str(index))
             )
+            selection = all_pka_mols[parsed_index]
 
-        molecules = self.molecules
-        return [
-            PKaMolecule(molecule=mol, proton_index=proton_index)
-            for mol in molecules
-        ]
+        if return_list:
+            return selection if isinstance(selection, list) else [selection]
+        return selection
 
     # ------------------------------------------------------------------
     # Per-fragment colour parsing and auto-detection

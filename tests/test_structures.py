@@ -1947,8 +1947,8 @@ class TestpKaCDXFile:
 
         assert proton_index == 8
 
-        # Verify get_pka_molecule returns PKaMolecule with proton_index
-        pka_mol = cdx_file.get_pka_molecule()
+        # Verify get_pka_molecules returns PKaMolecule with proton_index
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
         assert isinstance(pka_mol, PKaMolecule)
         assert pka_mol.proton_index == 8
         assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
@@ -1963,8 +1963,8 @@ class TestpKaCDXFile:
         """
         cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
 
-        # Via get_pka_molecule with color_code
-        pka_mol = cdx_file.get_pka_molecule(color_code=4)
+        # Via get_pka_molecules with color_code
+        pka_mol = cdx_file.get_pka_molecules(index="-1", color_code=4)
         assert isinstance(pka_mol, PKaMolecule)
         assert pka_mol.proton_index == 8
         assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
@@ -1981,7 +1981,9 @@ class TestpKaCDXFile:
         assert len(h_indices) > 0
         explicit_idx = h_indices[0]
 
-        pka_mol = cdx_file.get_pka_molecule(proton_index=explicit_idx)
+        pka_mol = cdx_file.get_pka_molecules(
+            index="-1", proton_index=explicit_idx
+        )
         assert isinstance(pka_mol, PKaMolecule)
         assert pka_mol.proton_index == explicit_idx
         assert pka_mol.symbols[explicit_idx - 1] == "H"
@@ -2026,7 +2028,7 @@ class TestpKaCDXFile:
         from chemsmart.utils.mixins import delete_atoms_by_indices
 
         cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
-        pka_mol = cdx_file.get_pka_molecule()
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
         assert isinstance(pka_mol, PKaMolecule)
         assert pka_mol.chemical_formula == "C6H6O"
         assert pka_mol.num_atoms == 13
@@ -2052,7 +2054,7 @@ class TestpKaCDXFile:
         from chemsmart.utils.mixins import delete_atoms_by_indices
 
         cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
-        pka_mol = cdx_file.get_pka_molecule()
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
         assert isinstance(pka_mol, PKaMolecule)
         assert pka_mol.proton_index == 13
         assert pka_mol.chemical_formula == "C6H6O"
@@ -2073,7 +2075,7 @@ class TestpKaCDXFile:
         cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
 
         # colour 4 is the H span colour in phenol.cdxml
-        pka_mol = cdx_file.get_pka_molecule(color_code=4)
+        pka_mol = cdx_file.get_pka_molecules(index="-1", color_code=4)
         assert isinstance(pka_mol, PKaMolecule)
         assert pka_mol.proton_index == 13
         assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
@@ -2166,10 +2168,10 @@ class TestpKaCDXFile:
     def test_get_pka_molecules_delegates_to_auto(
         self, colored_proton_two_molecule_cdxml_file
     ):
-        """get_pka_molecules() with no args delegates to get_pka_molecules_auto()."""
+        """get_pka_molecules() with index=':' and no proton args delegates to get_pka_molecules_auto()."""
         cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
-        # No proton_index, no color_code → auto mode
-        pka_mols = cdx_file.get_pka_molecules()
+        # No proton_index, no color_code → auto mode; index=":" → all fragments
+        pka_mols = cdx_file.get_pka_molecules(index=":")
 
         assert len(pka_mols) == 2
         for pka_mol in pka_mols:
@@ -2186,7 +2188,7 @@ class TestpKaCDXFile:
         h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
         pi = h_indices[0]
 
-        pka_mols = cdx_file.get_pka_molecules(proton_index=pi)
+        pka_mols = cdx_file.get_pka_molecules(index=":", proton_index=pi)
         assert len(pka_mols) == 2
         for pka_mol in pka_mols:
             assert pka_mol.proton_index == pi

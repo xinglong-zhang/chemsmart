@@ -333,8 +333,8 @@ def resolve_reference_proton(
 
         ref_cdx = PKaCDXFile(filename=reference)
         try:
-            ref_pka_mol = ref_cdx.get_pka_molecule(
-                color_code=reference_color_code
+            ref_pka_mol = ref_cdx.get_pka_molecules(
+                index="-1", color_code=reference_color_code
             )
             reference_proton_index = ref_pka_mol.proton_index
             logger.info(
