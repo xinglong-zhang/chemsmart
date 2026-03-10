@@ -163,6 +163,17 @@ Output:
 
    chemsmart run thermochemistry -T 298.15 -d . -p gaussian -o thermo.dat
 
+**Batch processing with custom pressure:**
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -P 2.5 -d . -p gaussian -o thermo.dat
+
+.. note::
+
+   Both ``-p`` (program) and ``-P`` (pressure) are case-sensitive options that can be used together. ``-p`` specifies
+   the quantum chemistry program that generated the files, while ``-P`` specifies the pressure in atm.
+
 **Solution phase:**
 
 .. code:: bash
