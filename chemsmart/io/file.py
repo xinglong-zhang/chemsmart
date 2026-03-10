@@ -265,9 +265,9 @@ class PKaCDXFile(CDXFile):
             same CDXML through ``Chem.MolsFromCDXMLFile``, **before**
             ``Chem.AddHs`` adds implicit hydrogens.
         """
-        from rdkit.Chem import GetPeriodicTable
+        from chemsmart.utils.periodictable import PeriodicTable
 
-        pt = GetPeriodicTable()
+        pt = PeriodicTable()
         root = self._parse_cdxml_root()
 
         list_of_elements = []
@@ -339,7 +339,7 @@ class PKaCDXFile(CDXFile):
                     break
 
             try:
-                symbol = periodic_table.GetElementSymbol(element_num)
+                symbol = periodic_table.to_symbol(element_num)
             except Exception:
                 symbol = "?"
 
@@ -697,9 +697,9 @@ class PKaCDXFile(CDXFile):
         Raises:
             ValueError: If the file cannot be parsed as valid CDXML.
         """
-        from rdkit.Chem import GetPeriodicTable
+        from chemsmart.utils.periodictable import PeriodicTable
 
-        pt = GetPeriodicTable()
+        pt = PeriodicTable()
         root = self._parse_cdxml_root()
 
         fragments_atoms = []
