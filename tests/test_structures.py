@@ -2025,8 +2025,6 @@ class TestpKaCDXFile:
         """Test that the coloured proton can be removed from the molecule.
         The coloured proton is an explicit node in the CDXML, so should be removed as a normal atom.
         Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms)."""
-        from chemsmart.utils.mixins import delete_atoms_by_indices
-
         cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
         pka_mol = cdx_file.get_pka_molecules(index="-1")
         assert isinstance(pka_mol, PKaMolecule)
@@ -2036,8 +2034,8 @@ class TestpKaCDXFile:
         assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
 
         # Remove proton → phenoxide
-        phenoxide = delete_atoms_by_indices(
-            pka_mol, pka_mol.proton_index, one_based=True
+        phenoxide = pka_mol.delete_atoms_by_indices(
+            pka_mol.proton_index, one_based=True
         )
         assert phenoxide.num_atoms == 12
         assert phenoxide.chemical_formula == "C6H5O"
@@ -2051,8 +2049,6 @@ class TestpKaCDXFile:
         The OH hydrogen is an implicit H on the O node, identified
         via the coloured "H" span in the label.
         """
-        from chemsmart.utils.mixins import delete_atoms_by_indices
-
         cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
         pka_mol = cdx_file.get_pka_molecules(index="-1")
         assert isinstance(pka_mol, PKaMolecule)
@@ -2062,8 +2058,8 @@ class TestpKaCDXFile:
         assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
 
         # Remove proton → phenoxide
-        phenoxide = delete_atoms_by_indices(
-            pka_mol, pka_mol.proton_index, one_based=True
+        phenoxide = pka_mol.delete_atoms_by_indices(
+            pka_mol.proton_index, one_based=True
         )
         assert phenoxide.num_atoms == 12
         assert phenoxide.chemical_formula == "C6H5O"

@@ -2160,8 +2160,6 @@ class ORCApKaJobSettings(ORCAJobSettings):
 
     def _create_reference_conjugate_base_molecule(self, reference_molecule):
         """Remove proton from reference acid to create B-."""
-        from chemsmart.utils.mixins import delete_atoms_by_indices
-
         if self.reference_proton_index is None:
             raise ValueError("reference_proton_index must be specified.")
 
@@ -2173,8 +2171,8 @@ class ORCApKaJobSettings(ORCAJobSettings):
                 f"'{atom_symbol}', not hydrogen."
             )
 
-        ref_cb_mol = delete_atoms_by_indices(
-            reference_molecule, self.reference_proton_index, one_based=True
+        ref_cb_mol = reference_molecule.delete_atoms_by_indices(
+            self.reference_proton_index, one_based=True
         )
 
         if self.reference_conjugate_base_charge is not None:
@@ -2245,8 +2243,6 @@ class ORCApKaJobSettings(ORCAJobSettings):
 
     def _create_conjugate_base_molecule(self, molecule):
         """Remove the specified proton to create the conjugate base (A-)."""
-        from chemsmart.utils.mixins import delete_atoms_by_indices
-
         if self.proton_index is None:
             raise ValueError(
                 "proton_index must be specified to create conjugate base "
@@ -2266,8 +2262,8 @@ class ORCApKaJobSettings(ORCAJobSettings):
                 "not hydrogen."
             )
 
-        conjugate_base_mol = delete_atoms_by_indices(
-            molecule, self.proton_index, one_based=True
+        conjugate_base_mol = molecule.delete_atoms_by_indices(
+            self.proton_index, one_based=True
         )
 
         original_charge = molecule.charge if molecule.charge is not None else 0

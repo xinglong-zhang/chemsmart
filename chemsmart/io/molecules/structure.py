@@ -1387,6 +1387,124 @@ class Molecule:
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
 
+    def delete_atoms_by_indices(self, atom_indices, *, one_based=True):
+        """Return a new :class:`Molecule` with the specified atoms removed.
+
+        Accepts one or more atom indices, builds a boolean keep-mask, and
+        constructs a fresh ``Molecule`` containing only the retained atoms.
+        Per-atom arrays (``frozen_atoms``, ``forces``, ``velocities``,
+        ``vibrational_modes``) are filtered accordingly; per-mode scalars
+        (frequencies, reduced masses, …) are passed as-is since
+        ``Molecule.__init__`` wraps them in a new ``list`` internally.
+
+        Args:
+            atom_indices (int | Iterable[int]): Index or indices of atoms
+                to delete.
+            one_based (bool): If ``True`` (default) the indices are
+                interpreted as 1-based (matching Gaussian / ORCA
+                conventions).  Set to ``False`` for 0-based indexing.
+
+        Returns:
+            Molecule: A new molecule without the deleted atoms.
+
+        Raises:
+            ValueError: If *atom_indices* is ``None``, any index is out of
+                range, or removing the atoms would leave an empty molecule.
+            TypeError: If *atom_indices* is neither ``int`` nor iterable.
+
+        Example::
+
+            mol = Molecule.from_filepath("phenol.xyz")
+            phenoxide = mol.delete_atoms(atom_indices=13)        # 1-based
+            phenoxide = mol.delete_atoms(atom_indices=[13])
+            phenoxide = mol.delete_atoms(atom_indices=12, one_based=False)
+        """
+        if atom_indices is None:
+            raise ValueError(
+                "atom_indices must be provided when deleting atoms"
+            )
+
+        if isinstance(atom_indices, int):
+            indices = [atom_indices]
+        else:
+            try:
+                indices = list(atom_indices)
+            except TypeError as exc:
+                raise TypeError(
+                    "atom_indices must be an int or iterable of ints"
+                ) from exc
+
+        if not indices:
+            return copy.deepcopy(self)
+
+        zero_indices = []
+        for idx in indices:
+            try:
+                idx_int = int(idx)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Atom index '{idx}' is not a valid integer"
+                ) from exc
+            zero_indices.append(idx_int - 1 if one_based else idx_int)
+
+        zero_indices = sorted(set(zero_indices))
+        total_atoms = len(self.symbols)
+
+        for idx in zero_indices:
+            if idx < 0 or idx >= total_atoms:
+                label = idx + 1 if one_based else idx
+                raise ValueError(
+                    f"Atom index {label} out of range for molecule "
+                    f"with {total_atoms} atoms"
+                )
+
+        keep_mask = np.ones(total_atoms, dtype=bool)
+        keep_mask[zero_indices] = False
+
+        if not keep_mask.any():
+            raise ValueError(
+                "Deleting the requested atoms would leave an empty molecule"
+            )
+
+        def _filter(seq):
+            """Filter a per-atom list/array; return None if input is None."""
+            if seq is None:
+                return None
+            arr = np.asarray(seq)
+            if arr.shape[0] == total_atoms:
+                return (
+                    arr[keep_mask].tolist()
+                    if isinstance(seq, list)
+                    else arr[keep_mask].copy()
+                )
+            return seq
+
+        new_vib_modes = (
+            [np.asarray(m)[keep_mask].copy() for m in self.vibrational_modes]
+            if self.vibrational_modes
+            else None
+        )
+
+        return Molecule(
+            symbols=[s for s, k in zip(self.symbols, keep_mask) if k],
+            positions=np.asarray(self.positions)[keep_mask],
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            frozen_atoms=_filter(self.frozen_atoms),
+            pbc_conditions=self.pbc_conditions,
+            translation_vectors=self.translation_vectors,
+            energy=self.energy,
+            forces=_filter(self.forces),
+            velocities=_filter(self.velocities),
+            vibrational_frequencies=self.vibrational_frequencies,
+            vibrational_reduced_masses=self.vibrational_reduced_masses,
+            vibrational_force_constants=self.vibrational_force_constants,
+            vibrational_ir_intensities=self.vibrational_ir_intensities,
+            vibrational_mode_symmetries=self.vibrational_mode_symmetries,
+            vibrational_modes=new_vib_modes,
+            info=self.info,
+        )
+
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol
         with proper stereochemistry handling.
