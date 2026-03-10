@@ -126,3 +126,13 @@ class ORCAOutputFolder(BaseFolder):
             f.write(
                 f"TOTAL core-hours in folder {self.folder} is: {self.total_service_units}\n"
             )
+
+    # def assemble_database(self, database_file='database.json'):
+    #     """Assemble a database from all log files in the folder."""
+    #     database = {}
+    #     for file in self.all_outfiles:
+    #         output_file = ORCAOutput(file)
+    #         database[file] = output_file.__dict__
+    #     with open(database_file, 'w') as f:
+    #         json.dump(database, f, indent=4)
+    #     return database

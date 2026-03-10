@@ -145,3 +145,13 @@ class GaussianOutputFolder(BaseFolder):
                 f"TOTAL core-hours in folder {self.folder} is: "
                 f"{self.total_service_units}\n"
             )
+
+    # def assemble_database(self, database_file='database.json'):
+    #     """Assemble a database from all log files in the folder."""
+    #     database = {}
+    #     for file in self.all_logfiles:
+    #         output_file = Gaussian16Output(file)
+    #         database[file] = output_file.__dict__
+    #     with open(database_file, 'w') as f:
+    #         json.dump(database, f, indent=4)
+    #     return database
