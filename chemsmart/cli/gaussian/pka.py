@@ -21,7 +21,7 @@ import click
 
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.pka_helpers import (
+from chemsmart.cli.pka import (
     click_pka_shared_options,
     click_pka_submit_options,
     resolve_proton_index,
@@ -296,7 +296,7 @@ def batch(ctx, skip_completed, parallel, **kwargs):
 
     # Validate reference acid for proton exchange
     if shared["thermodynamic_cycle"] == "proton exchange":
-        from chemsmart.cli.pka_helpers import resolve_reference_proton
+        from chemsmart.cli.pka import resolve_reference_proton
 
         missing = []
         if shared["reference"] is None:
