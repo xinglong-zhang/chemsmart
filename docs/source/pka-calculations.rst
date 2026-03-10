@@ -127,8 +127,8 @@ Required columns:
 
 .. note::
 
-   If reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values from the most recently
-   defined reference acid in a previous row will be used. The ``pka_ref`` can also be provided via the ``-rp``
+   If reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values from the most
+   recently defined reference acid in a previous row will be used. The ``pka_ref`` can also be provided via the ``-rp``
    command-line option.
 
 The results, including the computed pKa for each entry, will be saved to the file specified by ``--output-results``.
