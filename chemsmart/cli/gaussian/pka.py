@@ -22,6 +22,7 @@ import click
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.pka import (
+    click_pka_proton_options,
     click_pka_shared_options,
     click_pka_submit_options,
     resolve_proton_index,
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 @gaussian.group("pka", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_pka_shared_options
+@click_pka_proton_options
 @click_pka_submit_options
 @click.pass_context
 def pka(
@@ -64,9 +66,10 @@ def pka(
     concentration,
     cutoff_entropy_grimme,
     cutoff_enthalpy,
-    # submit-specific options (on group for backward compat)
+    # proton identification options (pka-layer only)
     proton_index,
     color_code,
+    # submit options
     parallel,
     **kwargs,
 ):
@@ -118,13 +121,13 @@ def pka(
     )
     ctx.ensure_object(dict)
     ctx.obj["pka_shared"] = shared
+    ctx.obj["pka_proton_index"] = proton_index
+    ctx.obj["pka_color_code"] = color_code
 
     # Default to ``submit`` when no subcommand is given
     if ctx.invoked_subcommand is None:
         ctx.invoke(
             submit,
-            proton_index=proton_index,
-            color_code=color_code,
             parallel=parallel,
             skip_completed=skip_completed,
         )
@@ -139,7 +142,7 @@ def pka(
 @click_job_options
 @click_pka_submit_options
 @click.pass_context
-def submit(ctx, proton_index, color_code, parallel, skip_completed, **kwargs):
+def submit(ctx, parallel, skip_completed, **kwargs):
     """Submit a single-molecule Gaussian pKa calculation.
 
     \b
@@ -150,18 +153,20 @@ def submit(ctx, proton_index, color_code, parallel, skip_completed, **kwargs):
     \b
     Examples:
       # Proton exchange cycle
-      chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka submit -pi 10 \\
-          -t "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1
+      chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka -pi 10 \\
+          -t "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1 submit
 
       # Direct cycle
-      chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka submit -pi 10 \\
-          -t direct
+      chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka -pi 10 \\
+          -t direct submit
 
       # Auto-detect proton from ChemDraw file
       chemsmart run gaussian -f phenol.cdxml -c 0 -m 1 pka submit
     """
     shared = ctx.obj["pka_shared"]
     filename = ctx.obj.get("filename")
+    proton_index = ctx.obj.get("pka_proton_index")
+    color_code = ctx.obj.get("pka_color_code")
 
     # ── resolve proton index (CDXML auto-detect) ──
     proton_index, pka_molecules = resolve_proton_index(

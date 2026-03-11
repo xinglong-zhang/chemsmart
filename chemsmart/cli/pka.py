@@ -173,14 +173,22 @@ def click_pka_shared_options(f):
     return wrapper
 
 
-def click_pka_submit_options(f):
+def click_pka_proton_options(f):
+    """Options that identify the proton to remove (-pi / -cc).
+
+    Applied to the ``pka`` *group* so the values are captured once and
+    stored in ``ctx.obj``.  The ``submit`` subcommand reads them from
+    there rather than re-declaring them.
+    """
+
     @click.option(
         "-pi",
         "--proton-index",
         type=int,
         required=False,
         help=(
-            "1-based index of the proton to remove for deprotonation. Required unless a .cdxml file with a coloured proton is used."
+            "1-based index of the proton to remove for deprotonation. "
+            "Required unless a .cdxml file with a coloured proton is used."
         ),
     )
     @click.option(
@@ -189,9 +197,20 @@ def click_pka_submit_options(f):
         type=int,
         default=None,
         help=(
-            "CDXML colour-table index identifying the proton to remove. If omitted, the uniquely coloured hydrogen is auto-detected."
+            "CDXML colour-table index identifying the proton to remove. "
+            "If omitted, the uniquely coloured hydrogen is auto-detected."
         ),
     )
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
+def click_pka_submit_options(f):
+    """Options specific to the ``submit`` / ``batch`` subcommand layer."""
+
     @click.option(
         "--parallel/--no-parallel",
         default=False,
