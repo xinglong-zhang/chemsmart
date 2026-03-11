@@ -7,8 +7,10 @@ import click
 
 from chemsmart.assembler.export import DataExporter
 from chemsmart.assembler.single import SingleFileAssembler
-from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.io import find_output_files_in_directory
+
+from .database import database
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +63,7 @@ def click_assemble_options(f):
     return wrapper_common_options
 
 
-# use MyGroup to allow potential subcommands in the future
-@click.group(cls=MyGroup, invoke_without_command=True)
+@database.command(cls=MyCommand)
 @click_assemble_options
 @click.pass_context
 def assemble(
@@ -72,7 +73,6 @@ def assemble(
     output,
     index,
     keys,
-    **kwargs,
 ):
     """CLI for running assemble jobs using the chemsmart framework.
 
@@ -80,7 +80,7 @@ def assemble(
     unified dataset, which can then be exported in the desired format.
 
     Example usage:
-    chemsmart run assemble -d results/ -t gaussian -o output.json
+    chemsmart run database assemble -d results/ -t gaussian -o output.json
     """
 
     directory = os.path.abspath(directory)

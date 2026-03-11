@@ -1,4 +1,4 @@
-from chemsmart.cli.assemble import assemble
+from chemsmart.cli.database import database
 from chemsmart.cli.gaussian import gaussian
 from chemsmart.cli.mol import mol
 from chemsmart.cli.nciplot import nciplot
@@ -11,5 +11,5 @@ subcommands = [
     mol,
     nciplot,
     thermochemistry,
-    assemble,
+    database,
 ]
