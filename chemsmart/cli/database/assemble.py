@@ -1,12 +1,11 @@
 import functools
 import logging
 import os
-from pathlib import Path
 
 import click
 
-from chemsmart.assembler.export import DataExporter
-from chemsmart.assembler.single import SingleFileAssembler
+from chemsmart.assembler.assemble import SingleFileAssembler
+from chemsmart.assembler.database import Database
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.io import find_output_files_in_directory
 
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def click_assemble_options(f):
     """
-    Common click options for DataAssembler.
+    Common click options for database assemble.
     """
 
     @click.option(
@@ -35,14 +34,6 @@ def click_assemble_options(f):
         help="Type of calculation output files to assemble.",
     )
     @click.option(
-        "-o",
-        "--output",
-        type=str,
-        required=True,
-        help="Output filename; extension determines format (.json / .csv / .sqlite). "
-        "If no extension is provided, defaults to JSON format.",
-    )
-    @click.option(
         "-i",
         "--index",
         default=":",
@@ -50,11 +41,12 @@ def click_assemble_options(f):
         help="Index (1-based) of the molecule to extract from multi-molecule files.",
     )
     @click.option(
-        "-k",
-        "--keys",
+        "-o",
+        "--output",
         type=str,
+        default="database.db",
         show_default=True,
-        help="Comma-separated list of export fields.",
+        help="Output database file (.db extension). ",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -70,18 +62,21 @@ def assemble(
     ctx,
     directory,
     filetype,
-    output,
     index,
-    keys,
+    output,
 ):
-    """CLI for running assemble jobs using the chemsmart framework.
+    """Assemble calculation output files into a SQLite database.
 
-    This command collects calculation data from output files in the specified directory and assembles them into a
-    unified dataset, which can then be exported in the desired format.
+    This command collects calculation data from output files in the specified
+    directory and assembles them into a unified SQLite database (.db).
 
     Example usage:
-    chemsmart run database assemble -d results/ -t gaussian -o output.json
+    chemsmart run database assemble -d results/ -t gaussian -o database.db
     """
+
+    # Ensure the output filename ends with .db
+    if not output.endswith(".db"):
+        output = output + ".db"
 
     directory = os.path.abspath(directory)
     if not os.path.isdir(directory):
@@ -117,37 +112,12 @@ def assemble(
             logger.error(f"Failed to parse {file}: {e}")
 
     if not rows:
-        logger.error("No valid data parsed. Aborting export.")
+        logger.error("No valid data parsed. Aborting.")
         return None
 
-    # Prepare output base name (DataExporter will append extension)
-    fmt = _deduce_format(output)
-    base, ext = os.path.splitext(output)
-    outputfile = base if ext else output
-
-    if keys:
-        keys_list = [k.strip() for k in keys.split(",") if k.strip()]
-    else:
-        keys_list = None
-
-    exporter = DataExporter(rows, outputfile=outputfile, keys=keys_list)
-    if fmt == "json":
-        exporter.to_json()
-    elif fmt == "csv":
-        exporter.to_csv()
-    elif fmt == "sqlite":
-        exporter.to_sqlite()
-    logger.info(f"Export completed: {outputfile}.{fmt}")
+    # Write to SQLite database
+    db = Database(db_file=output)
+    db.create()
+    count = db.insert_records(rows, program=filetype.lower())
+    logger.info(f"Assembled {count} record(s) into database: {output}")
     return None
-
-
-def _deduce_format(output):
-    ext = Path(output).suffix.lower()
-    if ext in {".json", ".csv", ".sqlite"}:
-        return ext[1:]
-    elif ext == "":
-        logger.warning("No extension specified. Defaulting to JSON format.")
-        return "json"
-    raise ValueError(
-        f"Unsupported output format: {ext}. Only .json .csv .sqlite are supported."
-    )

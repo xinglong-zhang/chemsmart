@@ -1,11 +1,47 @@
-import logging
+"""
+Assembler module for parsing quantum chemistry output files and
+assembling structured records for database storage.
 
-from chemsmart.assembler.provenance import build_provenance
+This module consolidates the assembler pipeline:
+- BaseAssembler: core assembly logic shared across programs
+- GaussianAssembler: Gaussian-specific assembly
+- ORCAAssembler: ORCA-specific assembly
+- SingleFileAssembler: dispatcher that auto-detects program type
+- build_provenance: provenance metadata builder
+"""
+
+import logging
+from functools import cached_property
+
+from chemsmart import __version__ as chemsmart_version
 from chemsmart.assembler.records import AssembledRecord
-from chemsmart.assembler.utils import get_record_id
+from chemsmart.assembler.utils import (
+    file_size,
+    get_record_id,
+    sha256_content,
+    utcnow_iso,
+)
+from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
+
+
+def build_provenance(filename, output):
+    """Build provenance metadata for an assembled record."""
+    return {
+        "source_file": filename,
+        "source_file_hash": sha256_content(output),
+        "source_file_size": file_size(filename),
+        "source_file_date": output.date,
+        "program": get_program_type_from_file(filename),
+        "program_version": output.version,
+        "parser": output.__class__.__name__,
+        "chemsmart_version": chemsmart_version,
+        "assembled_at": utcnow_iso(),
+    }
 
 
 class BaseAssembler:
@@ -168,3 +204,86 @@ class BaseAssembler:
                 }
             )
         return calculation_results
+
+
+class GaussianAssembler(BaseAssembler):
+    OUTPUT_CLASS = Gaussian16Output
+    PROGRAM = "Gaussian"
+
+    def get_meta_data(self):
+        meta_data = super().get_meta_data()
+        meta_data.update(
+            {
+                "num_primitive_gaussians": self.output.num_primitive_gaussians,
+                "num_cartesian_basis_functions": self.output.num_cartesian_basis_functions,
+            }
+        )
+        if self.output.modredundant_group is not None:
+            meta_data["modredundant_group"] = self.output.modredundant_group
+        return meta_data
+
+    def get_calculation_results(self):
+        calculation_results = super().get_calculation_results()
+        calculation_results.update(
+            {
+                "optimized_steps": self.output.optimized_steps,
+                "reduced_masses": self.output.reduced_masses,
+                "force_constants": self.output.force_constants,
+                "ir_intensities": self.output.ir_intensities,
+                "vibrational_mode_symmetries": self.output.vibrational_mode_symmetries,
+            }
+        )
+        return calculation_results
+
+
+class ORCAAssembler(BaseAssembler):
+    OUTPUT_CLASS = ORCAOutput
+    PROGRAM = "ORCA"
+
+    def get_meta_data(self):
+        meta_data = super().get_meta_data()
+        meta_data.update(
+            {
+                "num_shells": self.output.num_shells,
+            }
+        )
+        return meta_data
+
+    def get_calculation_results(self):
+        calculation_results = super().get_calculation_results()
+        calculation_results.update(
+            {
+                "molar_absorption_coefficients": self.output.molar_absorption_coefficients,
+            }
+        )
+        return calculation_results
+
+
+class SingleFileAssembler:
+    """Auto-detect program type and delegate to the appropriate assembler."""
+
+    def __init__(self, filename, index=":"):
+        self.filename = filename
+        self.index = index
+
+    @cached_property
+    def assemble_data(self):
+        assembler = self._get_assembler(self.filename)
+        try:
+            data = assembler.assemble()
+        except Exception as e:
+            logger.error(f"Error assembling {self.filename}: {e}")
+            return None
+        return data
+
+    def _get_assembler(self, file):
+        program = get_program_type_from_file(self.filename)
+        if program == "gaussian":
+            assembler = GaussianAssembler(file, index=self.index)
+        elif program == "orca":
+            assembler = ORCAAssembler(file, index=self.index)
+        else:
+            raise ValueError(
+                "Unsupported format. Only 'gaussian' and 'orca' are supported."
+            )
+        return assembler

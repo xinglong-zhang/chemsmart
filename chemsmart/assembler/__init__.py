@@ -1,10 +1,12 @@
-from .base import BaseAssembler
+from .assemble import (
+    BaseAssembler,
+    GaussianAssembler,
+    ORCAAssembler,
+    SingleFileAssembler,
+)
 from .database import Database
 from .export import DataExporter
-from .gaussian import GaussianAssembler
-from .orca import ORCAAssembler
 from .records import AssembledRecord
-from .single import SingleFileAssembler
 
 __all__ = [
     "BaseAssembler",
