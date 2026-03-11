@@ -7,7 +7,7 @@ import click
 from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filenames_options,
-    click_folder_options,
+    click_molecule_folder_options,
     click_pubchem_options,
 )
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
@@ -327,7 +327,7 @@ def click_pymol_save_options(f):
 @click.group(cls=MyGroup)
 @click_filenames_options
 @click_file_label_and_index_options
-@click_folder_options
+@click_molecule_folder_options
 @click_pubchem_options
 @click.pass_context
 def mol(
@@ -474,7 +474,7 @@ def mol_process_pipeline(ctx, *args, **kwargs):
 @click.group(cls=MyGroup)
 @click_filenames_options
 @click_file_label_and_index_options
-@click_folder_options
+@click_molecule_folder_options
 @click_pubchem_options
 @click.pass_context
 def mol_qmmm(

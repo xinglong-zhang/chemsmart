@@ -3,14 +3,18 @@ import os
 
 from chemsmart.io.file import SDFFile
 from chemsmart.io.folder import BaseFolder
-from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
+from chemsmart.io.gaussian.folder import (
+    GaussianInputFolder,
+    GaussianOutputFolder,
+)
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.io.orca.folder import ORCAInpFolder, ORCAOutFolder
+from chemsmart.io.orca.folder import ORCAInputFolder, ORCAOutputFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xyz.folder import XYZFolder
 from chemsmart.io.xyz.xyzfile import XYZFile
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -24,20 +28,26 @@ class FileConverter:
     Args:
         directory (str): Directory in which to convert files.
         type (str): Type of file to be converted, if directory is specified.
+        program (str | None): Computational chemistry program whose output files
+            should be converted. Only required when converting files with
+            shared extensions.
         filename (str): Input filename to be converted.
-        output_filetype (str): Type of files to convert to, defaults to .xzy.
+        output_filetype (str): Type of files to convert to, defaults to xyz.
+        include_intermediate_structures (bool): Include intermediate structures.
     """
 
     def __init__(
         self,
         directory=None,
         type=None,
+        program=None,
         filename=None,
         output_filetype="xyz",
         include_intermediate_structures=False,
     ):
         self.directory = directory
         self.type = type
+        self.program = program
         self.filename = filename
         self.output_filetype = output_filetype
         self.include_intermediate_structures = include_intermediate_structures
@@ -53,7 +63,13 @@ class FileConverter:
             logger.info(f"Converting files in directory: {self.directory}")
             assert (
                 self.type is not None
-            ), "Type of file to be converted must be specified."
+            ), "Type of file (--filetype) to be converted must be specified."
+            if self.type == "out" and self.program is None:
+                raise ValueError(
+                    "Both --filetype out and --program must be specified when "
+                    "converting .out files, because both Gaussian and ORCA use "
+                    "this extension. Use --program gaussian or --program orca."
+                )
             self._convert_all_files(
                 self.directory, self.type, self.output_filetype
             )
@@ -81,20 +97,32 @@ class FileConverter:
             output_filetype (str): Target output format.
         """
         if type == "log":
-            g16_folder = GaussianLogFolder(folder=directory)
-            all_files = g16_folder.all_logfiles
+            g16_folder = GaussianOutputFolder(folder=directory)
+            all_files = g16_folder.all_log_files
         elif type == "com":
-            g16_folder = GaussianComFolder(folder=directory)
+            g16_folder = GaussianInputFolder(folder=directory)
             all_files = g16_folder.all_com_files
         elif type == "gjf":
-            g16_folder = GaussianComFolder(folder=directory)
+            g16_folder = GaussianInputFolder(folder=directory)
             all_files = g16_folder.all_gjf_files
         elif type == "out":
-            orca_folder = ORCAOutFolder(folder=directory)
-            all_files = orca_folder.all_outfiles
+            if self.program == "gaussian":
+                g16_folder = GaussianOutputFolder(folder=directory)
+                all_files = [
+                    f
+                    for f in g16_folder.all_output_files
+                    if f.endswith(f".{type}")
+                ]
+            else:
+                orca_folder = ORCAOutputFolder(folder=directory)
+                all_files = [
+                    f
+                    for f in orca_folder.all_output_files
+                    if f.endswith(f".{type}")
+                ]
         elif type == "inp":
-            orca_folder = ORCAInpFolder(folder=directory)
-            all_files = orca_folder.all_inpfiles
+            orca_folder = ORCAInputFolder(folder=directory)
+            all_files = orca_folder.all_inp_files
         elif type == "xyz":
             xyz_folder = XYZFolder(folder=directory)
             all_files = xyz_folder.all_xyzfiles
@@ -115,7 +143,10 @@ class FileConverter:
             elif type == "com" or type == "gjf":
                 outfile = Gaussian16Input(filename=file)
             elif type == "out":
-                outfile = ORCAOutput(filename=file)
+                if self.program == "gaussian":
+                    outfile = Gaussian16Output(filename=file)
+                else:
+                    outfile = ORCAOutput(filename=file)
             elif type == "inp":
                 outfile = ORCAInput(filename=file)
             elif type == "xyz":
@@ -153,12 +184,18 @@ class FileConverter:
             output_filetype (str): Target output format.
         """
         logger.info(f"Converting file type: {self.type}")
-        if self.type == "log":
-            outfile = Gaussian16Output(filename=filename)
+        if self.type == "log" or self.type == "out":
+            detected = get_program_type_from_file(filename)
+            if detected == "gaussian":
+                outfile = Gaussian16Output(filename=filename)
+            elif detected == "orca":
+                outfile = ORCAOutput(filename=filename)
+            else:
+                raise ValueError(
+                    f"Could not detect program type for '{filename}'. "
+                )
         elif self.type == "com" or self.type == "gjf":
             outfile = Gaussian16Input(filename=filename)
-        elif self.type == "out":
-            outfile = ORCAOutput(filename=filename)
         elif self.type == "inp":
             outfile = ORCAInput(filename=filename)
         elif self.type == "xyz":

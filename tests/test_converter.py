@@ -4,14 +4,17 @@ from shutil import copy, copytree, rmtree
 import numpy as np
 
 from chemsmart.io.converter import FileConverter
-from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
+from chemsmart.io.gaussian.folder import (
+    GaussianInputFolder,
+    GaussianOutputFolder,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xyz.folder import XYZFolder
 
 
 class TestConverter:
 
-    def test_convert_log_foler_to_xyz(
+    def test_convert_log_folder_to_xyz(
         self, tmpdir, gaussian_outputs_test_directory
     ):
         # copy whole directory gaussian_outputs_test_directory to tmpdir
@@ -33,8 +36,8 @@ class TestConverter:
         file_converter.convert_files()
 
         # check if the files are converted
-        g16_folder = GaussianLogFolder(folder=tmp_log_folder)
-        all_logfiles = g16_folder.all_logfiles
+        g16_folder = GaussianOutputFolder(folder=tmp_log_folder)
+        all_logfiles = g16_folder.all_log_files
 
         # check all .log files have been converted to .xyz files
         for file in all_logfiles:
@@ -48,7 +51,7 @@ class TestConverter:
             assert len(lines) == 5  # 5 lines in the log file
             assert lines[0] == "3\n"  # first line is number of atoms
 
-    def test_convert_log_foler_to_com(
+    def test_convert_log_folder_to_com(
         self, tmpdir, gaussian_outputs_test_directory
     ):
         # copy whole directory gaussian_outputs_test_directory to tmpdir
@@ -71,8 +74,8 @@ class TestConverter:
         file_converter.convert_files()
 
         # check all .log files have been converted to .com files
-        g16_folder = GaussianLogFolder(folder=tmp_log_folder)
-        all_logfiles = g16_folder.all_logfiles
+        g16_folder = GaussianOutputFolder(folder=tmp_log_folder)
+        all_logfiles = g16_folder.all_log_files
         for file in all_logfiles:
             assert os.path.exists(file.replace(".log", ".com"))
 
@@ -83,7 +86,7 @@ class TestConverter:
             assert len(lines) == 12
             assert lines[5].startswith("Generated from")
 
-    def test_convert_com_foler_to_xyz(
+    def test_convert_com_folder_to_xyz(
         self, tmpdir, gaussian_inputs_test_directory
     ):
         # copy whole directory gaussian_pbc_inputs_test_directory to tmpdir
@@ -96,7 +99,7 @@ class TestConverter:
         file_converter.convert_files()
 
         # check all .com files have been converted to .xyz files
-        g16_folder = GaussianComFolder(folder=tmp_com_folder)
+        g16_folder = GaussianInputFolder(folder=tmp_com_folder)
         all_comfiles = g16_folder.all_com_files
         for file in all_comfiles:
             assert os.path.exists(file.replace(".com", ".xyz"))
