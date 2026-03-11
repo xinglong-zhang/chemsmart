@@ -279,7 +279,6 @@ def batch(ctx, skip_completed, parallel, **kwargs):
 
     from chemsmart.io.molecules.structure import Molecule
     from chemsmart.jobs.gaussian.pka import GaussianpKaJob
-    from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
     from chemsmart.utils.utils import (
         parse_pka_table,
         validate_pka_table_entries,
@@ -336,47 +335,23 @@ def batch(ctx, skip_completed, parallel, **kwargs):
         opt_settings = opt_settings.merge(job_settings, keywords=kw)
     jobrunner = ctx.obj["jobrunner"]
 
+    import copy
+
     jobs = []
     for entry in entries:
         filepath = entry.get("filepath") or entry.get("path") or entry.filepath
         molecule = Molecule.from_filepath(filepath)
         label = Path(filepath).stem
 
-        pka_settings = GaussianpKaJobSettings(
+        # Per-row charge and multiplicity override the opt_settings defaults.
+        row_opt_settings = copy.copy(opt_settings)
+        row_opt_settings.charge = int(entry.charge)
+        row_opt_settings.multiplicity = int(entry.multiplicity)
+
+        pka_settings = _build_gaussian_pka_settings(
             proton_index=int(entry.proton_index),
-            thermodynamic_cycle=shared["thermodynamic_cycle"],
-            reference_file=shared["reference"],
-            reference_proton_index=shared["reference_proton_index"],
-            reference_charge=shared["reference_charge"],
-            reference_multiplicity=shared["reference_multiplicity"],
-            reference_conjugate_base_charge=shared[
-                "reference_conjugate_base_charge"
-            ],
-            reference_conjugate_base_multiplicity=shared[
-                "reference_conjugate_base_multiplicity"
-            ],
-            delta_G_proton=shared["delta_g_proton"],
-            conjugate_base_charge=None,
-            conjugate_base_multiplicity=None,
-            solvent_model=shared["solvent_model"],
-            solvent_id=shared["solvent_id"],
-            temperature=shared["temperature"],
-            concentration=shared["concentration"],
-            cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-            cutoff_enthalpy=shared["cutoff_enthalpy"],
-            charge=int(entry.charge),
-            multiplicity=int(entry.multiplicity),
-            functional=opt_settings.functional,
-            basis=opt_settings.basis,
-            ab_initio=opt_settings.ab_initio,
-            semiempirical=opt_settings.semiempirical,
-            additional_route_parameters=(
-                opt_settings.additional_route_parameters
-            ),
-            gen_genecp_file=opt_settings.gen_genecp_file,
-            heavy_elements=opt_settings.heavy_elements,
-            heavy_elements_basis=opt_settings.heavy_elements_basis,
-            light_elements_basis=opt_settings.light_elements_basis,
+            shared=shared,
+            opt_settings=row_opt_settings,
         )
 
         logger.info(
@@ -452,7 +427,7 @@ def _build_gaussian_pka_settings(proton_index, shared, opt_settings):
     opt_kwargs = {
         k: v
         for k, v in vars(opt_settings).items()
-        if k in gs_params and v is not None
+        if k in gs_params and v is not None and k not in pka_kwargs
     }
 
     return GaussianpKaJobSettings(

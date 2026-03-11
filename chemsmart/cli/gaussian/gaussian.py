@@ -537,6 +537,15 @@ def gaussian(
             f"No filename is supplied and Gaussian default settings are used:\n"
             f"{job_settings.__dict__} "
         )
+    elif filename.endswith(".csv"):
+        # CSV batch table: molecule loading and charge/multiplicity come
+        # from the table rows, not from the CLI.  Defer everything to the
+        # subcommand (e.g. pka batch).
+        job_settings = GaussianJobSettings.default()
+        logger.info(
+            f"CSV batch file detected: {filename}. "
+            "Molecule loading deferred to subcommand."
+        )
     elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
@@ -604,15 +613,19 @@ def gaussian(
         )
 
     if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
-        )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(
-            f"Obtained {len(molecules)} molecule {molecules} from {filename}"
-        )
+        if filename.endswith(".csv"):
+            # Molecules are loaded per-row by the batch subcommand.
+            molecules = []
+        else:
+            molecules = Molecule.from_filepath(
+                filepath=filename, index=":", return_list=True
+            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filename}!"
+            logger.debug(
+                f"Obtained {len(molecules)} molecule {molecules} from {filename}"
+            )
 
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
