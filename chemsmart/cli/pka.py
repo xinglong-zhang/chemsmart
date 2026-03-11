@@ -131,8 +131,8 @@ def click_pka_shared_options(f):
         "-si",
         "--solvent-id",
         type=str,
-        default="water",
-        help="Solvent ID for solution phase SP (default: water).",
+        default=None,
+        help="Solvent ID for solution phase SP (default: project setting or water).",
     )
     @click.option(
         "-T",

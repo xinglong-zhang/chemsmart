@@ -111,7 +111,7 @@ def pka(
         delta_g_proton=delta_g_proton,
         conjugate_base_charge=conjugate_base_charge,
         conjugate_base_multiplicity=conjugate_base_multiplicity,
-        solvent_model=solvent_model if solvent_model is not None else "SMD",
+        solvent_model=solvent_model,
         solvent_id=solvent_id,
         temperature=temperature,
         concentration=concentration,
@@ -434,6 +434,26 @@ def _build_gaussian_pka_settings(proton_index, shared, opt_settings):
         for k, v in vars(opt_settings).items()
         if k in gs_params and v is not None and k not in pka_kwargs
     }
+
+    # ── 3. Prefer project solvent settings when CLI omitted ──
+    solvent_model = pka_kwargs.get("solvent_model")
+    if solvent_model is None:
+        try:
+            solvent_model = opt_settings.solvent_model
+        except AttributeError:
+            solvent_model = None
+    solvent_id = pka_kwargs.get("solvent_id")
+    if solvent_id is None:
+        try:
+            solvent_id = opt_settings.solvent_id
+        except AttributeError:
+            solvent_id = None
+    if solvent_model is None:
+        solvent_model = "SMD"
+    if solvent_id is None:
+        solvent_id = "water"
+    pka_kwargs["solvent_model"] = solvent_model
+    pka_kwargs["solvent_id"] = solvent_id
 
     return GaussianpKaJobSettings(
         proton_index=proton_index,

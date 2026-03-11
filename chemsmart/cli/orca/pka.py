@@ -102,7 +102,7 @@ def pka(
         delta_g_proton=delta_g_proton,
         conjugate_base_charge=conjugate_base_charge,
         conjugate_base_multiplicity=conjugate_base_multiplicity,
-        solvent_model=solvent_model if solvent_model is not None else "CPCM",
+        solvent_model=solvent_model,
         solvent_id=solvent_id,
         temperature=temperature,
         concentration=concentration,
@@ -305,6 +305,23 @@ def batch(ctx, skip_completed, parallel, **kwargs):
         label = Path(filepath).stem
         base_label = label if label.endswith("_pka") else f"{label}_pka"
 
+        solvent_model = shared["solvent_model"]
+        if solvent_model is None:
+            try:
+                solvent_model = opt_settings.solvent_model
+            except AttributeError:
+                solvent_model = None
+        solvent_id = shared["solvent_id"]
+        if solvent_id is None:
+            try:
+                solvent_id = opt_settings.solvent_id
+            except AttributeError:
+                solvent_id = None
+        if solvent_model is None:
+            solvent_model = "CPCM"
+        if solvent_id is None:
+            solvent_id = "water"
+
         pka_settings = ORCApKaJobSettings(
             proton_index=int(entry.proton_index),
             thermodynamic_cycle=shared["thermodynamic_cycle"],
@@ -321,8 +338,8 @@ def batch(ctx, skip_completed, parallel, **kwargs):
             delta_G_proton=shared["delta_g_proton"],
             conjugate_base_charge=None,
             conjugate_base_multiplicity=None,
-            solvent_model=shared["solvent_model"],
-            solvent_id=shared["solvent_id"],
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
             temperature=shared["temperature"],
             concentration=shared["concentration"],
             cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
@@ -369,6 +386,23 @@ def _build_orca_pka_settings(proton_index, shared, opt_settings):
     """Build an ``ORCApKaJobSettings`` from shared options and project."""
     from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 
+    solvent_model = shared["solvent_model"]
+    if solvent_model is None:
+        try:
+            solvent_model = opt_settings.solvent_model
+        except AttributeError:
+            solvent_model = None
+    solvent_id = shared["solvent_id"]
+    if solvent_id is None:
+        try:
+            solvent_id = opt_settings.solvent_id
+        except AttributeError:
+            solvent_id = None
+    if solvent_model is None:
+        solvent_model = "CPCM"
+    if solvent_id is None:
+        solvent_id = "water"
+
     return ORCApKaJobSettings(
         proton_index=proton_index,
         thermodynamic_cycle=shared["thermodynamic_cycle"],
@@ -385,8 +419,8 @@ def _build_orca_pka_settings(proton_index, shared, opt_settings):
         delta_G_proton=shared["delta_g_proton"],
         conjugate_base_charge=shared["conjugate_base_charge"],
         conjugate_base_multiplicity=shared["conjugate_base_multiplicity"],
-        solvent_model=shared["solvent_model"],
-        solvent_id=shared["solvent_id"],
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
         temperature=shared["temperature"],
         concentration=shared["concentration"],
         cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
