@@ -192,7 +192,7 @@ def submit(ctx, parallel, skip_completed, **kwargs):
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
     pka_settings = _build_gaussian_pka_settings(
-        proton_index, shared, opt_settings
+        proton_index, shared, opt_settings, project_settings.sp_settings()
     )
 
     if pka_settings.charge is None:
@@ -357,6 +357,7 @@ def batch(ctx, skip_completed, parallel, **kwargs):
             proton_index=int(entry.proton_index),
             shared=shared,
             opt_settings=row_opt_settings,
+            sp_settings=project_settings.sp_settings(),
         )
 
         logger.info(
@@ -386,7 +387,9 @@ def batch(ctx, skip_completed, parallel, **kwargs):
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _build_gaussian_pka_settings(proton_index, shared, opt_settings):
+def _build_gaussian_pka_settings(
+    proton_index, shared, opt_settings, sp_settings=None
+):
     """Build a ``GaussianpKaJobSettings`` from shared options and project.
 
     All attributes of *opt_settings* that are accepted by
@@ -442,12 +445,24 @@ def _build_gaussian_pka_settings(proton_index, shared, opt_settings):
             solvent_model = opt_settings.solvent_model
         except AttributeError:
             solvent_model = None
+    if solvent_model is None and sp_settings is not None:
+        try:
+            solvent_model = sp_settings.solvent_model
+        except AttributeError:
+            solvent_model = None
+
     solvent_id = pka_kwargs.get("solvent_id")
     if solvent_id is None:
         try:
             solvent_id = opt_settings.solvent_id
         except AttributeError:
             solvent_id = None
+    if solvent_id is None and sp_settings is not None:
+        try:
+            solvent_id = sp_settings.solvent_id
+        except AttributeError:
+            solvent_id = None
+
     if solvent_model is None:
         solvent_model = "SMD"
     if solvent_id is None:
@@ -484,7 +499,10 @@ def _create_pka_jobs_from_molecules(
     for idx, pka_mol in enumerate(pka_molecules, start=1):
         mol_label = f"{base_name}_frag{idx}_pka"
         pka_settings = _build_gaussian_pka_settings(
-            pka_mol.proton_index, shared, opt_settings
+            pka_mol.proton_index,
+            shared,
+            opt_settings,
+            project_settings.sp_settings(),
         )
 
         logger.info(
