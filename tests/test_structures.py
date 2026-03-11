@@ -18,7 +18,10 @@ from chemsmart.io.molecules.structure import (
     QMMMMolecule,
 )
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.utils.cluster import is_pubchem_network_available
+from chemsmart.utils.cluster import (
+    is_pubchem_api_available,
+    is_pubchem_network_available,
+)
 from chemsmart.utils.utils import cmp_with_ignore
 
 
@@ -226,7 +229,8 @@ class TestStructures:
 
         all_molecules = xyz_file.get_molecules(index=":", return_list=True)
 
-        # set correct charge and multiplicity for molecules as needed by pymatgen checks
+        # set correct charge and multiplicity for
+        # molecules as needed by pymatgen checks
         molecules = []
         for molecule in all_molecules:
             molecule.charge = 1
@@ -970,13 +974,9 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
-    @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
-    )
-    def test_stereochemistry_handling(self):
+    def test_stereochemistry_handling(self, methyl3hexane_molecule):
         """Test preservation of stereochemical information."""
-        methyl_3_hexane = Molecule.from_pubchem("11507")
+        methyl_3_hexane = methyl3hexane_molecule
         assert np.all(
             methyl_3_hexane.bond_orders
             == [
@@ -1028,6 +1028,12 @@ class TestChemicalFeatures:
         rdkit_mol = chiral_mol.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) != []
 
+    @pytest.mark.skipif(
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
+        reason="Network to pubchem is unavailable",
+    )
+    def test_more_stereochemistry_handling(self):
+        """Test preservation of stereochemical information with PubChem."""
         chiral_mol2 = Molecule.from_pubchem(
             "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
         )
@@ -1093,7 +1099,8 @@ class TestChemicalFeatures:
             1.0,
             1.0,
         ]
-        # check there are 6 aromatic C-C bonds and 6 single C-H bonds in benzene
+        # check there are 6 aromatic C-C bonds
+        # and 6 single C-H bonds in benzene
         assert len([bond for bond in benzene.bond_orders if bond == 1.5]) == 6
         assert len([bond for bond in benzene.bond_orders if bond == 1.0]) == 6
 
@@ -1112,7 +1119,8 @@ class TestChemicalFeatures:
         """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
 
-        # Test pyvoro-based method (optional, may not be available in Python 3.12+)
+        # Test pyvoro-based method (optional,
+        # may not be available in Python 3.12+)
         try:
             ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
             assert ozone_vd_vol > 0
@@ -1127,7 +1135,8 @@ class TestChemicalFeatures:
         assert np.isclose(
             ozone.crude_volume_by_atomic_radii, 3.612781286145805, rtol=0.01
         )
-        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        # vdw_volume uses exact lens-shaped
+        # intersection formula for overlap correction
         assert np.isclose(ozone.vdw_volume, 29.65124427436735, rtol=0.01)
         # grid_vdw_volume uses grid-based integration (similar to RDKit)
         assert np.isclose(ozone.grid_vdw_volume, 31.464, rtol=0.05)
@@ -1162,7 +1171,8 @@ class TestChemicalFeatures:
             12.369068467588548,
             rtol=0.01,
         )
-        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        # vdw_volume uses exact lens-shaped
+        # intersection formula for overlap correction
         assert np.isclose(acetone.vdw_volume, 48.85540325089168, rtol=0.01)
         # grid_vdw_volume uses grid-based integration (similar to RDKit)
         assert np.isclose(acetone.grid_vdw_volume, 64.832, rtol=0.05)
@@ -1397,8 +1407,10 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
 
 
 class TestQMMMinMolecule:
-    def test_atoms_in_levels_wrong_low_level(self, tmpdir):
-        methyl_3_hexane = QMMMMolecule(molecule=Molecule.from_pubchem("11507"))
+    def test_atoms_in_levels_wrong_low_level(
+        self, tmpdir, methyl3hexane_molecule
+    ):
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
         methyl_3_hexane.low_level_atoms = [7, 8, 9]
@@ -1407,12 +1419,17 @@ class TestQMMMinMolecule:
         assert methyl_3_hexane.num_atoms == 23
         with pytest.raises(ValueError):
             methyl_3_hexane.partition_level_strings
-            # should raise error since high + medium + low is not equal to total number of atoms
+            # should raise error since high + medium +
+            # low is not equal to total number of atoms
 
     def test_atoms_in_levels_default_low_level(
-        self, tmpdir, qmmm_written_xyz_file, qmmm_written_xyz_only_file
+        self,
+        tmpdir,
+        qmmm_written_xyz_file,
+        qmmm_written_xyz_only_file,
+        methyl3hexane_molecule,
     ):
-        methyl_3_hexane = QMMMMolecule(molecule=Molecule.from_pubchem("11507"))
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
         methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
@@ -1877,7 +1894,8 @@ class TestCDXFile:
 
 
 def test_qmmm_partition_overlap_raises():
-    """Creating a QMMMMolecule with overlapping partitions should raise a ValueError."""
+    """Creating a QMMMMolecule with overlapping
+    partitions should raise a ValueError."""
     # Create a small dummy molecule
     symbols = ["C"] * 5
     positions = np.zeros((5, 3))

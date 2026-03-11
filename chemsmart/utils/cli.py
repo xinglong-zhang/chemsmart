@@ -199,8 +199,10 @@ class CtxObjArguments:
 
         if value is False:
             if is_flag and len(secondary_opts) == 0:
-                # Click "is_flag" option. Click param class has no way to check if
-                # flag is True or not only can determine by checking arg_secondary_opts
+                # Click "is_flag" option. Click
+                # param class has no way to check if
+                # flag is True or not only can determine
+                # by checking arg_secondary_opts
                 return ""
 
             # If variable is bool, then there will be non-empty secondary_opts
@@ -386,7 +388,8 @@ def get_setting_from_jobtype_for_gaussian(
 
     Raises:
         ValueError: If jobtype is None.
-        AssertionError: If required parameters are missing for specific job types.
+        AssertionError: If required parameters
+        are missing for specific job types.
     """
     if jobtype is None:
         raise ValueError("Jobtype must be provided for Crest and Link job.")
@@ -417,6 +420,8 @@ def get_setting_from_jobtype_for_gaussian(
         settings = project_settings.nci_settings()
     elif jobtype.lower() == "qmmm":
         settings = project_settings.qmmm_settings()
+    elif jobtype.lower() == "neb":
+        settings = project_settings.neb_settings()
 
     if coordinates is not None:
         modred_info = ast.literal_eval(coordinates)
@@ -541,7 +546,8 @@ def get_setting_from_jobtype_for_orca(
 
     Raises:
         ValueError: If jobtype is None.
-        AssertionError: If required parameters are missing for specific job types.
+        AssertionError: If required parameters
+        are missing for specific job types.
     """
     if jobtype is None:
         raise ValueError("Jobtype must be provided for Crest and Link job.")
@@ -574,6 +580,8 @@ def get_setting_from_jobtype_for_orca(
         settings = project_settings.nci_settings()
     elif jobtype.lower() == "qmmm":
         settings = project_settings.qmmm_settings()
+    elif jobtype.lower() == "neb":
+        settings = project_settings.neb_settings()
 
     if coordinates is not None:
         modred_info = ast.literal_eval(coordinates)
@@ -643,7 +651,8 @@ def check_scan_parameters_consistency_orca(
     coords: list, dist_start: list, dist_end: list, num_steps: list
 ):
     """
-    Validate consistency between scan coordinates and their parameters for ORCA.
+    Validate consistency between scan
+    coordinates and their parameters for ORCA.
 
     Ensures that the number of coordinates matches the number of dist_start,
     dist_end and num_steps values provided. Handles both single coordinate and
@@ -652,7 +661,8 @@ def check_scan_parameters_consistency_orca(
     Args:
         coords: Coordinate specification - list[int] for single coordinate
                 or list[list[int]] for multiple coordinates.
-        dist_start: List of starting distances - must match number of coordinates.
+        dist_start: List of starting distances
+        - must match number of coordinates.
         dist_end: List of ending distances - must match number of coordinates.
         num_steps: List of step counts - must match number of coordinates.
 
@@ -666,10 +676,12 @@ def check_scan_parameters_consistency_orca(
         check_scan_parameters_consistency_orca([1,2], [3.0], [1.2], [10])
 
         # Valid multiple coordinates
-        check_scan_parameters_consistency_orca([[1,2],[3,4]], [3.0,2.5], [1.2,1.0], [10,15])
+        check_scan_parameters_consistency_orca([[1,2],[3,4]],
+        [3.0,2.5], [1.2,1.0], [10,15])
 
         # Invalid - mismatched counts
-        check_scan_parameters_consistency_orca([[1,2],[3,4]], [3.0], [1.2,1.0], [10,15])
+        check_scan_parameters_consistency_orca([[1,2],[3,4]],
+        [3.0], [1.2,1.0], [10,15])
         # Raises ValueError
     """
     if isinstance(coords[0], list):

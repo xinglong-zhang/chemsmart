@@ -341,10 +341,12 @@ def mol(
     pubchem,
 ):
     """
-    CLI subcommand for running PyMOL visualization jobs using the chemsmart framework.
+    CLI subcommand for running PyMOL visualization
+    jobs using the chemsmart framework.
 
     Example usage:
-        chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
+        chemsmart run mol -f test.xyz visualize -c
+        [[413,409],[413,412],[413,505],[413,507]]
     """
     # Ensure ctx.obj is a dict and initialize molecules variable
     ctx.ensure_object(dict)
@@ -352,7 +354,8 @@ def mol(
     ctx.obj.setdefault("qmmm", False)
     molecules = None
 
-    # Normalize empty tuple to None (click's multiple=True returns () when no -f provided)
+    # Normalize empty tuple to None (click's
+    # multiple=True returns () when no -f provided)
     if not filenames:
         filenames = None
 
@@ -382,7 +385,8 @@ def mol(
 
     # if filename is specified, read the file and obtain molecule
     if filenames:
-        # Check if this is an align task by looking for " align" in invokded subcommand
+        # Check if this is an align task by looking
+        # for " align" in invokded subcommand
         is_align_task = ctx.invoked_subcommand == "align"
 
         if is_align_task:

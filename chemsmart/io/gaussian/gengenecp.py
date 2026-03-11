@@ -227,7 +227,8 @@ class GenGenECPSection:
                 )
 
             genecp_string += light_elements_basis + "\n"
-            # separate light atoms basis from beginning of heavy atoms gen/genecp basis
+            # separate light atoms basis from
+            # beginning of heavy atoms gen/genecp basis
             genecp_string += "****\n"
         # Generate heavy atom basis set content from BSE API
         # Handle def2 basis set naming convention

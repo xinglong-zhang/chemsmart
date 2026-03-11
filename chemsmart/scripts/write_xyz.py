@@ -42,7 +42,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
 def entry_point(filename, index, single_file):
     """Script for writing structure to .xyz format.
     The script can write a single structure to a file or a list of structures,
-    based on 1-indexing. The default is to write the last structure in the file.
+    based on 1-indexing. The default is to
+    write the last structure in the file.
     """
     create_logger()
 

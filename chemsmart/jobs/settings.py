@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class MolecularJobSettings:
-    """Common base job settings for molecular systems using Gaussian and ORCA jobs."""
+    """Common base job settings for molecular
+    systems using Gaussian and ORCA jobs."""
 
     def __init__(
         self,
@@ -74,7 +75,8 @@ class MolecularJobSettings:
                 self.set_custom_solvent_via_file(custom_solvent)
             else:
                 self.custom_solvent = custom_solvent
-            # check that the last line of custom_solvent is empty, if not, add an empty line
+            # check that the last line of custom_solvent
+            # is empty, if not, add an empty line
             if self.custom_solvent[-1] != "\n":
                 self.custom_solvent += "\n"
             logger.debug(f"Custom solvent parameters: {self.custom_solvent}")
@@ -92,7 +94,8 @@ class MolecularJobSettings:
     def update_solvent(self, solvent_model=None, solvent_id=None):
         """Update solvent model and solvent identity for implicit solvation.
 
-        Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
+        Solvent models available: ['pcm', 'iefpcm',
+        'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
         """
         # update only if not None; do not update to default value of None
         if solvent_model is not None:
@@ -171,11 +174,12 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         "traj",
         "uvvis",
         "wbi",
+        "neb",  # NEB uses gas settings, with NEB-specific options from CLI
     ]
     sp_job = ["sp"]
     td_job = ["td"]
     qmmm_job = ["qmmm"]
-    all_jobs = gas_phase_jobs + sp_job
+    all_jobs = gas_phase_jobs + sp_job + td_job
 
     # read in project config
     with open(filename) as f:
@@ -195,7 +199,8 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     qmmm_config = project_config.get("qmmm", None)
 
     if gas_config is None:
-        # no settings for gas phase; using implicit solvation model for all jobs
+        # no settings for gas phase; using
+        # implicit solvation model for all jobs
         # (except td and qmmm, which will use their own configurations)
         for job in all_jobs:
             all_project_configs[job] = (

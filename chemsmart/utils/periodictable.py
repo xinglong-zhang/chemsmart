@@ -80,7 +80,8 @@ class PeriodicTable:
                 if candidate in self.PERIODIC_TABLE:
                     return candidate
 
-        # Fall back to legacy behavior if nothing matched (will likely raise later)
+        # Fall back to legacy behavior if nothing
+        # matched (will likely raise later)
         return (
             cleaned.upper()
             if len(cleaned) == 1
@@ -95,7 +96,8 @@ class PeriodicTable:
         in the periodic table (atomic number order).
 
         Args:
-            list_of_elements (list[str]): Element symbols to sort (case-sensitive;
+            list_of_elements (list[str]): Element
+            symbols to sort (case-sensitive;
                 ensure canonical capitalization as in `PERIODIC_TABLE`).
 
         Returns:
@@ -110,7 +112,8 @@ class PeriodicTable:
         Convert element symbol to atomic number.
 
         Args:
-            symbol (str): Element symbol (e.g., 'H', 'He', 'Li'). Case-sensitive;
+            symbol (str): Element symbol (e.g.,
+            'H', 'He', 'Li'). Case-sensitive;
                 use `to_element` beforehand to normalize if needed.
 
         Returns:

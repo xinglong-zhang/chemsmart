@@ -41,7 +41,8 @@ class Molecule:
         The charge of the molecule.
     multiplicity: integer
         The multiplicity of the molecule.
-    frozen_atoms: list of integers, one for each atom, indicating which atoms are frozen.
+    frozen_atoms: list of integers, one for each
+    atom, indicating which atoms are frozen.
         Follows Gaussian input file format where -1 denotes frozen atoms
         and 0 denotes relaxed atoms.
     pbc_conditions: list of integers
@@ -98,14 +99,20 @@ class Molecule:
         self._energy = energy
         self.forces = forces
         self.velocities = velocities
+        if info is None:
+            # initialise info as empty dict if it is None
+            info = dict()
         self.info = info
         self._num_atoms = len(self.symbols)
 
         # Define bond order classification multipliers (avoiding redundancy)
-        # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
+        # use the relationship between bond orders and bond
+        # lengths from J. Phys. Chem. 1959, 63, 8, 1346
         #                 1/Ls^3 : 1/Ld^3 : 1/Lt^3 = 2 : 3 : 4
-        # From experimental data, the aromatic bond length in benzene is ~1.39 Å,
-        # which is between single (C–C, ~1.54 Å) and double (C=C, ~1.34 Å) bonds.
+        # From experimental data, the aromatic
+        # bond length in benzene is ~1.39 Å,
+        # which is between single (C–C, ~1.54
+        # Å) and double (C=C, ~1.34 Å) bonds.
         # Interpolate the aromatic bond length as L_ar ≈ L_s × (4/5)**1/3
         self.bond_length_multipliers = {
             "single": 1.0,
@@ -174,7 +181,8 @@ class Molecule:
         """
         Get subset of molecule using 1-based indexing.
 
-        Interprets the input idx as 1-based indices by index adjustment (i - 1).
+        Interprets the input idx as 1-based
+        indices by index adjustment (i - 1).
         The method assumes that idx contains 1-based indices (e.g., [1, 2, 3]),
         so it subtracts 1 to convert them to Python's zero-based indexing.
         """
@@ -300,7 +308,8 @@ class Molecule:
 
     @property
     def vdw_radii_list(self):
-        """Return a list of van der Waals radii for each atom in the molecule."""
+        """Return a list of van der Waals
+        radii for each atom in the molecule."""
         return [p.vdw_radius(symbol) for symbol in self.symbols]
 
     @property
@@ -323,15 +332,18 @@ class Molecule:
                 radii_sum = radii[i] + radii[j]
                 max_radii_sum = max(max_radii_sum, radii_sum)
 
-        # Use a factor of 1.5 to ensure sufficient dispersion for Voronoi tessellation
+        # Use a factor of 1.5 to ensure sufficient
+        # dispersion for Voronoi tessellation
         dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
         return dispersion
 
     @property
     def voronoi_dirichlet_occupied_volume(self):
-        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet tessellation.
+        """Calculate the occupied volume of the
+        molecule using Voronoi-Dirichlet tessellation.
 
-        Note: This method requires the pyvoro package, which can be installed with:
+        Note: This method requires the pyvoro
+        package, which can be installed with:
             pip install chemsmart[voronoi]
         Note: pyvoro requires Python < 3.12
         """
@@ -347,7 +359,8 @@ class Molecule:
 
     @property
     def voronoi_dirichlet_polyhedra_occupied_volume(self):
-        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet Polyhedra (VDP)."""
+        """Calculate the occupied volume of the molecule
+        using Voronoi-Dirichlet Polyhedra (VDP)."""
         from chemsmart.utils.geometry import (
             calculate_molecular_volume_vdp,
         )
@@ -359,7 +372,8 @@ class Molecule:
 
     @property
     def crude_volume_by_atomic_radii(self):
-        """Calculate the crude occupied volume of the molecule using atomic radii."""
+        """Calculate the crude occupied volume
+        of the molecule using atomic radii."""
         from chemsmart.utils.geometry import calculate_crude_occupied_volume
 
         return calculate_crude_occupied_volume(
@@ -368,7 +382,8 @@ class Molecule:
 
     @property
     def crude_volume_by_vdw_radii(self):
-        """Calculate the crude occupied volume of the molecule using van der Waals radii."""
+        """Calculate the crude occupied volume of
+        the molecule using van der Waals radii."""
         from chemsmart.utils.geometry import calculate_crude_occupied_volume
 
         return calculate_crude_occupied_volume(
@@ -377,14 +392,16 @@ class Molecule:
 
     @property
     def vdw_volume(self):
-        """Calculate the occupied volume of the molecule using van der Waals radii.
+        """Calculate the occupied volume of
+        the molecule using van der Waals radii.
 
         Uses pairwise overlap correction. For more accurate results on complex
         molecules, consider using ``grid_vdw_volume`` instead.
 
         See Also
         --------
-        grid_vdw_volume : Grid-based volume (more accurate for complex molecules)
+        grid_vdw_volume : Grid-based volume
+        (more accurate for complex molecules)
         vdw_volume_from_rdkit : RDKit's grid-based implementation
         """
         from chemsmart.utils.geometry import calculate_vdw_volume
@@ -399,7 +416,8 @@ class Molecule:
 
         This method places the molecule in a 3D grid and counts grid points
         that fall inside any atomic VDW sphere. This approach correctly handles
-        all orders of atomic overlaps and provides more accurate volume estimates
+        all orders of atomic overlaps and
+        provides more accurate volume estimates
         for complex molecules compared to the pairwise method.
 
         This implementation is similar to RDKit's DoubleCubicLatticeVolume
@@ -557,7 +575,8 @@ class Molecule:
     @property
     def moments_of_inertia_principal_axes(self):
         """
-        Obtain moments of inertia along principal axes from molecular structure.
+        Obtain moments of inertia along
+        principal axes from molecular structure.
         """
         _, _, eigenvectors = self._get_moments_of_inertia
         return eigenvectors
@@ -578,7 +597,8 @@ class Molecule:
     @cached_property
     def _get_moments_of_inertia_weighted_mass(self):
         """
-        Calculate the moments of inertia of the molecule. Use natural abundance weighted masses.
+        Calculate the moments of inertia of the
+        molecule. Use natural abundance weighted masses.
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
@@ -593,7 +613,8 @@ class Molecule:
     @cached_property
     def _get_moments_of_inertia_most_abundant_mass(self):
         """
-        Calculate the moments of inertia of the molecule. Use most abundant masses.
+        Calculate the moments of inertia of
+        the molecule. Use most abundant masses.
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
@@ -660,7 +681,8 @@ class Molecule:
 
     def get_dihedral(self, idx1, idx2, idx3, idx4):
         """
-        Calculate the dihedral angle between four points, about bond formed by idx2 and idx3.
+        Calculate the dihedral angle between four
+        points, about bond formed by idx2 and idx3.
         Use 1-based indexing for idx1, idx2, idx3, and idx4.
         """
         return self.get_dihedral_from_positions(
@@ -724,7 +746,8 @@ class Molecule:
         cls, list_of_symbols, positions, pbc_conditions=None
     ):
         """
-        Create molecule from symbols, positions and periodic boundary conditions.
+        Create molecule from symbols, positions
+        and periodic boundary conditions.
         """
         return cls(
             symbols=Symbols.fromsymbols(list_of_symbols),
@@ -980,10 +1003,12 @@ class Molecule:
             return_list (bool): Whether to return list format. Default False
 
         Returns:
-            Molecule or list or None: Molecule object from PubChem, None if not found
+            Molecule or list or None: Molecule
+            object from PubChem, None if not found
 
         Raises:
-            requests.exceptions.RequestException: For network or HTTP-related issues
+            requests.exceptions.RequestException:
+            For network or HTTP-related issues
         """
         from chemsmart.io.molecules.pubchem import pubchem_search
 
@@ -1025,7 +1050,8 @@ class Molecule:
     @classmethod
     def from_rdkit_mol(cls, rdMol: Chem.Mol) -> "Molecule":
         """
-        Creates a Molecule instance from an RDKit Mol object, assuming a single conformer.
+        Creates a Molecule instance from an RDKit
+        Mol object, assuming a single conformer.
         """
         if rdMol is None:
             raise ValueError("Invalid RDKit molecule provided.")
@@ -1043,7 +1069,8 @@ class Molecule:
         # Extract atomic symbols
         symbols = [atom.GetSymbol() for atom in rdMol.GetAtoms()]
 
-        # Extract atomic positions from the first conformer (assuming single conformer)
+        # Extract atomic positions from the first
+        # conformer (assuming single conformer)
         conf = rdMol.GetConformer(0)
         positions = np.array(
             [
@@ -1091,7 +1118,8 @@ class Molecule:
 
         Args:
             f (file): File object to write coordinates to
-            program (str, optional): Format to use ('gaussian' or 'orca'). Default 'gaussian'
+            program (str, optional): Format to use
+            ('gaussian' or 'orca'). Default 'gaussian'
 
         Raises:
             ValueError: If program format is not supported
@@ -1241,7 +1269,8 @@ class Molecule:
         ), "Positions to write should not be None!"
 
         # if self.frozen_atoms is None:
-        # commented above out since with frozen atom or not, the geometry is written the same way
+        # commented above out since with frozen atom
+        # or not, the geometry is written the same way
         for i, (s, (x, y, z)) in enumerate(
             zip(self.chemical_symbols, self.positions)
         ):
@@ -1255,7 +1284,8 @@ class Molecule:
         pass
 
     def _determine_level_from_atom_index(self, atom_index):
-        """Determine the partition level of an atom based on its integer index."""
+        """Determine the partition level of
+        an atom based on its integer index."""
         atom_index = str(atom_index)
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
@@ -1264,7 +1294,8 @@ class Molecule:
                 if atom_index in self.medium_level_atoms:
                     return "M"
             else:
-                # if high level atoms is given, then low level atoms will be needed
+                # if high level atoms is given, then
+                # low level atoms will be needed
                 return "L"
         else:
             return None
@@ -1273,7 +1304,7 @@ class Molecule:
         """
         Return string representation of molecule.
         """
-        return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
+        return f"{self.__class__.__name__}<{self.chemical_formula},energy: {self.energy}>"
 
     def __str__(self):
         """
@@ -1357,12 +1388,16 @@ class Molecule:
         return Chem.MolToSmiles(rdkit_mol)
 
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
-        """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
+        """Convert Molecule object to RDKit Mol
+        with proper stereochemistry handling.
         Args:
             add_bonds (bool): Flag to add bonds to molecule or not.
-            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
-            From testing, see test_resonance_handling, it seems that a value of 0.1Å
-            works for ozone, acetone, benzene, and probably other molecules, too.
+            bond_cutoff_buffer (float): Additional
+            buffer for bond cutoff distance.
+            From testing, see test_resonance_handling,
+            it seems that a value of 0.1Å
+            works for ozone, acetone, benzene,
+            and probably other molecules, too.
             adjust_Hs (bool): Adjust bond distances to H atoms.
         Returns:
             RDKit Mol: RDKit molecule object.
@@ -1392,9 +1427,11 @@ class Molecule:
 
         # Partial sanitization for stereochemistry detection
         # Chem.SanitizeMol(rdkit_mol,
-        #                  Chem.SANITIZE_ALL ^ Chem.SANITIZE_ADJUSTHS ^ Chem.SANITIZE_SETAROMATICITY)
+        # Chem.SANITIZE_ALL ^ Chem.SANITIZE_ADJUSTHS
+        # ^ Chem.SANITIZE_SETAROMATICITY)
 
-        # I comment the following out since we do not want to modify the molecule
+        # I comment the following out since we
+        # do not want to modify the molecule
         # Validate the RDKit molecule
         # try:
         #     Chem.SanitizeMol(rdkit_mol)
@@ -1456,7 +1493,8 @@ class Molecule:
         self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
     ):
         """
-        Add bonds to the RDKit molecule using a vectorized approach to compute bond orders.
+        Add bonds to the RDKit molecule using a
+        vectorized approach to compute bond orders.
         """
         num_atoms = len(self.symbols)
 
@@ -1549,12 +1587,15 @@ class Molecule:
 
     def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
         """
-        Convert a Molecule object to a connectivity graph with vectorized calculations.
+        Convert a Molecule object to a connectivity
+        graph with vectorized calculations.
         Bond cutoff value determines the maximum distance between two atoms
-        to add a graph edge between them. Bond cutoff is obtained using Covalent
+        to add a graph edge between them.
+        Bond cutoff is obtained using Covalent
         Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
         Args:
-            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            bond_cutoff_buffer (float): Additional
+            buffer for bond cutoff distance.
             adjust_H (bool): Whether to adjust hydrogen bond cutoffs.
 
         Returns:
@@ -1612,10 +1653,12 @@ class Molecule:
     ) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph, non-vectorized.
         Bond cutoff value determines the maximum distance between two atoms
-        to add a graph edge between them. Bond cutoff is obtained using Covalent
+        to add a graph edge between them.
+        Bond cutoff is obtained using Covalent
         Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
         Args:
-            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            bond_cutoff_buffer (float): Additional
+            buffer for bond cutoff distance.
         Returns:
             nx.Graph: A networkx graph object representing the molecule.
         """
@@ -1728,18 +1771,24 @@ class Molecule:
         return_xyz: bool = False,
     ):
         """
-        Create a geometry (or trajectory) displaced along a *mass-weighted* normal mode.
+        Create a geometry (or trajectory) displaced
+        along a *mass-weighted* normal mode.
 
         Args:
             mode_idx (int): Mode index (1-based, negatives allowed)
-            amp (float): Target maximum atomic displacement in Å after normalization.
-            nframes (int | None): If provided, generate that many frames over one period
+            amp (float): Target maximum atomic
+            displacement in Å after normalization.
+            nframes (int | None): If provided,
+            generate that many frames over one period
                 [0, 2π); else return a single frame at `phase`.
             phase (float): Phase angle (radians) for the single-frame case.
                 Defaults to pi/2 so that sin(phase) = 1.
-            normalize (bool): If True, scale the (un-weighted) mode so its largest
-                per-atom displacement is 1.0, making `amp` the max displacement.
-            return_xyz (bool): If True and `nframes` is set, return a multi-frame XYZ string.
+            normalize (bool): If True, scale the
+            (un-weighted) mode so its largest
+                per-atom displacement is 1.0,
+                making `amp` the max displacement.
+            return_xyz (bool): If True and `nframes`
+            is set, return a multi-frame XYZ string.
 
         Returns:
             Molecule | list[Molecule] | str
@@ -1826,9 +1875,11 @@ class Molecule:
 
         Args:
             pdb_filename (str): Destination PDB file path.
-            xyz_filename (str, optional): Source XYZ file path; if omitted or missing, a
+            xyz_filename (str, optional): Source
+            XYZ file path; if omitted or missing, a
                 temporary XYZ is written via ``write_xyz``.
-            mode (str): File mode passed to ``write_xyz`` when creating the XYZ file.
+            mode (str): File mode passed to
+            ``write_xyz`` when creating the XYZ file.
             overwrite (bool): Whether to overwrite an existing PDB file.
             cleanup (bool): Remove auto-generated XYZ files after conversion.
         """
@@ -1941,7 +1992,8 @@ class CoordinateBlock:
     @property
     def constrained_atoms(self):
         """
-        Returns a list of constraints in Gaussian format where 0 means unconstrained
+        Returns a list of constraints in Gaussian
+        format where 0 means unconstrained
         and -1 means constrained.
         """
         return self._get_constraints()
@@ -1953,7 +2005,8 @@ class CoordinateBlock:
 
     def convert_coordinate_block_list_to_molecule(self):
         """
-        Function to convert coordinate block supplied as text or as a list of lines into
+        Function to convert coordinate block
+        supplied as text or as a list of lines into
         Molecule class.
         """
         if not self.partitions:
@@ -1981,9 +2034,11 @@ class CoordinateBlock:
         for line in self.coordinate_block:
             line_elements = line.split()
             # assert len(line_elements) == 4, (
-            # f'The geometry specification, `Symbol x y z` line should have 4 members \n'
+            # f'The geometry specification, `Symbol
+            # x y z` line should have 4 members \n'
             # f'but is {len(line_elements)} instead!')
-            # not true for some cubes where the atomic number is repeated as a float:
+            # not true for some cubes where the
+            # atomic number is repeated as a float:
             # 6    6.000000  -12.064399   -0.057172   -0.099010
             # also not true for Gaussian QM/MM calculations where "H" or "L" is
             # indicated at the end of the line
@@ -2000,7 +2055,8 @@ class CoordinateBlock:
                 logger.debug(f"Skipping line {line} with TV!")
                 continue
             if all(el.isdigit() for el in line_elements):
-                # skip the charge and multiplicity line of QM/MM coordinate block
+                # skip the charge and multiplicity
+                # line of QM/MM coordinate block
                 logger.debug(f"Skipping line {line} with all digit elements!")
                 continue
 
@@ -2068,7 +2124,8 @@ class CoordinateBlock:
             ):  # skip lines that do not contain coordinates
                 continue
             if all(el.isdigit() for el in line_elements):
-                # skip the charge and multiplicity line of QM/MM coordinate block
+                # skip the charge and multiplicity
+                # line of QM/MM coordinate block
                 continue
 
             try:
@@ -2079,7 +2136,8 @@ class CoordinateBlock:
                 )
             atomic_numbers.append(atomic_number)
 
-            # Decide how to interpret the second token: constraint flag vs coordinate
+            # Decide how to interpret the second
+            # token: constraint flag vs coordinate
             try:
                 second_val_float = float(line_elements[1])
                 second_val_int = int(second_val_float)
@@ -2090,8 +2148,10 @@ class CoordinateBlock:
                 second_val_int = None
                 is_constraint_flag = False
 
-            # If the last token is non-numeric (e.g., partition label like H/M/L),
-            # we should not attempt to treat the second token as a constraint flag.
+            # If the last token is non-numeric
+            # (e.g., partition label like H/M/L),
+            # we should not attempt to treat the
+            # second token as a constraint flag.
             def _is_numeric_token(token):
                 try:
                     float(token)
@@ -2106,7 +2166,8 @@ class CoordinateBlock:
             z_coordinate = 0.0
             if len(line_elements) > 4:
                 if is_constraint_flag and last_token_numeric:
-                    # Frozen coordinate line: second token is an explicit -1/0 flag
+                    # Frozen coordinate line: second
+                    # token is an explicit -1/0 flag
                     constraints.append(second_val_int)
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
@@ -2116,12 +2177,14 @@ class CoordinateBlock:
                     and second_val_float is not None
                     and np.isclose(atomic_number, second_val_float, atol=1e-6)
                 ):
-                    # Cube file style where the atomic number is repeated as float
+                    # Cube file style where the atomic
+                    # number is repeated as float
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
                     z_coordinate = float(line_elements[4])
                 else:
-                    # Standard coordinate line (including cases like trailing partition labels)
+                    # Standard coordinate line (including
+                    # cases like trailing partition labels)
                     x_coordinate = float(line_elements[1])
                     y_coordinate = float(line_elements[2])
                     z_coordinate = float(line_elements[3])
@@ -2301,7 +2364,8 @@ class SDFFile(FileMixin):
 
 class QMMMMolecule(Molecule):
     """
-    Standardise QMMM-related objects subclass normal objects (settings, jobrunner, molecule, etc),
+    Standardise QMMM-related objects subclass normal
+    objects (settings, jobrunner, molecule, etc),
     without affecting the normal molecules.
     """
 
@@ -2322,11 +2386,13 @@ class QMMMMolecule(Molecule):
         self.molecule = molecule
 
         if molecule is not None:
-            # inherit all parameters from the molecule object including class methods
+            # inherit all parameters from the
+            # molecule object including class methods
             sig = inspect.signature(Molecule.__init__)
             valid_params = set(sig.parameters.keys()) - {"self"}
 
-            # Keep only attributes of molecule that are valid init params and override with any explicit kwargs if given
+            # Keep only attributes of molecule that are valid init
+            # params and override with any explicit kwargs if given
             init_params = {
                 k: getattr(molecule, k)
                 for k in valid_params
@@ -2372,11 +2438,14 @@ class QMMMMolecule(Molecule):
     def _get_partition_levels(self):
         """Obtain the list of partition levels for the atoms in the system.
         Returns:
-            list: List of partition levels as strings (H, M, L) for the atoms in the system.
+            list: List of partition levels as strings
+            (H, M, L) for the atoms in the system.
         """
         # convert atom indices to lists if they are not already so
-        # for example high_level_atoms=[[18-28], [29-39], [40-50], [51-61], [62-72]],
-        # then we want high_level_atoms=[18, 19, 20, ..., 28, 29, 30, ..., 39, ...]
+        # for example high_level_atoms=[[18-28],
+        # [29-39], [40-50], [51-61], [62-72]],
+        # then we want high_level_atoms=[18,
+        # 19, 20, ..., 28, 29, 30, ..., 39, ...]
         from chemsmart.utils.utils import get_list_from_string_range
 
         # Normalize inputs into lists of integer indices
@@ -2463,8 +2532,10 @@ class QMMMMolecule(Molecule):
         if (len(set_h) + len(set_m) + len(set_l)) != int(
             self.num_atoms
         ) and len(set_h) + len(set_m) + len(set_l) != 0:
-            # allow the case where user only supplied some layers and intended others empty
-            # but raise if they provided explicit low/medium/high that don't cover all atoms
+            # allow the case where user only supplied
+            # some layers and intended others empty
+            # but raise if they provided explicit
+            # low/medium/high that don't cover all atoms
             if self.low_level_atoms is not None:
                 raise ValueError(
                     "The number of low + medium + high level atoms must equal the number of atoms in the molecule when low_level_atoms is explicitly provided."
@@ -2587,7 +2658,8 @@ class QMMMMolecule(Molecule):
         return f
 
     def _determine_level_from_atom_index(self, atom_index):
-        """Determine the partition level of an atom based on its integer index."""
+        """Determine the partition level of
+        an atom based on its integer index."""
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
                 return "H"
@@ -2597,7 +2669,8 @@ class QMMMMolecule(Molecule):
             ):
                 return "M"
             else:
-                # if high level atoms is given, then low level atoms will be needed
+                # if high level atoms is given, then
+                # low level atoms will be needed
                 return "L"
         else:
             return None

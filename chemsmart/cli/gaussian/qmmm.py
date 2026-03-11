@@ -1,4 +1,5 @@
-"""Helper functions and decorators for QMMM job support across Gaussian commands."""
+"""Helper functions and decorators for QMMM
+job support across Gaussian commands."""
 
 import ast
 import logging
@@ -20,7 +21,8 @@ def create_qmmm_subcommand(parent_command):
     Gaussian job type (opt, ts, modred, sp, etc.) to enable QM/MM calculations.
 
     Args:
-        parent_command: The Click group command to attach the qmmm subcommand to
+        parent_command: The Click group command
+        to attach the qmmm subcommand to
 
     Returns:
         The qmmm command function
@@ -213,7 +215,8 @@ def create_qmmm_subcommand(parent_command):
         jobtype = parent_cmd_name  # The parent command name (opt, ts, sp, modred, scan, etc.)
 
         # Get parent command options
-        # Subcommand value wins over parent; fall back to parent then default False
+        # Subcommand value wins over parent;
+        # fall back to parent then default False
         skip_cli = kwargs.get("skip_completed", None)
         skip_completed = (
             skip_cli
@@ -227,7 +230,8 @@ def create_qmmm_subcommand(parent_command):
 
         # Build QMMM settings in proper order:
         # 1. Start with project QMMM settings (from YAML)
-        # 2. Merge parent job settings (to inherit modred, custom_solvent, etc.)
+        # 2. Merge parent job settings (to
+        # inherit modred, custom_solvent, etc.)
         # 3. Apply CLI options (done later in the code)
 
         # Step 1: Get project QMMM settings from YAML
@@ -246,8 +250,10 @@ def create_qmmm_subcommand(parent_command):
                 f"Merging parent settings ({parent_settings.__class__.__name__}) into QMMM settings"
             )
 
-            # Define which attributes should ALWAYS be inherited from parent (if not None in parent)
-            # These are job-specific attributes that come from the parent command or CLI
+            # Define which attributes should ALWAYS be
+            # inherited from parent (if not None in parent)
+            # These are job-specific attributes that
+            # come from the parent command or CLI
             always_inherit_from_parent = [
                 "modred",  # From modred/scan parent command
                 "custom_solvent",  # From parent settings or -A option
@@ -263,7 +269,8 @@ def create_qmmm_subcommand(parent_command):
             qmmm_settings.jobtype = jobtype
             logger.debug(f"Inferred jobtype from parent command: {jobtype}")
 
-        # Step 3: Apply CLI options to qmmm_settings (these override project and parent)
+        # Step 3: Apply CLI options to qmmm_settings
+        # (these override project and parent)
         logger.debug("Applying QMMM-specific CLI options")
         if high_level_functional is not None:
             qmmm_settings.high_level_functional = high_level_functional

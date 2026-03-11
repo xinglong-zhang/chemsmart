@@ -129,7 +129,6 @@ class TestGaussianQMMMJobSettings:
             parent_jobtype="opt",
             freq=True,
         )
-        print(settings1.route_string)
         assert settings1.route_string == "# opt freq oniom(b3lyp/6-31g(d):uff)"
 
         settings2 = GaussianQMMMJobSettings(
@@ -160,8 +159,10 @@ class TestGaussianQMMMJobSettings:
             high_level_atoms=[1, 2, 3],
             parent_jobtype="sp",
         )
-        # assert settings3.route_string == "# oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
-        # ValueError: For high level of theory, one should specify only functional/basis or force field!
+        # assert settings3.route_string == "#
+        # oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
+        # ValueError: For high level of theory, one should
+        # specify only functional/basis or force field!
         with pytest.raises(ValueError):
             settings3.route_string
 
@@ -245,8 +246,16 @@ class TestGaussianQMMMJobSettings:
             == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
         )
 
-    def test_qmmm_settings_for_atoms(self, gaussian_inputs_test_directory):
-        mol1 = QMMMMolecule(molecule=Molecule.from_pubchem("81184"))
+    def test_qmmm_settings_for_atoms(
+        self,
+        gaussian_inputs_test_directory,
+        gaussian_semiempirical_pm6_output_file,
+    ):
+        mol1 = QMMMMolecule(
+            molecule=Molecule.from_filepath(
+                gaussian_semiempirical_pm6_output_file
+            )
+        )
 
         settings1 = QMMMMolecule(
             symbols=mol1.symbols,
@@ -285,7 +294,8 @@ class TestGaussianQMMMJobSettings:
             "L",
         ]
 
-        # Test for 3-layer ONIOM calculation with example input dppeFeCl2_phenyldioxazolone_qmmm.com
+        # Test for 3-layer ONIOM calculation with example
+        # input dppeFeCl2_phenyldioxazolone_qmmm.com
         # mol2 = QMMM(molecule=Molecule._read_gaussian_inputfile(
         #     os.path.join(
         #         gaussian_inputs_test_directory,

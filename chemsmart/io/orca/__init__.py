@@ -2,8 +2,10 @@ class ORCARefs:
     """
     Reference data for ORCA quantum chemistry software.
 
-    This class provides comprehensive reference lists of ORCA input keywords, blocks,
-    functionals, basis sets, and other computational parameters. Used for validating
+    This class provides comprehensive reference
+    lists of ORCA input keywords, blocks,
+    functionals, basis sets, and other
+    computational parameters. Used for validating
     ORCA input files and providing autocomplete functionality.
     """
 
@@ -21,8 +23,10 @@ class ORCARefs:
         "freq",  # Control of frequency calculations
         "geom",  # Control of geometry optimization
         "ice",  # iterative configuration expansion (ICE)
-        # The goal of the ICE-CI is to provide compact wavefunction(s) (e.g. one or several states) close to
-        # the full-CI limit at a small fraction of the computational cost. However, ICE-CI itself is not designed
+        # The goal of the ICE-CI is to provide compact
+        # wavefunction(s) (e.g. one or several states) close to
+        # the full-CI limit at a small fraction of the
+        # computational cost. However, ICE-CI itself is not designed
         # to deal with hundreds of atoms or thousands of basis functions.
         "loc",  # Localization of orbitals
         "md",  # Control of molecular dynamics simulation
@@ -55,7 +59,8 @@ class ORCARefs:
 
     ORCA_FUNCTIONALS = [
         ## % method
-        # Choices for "Functional". If no reference is given, look further below for the references for individual
+        # Choices for "Functional". If no reference is given,
+        # look further below for the references for individual
         # exchange and correlation parts
         ## Functional
         # ***************************************
@@ -155,7 +160,8 @@ class ORCARefs:
         "PBE-QIDH",  # Adamo's PBE-based double hybrid [316]
         "PBE0-DH",  # Adamo's PBE-based double hybrid [317]
         "SCS/SOS-B2PLYP21",  # spin-opposite scaled version of B2PLYP optimized for excited states by Casanova-P ́aez
-        # and Goerigk (SCS fit gave SOS version; SOS only applies to the CIS(D) component) [206]
+        # and Goerigk (SCS fit gave SOS version; SOS
+        # only applies to the CIS(D) component) [206]
         "SCS-PBE-QIDH",  # spin-component scaled version of PBE-QIDH optimized for excited states by Casanova-P ́aez
         # and Goerigk (SCS only applies to the CIS(D) component) [206]
         "SOS-PBE-QIDH",  # spin-opposite scaled version of PBE-QIDH optimized for excited states by Casanova-P ́aez
@@ -175,7 +181,8 @@ class ORCARefs:
         "wPBEPP86",  # Casanova-P ́aez and Goerigk's range-separated DHDF optimized for excitation energies [206]
         "wPBEPP86",  # Casanova-P ́aez and Goerigk's range-separated DHDF optimized for excitation energies [206]
         "SCS/SOS-wB2PLYP",  # spin-opposite scaled DHDF optimized for excitation energies by Casanova-P ́aez
-        # and Goerigk (SCS fit gave SOS version; SOS only applies to the CIS(D) component)[206]
+        # and Goerigk (SCS fit gave SOS version; SOS
+        # only applies to the CIS(D) component)[206]
         "SCS-wB2GP-PLYP",  # spin-component scaled DHDF optimized for excitation energies by Casanova-P ́aez
         # and Goerigk (SCS only applies to the CIS(D) component)[206]
         "SOS-wB2GP-PLYP",  # spin-opposite scaled DHDF optimized for excitation energies by Casanova-P ́aez
@@ -239,12 +246,14 @@ class ORCARefs:
         # ***************************************
         # The def2 basis sets of the Karlsruhe group
         # These basis sets are all-electron for elements H-Kr,
-        # and automatically load Stuttgart-Dresden effective core potentials for elements Rb-Rn.
+        # and automatically load Stuttgart-Dresden
+        # effective core potentials for elements Rb-Rn.
         # ***************************************
         "def2-SVP",  # Valence double-zeta basis set with “new” polarization functions.
         "def2-SV(P)",  # The above with slightly reduced polarization.
         "def2-TZVP",  # Valence triple-zeta basis set with “new” polarization functions.
-        # Note that this is quite similar to the older (“def ”) TZVPP for the main group elements and TZVP for hydrogen.
+        # Note that this is quite similar to the older (“def ”)
+        # TZVPP for the main group elements and TZVP for hydrogen.
         "def2-TZVP(-f)",  # TZVP with f polarization removed from main group elements.
         "def2-TZVPP",  # TZVPP basis set with “new” polarization functions.
         "def2-QZVP",  # Polarized quadruple-zeta basis.
@@ -318,12 +327,15 @@ class ORCARefs:
 
     ORCA_ANO_BASIS_SETS = [
         "ANO-pVnZ",  # (n=D, T, Q, 5, 6). Our newly contracted ANO basis sets on the basis of the cc-pV6Z (or pc-4 where
-        # missing) primitives.These are very accurate basis sets that are significantly better than the cc-pVnZ
-        # counterparts for the same number of basis functions (but much larger number of primitives of course).
+        # missing) primitives.These are very accurate basis
+        # sets that are significantly better than the cc-pVnZ
+        # counterparts for the same number of basis functions
+        # (but much larger number of primitives of course).
         "saug-ANO-pVnZ",  # (n = D, T, Q, 5) augmentation with a single set of sp functions.Greatly enhances the
         # accuracy of the SCF energies but not for correlation energies.
         "aug-ANO-pVnZ",  # (n = D, T, Q, 5) full augmentation with spd, spdf, spdfg set of polarization functions.
-        # Almost as expensive as the next higher basis set. In fact, aug-ANO-pVnZ = ANO-pV(n + 1)Z with the highest
+        # Almost as expensive as the next higher basis set. In
+        # fact, aug-ANO-pVnZ = ANO-pV(n + 1)Z with the highest
         # angular momentum polarization function deleted.
         # Relativistic contracted ANO-RCC basis sets
         "ANO-RCC-FULL",  # The complete ANO-RCC basis sets (H-Cm). Some default contractions are provided for
@@ -354,28 +366,41 @@ class ORCARefs:
 
     ORCA_EXTRAPOLATION_BASIS = [
         "Extrapolate(n/m,bas)",  # Extrapolation of the basis set family “bas” (bas=cc,aug-cc, cc-core, ano, saug-ano,
-        # aug-ano, def2; if omitted “cc-pVnZ” is used) for cardinal numbers n,m (n<m=2,3,4,5),
-        # e.g. Extrapolate(2/3,cc) extrapolates the SCF, MP2 and MDCI energies to the basis set limit.
-        # “core” refers to basis sets with core correlation function. frozen core approximation turned off (default).
-        # This setting can be overridden in the “methods” block if one just wants to use the basis set with core
-        # correlation functions (steep primitives) but without unfreezing the core electrons.
+        # aug-ano, def2; if omitted “cc-pVnZ” is used)
+        # for cardinal numbers n,m (n<m=2,3,4,5),
+        # e.g. Extrapolate(2/3,cc) extrapolates the SCF,
+        # MP2 and MDCI energies to the basis set limit.
+        # “core” refers to basis sets with core correlation
+        # function. frozen core approximation turned off (default).
+        # This setting can be overridden in the “methods” block
+        # if one just wants to use the basis set with core
+        # correlation functions (steep primitives)
+        # but without unfreezing the core electrons.
         "Extrapolate(n,bas)",  # Calculate the first n-energies for member of the basis set family basis,
-        # e.g. Extrapolate(3) is doing calculations with cc-pVDZ, cc-pVTZ and cc-pVQZ.
+        # e.g. Extrapolate(3) is doing calculations
+        # with cc-pVDZ, cc-pVTZ and cc-pVQZ.
         "ExtrapolateEP2(n/m,bas,[method,method-details])",  # Similar: performs SCF, MP2 and MDCI calculations.
-        # The higher basis set can only be done with DLPNO-CCSD(T) or MP2 methods and then used to extrapolate the MDCI
-        # calculation to the basis set limit. E.g., ExtrapolateEP2(2/3,ANO,MP2); ExtrapolateEP2(2/3,cc,DLPNO-CCSD(T))
+        # The higher basis set can only be done with DLPNO-CCSD(T)
+        # or MP2 methods and then used to extrapolate the MDCI
+        # calculation to the basis set limit. E.g.,
+        # ExtrapolateEP2(2/3,ANO,MP2); ExtrapolateEP2(2/3,cc,DLPNO-CCSD(T))
         "ExtrapolateEP3(bas,[method,method-details])",  # Similar to EP2: for high basis set one cardinal number higher.
-        # method is optional and can be either MP2 or DLPNO-CCSD(T), the latter being the default.
-        # In case method is DLPNO-CCSD(T), in method-details option one can ask for LoosePNO, NormalPNO or TightPNO.
+        # method is optional and can be either MP2 or
+        # DLPNO-CCSD(T), the latter being the default.
+        # In case method is DLPNO-CCSD(T), in method-details
+        # option one can ask for LoosePNO, NormalPNO or TightPNO.
     ]
 
     ORCA_AUXILIARY_COULOMB_BASIS_SETS = [
         "Def2/J",  # Weigend's “universal” Coulomb fitting basis that is suitable for all def2 type basis sets.
         # Assumes the use of ECPs beyond Kr (do not use with DKH / ZORA).
         "SARC/J",  # General-purpose Coulomb fitting basis set for all-electron calculations.
-        # Consists of the decontracted def2/J up to Kr and of our own auxiliary basis sets for the rest of the periodic
-        # table.Appropriate for use in DKH or ZORA calculations with the recontracted versions of the all-electron
-        # def2 basis sets (up to Kr) and the SARC basis sets for the heavier elements.
+        # Consists of the decontracted def2/J up to Kr and of our
+        # own auxiliary basis sets for the rest of the periodic
+        # table.Appropriate for use in DKH or ZORA calculations
+        # with the recontracted versions of the all-electron
+        # def2 basis sets (up to Kr) and the SARC
+        # basis sets for the heavier elements.
         "x2c/J",  # Weigend's Coulomb fitting basis for the all-electron x2c-XVPall basis sets.
     ]
 
@@ -706,7 +731,8 @@ class ORCARefs:
         """
         Get list of basis sets with polarization functions in lowercase.
 
-        Generates combinations of Pople-style basis sets with polarization functions.
+        Generates combinations of Pople-style
+        basis sets with polarization functions.
         For 6-31G basis sets, excludes (3df) and (3df,3pd) polarizations.
         For 6-311G basis sets, includes all polarization combinations.
 
@@ -830,7 +856,8 @@ class ORCARefs:
 
         Derived from the def2-XVP ones with small modifications for 5s, 6s,
         4d, and 5d elements and iodine. They are optimized for the revised
-        Dirac-Fock ECPs (dhf-ECP) as opposed to the Wood-Boring ones (def2-ECP).
+        Dirac-Fock ECPs (dhf-ECP) as opposed
+        to the Wood-Boring ones (def2-ECP).
 
         Returns:
             list: def2 basis sets converted to dhf prefix for Dirac-Fock ECPs
@@ -849,11 +876,14 @@ class ORCARefs:
 
         For use in DKH or ZORA calculations, provides adapted versions of the
         def2 basis sets for elements H-Kr. These basis sets retain the original
-        def2 exponents but have only one contracted function per angular momentum
-        with contraction coefficients suitable for scalar relativistic Hamiltonians.
+        def2 exponents but have only one
+        contracted function per angular momentum
+        with contraction coefficients suitable
+        for scalar relativistic Hamiltonians.
 
         Returns:
-            list: def2 basis sets with DKH- or ZORA- prefix for relativistic calculations
+            list: def2 basis sets with DKH- or ZORA-
+            prefix for relativistic calculations
         """
         orca_basis_relativistic_DKH_ZORA = []
         for basis in self.orca_basis_karlsruhe_def2:
@@ -869,7 +899,8 @@ class ORCARefs:
         Get minimally augmented versions of relativistic basis sets.
 
         Returns:
-            list: DKH and ZORA basis sets with ma- prefix for minimal augmentation
+            list: DKH and ZORA basis sets with
+            ma- prefix for minimal augmentation
         """
         orca_basis_relativistic_DKH_ZORA_ma = []
         for basis in self.orca_basis_relativistic_DKH_ZORA:
@@ -897,7 +928,8 @@ class ORCARefs:
 
     @property
     def orca_basis_x2c_2c(self):
-        """The “-2c” variants are intended for two-component calculations including spin-orbit coupling.
+        """The “-2c” variants are intended for two-component
+        calculations including spin-orbit coupling.
 
         Note that two-component methods are currently not implemented in ORCA.
         """
@@ -909,7 +941,8 @@ class ORCARefs:
 
     @property
     def orca_basis_x2c_nmr(self):
-        """The “-s” variants are augmented with additional tight functions for NMR shielding calculations. [5]."""
+        """The “-s” variants are augmented with additional
+        tight functions for NMR shielding calculations. [5]."""
         orca_basis_x2c_nmr = []
         for basis in self.orca_basis_x2c:
             x2c_nmr_basis = f"{basis}-s"
@@ -942,7 +975,8 @@ class ORCARefs:
         Get SARC basis sets of valence quadruple-zeta quality for lanthanides.
 
         SARC basis sets with NEVPT2-optimized (3g2h) polarization functions.
-        Suitable for accurate calculations using correlated wavefunction methods.
+        Suitable for accurate calculations
+        using correlated wavefunction methods.
         Note: Can be called without the polarization functions using ...-QZV.
         Each basis set has a large dedicated /JK auxiliary basis set for
         simultaneous Coulomb and exchange fitting.
@@ -1009,8 +1043,10 @@ class ORCARefs:
                 for i in ["D", "T", "Q"]:
                     jun_jul_aug_basis = basis.replace("(n+d)", f"({i}+d)")
                     # (n = D, T, Q): sp (D), spd (T), spdf (Q) on Li-Ca for jun
-                    # (n = D, T, Q): spd (D), spdf (T), spdfg (Q) on Li-Ca for jul
-                    # same as jun-, may-, and apr- for n = D, T, and Q, respectively for maug
+                    # (n = D, T, Q): spd (D), spdf
+                    # (T), spdfg (Q) on Li-Ca for jul
+                    # same as jun-, may-, and apr- for n
+                    # = D, T, and Q, respectively for maug
                     orca_basis_pa_cc.append(jun_jul_aug_basis)
         return [basis.lower() for basis in orca_basis_pa_cc]
 
@@ -1098,10 +1134,13 @@ class ORCARefs:
 
     @property
     def orca_auxiliary_basis_coulomb_exchange(self):
-        """Auxiliary basis sets for simultaneously fitting Coulomb and exchange.
+        """Auxiliary basis sets for simultaneously
+        fitting Coulomb and exchange.
 
-        Fitting basis sets developed by Weigend for fitting simultaneously Coulomb and exchange energies.
-        They are quite large and accurate. They fit SCF energies very well but even if they are large they do not fit
+        Fitting basis sets developed by Weigend for fitting
+        simultaneously Coulomb and exchange energies.
+        They are quite large and accurate. They fit SCF energies
+        very well but even if they are large they do not fit
         correlation as well as the dedicated “/C” auxiliary basis sets.
         """
         orca_auxiliary_basis_coulomb_exchange = []

@@ -109,7 +109,8 @@ def click_output_folder_options(f):
 
 
 def click_molecule_vibrational_displacement_options(f):
-    """CLI options for the vibrationally_displaced() method of Molecule object."""
+    """CLI options for the vibrationally_displaced()
+    method of Molecule object."""
 
     @click.option(
         "-m",
@@ -199,7 +200,8 @@ def click_filename_options(f):
 
 
 def click_file_label_and_index_options(f):
-    """Common click options for specifying file label, append-label, and index via CLI."""
+    """Common click options for specifying file
+    label, append-label, and index via CLI."""
 
     @click.option(
         "-l",

@@ -111,7 +111,8 @@ def create_molecule_list(
         list[Molecule]: Molecule objects with specified properties.
 
     Notes:
-        - `orientations_pbc`, `energies`, and `forces` are indexed by structure;
+        - `orientations_pbc`, `energies`, and
+        `forces` are indexed by structure;
           when provided, they should be at least `num_structures` long.
         - This function does not validate shapes beyond basic indexing.
     """
@@ -266,7 +267,8 @@ def line_of_integer_followed_by_floats(line) -> bool:
       - remaining tokens are floats.
     Options:
       strict_float=True  -> require decimal point or exponent in floats
-      min_floats=1       -> require at least this many float tokens after the integer
+      min_floats=1 -> require at least this
+      many float tokens after the integer
     """
     float_pattern = re.compile(float_pattern_with_exponential)
     tokens = line.split()
@@ -292,7 +294,8 @@ def match_outfile_pattern(line):
         line (str): Line from an output file.
 
     Returns:
-        str | None: Program name ("gaussian", "orca", "xtb", "crest") if matched, else None.
+        str | None: Program name ("gaussian", "orca", "xtb", "crest")
+        if matched, else None.
     """
     for program, info in PROGRAM_INFO.items():
         if any(keyword in line for keyword in info["keywords"]):
@@ -345,22 +348,31 @@ def load_molecules_from_paths(
     check_exists=False,
 ):
     """
-    Load molecules from a list of file paths, assigning unique names to each molecule.
+    Load molecules from a list of file paths,
+    assigning unique names to each molecule.
 
-    For each file in `file_paths`, this function loads one or more molecular structures
-    using `Molecule.from_filepath`, assigns a unique name to each molecule based on the
+    For each file in `file_paths`, this function
+    loads one or more molecular structures
+    using `Molecule.from_filepath`, assigns a
+    unique name to each molecule based on the
     file name and structure index, and returns a list of all loaded molecules.
 
     Args:
-        file_paths (list of str or Path): List of file paths to load molecules from.
-        index (int or str or None): Index or slice to select specific structures from each file.
+        file_paths (list of str or Path): List
+        of file paths to load molecules from.
+        index (int or str or None): Index or slice
+        to select specific structures from each file.
             If None, defaults to "-1" (last structure).
-        add_index_suffix_for_single (bool, optional): If True, appends an index suffix to
-            the molecule name even if only a single structure is loaded from a file.
-        check_exists (bool, optional): If True, checks that each file exists before loading.
+        add_index_suffix_for_single (bool, optional):
+        If True, appends an index suffix to
+            the molecule name even if only a
+            single structure is loaded from a file.
+        check_exists (bool, optional): If True,
+        checks that each file exists before loading.
 
     Returns:
-        list of Molecule: List of loaded Molecule objects, each with a unique name.
+        list of Molecule: List of loaded Molecule
+        objects, each with a unique name.
 
     Raises:
         FileNotFoundError: If `check_exists` is True and a file does not exist.
@@ -394,13 +406,15 @@ def load_molecules_from_paths(
                 return_list=True,
             )
 
-            # assign unique names per-structure when file contains multiple structures
+            # assign unique names per-structure
+            # when file contains multiple structures
             base = os.path.splitext(os.path.basename(file_path))[0]
             if isinstance(mols, list) and len(mols) > 1:
                 for j, mol in enumerate(mols, start=1):
                     mol.name = f"{base}_{j}"
             else:
-                # Optional suffix for single-structure files (filenames branch).
+                # Optional suffix for single-structure
+                # files (filenames branch).
                 if add_index_suffix_for_single and index not in (":", "-1"):
                     for mol in mols:
                         mol.name = f"{base}_idx{index}"
@@ -433,14 +447,17 @@ def select_items_by_index(
 
     Args:
         items_list (list): List of items to select from.
-        index_spec (int or str or slice or None): Index specification for selection.
+        index_spec (int or str or slice or
+        None): Index specification for selection.
             If None or ":", returns all items.
             If int: Direct integer index (0-based Python indexing).
             If slice: Direct slice object (0-based Python indexing).
-            If str: String specification (1-based indexing, parsed by parse_index_specification).
+            If str: String specification (1-based
+            indexing, parsed by parse_index_specification).
         allow_duplicates (bool, optional): If True, allows duplicate indices.
             Only applies to string specifications.
-        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+        allow_out_of_range (bool, optional):
+        If True, allows out-of-range indices.
             Only applies to string specifications.
 
     Returns:
@@ -453,7 +470,8 @@ def select_items_by_index(
 
     Note:
         - int indices raise IndexError for out-of-range access.
-        - slice indices never raise errors; they return empty or partial results.
+        - slice indices never raise errors;
+          they return empty or partial results.
         - str indices raise ValueError based on allow_out_of_range parameter.
     """
     # If no filtering needed, return all
@@ -507,7 +525,8 @@ def clean_label(label: str) -> str:
         if ch in SAFE_CHARS:
             out.append(ch)
         else:
-            # includes ch.isspace() or ch in {",", ".", "(", ")", "[", "]", "/", "\\"}
+            # includes ch.isspace() or ch in {",",
+            # ".", "(", ")", "[", "]", "/", "\\"}
             # drop any other weird character, or map to "_"
             out.append("_")
 
@@ -521,9 +540,11 @@ def clean_label(label: str) -> str:
 
 def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
     """
-    Convert a comma-separated list of atom index ranges into a PyMOL `id` selection.
+    Convert a comma-separated list of atom
+    index ranges into a PyMOL `id` selection.
 
-    The input is expected to be a string of indices and/or index ranges separated
+    The input is expected to be a string of
+    indices and/or index ranges separated
     by commas, e.g.:
 
         "1-10,11,14,19-30"
@@ -536,7 +557,8 @@ def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
     Note: PyMOL selection:
     `select mysel, id 1 or id 2 or id 8-10`
     selects all atoms where (id == 1) OR (id == 2) OR (id is in 8-10)
-    So any atom that satisfies any one of those conditions is included in the selection.
+    So any atom that satisfies any one of those
+    conditions is included in the selection.
     That gives you atoms 1, 2, 8, 9, 10.
     This is proper boolean logic:
     or -> set union (combine atoms from all conditions)
@@ -554,7 +576,8 @@ def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
     Raises
     ------
     ValueError
-        If the input string is empty or contains no valid indices after stripping.
+        If the input string is empty or contains
+        no valid indices after stripping.
     """
     # Split on commas and normalise whitespace.
     parts = [

@@ -57,7 +57,8 @@ class FileConverter:
         Convert files based on the specified parameters.
 
         Converts either all files in a directory (if directory is specified)
-        or a single file (if filename is specified) to the target output format.
+        or a single file (if filename is
+        specified) to the target output format.
         """
         if self.directory is not None:
             logger.info(f"Converting files in directory: {self.directory}")
@@ -93,7 +94,8 @@ class FileConverter:
 
         Args:
             directory (str): Directory containing files to convert.
-            type (str): File type to convert (log, com, gjf, out, inp, xyz, sdf).
+            type (str): File type to convert
+            (log, com, gjf, out, inp, xyz, sdf).
             output_filetype (str): Target output format.
         """
         if type == "log":

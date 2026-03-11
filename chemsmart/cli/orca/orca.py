@@ -143,7 +143,8 @@ def click_orca_settings_options(f):
             ["GDIIS", "DIIS", "SOSCF", "AutoTRAH"], case_sensitive=False
         ),  # SOSCF is an approximately quadratically convergent variant of
         # the SCF procedure.
-        # In cases where conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle,
+        # In cases where conventional SCF
+        # procedures (DIIS/KDIIS/SOSCF) struggle,
         # we invoke TRAH-SCF automatically (AutoTRAH).
         default=None,
         help="SCF algorithm to use.",

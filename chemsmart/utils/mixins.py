@@ -169,7 +169,8 @@ class FileMixin:
 
     # -------------------------------------------------------------------------
     # Frontier orbital properties (common to Gaussian and ORCA output parsers)
-    # These depend on subclasses providing: multiplicity, alpha_occ_eigenvalues,
+    # These depend on subclasses providing:
+    # multiplicity, alpha_occ_eigenvalues,
     # beta_occ_eigenvalues, alpha_virtual_eigenvalues, beta_virtual_eigenvalues
     # -------------------------------------------------------------------------
 
@@ -359,7 +360,8 @@ class FileMixin:
 
     @cached_property
     def alpha_fmo_gap(self):
-        """Returns the frontier molecular orbital (FMO) gap for alpha-spin orbitals,
+        """Returns the frontier molecular orbital
+        (FMO) gap for alpha-spin orbitals,
         for open-shell systems.
         For closed-shell systems (multiplicity == 1), returns fmo_gap.
         Returns:
@@ -375,7 +377,8 @@ class FileMixin:
 
     @cached_property
     def beta_fmo_gap(self):
-        """Returns the frontier molecular orbital (FMO) gap for beta-spin orbitals,
+        """Returns the frontier molecular
+        orbital (FMO) gap for beta-spin orbitals,
         for open-shell systems.
         For closed-shell systems (multiplicity == 1), under restricted KS, beta
         orbitals are not printed, and this returns None.
@@ -575,7 +578,8 @@ class GaussianFileMixin(FileMixin):
         """
         modred = {}
         coords = []
-        # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
+        # modred = {'num_steps': 10, 'step_size':
+        # 0.05, 'coords': [[1, 2], [3, 4]]}
         for raw_line in modred_list_of_string:
             if "S" not in raw_line and "s" not in raw_line:
                 continue
@@ -594,7 +598,8 @@ class GaussianFileMixin(FileMixin):
             coords.append(each_modred_list)
             modred["coords"] = coords
 
-            # obtain num_steps and step_size (assumed the same for each scan coordinate)
+            # obtain num_steps and step_size (assumed
+            # the same for each scan coordinate)
             steps_string = line_elems[-1]
             steps_list = steps_string.split()
             num_steps = int(steps_list[0])
@@ -911,8 +916,10 @@ class ORCAFileMixin(FileMixin):
                 next_lines = self.contents[i + 1 :]
                 for next_line in next_lines:
                     if "cutoff" in next_line.lower():
-                        # Find the string prior to it. This is assuming the input is written by
-                        # this program where the comment on the cutoff is also written
+                        # Find the string prior to it. This
+                        # is assuming the input is written by
+                        # this program where the comment
+                        # on the cutoff is also written
                         l_elem = next_line.split()
                         c_idx = l_elem.index("cutoff")
                         return l_elem[c_idx - 1]
@@ -963,7 +970,8 @@ class ORCAFileMixin(FileMixin):
             # if '!' in line and 'cpcm' in line:
             #    cpcm = True
 
-            # solvent specification not in the route string but in the %cpcm block (ORCA_Test_0829.inp)
+            # solvent specification not in the route string
+            # but in the %cpcm block (ORCA_Test_0829.inp)
             if "%cpcm" in line.lower():
                 cpcm = True
                 next_lines = self.contents[i + 1 :]

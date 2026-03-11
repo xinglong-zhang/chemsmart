@@ -129,7 +129,8 @@ class TestUtils:
         ]
 
     def test_get_indices_from_string(self):
-        """Test the conversion of string indices to a list of integers; 1-based indices."""
+        """Test the conversion of string indices
+        to a list of integers; 1-based indices."""
         objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
         s1 = "1:3"  # standard python slicing
         s2 = "1,2,4"
@@ -664,7 +665,8 @@ class TestParseIndexSpecification:
         """Test boundary checking when allow_out_of_range=False."""
         from chemsmart.utils.utils import parse_index_specification
 
-        # Test out of range should fail (10 structures, index 11 is out of range)
+        # Test out of range should fail (10
+        # structures, index 11 is out of range)
         with pytest.raises(
             ValueError, match="Index 11 is out of range.*10 structures"
         ):
@@ -716,7 +718,8 @@ class TestParseIndexSpecification:
         # After normalization: [1-1=0, 4-1=3, 5+(-2)=3]
         assert result == [0, 3, 3]
 
-        # Test negative and positive indices pointing to same structure are allowed
+        # Test negative and positive indices
+        # pointing to same structure are allowed
         result = parse_index_specification(
             "1,-5", total_count=5, allow_duplicates=True
         )
@@ -829,14 +832,17 @@ class TestIOUtilities:
     @pytest.mark.parametrize(
         "line,expected",
         [
-            # Valid: first token int; remaining are proper floats (decimal or exponent)
+            # Valid: first token int; remaining are
+            # proper floats (decimal or exponent)
             ("3 1.0 -2.3 4e-2", True),
             ("0 .5 5. 5.0 -0.3E+2", True),
             ("-1 +.3 -0.5e2", True),
             ("+4  .7", True),
-            # Invalid: remaining tokens are plain integers (assuming your float pattern requires decimal/exponent)
+            # Invalid: remaining tokens are plain integers (assuming
+            # your float pattern requires decimal/exponent)
             ("3 1 2 3", False),
-            # Invalid: not enough floats (only an integer). Recommended behavior = False.
+            # Invalid: not enough floats (only an
+            # integer). Recommended behavior = False.
             ("+4", False),
             ("7   ", False),
             # Invalid: bad first token or malformed floats
@@ -906,7 +912,8 @@ class TestIOUtilities:
         assert clean_label("***") == "star_star_star"
 
         # 3) Leading/trailing underscores after conversion
-        # "*label*" -> "_star_label_star_" -> collapse + strip -> "star_label_star"
+        # "*label*" -> "_star_label_star_" ->
+        # collapse + strip -> "star_label_star"
         assert clean_label("*label*") == "star_label_star"
 
         # 4) Multiple consecutive special characters
@@ -987,7 +994,8 @@ class TestNaturallySorted:
         assert naturally_sorted(input_list) == expected
 
     def test_mixed_types(self):
-        """Test sorting with mixed formats (numbers, letters, and empty strings)."""
+        """Test sorting with mixed formats
+        (numbers, letters, and empty strings)."""
         input_list = ["100", "2", "abc", "", "Z", "z1"]
         expected = ["", "2", "100", "abc", "Z", "z1"]
         assert naturally_sorted(input_list) == expected
@@ -1009,7 +1017,8 @@ class TestRunCommand:
     """Tests for the run_command utility function."""
 
     def test_list_command_success(self, mock_popen):
-        """Test running a command provided as a list with successful execution."""
+        """Test running a command provided as
+        a list with successful execution."""
         mock_process = mock_popen.return_value
         mock_process.communicate.return_value = ("dir contents\n", "")
         mock_process.returncode = 0
@@ -1024,7 +1033,8 @@ class TestRunCommand:
         )
 
     def test_string_command_success(self, mock_popen):
-        """Test running a command provided as a string with successful execution."""
+        """Test running a command provided as
+        a string with successful execution."""
         mock_process = mock_popen.return_value
         mock_process.communicate.return_value = ("dir contents\n", "")
         mock_process.returncode = 0
@@ -1088,7 +1098,8 @@ class TestRunCommand:
 
 
 class TestReturnObjectsAndIndicesFromStringIndex:
-    """Tests for the return_objects_and_indices_from_string_index utility function."""
+    """Tests for the return_objects_and_indices_from_string_index
+    utility function."""
 
     def test_single_index_string(self):
         """Test single index as a string (1-based)."""
@@ -1235,7 +1246,8 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         assert result_indices == [1, 3, 5]
 
     def test_specified_indices_5_to_8(self):
-        """Test that specified indices are preserved (e.g., 5:8 gives indices 5,6,7)."""
+        """Test that specified indices are preserved
+        (e.g., 5:8 gives indices 5,6,7)."""
         objects = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
         result_objects, result_indices = (
             return_objects_and_indices_from_string_index(objects, "5:8")

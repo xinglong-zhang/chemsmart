@@ -449,7 +449,8 @@ class TestSelectItemsByIndex:
             self.select_fn(self.test_list, "1,1,2", allow_duplicates=False)
 
     def test_allow_duplicates_false_negative_positive_same(self):
-        """Test that -10 and 1 (same item) raises when duplicates not allowed."""
+        """Test that -10 and 1 (same item)
+        raises when duplicates not allowed."""
         with pytest.raises(ValueError):
             self.select_fn(self.test_list, "1,-10", allow_duplicates=False)
 

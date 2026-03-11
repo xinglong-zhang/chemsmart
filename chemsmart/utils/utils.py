@@ -268,8 +268,10 @@ def write_list_of_lists_as_a_string_with_empty_line_between_lists(
         for line in list_of_lists[i]:
             string += line + "\n"
         if i < num_lists - 1:
-            # ensures that only empty line is written in between lists, but not after the last list
-            # as the empty line after each block is written in gaussian job settings.write_gaussian_input()
+            # ensures that only empty line is written in
+            # between lists, but not after the last list
+            # as the empty line after each block is written
+            # in gaussian job settings.write_gaussian_input()
             string += "\n"
     return string
 
@@ -277,8 +279,10 @@ def write_list_of_lists_as_a_string_with_empty_line_between_lists(
 def get_list_from_string_range(string_of_range):
     """
     Use 1-indexed.
-    See chemsmart/tests/GaussianUtilsTest.py::GetListFromStringRangeTest::test_get_list_from_string_range
-    :param string_of_range: accepts string of range. e.g., s='[1-3,28-31,34-41]' or s='1-3,28-31,34-41'
+    See chemsmart/tests/GaussianUtilsTest.py::
+    GetListFromStringRangeTest::test_get_list_from_string_range
+    :param string_of_range: accepts string of range.
+    e.g., s='[1-3,28-31,34-41]' or s='1-3,28-31,34-41'
     :return: list of range.
     """
     if "[" in string_of_range:
@@ -353,7 +357,8 @@ def str_indices_range_to_list(str_indices):
         '[1-9]' -> gives [1,2,3,4,5,6,7,8,9] (inclusive end, range style)
 
     Args:
-        str_indices (str): String representation of indices in supported formats.
+        str_indices (str): String representation
+        of indices in supported formats.
 
     Returns:
         list: List of individual integer indices.
@@ -365,7 +370,8 @@ def str_indices_range_to_list(str_indices):
 
     list_indices = []
 
-    # Check if this is a comma-separated list (handles both single values and ranges)
+    # Check if this is a comma-separated list
+    # (handles both single values and ranges)
     if "," in str_indices:
         parts = str_indices.split(",")
         for part in parts:
@@ -438,7 +444,8 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
     1-based to 0-based index conversion.
 
     Args:
-        stridx (str): String representation of index (e.g., '1', '1:5', '1:5:2').
+        stridx (str): String representation
+        of index (e.g., '1', '1:5', '1:5:2').
 
     Returns:
         Union[int, slice, str]: Converted index in appropriate Python type.
@@ -503,11 +510,14 @@ def convert_string_index_from_1_based_to_0_based(
     Args:
         index (Union[str, int, slice]): String representing an index or slice,
                                        e.g., "1", "2:5", "3:10:2", "-1",
-                                       or user-defined ranges like "1-2,5", "1,-1".
-        total_count (int, optional): Total number of items, used for validation.
+                                       or user-defined ranges
+                                       like "1-2,5", "1,-1".
+        total_count (int, optional): Total
+        number of items, used for validation.
         allow_duplicates (bool, optional): If True, allows duplicate indices.
             Defaults to True.
-        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+        allow_out_of_range (bool, optional):
+        If True, allows out-of-range indices.
             Defaults to True.
 
     Returns:
@@ -578,7 +588,8 @@ def parse_index_specification(
         allow_duplicates (bool, optional): If True, allows duplicate indices in
             the result. If False, raises ValueError when duplicates are found.
             Defaults to True.
-        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+        allow_out_of_range (bool, optional):
+        If True, allows out-of-range indices.
             If False, raises ValueError when indices are out of bounds.
             Defaults to True.
 
@@ -689,7 +700,8 @@ def parse_index_specification(
                 indices = _filter_out_of_range_indices(indices, total_count)
 
             # Normalize negative indices to positive 0-based equivalents
-            # This ensures downstream code can safely do `idx + 1` for 1-based conversion
+            # This ensures downstream code can safely
+            # do `idx + 1` for 1-based conversion
             indices = _normalize_negative_indices(indices, total_count)
 
         return indices
@@ -723,7 +735,8 @@ def parse_index_specification(
                         result = _filter_out_of_range_indices(
                             result, total_count
                         )
-                    # Normalize negative indices to positive 0-based equivalents
+                    # Normalize negative indices to
+                    # positive 0-based equivalents
                     result = _normalize_negative_indices(result, total_count)
                 return result
             else:
@@ -742,7 +755,8 @@ def parse_index_specification(
                         result = _filter_out_of_range_indices(
                             result, total_count
                         )
-                    # Normalize negative indices to positive 0-based equivalents
+                    # Normalize negative indices to
+                    # positive 0-based equivalents
                     result = _normalize_negative_indices(result, total_count)
                 return result
         else:
@@ -774,7 +788,8 @@ def parse_index_specification(
             )
 
             # Normalize negative indices to positive 0-based equivalents
-            # This ensures downstream code can safely do `idx + 1` for 1-based conversion
+            # This ensures downstream code can safely
+            # do `idx + 1` for 1-based conversion
             result = _normalize_negative_indices(result, total_count)
 
         return result
@@ -796,7 +811,8 @@ def _validate_parsed_indices(
         ValueError: If validation fails
     """
     if isinstance(indices, list):
-        # Check for duplicates - convert negative indices to positive for comparison
+        # Check for duplicates - convert negative
+        # indices to positive for comparison
         if not allow_duplicates:
             # Convert all indices to positive indices for duplicate checking
             normalized_indices = []
@@ -817,13 +833,15 @@ def _validate_parsed_indices(
                     zip(indices, normalized_indices)
                 ):
                     if norm_idx in seen_normalized:
-                        # Both the current and previously seen indices point to same structure
+                        # Both the current and previously
+                        # seen indices point to same structure
                         duplicate_positions.extend(
                             [seen_normalized[norm_idx], i]
                         )
                     seen_normalized[norm_idx] = i
 
-                # Get the original indices that are duplicates (convert back to 1-based for error message)
+                # Get the original indices that are duplicates
+                # (convert back to 1-based for error message)
                 duplicate_indices_1based = []
                 for pos in set(duplicate_positions):
                     orig_idx = indices[pos]
@@ -845,7 +863,8 @@ def _validate_parsed_indices(
         if not allow_out_of_range:
             _validate_single_index_bounds(indices, total_count)
 
-    # Note: slice objects are not validated for bounds as Python handles them gracefully
+    # Note: slice objects are not validated for
+    # bounds as Python handles them gracefully
 
 
 def _filter_out_of_range_indices(indices, total_count):
@@ -883,7 +902,8 @@ def _filter_out_of_range_indices(indices, total_count):
 
 def _is_index_in_bounds(idx, total_count):
     """
-    Helper function to check if an index is within bounds without raising an exception.
+    Helper function to check if an index is
+    within bounds without raising an exception.
 
     Args:
         idx: The index to check (0-based)
@@ -913,7 +933,8 @@ def _normalize_negative_indices(indices, total_count):
         total_count: Total number of items available
 
     Returns:
-        Normalized indices with negatives converted to positive 0-based equivalents
+        Normalized indices with negatives
+        converted to positive 0-based equivalents
 
     Examples:
         >>> _normalize_negative_indices(-1, 5)
@@ -991,23 +1012,29 @@ def return_objects_from_string_index(list_of_objects, index):
 
 def return_objects_and_indices_from_string_index(list_of_objects, index):
     """
-    Return objects and their original 1-based indices from a list based on the given index.
+    Return objects and their original 1-based
+    indices from a list based on the given index.
 
-    This function is similar to return_objects_from_string_index but also returns
+    This function is similar to
+    return_objects_from_string_index but also returns
     the original 1-based indices that were used to select the objects.
 
     Args:
         list_of_objects: List of objects to select from.
-        index: String or integer representing the index/indices to select (1-based).
+        index: String or integer representing
+        the index/indices to select (1-based).
 
     Returns:
         tuple: (objects, indices_1based) where:
-            - objects: List of selected objects (or single object if single index)
-            - indices_1based: List of original 1-based indices (or single index if single index)
+            - objects: List of selected objects
+            (or single object if single index)
+            - indices_1based: List of original 1-based
+            indices (or single index if single index)
 
     Examples:
         >>> objects = ['a', 'b', 'c', 'd', 'e']
-        >>> # '2:4' in 1-based means items 2 and 3 (exclusive of 4, like Python slicing)
+        >>> # '2:4' in 1-based means items 2 and
+        3 (exclusive of 4, like Python slicing)
         >>> return_objects_and_indices_from_string_index(objects, '2:4')
         (['b', 'c'], [2, 3])
         >>> # Single index '5' returns the 5th item
@@ -1025,7 +1052,8 @@ def return_objects_and_indices_from_string_index(list_of_objects, index):
     elif isinstance(index_0based, int):
         # if index is a single integer, use it to select a single object
         objects = list_of_objects[index_0based]
-        # Handle negative indices: convert to positive 0-based first, then to 1-based
+        # Handle negative indices: convert to
+        # positive 0-based first, then to 1-based
         if index_0based < 0:
             indices_1based = len(list_of_objects) + index_0based + 1
         else:
@@ -1144,7 +1172,8 @@ def two_lists_have_similar_contents(list1, list2, ignore_string=None):
         list1 (list): First list to compare.
         list2 (list): Second list to compare.
         ignore_string (str, optional): If specified, list items containing
-                                      this string will be ignored in comparison.
+                                      this string will be
+                                      ignored in comparison.
 
     Returns:
         bool: True if lists have similar contents, False otherwise.
@@ -1236,8 +1265,10 @@ def get_prepend_string_list_from_modred_free_format(
     e.g., [[1,2],[5,6]] or [1,2] -> ['B 1 2', 'B 5 6']
     program: gaussian or orca, variable to decide the index to start from
     Gaussian starts from 1, while orca starts from 0
-    For chemsmart applications in homogeneous catalysis, we will use 1-indexing throughout,
-    since this is what we usually see when we use GaussView or Avogadro to visualise the structures.
+    For chemsmart applications in homogeneous
+    catalysis, we will use 1-indexing throughout,
+    since this is what we usually see when we use
+    GaussView or Avogadro to visualise the structures.
     """
     prepend_string_list = []
     if not isinstance(input_modred, list):
@@ -1354,14 +1385,15 @@ def check_charge_and_multiplicity(settings):
     in the settings object, raising an error if either is missing.
 
     Args:
-        settings: Settings object containing charge and multiplicity attributes.
+        settings: Settings object containing
+        charge and multiplicity attributes.
 
     Raises:
         ValueError: If charge or multiplicity is None.
     """
     if settings.charge is None or settings.multiplicity is None:
         raise ValueError(
-            "Charge and multiplicity must be set for Gaussian jobs."
+            "Charge and multiplicity must be set for Gaussian/ORCA jobs."
         )
 
 
@@ -1378,7 +1410,8 @@ def cmp_with_ignore(f1, f2, ignore_string=None):
         f2 (str): Second file path to compare.
         ignore_string (Union[str, list], optional): String or list of strings
                                                    to ignore during comparison.
-                                                   Lines containing any of these
+                                                   Lines containing
+                                                   any of these
                                                    strings will be skipped.
 
     Returns:
@@ -1601,7 +1634,8 @@ def extract_number(filename):
 
     Returns:
         int or float: Extracted number, or infinity if no number found
-                     (to place files without numbers at the end during sorting).
+                     (to place files without numbers
+                     at the end during sorting).
     """
     match = re.search(r"c(\d+)\*?", filename)
     if match:
@@ -1736,7 +1770,8 @@ def spline_data(x, y, new_length=1000, k=3):
     Raises:
         ValueError: If input lists x and y have different lengths or are empty.
         scipy.interpolate.InterpolationError: If spline interpolation fails
-                                            (e.g., invalid k or insufficient points).
+                                            (e.g., invalid k or
+                                            insufficient points).
     """
     from scipy.interpolate import UnivariateSpline
 
@@ -1754,13 +1789,15 @@ def spline_data(x, y, new_length=1000, k=3):
 
 
 def safe_min_lengths(*lists):
-    """Return the minimum length of any number of provided lists (ignoring None).
+    """Return the minimum length of any
+    number of provided lists (ignoring None).
 
     Args:
         *lists: Variable number of list-like objects. None values are ignored.
 
     Returns:
-        int: The minimum length among the provided lists, or 0 if no valid lists are given.
+        int: The minimum length among the provided
+        lists, or 0 if no valid lists are given.
     """
     lengths = [len(lst) for lst in lists if lst is not None]
     return min(lengths) if lengths else 0

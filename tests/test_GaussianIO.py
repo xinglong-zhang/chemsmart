@@ -39,7 +39,7 @@ class TestRouteString:
             r1b.additional_opt_options_in_route is None
         )  # noeigentest prevents Gaussian from stopping
         # if no negative Hessian eigenvalue was found
-        #                                                   # (not additional opt options for geometry opt)
+        # (not additional opt options for geometry opt)
         assert r1b.additional_route_parameters is None
 
     def test_read_route_string_standard3a(self):
@@ -105,7 +105,8 @@ class TestRouteString:
         # TODO: nmr route to be specified
 
     def test_read_route_string_standard7(self):
-        s1g = "# TD(nstates=30) wB97XD/def2SVP scrf(solvent=dichloroethane)"  # TD-DFT route
+        s1g = "# TD(nstates=30) wB97XD/def2SVP scrf(solvent=dichloroethane)"
+        # TD-DFT route
         r1g = GaussianRoute(s1g)
         assert r1g.functional == "wb97xd"
         assert r1g.basis == "def2svp"
@@ -1555,7 +1556,8 @@ class TestGaussian16Output:
             0,
         ]
 
-        # since use_frozen is False, this is not included in the output structure
+        # since use_frozen is False, this is
+        # not included in the output structure
         assert g16_hide_frozen.optimized_structure.frozen_atoms is None
 
         assert g16_hide_frozen.optimized_structure.energy == -804.614710796
@@ -1955,8 +1957,10 @@ class TestGaussianWBIOutput:
         assert len(g16_output.standard_orientations) == 1
         assert len(g16_output.all_structures) == 1
 
-    def test_molecules(self):
-        mol = Molecule.from_pubchem("241")  # benzene molecule
+    def test_molecules(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile
+        )  # benzene molecule
         assert mol.is_aromatic
 
 

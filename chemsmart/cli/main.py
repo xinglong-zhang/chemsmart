@@ -8,6 +8,7 @@ banner display.
 
 import click
 
+from chemsmart import __version__
 from chemsmart.utils.cli import MyGroup
 
 from .config import config
@@ -18,6 +19,7 @@ from .update import update
 
 @click.group(cls=MyGroup)
 @click.pass_context
+@click.version_option(version=__version__, prog_name="CHEMSMART")
 @click.option("--verbose", is_flag=True, default=True)
 def entry_point(ctx, verbose):
     """

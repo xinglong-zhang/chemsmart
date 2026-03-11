@@ -116,7 +116,8 @@ class GaussianCubeFile(FileMixin):
         """
         lines_of_values = []
         for line in self.contents[6 + self.num_atoms :]:
-            # skip first 2 header lines + next 1 num atoms line + 3 grid vectors lines
+            # skip first 2 header lines + next 1
+            # num atoms line + 3 grid vectors lines
             line_of_floats_as_list = [float(x) for x in line.split()]
             lines_of_values.append(line_of_floats_as_list)
         return lines_of_values

@@ -112,7 +112,8 @@ class TestGenGenECPBasisDetermination:
     based on elements present."""
 
     def test_periodic_table_requires_ecp(self):
-        """Test that requires_ecp correctly identifies elements needing ECPs."""
+        """Test that requires_ecp correctly
+        identifies elements needing ECPs."""
         pt = PeriodicTable()
 
         # Elements with Z <= 36 should not require ECP
@@ -242,7 +243,8 @@ class TestGenGenECPBasisDetermination:
         assert determined_basis == "genecp"
 
     def test_determine_basis_keyword_no_heavy_elements(self):
-        """Test that molecules with no heavy elements use light elements basis."""
+        """Test that molecules with no heavy
+        elements use light elements basis."""
         # Create molecule with only light elements
         h2o_molecule = Atoms(
             "H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
@@ -264,7 +266,8 @@ class TestGenGenECPBasisDetermination:
             multiplicity=1,
         )
 
-        # Determine basis should use light elements since no heavy elements present
+        # Determine basis should use light
+        # elements since no heavy elements present
         determined_basis = settings.determine_basis_keyword(h2o_mol)
         assert determined_basis == "def2svp"
 
@@ -299,7 +302,8 @@ class TestGenGenECPBasisDetermination:
             multiplicity=1,
         )
 
-        # Determine basis should return original basis since it's not gen/genecp
+        # Determine basis should return original
+        # basis since it's not gen/genecp
         determined_basis = settings.determine_basis_keyword(br_mol)
         assert determined_basis == "6-31g(d)"
 
@@ -344,15 +348,18 @@ class TestGenGenECPBasisDetermination:
 
 
 class TestGenECPReplacementInRoute:
-    """Test that gen/genecp replacement in route strings doesn't affect other keywords."""
+    """Test that gen/genecp replacement in route
+    strings doesn't affect other keywords."""
 
     def test_gen_replacement_does_not_affect_noeigentest(self):
-        """Test that 'gen' in 'noeigentest' is not replaced, and case mode behaves correctly."""
+        """Test that 'gen' in 'noeigentest' is not
+        replaced, and case mode behaves correctly."""
         import re
 
         from chemsmart.utils.io import replace_word
 
-        # Route strings with lowercase 'gen' (replacement should work in BOTH modes)
+        # Route strings with lowercase 'gen'
+        # (replacement should work in BOTH modes)
         route_strings = [
             "# opt=(ts,calcfc,noeigentest) freq mn15 gen",
             "opt=(calcfc,ts,noeigentest,maxstep=5) freq gen m06",
@@ -399,7 +406,8 @@ class TestGenECPReplacementInRoute:
         assert "noeigentest" in result_cs
 
     def test_genecp_replacement_does_not_affect_other_keywords(self):
-        """Test that 'genecp' replacement works correctly in both case modes."""
+        """Test that 'genecp' replacement
+        works correctly in both case modes."""
         from chemsmart.utils.io import replace_word
 
         route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 genecp"
@@ -435,7 +443,8 @@ class TestGenECPReplacementInRoute:
         assert "def2svp" not in result_cs
 
     def test_gen_to_genecp_replacement(self):
-        """Test replacing 'gen' with 'genecp' in route strings for both case modes."""
+        """Test replacing 'gen' with 'genecp'
+        in route strings for both case modes."""
         import re
 
         from chemsmart.utils.io import replace_word
@@ -469,7 +478,8 @@ class TestGenECPReplacementInRoute:
         assert "genecp" not in result_cs
 
     def test_replacement_with_various_delimiters(self):
-        """Test that replacement works correctly with various delimiters, in both case modes."""
+        """Test that replacement works correctly with
+        various delimiters, in both case modes."""
         from chemsmart.utils.io import replace_word
 
         # These are all lowercase 'gen' -> should replace in BOTH modes
@@ -492,8 +502,10 @@ class TestGenECPReplacementInRoute:
                     result == expected
                 ), f"[case_sensitive={case_sensitive}] Expected '{expected}' but got '{result}'"
 
-        # Should not replace "gen" when it is part of another word (boundary test)
-        # NOTE: this string actually *contains* a standalone "gen" at the end, so it SHOULD replace that one.
+        # Should not replace "gen" when it is
+        # part of another word (boundary test)
+        # NOTE: this string actually *contains* a standalone
+        # "gen" at the end, so it SHOULD replace that one.
         route_string = "regenerate gen"
         expected = "regenerate 6-31g"
         for case_sensitive in (True, False):

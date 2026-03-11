@@ -52,8 +52,10 @@ class ORCAOutputFolder(BaseFolder):
     """
     Output folder containing all ORCA output files for postprocessing.
 
-    This class provides utilities for managing collections of ORCA output files,
-    including calculation statistics, runtime analysis, and resource usage tracking.
+    This class provides utilities for
+    managing collections of ORCA output files,
+    including calculation statistics, runtime
+    analysis, and resource usage tracking.
     """
 
     def __init__(self, folder):
@@ -94,7 +96,8 @@ class ORCAOutputFolder(BaseFolder):
     @property
     def total_service_units(self):
         """
-        Calculate total computational service units used across all output files.
+        Calculate total computational service
+        units used across all output files.
 
         Returns:
             float: Total core-hours consumed by all calculations in folder

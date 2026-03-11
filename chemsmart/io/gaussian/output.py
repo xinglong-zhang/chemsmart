@@ -148,7 +148,8 @@ class Gaussian16Output(GaussianFileMixin):
                 line_elem = line.split()
                 # return int(line_elem[-1])
                 # # in qmmm, not always last, e.g.,
-                # # Charge =  1 Multiplicity = 2 for low   level calculation on real  system.
+                # # Charge = 1 Multiplicity = 2 for
+                # low level calculation on real system.
                 return int(line_elem[5])
 
     @property
@@ -175,7 +176,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def input_coordinates_block(self):
-        """Obtain the coordinate block from the input that is printed in the outputfile."""
+        """Obtain the coordinate block from the
+        input that is printed in the outputfile."""
         coordinates_block_lines_list = []
         for i, line in enumerate(self.contents):
             if line.startswith("Symbolic Z-matrix:"):
@@ -185,10 +187,13 @@ class Gaussian16Output(GaussianFileMixin):
                     if j_line.split()[0] not in p.PERIODIC_TABLE:
                         if j_line.startswith("Charge ="):
                             logger.debug(f"Skipping line: {j_line}")
-                            # e.g., in QM/MM output files, the first element is not the coordinates information
-                            # e.g., "Charge =  1 Multiplicity = 2 for low   level calculation on real  system."
+                            # e.g., in QM/MM output files, the first
+                            # element is not the coordinates information
+                            # e.g., "Charge = 1 Multiplicity = 2 for
+                            # low level calculation on real system."
                             continue
-                        # elif j_line.startswith("TV"): we still add the line for PBC
+                        # elif j_line.startswith("TV"):
+                        # we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
@@ -197,26 +202,30 @@ class Gaussian16Output(GaussianFileMixin):
     def all_structures(self):
         """
         Obtain all the structures from the output file.
-        Use Standard orientations to get the structures; if not, use input orientations.
+        Use Standard orientations to get the
+        structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
         """
         return self._get_all_molecular_structures()
 
     def _get_all_molecular_structures(self):
         """
-        Build and return the list of Molecule objects parsed from a calculation.
+        Build and return the list of Molecule
+        objects parsed from a calculation.
 
         Selection precedence for orientations:
           1) standard_orientations (+ PBC)
           2) input_orientations   (+ PBC)
 
         Special handling (as per design):
-          - Non-link & normal termination: de-duplicate the terminal (e.g. freq) frame.
+          - Non-link & normal termination:
+          de-duplicate the terminal (e.g. freq) frame.
           - Non-link & abnormal termination: use safe_min_lengths.
           - Link & normal termination: drop the first frame, then behave like
             normal termination (incl. de-dup).
           - Link & abnormal termination:
-              * if multiple frames: drop the first (carry-over), then use safe_min_lengths.
+              * if multiple frames: drop the first
+              (carry-over), then use safe_min_lengths.
               * if single frame: return that only frame (no drop).
 
         Returns
@@ -246,8 +255,10 @@ class Gaussian16Output(GaussianFileMixin):
                 orientations_pbc = orientations_pbc[1:]
             if energies:
                 energies = energies[1:]
-            # Forces do not need to be dropped here because no force computation occurs at the first link job.
-            # This is intentional: the forces array is already aligned with the relevant orientations.
+            # Forces do not need to be dropped here because no
+            # force computation occurs at the first link job.
+            # This is intentional: the forces array is
+            # already aligned with the relevant orientations.
 
         # Helper to keep only the last frame across all arrays
         def keep_last_only():
@@ -261,7 +272,8 @@ class Gaussian16Output(GaussianFileMixin):
             if forces:
                 forces = forces[-1:]
 
-        # Right-trim auxiliaries to the number of orientations (no data loss in orientations)
+        # Right-trim auxiliaries to the number of
+        # orientations (no data loss in orientations)
         def align_lengths_to_orientations():
             nonlocal orientations, orientations_pbc, energies, forces
             n = len(orientations)
@@ -289,9 +301,11 @@ class Gaussian16Output(GaussianFileMixin):
             else:
                 logger.debug("Link job with error termination.")
                 if len(orientations) > 1:
-                    # Multiple frames: drop carried-over first, then treat as abnormal
+                    # Multiple frames: drop carried-over
+                    # first, then treat as abnormal
                     drop_first()
-                    # Fall through to abnormal handling below (safe_min_lengths)
+                    # Fall through to abnormal
+                    # handling below (safe_min_lengths)
                 else:
                     # Single frame available: return it as-is (do NOT drop)
                     frozen_atoms = (
@@ -309,13 +323,15 @@ class Gaussian16Output(GaussianFileMixin):
                         pbc_conditions=self.list_of_pbc_conditions,
                     )
 
-        # 3) De-dup only for normal-termination paths (incl. link-normal after drop)
+        # 3) De-dup only for normal-termination
+        # paths (incl. link-normal after drop)
         if self.normal_termination:
             clean_duplicate_structure(orientations)
             # After dedup, ensure auxiliaries aren't longer than orientations
             align_lengths_to_orientations()
 
-        # 4) Compute safe min length for logging and for abnormal (non-link or link>1-after-drop)
+        # 4) Compute safe min length for logging and
+        # for abnormal (non-link or link>1-after-drop)
         num_structures_to_use = safe_min_lengths(
             orientations, energies, forces
         )
@@ -346,7 +362,8 @@ class Gaussian16Output(GaussianFileMixin):
         if self.normal_termination:
             all_structures = create_molecule_list(**create_kwargs)
         else:
-            # Abnormal (non-link, or link with >1 frame after drop): truncate safely
+            # Abnormal (non-link, or link with >1
+            # frame after drop): truncate safely
             all_structures = create_molecule_list(
                 **create_kwargs, num_structures=num_structures_to_use
             )
@@ -403,7 +420,8 @@ class Gaussian16Output(GaussianFileMixin):
         """
         return self.last_structure
 
-    ###### the following properties relate to intermediate geometry optimizations
+    ###### the following properties relate to
+    # intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
 
     @cached_property
@@ -498,7 +516,8 @@ class Gaussian16Output(GaussianFileMixin):
     @property
     def gen_genecp(self):
         """
-        String specifying if gen or genecp is used in the calculation output file.
+        String specifying if gen or genecp is
+        used in the calculation output file.
         """
         return self._get_gen_genecp()
 
@@ -617,7 +636,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def reduced_masses(self):
         """
-        Obtain list of reduced masses corresponding to the vibrational frequency.
+        Obtain list of reduced masses
+        corresponding to the vibrational frequency.
         """
         reduced_masses = []
         for line in self.contents:
@@ -634,7 +654,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def force_constants(self):
         """
-        Obtain list of force constants corresponding to the vibrational frequency.
+        Obtain list of force constants
+        corresponding to the vibrational frequency.
         """
         force_constants = []
         for line in self.contents:
@@ -651,7 +672,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def ir_intensities(self):
         """
-        Obtain list of IR intensities corresponding to the vibrational frequency.
+        Obtain list of IR intensities
+        corresponding to the vibrational frequency.
         """
         IR_intensities = []
         for line in self.contents:
@@ -668,7 +690,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_mode_symmetries(self):
         """
-        Obtain list of vibrational mode symmetries corresponding to the vibrational frequency.
+        Obtain list of vibrational mode symmetries
+        corresponding to the vibrational frequency.
         """
         vibrational_mode_symmetries = []
         for i, line in enumerate(self.contents):
@@ -835,7 +858,8 @@ class Gaussian16Output(GaussianFileMixin):
     def frozen_atoms_masks(self):
         """
         Obtain list of frozen atoms masks (-1 = frozen, 0 = free)
-        using precomputed frozen_coordinate_indices and free_coordinate_indices.
+        using precomputed frozen_coordinate_indices
+        and free_coordinate_indices.
         """
         if not self.has_frozen_coordinates:
             return None
@@ -850,7 +874,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def scf_energies(self):
         """
-        Obtain SCF energies from the Gaussian output file. Default units of Hartree.
+        Obtain SCF energies from the Gaussian
+        output file. Default units of Hartree.
         """
         scf_energies = []
         for line in self.contents:
@@ -862,7 +887,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def mp2_energies(self):
         """
-        Obtain MP2 energies from the Gaussian output file. Default units of Hartree.
+        Obtain MP2 energies from the Gaussian
+        output file. Default units of Hartree.
         """
         mp2_energies = []
         for line in self.contents:
@@ -875,7 +901,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def oniom_energies(self):
         """
-        Obtain ONIOM energies from the Gaussian output file. Default units of Hartree.
+        Obtain ONIOM energies from the Gaussian
+        output file. Default units of Hartree.
         """
         oniom_energies = []
         for line in self.contents:
@@ -886,7 +913,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def oniom_layer_energies(self):
-        """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
+        """Obtain ONIOM energies from the Gaussian
+        output file. Default units of Hartree."""
         layer_energies = {}
         for line in self.contents:
             layer_match = re.match(oniom_gridpoint_pattern, line)
@@ -990,7 +1018,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def input_orientations_pbc(self):
-        """Obtain structures in Input Orientation with PBC from Gaussian output file."""
+        """Obtain structures in Input Orientation
+        with PBC from Gaussian output file."""
         _, input_orientations_pbc = self._get_input_orientations_and_pbc()
         return input_orientations_pbc
 
@@ -1025,13 +1054,15 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def standard_orientations(self):
-        """Obtain structures in Standard Orientation from Gaussian output file."""
+        """Obtain structures in Standard
+        Orientation from Gaussian output file."""
         standard_orientations, _ = self._get_standard_orientations_and_pbc()
         return standard_orientations
 
     @cached_property
     def standard_orientations_pbc(self):
-        """Obtain structures in Standard Orientation with PBC from Gaussian output file."""
+        """Obtain structures in Standard Orientation
+        with PBC from Gaussian output file."""
         _, standard_orientations_pbc = (
             self._get_standard_orientations_and_pbc()
         )
@@ -1099,7 +1130,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def excitation_energies_eV(self):
         """
-        Read TDDFT transitions and return the transition energies in eV as a list.
+        Read TDDFT transitions and return the
+        transition energies in eV as a list.
         """
         excitation_energies_eV = []
         for i in self.tddft_transitions:
@@ -1109,7 +1141,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def absorptions_in_nm(self):
         """
-        Read TDDFT transitions and return the absorbed wavelengths in nm as a list.
+        Read TDDFT transitions and return the
+        absorbed wavelengths in nm as a list.
         """
         absorptions_in_nm = []
         for i in self.tddft_transitions:
@@ -1149,7 +1182,8 @@ class Gaussian16Output(GaussianFileMixin):
             if line.startswith("Excited State"):
                 each_state_transitions = []
                 each_state_contribution_coefficients = []
-                # parse the lines that follow until an empty line is encountered
+                # parse the lines that follow until
+                # an empty line is encountered
                 j = 1
                 while len(self.contents[i + j]) != 0:
                     line_element = self.contents[i + j].split()
@@ -1173,11 +1207,13 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def alpha_occ_eigenvalues(self):
         """
-        Obtain all eigenenergies of the alpha occupied orbitals and convert to eV.
+        Obtain all eigenenergies of the alpha
+        occupied orbitals and convert to eV.
         """
         alpha_occ_eigenvalues = []
 
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1217,7 +1253,8 @@ class Gaussian16Output(GaussianFileMixin):
         Units of eV, as for orbital energies.
         """
 
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1256,7 +1293,8 @@ class Gaussian16Output(GaussianFileMixin):
         Obtain all eigenenergies of the beta occupied orbitals.
         Units of eV, as for orbital energies.
         """
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1296,7 +1334,8 @@ class Gaussian16Output(GaussianFileMixin):
         Units of eV, as for orbital energies.
         """
 
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1491,7 +1530,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_hirshfeld_charges_spins_dipoles_cm5(self):
         """
-        Obtain Hirshfeld charges, spin densities, dipoles, and CM5 charges from the output file.
+        Obtain Hirshfeld charges, spin densities,
+        dipoles, and CM5 charges from the output file.
         """
         all_hirshfeld_charges = []
         all_spin_densities = []
@@ -1535,7 +1575,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_hirshfeld_charges_spin_densities_cm5_charges_heavy_atoms(self):
         """
-        Obtain Hirshfeld charges, spin densities and CM5 with hydrogens summed into heavy atoms.
+        Obtain Hirshfeld charges, spin densities and
+        CM5 with hydrogens summed into heavy atoms.
         """
         all_hirshfeld_charges_heavy_atoms = []
         all_hirshfeld_spin_densities_heavy_atoms = []
@@ -1613,7 +1654,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def moments_of_inertia(self):
         """
-        Obtain moments of inertia from the output file which are in atomic units
+        Obtain moments of inertia from the
+        output file which are in atomic units
         (amu * Bohr^2) and convert to SI units (kg * m^2).
         """
         moments_of_inertia, _ = (
@@ -1705,7 +1747,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     def to_dataset(self, **kwargs):
         """
-        Convert Gaussian .log file to Dataset with all data points taken from the .log file.
+        Convert Gaussian .log file to Dataset with
+        all data points taken from the .log file.
 
         Returns:
             Dataset.
@@ -1723,7 +1766,8 @@ class Gaussian16Output(GaussianFileMixin):
         low_level = []
         for i, line in enumerate(self.contents):
             if "Symbolic Z-matrix:" in line:
-                # First ONIOM format: coordinates start 4 lines after the header
+                # First ONIOM format: coordinates
+                # start 4 lines after the header
                 if "Charge" not in self.contents[i + 4]:
                     atom_index = 1
                     for j_line in self.contents[i + 4 :]:
@@ -1743,7 +1787,8 @@ class Gaussian16Output(GaussianFileMixin):
                                 low_level.append(atom_index)
                             atom_index += 1
                 else:
-                    # Alternative ONIOM format: coordinates start 7 lines after the header
+                    # Alternative ONIOM format: coordinates
+                    # start 7 lines after the header
                     atom_index = 1
                     for j_line in self.contents[i + 7 :]:
                         if len(j_line) == 0:
@@ -1788,7 +1833,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def oniom_get_charge_and_multiplicity(self):
-        """Obtain the charge and multiplicity of the system in the ONIOM calculation.
+        """Obtain the charge and multiplicity
+        of the system in the ONIOM calculation.
         Returns:
             charge and multiplicity as a dictionary"""
         charge_multiplicity = {}
@@ -1875,7 +1921,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
 
                         # Construct the atom key, e.g., "Ni1"
                         atom_key = f"{atom_type}{atom_number}"
-                        # Construct the sub-key for each NAO entry, e.g., "NAO1", "NAO2", etc.
+                        # Construct the sub-key for each NAO
+                        # entry, e.g., "NAO1", "NAO2", etc.
                         nao_key = f"NAO_{atom_type}{nao_number}"
 
                         # Initialize the atom dictionary if it doesn't exist
@@ -1950,7 +1997,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
     @cached_property
     def total_electrons(self):
         """
-        Get the total number of electrons corresponding to each atom as a dictionary.
+        Get the total number of electrons
+        corresponding to each atom as a dictionary.
         """
         total_electrons = {}
         for atom_key, atom_data in self.natural_population_analysis.items():
@@ -1960,7 +2008,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
     @cached_property
     def electronic_configuration(self):
         """
-        Get electronic configuration for each atom and store results in a dictionary.
+        Get electronic configuration for each
+        atom and store results in a dictionary.
         """
         electronic_configuration = {}
         for i, line in enumerate(self.contents):
@@ -2002,7 +2051,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
 
 class Gaussian16OutputWithPBC(Gaussian16Output):
     """
-    class for parsing and obtaining information from Gaussian output file with PBC.
+    class for parsing and obtaining information
+    from Gaussian output file with PBC.
     """
 
     def __init__(self, filename):

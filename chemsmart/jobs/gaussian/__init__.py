@@ -65,7 +65,8 @@ __all__ = [
 # imports as explicitly used
 
 # If I comment all these out, I get the following error during run:
-#   File "/Users/xinglongzhang/bin/chemsmart/chemsmart/jobs/runner.py", line 192, in from_job
+# File "/Users/xinglongzhang/bin/chemsmart/chemsmart/jobs/runner.py",
+# line 192, in from_job
 #     raise ValueError(
 # ValueError: Could not find any runners for job:
 # GaussianOptJob<folder=<run/folder>, label=final_prd_opt_scan_gas_opt_opt>.
