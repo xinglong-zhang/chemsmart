@@ -6,8 +6,8 @@ import click
 
 from chemsmart.assembler.assemble import SingleFileAssembler
 from chemsmart.assembler.database import Database
+from chemsmart.io.folder import BaseFolder
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.io import find_output_files_in_directory
 
 from .database import database
 
@@ -84,8 +84,9 @@ def assemble(
 
     # Collect available output files
     if filetype.lower() in {"gaussian", "orca"}:
-        files = find_output_files_in_directory(
-            directory=directory, program=filetype.lower()
+        folder = BaseFolder(folder=directory)
+        files = folder.get_all_output_files_in_current_folder_and_subfolders_by_program(
+            program=filetype.lower()
         )
     else:
         raise ValueError(

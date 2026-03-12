@@ -1,0 +1,20 @@
+#template for ORCA QM/MM calculation
+gas:
+  functional: m062x  # quotes required for string with spaces
+  basis: def2-svp
+  defgrid: DEFGRID3
+solv:
+  functional: m062x
+  basis: def2-tzvp
+  defgrid: DEFGRID3
+  freq: False
+  solvent_model: smd
+  solvent_id: cyclohexane
+qmmm:
+  qm_functional: MN15
+  qm_basis: def2svp
+  qm2_functional: PBEPBE
+  qm2_basis: 6-31g(d,p)/auto
+  mm_force_field: AMBER=HardFirst
+ 
+

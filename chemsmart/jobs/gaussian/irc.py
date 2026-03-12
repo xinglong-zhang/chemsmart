@@ -194,7 +194,8 @@ class GaussianIRCJob(GaussianJob):
         - If direction is None: check both forward and reverse IRC completion
 
         Returns:
-            bool: True if the required IRC calculations are complete, False otherwise.
+            bool: True if the required IRC
+            calculations are complete, False otherwise.
         """
         if self.settings.direction == "forward":
             return self._run_forward_is_complete()
@@ -226,9 +227,11 @@ class GaussianIRCJob(GaussianJob):
 
     def backup_files(self, backup_chk=False):
         """
-        Create backup copies of IRC input and output files based on direction setting.
+        Create backup copies of IRC input and
+        output files based on direction setting.
 
-        Backs up files from the required IRC calculations based on the direction parameter:
+        Backs up files from the required IRC
+        calculations based on the direction parameter:
         - If direction is 'forward': backup only forward IRC files
         - If direction is 'reverse': backup only reverse IRC files
         - If direction is None: backup both forward and reverse IRC files

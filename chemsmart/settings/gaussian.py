@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.gaussian.settings import (
     GaussianIRCJobSettings,
     GaussianJobSettings,
+    GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -16,7 +17,8 @@ project_settings_registry: list[str] = []
 # Type annotation required for Python's type checker (e.g., mypy)
 # which has stricter requirements when working in contexts where type inference
 # is insufficient or ambiguous.
-# This is not due to Python 3.9 itself, but type checking rules enforced by tools
+# This is not due to Python 3.9 itself,
+# but type checking rules enforced by tools
 # like mypy or stricter typing practices.
 
 
@@ -46,7 +48,8 @@ class GaussianProjectSettings(RegistryMixin):
         Get main Gaussian settings with key default values.
 
         Returns:
-            GaussianJobSettings: Default job settings with functional and basis set.
+            GaussianJobSettings: Default job
+            settings with functional and basis set.
         """
         default_gaussian_job_settings = GaussianJobSettings.default()
         default_gaussian_job_settings.functional = self.functional
@@ -58,7 +61,8 @@ class GaussianProjectSettings(RegistryMixin):
         Get default settings for geometry optimization jobs.
 
         Returns:
-            GaussianJobSettings: Settings configured for structure optimization.
+            GaussianJobSettings: Settings
+            configured for structure optimization.
         """
         settings = self.main_settings().copy()
         settings.jobtype = "opt"
@@ -91,7 +95,8 @@ class GaussianProjectSettings(RegistryMixin):
         Get default settings for Intrinsic Reaction Coordinate calculations.
 
         Returns:
-            GaussianIRCJobSettings: IRC-specific settings with frequency disabled.
+            GaussianIRCJobSettings: IRC-specific
+            settings with frequency disabled.
         """
         settings = self.main_settings().copy()
         # Convert to IRC-specific settings class
@@ -105,7 +110,8 @@ class GaussianProjectSettings(RegistryMixin):
         Get default settings for potential energy surface scan calculations.
 
         Returns:
-            GaussianJobSettings: Settings for coordinate scanning with frequency disabled.
+            GaussianJobSettings: Settings for
+            coordinate scanning with frequency disabled.
         """
         settings = self.main_settings().copy()
         settings.jobtype = "scan"
@@ -117,7 +123,8 @@ class GaussianProjectSettings(RegistryMixin):
         Get default settings for Non-Covalent Interaction analysis.
 
         Returns:
-            GaussianJobSettings: Settings for NCI analysis with frequency disabled.
+            GaussianJobSettings: Settings for
+            NCI analysis with frequency disabled.
         """
         settings = self.main_settings().copy()
         settings.jobtype = "nci"
@@ -129,7 +136,8 @@ class GaussianProjectSettings(RegistryMixin):
         Get default settings for Wiberg Bond Index calculations.
 
         Returns:
-            GaussianJobSettings: Settings for WBI analysis with frequency disabled.
+            GaussianJobSettings: Settings for
+            WBI analysis with frequency disabled.
         """
         settings = self.main_settings().copy()
         settings.jobtype = "wbi"
@@ -152,6 +160,14 @@ class GaussianProjectSettings(RegistryMixin):
         settings.basis = self.large_basis  # Use high-accuracy basis set
         return settings
 
+    def qmmm_settings(self):
+        """Gaussian default settings for qmmm job."""
+        settings = self.main_settings().copy()
+        settings = GaussianQMMMJobSettings(**settings.__dict__)
+        settings.jobtype = "qmmm"
+        settings.freq = False
+        return settings
+
     @classmethod
     def from_project(cls, project):
         """
@@ -168,7 +184,8 @@ class GaussianProjectSettings(RegistryMixin):
             GaussianProjectSettings: Configured settings instance.
 
         Raises:
-            FileNotFoundError: If no configuration is found for the specified project.
+            FileNotFoundError: If no configuration
+            is found for the specified project.
         """
         # First try user-defined project settings
         user_project_settings = cls._from_user_project_name(project)
@@ -200,7 +217,8 @@ class GaussianProjectSettings(RegistryMixin):
             manager: Project settings manager instance.
 
         Returns:
-            YamlGaussianProjectSettings or None: YAML-based settings instance if successful, None if failed.
+            YamlGaussianProjectSettings or None: YAML-based
+            settings instance if successful, None if failed.
         """
         try:
             return manager.create()
@@ -216,7 +234,8 @@ class GaussianProjectSettings(RegistryMixin):
             project_name (str): Name of the project configuration file.
 
         Returns:
-            YamlGaussianProjectSettings or None: YAML-based settings instance if found, None otherwise.
+            YamlGaussianProjectSettings or None: YAML-based
+            settings instance if found, None otherwise.
         """
         project_name_yaml_path = os.path.join(
             ChemsmartUserSettings().user_gaussian_settings_dir,
@@ -239,7 +258,8 @@ class GaussianProjectSettings(RegistryMixin):
             project_name (str): Name of the test project configuration.
 
         Returns:
-            YamlGaussianProjectSettings or None: YAML-based settings instance if found, None otherwise.
+            YamlGaussianProjectSettings or None: YAML-based
+            settings instance if found, None otherwise.
         """
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
         test_projects_dir = os.path.join(
@@ -283,6 +303,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        qmmm_settings,
     ):
         """
         Initialize YAML-based project settings.
@@ -307,6 +328,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._qmmm_settings = qmmm_settings
 
     def opt_settings(self):
         return self._opt_settings
@@ -334,6 +356,9 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
 
     def wbi_settings(self):
         return self._wbi_settings
+
+    def qmmm_settings(self):
+        return self._qmmm_settings
 
     @classmethod
     def from_yaml(cls, filename):
@@ -382,6 +407,7 @@ class YamlGaussianProjectSettingsBuilder:
         sp_settings = self._project_settings_for_job(jobtype="sp")
         td_settings = self._project_settings_for_job(jobtype="td")
         wbi_settings = self._project_settings_for_job(jobtype="wbi")
+        qmmm_settings = self._project_settings_for_job(jobtype="qmmm")
 
         # Create the project settings instance
         project_settings = YamlGaussianProjectSettings(
@@ -394,6 +420,7 @@ class YamlGaussianProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            qmmm_settings=qmmm_settings,
         )
 
         # Set project name from filename and return
@@ -423,7 +450,8 @@ class YamlGaussianProjectSettingsBuilder:
             jobtype (str): Type of job (opt, ts, irc, td, etc.).
 
         Returns:
-            GaussianJobSettings: Configured settings for the specified job type.
+            GaussianJobSettings: Configured
+            settings for the specified job type.
 
         Raises:
             RuntimeError: If configuration for the job type is not found.
@@ -432,6 +460,7 @@ class YamlGaussianProjectSettingsBuilder:
         settings_mapping = {
             "irc": GaussianIRCJobSettings,
             "td": GaussianTDDFTJobSettings,
+            "qmmm": GaussianQMMMJobSettings,
         }
 
         try:

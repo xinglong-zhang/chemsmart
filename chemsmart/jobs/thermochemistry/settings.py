@@ -21,7 +21,8 @@ class ThermochemistryJobSettings:
 
     Attributes:
         temperature (float | None): Temperature in Kelvin.
-        concentration (float | None): Concentration for solution-phase corrections.
+        concentration (float | None): Concentration
+        for solution-phase corrections.
         pressure (float): Pressure in atm (default 1.0).
         use_weighted_mass (bool): Use mass-weighted scheme when True.
         alpha (int): Scaling factor for QRRHO corrections.
@@ -31,7 +32,8 @@ class ThermochemistryJobSettings:
         energy_units (str): Energy unit label (e.g., 'hartree', 'kcal/mol').
         outputfile (str | None): Path to write thermochemistry results.
         overwrite (bool): Overwrite existing output when True.
-        check_imaginary_frequencies (bool): Validate absence of imaginary modes.
+        check_imaginary_frequencies (bool):
+        Validate absence of imaginary modes.
         write_header (bool): Write header to output file when True.
     """
 
@@ -67,7 +69,8 @@ class ThermochemistryJobSettings:
             outputfile (str, optional): Path to output file
             overwrite (bool): Whether to overwrite existing output files
             check_imaginary_frequencies (bool): Check for imaginary frequencies
-            write_header (bool): Whether to write header to output file (default: True)
+            write_header (bool): Whether to write
+            header to output file (default: True)
         """
         logger.debug("Initializing ThermochemistryJobSettings")
         self.temperature = temperature
