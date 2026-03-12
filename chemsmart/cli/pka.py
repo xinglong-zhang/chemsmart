@@ -300,6 +300,67 @@ def click_pka_analyze_options(f):
     return f
 
 
+def build_per_entry_subcommands(
+    ctx, filepath, charge, multiplicity, proton_index
+):
+    """Build a per-entry subcommand list for ``chemsmart sub`` batch mode.
+
+    When ``chemsmart sub gaussian … pka … batch`` (or its ORCA equivalent)
+    is used, each submitted cluster job should process **only its own CSV
+    entry**, not re-run the entire batch.  This helper deep-copies the
+    recorded subcommand chain and patches it so the reconstructed CLI
+    becomes the equivalent of::
+
+        chemsmart run gaussian -f <filepath> -c <charge> -m <mult> \\
+            pka -pi <proton_index> <shared pka options…>
+
+    i.e. the single-molecule ``pka`` path (``invoke_without_command``
+    falls through to ``submit``).
+
+    Args:
+        ctx: Click context whose ``ctx.obj["subcommand"]`` contains the
+            full subcommand chain recorded by ``MyGroup``/``MyCommand``.
+        filepath: Per-entry molecule file path.
+        charge: Per-entry charge.
+        multiplicity: Per-entry multiplicity.
+        proton_index: Per-entry proton index.
+
+    Returns:
+        list[dict]: Patched subcommand chain suitable for
+        ``CtxObjArguments.reconstruct_command_line()``.
+    """
+    import copy
+
+    subcommands = copy.deepcopy(ctx.obj["subcommand"])
+
+    # ── 1. Patch the backend ("gaussian" or "orca") entry ──
+    for cmd in subcommands:
+        if cmd["name"] in ("gaussian", "orca"):
+            kw = cmd["kwargs"]
+            if "filename" in kw:
+                kw["filename"]["value"] = filepath
+            if "charge" in kw:
+                kw["charge"]["value"] = charge
+            if "multiplicity" in kw:
+                kw["multiplicity"]["value"] = multiplicity
+            break
+
+    # ── 2. Patch the "pka" group entry ──
+    for cmd in subcommands:
+        if cmd["name"] == "pka":
+            kw = cmd["kwargs"]
+            if "proton_index" in kw:
+                kw["proton_index"]["value"] = proton_index
+            break
+
+    # ── 3. Remove the "batch" command ──
+    # Without "batch" in the chain, `pka` will be invoked without a
+    # subcommand, which triggers `ctx.invoke(submit, …)` automatically.
+    subcommands = [cmd for cmd in subcommands if cmd["name"] != "batch"]
+
+    return subcommands
+
+
 def resolve_proton_index(filename, proton_index, color_code):
     if proton_index is not None:
         return proton_index, None

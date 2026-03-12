@@ -22,6 +22,7 @@ import click
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.pka import (
+    build_per_entry_subcommands,
     click_pka_proton_options,
     click_pka_shared_options,
     click_pka_submit_options,
@@ -366,17 +367,28 @@ def batch(ctx, skip_completed, parallel, **kwargs):
             f"charge={entry.charge}, mult={entry.multiplicity}"
         )
 
-        jobs.append(
-            GaussianpKaJob(
-                molecule=molecule,
-                settings=pka_settings,
-                label=label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                parallel=parallel,
-                **kwargs,
-            )
+        job = GaussianpKaJob(
+            molecule=molecule,
+            settings=pka_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            parallel=parallel,
+            **kwargs,
         )
+
+        # Build per-entry subcommand override so that `chemsmart sub`
+        # generates a run script that processes ONLY this entry instead
+        # of re-running the entire batch CSV.
+        job._batch_subcommands_override = build_per_entry_subcommands(
+            ctx,
+            filepath=filepath,
+            charge=int(entry.charge),
+            multiplicity=int(entry.multiplicity),
+            proton_index=int(entry.proton_index),
+        )
+
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from table")
     return jobs

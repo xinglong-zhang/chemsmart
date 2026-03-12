@@ -22,6 +22,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.pka import (
+    build_per_entry_subcommands,
     click_pka_proton_options,
     click_pka_shared_options,
     click_pka_submit_options,
@@ -371,6 +372,17 @@ def batch(ctx, skip_completed, parallel, **kwargs):
                 parallel=parallel,
                 **kwargs,
             )
+        )
+
+        # Build per-entry subcommand override so that `chemsmart sub`
+        # generates a run script that processes ONLY this entry instead
+        # of re-running the entire batch CSV.
+        jobs[-1]._batch_subcommands_override = build_per_entry_subcommands(
+            ctx,
+            filepath=filepath,
+            charge=int(entry.charge),
+            multiplicity=int(entry.multiplicity),
+            proton_index=int(entry.proton_index),
         )
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")

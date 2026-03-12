@@ -156,9 +156,19 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         Get cli args that reconstruct the command line.
 
         Rebuilds the command-line arguments from the context object
-        for job submission purposes.
+        for job submission purposes.  When a job carries a
+        ``_batch_subcommands_override`` (set by batch commands),
+        those per-entry subcommands are used instead of the global
+        context, so each submitted script processes only its own entry.
         """
-        commands = ctx.obj["subcommand"]
+        commands = (
+            job._batch_subcommands_override
+            if (
+                hasattr(job, "_batch_subcommands_override")
+                and job._batch_subcommands_override is not None
+            )
+            else ctx.obj["subcommand"]
+        )
 
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
