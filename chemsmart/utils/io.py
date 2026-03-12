@@ -579,3 +579,31 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
         )
 
     return mols
+
+
+def resolve_output_path(input_file, output_file):
+    """Return *output_file* unchanged, unless it would overwrite *input_file*.
+
+    When both paths resolve to the same file, a numeric suffix (``_1``, ``_2``,
+    …) is appended and a warning is logged.
+    """
+    in_path = os.path.abspath(input_file)
+    out_path = os.path.abspath(output_file)
+
+    if in_path != out_path:
+        return out_path, False
+
+    # Split file name and extension
+    basename = os.path.basename(output_file)
+    dir_name = os.path.dirname(out_path)
+    stem, suffix = os.path.splitext(basename)
+
+    counter = 1
+    while True:
+        candidate = os.path.join(dir_name, f"{stem}_{counter}{suffix}")
+        if (
+            not os.path.exists(candidate)
+            and os.path.abspath(candidate) != in_path
+        ):
+            return candidate, True
+        counter += 1
