@@ -70,9 +70,9 @@ class DatabaseQuery:
     _TABLE_COLUMNS = [
         ("Idx", "record_index", 4, ">"),
         ("Record ID", "record_id", 16, "<"),
-        ("Formula", "chemical_formula", 12, "<"),
+        ("Formula", "chemical_formula", 16, "<"),
         ("Program", "program", 8, "<"),
-        ("Functional", "functional", 10, "<"),
+        ("Functional", "functional", 20, "<"),
         ("Basis", "basis", 12, "<"),
         ("Total Energy (Eh)", "total_energy", 16, ">"),
     ]
@@ -203,8 +203,8 @@ class DatabaseQuery:
         matched_count = len(summaries)
 
         # Build header
-        separator1 = "=" * 3 + " Query Summary " + "=" * 66
-        separator2 = "=" * 84
+        separator1 = "=" * 3 + " Query Summary " + "=" * 80
+        separator2 = "=" * 98
         header_lines = [
             separator1,
             f"DB      : {db_name}",
