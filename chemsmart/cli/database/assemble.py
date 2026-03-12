@@ -1,4 +1,3 @@
-import functools
 import logging
 import os
 
@@ -6,6 +5,7 @@ import click
 
 from chemsmart.assembler.assemble import SingleFileAssembler
 from chemsmart.assembler.database import Database
+from chemsmart.cli.job import click_output_folder_options
 from chemsmart.io.folder import BaseFolder
 from chemsmart.utils.cli import MyCommand
 
@@ -14,54 +14,28 @@ from .database import database
 logger = logging.getLogger(__name__)
 
 
-def click_assemble_options(f):
-    """
-    Common click options for database assemble.
-    """
-
-    @click.option(
-        "-d",
-        "--directory",
-        default=".",
-        show_default=True,
-        help="Directory containing calculation output files.",
-    )
-    @click.option(
-        "-t",
-        "--filetype",
-        type=click.Choice(["gaussian", "orca"], case_sensitive=False),
-        required=True,
-        help="Type of calculation output files to assemble.",
-    )
-    @click.option(
-        "-i",
-        "--index",
-        default=":",
-        show_default=True,
-        help="Index (1-based) of the molecule to extract from multi-molecule files.",
-    )
-    @click.option(
-        "-o",
-        "--output",
-        type=str,
-        default="database.db",
-        show_default=True,
-        help="Output database file (.db extension). ",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
-
-
 @database.command(cls=MyCommand)
-@click_assemble_options
+@click_output_folder_options
+@click.option(
+    "-i",
+    "--index",
+    default=":",
+    show_default=True,
+    help="Index (1-based) of the molecule to extract from multi-molecule files.",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=str,
+    default="database.db",
+    show_default=True,
+    help="Output database file (.db extension). ",
+)
 @click.pass_context
 def assemble(
     ctx,
     directory,
-    filetype,
+    program,
     index,
     output,
 ):
@@ -71,35 +45,42 @@ def assemble(
     directory and assembles them into a unified SQLite database (.db).
 
     Example usage:
-    chemsmart run database assemble -d results/ -t gaussian -o database.db
+    chemsmart run database assemble -d results/ -p gaussian -o database.db
     """
 
     # Ensure the output filename ends with .db
-    if not output.endswith(".db"):
+    if not output.lower().endswith(".db"):
         output = output + ".db"
 
+    if directory is None:
+        directory = "./"
     directory = os.path.abspath(directory)
     if not os.path.isdir(directory):
         raise FileNotFoundError(f"Directory does not exist: {directory}")
 
+    if program is None:
+        raise ValueError(
+            "Program must be specified with -p or --program option"
+        )
+
     # Collect available output files
-    if filetype.lower() in {"gaussian", "orca"}:
+    if program.lower() in {"gaussian", "orca"}:
         folder = BaseFolder(folder=directory)
         files = folder.get_all_output_files_in_current_folder_and_subfolders_by_program(
-            program=filetype.lower()
+            program=program.lower()
         )
     else:
         raise ValueError(
-            f"Unsupported filetype '{filetype}'. Use 'gaussian' or 'orca'."
+            f"Unsupported program '{program}'. Use 'gaussian' or 'orca'."
         )
 
     if not files:
         logger.error(
-            f"No {filetype} output files found in directory: {directory}"
+            f"No {program} output files found in directory: {directory}"
         )
         return None
 
-    logger.info(f"Found {len(files)} {filetype} files, assembling...")
+    logger.info(f"Found {len(files)} {program} files, assembling...")
 
     # Parse all collected files
     rows = []
@@ -119,6 +100,6 @@ def assemble(
     # Write to SQLite database
     db = Database(db_file=output)
     db.create()
-    count = db.insert_records(rows, program=filetype.lower())
+    count = db.insert_records(rows, program=program.lower())
     logger.info(f"Assembled {count} record(s) into database: {output}")
     return None
