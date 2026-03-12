@@ -157,3 +157,18 @@ pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
 # version release
 version_pattern = r'(version\s*=\s*")[^"]+(")'
 release_pattern = r'(release\s*=\s*")[^"]+(")'
+
+
+# Database query patterns
+# Matches a single condition: field  operator  value
+# value is either a quoted string ('…' or "…") or a bare numeric token.
+query_condition_pattern = (
+    r"(\w+)"  # field name
+    r"\s*(==|<=|>=|!=|~|<|>|=)\s*"  # operator
+    r"('(?:[^'\\]|\\.)*'"  # single-quoted string value
+    r'|"(?:[^"\\]|\\.)*"'  # double-quoted string value
+    r"|[\w.+\-]+)"  # bare numeric / identifier value
+)
+
+# Split on AND / OR while keeping the keyword
+query_logic_split_pattern = r"\s+(AND|OR)\s+"

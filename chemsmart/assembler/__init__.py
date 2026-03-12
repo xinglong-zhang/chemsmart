@@ -6,6 +6,7 @@ from .assemble import (
 )
 from .database import Database
 from .export import DataExporter
+from .query import DatabaseQuery
 from .records import AssembledRecord
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "SingleFileAssembler",
     "AssembledRecord",
     "Database",
+    "DatabaseQuery",
     "DataExporter",
 ]
