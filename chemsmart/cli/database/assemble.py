@@ -58,29 +58,35 @@ def assemble(
     if not os.path.isdir(directory):
         raise FileNotFoundError(f"Directory does not exist: {directory}")
 
-    if program is None:
-        raise ValueError(
-            "Program must be specified with -p or --program option"
-        )
-
     # Collect available output files
-    if program.lower() in {"gaussian", "orca"}:
-        folder = BaseFolder(folder=directory)
-        files = folder.get_all_output_files_in_current_folder_and_subfolders_by_program(
-            program=program.lower()
-        )
+    supported_programs = {"gaussian", "orca"}
+    if program is None:
+        programs = supported_programs
+    elif program.lower() in supported_programs:
+        programs = {program.lower()}
     else:
         raise ValueError(
             f"Unsupported program '{program}'. Use 'gaussian' or 'orca'."
         )
+    folder = BaseFolder(folder=directory)
+    files = []
+    for prog in programs:
+        files.extend(
+            folder.get_all_output_files_in_current_folder_and_subfolders_by_program(
+                program=prog
+            )
+        )
 
     if not files:
         logger.error(
-            f"No {program} output files found in directory: {directory}"
+            f"No {', '.join(programs)} output files found in directory: {directory}"
         )
         return None
 
-    logger.info(f"Found {len(files)} {program} files, assembling...")
+    if program is None:
+        logger.info(f"Found {len(files)} output files, assembling...")
+    else:
+        logger.info(f"Found {len(files)} {program} files, assembling...")
 
     # Parse all collected files
     rows = []
@@ -100,6 +106,6 @@ def assemble(
     # Write to SQLite database
     db = Database(db_file=output)
     db.create()
-    count = db.insert_records(rows, program=program.lower())
+    count = db.insert_records(rows)
     logger.info(f"Assembled {count} record(s) into database: {output}")
     return None

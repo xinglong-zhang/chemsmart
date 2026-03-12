@@ -182,19 +182,18 @@ class Database:
     def insert_record(
         self,
         record,
-        program,
         conn=None,
     ):
         """Insert a single record into the database.
 
         Args:
             record: The record to insert (AssembledRecord or dict).
-            program: The program used for the calculation (e.g., 'gaussian', 'orca').
             conn: Optional existing database connection.
         """
         record_dict = record_to_dict(record)
         record_dict = convert_numpy(record_dict)
 
+        program = record_dict.get("provenance", {}).get("program", "unknown")
         close_conn = False
         if conn is None:
             conn = sqlite3.connect(self.db_file)
@@ -367,12 +366,11 @@ class Database:
                 ),
             )
 
-    def insert_records(self, records, program):
+    def insert_records(self, records):
         """Insert multiple records into the database.
 
         Args:
             records: List of records to insert.
-            program: The program used for the calculations.
 
         Returns:
             Number of records successfully inserted.
@@ -382,7 +380,7 @@ class Database:
         try:
             for record in records:
                 try:
-                    self.insert_record(record, program, conn)
+                    self.insert_record(record, conn)
                     count += 1
                 except Exception as e:
                     logger.error(f"Failed to insert record: {e}")

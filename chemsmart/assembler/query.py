@@ -185,10 +185,7 @@ class DatabaseQuery:
         try:
             for record in records:
                 try:
-                    program = record.get("provenance", {}).get(
-                        "program", "unknown"
-                    )
-                    out_db.insert_record(record, program=program, conn=conn)
+                    out_db.insert_record(record, conn=conn)
                     count += 1
                 except Exception as e:
                     logger.error(f"Failed to export record: {e}")
