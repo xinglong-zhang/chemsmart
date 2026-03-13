@@ -13,6 +13,7 @@ from chemsmart.io.orca.output import (
     ORCAEngradFile,
     ORCANEBOutput,
     ORCAOutput,
+    ORCApKaOutput,
     ORCAQMMMOutput,
 )
 from chemsmart.io.orca.route import ORCARoute
@@ -3162,3 +3163,127 @@ class TestORCANEBJobSettings:
             assert (
                 settings1 != settings2
             ), f"Equality failed for attribute: {attr}"
+
+
+class TestORCApKaOutput:
+    """Tests for ORCApKaOutput using ORCATests pKa fixtures from outputs/."""
+
+    # Reference values from tests/data/ORCATests/outputs/combined.dat
+    L2_HA_E = -1101.598928
+    L2_HA_QH_G = -1101.324870
+    L2_A_E = -1101.075761
+    L2_A_QH_G = -1100.815285
+
+    PHENOL_HB_E = -307.111134
+    PHENOL_HB_QH_G = -307.031069
+    PHENOL_B_E = -306.533586
+    PHENOL_B_QH_G = -306.467527
+
+    L2_HA_SP_E = -1101.625867
+    L2_A_SP_E = -1101.157126
+    PHENOL_HB_SP_E = -307.121330
+    PHENOL_B_SP_E = -306.628244
+
+    EXPECTED_DG_AU = -0.02392099999997299
+    EXPECTED_DG_KCAL = -15.010654129046468
+
+    @staticmethod
+    def _p(*parts):
+        return os.path.join(*parts)
+
+    def _files(self, orca_outputs_directory):
+        return {
+            "ha_gas": self._p(orca_outputs_directory, "L2_ts1_opt_pka_HA.out"),
+            "a_gas": self._p(orca_outputs_directory, "L2_ts1_opt_pka_A.out"),
+            "hb_gas": self._p(orca_outputs_directory, "phenol_pka_HB.out"),
+            "b_gas": self._p(orca_outputs_directory, "phenol_pka_B.out"),
+            "ha_solv": self._p(
+                orca_outputs_directory, "L2_ts1_opt_pka_HA_sp.out"
+            ),
+            "a_solv": self._p(
+                orca_outputs_directory, "L2_ts1_opt_pka_A_sp.out"
+            ),
+            "hb_solv": self._p(orca_outputs_directory, "phenol_pka_HB_sp.out"),
+            "b_solv": self._p(orca_outputs_directory, "phenol_pka_B_sp.out"),
+        }
+
+    def test_init_with_default_settings(self, orca_outputs_directory):
+        files = self._files(orca_outputs_directory)
+        output = ORCApKaOutput(filename=files["ha_gas"])
+        assert output.filename == files["ha_gas"]
+        assert output.temperature == 298.15
+        assert output.concentration == 1.0
+        assert output.energy_units == "hartree"
+
+    def test_electronic_energy_and_qh_gibbs_match_combined_dat(
+        self, orca_outputs_directory
+    ):
+        files = self._files(orca_outputs_directory)
+
+        ha = ORCApKaOutput(filename=files["ha_gas"])
+        a = ORCApKaOutput(filename=files["a_gas"])
+        hb = ORCApKaOutput(filename=files["hb_gas"])
+        b = ORCApKaOutput(filename=files["b_gas"])
+
+        assert np.isclose(
+            ha.electronic_energy_in_units, self.L2_HA_E, rtol=1e-8
+        )
+        assert np.isclose(ha.qh_gibbs_free_energy, self.L2_HA_QH_G, rtol=1e-8)
+
+        assert np.isclose(a.electronic_energy_in_units, self.L2_A_E, rtol=1e-8)
+        assert np.isclose(a.qh_gibbs_free_energy, self.L2_A_QH_G, rtol=1e-8)
+
+        assert np.isclose(
+            hb.electronic_energy_in_units, self.PHENOL_HB_E, rtol=1e-8
+        )
+        assert np.isclose(
+            hb.qh_gibbs_free_energy, self.PHENOL_HB_QH_G, rtol=1e-8
+        )
+
+        assert np.isclose(
+            b.electronic_energy_in_units, self.PHENOL_B_E, rtol=1e-8
+        )
+        assert np.isclose(
+            b.qh_gibbs_free_energy, self.PHENOL_B_QH_G, rtol=1e-8
+        )
+
+    def test_compute_pka_uses_requested_files(self, orca_outputs_directory):
+        files = self._files(orca_outputs_directory)
+
+        result = ORCApKaOutput.compute_pka(
+            ha_gas_file=files["ha_gas"],
+            a_gas_file=files["a_gas"],
+            href_gas_file=files["hb_gas"],
+            ref_gas_file=files["b_gas"],
+            ha_solv_file=files["ha_solv"],
+            a_solv_file=files["a_solv"],
+            href_solv_file=files["hb_solv"],
+            ref_solv_file=files["b_solv"],
+            pka_reference=6.75,
+            temperature=298.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        # Solvent SP energies should match values in combined.dat
+        assert np.isclose(result["E_solv_HA_au"], self.L2_HA_SP_E, rtol=1e-8)
+        assert np.isclose(result["E_solv_A_au"], self.L2_A_SP_E, rtol=1e-8)
+        assert np.isclose(
+            result["E_solv_HRef_au"], self.PHENOL_HB_SP_E, rtol=1e-8
+        )
+        assert np.isclose(
+            result["E_solv_Ref_au"], self.PHENOL_B_SP_E, rtol=1e-8
+        )
+
+        # Thermodynamic-cycle energy from combined.dat-derived constants
+        # (combined.dat stores rounded values, so allow a small tolerance)
+        assert np.isclose(
+            result["delta_G_soln_au"], self.EXPECTED_DG_AU, atol=5e-7
+        )
+        assert np.isclose(
+            result["delta_G_soln_kcal_mol"], self.EXPECTED_DG_KCAL, atol=5e-4
+        )
+
+        # Sanity: pKa field is finite and reflects reference + delta
+        assert np.isfinite(result["pKa"])
