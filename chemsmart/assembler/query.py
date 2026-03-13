@@ -152,16 +152,24 @@ class DatabaseQuery:
         return " ".join(clause_parts), tuple(params)
 
     def query(self):
-        """Return full records matching *query_string*."""
-        where_clause, params = self.parse_query()
+        """Return full records matching *query_string*, or all records if no query."""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
-            sql = (
-                "SELECT DISTINCT r.* FROM records r "
-                "LEFT JOIN molecules m ON r.record_id = m.record_id "
-                f"WHERE {where_clause} ORDER BY r.record_index"
-            )
+            if self.query_string:
+                where_clause, params = self.parse_query()
+                sql = (
+                    "SELECT DISTINCT r.* FROM records r "
+                    "LEFT JOIN molecules m ON r.record_id = m.record_id "
+                    f"WHERE {where_clause} ORDER BY r.record_index"
+                )
+            else:
+                params = ()
+                sql = (
+                    "SELECT DISTINCT r.* FROM records r "
+                    "LEFT JOIN molecules m ON r.record_id = m.record_id "
+                    "ORDER BY r.record_index"
+                )
             rows = conn.execute(sql, params).fetchall()
             db = Database(self.db_file)
             return [db._row_to_full_record(conn, dict(row)) for row in rows]
@@ -169,12 +177,16 @@ class DatabaseQuery:
             conn.close()
 
     def query_summaries(self):
-        """Return lightweight summaries for records matching *query_string*."""
-        where_clause, params = self.parse_query()
+        """Return lightweight summaries matching *query_string*, or all records if no query."""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
-            sql = f"{self._SUMMARY_SQL} WHERE {where_clause} ORDER BY r.record_index"
+            if self.query_string:
+                where_clause, params = self.parse_query()
+                sql = f"{self._SUMMARY_SQL} WHERE {where_clause} ORDER BY r.record_index"
+            else:
+                params = ()
+                sql = f"{self._SUMMARY_SQL} ORDER BY r.record_index"
             rows = conn.execute(sql, params).fetchall()
             return [dict(row) for row in rows]
         finally:

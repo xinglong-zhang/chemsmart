@@ -27,10 +27,11 @@ def click_query_options(f):
         "-q",
         "--query",
         type=str,
-        required=True,
+        default=None,
         help=(
             "Query expression. "
-            "Supported operators: <, <=, >, >=, =, !=, ~ "
+            "If omitted, all records are shown. "
+            "Supported operators: <, <=, >, >=, =, !=, ~. "
             "Logical: AND, OR. "
             "Example: \"fmo_gap < 7 AND program = 'gaussian'\""
         ),
@@ -56,7 +57,8 @@ def query(ctx, file, query, output):
     """Query records from a chemsmart database.
 
     Filter records using a query expression and optionally export the
-    matching subset to a new database file.
+    matching subset to a new database file. If no query is provided,
+    all records are displayed.
 
     Supported logical operators: AND, OR
 
@@ -69,8 +71,9 @@ def query(ctx, file, query, output):
 
     \b
     Examples:
-        chemsmart run database query -f my.db -q "fmo_gap < 7 AND program = 'gaussian'"
+        chemsmart run database query -f my.db
         chemsmart run database query -f my.db -q "chemical_formula = 'CO2'" -o co2.db
+        chemsmart run database query -f my.db -q "fmo_gap < 7 AND program = 'gaussian'"
         chemsmart run database query -f my.db -q "source_file ~ 'benzene'"
     """
     # Validate input database
