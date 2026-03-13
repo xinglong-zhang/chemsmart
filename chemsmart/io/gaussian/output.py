@@ -2760,7 +2760,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 ha_gas_file="5PQ_Me_ts1_no_pd_opt.log",
                 a_gas_file="5PQ_Me_ts1_b_no_pd_opt.log",
                 href_gas_file="collidine-H_opt.log",
-                b_gas_file="collidine_opt.log",
+                ref_gas_file="collidine_opt.log",
                 ha_solv_file="5PQ_Me_ts1_no_pd_opt_sp_smd.log",
                 a_solv_file="5PQ_Me_ts1_b_no_pd_opt_sp_smd.log",
                 href_solv_file="collidine-H_opt_sp_smd.log",
@@ -2889,7 +2889,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
         ha_gas_file,
         a_gas_file,
         href_gas_file,
-        b_gas_file,
+        ref_gas_file,
         ha_solv_file,
         a_solv_file,
         href_solv_file,
@@ -2911,7 +2911,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
             a_gas_file (str): Path to A⁻ gas-phase optimization+freq output file.
             href_gas_file (str): Path to HB gas-phase optimization+freq output file.
-            b_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
+            ref_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
             ha_solv_file (str): Path to HA solvent single-point output file.
             a_solv_file (str): Path to A⁻ solvent single-point output file.
             href_solv_file (str): Path to HB solvent single-point output file.
@@ -2941,7 +2941,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             ha_gas_file=ha_gas_file,
             a_gas_file=a_gas_file,
             href_gas_file=href_gas_file,
-            ref_gas_file=b_gas_file,
+            ref_gas_file=ref_gas_file,
             ha_solv_file=ha_solv_file,
             a_solv_file=a_solv_file,
             href_solv_file=href_solv_file,

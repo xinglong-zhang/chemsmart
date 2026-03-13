@@ -2740,7 +2740,7 @@ class TestGaussian16pKaOutput:
             ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
             a_gas_file=gaussian_pKa_A_optimization_outputfile,
             href_gas_file=gaussian_pKa_HB_optimization_outputfile,
-            b_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ref_gas_file=gaussian_pKa_B_optimization_outputfile,
             ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
             a_solv_file=gaussian_pKa_A_single_point_outputfile,
             href_solv_file=gaussian_pKa_HB_single_point_outputfile,
