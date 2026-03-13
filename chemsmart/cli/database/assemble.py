@@ -106,6 +106,12 @@ def assemble(
     # Write to SQLite database
     db = Database(db_file=output)
     db.create()
-    count = db.insert_records(rows)
-    logger.info(f"Assembled {count} record(s) into database: {output}")
+    attempted = db.insert_records(rows)
+    actual = db.count_records()
+    if attempted != actual:
+        logger.warning(
+            f"Processed {attempted} file(s), but only {actual} unique record(s) "
+            f"were stored (duplicates were replaced)."
+        )
+    logger.info(f"Assembled {actual} record(s) into database: {output}")
     return None
