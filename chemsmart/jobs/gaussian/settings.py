@@ -691,6 +691,14 @@ class GaussianJobSettings(MolecularJobSettings):
                     f"Using custom solvent with model: {solvent_model}, "
                     f"ID: {solvent_id}"
                 )
+            if self.additional_solvent_options is not None:
+                route_string += f",{self.additional_solvent_options})"
+                logger.debug(
+                    f"Added additional solvent options: "
+                    f"{self.additional_solvent_options}"
+                )
+            else:
+                route_string += ")"
         elif (
             self.solvent_model is not None and self.solvent_id is not None
         ):  # solvation is turned on
@@ -717,7 +725,7 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"{self.solvent_model}, solvent_id: {self.solvent_id}"
             )
             raise ValueError(
-                f"Both solvent model (via -sm or --solvent-model)"
+                f"Both solvent model (via -sm or --solvent-model) "
                 f"and solvent ID (via -si or --solvent-id) "
                 f"need to be specified.\n"
                 f"Currently, solvent model is {self.solvent_model} and "
