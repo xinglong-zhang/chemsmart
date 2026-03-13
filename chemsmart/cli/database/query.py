@@ -65,12 +65,13 @@ def query(ctx, file, query, output):
     Supported fields: record_id, program, functional, basis, jobtype,
     solvent_on, charge, multiplicity, chemical_formula, smiles,
     number_of_atoms, total_energy, homo_energy, lumo_energy, fmo_gap,
-    zero_point_energy, enthalpy, entropy, gibbs_free_energy
+    zero_point_energy, enthalpy, entropy, gibbs_free_energy, source_file
 
     \b
     Examples:
         chemsmart run database query -f my.db -q "fmo_gap < 7 AND program = 'gaussian'"
         chemsmart run database query -f my.db -q "chemical_formula = 'CO2'" -o co2.db
+        chemsmart run database query -f my.db -q "source_file ~ 'benzene'"
     """
     # Validate input database
     file = os.path.abspath(file)

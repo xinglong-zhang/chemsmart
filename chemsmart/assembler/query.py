@@ -31,6 +31,7 @@ TABLE_FIELDS = {
         "enthalpy",
         "entropy",
         "gibbs_free_energy",
+        "source_file",
     },
     # molecules table
     "m": {
@@ -61,7 +62,9 @@ class DatabaseQuery:
             r.program,
             r.functional,
             r.basis,
+            r.jobtype,
             r.total_energy,
+            r.source_file,
             m.chemical_formula
         FROM records r
         LEFT JOIN molecules m ON r.record_id = m.record_id
@@ -70,9 +73,11 @@ class DatabaseQuery:
     _TABLE_COLUMNS = [
         ("Idx", "record_index", 4, ">"),
         ("Record ID", "record_id", 16, "<"),
+        ("File", "source_file", 24, "<"),
         ("Formula", "chemical_formula", 16, "<"),
+        ("Job", "jobtype", 6, "<"),
         ("Program", "program", 8, "<"),
-        ("Functional", "functional", 20, "<"),
+        ("Functional", "functional", 32, "<"),
         ("Basis", "basis", 12, "<"),
         ("Total Energy (Eh)", "total_energy", 16, ">"),
     ]
@@ -244,6 +249,8 @@ class DatabaseQuery:
                     text = ""
                 elif key == "record_id":
                     text = str(val)[:width]
+                elif key == "source_file":
+                    text = os.path.basename(str(val))[:width]
                 elif key == "total_energy" and isinstance(val, (int, float)):
                     text = f"{val:.6f}"
                 else:

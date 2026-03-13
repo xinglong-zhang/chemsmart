@@ -16,6 +16,7 @@ from functools import cached_property
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.assembler.records import AssembledRecord
 from chemsmart.assembler.utils import (
+    canonical_geometry_string,
     file_size,
     get_record_id,
     sha256_content,
@@ -69,24 +70,34 @@ class BaseAssembler:
             logger.error(f"No molecules parsed from {self.filename}.")
             return None
 
-        data = {
-            "record_id": get_record_id(self.filename),
-            "meta": self.get_meta_data(),
-            "results": self.get_calculation_results(),
-            "molecules": [],
-            "provenance": build_provenance(self.filename, self.output),
-        }
-
+        meta = self.get_meta_data()
+        results = self.get_calculation_results()
+        provenance = build_provenance(self.filename, self.output)
+        molecules = []
         for i, mol in enumerate(self.molecules_list):
             mol_entry = {"index": i + 1, **self.get_molecule_info(mol)}
-            data["molecules"].append(mol_entry)
+            molecules.append(mol_entry)
+
+        # Use the last molecule (typically the optimized structure) for the ID
+        ref_mol = self.molecules_list[-1]
+        canon_geom = canonical_geometry_string(
+            ref_mol.chemical_symbols, ref_mol.positions
+        )
+        record_id = get_record_id(
+            canonical_geometry=canon_geom,
+            charge=ref_mol.charge,
+            multiplicity=ref_mol.multiplicity,
+            program=provenance.get("program", "unknown"),
+            functional=meta.get("functional", ""),
+            basis=meta.get("basis", ""),
+        )
 
         return AssembledRecord(
-            record_id=data["record_id"],
-            meta=data["meta"],
-            results=data["results"],
-            molecules=data["molecules"],
-            provenance=data["provenance"],
+            record_id=record_id,
+            meta=meta,
+            results=results,
+            molecules=molecules,
+            provenance=provenance,
         )
 
     def get_meta_data(self):

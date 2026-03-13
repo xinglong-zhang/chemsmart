@@ -6,10 +6,61 @@ from pathlib import Path
 import numpy as np
 
 
-def get_record_id(filename):
-    """Generate a stable record ID from filename."""
-    path = Path(filename).resolve()
-    return hashlib.sha256(str(path).encode()).hexdigest()
+def get_record_id(
+    canonical_geometry, charge, multiplicity, program, functional, basis
+):
+    """Generate a stable record ID from molecular identity fields.
+
+    The hash is computed from canonical geometry (sorted symbols + rounded
+    positions), charge, multiplicity, program, functional, and basis set.
+    This ensures that the same calculation always produces the same ID
+    regardless of file path.
+
+    Args:
+        canonical_geometry: String representation of the molecular geometry
+            (e.g. sorted chemical symbols + rounded positions).
+        charge: Molecular charge.
+        multiplicity: Spin multiplicity.
+        program: Computational chemistry program name.
+        functional: DFT functional or method.
+        basis: Basis set.
+
+    Returns:
+        SHA-256 hex digest string.
+    """
+    components = [
+        str(canonical_geometry),
+        str(charge),
+        str(multiplicity),
+        str(program),
+        str(functional),
+        str(basis),
+    ]
+    payload = "|".join(components)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def canonical_geometry_string(chemical_symbols, positions, decimals=6):
+    """Build a canonical string representation of molecular geometry.
+
+    Atoms are sorted by (symbol, x, y, z) so that the representation is
+    invariant to input ordering.
+
+    Args:
+        chemical_symbols: List of element symbols.
+        positions: Nx3 array-like of Cartesian coordinates.
+        decimals: Number of decimal places for coordinate rounding.
+
+    Returns:
+        Canonical geometry string.
+    """
+    rounded = np.round(np.asarray(positions, dtype=float), decimals=decimals)
+    atoms = sorted(zip(chemical_symbols, rounded.tolist()))
+    parts = [
+        f"{sym}:{x:.{decimals}f},{y:.{decimals}f},{z:.{decimals}f}"
+        for sym, (x, y, z) in atoms
+    ]
+    return ";".join(parts)
 
 
 def utcnow_iso():

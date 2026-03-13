@@ -657,14 +657,16 @@ class Database:
             if record_index is not None:
                 cursor = conn.execute(
                     """SELECT record_index, record_id, program, functional, basis, 
-                       jobtype, total_energy, homo_energy, lumo_energy, fmo_gap
+                       jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
+                       source_file
                        FROM records WHERE record_index = ?""",
                     (record_index,),
                 )
             elif record_id is not None:
                 cursor = conn.execute(
                     """SELECT record_index, record_id, program, functional, basis,
-                       jobtype, total_energy, homo_energy, lumo_energy, fmo_gap
+                       jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
+                       source_file
                        FROM records WHERE record_id = ?""",
                     (record_id,),
                 )
@@ -702,7 +704,8 @@ class Database:
         try:
             cursor = conn.execute(
                 """SELECT record_index, record_id, program, functional, basis,
-                   jobtype, total_energy, homo_energy, lumo_energy, fmo_gap
+                   jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
+                   source_file
                    FROM records ORDER BY record_index"""
             )
             rows = cursor.fetchall()
