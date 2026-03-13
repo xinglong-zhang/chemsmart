@@ -43,6 +43,13 @@ def click_query_options(f):
         default=None,
         help="Output database file (.db) for saving matching records. ",
     )
+    @click.option(
+        "-l",
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of records to query.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -53,7 +60,7 @@ def click_query_options(f):
 @database.command(cls=MyCommand)
 @click_query_options
 @click.pass_context
-def query(ctx, file, query, output):
+def query(ctx, file, query, output, limit):
     """Query records from a chemsmart database.
 
     Filter records using a query expression and optionally export the
@@ -76,6 +83,7 @@ def query(ctx, file, query, output):
     \b
     Examples:
         chemsmart run database query -f database.db
+        chemsmart run database query -f database.db -l 10
         chemsmart run database query -f my.db -q "chemical_formula = 'CO2'" -o co2.db
         chemsmart run database query -f my.db -q "fmo_gap < 7 AND program = 'gaussian'"
         chemsmart run database query -f my.db -q "source_file ~ 'benzene'"
@@ -97,7 +105,11 @@ def query(ctx, file, query, output):
                 f"Writing to {os.path.basename(output)} to avoid overwrite."
             )
 
-    dq = DatabaseQuery(file, query, output)
+    if limit is not None:
+        if limit <= 0:
+            raise click.BadParameter("Limit must be a positive integer.")
+
+    dq = DatabaseQuery(file, query, output, limit)
 
     # Run query for summaries (terminal display)
     try:
@@ -109,7 +121,7 @@ def query(ctx, file, query, output):
     # Log query results
     total_count = dq.count_records()
     logger.info(
-        f"Query matched {len(summaries)} of {total_count} record(s) in {os.path.basename(file)}."
+        f"Query returned {len(summaries)} of {total_count} record(s) in {os.path.basename(file)}."
     )
 
     # Print formatted summary
@@ -118,6 +130,6 @@ def query(ctx, file, query, output):
     # Export to new database if requested
     if output is not None and summaries:
         records = dq.query()
-        dq.export_to_db(records, output)
+        dq.export_to_db(records)
 
     return None

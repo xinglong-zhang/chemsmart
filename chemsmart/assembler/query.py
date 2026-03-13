@@ -82,10 +82,19 @@ class DatabaseQuery:
         ("Total Energy (Eh)", "total_energy", 16, ">"),
     ]
 
-    def __init__(self, db_file, query_string, output_file=None):
+    def __init__(self, db_file, query_string, output_file=None, limit=None):
+        """Initialize a database query.
+
+        Args:
+            db_file: Path to the SQLite database file.
+            query_string: Optional query expression to filter records.
+            output_file: Optional output database file path for exporting results.
+            limit: Maximum number of records to query.
+        """
         self.db_file = db_file
         self.query_string = query_string
         self.output_file = output_file
+        self.limit = limit
 
     def parse_query(self):
         """Translate a user query string into a parameterised SQL WHERE clause."""
@@ -170,6 +179,8 @@ class DatabaseQuery:
                     "LEFT JOIN molecules m ON r.record_id = m.record_id "
                     "ORDER BY r.record_index"
                 )
+            if self.limit is not None and self.limit > 0:
+                sql += f" LIMIT {self.limit}"
             rows = conn.execute(sql, params).fetchall()
             db = Database(self.db_file)
             return [db._row_to_full_record(conn, dict(row)) for row in rows]
@@ -187,8 +198,32 @@ class DatabaseQuery:
             else:
                 params = ()
                 sql = f"{self._SUMMARY_SQL} ORDER BY r.record_index"
+            if self.limit is not None and self.limit > 0:
+                sql += f" LIMIT {self.limit}"
             rows = conn.execute(sql, params).fetchall()
             return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    def count_matched_records(self):
+        """Count the number of records matching the query string (ignoring limit).
+
+        Returns:
+            Total number of records matching the query, or total records if no query.
+        """
+        conn = sqlite3.connect(self.db_file)
+        try:
+            if self.query_string:
+                where_clause, params = self.parse_query()
+                sql = (
+                    "SELECT COUNT(DISTINCT r.record_id) FROM records r "
+                    "LEFT JOIN molecules m ON r.record_id = m.record_id "
+                    f"WHERE {where_clause}"
+                )
+                cursor = conn.execute(sql, params)
+            else:
+                cursor = conn.execute("SELECT COUNT(*) FROM records")
+            return cursor.fetchone()[0]
         finally:
             conn.close()
 
@@ -205,12 +240,12 @@ class DatabaseQuery:
         finally:
             conn.close()
 
-    def export_to_db(self, records, output_file):
+    def export_to_db(self, records):
         """Write matching records into a new database."""
-        out_db = Database(db_file=output_file)
+        out_db = Database(db_file=self.output_file)
         out_db.create()
 
-        conn = sqlite3.connect(output_file)
+        conn = sqlite3.connect(self.output_file)
         count = 0
         try:
             for record in records:
@@ -227,7 +262,6 @@ class DatabaseQuery:
     def format_summary(self, summaries):
         """Format complete summary output with header, table, and footer."""
         db_name = os.path.basename(self.db_file)
-        matched_count = len(summaries)
 
         # Build header
         separator1 = "=" * 3 + " Query Summary " + "=" * 120
@@ -235,9 +269,15 @@ class DatabaseQuery:
         header_lines = [
             separator1,
             f"DB      : {db_name}",
-            f"Query   : {self.query_string or '<all>'}",
-            f"Matched : {matched_count} record(s)",
+            f"Total   : {self.count_records()} record(s)",
         ]
+        if self.query_string:
+            header_lines.append(f"Query   : {self.query_string}")
+            header_lines.append(
+                f"Matched : {self.count_matched_records()} record(s)"
+            )
+        if self.limit:
+            header_lines.append(f"Limit   : {self.limit} record(s)")
         if self.output_file:
             output_name = os.path.basename(self.output_file)
             header_lines.append(f"Output  : {output_name}")
