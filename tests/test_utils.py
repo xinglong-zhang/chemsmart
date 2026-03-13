@@ -18,6 +18,7 @@ from chemsmart.utils.utils import (
     content_blocks_by_paragraph,
     convert_string_index_from_1_based_to_0_based,
     get_list_from_string_range,
+    get_range_from_list,
     is_float,
     iterative_compare,
     naturally_sorted,
@@ -128,7 +129,8 @@ class TestUtils:
         ]
 
     def test_get_indices_from_string(self):
-        """Test the conversion of string indices to a list of integers; 1-based indices."""
+        """Test the conversion of string indices
+        to a list of integers; 1-based indices."""
         objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
         s1 = "1:3"  # standard python slicing
         s2 = "1,2,4"
@@ -305,6 +307,78 @@ class TestUtils:
         unique_list6 = iterative_compare(list6)
         assert len(unique_list6) == 2
 
+    def test_get_range_from_list(self):
+        s1 = [1, 2, 3, 5, 6, 7]
+        range = get_range_from_list(s1)
+        assert range == ["1-3", "5-7"]
+
+        s2 = [1, 34, 45, 46, 48, 50]
+        range = get_range_from_list(s2)
+        assert range == ["1", "34", "45-46", "48", "50"]
+
+        s3 = [28, 45, 60, 89]
+        range = get_range_from_list(s3)
+        assert range == ["28", "45", "60", "89"]
+
+        s4 = [
+            18,
+            19,
+            20,
+            21,
+            23,
+            25,
+            27,
+            29,
+            30,
+            31,
+            33,
+            35,
+            37,
+            39,
+            41,
+            43,
+            46,
+            47,
+            48,
+            49,
+            51,
+            53,
+            55,
+            57,
+            61,
+            62,
+            63,
+            64,
+            66,
+            68,
+            70,
+            72,
+        ]
+        range = get_range_from_list(s4)
+        assert range == [
+            "18-21",
+            "23",
+            "25",
+            "27",
+            "29-31",
+            "33",
+            "35",
+            "37",
+            "39",
+            "41",
+            "43",
+            "46-49",
+            "51",
+            "53",
+            "55",
+            "57",
+            "61-64",
+            "66",
+            "68",
+            "70",
+            "72",
+        ]
+
 
 class TestGetListFromStringRange:
     def test_get_list_from_string_range(self):
@@ -363,11 +437,11 @@ class TestGetListFromStringRange:
 
         s3 = "1-9"
         s3_list = str_indices_range_to_list(str_indices=s3)
-        assert s3_list == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert s3_list == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         s4 = "[1-9]"
         s4_list = str_indices_range_to_list(str_indices=s4)
-        assert s4_list == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert s4_list == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         s6 = "2:3"
         s6_list = str_indices_range_to_list(str_indices=s6)
@@ -441,6 +515,261 @@ class TestString2Index1Based:
             string2index_1based("1:x:2")
 
 
+class TestParseIndexSpecification:
+    """Tests for the new unified parse_index_specification function."""
+
+    def test_ase_style_single_indices(self):
+        """Test ASE-style single index specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1") == 0
+        assert parse_index_specification("5") == 4
+        assert parse_index_specification("-1") == -1
+        assert parse_index_specification("-2") == -2
+
+    def test_ase_style_slices(self):
+        """Test ASE-style slice specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Basic slices
+        result = parse_index_specification("1:5")
+        assert isinstance(result, slice)
+        assert result == slice(0, 4)
+
+        # All items
+        result = parse_index_specification(":")
+        assert isinstance(result, slice)
+        assert result == slice(None, None)
+
+        # Open-ended slices
+        result = parse_index_specification("5:")
+        assert result == slice(4, None)
+
+        result = parse_index_specification(":5")
+        assert result == slice(None, 4)
+
+        # With step
+        result = parse_index_specification("::2")
+        assert result == slice(None, None, 2)
+
+        result = parse_index_specification("1:10:2")
+        assert result == slice(0, 9, 2)
+
+    def test_free_format_comma_separated(self):
+        """Test free-format comma-separated specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,3,5") == [0, 2, 4]
+        assert parse_index_specification("1,2,4") == [0, 1, 3]
+
+    def test_free_format_with_negative_indices(self):
+        """Test free-format with negative indices."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,-1") == [0, -1]
+        assert parse_index_specification("1,3,-1") == [0, 2, -1]
+        assert parse_index_specification("2,-2") == [1, -2]
+        assert parse_index_specification("-1,-2") == [-1, -2]
+
+    def test_free_format_hyphen_ranges(self):
+        """Test free-format hyphen-based range specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Simple range (inclusive)
+        assert parse_index_specification("1-5") == [0, 1, 2, 3, 4]
+        assert parse_index_specification("2-4") == [1, 2, 3]
+
+        # Range with brackets
+        assert parse_index_specification("[1-5]") == [0, 1, 2, 3, 4]
+
+    def test_free_format_mixed(self):
+        """Test free-format mixed specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Mix of ranges and individual indices
+        assert parse_index_specification("1-3,5") == [0, 1, 2, 4]
+        assert parse_index_specification("1-3,5,7-9") == [0, 1, 2, 4, 6, 7, 8]
+
+        # Mix with negative indices
+        assert parse_index_specification("1-2,-1") == [0, 1, -1]
+        assert parse_index_specification("1,3-5,-1") == [0, 2, 3, 4, -1]
+
+    def test_invalid_inputs(self):
+        """Test that invalid inputs raise ValueError."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Index 0 is not allowed (1-based indexing)
+        with pytest.raises(ValueError):
+            parse_index_specification("0")
+
+        with pytest.raises(ValueError):
+            parse_index_specification("1,0,3")
+
+    def test_with_actual_lists(self):
+        """Test parse_index_specification with actual list indexing."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+
+        # Single index
+        idx = parse_index_specification("1")
+        assert objects[idx] == "a"
+
+        # Negative index
+        idx = parse_index_specification("-1")
+        assert objects[idx] == "h"
+
+        # Slice
+        idx = parse_index_specification("1:4")
+        assert objects[idx] == ["a", "b", "c"]
+
+        idx = parse_index_specification("1:7:2")
+        assert objects[idx] == ["a", "c", "e"]
+
+        idx = parse_index_specification("1:8:2")
+        assert objects[idx] == ["a", "c", "e", "g"]
+
+        idx = parse_index_specification("::2")
+        assert objects[idx] == ["a", "c", "e", "g"]
+
+        # All
+        idx = parse_index_specification(":")
+        assert objects[idx] == objects
+
+        # Comma-separated
+        idx = parse_index_specification("1,3,5")
+        assert [objects[i] for i in idx] == ["a", "c", "e"]
+
+        # Range
+        idx = parse_index_specification("1-3")
+        assert [objects[i] for i in idx] == ["a", "b", "c"]
+
+        # Mixed with negative
+        idx = parse_index_specification("1,-1")
+        assert [objects[i] for i in idx] == ["a", "h"]
+
+        idx = parse_index_specification("1,3,-1")
+        assert [objects[i] for i in idx] == ["a", "c", "h"]
+
+    def test_duplicate_detection_enabled(self):
+        """Test duplicate detection when allow_duplicates=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test explicit duplicates should fail
+        with pytest.raises(ValueError, match="Index overlap detected"):
+            parse_index_specification(
+                "5,-1", total_count=5, allow_duplicates=False
+            )
+
+    def test_boundary_checking_enabled(self):
+        """Test boundary checking when allow_out_of_range=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test out of range should fail (10
+        # structures, index 11 is out of range)
+        with pytest.raises(
+            ValueError, match="Index 11 is out of range.*10 structures"
+        ):
+            parse_index_specification(
+                "11", total_count=10, allow_out_of_range=False
+            )
+
+        # Test negative out of range should fail (-11 with 10 structures)
+        with pytest.raises(
+            ValueError,
+            match="Negative index -11 is out of range.*10 structures",
+        ):
+            parse_index_specification(
+                "-11", total_count=10, allow_out_of_range=False
+            )
+
+        # Test range extending beyond bounds (8-11 with 10 structures)
+        with pytest.raises(
+            ValueError, match="Index 11 is out of range.*10 structures"
+        ):
+            parse_index_specification(
+                "8-11", total_count=10, allow_out_of_range=False
+            )
+
+    def test_parse_index_duplicate_detection_disabled(self):
+        """Test duplicate detection when allow_duplicates=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test explicit duplicates should fail
+        with pytest.raises(ValueError, match="Index overlap detected"):
+            parse_index_specification(
+                "1,4,-2", total_count=5, allow_duplicates=False
+            )
+
+        # Test negative and positive indices pointing to same structure
+        with pytest.raises(ValueError, match="Index overlap detected"):
+            parse_index_specification(
+                "1,-5", total_count=5, allow_duplicates=False
+            )
+
+    def test_parse_index_duplicate_detection_enabled(self):
+        """Test duplicate detection when allow_duplicates=True."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test duplicates are allowed - should return all indices normalized
+        result = parse_index_specification(
+            "1,4,-2", total_count=5, allow_duplicates=True
+        )
+        # After normalization: [1-1=0, 4-1=3, 5+(-2)=3]
+        assert result == [0, 3, 3]
+
+        # Test negative and positive indices
+        # pointing to same structure are allowed
+        result = parse_index_specification(
+            "1,-5", total_count=5, allow_duplicates=True
+        )
+        # After normalization: [1-1=0, 5+(-5)=0]
+        assert result == [0, 0]
+
+    def test_parse_index_boundary_detection_disabled(self):
+        """Test boundary detection when allow_out_of_range=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test out-of-range positive index should fail
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "8", total_count=5, allow_out_of_range=False
+            )
+
+        # Test out-of-range negative index should fail
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "-6", total_count=5, allow_out_of_range=False
+            )
+
+        # Test range with out-of-bounds indices should fail
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "3-8", total_count=5, allow_out_of_range=False
+            )
+
+    def test_parse_index_boundary_detection_enabled(self):
+        """Test boundary detection when allow_out_of_range=True."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test out-of-range indices are filtered out, valid ones remain
+        result = parse_index_specification(
+            "3,8,2", total_count=5, allow_out_of_range=True
+        )
+        assert result == [
+            2,
+            1,
+        ]  # Only indices 3 and 2 (0-based: 2, 1) are valid, 8 is filtered
+
+        # Test all out-of-range should raise error
+        with pytest.raises(
+            ValueError, match="All specified indices are out of range"
+        ):
+            parse_index_specification(
+                "8,9,10", total_count=5, allow_out_of_range=True
+            )
+
+
 class TestIOUtilities:
     def test_clean_duplicate_structure(self):
         orientations = [
@@ -503,14 +832,17 @@ class TestIOUtilities:
     @pytest.mark.parametrize(
         "line,expected",
         [
-            # Valid: first token int; remaining are proper floats (decimal or exponent)
+            # Valid: first token int; remaining are
+            # proper floats (decimal or exponent)
             ("3 1.0 -2.3 4e-2", True),
             ("0 .5 5. 5.0 -0.3E+2", True),
             ("-1 +.3 -0.5e2", True),
             ("+4  .7", True),
-            # Invalid: remaining tokens are plain integers (assuming your float pattern requires decimal/exponent)
+            # Invalid: remaining tokens are plain integers (assuming
+            # your float pattern requires decimal/exponent)
             ("3 1 2 3", False),
-            # Invalid: not enough floats (only an integer). Recommended behavior = False.
+            # Invalid: not enough floats (only an
+            # integer). Recommended behavior = False.
             ("+4", False),
             ("7   ", False),
             # Invalid: bad first token or malformed floats
@@ -580,7 +912,8 @@ class TestIOUtilities:
         assert clean_label("***") == "star_star_star"
 
         # 3) Leading/trailing underscores after conversion
-        # "*label*" -> "_star_label_star_" -> collapse + strip -> "star_label_star"
+        # "*label*" -> "_star_label_star_" ->
+        # collapse + strip -> "star_label_star"
         assert clean_label("*label*") == "star_label_star"
 
         # 4) Multiple consecutive special characters
@@ -661,7 +994,8 @@ class TestNaturallySorted:
         assert naturally_sorted(input_list) == expected
 
     def test_mixed_types(self):
-        """Test sorting with mixed formats (numbers, letters, and empty strings)."""
+        """Test sorting with mixed formats
+        (numbers, letters, and empty strings)."""
         input_list = ["100", "2", "abc", "", "Z", "z1"]
         expected = ["", "2", "100", "abc", "Z", "z1"]
         assert naturally_sorted(input_list) == expected
@@ -683,7 +1017,8 @@ class TestRunCommand:
     """Tests for the run_command utility function."""
 
     def test_list_command_success(self, mock_popen):
-        """Test running a command provided as a list with successful execution."""
+        """Test running a command provided as
+        a list with successful execution."""
         mock_process = mock_popen.return_value
         mock_process.communicate.return_value = ("dir contents\n", "")
         mock_process.returncode = 0
@@ -698,7 +1033,8 @@ class TestRunCommand:
         )
 
     def test_string_command_success(self, mock_popen):
-        """Test running a command provided as a string with successful execution."""
+        """Test running a command provided as
+        a string with successful execution."""
         mock_process = mock_popen.return_value
         mock_process.communicate.return_value = ("dir contents\n", "")
         mock_process.returncode = 0
@@ -762,7 +1098,8 @@ class TestRunCommand:
 
 
 class TestReturnObjectsAndIndicesFromStringIndex:
-    """Tests for the return_objects_and_indices_from_string_index utility function."""
+    """Tests for the return_objects_and_indices_from_string_index
+    utility function."""
 
     def test_single_index_string(self):
         """Test single index as a string (1-based)."""
@@ -909,7 +1246,8 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         assert result_indices == [1, 3, 5]
 
     def test_specified_indices_5_to_8(self):
-        """Test that specified indices are preserved (e.g., 5:8 gives indices 5,6,7)."""
+        """Test that specified indices are preserved
+        (e.g., 5:8 gives indices 5,6,7)."""
         objects = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
         result_objects, result_indices = (
             return_objects_and_indices_from_string_index(objects, "5:8")

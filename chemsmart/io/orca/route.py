@@ -8,6 +8,7 @@ from chemsmart.io.orca import (
     ORCA_ALL_EXTRAPOLATION_BASIS_SETS,
     ORCA_ALL_FUNCTIONALS,
     ORCA_ALL_JOB_TYPES,
+    ORCA_ALL_QM2_BUILT_IN_METHODS,
     ORCA_ALL_SCF_ALGORITHMS,
     ORCA_SCF_CONVERGENCE,
 )
@@ -33,7 +34,8 @@ class ORCARoute:
         Initialize ORCA route parser.
 
         Args:
-            route_string (str): ORCA route string to parse (e.g., '! B3LYP def2-TZVP')
+            route_string (str): ORCA route string
+            to parse (e.g., '! B3LYP def2-TZVP')
         """
         self.route_string = route_string.lower()
         self.route_inputs = self.route_string.split()
@@ -176,3 +178,27 @@ class ORCARoute:
             if "freq" in route_input:
                 return route_input == "numfreq"
         return False
+
+    @property
+    def qmmm_jobtype(self):
+        for route_keyword in self.route_keywords:
+            if "qm/" in route_keyword or "qmmm" in route_keyword:
+                return route_keyword
+
+    @property
+    def qm_functional(self):
+        return self.functional
+
+    @property
+    def qm_basis(self):
+        return self.basis
+
+    @property
+    def qm2_method(self):
+        # only available when QM2 methods are ORCA built-in methods
+        for route_keyword in self.route_keywords:
+            if "qm" in route_keyword:
+                qmmm_methods = route_keyword.split("/")
+                for method in qmmm_methods:
+                    if method in ORCA_ALL_QM2_BUILT_IN_METHODS:
+                        return method

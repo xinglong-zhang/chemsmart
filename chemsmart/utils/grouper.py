@@ -133,7 +133,8 @@ class MoleculeGrouper(ABC):
         are valid Molecule instances.
 
         Raises:
-            TypeError: If molecules is not iterable or contains non-Molecule items.
+            TypeError: If molecules is not iterable
+            or contains non-Molecule items.
         """
         if not isinstance(self.molecules, Iterable):
             raise TypeError("Molecules must be an iterable collection")
@@ -182,7 +183,8 @@ class RMSDGrouper(MoleculeGrouper):
             group.
         num_procs (int): Inherited; number of worker processes/threads.
         threshold (float): RMSD threshold for grouping molecules.
-        align_molecules (bool): Whether to align molecules before RMSD calculation.
+        align_molecules (bool): Whether to
+        align molecules before RMSD calculation.
         ignore_hydrogens (bool): Whether to exclude hydrogen atoms from RMSD.
     """
 
@@ -389,7 +391,8 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         for i, mol in enumerate(self.molecules):
             pos_np[i] = mol.positions
 
-        # 🏃‍♂️ **2️⃣ Run Parallel RMSD Calculation Using Explicit Shared Memory**
+        # 🏃‍♂️ **2️⃣ Run Parallel RMSD Calculation
+        # Using Explicit Shared Memory**
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
         with multiprocessing.Pool(
             self.num_procs,
@@ -463,25 +466,33 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
     """
-    Groups molecules based on fingerprint similarity using Tanimoto coefficient.
+    Groups molecules based on fingerprint
+    similarity using Tanimoto coefficient.
 
-    This class supports different fingerprint types and uses connected components
+    This class supports different fingerprint
+    types and uses connected components
     clustering to group structurally similar molecules.
 
-    Tanimoto similarity is a measure of how similar two molecular fingerprints are,
+    Tanimoto similarity is a measure of how
+    similar two molecular fingerprints are,
     ranging from 0 (completely different) to 1 (identical).
     Default = 0.9 ensures molecules have a strong structural resemblance while
     allowing minor variations.
 
     Threshold	Effect	Use Case
     0.95 - 1.0	Very strict: Only almost identical molecules are grouped.
-                            Ideal for highly similar molecules (e.g., stereoisomers).
+                            Ideal for highly similar
+                            molecules (e.g., stereoisomers).
     0.80 - 0.95	Moderately strict: Groups structurally similar molecules.
-                            Useful for clustering molecules with minor functional group differences.
-    0.50 - 0.80	More relaxed: Groups molecules with broad structural similarities.
-                            Good for structural analogs or scaffold-based grouping.
+                            Useful for clustering molecules with
+                            minor functional group differences.
+    0.50 - 0.80	More relaxed: Groups molecules
+    with broad structural similarities.
+                            Good for structural analogs
+                            or scaffold-based grouping.
     < 0.50	Very lenient: Even molecules with weak similarity are grouped.
-                            Not recommended unless looking for very broad chemical families.
+                            Not recommended unless looking
+                            for very broad chemical families.
     """
 
     def __init__(
@@ -617,7 +628,8 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
     Hashing choices (see `_get_mol_hash`):
     - If `use_tautomers` is True: `rdMolHash.HashFunction.Tautomer`.
-    - Else if `use_stereochemistry` is True: `rdMolHash.HashFunction.AnonymousGraph`.
+    - Else if `use_stereochemistry` is True:
+    `rdMolHash.HashFunction.AnonymousGraph`.
     - Else: `rdMolHash.HashFunction.MolFormula`.
 
     Attributes:
@@ -738,7 +750,8 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             mol2 (Molecule): Second molecule to compare.
 
         Returns:
-            bool: True if InChIKeys match; False otherwise (including on failure).
+            bool: True if InChIKeys match; False
+            otherwise (including on failure).
         """
         try:
             return Chem.MolToInchiKey(mol1.to_rdkit()) == Chem.MolToInchiKey(
@@ -817,7 +830,8 @@ class ConnectivityGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
-            threshold (float): Buffer for bond cutoff distance. Defaults to 0.0.
+            threshold (float): Buffer for bond
+            cutoff distance. Defaults to 0.0.
             adjust_H (bool): Whether to adjust hydrogen bond detection.
                 Defaults to True.
         """
@@ -949,7 +963,8 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
-            threshold (float): Buffer for bond cutoff distance. Defaults to 0.0.
+            threshold (float): Buffer for bond
+            cutoff distance. Defaults to 0.0.
             adjust_H (bool): Whether to adjust hydrogen bond detection.
                 Defaults to True.
         """

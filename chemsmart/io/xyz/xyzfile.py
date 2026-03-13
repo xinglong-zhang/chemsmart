@@ -83,6 +83,7 @@ class XYZFile(FileMixin):
         all_molecules = []
         comments = []
         i = 0
+        frame_idx = 0  # frame counter across the entire file (assigned to molecules as 1-based)
         while i < len(self.contents):
             # Read number of atoms
             num_atoms = int(self.contents[i].strip())
@@ -97,6 +98,10 @@ class XYZFile(FileMixin):
             coordinate_block = self.contents[i : i + num_atoms]
             i += num_atoms
             molecule = Molecule.from_coordinate_block_text(coordinate_block)
+
+            # Assign frame index (1-based) where the structure appears in file
+            frame_idx += 1
+            setattr(molecule, "structure_index_in_file", frame_idx)
 
             # Store the molecule data
             all_molecules.append(molecule)
@@ -120,9 +125,11 @@ class XYZFile(FileMixin):
             return_list (bool): Whether to return list format
 
         Returns:
-            Molecule or list: Single molecule or list of molecules with energies
+            Molecule or list: Single molecule
+            or list of molecules with energies
         """
-        # Ensure that when return_list=False, molecules is always treated as a list before iteration:
+        # Ensure that when return_list=False, molecules
+        # is always treated as a list before iteration:
         molecules, comments = self._get_molecules_and_comments(
             index=index, return_list=True
         )
@@ -131,12 +138,14 @@ class XYZFile(FileMixin):
         if len(comments) != 0:
             for i, comment in enumerate(comments):
                 # will extract the first float number in the line.
-                # example case 1: "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
+                # example case 1: "Empirical formula:
+                # C191H241Cu2N59O96P14 Energy(Hartree): -25900.214629"
                 # energy will be -25900.214629.
                 match = re.findall(raw_energy_value_pattern, comment)
                 if match:
                     molecules[i].energy = float(match[0])
-                    # Assign energy to the only or the first negative float number
+                    # Assign energy to the only or
+                    # the first negative float number
                 else:
                     # No energy found, skip
                     continue

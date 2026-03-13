@@ -1,7 +1,7 @@
 # Default Gaussian settings for calculations 
 chk: True
 freq: True
-job_type: Null
+jobtype: Null
 title: 'Gaussian job'
 ab_initio: Null  # default value; will get updated by project settings
 functional: Null  # default value; will get updated by project settings

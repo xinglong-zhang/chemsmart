@@ -7,6 +7,11 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.constants import (
+    cal_to_joules,
+    joule_per_mol_to_hartree,
+    kcal_per_mol_to_hartree,
+)
 from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
@@ -19,9 +24,14 @@ from chemsmart.utils.repattern import (
     nm_pattern,
     normal_mode_pattern,
     oniom_energy_pattern,
+    oniom_gridpoint_pattern,
     scf_energy_pattern,
 )
-from chemsmart.utils.utils import safe_min_lengths, string2index_1based
+from chemsmart.utils.utils import (
+    get_range_from_list,
+    safe_min_lengths,
+    string2index_1based,
+)
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
@@ -53,6 +63,7 @@ class Gaussian16Output(GaussianFileMixin):
         """
         Initialize the Gaussian output parser.
         """
+        self._energies = None
         self.filename = filename
         self.use_frozen = use_frozen
         self.include_intermediate = include_intermediate
@@ -142,7 +153,8 @@ class Gaussian16Output(GaussianFileMixin):
                 line_elem = line.split()
                 # return int(line_elem[-1])
                 # # in qmmm, not always last, e.g.,
-                # # Charge =  1 Multiplicity = 2 for low   level calculation on real  system.
+                # # Charge = 1 Multiplicity = 2 for
+                # low level calculation on real system.
                 return int(line_elem[5])
 
     @property
@@ -169,7 +181,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def input_coordinates_block(self):
-        """Obtain the coordinate block from the input that is printed in the outputfile."""
+        """Obtain the coordinate block from the
+        input that is printed in the outputfile."""
         coordinates_block_lines_list = []
         for i, line in enumerate(self.contents):
             if line.startswith("Symbolic Z-matrix:"):
@@ -179,10 +192,13 @@ class Gaussian16Output(GaussianFileMixin):
                     if j_line.split()[0] not in p.PERIODIC_TABLE:
                         if j_line.startswith("Charge ="):
                             logger.debug(f"Skipping line: {j_line}")
-                            # e.g., in QM/MM output files, the first element is not the coordinates information
-                            # e.g., "Charge =  1 Multiplicity = 2 for low   level calculation on real  system."
+                            # e.g., in QM/MM output files, the first
+                            # element is not the coordinates information
+                            # e.g., "Charge = 1 Multiplicity = 2 for
+                            # low level calculation on real system."
                             continue
-                        # elif j_line.startswith("TV"): we still add the line for PBC
+                        # elif j_line.startswith("TV"):
+                        # we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
@@ -191,26 +207,30 @@ class Gaussian16Output(GaussianFileMixin):
     def all_structures(self):
         """
         Obtain all the structures from the output file.
-        Use Standard orientations to get the structures; if not, use input orientations.
+        Use Standard orientations to get the
+        structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
         """
         return self._get_all_molecular_structures()
 
     def _get_all_molecular_structures(self):
         """
-        Build and return the list of Molecule objects parsed from a calculation.
+        Build and return the list of Molecule
+        objects parsed from a calculation.
 
         Selection precedence for orientations:
           1) standard_orientations (+ PBC)
           2) input_orientations   (+ PBC)
 
         Special handling (as per design):
-          - Non-link & normal termination: de-duplicate the terminal (e.g. freq) frame.
+          - Non-link & normal termination:
+          de-duplicate the terminal (e.g. freq) frame.
           - Non-link & abnormal termination: use safe_min_lengths.
           - Link & normal termination: drop the first frame, then behave like
             normal termination (incl. de-dup).
           - Link & abnormal termination:
-              * if multiple frames: drop the first (carry-over), then use safe_min_lengths.
+              * if multiple frames: drop the first
+              (carry-over), then use safe_min_lengths.
               * if single frame: return that only frame (no drop).
 
         Returns
@@ -240,8 +260,10 @@ class Gaussian16Output(GaussianFileMixin):
                 orientations_pbc = orientations_pbc[1:]
             if energies:
                 energies = energies[1:]
-            # Forces do not need to be dropped here because no force computation occurs at the first link job.
-            # This is intentional: the forces array is already aligned with the relevant orientations.
+            # Forces do not need to be dropped here because no
+            # force computation occurs at the first link job.
+            # This is intentional: the forces array is
+            # already aligned with the relevant orientations.
 
         # Helper to keep only the last frame across all arrays
         def keep_last_only():
@@ -255,7 +277,8 @@ class Gaussian16Output(GaussianFileMixin):
             if forces:
                 forces = forces[-1:]
 
-        # Right-trim auxiliaries to the number of orientations (no data loss in orientations)
+        # Right-trim auxiliaries to the number of
+        # orientations (no data loss in orientations)
         def align_lengths_to_orientations():
             nonlocal orientations, orientations_pbc, energies, forces
             n = len(orientations)
@@ -283,9 +306,11 @@ class Gaussian16Output(GaussianFileMixin):
             else:
                 logger.debug("Link job with error termination.")
                 if len(orientations) > 1:
-                    # Multiple frames: drop carried-over first, then treat as abnormal
+                    # Multiple frames: drop carried-over
+                    # first, then treat as abnormal
                     drop_first()
-                    # Fall through to abnormal handling below (safe_min_lengths)
+                    # Fall through to abnormal
+                    # handling below (safe_min_lengths)
                 else:
                     # Single frame available: return it as-is (do NOT drop)
                     frozen_atoms = (
@@ -303,13 +328,15 @@ class Gaussian16Output(GaussianFileMixin):
                         pbc_conditions=self.list_of_pbc_conditions,
                     )
 
-        # 3) De-dup only for normal-termination paths (incl. link-normal after drop)
+        # 3) De-dup only for normal-termination
+        # paths (incl. link-normal after drop)
         if self.normal_termination:
             clean_duplicate_structure(orientations)
             # After dedup, ensure auxiliaries aren't longer than orientations
             align_lengths_to_orientations()
 
-        # 4) Compute safe min length for logging and for abnormal (non-link or link>1-after-drop)
+        # 4) Compute safe min length for logging and
+        # for abnormal (non-link or link>1-after-drop)
         num_structures_to_use = safe_min_lengths(
             orientations, energies, forces
         )
@@ -324,6 +351,15 @@ class Gaussian16Output(GaussianFileMixin):
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
+        # Calculate is_optimized_structure_list
+        is_optimized = [False] * num_structures_to_use
+        if self.optimized_steps_indices and self.include_intermediate:
+            for idx in self.optimized_steps_indices:
+                if 0 <= idx < len(is_optimized):
+                    is_optimized[idx] = True
+        elif self.normal_termination:
+            is_optimized[-1] = True
+
         # 5) Build Molecule list
         create_kwargs = dict(
             orientations=orientations,
@@ -335,27 +371,29 @@ class Gaussian16Output(GaussianFileMixin):
             multiplicity=self.multiplicity,
             frozen_atoms=frozen_atoms,
             pbc_conditions=self.list_of_pbc_conditions,
+            is_optimized_structure_list=is_optimized,
         )
 
         if self.normal_termination:
             all_structures = create_molecule_list(**create_kwargs)
         else:
-            # Abnormal (non-link, or link with >1 frame after drop): truncate safely
+            # Abnormal (non-link, or link with >1
+            # frame after drop): truncate safely
             all_structures = create_molecule_list(
                 **create_kwargs, num_structures=num_structures_to_use
             )
 
         # 6) Keep only optimized steps if requested
-        if (
-            getattr(self, "optimized_steps_indices", None)
-            and not self.include_intermediate
-        ):
+        if self.optimized_steps_indices and not self.include_intermediate:
             logger.debug(
                 "Ignoring intermediate optimization steps (constrained opt)."
             )
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+            # Since we filtered to only optimized steps, mark all as optimized
+            for mol in all_structures:
+                mol.is_optimized_structure = True
 
         logger.debug(
             "Attaching vibrational data to the final structure if available..."
@@ -366,7 +404,6 @@ class Gaussian16Output(GaussianFileMixin):
         if self.num_vib_frequencies:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
 
-        logger.debug("Total structures returned: %d", len(all_structures))
         return all_structures
 
     @cached_property
@@ -397,7 +434,8 @@ class Gaussian16Output(GaussianFileMixin):
         """
         return self.last_structure
 
-    ###### the following properties relate to intermediate geometry optimizations
+    ###### the following properties relate to
+    # intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
 
     @cached_property
@@ -492,7 +530,8 @@ class Gaussian16Output(GaussianFileMixin):
     @property
     def gen_genecp(self):
         """
-        String specifying if gen or genecp is used in the calculation output file.
+        String specifying if gen or genecp is
+        used in the calculation output file.
         """
         return self._get_gen_genecp()
 
@@ -611,7 +650,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def reduced_masses(self):
         """
-        Obtain list of reduced masses corresponding to the vibrational frequency.
+        Obtain list of reduced masses
+        corresponding to the vibrational frequency.
         """
         reduced_masses = []
         for line in self.contents:
@@ -628,7 +668,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def force_constants(self):
         """
-        Obtain list of force constants corresponding to the vibrational frequency.
+        Obtain list of force constants
+        corresponding to the vibrational frequency.
         """
         force_constants = []
         for line in self.contents:
@@ -645,7 +686,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def ir_intensities(self):
         """
-        Obtain list of IR intensities corresponding to the vibrational frequency.
+        Obtain list of IR intensities
+        corresponding to the vibrational frequency.
         """
         IR_intensities = []
         for line in self.contents:
@@ -662,7 +704,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_mode_symmetries(self):
         """
-        Obtain list of vibrational mode symmetries corresponding to the vibrational frequency.
+        Obtain list of vibrational mode symmetries
+        corresponding to the vibrational frequency.
         """
         vibrational_mode_symmetries = []
         for i, line in enumerate(self.contents):
@@ -740,6 +783,10 @@ class Gaussian16Output(GaussianFileMixin):
         setattr(mol, "vibrational_ir_intensities", vib["ir_intensities"])
         setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
         setattr(mol, "vibrational_modes", vib["modes"])
+
+        # Attach Mulliken charges and rotational symmetry number like vibrations
+        mol.mulliken_atomic_charges = self.mulliken_atomic_charges
+        mol.rotational_symmetry_number = self.rotational_symmetry_number
 
         return mol
 
@@ -829,7 +876,8 @@ class Gaussian16Output(GaussianFileMixin):
     def frozen_atoms_masks(self):
         """
         Obtain list of frozen atoms masks (-1 = frozen, 0 = free)
-        using precomputed frozen_coordinate_indices and free_coordinate_indices.
+        using precomputed frozen_coordinate_indices
+        and free_coordinate_indices.
         """
         if not self.has_frozen_coordinates:
             return None
@@ -844,7 +892,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def scf_energies(self):
         """
-        Obtain SCF energies from the Gaussian output file. Default units of Hartree.
+        Obtain SCF energies from the Gaussian
+        output file. Default units of Hartree.
         """
         scf_energies = []
         for line in self.contents:
@@ -856,7 +905,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def mp2_energies(self):
         """
-        Obtain MP2 energies from the Gaussian output file. Default units of Hartree.
+        Obtain MP2 energies from the Gaussian
+        output file. Default units of Hartree.
         """
         mp2_energies = []
         for line in self.contents:
@@ -869,7 +919,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def oniom_energies(self):
         """
-        Obtain ONIOM energies from the Gaussian output file. Default units of Hartree.
+        Obtain ONIOM energies from the Gaussian
+        output file. Default units of Hartree.
         """
         oniom_energies = []
         for line in self.contents:
@@ -877,6 +928,21 @@ class Gaussian16Output(GaussianFileMixin):
             if match:
                 oniom_energies.append(float(match[1]))
         return oniom_energies
+
+    @cached_property
+    def oniom_layer_energies(self):
+        """Obtain ONIOM energies from the Gaussian
+        output file. Default units of Hartree."""
+        layer_energies = {}
+        for line in self.contents:
+            layer_match = re.match(oniom_gridpoint_pattern, line)
+            if layer_match:
+                formatted_layer = (
+                    f"{line.split()[3]}  {line.split()[4]}, "
+                    f"{line.split()[5]}  {line.split()[6]}"
+                )
+                layer_energies[formatted_layer] = float(line.split()[-1])
+        return layer_energies
 
     @cached_property
     def energies(self):
@@ -898,6 +964,253 @@ class Gaussian16Output(GaussianFileMixin):
         for line in self.contents:
             if "Zero-point correction=" in line:
                 return float(line.split()[2])
+        return None
+
+    @cached_property
+    def thermal_vibration_correction(self):
+        """
+        Thermal vibration correction in Hartree.
+        """
+        if self.zero_point_energy is not None:
+            for i, line_i in enumerate(self.contents):
+                if "E (Thermal)" in line_i and "CV" in line_i:
+                    for line_j in self.contents[i + 1 :]:
+                        if "Vibrational" in line_j:
+                            return (
+                                float(line_j.split()[1])
+                                * kcal_per_mol_to_hartree
+                                - self.zero_point_energy
+                            )
+        return None
+
+    @cached_property
+    def thermal_rotation_correction(self):
+        """
+        Thermal rotation correction in Hartree.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Rotational" in line_j:
+                        return (
+                            float(line_j.split()[1]) * kcal_per_mol_to_hartree
+                        )
+        return None
+
+    @cached_property
+    def thermal_translation_correction(self):
+        """
+        Thermal translation correction in Hartree.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Translational" in line_j:
+                        return (
+                            float(line_j.split()[1]) * kcal_per_mol_to_hartree
+                        )
+        return None
+
+    @cached_property
+    def thermal_energy_correction(self):
+        """
+        thermal correction to energy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Energy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def thermal_enthalpy_correction(self):
+        """
+        thermal correction to enthalpy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Enthalpy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def thermal_gibbs_free_energy_correction(self):
+        """
+        thermal correction to Gibbs free energy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Gibbs Free Energy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def internal_energy(self):
+        """
+        Sum of electronic and thermal energies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Energies=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def enthalpy(self):
+        """
+        Sum of electronic and thermal enthalpies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Enthalpies=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def electronic_entropy_no_temperature_in_SI(self):
+        """
+        Electronic entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Electronic" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def electronic_entropy(self):
+        """
+        Electronic entropy in Hartree.
+        """
+        if self.electronic_entropy_no_temperature_in_SI is not None:
+            electronic_entropy_hartree = (
+                self.electronic_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return electronic_entropy_hartree
+        return None
+
+    @cached_property
+    def vibrational_entropy_no_temperature_in_SI(self):
+        """
+        Vibrational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Vibrational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def vibrational_entropy(self):
+        """
+        Vibrational entropy in Hartree.
+        """
+        if self.vibrational_entropy_no_temperature_in_SI is not None:
+            vibrational_entropy_hartree = (
+                self.vibrational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return vibrational_entropy_hartree
+        return None
+
+    @cached_property
+    def rotational_entropy_no_temperature_in_SI(self):
+        """
+        Rotational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Rotational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def rotational_entropy(self):
+        """
+        Rotational entropy in Hartree.
+        """
+        if self.rotational_entropy_no_temperature_in_SI is not None:
+            rotational_entropy_hartree = (
+                self.rotational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return rotational_entropy_hartree
+        return None
+
+    @cached_property
+    def translational_entropy_no_temperature_in_SI(self):
+        """
+        Translational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Translational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def translational_entropy(self):
+        """
+        Translational entropy in Hartree.
+        """
+        if self.translational_entropy_no_temperature_in_SI is not None:
+            translational_entropy_hartree = (
+                self.translational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return translational_entropy_hartree
+        return None
+
+    @cached_property
+    def entropy_in_J_per_mol_per_K(self):
+        """
+        Total entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Total" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def entropy(self):
+        """
+        Total entropy in Hartree.
+        """
+        if self.entropy_in_J_per_mol_per_K is not None:
+            total_entropy_hartree = (
+                self.entropy_in_J_per_mol_per_K * joule_per_mol_to_hartree
+            )
+            return total_entropy_hartree
+        return None
+
+    @cached_property
+    def entropy_times_temperature(self):
+        """
+        The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
+        Return value in Hartree.
+        """
+        if (
+            self.temperature_in_K
+            and self.entropy_in_J_per_mol_per_K is not None
+        ):
+            entropy_ts_hartree = (
+                self.entropy_in_J_per_mol_per_K
+                * joule_per_mol_to_hartree
+                * self.temperature_in_K
+            )
+            return entropy_ts_hartree
+        return None
+
+    @cached_property
+    def gibbs_free_energy(self):
+        """
+        Sum of electronic and thermal free energies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Free Energies=" in line:
+                return float(line.split()[-1])
         return None
 
     # check for convergence criterion not met (happens for some output files)
@@ -970,7 +1283,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def input_orientations_pbc(self):
-        """Obtain structures in Input Orientation with PBC from Gaussian output file."""
+        """Obtain structures in Input Orientation
+        with PBC from Gaussian output file."""
         _, input_orientations_pbc = self._get_input_orientations_and_pbc()
         return input_orientations_pbc
 
@@ -1005,13 +1319,15 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def standard_orientations(self):
-        """Obtain structures in Standard Orientation from Gaussian output file."""
+        """Obtain structures in Standard
+        Orientation from Gaussian output file."""
         standard_orientations, _ = self._get_standard_orientations_and_pbc()
         return standard_orientations
 
     @cached_property
     def standard_orientations_pbc(self):
-        """Obtain structures in Standard Orientation with PBC from Gaussian output file."""
+        """Obtain structures in Standard Orientation
+        with PBC from Gaussian output file."""
         _, standard_orientations_pbc = (
             self._get_standard_orientations_and_pbc()
         )
@@ -1079,7 +1395,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def excitation_energies_eV(self):
         """
-        Read TDDFT transitions and return the transition energies in eV as a list.
+        Read TDDFT transitions and return the
+        transition energies in eV as a list.
         """
         excitation_energies_eV = []
         for i in self.tddft_transitions:
@@ -1089,7 +1406,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def absorptions_in_nm(self):
         """
-        Read TDDFT transitions and return the absorbed wavelengths in nm as a list.
+        Read TDDFT transitions and return the
+        absorbed wavelengths in nm as a list.
         """
         absorptions_in_nm = []
         for i in self.tddft_transitions:
@@ -1129,7 +1447,8 @@ class Gaussian16Output(GaussianFileMixin):
             if line.startswith("Excited State"):
                 each_state_transitions = []
                 each_state_contribution_coefficients = []
-                # parse the lines that follow until an empty line is encountered
+                # parse the lines that follow until
+                # an empty line is encountered
                 j = 1
                 while len(self.contents[i + j]) != 0:
                     line_element = self.contents[i + j].split()
@@ -1153,11 +1472,13 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def alpha_occ_eigenvalues(self):
         """
-        Obtain all eigenenergies of the alpha occupied orbitals and convert to eV.
+        Obtain all eigenenergies of the alpha
+        occupied orbitals and convert to eV.
         """
         alpha_occ_eigenvalues = []
 
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1197,7 +1518,8 @@ class Gaussian16Output(GaussianFileMixin):
         Units of eV, as for orbital energies.
         """
 
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1236,7 +1558,8 @@ class Gaussian16Output(GaussianFileMixin):
         Obtain all eigenenergies of the beta occupied orbitals.
         Units of eV, as for orbital energies.
         """
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1276,7 +1599,8 @@ class Gaussian16Output(GaussianFileMixin):
         Units of eV, as for orbital energies.
         """
 
-        # Iterate through lines in reverse to find the last block of eigenvalues
+        # Iterate through lines in reverse to
+        # find the last block of eigenvalues
         eigenvalue_blocks = []
         current_block = []
         found_first_block = False
@@ -1471,7 +1795,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_hirshfeld_charges_spins_dipoles_cm5(self):
         """
-        Obtain Hirshfeld charges, spin densities, dipoles, and CM5 charges from the output file.
+        Obtain Hirshfeld charges, spin densities,
+        dipoles, and CM5 charges from the output file.
         """
         all_hirshfeld_charges = []
         all_spin_densities = []
@@ -1515,7 +1840,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_hirshfeld_charges_spin_densities_cm5_charges_heavy_atoms(self):
         """
-        Obtain Hirshfeld charges, spin densities and CM5 with hydrogens summed into heavy atoms.
+        Obtain Hirshfeld charges, spin densities and
+        CM5 with hydrogens summed into heavy atoms.
         """
         all_hirshfeld_charges_heavy_atoms = []
         all_hirshfeld_spin_densities_heavy_atoms = []
@@ -1584,16 +1910,29 @@ class Gaussian16Output(GaussianFileMixin):
         index = string2index_1based(index)
         return self.all_structures[index]
 
+    @cached_property
+    def temperature_in_K(self):
+        for line in self.contents:
+            if "Temperature" in line and "Kelvin." in line:
+                return float(line.split()[1])
+
+    @cached_property
+    def pressure_in_atm(self):
+        for line in self.contents:
+            if "Pressure" in line and "Atm." in line:
+                return float(line.split()[-2])
+
     @property
     def mass(self):
         for line in self.contents:
-            if "Molecular mass:" and "amu." in line:
+            if "Molecular mass:" in line and "amu." in line:
                 return float(line.split()[2])
 
     @cached_property
     def moments_of_inertia(self):
         """
-        Obtain moments of inertia from the output file which are in atomic units
+        Obtain moments of inertia from the
+        output file which are in atomic units
         (amu * Bohr^2) and convert to SI units (kg * m^2).
         """
         moments_of_inertia, _ = (
@@ -1685,13 +2024,129 @@ class Gaussian16Output(GaussianFileMixin):
 
     def to_dataset(self, **kwargs):
         """
-        Convert Gaussian .log file to Dataset with all data points taken from the .log file.
+        Convert Gaussian .log file to Dataset with
+        all data points taken from the .log file.
 
         Returns:
             Dataset.
         """
         # TODO: to be implemented
         pass
+
+    @cached_property
+    def oniom_partition(self):
+        """Obtain the atomic indices of each layer in the ONIOM calculation.
+        Returns:
+            indices of each layer as a dictionary"""
+        high_level = []
+        medium_level = []
+        low_level = []
+        for i, line in enumerate(self.contents):
+            if "Symbolic Z-matrix:" in line:
+                # First ONIOM format: coordinates
+                # start 4 lines after the header
+                if "Charge" not in self.contents[i + 4]:
+                    atom_index = 1
+                    for j_line in self.contents[i + 4 :]:
+                        if len(j_line) == 0:
+                            break
+                        if len(j_line) > 4:
+                            tokens = j_line.split()
+                            if tokens[1] == "-1" or tokens[1] == "0":
+                                layer = str(tokens[5])
+                            else:
+                                layer = str(tokens[4])
+                            if layer == "H":
+                                high_level.append(atom_index)
+                            elif layer == "M":
+                                medium_level.append(atom_index)
+                            elif layer == "L":
+                                low_level.append(atom_index)
+                            atom_index += 1
+                else:
+                    # Alternative ONIOM format: coordinates
+                    # start 7 lines after the header
+                    atom_index = 1
+                    for j_line in self.contents[i + 7 :]:
+                        if len(j_line) == 0:
+                            break
+                        if len(j_line) > 4:
+                            tokens = j_line.split()
+                            if tokens[1] == "-1" or tokens[1] == "0":
+                                layer = str(tokens[5])
+                            else:
+                                layer = str(tokens[4])
+                            if layer == "H":
+                                high_level.append(atom_index)
+                            elif layer == "M":
+                                medium_level.append(atom_index)
+                            elif layer == "L":
+                                low_level.append(atom_index)
+                            atom_index += 1
+        partition = {}
+        for level_name, level_list in [
+            ("high level atoms", high_level),
+            ("medium level atoms", medium_level),
+            ("low level atoms", low_level),
+        ]:
+            if len(level_list) != 0:
+                partition[level_name] = get_range_from_list(level_list)
+        return partition
+
+    @cached_property
+    def oniom_cutting_bonds(self):
+        """Obtain the cutting bonds in the ONIOM calculation.
+        Returns:
+            cutting bonds as a dictionary"""
+        cutting_bonds = {}
+        for i, line in enumerate(self.contents):
+            if "Cut between" in line:
+                atom1 = int(self.contents[i].split()[5])
+                atom2 = int(self.contents[i].split()[8])
+                factor1 = float(self.contents[i].split()[10])
+                factor2 = float(self.contents[i].split()[11])
+                cutting_bonds[(atom1, atom2)] = (factor1, factor2)
+        return cutting_bonds
+
+    @cached_property
+    def oniom_get_charge_and_multiplicity(self):
+        """Obtain the charge and multiplicity
+        of the system in the ONIOM calculation.
+        Returns:
+            charge and multiplicity as a dictionary"""
+        charge_multiplicity = {}
+        for line in self.contents:
+            if "Charge" in line and "low   level calculation on real" in line:
+                charge_multiplicity["low-level, real system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "med   level calculation on mid" in line:
+                charge_multiplicity["medium-level, mid system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "low   level calculation on mid" in line:
+                charge_multiplicity["low-level, mid system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "high  level calculation on model" in line:
+                charge_multiplicity["high-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "med   level calculation on model" in line:
+                charge_multiplicity["medium-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "low   level calculation on model" in line:
+                charge_multiplicity["low-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+        return charge_multiplicity
 
 
 class Gaussian16WBIOutput(Gaussian16Output):
@@ -1743,7 +2198,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
 
                         # Construct the atom key, e.g., "Ni1"
                         atom_key = f"{atom_type}{atom_number}"
-                        # Construct the sub-key for each NAO entry, e.g., "NAO1", "NAO2", etc.
+                        # Construct the sub-key for each NAO
+                        # entry, e.g., "NAO1", "NAO2", etc.
                         nao_key = f"NAO_{atom_type}{nao_number}"
 
                         # Initialize the atom dictionary if it doesn't exist
@@ -1818,7 +2274,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
     @cached_property
     def total_electrons(self):
         """
-        Get the total number of electrons corresponding to each atom as a dictionary.
+        Get the total number of electrons
+        corresponding to each atom as a dictionary.
         """
         total_electrons = {}
         for atom_key, atom_data in self.natural_population_analysis.items():
@@ -1828,7 +2285,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
     @cached_property
     def electronic_configuration(self):
         """
-        Get electronic configuration for each atom and store results in a dictionary.
+        Get electronic configuration for each
+        atom and store results in a dictionary.
         """
         electronic_configuration = {}
         for i, line in enumerate(self.contents):
@@ -1870,7 +2328,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
 
 class Gaussian16OutputWithPBC(Gaussian16Output):
     """
-    class for parsing and obtaining information from Gaussian output file with PBC.
+    class for parsing and obtaining information
+    from Gaussian output file with PBC.
     """
 
     def __init__(self, filename):

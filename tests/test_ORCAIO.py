@@ -8,9 +8,16 @@ from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
-from chemsmart.io.orca.input import ORCAInput
-from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
+from chemsmart.io.orca.input import ORCAInput, ORCANEBInput, ORCAQMMMInput
+from chemsmart.io.orca.output import (
+    ORCAEngradFile,
+    ORCANEBOutput,
+    ORCAOutput,
+    ORCAQMMMOutput,
+)
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+from chemsmart.jobs.orca.writer import ORCAInputWriter
 
 
 class TestORCARoute:
@@ -92,6 +99,53 @@ class TestORCARoute:
         assert r6.extrapolation_basis is None
         assert r6.auxiliary_basis is None
 
+        # two-layer ONIOM
+        s7 = "!QM/XTB BP86 def2-TZVP def2/J"
+        r7 = ORCARoute(route_string=s7)
+        assert r7.route_keywords == ["qm/xtb", "bp86", "def2-tzvp", "def2/j"]
+        assert r7.qm_functional == "bp86"
+        assert r7.qm_basis == "def2-tzvp"
+        assert r7.auxiliary_basis == "def2/j"
+        assert r7.qm2_method == "xtb"
+        assert r7.qmmm_jobtype == "qm/xtb"
+
+        # three-layer ONIOM
+        s8 = "!QM/HF-3c/MM Opt B3LYP def2-TZVP def2/J NumFreq CPCM(water)"
+        r8 = ORCARoute(route_string=s8)
+        assert r8.route_keywords == [
+            "qm/hf-3c/mm",
+            "opt",
+            "b3lyp",
+            "def2-tzvp",
+            "def2/j",
+            "numfreq",
+            "cpcm(water)",
+        ]
+        assert r8.qm_functional == "b3lyp"
+        assert r8.qm_basis == "def2-tzvp"
+        assert r8.auxiliary_basis == "def2/j"
+        assert r8.qm2_method == "hf-3c"
+        assert r8.qmmm_jobtype == "qm/hf-3c/mm"
+
+        # MOL-CRYSTAL-QMMM route
+        s9 = "! MOL-CRYSTAL-QMMM PBE def2-SVP Opt NumFreq"
+        r9 = ORCARoute(route_string=s9)
+        assert r9.route_keywords == [
+            "mol-crystal-qmmm",
+            "pbe",
+            "def2-svp",
+            "opt",
+            "numfreq",
+        ]
+        assert r9.qm_functional == "pbe"
+        assert r9.qm_basis == "def2-svp"
+        assert r9.qmmm_jobtype == "mol-crystal-qmmm"
+
+        # IONIC-CRYSTAL-QMMM route
+        s10 = "! IONIC-CRYSTAL-QMMM"
+        r10 = ORCARoute(route_string=s10)
+        assert r10.qmmm_jobtype == "ionic-crystal-qmmm"
+
 
 class TestORCABasis:
     def test_orca_all_auxiliary_basis_sets(self):
@@ -158,7 +212,7 @@ class TestORCAInput:
         ):
             orca_inp.solvent_id
 
-    def test_orca_input_with_xyz_files_specified(
+    def test_orca_neb_input_with_xyz_files_specified(
         self,
         tmpdir,
         orca_input_nebts_file,
@@ -193,20 +247,224 @@ class TestORCAInput:
         assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
 
         orca_inp = ORCAInput(filename=orca_input_nebts_file)
-        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.route_string == "! gfn2-xtb neb-ts freq".lower()
         assert orca_inp.functional is None
         assert orca_inp.basis is None
         assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified
         assert orca_inp.charge == 0
-        assert orca_inp.multiplicity == 1
+        assert orca_inp.multiplicity == 2
         assert orca_inp.molecule.num_atoms == 40
         assert isinstance(orca_inp.molecule, Molecule)
         assert orca_inp.molecule.empirical_formula == "C23H15NO"
+
+    def test_orca_qmmm_input(self, orca_inputs_directory):
+        orca_inp1 = os.path.join(orca_inputs_directory, "dna_qmmm1.inp")
+        orca_inp1 = ORCAQMMMInput(filename=orca_inp1)
+        # charge and multiplicity of QM region
+        # (instead of real system in regular input)
+        assert orca_inp1.qm_charge == 2
+        assert orca_inp1.qm_multiplicity == 1
+        assert orca_inp1.qm_atoms == [
+            "54",
+            "124:133",
+            "209",
+            "210",
+            "259:263",
+            "271",
+            "272",
+            "326:340",
+            "424:476",
+            "488:516",
+        ]
+        assert orca_inp1.qm_active_atoms == ["0:5", "16", "21:30"]
+        # assert orca_inp.qm_force_field
+        assert orca_inp1.qm_h_bond_length == [
+            ("c", "hla", "1.09"),
+            ("o", "hla", "0.98"),
+            ("n", "hla", "0.99"),
+        ]
+        assert orca_inp1.qm_boundary_interaction == (
+            "Will neglect bends at QM2-QM1-MM1 and torsions at QM3-QM2-QM1-MM1 boundary.\n"
+            "Will include bonds at QM1-MM1 boundary.\n"
+        )
+        assert orca_inp1.qm_embedding_type == "electrostatic"
+        assert orca_inp1.qm2_functional.strip('"') == "b3lyp"
+        assert orca_inp1.qm2_basis.strip('"') == "def2-svp def2/j"
+
+        orca_inp2 = os.path.join(orca_inputs_directory, "dna_qmmm2.inp")
+        orca_inp2 = ORCAQMMMInput(filename=orca_inp2)
+        assert orca_inp2.qm2_level_of_theory.strip('"') == "myqm2method.txt"
+        assert orca_inp2.qm_qm2_boundary_treatment == "pbeh3c"
+        assert orca_inp2.qm2_atoms == ["5:22"]
+        assert orca_inp2.qm2_charge == 0
+        assert orca_inp2.qm2_multiplicity == 3
+
+        # todo:tests for crystal QMMM
+        # orca_inp3 = os.path.join(orca_inputs_directory,
+        # "ionic_crystal_qmmm.inp")
+
+
+class TestORCANEBInput:
+    """Test suite for ORCANEBInput class."""
+
+    def test_read_neb_input_basic(self, orca_input_nebts_file):
+        """Test basic reading of NEB input file."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert neb_inp is not None
+        assert neb_inp.route_string == "! gfn2-xtb neb-ts freq"
+
+    def test_neb_input_nimages(self, orca_input_nebts_file):
+        """Test reading number of images from NEB input."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert neb_inp.nimages == 16
+
+    def test_neb_input_ending_xyzfile(self, orca_input_nebts_file):
+        """Test reading ending XYZ file from NEB input."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert neb_inp.ending_xyzfile == "S-1a_opt.xyz"
+
+    def test_neb_input_ts_xyzfile(self, orca_input_nebts_file):
+        """Test reading TS XYZ file from NEB input."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert neb_inp.ts_xyzfile == "TS_rot1.xyz"
+
+    def test_neb_input_pre_optimization_false(self, orca_input_nebts_file):
+        """Test reading pre-optimization flag (False) from NEB input."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert neb_inp.pre_optimization is False
+
+    def test_neb_input_starting_xyzfile(self, orca_input_nebts_file):
+        """Test reading starting XYZ file from NEB input."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        # When using xyzfile syntax, starting_xyzfile should be the filename
+        starting = neb_inp.starting_xyzfile
+        assert starting == "R-1a_opt.xyz"
+
+    def test_neb_input_charge_and_multiplicity(self, orca_input_nebts_file):
+        """Test reading charge and multiplicity from NEB input."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert neb_inp.charge == 0
+        assert neb_inp.multiplicity == 2
+
+    def test_neb_input_inherits_from_orca_input(self, orca_input_nebts_file):
+        """Test that ORCANEBInput inherits from ORCAInput."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert isinstance(neb_inp, ORCAInput)
+        # Should have access to parent class properties
+        assert hasattr(neb_inp, "route_string")
+        assert hasattr(neb_inp, "charge")
+        assert hasattr(neb_inp, "multiplicity")
+
+    def test_neb_input_restarting_allxyzfile_none(self, orca_input_nebts_file):
+        """Test that restarting_allxyzfile is None when not specified."""
+        neb_inp = ORCANEBInput(filename=orca_input_nebts_file)
+        assert neb_inp.restarting_allxyzfile is None
+
+    def test_neb_input_with_preopt_true(self, tmpdir):
+        """Test reading NEB input with pre-optimization enabled."""
+        neb_content = """!gfn2-xtb neb-ci
+%NEB
+  NImages 8
+  NEB_END_XYZFILE "product.xyz"
+  PREOPT_ENDS TRUE
+END
+* xyzfile 0 1 reactant.xyz
+"""
+        neb_file = tmpdir.join("test_neb_preopt.inp")
+        neb_file.write(neb_content)
+
+        neb_inp = ORCANEBInput(filename=str(neb_file))
+        assert neb_inp.pre_optimization is True
+        assert neb_inp.nimages == 8
+        assert neb_inp.ending_xyzfile == "product.xyz"
+
+    def test_neb_input_with_restart_file(self, tmpdir):
+        """Test reading NEB input with restart file."""
+        neb_content = """!xtb2 neb-ts
+%NEB
+  NImages 12
+  Restart_ALLXYZFile "previous_run.allxyz"
+END
+* xyzfile 0 1 start.xyz
+"""
+        neb_file = tmpdir.join("test_neb_restart.inp")
+        neb_file.write(neb_content)
+
+        neb_inp = ORCANEBInput(filename=str(neb_file))
+        assert neb_inp.nimages == 12
+        assert neb_inp.restarting_allxyzfile == "previous_run.allxyz"
+        # When restart is used, ending file might not be specified
+        assert neb_inp.ending_xyzfile is None
+
+    def test_neb_input_case_insensitive(self, tmpdir):
+        """Test that NEB input parsing is case-insensitive."""
+        neb_content = """!XTB2 NEB-TS
+%neb
+  NImages 10
+  neb_end_xyzfile "PRODUCT.xyz"
+  Preopt_Ends false
+end
+* xyzfile 0 1 reactant.xyz
+"""
+        neb_file = tmpdir.join("test_neb_case.inp")
+        neb_file.write(neb_content)
+
+        neb_inp = ORCANEBInput(filename=str(neb_file))
+        assert neb_inp.nimages == 10
+        assert neb_inp.ending_xyzfile == "PRODUCT.xyz"
+        assert neb_inp.pre_optimization is False
+
+    def test_neb_input_without_ts_file(self, tmpdir):
+        """Test reading NEB input without TS guess file."""
+        neb_content = """!xtb2 neb-ci
+%NEB
+  NImages 8
+  NEB_END_XYZFILE "product.xyz"
+END
+* xyzfile 0 1 reactant.xyz
+"""
+        neb_file = tmpdir.join("test_neb_no_ts.inp")
+        neb_file.write(neb_content)
+
+        neb_inp = ORCANEBInput(filename=str(neb_file))
+        assert neb_inp.nimages == 8
+        assert neb_inp.ending_xyzfile == "product.xyz"
+        assert neb_inp.ts_xyzfile is None
+
+    def test_neb_input_all_properties(self, tmpdir):
+        """Test reading all NEB input properties at once."""
+        neb_content = """!B3LYP def2-SVP NEB-TS
+%NEB
+  NImages 20
+  NEB_END_XYZFILE "final_product.xyz"
+  NEB_TS_XYZFILE "ts_guess.xyz"
+  PREOPT_ENDS TRUE
+END
+* xyzfile -1 2 initial_reactant.xyz
+"""
+        neb_file = tmpdir.join("test_neb_all.inp")
+        neb_file.write(neb_content)
+
+        neb_inp = ORCANEBInput(filename=str(neb_file))
+
+        # All NEB-specific properties
+        assert neb_inp.nimages == 20
+        assert neb_inp.ending_xyzfile == "final_product.xyz"
+        assert neb_inp.ts_xyzfile == "ts_guess.xyz"
+        assert neb_inp.pre_optimization is True
+        assert neb_inp.starting_xyzfile == "initial_reactant.xyz"
+        assert neb_inp.restarting_allxyzfile is None
+
+        # Inherited properties
+        assert neb_inp.charge == -1
+        assert neb_inp.multiplicity == 2
 
 
 class TestORCAOutput:
     def test_read_water_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.version == "5.0.3"
+        assert orca_out.date is None
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"
@@ -579,6 +837,21 @@ class TestORCAOutput:
             439538.666271,
             282661.493198,
         ]
+        assert orca_out.rotational_constants_in_Hz == [
+            791961336970,
+            439538666271,
+            282661493198,
+        ]
+        # k_B = 1.380649 * 10^-23 J/K
+        # h = 6.62606957 * 10^-34 J s
+        assert np.allclose(
+            orca_out.rotational_temperatures,
+            [
+                6.62606957 * 1e-34 * 791961336970 / (1.380649 * 1e-23),
+                6.62606957 * 1e-34 * 439538666271 / (1.380649 * 1e-23),
+                6.62606957 * 1e-34 * 282661493198 / (1.380649 * 1e-23),
+            ],
+        )
         assert orca_out.vibrational_frequencies == [
             1625.35,
             3875.61,
@@ -675,10 +948,15 @@ class TestORCAOutput:
             0.00141627,
             rel_tol=1e-8,
         )
+        assert math.isclose(
+            orca_out.thermal_energy_correction,
+            0.02441621,
+            rel_tol=1e-8,
+        )
         assert math.isclose(orca_out.enthalpy, -76.29795059, rel_tol=1e-4)
         assert math.isclose(
             orca_out.thermal_enthalpy_correction,
-            0.00094421,
+            0.00094421 + 0.02441621,
             rel_tol=1e-8,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
@@ -697,7 +975,9 @@ class TestORCAOutput:
             144.8035920,
             rel_tol=1e-4,
         )
-        assert math.isclose(orca_out.entropy_TS, 0.02143089, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.entropy_times_temperature, 0.02143089, rel_tol=1e-4
+        )
 
         assert orca_out.mulliken_atomic_charges == {
             "O1": -0.32926,
@@ -828,6 +1108,11 @@ class TestORCAOutput:
 
         assert math.isclose(
             orca_out.gibbs_free_energy, -76.31938148, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_gibbs_free_energy_correction,
+            0.00392953,
+            rel_tol=1e-8,
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
@@ -1892,6 +2177,7 @@ class TestORCAOutput:
 
     def test_sn2_ts_orca_output(self, orca_sn2_ts_output):
         orca_out = ORCAOutput(filename=orca_sn2_ts_output)
+        assert orca_out.route_string == "! m062x def2-svp optts freq"
         assert orca_out.spin == "restricted"
         assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
@@ -2269,10 +2555,15 @@ class TestORCAOutput:
             0.00141627,
             rel_tol=1e-8,
         )
+        assert math.isclose(
+            orca_out.thermal_energy_correction,
+            0.04160714,
+            rel_tol=1e-8,
+        )
         assert math.isclose(orca_out.enthalpy, -599.55646959, rel_tol=1e-4)
         assert math.isclose(
             orca_out.thermal_enthalpy_correction,
-            0.00094421,
+            0.00094421 + 0.04160714,
             rel_tol=1e-8,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
@@ -2291,7 +2582,9 @@ class TestORCAOutput:
             0.01835566 * units.Hartree / (units.J / units.mol),
             rel_tol=1,
         )
-        assert math.isclose(orca_out.entropy_TS, 0.03229008, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.entropy_times_temperature, 0.03229008, rel_tol=1e-4
+        )
 
         entropy_TS_in_J_per_mol = (
             0.03229008 * units.Hartree / (units.J / units.mol)
@@ -2321,6 +2614,11 @@ class TestORCAOutput:
 
         assert math.isclose(
             orca_out.gibbs_free_energy, -599.58875967, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_gibbs_free_energy_correction,
+            0.01026126,
+            rel_tol=1e-8,
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
@@ -2554,3 +2852,355 @@ class TestORCAEngrad:
         assert np.allclose(
             orca_engrad.molecule.positions, coordinates, rtol=1e-6
         )
+
+
+class TestORCAQMMM:
+    def test_read_qmmm_output(self, orca_two_layer_qmmmm_output_file):
+        orca_qmmm1 = ORCAQMMMOutput(filename=orca_two_layer_qmmmm_output_file)
+        assert orca_qmmm1.multiscale_model == "QM1/QM2"
+        assert orca_qmmm1.qm2_method == "XTB2"
+        assert orca_qmmm1.total_charge == 0
+        assert orca_qmmm1.scaling_factor_qm2 == 1.0
+        assert orca_qmmm1.point_charges_in_qm_from_mm == 24
+        assert orca_qmmm1.point_charges_in_qm_from_charge_shift == 0
+        assert orca_qmmm1.total_system_size == 36
+        assert orca_qmmm1.qm_system_size == 12
+        assert orca_qmmm1.qm2_system_size == 24
+        assert orca_qmmm1.number_of_link_atoms == 0
+        assert orca_qmmm1.qm_plus_link_atoms_size == 12
+        assert orca_qmmm1.qm_region == ["1-12"]
+        assert orca_qmmm1.qm2_energy_of_large_region == -994.9374837306615
+        assert orca_qmmm1.qm2_energy_of_small_region == -396.0605045891306
+        assert orca_qmmm1.qm_qm2_energy == -5889.533884098047
+        assert orca_qmmm1.qm_energy == -5290.656904956516
+
+
+class TestORCAQMMMJobSettings:
+    def test_partition_string_single_and_list_input(self):
+        """Partition string should accept
+        '1-15,37,39' or list and compress ranges."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.high_level_atoms = "1-15,37,39"
+        out = s._get_partition_string()
+        assert out.strip() == "QMAtoms {0:14 36 38} end"
+
+        # list input should produce the same output
+        s.high_level_atoms = [1, *range(2, 16), 37, 39]
+        out2 = s._get_partition_string()
+        assert out2.strip() == "QMAtoms {0:14 36 38} end"
+
+    def test_partition_string_qm_and_qm2(self):
+        """When both high_level_atoms and medium_level_atoms
+        provided, both lines should be returned."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.high_level_atoms = "1-3,5"
+        s.intermediate_level_atoms = "7-9,12"
+        out = s._get_partition_string()
+        # order: QMAtoms then QM2Atoms
+        lines = [ln for ln in out.splitlines() if ln.strip()]
+        assert lines[0].strip() == "QMAtoms {0:2 4} end"
+        assert lines[1].strip() == "QM2Atoms {6:8 11} end"
+
+    def test_charge_and_multiplicity_population(self):
+        """ORCAQMMMJobSettings should populate .charge and
+        .multiplicity from intermediate or high fields."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        # when both high and intermediate
+        # specified, high-region takes precedence
+        s1 = ORCAQMMMJobSettings(
+            charge_intermediate=0,
+            mult_intermediate=1,
+            charge_high=2,
+            mult_high=3,
+        )
+        assert s1.charge == 2
+        assert s1.multiplicity == 3
+
+        # intermediate missing -> fall back to high
+        s2 = ORCAQMMMJobSettings(charge_high=-1, mult_high=2)
+        assert s2.charge == -1
+        assert s2.multiplicity == 2
+
+    def test_partition_string_empty_and_none(self):
+        """Empty string or None should return empty partition block."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.high_level_atoms = ""
+        assert s._get_partition_string() == ""
+
+        s.high_level_atoms = None
+        assert s._get_partition_string() == ""
+
+
+class TestORCANEB:
+    def test_read_neb_output(self, orca_neb_output_file):
+        import pathlib
+
+        src = pathlib.Path(orca_neb_output_file)
+
+        # Read with tolerant UTF-8 decoding and inject into the parser to avoid locale decoding errors
+        data = src.read_text(encoding="utf-8", errors="replace")
+        lines = [ln.strip() for ln in data.splitlines()]
+
+        orca_neb = ORCANEBOutput(filename=str(src))
+        orca_neb.__dict__["contents"] = lines
+        orca_neb.__dict__["content_lines_string"] = data
+        assert orca_neb.nimages == 10
+        assert orca_neb.num_atoms == 148
+        assert orca_neb.ci_converged is True
+        assert orca_neb.ts_converged is True
+        assert orca_neb.ci == "Climbing Image:  image 4."
+        assert orca_neb.ci_energy == -219.0833212
+        assert (
+            orca_neb.reactant.empirical_formula
+            == orca_neb.product.empirical_formula
+            == "C72H68NO6P"
+        )
+        assert orca_neb.ci_max_abs_force == 0.001963
+        assert orca_neb.ts_delta_energy == 4.02
+        assert orca_neb.ts_rms_force == 0.00034
+        assert orca_neb.ts_max_abs_force == 0.00543
+        assert orca_neb.ts_energy == -219.09056
+        assert orca_neb.preopt_ends
+
+
+class TestORCANEBJobSettings:
+    """Test suite for ORCANEBJobSettings class."""
+
+    def test_init_default(self):
+        """Test default initialization."""
+        settings = ORCANEBJobSettings()
+        assert settings.joboption is None
+        assert settings.nimages is None
+        assert settings.preopt_ends is False
+
+    def test_init_with_parameters(self):
+        """Test initialization with parameters."""
+        settings = ORCANEBJobSettings(
+            joboption="NEB-TS", nimages=8, semiempirical="XTB2"
+        )
+        assert settings.joboption == "NEB-TS"
+        assert settings.nimages == 8
+        assert settings.semiempirical == "XTB2"
+
+    def test_route_string_generation(self):
+        """Test route string generation."""
+        settings = ORCANEBJobSettings(joboption="NEB-CI", semiempirical="XTB2")
+        assert settings.route_string == "!  XTB2 NEB-CI"
+
+    def test_neb_block_basic(self, tmpdir):
+        """Test basic NEB block generation via ORCAInputWriter."""
+        from unittest.mock import MagicMock
+
+        settings = ORCANEBJobSettings(
+            nimages=5, starting_xyz="start.xyz", ending_xyzfile="end.xyz"
+        )
+        # Create a mock job with the settings
+        mock_job = MagicMock()
+        mock_job.settings = settings
+
+        writer = ORCAInputWriter(job=mock_job)
+        neb_block = writer.neb_block
+        assert "%NEB" in neb_block
+        assert "NImages 5" in neb_block
+        assert 'NEB_END_XYZFILE "end.xyz"' in neb_block
+
+    def test_inheritance(self):
+        """Test inheritance from ORCAJobSettings."""
+        settings = ORCANEBJobSettings(functional="B3LYP", basis="def2-SVP")
+        assert isinstance(settings, ORCANEBJobSettings)
+        assert settings.functional == "B3LYP"
+        assert settings.basis == "def2-SVP"
+
+    def test_validation_errors(self):
+        """Test validation raises appropriate errors."""
+        from unittest.mock import MagicMock
+
+        settings = ORCANEBJobSettings(starting_xyz="start.xyz")
+        mock_job = MagicMock()
+        mock_job.settings = settings
+        writer = ORCAInputWriter(job=mock_job)
+
+        with pytest.raises(
+            AssertionError, match="The number of images is missing"
+        ):
+            _ = writer.neb_block
+
+    def test_equality_identical_settings(self):
+        """Test that identical NEB settings are equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts_guess.xyz",
+            preopt_ends=True,
+            semiempirical="XTB2",
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts_guess.xyz",
+            preopt_ends=True,
+            semiempirical="XTB2",
+            functional="B3LYP",
+            basis="def2-SVP",
+            charge=0,
+            multiplicity=1,
+        )
+        assert settings1 == settings2
+
+    def test_equality_different_joboption(self):
+        """Test that settings with different joboption are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS", nimages=8, ending_xyzfile="product.xyz"
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-CI", nimages=8, ending_xyzfile="product.xyz"
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_nimages(self):
+        """Test that settings with different nimages are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS", nimages=8, ending_xyzfile="product.xyz"
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS", nimages=12, ending_xyzfile="product.xyz"
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_intermediate_xyzfile(self):
+        """Test that settings with different intermediate file are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts1.xyz",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            intermediate_xyzfile="ts2.xyz",
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_restarting_xyzfile(self):
+        """Test that settings with different restart file are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            restarting_xyzfile="restart1.allxyz",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            restarting_xyzfile="restart2.allxyz",
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_preopt_ends(self):
+        """Test that settings with different preopt_ends are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            preopt_ends=True,
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            preopt_ends=False,
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_semiempirical(self):
+        """Test that settings with different semiempirical method are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            semiempirical="XTB2",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            semiempirical="XTB1",
+        )
+        assert settings1 != settings2
+
+    def test_equality_different_parent_attributes(self):
+        """Test that settings with different parent class attributes are not equal."""
+        settings1 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            functional="B3LYP",
+            basis="def2-SVP",
+        )
+        settings2 = ORCANEBJobSettings(
+            joboption="NEB-TS",
+            nimages=8,
+            ending_xyzfile="product.xyz",
+            functional="PBE0",
+            basis="def2-SVP",
+        )
+        assert settings1 != settings2
+
+    def test_equality_includes_all_neb_attributes(self):
+        """Test that all 7 NEB-specific attributes are included in equality check."""
+        # Create two settings that differ only in each NEB attribute
+        base_kwargs = {
+            "joboption": "NEB-TS",
+            "nimages": 8,
+            "ending_xyzfile": "product.xyz",
+            "intermediate_xyzfile": "ts.xyz",
+            "restarting_xyzfile": "restart.allxyz",
+            "preopt_ends": True,
+            "semiempirical": "XTB2",
+        }
+
+        # Test each attribute individually
+        for attr in [
+            "joboption",
+            "nimages",
+            "ending_xyzfile",
+            "intermediate_xyzfile",
+            "restarting_xyzfile",
+            "preopt_ends",
+            "semiempirical",
+        ]:
+            settings1 = ORCANEBJobSettings(**base_kwargs)
+            modified_kwargs = base_kwargs.copy()
+
+            # Change the attribute to a different value
+            if attr == "joboption":
+                modified_kwargs[attr] = "NEB-CI"
+            elif attr == "nimages":
+                modified_kwargs[attr] = 12
+            elif attr == "preopt_ends":
+                modified_kwargs[attr] = False
+            elif attr == "semiempirical":
+                modified_kwargs[attr] = "XTB1"
+            else:  # file paths
+                modified_kwargs[attr] = "different_file.xyz"
+
+            settings2 = ORCANEBJobSettings(**modified_kwargs)
+            assert (
+                settings1 != settings2
+            ), f"Equality failed for attribute: {attr}"
