@@ -69,9 +69,13 @@ def query(ctx, file, query, output):
     number_of_atoms, total_energy, homo_energy, lumo_energy, fmo_gap,
     zero_point_energy, enthalpy, entropy, gibbs_free_energy, source_file
 
+    Note: For molecule-level fields (charge, multiplicity, chemical_formula,
+    smiles, number_of_atoms), a record matches if ANY molecule in the record
+    satisfies the condition.
+
     \b
     Examples:
-        chemsmart run database query -f my.db
+        chemsmart run database query -f database.db
         chemsmart run database query -f my.db -q "chemical_formula = 'CO2'" -o co2.db
         chemsmart run database query -f my.db -q "fmo_gap < 7 AND program = 'gaussian'"
         chemsmart run database query -f my.db -q "source_file ~ 'benzene'"
@@ -101,6 +105,12 @@ def query(ctx, file, query, output):
     except ValueError as e:
         logger.error(f"Invalid query: {e}")
         return None
+
+    # Log query results
+    total_count = dq.count_records()
+    logger.info(
+        f"Query matched {len(summaries)} of {total_count} record(s) in {os.path.basename(file)}."
+    )
 
     # Print formatted summary
     print("\n" + dq.format_summary(summaries) + "\n")

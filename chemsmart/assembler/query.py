@@ -72,8 +72,8 @@ class DatabaseQuery:
 
     _TABLE_COLUMNS = [
         ("Idx", "record_index", 4, ">"),
-        ("Record ID", "record_id", 16, "<"),
-        ("File", "source_file", 24, "<"),
+        ("Record ID", "record_id", 14, "<"),
+        ("File", "source_file", 22, "<"),
         ("Formula", "chemical_formula", 16, "<"),
         ("Job", "jobtype", 6, "<"),
         ("Program", "program", 8, "<"),
@@ -192,6 +192,19 @@ class DatabaseQuery:
         finally:
             conn.close()
 
+    def count_records(self):
+        """Count the total number of records in the database.
+
+        Returns:
+            Total number of records.
+        """
+        conn = sqlite3.connect(self.db_file)
+        try:
+            cursor = conn.execute("SELECT COUNT(*) FROM records")
+            return cursor.fetchone()[0]
+        finally:
+            conn.close()
+
     def export_to_db(self, records, output_file):
         """Write matching records into a new database."""
         out_db = Database(db_file=output_file)
@@ -217,12 +230,12 @@ class DatabaseQuery:
         matched_count = len(summaries)
 
         # Build header
-        separator1 = "=" * 3 + " Query Summary " + "=" * 80
-        separator2 = "=" * 98
+        separator1 = "=" * 3 + " Query Summary " + "=" * 120
+        separator2 = "=" * 138
         header_lines = [
             separator1,
             f"DB      : {db_name}",
-            f"Query   : {self.query_string}",
+            f"Query   : {self.query_string or '<all>'}",
             f"Matched : {matched_count} record(s)",
         ]
         if self.output_file:

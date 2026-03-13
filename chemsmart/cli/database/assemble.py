@@ -44,8 +44,10 @@ def assemble(
     This command collects calculation data from output files in the specified
     directory and assembles them into a unified SQLite database (.db).
 
-    Example usage:
-    chemsmart run database assemble -d results/ -p gaussian -o database.db
+    \b
+    Examples:
+        chemsmart run database assemble -d results/ -o my.db
+        chemsmart run database assemble -d ./ -p gaussian -o database.db
     """
 
     # Ensure the output filename ends with .db
@@ -111,7 +113,7 @@ def assemble(
     if attempted != actual:
         logger.warning(
             f"Processed {attempted} file(s), but only {actual} unique record(s) "
-            f"were stored (duplicates were replaced)."
+            f"were stored ({attempted - actual} duplicates were replaced)."
         )
     logger.info(f"Assembled {actual} record(s) into database: {output}")
     return None
