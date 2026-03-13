@@ -48,6 +48,11 @@ def modred(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 
+    # Merge gaussian-level CLI overrides (e.g. -c/--charge, -m/--multiplicity).
+    job_settings = ctx.obj["job_settings"]
+    keywords = ctx.obj["keywords"]
+    modred_settings = modred_settings.merge(job_settings, keywords=keywords)
+
     # job setting from filename or default, with updates from user in cli
     # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
