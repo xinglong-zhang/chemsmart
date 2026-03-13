@@ -2661,7 +2661,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
         ha_gas_file,
         a_gas_file,
         href_gas_file,
-        b_gas_file,
+        ref_gas_file,
         ha_solv_file,
         a_solv_file,
         href_solv_file,
@@ -2714,7 +2714,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             ha_gas_file (str): Path to HA gas-phase optimization+freq output file.
             a_gas_file (str): Path to A⁻ gas-phase optimization+freq output file.
             href_gas_file (str): Path to HB gas-phase optimization+freq output file.
-            b_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
+            ref_gas_file (str): Path to B⁻ gas-phase optimization+freq output file.
             ha_solv_file (str): Path to HA solvent single-point output file.
             a_solv_file (str): Path to A⁻ solvent single-point output file.
             href_solv_file (str): Path to HB solvent single-point output file.
@@ -2818,7 +2818,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             href_gas_file
         )
         E_gas_Ref_au, qh_G_Ref_au, G_corr_Ref_au = get_gas_phase_data(
-            b_gas_file
+            ref_gas_file
         )
 
         # Step 2: Get solvent SP energies (E_solv) for all species
@@ -2941,7 +2941,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             ha_gas_file=ha_gas_file,
             a_gas_file=a_gas_file,
             href_gas_file=href_gas_file,
-            b_gas_file=b_gas_file,
+            ref_gas_file=b_gas_file,
             ha_solv_file=ha_solv_file,
             a_solv_file=a_solv_file,
             href_solv_file=href_solv_file,
