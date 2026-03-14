@@ -241,6 +241,73 @@ Key ORCA-Specific Parameters
 -  ``mdci_cutoff``: MDCI method cutoff settings (``Loose``, ``Normal``, ``Tight``)
 -  ``mdci_density``: Density treatment in MDCI (must be the string ``"None"``, not YAML null value)
 
+Example: Custom Solvent Parameters for ORCA
+===========================================
+
+For non-standard solvents in ORCA, custom solvent parameters are written directly into the ``%cpcm`` block of the
+ORCA input file. Unlike Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads
+these parameters from the ``%cpcm`` block.
+
+Example (``~/.chemsmart/orca/custom.yaml``):
+
+.. code:: yaml
+
+   gas:
+     functional: m062x
+     basis: def2-svp
+     defgrid: DEFGRID3
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     defgrid: DEFGRID3
+     freq: False
+     solvent_model: cpcm
+     custom_solvent : |
+       Epsilon 16.7
+       Refrac 1.275
+
+This produces the following ORCA input for the ``solv`` job type:
+
+.. code:: text
+
+   ! CPCM M062X def2-tzvp DEFGRID3 ...
+   %cpcm
+     Epsilon 16.7
+     Refrac 1.275
+   end
+
+When a named solvent is also specified alongside ``custom_solvent``, the route uses ``CPCM(solvent_id)`` and the
+``custom_solvent`` parameters are still written inside the ``%cpcm`` block:
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: smd
+     solvent_id: water
+     custom_solvent : |
+       Epsilon 78.36
+       Refrac 1.33
+
+This produces:
+
+.. code:: text
+
+   ! CPCM(water) M062X def2-tzvp ...
+   %cpcm
+     SMD true
+     SMDsolvent "water"
+     Epsilon 78.36
+     Refrac 1.33
+   end
+
+.. note::
+
+   The ``custom_solvent`` block, SMD activation lines, and ``-so``/``--solvent-options`` CLI parameters all appear
+   together in a single ``%cpcm`` block, in that order: SMD lines first, then ``custom_solvent`` lines, then any
+   extra options from ``-so``.
+
 *******************
  Scratch Directory
 *******************
