@@ -13,7 +13,7 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
+from chemsmart.cli.orca.orca import click_orca_jobtype_options, click_orca_solvent_options, orca
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
 from chemsmart.utils.cli import (
     MyGroup,
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 @orca.group("scan", cls=MyGroup, invoke_without_command=True)
 @click_job_options
+@click_orca_solvent_options
 @click_orca_jobtype_options
 @click.option(
     "-cc",
@@ -39,6 +40,10 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def scan(
     ctx,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
     jobtype,
     coordinates,
     dist_start,
@@ -83,6 +88,16 @@ def scan(
 
     # merge project scan settings with job settings from cli keywords
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
+
+    # cli-supplied solvent model, solvent id, and additional solvent options
+    scan_settings.modify_solvent(
+        remove_solvent=remove_solvent,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
+    )
+    if solvent_options is not None:
+        scan_settings.additional_solvent_options = solvent_options
+
     logger.info(f"Final scan settings: {scan_settings.__dict__}")
 
     if constrained_coordinates is not None:

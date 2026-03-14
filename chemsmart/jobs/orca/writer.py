@@ -225,13 +225,17 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
 
         Note:
-            Currently placeholder for complex solvents specified via
-            %cpcm, %cosmo, or %smd blocks that cannot be captured by route.
+            Writes a ``%cpcm`` block when ``additional_solvent_options`` is
+            set on the job settings.  More complex solvent specifications
+            (e.g. custom epsilon or SMD parameters) can be passed via that
+            attribute.
         """
-        # to implement if there is more complex solvents to be specified via
-        # %cpcm block, %cosmo block, or %smd
-        # block that cannot be capture by route
-        pass
+        additional = self.settings.additional_solvent_options
+        if additional is not None:
+            logger.debug("Writing %cpcm solvent block")
+            f.write("%cpcm\n")
+            f.write(f"  {additional}\n")
+            f.write("end\n")
 
     def _write_mdci_block(self, f):
         """

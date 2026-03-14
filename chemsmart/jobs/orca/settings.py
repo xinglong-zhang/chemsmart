@@ -56,6 +56,8 @@ class ORCAJobSettings(MolecularJobSettings):
         title (str | None): Job title string.
         solvent_model (str | None): Solvation model identifier.
         solvent_id (str | None): Solvent identifier.
+        additional_solvent_options (str | None): Extra solvent options written
+            inside the ``%cpcm`` block (e.g. ``'Epsilon 78.36'``).
         additional_route_parameters (str | None): Extra route parameters.
         route_to_be_written (str | None): Custom route string to write.
         modred (list | dict | None): Modredundant coordinates specification.
@@ -95,6 +97,7 @@ class ORCAJobSettings(MolecularJobSettings):
         title=None,
         solvent_model=None,
         solvent_id=None,
+        additional_solvent_options=None,
         additional_route_parameters=None,
         route_to_be_written=None,
         modred=None,
@@ -136,6 +139,8 @@ class ORCAJobSettings(MolecularJobSettings):
             title: Job title
             solvent_model: Solvation model
             solvent_id: Solvent identifier
+            additional_solvent_options: Additional solvent options written
+                inside the ``%cpcm`` block (e.g. ``'Epsilon 78.36'``).
             additional_route_parameters: Additional route parameters
             route_to_be_written: Custom route string
             modred: Modified redundant coordinates
@@ -189,6 +194,7 @@ class ORCAJobSettings(MolecularJobSettings):
         self.dipole = dipole
         self.quadrupole = quadrupole
         self.invert_constraints = invert_constraints
+        self.additional_solvent_options = additional_solvent_options
 
         # Validate frequency and force settings
         if forces is True and (freq is True or numfreq is True):
