@@ -227,18 +227,26 @@ class ORCAInputWriter(InputWriter):
         Note:
             Writes a ``%cpcm`` block when:
 
-            * ``solvent_model`` is ``"smd"`` — emits ``SMD true`` and
-              ``SMDsolvent "<solvent_id>"`` so that SMD solvation is
-              activated correctly within ORCA's CPCM framework.
-            * ``additional_solvent_options`` is set — the string is
-              appended as-is inside the block (e.g. ``'SurfaceType gepol_ses'``
-              or ``'Epsilon 78.36'``).
+            * ``solvent_model`` is ``"smd"`` — emits ``SMD true`` and, if
+              ``solvent_id`` is provided, ``SMDsolvent "<solvent_id>"`` so
+              that SMD solvation is activated correctly within ORCA's CPCM
+              framework.
+            * ``additional_solvent_options`` is set — each line of the string
+              is written indented inside the block. Commonly used ORCA
+              ``%cpcm`` options that can be passed here:
 
-            Both conditions can apply simultaneously.
+              - ``Epsilon <value>`` — static dielectric constant (e.g.
+                ``Epsilon 78.36``), used for custom/non-named solvents
+              - ``Refrac <value>`` — refractive index (e.g. ``Refrac 1.33``)
+              - ``SurfaceType <type>`` — cavity surface (``gepol_ses``,
+                ``gepol_vdw``, or ``delley``; default ``gepol_ses``)
+              - ``Rsolv <value>`` — solvent probe radius in Ångström
+                (e.g. ``Rsolv 1.30``)
+              - ``MaxIter <n>`` — maximum CPCM iterations
+              - ``Tolerance <value>`` — CPCM convergence tolerance
 
-        Raises:
-            ValueError: If SMD model is requested but no solvent identity
-                is provided.
+            Both SMD activation and ``additional_solvent_options`` can apply
+            simultaneously in the same ``%cpcm`` block.
         """
         solvent_model = self.settings.solvent_model
         solvent_id = self.settings.solvent_id
@@ -247,20 +255,16 @@ class ORCAInputWriter(InputWriter):
         is_smd = solvent_model is not None and solvent_model.lower() == "smd"
         needs_block = is_smd or additional is not None
 
-        if is_smd and solvent_id is None:
-            raise ValueError(
-                "SMD solvation requires a solvent identity (solvent_id). "
-                "Please specify the solvent name (e.g. 'water', 'toluene')."
-            )
-
         if needs_block:
             logger.debug("Writing %cpcm solvent block")
             f.write("%cpcm\n")
             if is_smd:
                 f.write("  SMD true\n")
-                f.write(f'  SMDsolvent "{solvent_id}"\n')
+                if solvent_id is not None:
+                    f.write(f'  SMDsolvent "{solvent_id}"\n')
             if additional is not None:
-                f.write(f"  {additional}\n")
+                for line in additional.splitlines():
+                    f.write(f"  {line.rstrip()}\n")
             f.write("end\n")
 
     def _write_mdci_block(self, f):

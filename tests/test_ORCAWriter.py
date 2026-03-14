@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from filecmp import cmp
 
@@ -529,3 +530,127 @@ class TestORCAInputWriter:
         assert "SMD true" in content
         assert 'SMDsolvent "water"' in content
         assert "SurfaceType gepol_ses" in content
+
+    def test_custom_epsilon_cpcm_no_solvent_name(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Custom CPCM with Epsilon/Refrac: route must have bare CPCM (no parens)."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cpcm"
+        settings.solvent_id = None
+        settings.additional_solvent_options = "Epsilon 78.36\nRefrac 1.33"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_custom_epsilon_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_custom_epsilon_opt.inp")
+        assert os.path.isfile(orca_file)
+
+        content = open(orca_file).read()
+        # Route must have bare CPCM (no solvent in parentheses) for custom epsilon
+        assert re.search(r"\bCPCM\b", content)
+        assert "CPCM(" not in content
+        # %cpcm block must contain Epsilon and Refrac on separate lines
+        assert "%cpcm" in content
+        assert "Epsilon 78.36" in content
+        assert "Refrac 1.33" in content
+        # SMD should not be present
+        assert "SMD true" not in content
+
+    def test_custom_epsilon_with_rsolv_and_surface_type(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Multi-line additional_solvent_options: each option on its own line."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cpcm"
+        settings.solvent_id = None
+        settings.additional_solvent_options = (
+            "Epsilon 78.36\nRefrac 1.33\nSurfaceType gepol_ses\nRsolv 1.30"
+        )
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_multiline_solvent_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_multiline_solvent_opt.inp")
+        content = open(orca_file).read()
+
+        assert "%cpcm" in content
+        assert "Epsilon 78.36" in content
+        assert "Refrac 1.33" in content
+        assert "SurfaceType gepol_ses" in content
+        assert "Rsolv 1.30" in content
+        # Verify each option is on its own properly indented line
+        lines = content.splitlines()
+        cpcm_lines = [
+            line for line in lines if line.strip() in {
+                "Epsilon 78.36", "Refrac 1.33",
+                "SurfaceType gepol_ses", "Rsolv 1.30",
+            }
+        ]
+        assert len(cpcm_lines) == 4
+        for line in cpcm_lines:
+            assert line.startswith("  ")  # all indented by 2 spaces
+
+    def test_smd_with_surface_type_and_rsolv(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """SMD + SurfaceType + Rsolv: all options appear in %cpcm block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "smd"
+        settings.solvent_id = "water"
+        settings.additional_solvent_options = "SurfaceType gepol_ses\nRsolv 1.30"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_smd_surface_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_smd_surface_opt.inp")
+        content = open(orca_file).read()
+
+        assert "CPCM(water)" in content
+        assert "%cpcm" in content
+        assert "SMD true" in content
+        assert 'SMDsolvent "water"' in content
+        assert "SurfaceType gepol_ses" in content
+        assert "Rsolv 1.30" in content

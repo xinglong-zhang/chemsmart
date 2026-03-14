@@ -232,15 +232,24 @@ def click_orca_solvent_options(f):
         "--solvent-id",
         type=str,
         default=None,
-        help="Solvent identifier (e.g. water, toluene, dichloromethane).",
+        help="Solvent identifier (e.g. water, toluene, dichloromethane). "
+        "Optional when specifying a custom solvent via -so (Epsilon/Refrac).",
     )
     @click.option(
         "-so",
         "--solvent-options",
         type=str,
         default=None,
-        help="Additional solvent options written inside the %%cpcm block "
-        "(e.g. 'Epsilon 78.36').",
+        help=(
+            "Additional solvent options written inside the %%cpcm block. "
+            "Supports newline-separated entries for multiple options. "
+            "Common ORCA %%cpcm parameters: "
+            "'Epsilon 78.36' (dielectric constant, for custom solvents), "
+            "'Refrac 1.33' (refractive index), "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_vdw, delley), "
+            "'Rsolv 1.30' (probe radius in Angstrom). "
+            "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -274,15 +283,24 @@ def click_orca_solvent_group_options(f):
         "--solvent-id",
         type=str,
         default=None,
-        help="Solvent identifier (e.g. water, toluene, dichloromethane).",
+        help="Solvent identifier (e.g. water, toluene, dichloromethane). "
+        "Optional when specifying a custom solvent via -so (Epsilon/Refrac).",
     )
     @click.option(
         "-so",
         "--solvent-options",
         type=str,
         default=None,
-        help="Additional solvent options written inside the %%cpcm block "
-        "(e.g. 'Epsilon 78.36').",
+        help=(
+            "Additional solvent options written inside the %%cpcm block. "
+            "Supports newline-separated entries for multiple options. "
+            "Common ORCA %%cpcm parameters: "
+            "'Epsilon 78.36' (dielectric constant, for custom solvents), "
+            "'Refrac 1.33' (refractive index), "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_vdw, delley), "
+            "'Rsolv 1.30' (probe radius in Angstrom). "
+            "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

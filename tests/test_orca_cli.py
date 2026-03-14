@@ -349,3 +349,147 @@ class TestORCASolventCLITsCommand:
         assert result.exit_code == 0, result.output
         assert settings.solvent_model is None
         assert settings.solvent_id is None
+
+
+class TestORCACpcmBlockOptions:
+    """Tests for the ORCA-specific ``%cpcm`` block options via CLI ``-so``."""
+
+    def test_custom_epsilon_no_solvent_id(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """Custom dielectric via ``--remove-solvent`` + ``sp -sm cpcm -so 'Epsilon 78.36'``.
+
+        The project-level solvent (cyclohexane) is cleared by ``--remove-solvent``
+        at the group level; the subcommand-level flags then set the custom
+        dielectric without a named solvent.
+        """
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "--remove-solvent",
+                "sp",
+                "-sm",
+                "cpcm",
+                "-so",
+                "Epsilon 78.36",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.solvent_model == "cpcm"
+        assert settings.solvent_id is None
+        assert settings.additional_solvent_options == "Epsilon 78.36"
+
+    def test_custom_epsilon_and_refrac(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """Custom Epsilon + Refrac via ``--remove-solvent`` + ``sp -sm cpcm -so '...'``.
+
+        Both ``Epsilon`` and ``Refrac`` are passed as a newline-separated
+        string to ``-so``; each should appear in ``additional_solvent_options``.
+        """
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "--remove-solvent",
+                "sp",
+                "-sm",
+                "cpcm",
+                "-so",
+                "Epsilon 78.36\nRefrac 1.33",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.solvent_model == "cpcm"
+        assert settings.solvent_id is None
+        assert "Epsilon 78.36" in settings.additional_solvent_options
+        assert "Refrac 1.33" in settings.additional_solvent_options
+
+    def test_smd_with_surface_type(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """``-sm smd -si water -so 'SurfaceType gepol_ses'`` stores all options."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "SurfaceType gepol_ses",
+                "sp",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+        assert settings.additional_solvent_options == "SurfaceType gepol_ses"
+
+    def test_smd_with_rsolv(
+        self,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """``-sm smd -si water -so 'Rsolv 1.30'`` stores Rsolv option."""
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "Rsolv 1.30",
+                "sp",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+        assert settings.additional_solvent_options == "Rsolv 1.30"
