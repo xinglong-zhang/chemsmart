@@ -230,9 +230,9 @@ Examples:
 Solvent Options
 ===============
 
-Solvent settings can be specified at the Gaussian group level, which means they apply to **any** subcommand
-(``opt``, ``td``, ``sp``, ``ts``, etc.). This is useful when the project settings define a gas-phase calculation
-but you want to add solvation for a particular run without modifying the project file.
+Solvent settings can be specified at the Gaussian group level, which means they apply to **any** subcommand (``opt``,
+``td``, ``sp``, ``ts``, etc.). This is useful when the project settings define a gas-phase calculation but you want to
+add solvation for a particular run without modifying the project file.
 
 .. list-table::
    :header-rows: 1
@@ -260,9 +260,8 @@ but you want to add solvation for a particular run without modifying the project
 
 .. note::
 
-   Both ``-sm`` and ``-si`` must be provided together; specifying only one will raise an error when
-   Gaussian processes the input file.  ``-so`` is only applied when solvent is active — it is ignored
-   when ``--remove-solvent`` is used.
+   Both ``-sm`` and ``-si`` must be provided together; specifying only one will raise an error when Gaussian processes
+   the input file. ``-so`` is only applied when solvent is active — it is ignored when ``--remove-solvent`` is used.
 
 Examples:
 

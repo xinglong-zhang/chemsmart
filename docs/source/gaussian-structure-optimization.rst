@@ -51,8 +51,8 @@ Constrained optimization with frozen atoms:
 Solvated Optimization
 =====================
 
-Solvent options are specified at the Gaussian group level (before the ``opt`` subcommand) and apply to all
-job types. See :ref:`Solvent Options <gaussian-cli-options:Solvent Options>` for the full option reference.
+Solvent options are specified at the Gaussian group level (before the ``opt`` subcommand) and apply to all job types.
+See :ref:`Solvent Options <gaussian-cli-options:Solvent Options>` for the full option reference.
 
 Gas phase optimization (project default, no solvent):
 

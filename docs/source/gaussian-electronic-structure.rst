@@ -44,9 +44,9 @@ SP Options
 
 .. note::
 
-   These solvent options can also be provided at the **Gaussian group level** (before the ``sp`` subcommand),
-   in the same way as for ``opt``, ``td``, and all other subcommands.  Group-level options take precedence
-   over project settings.  See :ref:`Solvent Options <gaussian-cli-options:Solvent Options>` for details.
+   These solvent options can also be provided at the **Gaussian group level** (before the ``sp`` subcommand), in the
+   same way as for ``opt``, ``td``, and all other subcommands. Group-level options take precedence over project
+   settings. See :ref:`Solvent Options <gaussian-cli-options:Solvent Options>` for details.
 
 Basic Usage
 ===========
@@ -237,8 +237,8 @@ Calculate 50-50 singlet-triplet mix:
 Solvated TD-DFT
 ---------------
 
-Solvent options are given at the Gaussian group level (before ``td``).  See
-:ref:`Solvent Options <gaussian-cli-options:Solvent Options>` for the full option reference.
+Solvent options are given at the Gaussian group level (before ``td``). See :ref:`Solvent Options
+<gaussian-cli-options:Solvent Options>` for the full option reference.
 
 Gas phase TD-DFT (project default):
 

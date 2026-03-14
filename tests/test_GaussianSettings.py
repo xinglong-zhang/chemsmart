@@ -519,7 +519,9 @@ class TestGaussianJobFromComFile:
         assert opt_settings.solvent_model == "smd"
         assert opt_settings.solvent_id == "water"
         assert opt_settings.additional_solvent_options == "iterative"
-        assert "scrf=(smd,solvent=water,iterative)" in opt_settings.route_string
+        assert (
+            "scrf=(smd,solvent=water,iterative)" in opt_settings.route_string
+        )
 
     def test_cli_group_solvent_options_propagate_to_td(self):
         """Solvent options given at the gaussian group level propagate to td settings.
