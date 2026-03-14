@@ -26,6 +26,16 @@ from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
 
+@pytest.fixture
+def make_cli_ctx_obj():
+    """Factory for the minimal Click context object."""
+
+    def _make(jobrunner):
+        return {"jobrunner": jobrunner}
+
+    return _make
+
+
 @pytest.fixture()
 def chemsmart_templates_config(mocker):
     """
