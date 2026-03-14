@@ -110,8 +110,7 @@ def dias(
     label = ctx.obj["label"]
 
     if not solv:
-        sp_settings.solvent_model = None
-        sp_settings.solvent_id = None
+        sp_settings.remove_solvent()
 
     logger.info(f"DI-AS settings from project: {sp_settings.__dict__}")
 

@@ -1,4 +1,5 @@
 import os
+from filecmp import cmp
 from pathlib import Path
 
 import networkx as nx
@@ -14,9 +15,14 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import (
     CoordinateBlock,
     Molecule,
+    QMMMMolecule,
 )
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.utils.cluster import is_pubchem_network_available
+from chemsmart.utils.cluster import (
+    is_pubchem_api_available,
+    is_pubchem_network_available,
+)
+from chemsmart.utils.utils import cmp_with_ignore
 
 
 class TestCoordinateBlock:
@@ -60,7 +66,7 @@ TV                -1.219952    2.133447    0.000000
         ]
 
     def test_read_gaussian_cb_frozen_atoms(self):
-        coordinates_string = """
+        coordinates_string1 = """
 C        -1      -0.5448210000   -1.1694570000    0.0001270000
 C        -1       0.8378780000   -1.0476350000    0.0001900000
 C        -1       1.4329940000    0.2194290000    0.0001440000
@@ -76,10 +82,10 @@ O        0       3.6625230000   -0.6037690000   -0.0002940000
 H        0       3.3025560000    1.3842410000    0.0001510000
 Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 """
-        cb = CoordinateBlock(coordinate_block=coordinates_string)
-        assert cb.symbols.get_chemical_formula() == "C7H5ClO"
-        assert cb.molecule.empirical_formula == "C7H5ClO"
-        assert cb.molecule.frozen_atoms == [
+        cb1 = CoordinateBlock(coordinate_block=coordinates_string1)
+        assert cb1.symbols.get_chemical_formula() == "C7H5ClO"
+        assert cb1.molecule.empirical_formula == "C7H5ClO"
+        assert cb1.molecule.frozen_atoms == [
             -1,
             -1,
             -1,
@@ -95,6 +101,33 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
             0,
             0,
         ]
+        # assert cb1.molecule.partition_level_strings is None
+
+        coordinates_string2 = """ 
+  F     -1.041506214819     0.000000000000    -2.126109488809 M
+  F     -2.033681935634    -1.142892069126    -0.412218766901 M
+  F     -2.033681935634     1.142892069126    -0.412218766901 M
+  C     -1.299038105677     0.000000000000    -0.750000000000 M H 5
+  C      0.000000000000     0.000000000000     0.000000000000 H
+  H      0.000000000000     0.000000000000     1.100000000000 H
+  O      1.125833024920     0.000000000000    -0.650000000000 H
+ """
+        cb2 = CoordinateBlock(coordinate_block=coordinates_string2)
+        assert cb2.symbols.get_chemical_formula() == "C2HF3O"
+        assert cb2.molecule.empirical_formula == "C2HF3O"
+        assert cb2.molecule.partition_level_strings == [
+            "M",
+            "M",
+            "M",
+            "M",
+            "H",
+            "H",
+            "H",
+        ]
+        assert cb2.molecule.high_level_atoms == [5, 6, 7]
+        assert cb2.molecule.medium_level_atoms == [1, 2, 3, 4]
+
+        # TODO:
 
 
 class TestStructures:
@@ -142,6 +175,7 @@ class TestStructures:
             single_molecule_xyz_file, return_list=False
         )
         assert isinstance(molecule, Molecule)
+        assert getattr(molecule, "partition_level_strings", None) is None
         assert len(molecule.chemical_symbols) == 71
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
         assert np.isclose(molecule.mass, 665.982, atol=1e-2)
@@ -195,7 +229,8 @@ class TestStructures:
 
         all_molecules = xyz_file.get_molecules(index=":", return_list=True)
 
-        # set correct charge and multiplicity for molecules as needed by pymatgen checks
+        # set correct charge and multiplicity for
+        # molecules as needed by pymatgen checks
         molecules = []
         for molecule in all_molecules:
             molecule.charge = 1
@@ -939,13 +974,9 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
-    @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
-    )
-    def test_stereochemistry_handling(self):
+    def test_stereochemistry_handling(self, methyl3hexane_molecule):
         """Test preservation of stereochemical information."""
-        methyl_3_hexane = Molecule.from_pubchem("11507")
+        methyl_3_hexane = methyl3hexane_molecule
         assert np.all(
             methyl_3_hexane.bond_orders
             == [
@@ -997,6 +1028,12 @@ class TestChemicalFeatures:
         rdkit_mol = chiral_mol.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) != []
 
+    @pytest.mark.skipif(
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
+        reason="Network to pubchem is unavailable",
+    )
+    def test_more_stereochemistry_handling(self):
+        """Test preservation of stereochemical information with PubChem."""
         chiral_mol2 = Molecule.from_pubchem(
             "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
         )
@@ -1062,7 +1099,8 @@ class TestChemicalFeatures:
             1.0,
             1.0,
         ]
-        # check there are 6 aromatic C-C bonds and 6 single C-H bonds in benzene
+        # check there are 6 aromatic C-C bonds
+        # and 6 single C-H bonds in benzene
         assert len([bond for bond in benzene.bond_orders if bond == 1.5]) == 6
         assert len([bond for bond in benzene.bond_orders if bond == 1.0]) == 6
 
@@ -1081,7 +1119,8 @@ class TestChemicalFeatures:
         """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
 
-        # Test pyvoro-based method (optional, may not be available in Python 3.12+)
+        # Test pyvoro-based method (optional,
+        # may not be available in Python 3.12+)
         try:
             ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
             assert ozone_vd_vol > 0
@@ -1096,7 +1135,8 @@ class TestChemicalFeatures:
         assert np.isclose(
             ozone.crude_volume_by_atomic_radii, 3.612781286145805, rtol=0.01
         )
-        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        # vdw_volume uses exact lens-shaped
+        # intersection formula for overlap correction
         assert np.isclose(ozone.vdw_volume, 29.65124427436735, rtol=0.01)
         # grid_vdw_volume uses grid-based integration (similar to RDKit)
         assert np.isclose(ozone.grid_vdw_volume, 31.464, rtol=0.05)
@@ -1131,7 +1171,8 @@ class TestChemicalFeatures:
             12.369068467588548,
             rtol=0.01,
         )
-        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        # vdw_volume uses exact lens-shaped
+        # intersection formula for overlap correction
         assert np.isclose(acetone.vdw_volume, 48.85540325089168, rtol=0.01)
         # grid_vdw_volume uses grid-based integration (similar to RDKit)
         assert np.isclose(acetone.grid_vdw_volume, 64.832, rtol=0.05)
@@ -1363,6 +1404,118 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
             written_coordinates = g.read()
         assert os.path.exists(tmp_file)
         assert all([a == b for a, b in zip(coordinates, written_coordinates)])
+
+
+class TestQMMMinMolecule:
+    def test_atoms_in_levels_wrong_low_level(
+        self, tmpdir, methyl3hexane_molecule
+    ):
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.low_level_atoms = [7, 8, 9]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+        with pytest.raises(ValueError):
+            methyl_3_hexane.partition_level_strings
+            # should raise error since high + medium +
+            # low is not equal to total number of atoms
+
+    def test_atoms_in_levels_default_low_level(
+        self,
+        tmpdir,
+        qmmm_written_xyz_file,
+        qmmm_written_xyz_only_file,
+        methyl3hexane_molecule,
+    ):
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+
+        assert methyl_3_hexane.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "M",
+            "M",
+            "M",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
+
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        methyl_3_hexane.write(written_input, format="xyz", xyz_only=False)
+        assert cmp_with_ignore(
+            written_input, qmmm_written_xyz_only_file, ignore_string="tmp"
+        )  # writes input file as expected
+
+        written_input2 = os.path.join(tmpdir, "tmp_xyz_only.xyz")
+        methyl_3_hexane.write(written_input2, format="xyz", xyz_only=True)
+        assert cmp(
+            written_input2, qmmm_written_xyz_only_file, shallow=False
+        )  # writes input file as expected
+
+    def test_qmmm_atoms_handling(self, tmpdir):
+        """Test QM/MM atoms handling."""
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.00000000],
+                    [-3.88098484, -0.56804789, 0.00000000],
+                    [-5.16121212, 0.33672729, 0.00000000],
+                    [-1.93181817, -0.59090908, 0.00000000],
+                ]
+            ),
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 3)],
+            scale_factors={(1, 3): [0.9, 0.8, 0.7]},
+        )
+
+        assert mol.high_level_atoms == [4]
+        assert mol.low_level_atoms == [1, 2]
+        assert mol.medium_level_atoms == [3]
+        assert mol.bonded_atoms == [(1, 3)]
+
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        with open(written_input, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+
+            expected_lines = [
+                "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",
+                "H -3.8809848400 -0.5680478900 0.0000000000 L",
+                "H -5.1612121200 0.3367272900 0.0000000000 M",
+                "Cl -1.9318181700 -0.5909090800 0.0000000000 H",
+            ]
+
+            assert [" ".join(line.split()) for line in lines] == [
+                " ".join(line.split()) for line in expected_lines
+            ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
+        if os.path.exists("tmp.xyz"):
+            os.remove("tmp.xyz")
 
 
 class TestSDFFile:
@@ -1765,3 +1918,38 @@ class TestCDXFile:
         assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
         assert mol.num_atoms == 75
         assert mol.is_aromatic
+
+def test_qmmm_partition_overlap_raises():
+    """Creating a QMMMMolecule with overlapping
+    partitions should raise a ValueError."""
+    # Create a small dummy molecule
+    symbols = ["C"] * 5
+    positions = np.zeros((5, 3))
+    m = Molecule(symbols=symbols, positions=positions)
+    # High and medium overlap (atom index 2 appears in both)
+    q = QMMMMolecule(
+        molecule=m,
+        high_level_atoms=[1, 2],
+        medium_level_atoms=[2, 3],
+        low_level_atoms=None,
+    )
+    with pytest.raises(ValueError) as exc:
+        q._get_partition_levels()
+    assert "Overlap" in str(exc.value)
+
+
+def test_qmmm_partition_out_of_range_raises():
+    """Specifying out-of-range atom indices should raise a ValueError."""
+    symbols = ["C"] * 4
+    positions = np.zeros((4, 3))
+    m = Molecule(symbols=symbols, positions=positions)
+    # index 10 out of range
+    q = QMMMMolecule(
+        molecule=m,
+        high_level_atoms=[1],
+        medium_level_atoms=[2],
+        low_level_atoms=[10],
+    )
+    with pytest.raises(ValueError) as exc:
+        q._get_partition_levels()
+    assert "out of range" in str(exc.value)

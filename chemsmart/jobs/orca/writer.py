@@ -7,9 +7,14 @@ based on job settings and molecular structures.
 """
 
 import logging
-import os.path
+import os
 
-from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCATSJobSettings
+from chemsmart.jobs.orca.settings import (
+    ORCAIRCJobSettings,
+    ORCANEBJobSettings,
+    ORCAQMMMJobSettings,
+    ORCATSJobSettings,
+)
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.io import remove_keyword
 from chemsmart.utils.utils import (
@@ -29,7 +34,8 @@ class ORCAInputWriter(InputWriter):
 
     Attributes:
         job (ORCAJob): Target job for which the input is generated.
-        settings (ORCAJobSettings): Settings used to generate the route and blocks.
+        settings (ORCAJobSettings): Settings
+        used to generate the route and blocks.
         jobrunner (ORCAJobRunner): Runner providing cores/memory and paths.
     """
 
@@ -81,9 +87,11 @@ class ORCAInputWriter(InputWriter):
         self._write_solvent_block(f)
         self._write_mdci_block(f)
         self._write_elprop_block(f)
+        self._write_qmmm_block(f)
         self._write_modred_block(f)
         self._write_hessian_block(f)
         self._write_irc_block(f)
+        self._write_neb_block(f)
         self._write_constrained_atoms(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
@@ -123,6 +131,10 @@ class ORCAInputWriter(InputWriter):
             route_string = remove_keyword(self.settings.route_string, "opt")
         else:
             route_string = self.settings.route_string
+
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            logger.debug("Writing qmmm route string")
+            route_string = self.settings.qmmm_route_string
 
         f.write(route_string + "\n")
 
@@ -217,7 +229,8 @@ class ORCAInputWriter(InputWriter):
             %cpcm, %cosmo, or %smd blocks that cannot be captured by route.
         """
         # to implement if there is more complex solvents to be specified via
-        # %cpcm block, %cosmo block, or %smd block that cannot be capture by route
+        # %cpcm block, %cosmo block, or %smd
+        # block that cannot be capture by route
         pass
 
     def _write_mdci_block(self, f):
@@ -235,7 +248,8 @@ class ORCAInputWriter(InputWriter):
 
         if mdci_cutoff is not None:
             logger.debug("Writing MDCI block")
-            # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
+            # check that mdci_cutoff is one of the
+            # allowed values: ["loose", "normal", "tight"]
             assert mdci_cutoff.lower() in ["loose", "normal", "tight"], (
                 "mdci_cutoff must be one of the allowed values: "
                 "['loose', 'normal', 'tight']"
@@ -258,7 +272,8 @@ class ORCAInputWriter(InputWriter):
                 f.write("  TCutMKN 1e-4\n")
 
             if mdci_density is not None:
-                # check that mdci_density is one of the allowed values: ["none", "unrelaxed", "relaxed"]
+                # check that mdci_density is one of the allowed
+                # values: ["none", "unrelaxed", "relaxed"]
                 assert mdci_density.lower() in [
                     "none",
                     "unrelaxed",
@@ -298,6 +313,21 @@ class ORCAInputWriter(InputWriter):
                 f.write("  Quadrupole False\n")
             f.write("end\n")
 
+    def _write_qmmm_block(self, f):
+        """
+        Write QM/MM parameter block to ORCA input file.
+
+        Writes the complete %qmmm block for multiscale calculations
+        when using ORCAQMMMJobSettings. The block contains all necessary
+        parameters for defining QM/MM partitioning and calculation setup.
+
+        Args:
+            f: File object to write to
+        """
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            logger.debug("Writing qmmm block")
+            f.write(f"{self.settings.qmmm_block}\n")
+
     def _write_modred_block(self, f):
         """
         Write modified redundant coordinates block.
@@ -334,7 +364,8 @@ class ORCAInputWriter(InputWriter):
         """
         f.write("  Constraints\n")
         # append for modred jobs
-        # 'self.modred' as list of lists, or a single list if only one fixed constraint
+        # 'self.modred' as list of lists, or a
+        # single list if only one fixed constraint
         prepend_string_list = get_prepend_string_list_from_modred_free_format(
             input_modred=modred, program="orca"
         )
@@ -439,8 +470,10 @@ class ORCAInputWriter(InputWriter):
                 f'  InHessName "{self.settings.inhess_filename}"  # Hessian file\n'
             )
 
-        """Hybrid Hessian for speed up of TS search: TS mode is complicated and delocalized, 
-        e.g. in a concerted proton transfer reaction, can use hybrid Hessian to calc 
+        """Hybrid Hessian for speed up of TS search:
+        TS mode is complicated and delocalized,
+        e.g. in a concerted proton transfer
+        reaction, can use hybrid Hessian to calc
         numerical second derivatives only for atoms involved in the TS mode"""
         if self.settings.hybrid_hess:
             assert (
@@ -499,6 +532,16 @@ class ORCAInputWriter(InputWriter):
         if isinstance(self.settings, ORCAIRCJobSettings):
             self._write_irc_block_for_irc(f)
 
+    def _write_neb_block(self, f):
+        """
+        Write NEB block section if settings is ORCANEBJobSettings.
+
+        Args:
+            f: File object to write to
+        """
+        if isinstance(self.settings, ORCANEBJobSettings):
+            self._write_neb_block_for_neb(f)
+
     def _write_irc_block_for_irc(self, f):
         """Writes the IRC block options.
 
@@ -512,35 +555,51 @@ class ORCAInputWriter(InputWriter):
                             # backward
                             # down
         # Initial displacement
-            InitHess   read # by default ORCA uses the Hessian from AnFreq or NumFreq, or computes a new one
-                            # read    - reads the Hessian that is defined via Hess_Filename
+            InitHess read # by default ORCA uses the Hessian
+            from AnFreq or NumFreq, or computes a new one
+                            # read - reads the Hessian that
+                            # is defined via Hess_Filename
                             # calc_anfreq  - computes the analytic Hessian
                             # calc_numfreq - computes the numeric Hessian
-            Hess_Filename "h2o.hess"  # Hessian for initial displacement, must be used together with InitHess = read
-            hessMode   0  # Hessian mode that is used for the initial displacement. Default 0
+            Hess_Filename "h2o.hess" # Hessian for initial
+            displacement, must be used together with InitHess = read
+            hessMode 0 # Hessian mode that is used
+            for the initial displacement. Default 0
             Init_Displ DE      # DE (default) - energy difference
                                # length       - step size
-            Scale_Init_Displ 0.1 # step size for initial displacement from TS. Default 0.1 a.u.
-            DE_Init_Displ    2.0 # energy difference that is expected for initial displacement
+            Scale_Init_Displ 0.1 # step size for initial
+            displacement from TS. Default 0.1 a.u.
+            DE_Init_Displ 2.0 # energy difference
+            that is expected for initial displacement
                                  #  based on provided Hessian (Default: 2 mEh)
         # Steps
             Follow_CoordType cartesian # default and only option
-            Scale_Displ_SD    0.15  # Scaling factor for scaling the 1st SD step
-            Adapt_Scale_Displ true  # modify Scale_Displ_SD when the step size becomes smaller or larger
-            SD_ParabolicFit   true  # Do a parabolic fit for finding an optimal SD step length
-            Interpolate_only  true  # Only allow interpolation for parabolic fit, not extrapolation
+            Scale_Displ_SD 0.15 # Scaling
+            factor for scaling the 1st SD step
+            Adapt_Scale_Displ true # modify Scale_Displ_SD
+            when the step size becomes smaller or larger
+            SD_ParabolicFit true # Do a parabolic
+            fit for finding an optimal SD step length
+            Interpolate_only true # Only allow interpolation
+            for parabolic fit, not extrapolation
             Do_SD_Corr        true  # Apply a correction to the 1st SD step
-            Scale_Displ_SD_Corr  0.333 # Scaling factor for scaling the correction step to the SD step.
-                                       # It is multiplied by the length of the final 1st SD step
-            SD_Corr_ParabolicFit true  # Do a parabolic fit for finding an optimal correction
+            Scale_Displ_SD_Corr 0.333 # Scaling factor for
+            scaling the correction step to the SD step.
+                                       # It is multiplied by the length
+                                       # of the final 1st SD step
+            SD_Corr_ParabolicFit true # Do a parabolic
+            fit for finding an optimal correction
                                        # step length
         # Convergence thresholds - similar to LooseOpt
             TolRMSG   5.e-4      # RMS gradient (a.u.)
             TolMaxG   2.e-3      # Max. element of gradient (a.u.)
         # Output options
-            Monitor_Internals   # Up to three internal coordinates can be defined
-                {B 0 1}         # for which the values are printed during the IRC run.
-                {B 1 5}         # Possible are (B)onds, (A)ngles, (D)ihedrals and (I)mpropers
+            Monitor_Internals # Up to three
+            internal coordinates can be defined
+                {B 0 1} # for which the values
+                are printed during the IRC run.
+                {B 1 5} # Possible are (B)onds,
+                (A)ngles, (D)ihedrals and (I)mpropers
             end
         end.
         """
@@ -614,6 +673,120 @@ class ORCAInputWriter(InputWriter):
                 f.write(f"  {key} {value}\n")
         f.write("end\n")
 
+    @property
+    def neb_block(self):
+        """
+        Generate ORCA NEB input block as a string.
+
+        This property is for testing and inspection. Actual file writing
+        is handled by _write_neb_block_for_neb().
+
+        Returns:
+            str: Formatted %NEB block for ORCA input file
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+
+        Example output:
+            %NEB
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            NImages 8
+            PREOPT_ENDS True
+            end
+        """
+        settings = self.settings
+
+        # Validate required settings
+        assert settings.nimages, "The number of images is missing!"
+        assert (
+            settings.restarting_xyzfile or settings.ending_xyzfile
+        ), "No valid input geometry is given!"
+
+        lines = ["%NEB"]
+
+        if settings.restarting_xyzfile:
+            restart_file = os.path.basename(settings.restarting_xyzfile)
+            lines.append(f'Restart_ALLXYZFile "{restart_file}"')
+        else:
+            assert settings.ending_xyzfile, "No end geometry file is given!"
+            ending_file = os.path.basename(settings.ending_xyzfile)
+            lines.append(f'NEB_END_XYZFILE "{ending_file}"')
+
+            if settings.intermediate_xyzfile:
+                intermediate_file = os.path.basename(
+                    settings.intermediate_xyzfile
+                )
+                lines.append(f'NEB_TS_XYZFILE "{intermediate_file}"')
+
+        lines.append(f"NImages {settings.nimages}")
+
+        if not settings.restarting_xyzfile:
+            bool_str = "True" if settings.preopt_ends else "False"
+            lines.append(f"PREOPT_ENDS {bool_str}")
+
+        lines.append("end")
+        return "\n".join(lines)
+
+    def _write_neb_block_for_neb(self, f):
+        """
+        Write ORCA NEB block configuration to input file.
+
+        Generates the %NEB block with NEB-specific options including number
+        of images, geometry files, and optimization settings. Uses basenames
+        for file paths to work with scratch directory execution.
+
+        Args:
+            f: File object to write to
+
+        Example output:
+            %NEB
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            NImages 8
+            PREOPT_ENDS True
+            end
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+        """
+        settings = self.settings
+
+        # Validate required settings
+        assert settings.nimages, "The number of images is missing!"
+        assert (
+            settings.restarting_xyzfile or settings.ending_xyzfile
+        ), "No valid input geometry is given!"
+
+        f.write("%NEB\n")
+
+        if settings.restarting_xyzfile:
+            # Use basename for scratch compatibility
+            restart_file = os.path.basename(settings.restarting_xyzfile)
+            f.write(f'Restart_ALLXYZFile "{restart_file}"\n')
+        else:
+            assert settings.ending_xyzfile, "No end geometry file is given!"
+            # Use basename for scratch compatibility
+            ending_file = os.path.basename(settings.ending_xyzfile)
+            f.write(f'NEB_END_XYZFILE "{ending_file}"\n')
+
+            # Write TS guess file if provided
+            if settings.intermediate_xyzfile:
+                intermediate_file = os.path.basename(
+                    settings.intermediate_xyzfile
+                )
+                f.write(f'NEB_TS_XYZFILE "{intermediate_file}"\n')
+
+        # Write number of images
+        f.write(f"NImages {settings.nimages}\n")
+
+        # Write pre-optimization setting (only when not using restart)
+        if not settings.restarting_xyzfile:
+            bool_str = "True" if settings.preopt_ends else "False"
+            f.write(f"PREOPT_ENDS {bool_str}\n")
+
+        f.write("end\n")
+
     def _write_constrained_atoms(self, f):
         """
         Write atomic constraints for frozen atoms.
@@ -641,8 +814,47 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If charge or multiplicity is not specified
         """
-        charge = self.settings.charge
-        multiplicity = self.settings.multiplicity
+        charge = getattr(self.settings, "charge", None)
+        multiplicity = getattr(self.settings, "multiplicity", None)
+
+        # If missing, attempt to populate from common QMMM-related fields.
+        # Common names across settings: charge_qm,
+        # charge_intermediate, charge_total
+        # and mult_qm, mult_intermediate, mult_total.
+        if charge is None or multiplicity is None:
+            # order of preference: intermediate (QM2) -> qm -> total
+            candidate_charge_attrs = [
+                "charge_intermediate",
+                "charge_qm",
+                "charge_total",
+                "charge",
+            ]
+            candidate_mult_attrs = [
+                "mult_intermediate",
+                "mult_qm",
+                "mult_total",
+                "multiplicity",
+            ]
+
+            for attr in candidate_charge_attrs:
+                if charge is None:
+                    charge = getattr(self.settings, attr, None)
+            for attr in candidate_mult_attrs:
+                if multiplicity is None:
+                    multiplicity = getattr(self.settings, attr, None)
+
+            # if we found values, assign back to settings for downstream use
+            if charge is not None:
+                logger.debug(
+                    f"Populating settings.charge from QMMM fields: {charge}"
+                )
+                self.settings.charge = charge
+            if multiplicity is not None:
+                logger.debug(
+                    f"Populating settings.multiplicity from QMMM fields: {multiplicity}"
+                )
+                self.settings.multiplicity = multiplicity
+
         assert (
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"

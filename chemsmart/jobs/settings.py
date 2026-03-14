@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class MolecularJobSettings:
-    """Common base job settings for molecular systems using Gaussian and ORCA jobs."""
+    """Common base job settings for molecular
+    systems using Gaussian and ORCA jobs."""
 
     def __init__(
         self,
@@ -23,7 +24,7 @@ class MolecularJobSettings:
         multiplicity=None,
         freq=True,
         numfreq=False,
-        job_type=None,
+        jobtype=None,
         title=None,
         solvent_model=None,
         solvent_id=None,
@@ -49,7 +50,7 @@ class MolecularJobSettings:
         self.multiplicity = multiplicity
         self.freq = freq
         self.numfreq = numfreq
-        self.job_type = job_type
+        self.jobtype = jobtype
         self.title = title
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
@@ -74,7 +75,8 @@ class MolecularJobSettings:
                 self.set_custom_solvent_via_file(custom_solvent)
             else:
                 self.custom_solvent = custom_solvent
-            # check that the last line of custom_solvent is empty, if not, add an empty line
+            # check that the last line of custom_solvent
+            # is empty, if not, add an empty line
             if self.custom_solvent[-1] != "\n":
                 self.custom_solvent += "\n"
             logger.debug(f"Custom solvent parameters: {self.custom_solvent}")
@@ -87,11 +89,13 @@ class MolecularJobSettings:
     def remove_solvent(self):
         self.solvent_model = None
         self.solvent_id = None
+        self.custom_solvent = None
 
     def update_solvent(self, solvent_model=None, solvent_id=None):
         """Update solvent model and solvent identity for implicit solvation.
 
-        Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
+        Solvent models available: ['pcm', 'iefpcm',
+        'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
         """
         # update only if not None; do not update to default value of None
         if solvent_model is not None:
@@ -170,14 +174,19 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         "traj",
         "uvvis",
         "wbi",
+        "neb",  # NEB uses gas settings, with NEB-specific options from CLI
     ]
     sp_job = ["sp"]
     td_job = ["td"]
+    qmmm_job = ["qmmm"]
     all_jobs = gas_phase_jobs + sp_job + td_job
 
     # read in project config
     with open(filename) as f:
         project_config = yaml.safe_load(f)
+        logger.debug(
+            f"Project settings from yaml {filename}: \n{project_config}"
+        )
 
     # populate job settings for different jobs
     all_project_configs = {}  # store all job settings in a dict
@@ -187,14 +196,17 @@ def read_molecular_job_yaml(filename, program="gaussian"):
 
     # check if separate gas phase settings exist
     gas_config = project_config.get("gas", None)
+    qmmm_config = project_config.get("qmmm", None)
 
     if gas_config is None:
-        # no settings for gas phase; using implicit solvation model for all jobs
+        # no settings for gas phase; using
+        # implicit solvation model for all jobs
+        # (except td and qmmm, which will use their own configurations)
         for job in all_jobs:
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], solv_config
             )
@@ -204,17 +216,31 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], gas_config
             )
+            try:
+                # Try updating with gas_config first
+                all_project_configs[job] = update_dict_with_existing_keys(
+                    all_project_configs[job], gas_config
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Updating job '{job}' with gas_config failed ({e}). "
+                    f"Falling back to qmmm_config."
+                )
+                # Fallback: try updating with qmmm_config
+                all_project_configs[job] = update_dict_with_existing_keys(
+                    all_project_configs[job], qmmm_config
+                )
         for job in sp_job:  # jobs using solv config
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
             # turn off freq calculation for single point calculations
             all_project_configs[job]["freq"] = False
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], solv_config
             )
@@ -226,9 +252,24 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
-            all_project_configs[job]["job_type"] = job  # update job_type
+            all_project_configs[job]["jobtype"] = job  # update jobtype
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], td_config
             )
+
+    # check if qmmm settings exist (optional)
+    if "qmmm" in project_config:
+        qmmm_config = project_config["qmmm"]
+        for job in qmmm_job:  # jobs using qmmm config
+            all_project_configs[job] = (
+                default_config.copy()
+            )  # populate defaults
+            all_project_configs[job]["jobtype"] = job  # update jobtype
+            logger.debug(
+                f"Updating qmmm job settings: {all_project_configs[job]} with {qmmm_config}"
+            )
+            for k, v in qmmm_config.items():
+                logger.debug(f"Updating qmmm job settings: {k} with {v}")
+                all_project_configs[job][k] = v
 
     return all_project_configs

@@ -37,17 +37,20 @@ class FileOrganizer:
 
     Notes: (1) empty rows are okay and will be skipped;
            (2) no filenames should be the same in column C
-           (3) no ".log" (or other) extension is needed for each column in Excel document.
+           (3) no ".log" (or other) extension is
+           needed for each column in Excel document.
 
-    The final result will be that inside the current directory, a number of subdirectories
-    named in column A will be created and the files in column C will be named to the corresponding
+    The final result will be that inside the
+    current directory, a number of subdirectories
+    named in column A will be created and the files
+    in column C will be named to the corresponding
     names in column B and moved to their corresponding folders in column A.
 
     Args:
         directory (str): Directory in which the files are searched.
         filename (str): Excel filename to be used for organizing data.
         sheetname (str): Excel sheetname to be used for organizing data.
-        type (str): File type to be searched for.
+        filetype (str): File type to be searched for.
         cols (str): Columns to be read from Excel file.
         skip (int): Number of rows to be skipped in Excel file.
         row (int): Number of rows to be read in Excel file.
@@ -59,7 +62,7 @@ class FileOrganizer:
         directory=None,
         filename=None,
         sheetname=None,
-        type="log",
+        filetype="log",
         cols="B:D",
         skip=2,
         row=100,
@@ -71,7 +74,7 @@ class FileOrganizer:
         assert os.path.exists(filename), f"{filename} does not exist!"
         self.filename = filename
         self.sheetname = sheetname
-        self.type = type
+        self.filetype = filetype
         self.cols = cols
         self.skip = skip
         self.row = row
@@ -101,7 +104,8 @@ class FileOrganizer:
 
     def clean_data(self):
         """
-        Clean data from Excel file by removing empty structure names in second column.
+        Clean data from Excel file by removing
+        empty structure names in second column.
 
         Processes the loaded Excel data to remove rows where the second column
         (structure names) is empty or contains only whitespace. Converts all
@@ -135,7 +139,8 @@ class FileOrganizer:
         Create directories for organizing files.
 
         Creates subdirectories within the working directory based on the
-        provided folder names. Only creates directories that don't already exist.
+        provided folder names. Only creates
+        directories that don't already exist.
 
         Args:
             folders (list): List of folder names to create.
@@ -164,10 +169,10 @@ class FileOrganizer:
         Returns:
             None
         """
-        if self.type not in old_filename:
-            old_filename += f".{self.type}"
-        if self.type not in new_filename:
-            new_filename += f".{self.type}"
+        if self.filetype not in old_filename:
+            old_filename += f".{self.filetype}"
+        if self.filetype not in new_filename:
+            new_filename += f".{self.filetype}"
 
         absolute_file_path, _ = search_file(old_filename)
         new_file_path = os.path.join(

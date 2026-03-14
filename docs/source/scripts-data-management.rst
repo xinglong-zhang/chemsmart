@@ -39,7 +39,7 @@ Options
       -  string
       -  Excel file with metadata (required)
 
-   -  -  ``-t, --type``
+   -  -  ``-t, --filetype``
       -  string
       -  File extension to organize (default: log)
 
@@ -93,8 +93,8 @@ Usage
 
 .. code:: text
 
-   file_converter.py [-d path/to/directory] [-t filetype] [-f filename]
-                     [-o output_type] [-i]
+   file_converter.py [-d path/to/directory] [-t filetype] [-p program]
+                     [-f filename] [-o output_type] [-i]
 
 Options
 =======
@@ -111,9 +111,14 @@ Options
       -  string
       -  Directory for batch conversion (mutually exclusive with -f)
 
-   -  -  ``-t, --type``
+   -  -  ``-t, --filetype``
       -  string
       -  Input file type: log, com, gjf, out, inp, xyz, sdf
+
+   -  -  ``-p, --program``
+      -  choice
+      -  Program that produced the files: ``gaussian`` or ``orca``. Required when ``-t out`` is used, since both
+         Gaussian and ORCA share the ``.out`` extension
 
    -  -  ``-f, --filename``
       -  string
@@ -146,10 +151,20 @@ Output ``co2.xyz``:
    O        0.0000000000    0.0000000000   -1.1630620000
    C        0.0000000000    0.0000000000    0.0000000000
 
-**Batch conversion:**
+**Batch conversion of .log file:**
 
 .. code:: bash
 
    file_converter.py -d . -t log -o com -i
 
 Converts all ``.log`` files in the current directory to ``.com`` files, including intermediate structures.
+
+**Batch conversion of .out files (program required):**
+
+.. code:: bash
+
+   # Gaussian .out files
+   file_converter.py -d . -t out -p gaussian -o xyz
+
+   # ORCA .out files
+   file_converter.py -d . -t out -p orca -o xyz

@@ -76,7 +76,8 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
     - Assign independent colors to each group (optional).
     - Render background atoms using a faded color palette.
     - Optionally customize surface color and transparency.
-    - Override default atomic colors (C, N, O, S, P) with user-specified RGB values.
+    - Override default atomic colors (C, N,
+    O, S, P) with user-specified RGB values.
 
     Command-line integration (matching CLI behavior) should provide:
     - `groups`: a list of group specifications (repeatable `--group`).
@@ -104,11 +105,14 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         of highlight groups.
 
         Args:
-            groups (Iterable): Sequence of group specifications (parsed from CLI).
-            colors (Iterable, optional): Sequence of colors corresponding to groups.
+            groups (Iterable): Sequence of group
+            specifications (parsed from CLI).
+            colors (Iterable, optional): Sequence
+            of colors corresponding to groups.
             stick_radius (float, optional): Stick radius for rendering.
             surface_color (str or tuple, optional): Surface color override.
-            surface_transparency (float, optional): Surface transparency override.
+            surface_transparency (float, optional):
+            Surface transparency override.
             new_color_* (tuple, optional): RGB triplets for element recoloring.
             **kwargs: Additional arguments passed to parent PyMOLJob.
         """

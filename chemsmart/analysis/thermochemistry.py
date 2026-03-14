@@ -153,8 +153,8 @@ class Thermochemistry:
         return output
 
     @property
-    def job_type(self):
-        return self.file_object.job_type
+    def jobtype(self):
+        return self.file_object.jobtype
 
     @property
     def mass(self):
@@ -220,7 +220,7 @@ class Thermochemistry:
     def cleaned_frequencies(self):
         """Clean up vibrational frequencies for thermochemical calculations.
 
-        For transition states (job_type == "ts"), the first imaginary
+        For transition states (jobtype == "ts"), the first imaginary
         frequency is assumed to correspond to the reaction coordinate and is
         excluded from thermochemical calculation.
         For optimization, only geometries without imaginary frequencies are
@@ -229,7 +229,7 @@ class Thermochemistry:
         if self.vibrational_frequencies is None:
             return None
         if self.imaginary_frequencies:
-            if self.job_type == "ts":
+            if self.jobtype == "ts":
                 if (
                     len(self.imaginary_frequencies) == 1
                     and self.vibrational_frequencies[0] < 0.0
@@ -351,7 +351,7 @@ class Thermochemistry:
 
     @property
     def electronic_heat_capacity(self):
-        """The electronic heat capacity is zero for all types of molecules.
+        r"""The electronic heat capacity is zero for all types of molecules.
 
         C_V = (\partial U_e / \partial T)_V = 0
         """
@@ -373,7 +373,8 @@ class Thermochemistry:
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
         self,
     ):
-        """Calculate the rotational partition function of a nonlinear polyatomic molecule.
+        """Calculate the rotational partition
+        function of a nonlinear polyatomic molecule.
 
         Formula:
             q_r = pi^(1/2) / σ_r * (T^(3/2) / (Θ_r,x * Θ_r,y * Θ_r,z)^(1/2))
@@ -442,7 +443,8 @@ class Thermochemistry:
 
     @property
     def rotational_heat_capacity(self):
-        """Obtain the rotational contribution to the heat capacity in J mol^-1 K^-1.
+        """Obtain the rotational contribution
+        to the heat capacity in J mol^-1 K^-1.
 
         Formula:
             C_r = 0 for monoatomic molecules
@@ -553,7 +555,8 @@ class Thermochemistry:
 
     @property
     def vibrational_heat_capacity(self):
-        """Obtain the vibrational contribution to the heat capacity in J mol^-1 K^-1.
+        """Obtain the vibrational contribution
+        to the heat capacity in J mol^-1 K^-1.
 
         Formula:
             C_v = R * Σ(exp(-Θ_v,K / T) *
@@ -968,7 +971,7 @@ class Thermochemistry:
     def check_frequencies(self):
         """Check for imaginary frequencies and raise an error if found."""
         if self.imaginary_frequencies:
-            if self.job_type == "ts":
+            if self.jobtype == "ts":
                 if len(self.imaginary_frequencies) == 1:
                     logger.info(
                         f"Correct Transition State detected: only 1 imaginary "
@@ -981,7 +984,7 @@ class Thermochemistry:
                         f"{self.filename}. Expected 0 for optimization or 1 "
                         f"for TS, but found "
                         f"{len(self.imaginary_frequencies)} for job: "
-                        f"{self.job_type}!"
+                        f"{self.jobtype}!"
                     )
             else:
                 raise ValueError(
@@ -1343,7 +1346,8 @@ class Thermochemistry:
 
 
 class BoltzmannAverageThermochemistry(Thermochemistry):
-    """Class to compute Boltzmann-averaged thermochemical properties from a list of files."""
+    """Class to compute Boltzmann-averaged
+    thermochemical properties from a list of files."""
 
     def __init__(self, files, energy_type="gibbs", **kwargs):
         super().__init__(
@@ -1360,7 +1364,8 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
         files : list of str
             List of file paths containing thermochemistry data for conformers.
         energy_type : str, optional
-            Energy type to use for Boltzmann weighting ("electronic" or "gibbs"). Default is "gibbs".
+            Energy type to use for Boltzmann weighting
+            ("electronic" or "gibbs"). Default is "gibbs".
         """
         if not files:
             raise ValueError("List of files cannot be empty.")
