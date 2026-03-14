@@ -14,11 +14,9 @@ can be inspected without running an actual calculation.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.gaussian.gaussian import gaussian
-
 
 # ---------------------------------------------------------------------------
 # Helpers
