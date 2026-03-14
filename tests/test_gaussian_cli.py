@@ -1,10 +1,15 @@
 """
-Tests for Gaussian CLI solvent options.
+Tests for Gaussian CLI option propagation and subcommand behaviour.
 
-Verifies that the ``-sm``/``--solvent-model``, ``-si``/``--solvent-id``,
-``-so``/``--solvent-options``, and ``--remove-solvent`` options on the
-``gaussian`` CLI *group* are correctly propagated to every subcommand
-(``opt``, ``td``, ``sp``, …) via the ``merge()`` mechanism.
+This module verifies that solvent-related options
+ (``-sm``/``--solvent-model``, ``-si``/``--solvent-id``,
+ ``-so``/``--solvent-options``, and ``--remove-solvent``) on the
+ ``gaussian`` CLI *group* are correctly propagated to every relevant
+ subcommand (``opt``, ``td``, ``sp``, …) via the ``merge()`` mechanism.
+ It also exercises non-solvent Gaussian CLI functionality for various
+ subcommands (such as ``sp``, ``ts``, ``irc``, ``scan``, and ``crest``),
+ including job type flags, directions, scan/QRC settings, and related
+ options.
 
 Each test uses :class:`click.testing.CliRunner` to invoke the ``gaussian``
 group and :mod:`unittest.mock` to intercept the job constructor so that
@@ -27,42 +32,30 @@ class TestGaussianSolventCLIOptCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``-sm smd -si water`` sets solvent on the opt job settings."""
-        runner = CliRunner()
-        captured = {}
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
 
-        with patch(
-            "chemsmart.jobs.gaussian.opt.GaussianOptJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "water",
-                    "opt",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            # Capture settings from the call
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured, "GaussianOptJob was never instantiated"
-        settings = captured["settings"]
+        assert settings is not None, "GaussianOptJob was never instantiated"
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
 
@@ -71,6 +64,7 @@ class TestGaussianSolventCLIOptCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``-sm smd -si water -so iterative`` sets iterative solvent on opt."""
         runner = CliRunner()
