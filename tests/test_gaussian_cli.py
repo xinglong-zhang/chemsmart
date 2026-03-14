@@ -841,8 +841,7 @@ class TestGaussianCLIQrcCommand:
                 "1",
                 "qrc",
             ],
-            obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-            catch_exceptions=False,
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
         )
         assert result.exit_code == 0, result.output
         assert settings.solvent_model == "smd"
