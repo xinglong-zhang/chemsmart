@@ -423,3 +423,109 @@ class TestORCAInputWriter:
 
         assert os.path.isfile(orca_file)
         assert cmp(orca_file, orca_written_neb_file, shallow=False)
+
+    def test_smd_solvent_uses_cpcm_in_route_and_cpcm_block(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """SMD solvation must write CPCM(solvent) in route + %cpcm block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "smd"
+        settings.solvent_id = "water"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_smd_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_smd_opt.inp")
+        assert os.path.isfile(orca_file)
+
+        content = open(orca_file).read()
+        # Route must use CPCM, not SMD, for the inline solvent keyword
+        assert "CPCM(water)" in content
+        assert "smd(water)" not in content.lower()
+        # %cpcm block must activate SMD with quoted solvent name
+        assert "%cpcm" in content
+        assert "SMD true" in content
+        assert 'SMDsolvent "water"' in content
+
+    def test_cpcm_solvent_uses_cpcm_in_route_no_block(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Pure CPCM solvation must write CPCM(solvent) in route only, no %cpcm block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cpcm"
+        settings.solvent_id = "toluene"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cpcm_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cpcm_opt.inp")
+        assert os.path.isfile(orca_file)
+
+        content = open(orca_file).read()
+        # Route must have CPCM(toluene)
+        assert "CPCM(toluene)" in content
+        # No %cpcm block needed for pure CPCM
+        assert "%cpcm" not in content
+
+    def test_smd_with_additional_solvent_options(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """SMD + additional_solvent_options writes all options in %cpcm block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "smd"
+        settings.solvent_id = "water"
+        settings.additional_solvent_options = "SurfaceType gepol_ses"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_smd_extra_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_smd_extra_opt.inp")
+        content = open(orca_file).read()
+
+        assert "CPCM(water)" in content
+        assert "%cpcm" in content
+        assert "SMD true" in content
+        assert 'SMDsolvent "water"' in content
+        assert "SurfaceType gepol_ses" in content
