@@ -550,10 +550,11 @@ class ORCAJobSettings(MolecularJobSettings):
             # %cpcm block by _write_solvent_block in the writer.
             route_string += f" CPCM({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
-            raise ValueError(
-                "Warning: Solvent model is specified but solvent identity "
-                "is missing!"
-            )
+            # Custom solvent case (e.g. user-specified Epsilon/Refrac via
+            # additional_solvent_options): write bare CPCM keyword without a
+            # solvent name in parentheses.  ORCA will read the dielectric
+            # parameters from the %cpcm block.
+            route_string += " CPCM"
         elif self.solvent_model is None and self.solvent_id is not None:
             logger.warning(
                 "Warning: Solvent identity is specified but solvent model "
@@ -2015,10 +2016,11 @@ class ORCANEBJobSettings(ORCAJobSettings):
             # %cpcm block by _write_solvent_block in the writer.
             route_string += f" CPCM({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
-            raise ValueError(
-                "Warning: Solvent model is specified but solvent identity "
-                "is missing!"
-            )
+            # Custom solvent case (e.g. user-specified Epsilon/Refrac via
+            # additional_solvent_options): write bare CPCM keyword without a
+            # solvent name in parentheses.  ORCA will read the dielectric
+            # parameters from the %cpcm block.
+            route_string += " CPCM"
         elif self.solvent_model is None and self.solvent_id is not None:
             logger.warning(
                 "Warning: Solvent identity is specified but solvent model "
