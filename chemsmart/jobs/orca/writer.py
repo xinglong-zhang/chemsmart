@@ -225,16 +225,42 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
 
         Note:
-            Writes a ``%cpcm`` block when ``additional_solvent_options`` is
-            set on the job settings.  More complex solvent specifications
-            (e.g. custom epsilon or SMD parameters) can be passed via that
-            attribute.
+            Writes a ``%cpcm`` block when:
+
+            * ``solvent_model`` is ``"smd"`` — emits ``SMD true`` and
+              ``SMDsolvent "<solvent_id>"`` so that SMD solvation is
+              activated correctly within ORCA's CPCM framework.
+            * ``additional_solvent_options`` is set — the string is
+              appended as-is inside the block (e.g. ``'SurfaceType gepol_ses'``
+              or ``'Epsilon 78.36'``).
+
+            Both conditions can apply simultaneously.
+
+        Raises:
+            ValueError: If SMD model is requested but no solvent identity
+                is provided.
         """
+        solvent_model = self.settings.solvent_model
+        solvent_id = self.settings.solvent_id
         additional = self.settings.additional_solvent_options
-        if additional is not None:
+
+        is_smd = solvent_model is not None and solvent_model.lower() == "smd"
+        needs_block = is_smd or additional is not None
+
+        if is_smd and solvent_id is None:
+            raise ValueError(
+                "SMD solvation requires a solvent identity (solvent_id). "
+                "Please specify the solvent name (e.g. 'water', 'toluene')."
+            )
+
+        if needs_block:
             logger.debug("Writing %cpcm solvent block")
             f.write("%cpcm\n")
-            f.write(f"  {additional}\n")
+            if is_smd:
+                f.write("  SMD true\n")
+                f.write(f'  SMDsolvent "{solvent_id}"\n')
+            if additional is not None:
+                f.write(f"  {additional}\n")
             f.write("end\n")
 
     def _write_mdci_block(self, f):

@@ -545,7 +545,10 @@ class ORCAJobSettings(MolecularJobSettings):
 
         # write solvent if solvation is turned on
         if self.solvent_model is not None and self.solvent_id is not None:
-            route_string += f" {self.solvent_model}({self.solvent_id})"
+            # In ORCA, both CPCM and SMD use CPCM(solvent) in the route line.
+            # For SMD, the SMD activation parameters are written in the
+            # %cpcm block by _write_solvent_block in the writer.
+            route_string += f" CPCM({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
             raise ValueError(
                 "Warning: Solvent model is specified but solvent identity "
@@ -2007,7 +2010,10 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
         # write solvent if solvation is turned on
         if self.solvent_model is not None and self.solvent_id is not None:
-            route_string += f" {self.solvent_model}({self.solvent_id})"
+            # In ORCA, both CPCM and SMD use CPCM(solvent) in the route line.
+            # For SMD, the SMD activation parameters are written in the
+            # %cpcm block by _write_solvent_block in the writer.
+            route_string += f" CPCM({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
             raise ValueError(
                 "Warning: Solvent model is specified but solvent identity "
