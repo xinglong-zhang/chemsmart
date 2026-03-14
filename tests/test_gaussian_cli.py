@@ -17,12 +17,6 @@ the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
 can be inspected without running an actual calculation.
 """
 
-from unittest.mock import MagicMock, patch
-
-from click.testing import CliRunner
-
-from chemsmart.cli.gaussian.gaussian import gaussian
-
 
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""
@@ -100,41 +94,28 @@ class TestGaussianSolventCLIOptCommand:
         run_gaussian_and_capture_settings,
     ):
         """Route string for opt job contains ``scrf=(smd,solvent=water,iterative)``."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.opt.GaussianOptJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "water",
-                    "-so",
-                    "iterative",
-                    "opt",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert "settings" in captured
-        route_string = captured["settings"].route_string
-        assert "scrf=(smd,solvent=water,iterative)" in route_string
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "iterative",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert "scrf=(smd,solvent=water,iterative)" in settings.route_string
 
     def test_remove_solvent_clears_solvent_from_opt(
         self,
@@ -147,36 +128,22 @@ class TestGaussianSolventCLIOptCommand:
         # The ``solv`` project sets solvent_model=smd and solvent_id=toluene
         # for every job type (including opt).  ``--remove-solvent`` must strip
         # these from the merged settings.
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.opt.GaussianOptJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "--remove-solvent",
-                    "opt",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "--remove-solvent",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
@@ -193,39 +160,25 @@ class TestGaussianSolventCLITdCommand:
     ):
         """``-sm smd -si water`` overrides project td solvent (toluene→water)."""
         # ``solv`` project has smd/toluene for td; CLI overrides solvent_id.
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "cpcm",
-                    "-si",
-                    "water",
-                    "td",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "cpcm",
+                "-si",
+                "water",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model == "cpcm"
         assert settings.solvent_id == "water"
 
@@ -238,41 +191,28 @@ class TestGaussianSolventCLITdCommand:
     ):
         """TD route string contains ``scrf=(smd,solvent=water,iterative)``."""
         # ``solv`` project has smd/toluene for td; CLI overrides to water+iterative.
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "water",
-                    "-so",
-                    "iterative",
-                    "td",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert "settings" in captured
-        route_string = captured["settings"].route_string
-        assert "scrf=(smd,solvent=water,iterative)" in route_string
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "iterative",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert "scrf=(smd,solvent=water,iterative)" in settings.route_string
 
     def test_remove_solvent_clears_solvent_from_td(
         self,
@@ -282,36 +222,22 @@ class TestGaussianSolventCLITdCommand:
         run_gaussian_and_capture_settings,
     ):
         """``--remove-solvent`` nulls solvent settings for a td job."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "--remove-solvent",
-                    "td",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "--remove-solvent",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
@@ -324,35 +250,21 @@ class TestGaussianSolventCLITdCommand:
     ):
         """Without solvent CLI options the project solvent settings are kept."""
         # ``solv`` project has smd/toluene for td; no CLI override → kept.
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "td",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
 
@@ -368,38 +280,21 @@ class TestGaussianCLISinglePointCommand:
         run_gaussian_and_capture_settings,
     ):
         """``sp`` subcommand creates a ``GaussianSinglePointJob``."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "sp",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert (
-            "settings" in captured
-        ), "GaussianSinglePointJob was never instantiated"
-        # gas_solv project sp settings use ``solv`` config: def2tzvp + smd/toluene
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.basis == "def2tzvp"
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
@@ -412,39 +307,25 @@ class TestGaussianCLISinglePointCommand:
         run_gaussian_and_capture_settings,
     ):
         """sp-level ``-sm``/``-si`` options override project solvent settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "sp",
-                    "-sm",
-                    "pcm",
-                    "-si",
-                    "acetonitrile",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+                "-sm",
+                "pcm",
+                "-si",
+                "acetonitrile",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model == "pcm"
         assert settings.solvent_id == "acetonitrile"
 
@@ -456,36 +337,22 @@ class TestGaussianCLISinglePointCommand:
         run_gaussian_and_capture_settings,
     ):
         """sp-level ``--remove-solvent`` strips solvent from project settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "sp",
-                    "--remove-solvent",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+                "--remove-solvent",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
@@ -497,39 +364,25 @@ class TestGaussianCLISinglePointCommand:
         run_gaussian_and_capture_settings,
     ):
         """Group-level ``-sm``/``-si`` options are merged into sp settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "cpcm",
-                    "-si",
-                    "thf",
-                    "sp",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "cpcm",
+                "-si",
+                "thf",
+                "sp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model == "cpcm"
         assert settings.solvent_id == "thf"
 
@@ -545,34 +398,22 @@ class TestGaussianCLITsCommand:
         run_gaussian_and_capture_settings,
     ):
         """``ts`` subcommand creates a ``GaussianTSJob`` with gas settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch("chemsmart.jobs.gaussian.ts.GaussianTSJob") as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "ts",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured, "GaussianTSJob was never instantiated"
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.ts.GaussianTSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         # gas_solv project ts settings use ``gas`` config: def2svp, no solvent
-        settings = captured["settings"]
         assert settings.basis == "def2svp"
         assert settings.solvent_model is None
 
@@ -584,33 +425,21 @@ class TestGaussianCLITsCommand:
         run_gaussian_and_capture_settings,
     ):
         """``ts`` with ``solv`` project inherits solvent settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch("chemsmart.jobs.gaussian.ts.GaussianTSJob") as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "ts",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.ts.GaussianTSJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
 
@@ -622,37 +451,25 @@ class TestGaussianCLITsCommand:
         run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``ts`` settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch("chemsmart.jobs.gaussian.ts.GaussianTSJob") as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "dmso",
-                    "ts",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.ts.GaussianTSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "dmso",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "dmso"
 
@@ -668,35 +485,21 @@ class TestGaussianCLIIrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """``irc`` subcommand creates a ``GaussianIRCJob``."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.irc.GaussianIRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "irc",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured, "GaussianIRCJob was never instantiated"
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.basis == "def2svp"
 
     def test_irc_direction_forward_option(
@@ -707,37 +510,26 @@ class TestGaussianCLIIrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """``-d forward`` sets the IRC direction to ``forward``."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.irc.GaussianIRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "irc",
-                    "-d",
-                    "forward",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-d",
+                "forward",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
 
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        assert captured["settings"].direction == "forward"
+        assert settings.direction == "forward"
 
     def test_irc_direction_reverse_option(
         self,
@@ -747,37 +539,25 @@ class TestGaussianCLIIrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """``-d reverse`` sets the IRC direction to ``reverse``."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.irc.GaussianIRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "irc",
-                    "-d",
-                    "reverse",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-d",
+                "reverse",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        assert captured["settings"].direction == "reverse"
+        assert settings.direction == "reverse"
 
     def test_irc_group_level_solvent_injected(
         self,
@@ -787,39 +567,26 @@ class TestGaussianCLIIrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``irc`` settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.irc.GaussianIRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "methanol",
-                    "irc",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "methanol",
+                "irc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "methanol"
 
@@ -835,41 +602,28 @@ class TestGaussianCLIScanCommand:
         run_gaussian_and_capture_settings,
     ):
         """``scan`` subcommand creates a ``GaussianScanJob``."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.scan.GaussianScanJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "scan",
-                    "-c",
-                    "[[1,2]]",
-                    "-s",
-                    "0.1",
-                    "-n",
-                    "10",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2]]",
+                "-s",
+                "0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured, "GaussianScanJob was never instantiated"
-        settings = captured["settings"]
         assert settings.basis == "def2svp"
 
     def test_scan_settings_from_project(
@@ -880,41 +634,28 @@ class TestGaussianCLIScanCommand:
         run_gaussian_and_capture_settings,
     ):
         """``scan`` with ``solv`` project inherits solvent settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.scan.GaussianScanJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "scan",
-                    "-c",
-                    "[[1,2]]",
-                    "-s",
-                    "0.1",
-                    "-n",
-                    "10",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2]]",
+                "-s",
+                "0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
 
@@ -926,45 +667,32 @@ class TestGaussianCLIScanCommand:
         run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``scan`` settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.scan.GaussianScanJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "water",
-                    "scan",
-                    "-c",
-                    "[[1,2]]",
-                    "-s",
-                    "0.1",
-                    "-n",
-                    "10",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "scan",
+                "-c",
+                "[[1,2]]",
+                "-s",
+                "0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
 
@@ -980,39 +708,24 @@ class TestGaussianCLICrestCommand:
         run_gaussian_and_capture_settings,
     ):
         """``crest -j opt`` subcommand creates a ``GaussianCrestJob``."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.crest.GaussianCrestJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "crest",
-                    "-j",
-                    "opt",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.crest.GaussianCrestJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "crest",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert (
-            "settings" in captured
-        ), "GaussianCrestJob was never instantiated"
-        settings = captured["settings"]
         assert settings.basis == "def2svp"
 
     def test_crest_settings_from_solv_project(
@@ -1023,37 +736,24 @@ class TestGaussianCLICrestCommand:
         run_gaussian_and_capture_settings,
     ):
         """``crest`` with ``solv`` project inherits solvent settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.crest.GaussianCrestJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "crest",
-                    "-j",
-                    "opt",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.crest.GaussianCrestJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "crest",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
 
@@ -1065,41 +765,28 @@ class TestGaussianCLICrestCommand:
         run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``crest`` settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.crest.GaussianCrestJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "water",
-                    "crest",
-                    "-j",
-                    "opt",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.crest.GaussianCrestJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "crest",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
 
@@ -1115,35 +802,22 @@ class TestGaussianCLIQrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """``qrc`` subcommand creates a ``GaussianQRCJob`` (default jobtype=opt)."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "qrc",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured, "GaussianQRCJob was never instantiated"
-        settings = captured["settings"]
         assert settings.basis == "def2svp"
 
     def test_qrc_settings_from_solv_project(
@@ -1154,35 +828,23 @@ class TestGaussianCLIQrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """``qrc`` with ``solv`` project inherits solvent settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "qrc",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+            ],
+            obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            catch_exceptions=False,
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
 
@@ -1194,39 +856,26 @@ class TestGaussianCLIQrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``qrc`` settings."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "water",
-                    "qrc",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "qrc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
 
@@ -1238,36 +887,22 @@ class TestGaussianCLIQrcCommand:
         run_gaussian_and_capture_settings,
     ):
         """``qrc -j ts`` uses TS settings from the project for the QRC job."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "qrc",
-                    "-j",
-                    "ts",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+                "-j",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        # TS settings from gas_solv use the ``gas`` config: def2svp
-        settings = captured["settings"]
         assert settings.basis == "def2svp"
