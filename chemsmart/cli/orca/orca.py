@@ -210,14 +210,12 @@ def click_orca_solvent_options(f):
     """Common click options for ORCA solvent settings (subcommand level).
 
     Provides ``--remove-solvent``, ``-sm``/``--solvent-model``,
-    ``-si``/``--solvent-id`` and ``-so``/``--solvent-options`` to every
+    ``-si``/``--solvent-id``, and ``-so``/``--solvent-options`` to every
     ORCA subcommand that decorates with this function.
     """
 
     @click.option(
         "--remove-solvent/--no-remove-solvent",
-        "-rs/ ",
-        type=bool,
         default=False,
         help="Remove the solvent model from the job. Defaults to project "
         "settings.",
