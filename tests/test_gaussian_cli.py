@@ -18,20 +18,6 @@ from click.testing import CliRunner
 
 from chemsmart.cli.gaussian.gaussian import gaussian
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_ctx_obj(jobrunner):
-    """Minimal Click context object required by the ``gaussian`` group."""
-    return {"jobrunner": jobrunner}
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
 
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""
@@ -40,6 +26,7 @@ class TestGaussianSolventCLIOptCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """``-sm smd -si water`` sets solvent on the opt job settings."""
         runner = CliRunner()
@@ -66,7 +53,7 @@ class TestGaussianSolventCLIOptCommand:
                     "water",
                     "opt",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             # Capture settings from the call
@@ -83,6 +70,7 @@ class TestGaussianSolventCLIOptCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """``-sm smd -si water -so iterative`` sets iterative solvent on opt."""
         runner = CliRunner()
@@ -111,7 +99,7 @@ class TestGaussianSolventCLIOptCommand:
                     "iterative",
                     "opt",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             if mock_job_cls.call_args is not None:
@@ -128,6 +116,7 @@ class TestGaussianSolventCLIOptCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """Route string for opt job contains ``scrf=(smd,solvent=water,iterative)``."""
         runner = CliRunner()
@@ -156,7 +145,7 @@ class TestGaussianSolventCLIOptCommand:
                     "iterative",
                     "opt",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             if mock_job_cls.call_args is not None:
@@ -170,6 +159,7 @@ class TestGaussianSolventCLIOptCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """``--remove-solvent`` nulls the solvent on a project that has one."""
         # The ``solv`` project sets solvent_model=smd and solvent_id=toluene
@@ -196,7 +186,7 @@ class TestGaussianSolventCLIOptCommand:
                     "--remove-solvent",
                     "opt",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             if mock_job_cls.call_args is not None:
@@ -216,6 +206,7 @@ class TestGaussianSolventCLITdCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """``-sm smd -si water`` overrides project td solvent (toluene→water)."""
         # ``solv`` project has smd/toluene for td; CLI overrides solvent_id.
@@ -243,7 +234,7 @@ class TestGaussianSolventCLITdCommand:
                     "water",
                     "td",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             if mock_job_cls.call_args is not None:
@@ -259,6 +250,7 @@ class TestGaussianSolventCLITdCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """TD route string contains ``scrf=(smd,solvent=water,iterative)``."""
         # ``solv`` project has smd/toluene for td; CLI overrides to water+iterative.
@@ -288,7 +280,7 @@ class TestGaussianSolventCLITdCommand:
                     "iterative",
                     "td",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             if mock_job_cls.call_args is not None:
@@ -302,6 +294,7 @@ class TestGaussianSolventCLITdCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """``--remove-solvent`` nulls solvent settings for a td job."""
         runner = CliRunner()
@@ -325,7 +318,7 @@ class TestGaussianSolventCLITdCommand:
                     "--remove-solvent",
                     "td",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             if mock_job_cls.call_args is not None:
@@ -341,6 +334,7 @@ class TestGaussianSolventCLITdCommand:
         self,
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
     ):
         """Without solvent CLI options the project solvent settings are kept."""
         # ``solv`` project has smd/toluene for td; no CLI override → kept.
@@ -364,7 +358,7 @@ class TestGaussianSolventCLITdCommand:
                     "1",
                     "td",
                 ],
-                obj=_make_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
                 catch_exceptions=False,
             )
             if mock_job_cls.call_args is not None:
