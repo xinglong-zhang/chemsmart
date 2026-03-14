@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 @click_jobrunner_options
 @logger_options
 @click.option(
+    "-N",
+    "--num-nodes",
+    type=int,
+    default=None,
+    help="Number of nodes for parallel job execution. "
+    "When specified with a list of jobs, creates an array job.",
+)
+@click.option(
     "-t",
     "--time-hours",
     type=float,
@@ -58,8 +66,10 @@ def sub(
     fake,
     scratch,
     delete_scratch,
+    run_in_serial,
     debug,
     stream,
+    num_nodes,
     time_hours,
     queue,
     verbose,
@@ -93,6 +103,7 @@ def sub(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
+        run_in_serial=run_in_serial,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
@@ -104,6 +115,7 @@ def sub(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
+    ctx.obj["num_nodes"] = num_nodes  # Store num_nodes for array job submission
 
 
 @sub.result_callback(replace=True)
@@ -144,6 +156,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "verbose",
             "test",
             "print_command",
+            "num_nodes",
         ]
 
         for keyword in keywords_not_in_run:
@@ -179,14 +192,37 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
+    num_nodes = ctx.obj.get("num_nodes")
     job = args[0]
 
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
-        for single_job in job:
-            single_job.jobrunner = jobrunner
-            _process_single_job(job=single_job)
+        
+        # Check if we should use array job submission
+        if num_nodes is not None and num_nodes > 1 and not jobrunner.run_in_serial:
+            logger.info(f"Submitting {len(job)} jobs as array job with {num_nodes} nodes")
+            
+            # Attach jobrunner to all jobs
+            for single_job in job:
+                single_job.jobrunner = jobrunner
+            
+            # Submit as array job
+            cli_args = _reconstruct_cli_args(ctx, job[0])
+            server = Server.from_servername(kwargs.get("server"))
+            server.submit_array_job(
+                jobs=job,
+                num_nodes=num_nodes,
+                test=kwargs.get("test"),
+                cli_args=cli_args
+            )
+        else:
+            # Submit jobs individually (serial or when num_nodes not specified)
+            if jobrunner.run_in_serial:
+                logger.info("Submitting jobs serially (one by one)")
+            for single_job in job:
+                single_job.jobrunner = jobrunner
+                _process_single_job(job=single_job)
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)
