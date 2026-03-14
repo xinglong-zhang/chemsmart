@@ -1277,6 +1277,11 @@ def orca_yaml_settings_neb_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "neb")
 
 
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):

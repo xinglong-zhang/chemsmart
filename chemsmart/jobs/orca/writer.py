@@ -225,12 +225,32 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
 
         Note:
-            Writes a ``%cpcm`` block when:
+            Writes a ``%cpcm`` block when any of the following apply:
 
             * ``solvent_model`` is ``"smd"`` — emits ``SMD true`` and, if
               ``solvent_id`` is provided, ``SMDsolvent "<solvent_id>"`` so
               that SMD solvation is activated correctly within ORCA's CPCM
               framework.
+            * ``custom_solvent`` is set — the string is written line-by-line
+              inside the block.  In ORCA, custom solvent parameters (Epsilon,
+              Refrac, etc.) are specified directly in the ``%cpcm`` block
+              rather than as a separate appended section (as in Gaussian).
+              A typical ORCA project YAML entry looks like::
+
+                  custom_solvent : |
+                    Epsilon 16.7
+                    Refrac 1.275
+
+              which produces:
+
+              .. code-block:: text
+
+                  ! CPCM B3LYP def2-SVP
+                  %cpcm
+                    Epsilon 16.7
+                    Refrac 1.275
+                  end
+
             * ``additional_solvent_options`` is set — each line of the string
               is written indented inside the block. Commonly used ORCA
               ``%cpcm`` options that can be passed here:
@@ -245,15 +265,17 @@ class ORCAInputWriter(InputWriter):
               - ``MaxIter <n>`` — maximum CPCM iterations
               - ``Tolerance <value>`` — CPCM convergence tolerance
 
-            Both SMD activation and ``additional_solvent_options`` can apply
-            simultaneously in the same ``%cpcm`` block.
+            All three conditions can apply simultaneously in the same
+            ``%cpcm`` block: SMD activation lines are written first, then
+            ``custom_solvent`` lines, then ``additional_solvent_options``.
         """
         solvent_model = self.settings.solvent_model
         solvent_id = self.settings.solvent_id
+        custom_solvent = self.settings.custom_solvent
         additional = self.settings.additional_solvent_options
 
         is_smd = solvent_model is not None and solvent_model.lower() == "smd"
-        needs_block = is_smd or additional is not None
+        needs_block = is_smd or custom_solvent is not None or additional is not None
 
         if needs_block:
             logger.debug("Writing %cpcm solvent block")
@@ -262,6 +284,9 @@ class ORCAInputWriter(InputWriter):
                 f.write("  SMD true\n")
                 if solvent_id is not None:
                     f.write(f'  SMDsolvent "{solvent_id}"\n')
+            if custom_solvent is not None:
+                for line in custom_solvent.splitlines():
+                    f.write(f"  {line.rstrip()}\n")
             if additional is not None:
                 for line in additional.splitlines():
                     f.write(f"  {line.rstrip()}\n")

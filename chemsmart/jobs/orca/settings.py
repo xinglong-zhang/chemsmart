@@ -65,7 +65,17 @@ class ORCAJobSettings(MolecularJobSettings):
         heavy_elements (list | None): Heavy elements list for genecp.
         heavy_elements_basis (str | None): Basis for heavy elements.
         light_elements_basis (str | None): Basis for light elements.
-        custom_solvent (str | None): Custom solvent parameters block.
+        custom_solvent (str | None): Custom solvent parameters written
+            inside the ``%cpcm`` block.  In ORCA, custom dielectric constants
+            are specified as ``%cpcm`` block keywords rather than appended at
+            the end of the input (as in Gaussian).  Example YAML entry::
+
+                custom_solvent : |
+                  Epsilon 16.7
+                  Refrac 1.275
+
+            This produces ``! CPCM B3LYP def2-SVP`` in the route line and
+            a ``%cpcm`` block containing the Epsilon and Refrac lines.
         forces (bool): Calculate forces.
         input_string (str | None): Predefined input content to write directly.
         invert_constraints (bool): Invert modred constraints if True.
@@ -544,7 +554,18 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
-        if self.solvent_model is not None and self.solvent_id is not None:
+        if self.custom_solvent is not None:
+            # Custom solvent parameters will be written in the %cpcm block.
+            # In ORCA, custom dielectric constants (Epsilon, Refrac, etc.) go
+            # directly into the %cpcm block rather than being appended as a
+            # separate section (Gaussian style).  The route line uses bare
+            # CPCM when no named solvent is given, or CPCM(solvent_id) when
+            # one is provided.
+            if self.solvent_id is not None:
+                route_string += f" CPCM({self.solvent_id})"
+            else:
+                route_string += " CPCM"
+        elif self.solvent_model is not None and self.solvent_id is not None:
             # In ORCA, both CPCM and SMD use CPCM(solvent) in the route line.
             # For SMD, the SMD activation parameters are written in the
             # %cpcm block by _write_solvent_block in the writer.
@@ -2010,7 +2031,13 @@ class ORCANEBJobSettings(ORCAJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
-        if self.solvent_model is not None and self.solvent_id is not None:
+        if self.custom_solvent is not None:
+            # Custom solvent parameters will be written in the %cpcm block.
+            if self.solvent_id is not None:
+                route_string += f" CPCM({self.solvent_id})"
+            else:
+                route_string += " CPCM"
+        elif self.solvent_model is not None and self.solvent_id is not None:
             # In ORCA, both CPCM and SMD use CPCM(solvent) in the route line.
             # For SMD, the SMD activation parameters are written in the
             # %cpcm block by _write_solvent_block in the writer.
