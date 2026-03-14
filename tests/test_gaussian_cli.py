@@ -67,41 +67,27 @@ class TestGaussianSolventCLIOptCommand:
         run_gaussian_and_capture_settings,
     ):
         """``-sm smd -si water -so iterative`` sets iterative solvent on opt."""
-        runner = CliRunner()
-        captured = {}
-
-        with patch(
-            "chemsmart.jobs.gaussian.opt.GaussianOptJob"
-        ) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                [
-                    "-p",
-                    "gas_solv",
-                    "-f",
-                    single_molecule_xyz_file,
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "-sm",
-                    "smd",
-                    "-si",
-                    "water",
-                    "-so",
-                    "iterative",
-                    "opt",
-                ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured["settings"] = mock_job_cls.call_args[1]["settings"]
-
-        assert result.exit_code == 0, result.output
-        assert "settings" in captured
-        settings = captured["settings"]
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "iterative",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
         assert settings.additional_solvent_options == "iterative"
@@ -111,6 +97,7 @@ class TestGaussianSolventCLIOptCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Route string for opt job contains ``scrf=(smd,solvent=water,iterative)``."""
         runner = CliRunner()
@@ -154,6 +141,7 @@ class TestGaussianSolventCLIOptCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``--remove-solvent`` nulls the solvent on a project that has one."""
         # The ``solv`` project sets solvent_model=smd and solvent_id=toluene
@@ -201,6 +189,7 @@ class TestGaussianSolventCLITdCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``-sm smd -si water`` overrides project td solvent (toluene→water)."""
         # ``solv`` project has smd/toluene for td; CLI overrides solvent_id.
@@ -245,6 +234,7 @@ class TestGaussianSolventCLITdCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """TD route string contains ``scrf=(smd,solvent=water,iterative)``."""
         # ``solv`` project has smd/toluene for td; CLI overrides to water+iterative.
@@ -289,6 +279,7 @@ class TestGaussianSolventCLITdCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``--remove-solvent`` nulls solvent settings for a td job."""
         runner = CliRunner()
@@ -329,6 +320,7 @@ class TestGaussianSolventCLITdCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Without solvent CLI options the project solvent settings are kept."""
         # ``solv`` project has smd/toluene for td; no CLI override → kept.
@@ -373,6 +365,7 @@ class TestGaussianCLISinglePointCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``sp`` subcommand creates a ``GaussianSinglePointJob``."""
         runner = CliRunner()
@@ -416,6 +409,7 @@ class TestGaussianCLISinglePointCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """sp-level ``-sm``/``-si`` options override project solvent settings."""
         runner = CliRunner()
@@ -459,6 +453,7 @@ class TestGaussianCLISinglePointCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """sp-level ``--remove-solvent`` strips solvent from project settings."""
         runner = CliRunner()
@@ -499,6 +494,7 @@ class TestGaussianCLISinglePointCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Group-level ``-sm``/``-si`` options are merged into sp settings."""
         runner = CliRunner()
@@ -546,6 +542,7 @@ class TestGaussianCLITsCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``ts`` subcommand creates a ``GaussianTSJob`` with gas settings."""
         runner = CliRunner()
@@ -584,6 +581,7 @@ class TestGaussianCLITsCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``ts`` with ``solv`` project inherits solvent settings."""
         runner = CliRunner()
@@ -621,6 +619,7 @@ class TestGaussianCLITsCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``ts`` settings."""
         runner = CliRunner()
@@ -666,6 +665,7 @@ class TestGaussianCLIIrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``irc`` subcommand creates a ``GaussianIRCJob``."""
         runner = CliRunner()
@@ -704,6 +704,7 @@ class TestGaussianCLIIrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``-d forward`` sets the IRC direction to ``forward``."""
         runner = CliRunner()
@@ -743,6 +744,7 @@ class TestGaussianCLIIrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``-d reverse`` sets the IRC direction to ``reverse``."""
         runner = CliRunner()
@@ -782,6 +784,7 @@ class TestGaussianCLIIrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``irc`` settings."""
         runner = CliRunner()
@@ -829,6 +832,7 @@ class TestGaussianCLIScanCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``scan`` subcommand creates a ``GaussianScanJob``."""
         runner = CliRunner()
@@ -873,6 +877,7 @@ class TestGaussianCLIScanCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``scan`` with ``solv`` project inherits solvent settings."""
         runner = CliRunner()
@@ -918,6 +923,7 @@ class TestGaussianCLIScanCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``scan`` settings."""
         runner = CliRunner()
@@ -971,6 +977,7 @@ class TestGaussianCLICrestCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``crest -j opt`` subcommand creates a ``GaussianCrestJob``."""
         runner = CliRunner()
@@ -1013,6 +1020,7 @@ class TestGaussianCLICrestCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``crest`` with ``solv`` project inherits solvent settings."""
         runner = CliRunner()
@@ -1054,6 +1062,7 @@ class TestGaussianCLICrestCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``crest`` settings."""
         runner = CliRunner()
@@ -1103,6 +1112,7 @@ class TestGaussianCLIQrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``qrc`` subcommand creates a ``GaussianQRCJob`` (default jobtype=opt)."""
         runner = CliRunner()
@@ -1141,6 +1151,7 @@ class TestGaussianCLIQrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``qrc`` with ``solv`` project inherits solvent settings."""
         runner = CliRunner()
@@ -1180,6 +1191,7 @@ class TestGaussianCLIQrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """Group-level solvent options are propagated to ``qrc`` settings."""
         runner = CliRunner()
@@ -1223,6 +1235,7 @@ class TestGaussianCLIQrcCommand:
         single_molecule_xyz_file,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
     ):
         """``qrc -j ts`` uses TS settings from the project for the QRC job."""
         runner = CliRunner()
