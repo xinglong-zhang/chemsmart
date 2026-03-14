@@ -2,14 +2,17 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from rdkit import Chem
 
+from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.iterate.runner import IterateJobRunner
@@ -24,6 +27,41 @@ from chemsmart.jobs.mol.runner import (
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
+
+
+############ CLI Fixtures ##################
+@pytest.fixture
+def make_cli_ctx_obj():
+    """Factory for the minimal Click context object."""
+
+    def _make(jobrunner):
+        return {"jobrunner": jobrunner}
+
+    return _make
+
+
+@pytest.fixture
+def run_gaussian_and_capture_settings():
+    """Run the gaussian CLI with a patched job class and capture settings."""
+
+    def _run(job_class_path, cli_args, ctx_obj):
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings
+
+    return _run
 
 
 @pytest.fixture()
@@ -60,18 +98,6 @@ def chemsmart_templates_config(mocker):
     mocker.patch("chemsmart.settings.executable.user_settings", new_settings)
 
     return template_dir
-
-
-# each test runs on cwd to its temp dir
-# @pytest.fixture(autouse=True)
-# def go_to_tmpdir(request):
-#     # Get the fixture dynamically by its name.
-#     tmpdir = request.getfixturevalue("tmpdir")
-#     # ensure local test created packages can be imported
-#     sys.path.insert(0, str(tmpdir))
-#     # Chdir only for the duration of the test.
-#     with tmpdir.as_cwd():
-#         yield
 
 
 ############ Gaussian Fixtures ##################
