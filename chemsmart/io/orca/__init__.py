@@ -461,8 +461,10 @@ class ORCARefs:
     ]
 
     ORCA_SOLVENT_MODELS = [
-        "cpcm",  # conductor-like polarizable continuum model
-        "smd",  # solvation model based on density
+        "cpcm",    # conductor-like polarizable continuum model
+        "smd",     # solvation model based on density (via CPCM cavity)
+        "cosmo",   # conductor-like screening model
+        "cosmors", # COSMO for real solvents (COSMO-RS)
     ]
 
     ORCA_SOLVENT_IDS = [

@@ -230,7 +230,7 @@ They can also be specified at the **subcommand level** to override the group-lev
 
    -  -  ``-sm, --solvent-model``
       -  string
-      -  Implicit solvent model: ``cpcm`` or ``smd``
+      -  Implicit solvent model: ``cpcm``, ``smd``, ``cosmo``, or ``cosmors``
 
    -  -  ``-si, --solvent-id``
       -  string
@@ -239,18 +239,22 @@ They can also be specified at the **subcommand level** to override the group-lev
 
    -  -  ``-so, --solvent-options``
       -  string
-      -  Additional ``%cpcm`` block parameters (see table below), newline-separated for multiple options
+      -  Additional parameters for the model's solvent block (see tables below), newline-separated for multiple options
 
 .. note::
 
    -  For **CPCM** with a named solvent, ``CPCM(solvent_id)`` is written in the route line.
    -  For **SMD**, ``CPCM(solvent_id)`` is written in the route line **and** a ``%cpcm`` block is added with ``SMD
       true`` and ``SMDsolvent "solvent_id"``.
-   -  For a **custom dielectric** (no named solvent), bare ``CPCM`` is written in the route line and the dielectric
-      constants are written in the ``%cpcm`` block via ``-so`` (or ``custom_solvent`` in the project YAML).
+   -  For **COSMO** with a named solvent, ``COSMO(solvent_id)`` is written in the route line.
+   -  For **COSMO-RS** (``cosmors``), ``COSMO(solvent_id)`` is written in the route line and a ``%cosmors`` block
+      is added.
+   -  For a **custom dielectric** (no named solvent), the bare keyword (``CPCM`` or ``COSMO``) is written in the
+      route line and the dielectric constants go into the corresponding block via ``-so`` (or ``custom_solvent``
+      in the project YAML).
    -  ``-so`` is only applied when a solvent model is active — it is ignored when ``--remove-solvent`` is used.
 
-Supported ``%cpcm`` block options (via ``-so``):
+Supported ``%cpcm`` / ``%cosmo`` block options (via ``-so``, for ``cpcm``, ``smd``, and ``cosmo`` models):
 
 .. list-table::
    :header-rows: 1
@@ -267,9 +271,20 @@ Supported ``%cpcm`` block options (via ``-so``):
    -  -  ``Rsolv <value>``
       -  Solvent probe radius in Ångström (e.g. ``Rsolv 1.30``)
    -  -  ``MaxIter <n>``
-      -  Maximum CPCM iterations (e.g. ``MaxIter 100``)
+      -  Maximum iterations (e.g. ``MaxIter 100``)
    -  -  ``Tolerance <value>``
-      -  CPCM convergence tolerance
+      -  Convergence tolerance
+
+Supported ``%cosmors`` block options (via ``-so``, for the ``cosmors`` model):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   -  -  Option
+      -  Description
+   -  -  ``Temperature <value>``
+      -  Temperature in Kelvin (e.g. ``Temperature 298.15``)
 
 Examples:
 
@@ -284,6 +299,15 @@ Examples:
    # SMD with a surface-type option
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm smd -si water -so 'SurfaceType gepol_ses' opt
 
+   # COSMO with a named solvent
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmo -si water sp
+
+   # COSMO with custom dielectric (no named solvent)
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmo -so $'Epsilon 16.7\nRefrac 1.275' sp
+
+   # COSMO-RS with a named solvent and temperature
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -so 'Temperature 298.15' sp
+
    # Custom dielectric (no named solvent): remove project solvent first, then set custom Epsilon/Refrac
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 --remove-solvent sp -sm cpcm -so $'Epsilon 16.7\nRefrac 1.275'
 
@@ -293,7 +317,7 @@ Examples:
    # Remove solvent defined in project settings
    chemsmart sub orca -p solv_project -f molecule.xyz -c 0 -m 1 --remove-solvent sp
 
-The SMD example above produces:
+The SMD example produces:
 
 .. code:: text
 
@@ -303,7 +327,16 @@ The SMD example above produces:
      SMDsolvent "water"
    end
 
-The custom-dielectric example produces:
+The COSMO-RS example produces:
+
+.. code:: text
+
+   ! COSMO(water) B3LYP def2-SVP ...
+   %cosmors
+     Temperature 298.15
+   end
+
+The custom-dielectric CPCM example produces:
 
 .. code:: text
 

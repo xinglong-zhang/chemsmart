@@ -244,11 +244,33 @@ Key ORCA-Specific Parameters
 Example: Custom Solvent Parameters for ORCA
 ===========================================
 
-For non-standard solvents in ORCA, custom solvent parameters are written directly into the ``%cpcm`` block of the ORCA
-input file. Unlike Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads these
-parameters from the ``%cpcm`` block.
+For non-standard solvents in ORCA, custom solvent parameters are written directly into the model's solvent block.
+Unlike Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads these parameters
+from the appropriate block (``%cpcm``, ``%cosmo``, or ``%cosmors``).
 
-Example (``~/.chemsmart/orca/custom.yaml``):
+Supported solvent models and their corresponding ORCA blocks:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 20 65
+
+   -  -  Model
+      -  Route keyword
+      -  Block written
+   -  -  ``cpcm``
+      -  ``CPCM(solvent)`` or bare ``CPCM``
+      -  ``%cpcm … end``
+   -  -  ``smd``
+      -  ``CPCM(solvent)``
+      -  ``%cpcm`` with ``SMD true`` / ``SMDsolvent "…"``
+   -  -  ``cosmo``
+      -  ``COSMO(solvent)`` or bare ``COSMO``
+      -  ``%cosmo … end``
+   -  -  ``cosmors``
+      -  ``COSMO(solvent)`` or bare ``COSMO``
+      -  ``%cosmors … end``
+
+**CPCM with custom dielectric** (``~/.chemsmart/orca/custom.yaml``):
 
 .. code:: yaml
 
@@ -276,8 +298,50 @@ This produces the following ORCA input for the ``solv`` job type:
      Refrac 1.275
    end
 
-When a named solvent is also specified alongside ``custom_solvent``, the route uses ``CPCM(solvent_id)`` and the
-``custom_solvent`` parameters are still written inside the ``%cpcm`` block:
+**COSMO with custom dielectric:**
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: cosmo
+     custom_solvent : |
+       Epsilon 16.7
+       Refrac 1.275
+
+This produces:
+
+.. code:: text
+
+   ! COSMO M062X def2-tzvp ...
+   %cosmo
+     Epsilon 16.7
+     Refrac 1.275
+   end
+
+**COSMO-RS with named solvent:**
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: cosmors
+     solvent_id: water
+     custom_solvent : |
+       Temperature 298.15
+
+This produces:
+
+.. code:: text
+
+   ! COSMO(water) M062X def2-tzvp ...
+   %cosmors
+     Temperature 298.15
+   end
+
+**SMD with named solvent and extra parameters:**
 
 .. code:: yaml
 
@@ -305,7 +369,7 @@ This produces:
 .. note::
 
    The ``custom_solvent`` block, SMD activation lines, and ``-so``/``--solvent-options`` CLI parameters all appear
-   together in a single ``%cpcm`` block, in that order: SMD lines first, then ``custom_solvent`` lines, then any extra
+   together in a single solvent block, in that order: SMD lines first, then ``custom_solvent`` lines, then any extra
    options from ``-so``.
 
 *******************

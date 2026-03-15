@@ -554,28 +554,27 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
+        route_kw = self._get_solvent_route_keyword()
         if self.custom_solvent is not None:
-            # Custom solvent parameters will be written in the %cpcm block.
-            # In ORCA, custom dielectric constants (Epsilon, Refrac, etc.) go
-            # directly into the %cpcm block rather than being appended as a
-            # separate section (Gaussian style).  The route line uses bare
-            # CPCM when no named solvent is given, or CPCM(solvent_id) when
-            # one is provided.
+            # Custom solvent parameters will be written in the appropriate
+            # solvent block (%cpcm for CPCM/SMD, %cosmo for COSMO,
+            # %cosmors for COSMO-RS).  The route keyword depends on the model.
             if self.solvent_id is not None:
-                route_string += f" CPCM({self.solvent_id})"
+                route_string += f" {route_kw}({self.solvent_id})"
             else:
-                route_string += " CPCM"
+                route_string += f" {route_kw}"
         elif self.solvent_model is not None and self.solvent_id is not None:
-            # In ORCA, both CPCM and SMD use CPCM(solvent) in the route line.
-            # For SMD, the SMD activation parameters are written in the
-            # %cpcm block by _write_solvent_block in the writer.
-            route_string += f" CPCM({self.solvent_id})"
+            # Both CPCM and SMD use CPCM(solvent) in the route line; COSMO
+            # and COSMO-RS use COSMO(solvent).  For SMD and COSMO-RS the
+            # activation parameters are written in the solvent block by
+            # _write_solvent_block in the writer.
+            route_string += f" {route_kw}({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
             # Custom solvent case (e.g. user-specified Epsilon/Refrac via
-            # additional_solvent_options): write bare CPCM keyword without a
-            # solvent name in parentheses.  ORCA will read the dielectric
-            # parameters from the %cpcm block.
-            route_string += " CPCM"
+            # additional_solvent_options): write bare keyword without a
+            # solvent name.  ORCA reads the dielectric parameters from the
+            # corresponding block.
+            route_string += f" {route_kw}"
         elif self.solvent_model is None and self.solvent_id is not None:
             logger.warning(
                 "Warning: Solvent identity is specified but solvent model "
@@ -670,6 +669,21 @@ class ORCAJobSettings(MolecularJobSettings):
             coordinates += string
         f.write(coordinates)
         f.write("*\n")
+
+    def _get_solvent_route_keyword(self):
+        """Return the ORCA simple-input keyword for the active solvent model.
+
+        CPCM and SMD both use the ``CPCM`` route keyword.  COSMO and COSMO-RS
+        use the ``COSMO`` route keyword.  When no model is set the default is
+        ``CPCM``.
+
+        Returns:
+            str: ``"CPCM"`` or ``"COSMO"``
+        """
+        model_lower = (self.solvent_model or "").lower()
+        if model_lower in ("cosmo", "cosmors"):
+            return "COSMO"
+        return "CPCM"
 
     def _check_solvent(self, solvent_model):
         """
@@ -2031,23 +2045,18 @@ class ORCANEBJobSettings(ORCAJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
+        route_kw = self._get_solvent_route_keyword()
         if self.custom_solvent is not None:
-            # Custom solvent parameters will be written in the %cpcm block.
+            # Custom solvent parameters will be written in the appropriate
+            # solvent block.  The route keyword depends on the model.
             if self.solvent_id is not None:
-                route_string += f" CPCM({self.solvent_id})"
+                route_string += f" {route_kw}({self.solvent_id})"
             else:
-                route_string += " CPCM"
+                route_string += f" {route_kw}"
         elif self.solvent_model is not None and self.solvent_id is not None:
-            # In ORCA, both CPCM and SMD use CPCM(solvent) in the route line.
-            # For SMD, the SMD activation parameters are written in the
-            # %cpcm block by _write_solvent_block in the writer.
-            route_string += f" CPCM({self.solvent_id})"
+            route_string += f" {route_kw}({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
-            # Custom solvent case (e.g. user-specified Epsilon/Refrac via
-            # additional_solvent_options): write bare CPCM keyword without a
-            # solvent name in parentheses.  ORCA will read the dielectric
-            # parameters from the %cpcm block.
-            route_string += " CPCM"
+            route_string += f" {route_kw}"
         elif self.solvent_model is None and self.solvent_id is not None:
             logger.warning(
                 "Warning: Solvent identity is specified but solvent model "
