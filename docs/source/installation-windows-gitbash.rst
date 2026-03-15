@@ -2,7 +2,8 @@
  Installation for Windows Using Git Bash
 #########################################
 
-This guide covers installing Chemsmart on Windows using Git Bash.
+This guide covers installing Chemsmart on Windows using Git Bash. We still recommend installing and using Chemsmart in a
+Linux-like environment such as WSL (Ubuntu).
 
 ********************
  Create Environment
@@ -31,7 +32,7 @@ This guide covers installing Chemsmart on Windows using Git Bash.
 
       git clone https://github.com/xinglong-zhang/chemsmart.git
 
-#. Initialize conda for Git Bash in the Anaconda prompt:
+#. Initialize conda for Git Bash:
 
    .. code:: bash
 
@@ -62,10 +63,4 @@ This guide covers installing Chemsmart on Windows using Git Bash.
 
    .. code:: bash
 
-      make install
-
-#. For developers, install additional packages:
-
-   .. code:: bash
-
-      make install-dev
+      pip install chemsmart

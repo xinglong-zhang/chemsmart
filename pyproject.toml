@@ -79,7 +79,13 @@ homepage = "https://github.com/xinglong-zhang/chemsmart/"
 exclude = [".github"]
 
 [tool.setuptools.package-data]
-"chemsmart" = ["VERSION"]
+"chemsmart" = [
+    "VERSION",
+    "settings/templates/.chemsmart/**",
+]
+
+[project.scripts]
+chemsmart = "chemsmart.cli.main:main"
 
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]

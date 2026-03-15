@@ -110,8 +110,8 @@ endif
 # === Project Setup ===
 
 .PHONY: install
-install:          ## Install the project in user mode.
-	$(ENV_PREFIX)pip install .  # Normal users (runtime only)
+install:          ## Install the project in user mode. Normal users (runtime only)
+	$(ENV_PREFIX)pip install .
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: install-dev
