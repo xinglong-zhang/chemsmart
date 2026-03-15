@@ -43,7 +43,9 @@ class TestORCASolventCLISpCommand:
         )
 
         assert result.exit_code == 0, result.output
-        assert settings is not None, "ORCASinglePointJob was never instantiated"
+        assert (
+            settings is not None
+        ), "ORCASinglePointJob was never instantiated"
         assert settings.solvent_model == "cpcm"
         assert settings.solvent_id == "water"
 
@@ -73,7 +75,9 @@ class TestORCASolventCLISpCommand:
         )
 
         assert result.exit_code == 0, result.output
-        assert settings is not None, "ORCASinglePointJob was never instantiated"
+        assert (
+            settings is not None
+        ), "ORCASinglePointJob was never instantiated"
         assert settings.solvent_model == "cpcm"
         assert settings.solvent_id == "water"
 

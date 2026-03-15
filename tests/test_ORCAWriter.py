@@ -610,9 +610,14 @@ class TestORCAInputWriter:
         # Verify each option is on its own properly indented line
         lines = content.splitlines()
         cpcm_lines = [
-            line for line in lines if line.strip() in {
-                "Epsilon 78.36", "Refrac 1.33",
-                "SurfaceType gepol_ses", "Rsolv 1.30",
+            line
+            for line in lines
+            if line.strip()
+            in {
+                "Epsilon 78.36",
+                "Refrac 1.33",
+                "SurfaceType gepol_ses",
+                "Rsolv 1.30",
             }
         ]
         assert len(cpcm_lines) == 4
@@ -635,7 +640,9 @@ class TestORCAInputWriter:
         settings.multiplicity = 1
         settings.solvent_model = "smd"
         settings.solvent_id = "water"
-        settings.additional_solvent_options = "SurfaceType gepol_ses\nRsolv 1.30"
+        settings.additional_solvent_options = (
+            "SurfaceType gepol_ses\nRsolv 1.30"
+        )
 
         job = ORCAOptJob.from_filename(
             filename=single_molecule_xyz_file,

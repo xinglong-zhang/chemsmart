@@ -38,7 +38,17 @@ logger = logging.getLogger(__name__)
     help="Invert the constraints for frozen atoms in optimization.",
 )
 @click.pass_context
-def opt(ctx, remove_solvent, solvent_model, solvent_id, solvent_options, freeze_atoms, invert_constraints, skip_completed, **kwargs):
+def opt(
+    ctx,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
+    freeze_atoms,
+    invert_constraints,
+    skip_completed,
+    **kwargs,
+):
     """
     Run ORCA geometry optimization calculations.
 
