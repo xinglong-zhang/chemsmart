@@ -275,7 +275,9 @@ class ORCAInputWriter(InputWriter):
         additional = self.settings.additional_solvent_options
 
         is_smd = solvent_model is not None and solvent_model.lower() == "smd"
-        needs_block = is_smd or custom_solvent is not None or additional is not None
+        needs_block = (
+            is_smd or custom_solvent is not None or additional is not None
+        )
 
         if needs_block:
             logger.debug("Writing %cpcm solvent block")

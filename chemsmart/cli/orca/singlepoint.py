@@ -23,7 +23,15 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_orca_solvent_options
 @click.pass_context
-def sp(ctx, remove_solvent, solvent_model, solvent_id, solvent_options, skip_completed, **kwargs):
+def sp(
+    ctx,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
+    skip_completed,
+    **kwargs,
+):
     """
     Run ORCA single point energy calculations.
 

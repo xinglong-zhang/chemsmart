@@ -244,9 +244,9 @@ Key ORCA-Specific Parameters
 Example: Custom Solvent Parameters for ORCA
 ===========================================
 
-For non-standard solvents in ORCA, custom solvent parameters are written directly into the ``%cpcm`` block of the
-ORCA input file. Unlike Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads
-these parameters from the ``%cpcm`` block.
+For non-standard solvents in ORCA, custom solvent parameters are written directly into the ``%cpcm`` block of the ORCA
+input file. Unlike Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads these
+parameters from the ``%cpcm`` block.
 
 Example (``~/.chemsmart/orca/custom.yaml``):
 
@@ -305,8 +305,8 @@ This produces:
 .. note::
 
    The ``custom_solvent`` block, SMD activation lines, and ``-so``/``--solvent-options`` CLI parameters all appear
-   together in a single ``%cpcm`` block, in that order: SMD lines first, then ``custom_solvent`` lines, then any
-   extra options from ``-so``.
+   together in a single ``%cpcm`` block, in that order: SMD lines first, then ``custom_solvent`` lines, then any extra
+   options from ``-so``.
 
 *******************
  Scratch Directory

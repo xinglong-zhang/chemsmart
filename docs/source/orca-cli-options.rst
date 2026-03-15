@@ -211,8 +211,8 @@ Solvent Options
 ===============
 
 Solvent settings can be specified at the ORCA group level, which means they apply to **any** subcommand (``sp``,
-``opt``, ``ts``, ``irc``, ``scan``, etc.). This is useful when the project settings define a gas-phase calculation
-but you want to add solvation for a particular run without modifying the project file.
+``opt``, ``ts``, ``irc``, ``scan``, etc.). This is useful when the project settings define a gas-phase calculation but
+you want to add solvation for a particular run without modifying the project file.
 
 They can also be specified at the **subcommand level** to override the group-level settings for a single calculation.
 
@@ -234,7 +234,8 @@ They can also be specified at the **subcommand level** to override the group-lev
 
    -  -  ``-si, --solvent-id``
       -  string
-      -  Named solvent identifier (e.g. ``water``, ``toluene``, ``cyclohexane``). Omit when using a fully custom dielectric via ``-so``
+      -  Named solvent identifier (e.g. ``water``, ``toluene``, ``cyclohexane``). Omit when using a fully custom
+         dielectric via ``-so``
 
    -  -  ``-so, --solvent-options``
       -  string
@@ -243,8 +244,8 @@ They can also be specified at the **subcommand level** to override the group-lev
 .. note::
 
    -  For **CPCM** with a named solvent, ``CPCM(solvent_id)`` is written in the route line.
-   -  For **SMD**, ``CPCM(solvent_id)`` is written in the route line **and** a ``%cpcm`` block is added with ``SMD true``
-      and ``SMDsolvent "solvent_id"``.
+   -  For **SMD**, ``CPCM(solvent_id)`` is written in the route line **and** a ``%cpcm`` block is added with ``SMD
+      true`` and ``SMDsolvent "solvent_id"``.
    -  For a **custom dielectric** (no named solvent), bare ``CPCM`` is written in the route line and the dielectric
       constants are written in the ``%cpcm`` block via ``-so`` (or ``custom_solvent`` in the project YAML).
    -  ``-so`` is only applied when a solvent model is active — it is ignored when ``--remove-solvent`` is used.
@@ -257,22 +258,16 @@ Supported ``%cpcm`` block options (via ``-so``):
 
    -  -  Option
       -  Description
-
    -  -  ``Epsilon <value>``
       -  Static dielectric constant (used for custom/non-named solvents, e.g. ``Epsilon 78.36``)
-
    -  -  ``Refrac <value>``
       -  Refractive index (e.g. ``Refrac 1.33``)
-
    -  -  ``SurfaceType <type>``
       -  Cavity surface type: ``gepol_ses``, ``gepol_vdw``, or ``delley`` (default: ``gepol_ses``)
-
    -  -  ``Rsolv <value>``
       -  Solvent probe radius in Ångström (e.g. ``Rsolv 1.30``)
-
    -  -  ``MaxIter <n>``
       -  Maximum CPCM iterations (e.g. ``MaxIter 100``)
-
    -  -  ``Tolerance <value>``
       -  CPCM convergence tolerance
 
