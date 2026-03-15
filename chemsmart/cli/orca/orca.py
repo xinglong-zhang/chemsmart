@@ -225,7 +225,10 @@ def click_orca_solvent_options(f):
         "--solvent-model",
         type=str,
         default=None,
-        help="Solvent model to use (e.g. cpcm, smd, cosmo, cosmors).",
+        help="Solvent model to use: cpcm (CPCM with CPCM epsilon), "
+        "cpcmc (CPCM with COSMO epsilon; replaces legacy COSMO removed in ORCA 4.0), "
+        "smd (Minnesota SMD; route !SMD(solvent)), "
+        "cosmors (openCOSMO-RS; route !COSMORS(solvent)).",
     )
     @click.option(
         "-si",
@@ -242,13 +245,16 @@ def click_orca_solvent_options(f):
         default=None,
         help=(
             "Additional solvent options written inside the model's solvent block "
-            "(%%cpcm for cpcm/smd, %%cosmo for cosmo, %%cosmors for cosmors). "
+            "(%%cpcm for cpcm/cpcmc/smd, %%cosmors for cosmors). "
             "Supports newline-separated entries for multiple options. "
-            "Common %%cpcm/%%cosmo parameters: "
+            "Common %%cpcm parameters: "
             "'Epsilon 78.36' (dielectric constant, for custom solvents), "
             "'Refrac 1.33' (refractive index), "
-            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_vdw, delley), "
-            "'Rsolv 1.30' (probe radius in Angstrom). "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_sas, "
+            "vdw_gaussian, gepol_ses_gaussian), "
+            "'Rsolv 1.30' (probe radius in Angstrom), "
+            "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
+            "Common %%cosmors parameters: 'Temperature 298.15'. "
             "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
         ),
     )
@@ -277,7 +283,10 @@ def click_orca_solvent_group_options(f):
         "--solvent-model",
         type=str,
         default=None,
-        help="Solvent model to use (e.g. cpcm, smd, cosmo, cosmors).",
+        help="Solvent model to use: cpcm (CPCM with CPCM epsilon), "
+        "cpcmc (CPCM with COSMO epsilon; replaces legacy COSMO removed in ORCA 4.0), "
+        "smd (Minnesota SMD; route !SMD(solvent)), "
+        "cosmors (openCOSMO-RS; route !COSMORS(solvent)).",
     )
     @click.option(
         "-si",
@@ -294,13 +303,16 @@ def click_orca_solvent_group_options(f):
         default=None,
         help=(
             "Additional solvent options written inside the model's solvent block "
-            "(%%cpcm for cpcm/smd, %%cosmo for cosmo, %%cosmors for cosmors). "
+            "(%%cpcm for cpcm/cpcmc/smd, %%cosmors for cosmors). "
             "Supports newline-separated entries for multiple options. "
-            "Common %%cpcm/%%cosmo parameters: "
+            "Common %%cpcm parameters: "
             "'Epsilon 78.36' (dielectric constant, for custom solvents), "
             "'Refrac 1.33' (refractive index), "
-            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_vdw, delley), "
-            "'Rsolv 1.30' (probe radius in Angstrom). "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_sas, "
+            "vdw_gaussian, gepol_ses_gaussian), "
+            "'Rsolv 1.30' (probe radius in Angstrom), "
+            "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
+            "Common %%cosmors parameters: 'Temperature 298.15'. "
             "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
         ),
     )

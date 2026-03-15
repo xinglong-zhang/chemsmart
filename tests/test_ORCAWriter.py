@@ -425,14 +425,14 @@ class TestORCAInputWriter:
         assert os.path.isfile(orca_file)
         assert cmp(orca_file, orca_written_neb_file, shallow=False)
 
-    def test_smd_solvent_uses_cpcm_in_route_and_cpcm_block(
+    def test_smd_solvent_uses_smd_in_route_no_cpcm_block(
         self,
         tmpdir,
         single_molecule_xyz_file,
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """SMD solvation must write CPCM(solvent) in route + %cpcm block."""
+        """SMD solvation must write SMD(solvent) in route; no %cpcm block needed."""
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
@@ -454,13 +454,13 @@ class TestORCAInputWriter:
         assert os.path.isfile(orca_file)
 
         content = open(orca_file).read()
-        # Route must use CPCM, not SMD, for the inline solvent keyword
-        assert "CPCM(water)" in content
-        assert "smd(water)" not in content.lower()
-        # %cpcm block must activate SMD with quoted solvent name
-        assert "%cpcm" in content
-        assert "SMD true" in content
-        assert 'SMDsolvent "water"' in content
+        # Route must use SMD(solvent) — canonical ORCA 6.0 form
+        assert "SMD(water)" in content
+        assert "CPCM" not in content
+        # No %cpcm block needed for pure SMD (route handles activation)
+        assert "%cpcm" not in content
+        assert "SMD true" not in content
+        assert "SMDsolvent" not in content
 
     def test_cpcm_solvent_uses_cpcm_in_route_no_block(
         self,
@@ -503,7 +503,7 @@ class TestORCAInputWriter:
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """SMD + additional_solvent_options writes all options in %cpcm block."""
+        """SMD + additional_solvent_options: route SMD(solvent), options in %cpcm block."""
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
@@ -525,11 +525,15 @@ class TestORCAInputWriter:
         orca_file = os.path.join(tmpdir, "orca_smd_extra_opt.inp")
         content = open(orca_file).read()
 
-        assert "CPCM(water)" in content
+        # Route uses SMD(solvent) — canonical ORCA 6.0 form
+        assert "SMD(water)" in content
+        assert "CPCM" not in content
+        # %cpcm block only for the extra surface-type option
         assert "%cpcm" in content
-        assert "SMD true" in content
-        assert 'SMDsolvent "water"' in content
         assert "SurfaceType gepol_ses" in content
+        # SMD activation is handled by the route line, NOT the block
+        assert "SMD true" not in content
+        assert "SMDsolvent" not in content
 
     def test_custom_epsilon_cpcm_no_solvent_name(
         self,
@@ -631,7 +635,7 @@ class TestORCAInputWriter:
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """SMD + SurfaceType + Rsolv: all options appear in %cpcm block."""
+        """SMD + SurfaceType + Rsolv: route SMD(solvent), options in %cpcm block."""
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
@@ -655,10 +659,13 @@ class TestORCAInputWriter:
         orca_file = os.path.join(tmpdir, "orca_smd_surface_opt.inp")
         content = open(orca_file).read()
 
-        assert "CPCM(water)" in content
+        # Route uses SMD(solvent) — canonical ORCA 6.0 form
+        assert "SMD(water)" in content
+        assert "CPCM" not in content
         assert "%cpcm" in content
-        assert "SMD true" in content
-        assert 'SMDsolvent "water"' in content
+        # SMD activation is handled by the route line, NOT the block
+        assert "SMD true" not in content
+        assert "SMDsolvent" not in content
         assert "SurfaceType gepol_ses" in content
         assert "Rsolv 1.30" in content
 
@@ -752,7 +759,12 @@ class TestORCAInputWriter:
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """custom_solvent + SMD + additional_solvent_options all appear in %cpcm."""
+        """custom_solvent + SMD + additional_solvent_options all appear in %cpcm block.
+
+        With ORCA 6.0: route uses ``SMD(water)``, and the %cpcm block
+        contains ``custom_solvent`` lines first, then ``additional_solvent_options``.
+        SMD activation is handled by the route line alone.
+        """
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
@@ -775,137 +787,142 @@ class TestORCAInputWriter:
         orca_file = os.path.join(tmpdir, "orca_custom_smd_combo.inp")
         content = open(orca_file).read()
 
-        # Route uses named solvent since solvent_id is given
-        assert "CPCM(water)" in content
+        # Route uses SMD(water) — canonical ORCA 6.0 form
+        assert "SMD(water)" in content
+        assert "CPCM" not in content
         assert "%cpcm" in content
-        # SMD activation comes first
-        assert "SMD true" in content
-        assert 'SMDsolvent "water"' in content
-        # Then custom_solvent lines
+        # SMD activation is handled by the route line, NOT the block
+        assert "SMD true" not in content
+        assert "SMDsolvent" not in content
+        # custom_solvent lines in block
         assert "Epsilon 78.36" in content
         assert "Refrac 1.33" in content
-        # Then additional_solvent_options
+        # additional_solvent_options in block
         assert "SurfaceType gepol_ses" in content
 
-        # Verify order: SMD before custom_solvent before additional_solvent_options
-        smd_pos = content.index("SMD true")
+        # Verify order: custom_solvent before additional_solvent_options
         epsilon_pos = content.index("Epsilon 78.36")
         surface_pos = content.index("SurfaceType gepol_ses")
-        assert smd_pos < epsilon_pos < surface_pos
+        assert epsilon_pos < surface_pos
 
-    def test_cosmo_solvent_uses_cosmo_in_route_no_block(
+    def test_cpcmc_solvent_uses_cpcmc_in_route_no_block(
         self,
         tmpdir,
         single_molecule_xyz_file,
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """Pure COSMO solvation writes COSMO(solvent) in route and no %cosmo block."""
+        """CPCMC solvation writes CPCMC(solvent) in route and no %cpcm block.
+
+        ``cpcmc`` applies C-PCM with the COSMO epsilon function
+        (``!CPCMC(solvent)``).  This is the replacement for the legacy COSMO
+        model which was removed in ORCA 4.0.
+        """
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
         settings = project_settings.opt_settings()
         settings.charge = 0
         settings.multiplicity = 1
-        settings.solvent_model = "cosmo"
+        settings.solvent_model = "cpcmc"
         settings.solvent_id = "water"
 
         job = ORCAOptJob.from_filename(
             filename=single_molecule_xyz_file,
             settings=settings,
-            label="orca_cosmo_opt",
+            label="orca_cpcmc_opt",
             jobrunner=orca_jobrunner_no_scratch,
         )
         orca_writer = ORCAInputWriter(job=job)
         orca_writer.write(target_directory=tmpdir)
-        orca_file = os.path.join(tmpdir, "orca_cosmo_opt.inp")
+        orca_file = os.path.join(tmpdir, "orca_cpcmc_opt.inp")
         content = open(orca_file).read()
 
-        assert "COSMO(water)" in content
-        assert "CPCM" not in content
-        # No block needed for pure COSMO with named solvent
-        assert "%cosmo" not in content
+        assert "CPCMC(water)" in content
+        # No standalone CPCM or old COSMO keywords
+        assert "COSMO" not in content
+        # No block needed for pure CPCMC with named solvent
+        assert "%cpcm" not in content
 
-    def test_cosmo_custom_epsilon_no_solvent_name(
+    def test_cpcmc_custom_epsilon_no_solvent_name(
         self,
         tmpdir,
         single_molecule_xyz_file,
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """COSMO with custom Epsilon (no solvent_id) writes bare COSMO + %cosmo block."""
+        """CPCMC with custom Epsilon (no solvent_id) writes bare CPCMC + %cpcm block."""
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
         settings = project_settings.opt_settings()
         settings.charge = 0
         settings.multiplicity = 1
-        settings.solvent_model = "cosmo"
+        settings.solvent_model = "cpcmc"
         settings.additional_solvent_options = "Epsilon 16.7\nRefrac 1.275"
 
         job = ORCAOptJob.from_filename(
             filename=single_molecule_xyz_file,
             settings=settings,
-            label="orca_cosmo_custom",
+            label="orca_cpcmc_custom",
             jobrunner=orca_jobrunner_no_scratch,
         )
         orca_writer = ORCAInputWriter(job=job)
         orca_writer.write(target_directory=tmpdir)
-        orca_file = os.path.join(tmpdir, "orca_cosmo_custom.inp")
+        orca_file = os.path.join(tmpdir, "orca_cpcmc_custom.inp")
         content = open(orca_file).read()
 
-        # Bare COSMO in route (no parens) — use regex to match whole word COSMO
-        # not followed by a parenthesis
-        assert re.search(r"\bCOSMO\b(?!\()", content)
-        assert "COSMO(" not in content
-        assert "CPCM" not in content
-        # %cosmo block with custom parameters
-        assert "%cosmo" in content
+        # Bare CPCMC in route (no parens) — use regex to match whole word
+        assert re.search(r"\bCPCMC\b(?!\()", content)
+        assert "CPCMC(" not in content
+        assert "COSMO" not in content
+        # %cpcm block with custom parameters
+        assert "%cpcm" in content
         assert "Epsilon 16.7" in content
         assert "Refrac 1.275" in content
         assert "end" in content
 
-    def test_cosmo_custom_solvent_yaml(
+    def test_cpcmc_custom_solvent_yaml(
         self,
         tmpdir,
         single_molecule_xyz_file,
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """COSMO with custom_solvent YAML goes into %cosmo block."""
+        """CPCMC with custom_solvent YAML goes into %cpcm block."""
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
         settings = project_settings.opt_settings()
         settings.charge = 0
         settings.multiplicity = 1
-        settings.solvent_model = "cosmo"
+        settings.solvent_model = "cpcmc"
         settings.custom_solvent = "Epsilon 32.6\nRefrac 1.34"
 
         job = ORCAOptJob.from_filename(
             filename=single_molecule_xyz_file,
             settings=settings,
-            label="orca_cosmo_yaml",
+            label="orca_cpcmc_yaml",
             jobrunner=orca_jobrunner_no_scratch,
         )
         orca_writer = ORCAInputWriter(job=job)
         orca_writer.write(target_directory=tmpdir)
-        orca_file = os.path.join(tmpdir, "orca_cosmo_yaml.inp")
+        orca_file = os.path.join(tmpdir, "orca_cpcmc_yaml.inp")
         content = open(orca_file).read()
 
-        assert "%cosmo" in content
+        assert "%cpcm" in content
         assert "Epsilon 32.6" in content
         assert "Refrac 1.34" in content
-        assert "%cpcm" not in content
+        assert "COSMO" not in content
 
-    def test_cosmors_uses_cosmo_in_route_and_cosmors_block(
+    def test_cosmors_uses_cosmors_in_route_and_cosmors_block(
         self,
         tmpdir,
         single_molecule_xyz_file,
         orca_yaml_settings_orca_project_name,
         orca_jobrunner_no_scratch,
     ):
-        """COSMO-RS writes COSMO(solvent) in route and %cosmors block."""
+        """COSMO-RS writes COSMORS(solvent) in route and %cosmors block."""
         project_settings = ORCAProjectSettings.from_project(
             orca_yaml_settings_orca_project_name
         )
@@ -927,13 +944,13 @@ class TestORCAInputWriter:
         orca_file = os.path.join(tmpdir, "orca_cosmors_opt.inp")
         content = open(orca_file).read()
 
-        assert "COSMO(water)" in content
+        # Route must use COSMORS(solvent) — canonical ORCA 6.0 openCOSMO-RS form
+        assert "COSMORS(water)" in content
+        assert "COSMO(" not in content
         assert "CPCM" not in content
         assert "%cosmors" in content
         assert "Temperature 298.15" in content
         assert "%cpcm" not in content
-        # Any %cosmo occurrence must be part of %cosmors, not a standalone %cosmo block
-        assert "%cosmo" not in content or "%cosmors" in content
 
     def test_cosmors_custom_solvent_in_cosmors_block(
         self,
@@ -967,5 +984,4 @@ class TestORCAInputWriter:
         assert "Temperature 298.15" in content
         assert "Density 1.0" in content
         assert "%cpcm" not in content
-        # Any %cosmo occurrence must be part of %cosmors, not a standalone %cosmo block
-        assert "%cosmo" not in content or "%cosmors" in content
+        assert "COSMO(" not in content

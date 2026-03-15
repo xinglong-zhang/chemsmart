@@ -228,23 +228,18 @@ class ORCAInputWriter(InputWriter):
             Dispatches to the correct named ORCA block based on
             ``solvent_model``:
 
-            * ``cpcm`` or ``smd`` (or unset) → ``%cpcm … end``
-            * ``cosmo`` → ``%cosmo … end``
+            * ``cpcm``, ``cpcmc``, ``smd`` (or unset) → ``%cpcm … end``
             * ``cosmors`` → ``%cosmors … end``
 
             A block is emitted whenever any of the following apply:
 
-            * ``solvent_model`` is ``"smd"`` — emits ``SMD true`` and, if
-              ``solvent_id`` is provided, ``SMDsolvent "<solvent_id>"`` so
-              that SMD solvation is activated correctly within ORCA's CPCM
-              framework.
             * ``custom_solvent`` is set — the string is written line-by-line
               inside the block.  In ORCA, custom solvent parameters (Epsilon,
               Refrac, etc.) are specified directly in the solvent block
               rather than as a separate appended section (as in Gaussian).
-              For CPCM/SMD, the block is ``%cpcm``; for COSMO it is
-              ``%cosmo``; for COSMO-RS it is ``%cosmors``.  A typical ORCA
-              project YAML entry for COSMO looks like::
+              For CPCM/CPCMC/SMD, the block is ``%cpcm``; for COSMO-RS it is
+              ``%cosmors``.  A typical ORCA project YAML entry for CPCM looks
+              like::
 
                   custom_solvent : |
                     Epsilon 16.7
@@ -254,8 +249,8 @@ class ORCAInputWriter(InputWriter):
 
               .. code-block:: text
 
-                  ! COSMO B3LYP def2-SVP
-                  %cosmo
+                  ! CPCM B3LYP def2-SVP
+                  %cpcm
                     Epsilon 16.7
                     Refrac 1.275
                   end
@@ -264,54 +259,57 @@ class ORCAInputWriter(InputWriter):
               is written indented inside the block. Commonly used ORCA block
               options that can be passed here:
 
-              For ``%cpcm`` / ``%cosmo``:
+              For ``%cpcm`` (``cpcm``, ``cpcmc``, ``smd`` models):
               - ``Epsilon <value>`` — static dielectric constant (e.g.
                 ``Epsilon 78.36``), used for custom/non-named solvents
               - ``Refrac <value>`` — refractive index (e.g. ``Refrac 1.33``)
               - ``SurfaceType <type>`` — cavity surface (``gepol_ses``,
-                ``gepol_vdw``, or ``delley``; default ``gepol_ses``)
+                ``gepol_sas``, ``vdw_gaussian``, or ``gepol_ses_gaussian``;
+                default is ``vdw_gaussian`` since ORCA 5)
               - ``Rsolv <value>`` — solvent probe radius in Ångström
                 (e.g. ``Rsolv 1.30``)
               - ``MaxIter <n>`` — maximum iterations
               - ``Tolerance <value>`` — convergence tolerance
+              - SMD descriptors: ``soln``, ``soln25``, ``sola``, ``solb``,
+                ``solg``, ``solc``, ``solh``
 
-              For ``%cosmors``:
+              For ``%cosmors`` (``cosmors`` model):
               - ``Temperature <value>`` — temperature in K (e.g.
                 ``Temperature 298.15``)
+              - ``dftfunc``, ``dftbas``, ``solventfilename``, etc.
 
-            All three conditions can apply simultaneously in the same
-            block: SMD activation lines are written first, then
-            ``custom_solvent`` lines, then ``additional_solvent_options``.
+            Both conditions can apply simultaneously in the same block:
+            ``custom_solvent`` lines are written first, then
+            ``additional_solvent_options``.
+
+        Note on SMD: In ORCA 6.0, SMD is invoked via ``!SMD(solvent)`` in the
+        route line.  No ``SMD true`` / ``SMDsolvent`` activation is needed in
+        the ``%cpcm`` block; the route line handles that automatically.  The
+        ``%cpcm`` block is only written when ``custom_solvent`` or
+        ``additional_solvent_options`` are present.
+
+        Note on COSMO: The standalone COSMO model (``!COSMO(solvent)``) was
+        removed from ORCA in version 4.0.  Use ``cpcmc`` (``!CPCMC(solvent)``)
+        to apply CPCM with the COSMO epsilon function.
         """
         solvent_model = self.settings.solvent_model
-        solvent_id = self.settings.solvent_id
         custom_solvent = self.settings.custom_solvent
         additional = self.settings.additional_solvent_options
 
         model_lower = (solvent_model or "").lower()
-        is_smd = model_lower == "smd"
-        is_cosmo = model_lower == "cosmo"
         is_cosmors = model_lower == "cosmors"
 
         # Choose the block name based on the model
-        if is_cosmo:
-            block_name = "cosmo"
-        elif is_cosmors:
+        if is_cosmors:
             block_name = "cosmors"
         else:
             block_name = "cpcm"
 
-        needs_block = (
-            is_smd or custom_solvent is not None or additional is not None
-        )
+        needs_block = custom_solvent is not None or additional is not None
 
         if needs_block:
             logger.debug("Writing %%%s solvent block", block_name)
             f.write(f"%{block_name}\n")
-            if is_smd:
-                f.write("  SMD true\n")
-                if solvent_id is not None:
-                    f.write(f'  SMDsolvent "{solvent_id}"\n')
             if custom_solvent is not None:
                 for line in custom_solvent.splitlines():
                     f.write(f"  {line.rstrip()}\n")
