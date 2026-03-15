@@ -13,7 +13,11 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
+from chemsmart.cli.orca.orca import (
+    click_orca_jobtype_options,
+    click_orca_solvent_options,
+    orca,
+)
 from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
 from chemsmart.utils.cli import MyGroup, check_scan_coordinates_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
@@ -23,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 @orca.group("ts", cls=MyGroup, invoke_without_command=True)
 @click_job_options
+@click_orca_solvent_options
 @click_orca_jobtype_options
 @click.option(
     "-i/",
@@ -89,6 +94,10 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def ts(
     ctx,
+    remove_solvent=False,
+    solvent_model=None,
+    solvent_id=None,
+    solvent_options=None,
     jobtype=None,
     coordinates=None,
     dist_start=None,
@@ -131,6 +140,15 @@ def ts(
 
     # merge project TS settings with job settings from cli keywords
     ts_settings = ts_project_settings.merge(job_settings, keywords=keywords)
+
+    # cli-supplied solvent model, solvent id, and additional solvent options
+    ts_settings.modify_solvent(
+        remove_solvent=remove_solvent,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
+    )
+    if solvent_options is not None:
+        ts_settings.additional_solvent_options = solvent_options
 
     # get label for the job output files
     label = ctx.obj["label"]

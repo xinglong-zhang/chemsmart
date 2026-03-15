@@ -241,6 +241,141 @@ Key ORCA-Specific Parameters
 -  ``mdci_cutoff``: MDCI method cutoff settings (``Loose``, ``Normal``, ``Tight``)
 -  ``mdci_density``: Density treatment in MDCI (must be the string ``"None"``, not YAML null value)
 
+Example: Custom Solvent Parameters for ORCA
+===========================================
+
+For non-standard solvents in ORCA, custom solvent parameters are written directly into the model's solvent block. Unlike
+Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads these parameters from the
+appropriate block (``%cpcm`` or ``%cosmors``).
+
+Supported solvent models and their corresponding ORCA blocks:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 30 55
+
+   -  -  Model
+      -  Route keyword
+      -  Block written
+
+   -  -  ``cpcm``
+      -  ``CPCM(solvent)`` or bare ``CPCM``
+      -  ``%cpcm … end``
+
+   -  -  ``cpcmc``
+      -  ``CPCMC(solvent)`` or bare ``CPCMC``
+      -  ``%cpcm … end`` (CPCM with COSMO epsilon function; replaces legacy COSMO removed in ORCA 4.0)
+
+   -  -  ``smd``
+      -  ``SMD(solvent)`` or bare ``SMD``
+      -  ``%cpcm … end`` only if ``custom_solvent`` / ``-so`` options present
+
+   -  -  ``cosmors``
+      -  ``COSMORS(solvent)`` or bare ``COSMORS``
+      -  ``%cosmors … end``
+
+**CPCM with custom dielectric** (``~/.chemsmart/orca/custom.yaml``):
+
+.. code:: yaml
+
+   gas:
+     functional: m062x
+     basis: def2-svp
+     defgrid: DEFGRID3
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     defgrid: DEFGRID3
+     freq: False
+     solvent_model: cpcm
+     custom_solvent : |
+       Epsilon 16.7
+       Refrac 1.275
+
+This produces the following ORCA input for the ``solv`` job type:
+
+.. code:: text
+
+   ! CPCM M062X def2-tzvp DEFGRID3 ...
+   %cpcm
+     Epsilon 16.7
+     Refrac 1.275
+   end
+
+**CPCMC with custom dielectric** (CPCM + COSMO epsilon; use instead of legacy COSMO):
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: cpcmc
+     custom_solvent : |
+       Epsilon 16.7
+       Refrac 1.275
+
+This produces:
+
+.. code:: text
+
+   ! CPCMC M062X def2-tzvp ...
+   %cpcm
+     Epsilon 16.7
+     Refrac 1.275
+   end
+
+**openCOSMO-RS with named solvent:**
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: cosmors
+     solvent_id: water
+     custom_solvent : |
+       Temperature 298.15
+
+This produces:
+
+.. code:: text
+
+   ! COSMORS(water) M062X def2-tzvp ...
+   %cosmors
+     Temperature 298.15
+   end
+
+**SMD with named solvent and extra parameters:**
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: smd
+     solvent_id: water
+     custom_solvent : |
+       Epsilon 78.36
+       Refrac 1.33
+
+This produces:
+
+.. code:: text
+
+   ! SMD(water) M062X def2-tzvp ...
+   %cpcm
+     Epsilon 78.36
+     Refrac 1.33
+   end
+
+.. note::
+
+   The ``custom_solvent`` block and ``-so``/``--solvent-options`` CLI parameters all appear together in a single solvent
+   block, in that order: ``custom_solvent`` lines first, then any extra options from ``-so``.
+
+   For SMD in ORCA 6.0, the model is activated by the ``SMD(solvent)`` route keyword alone — no ``SMD true`` /
+   ``SMDsolvent`` lines are needed in the ``%cpcm`` block.
+
 *******************
  Scratch Directory
 *******************

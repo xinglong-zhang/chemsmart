@@ -206,6 +206,123 @@ def click_orca_settings_options(f):
     return wrapper_common_options
 
 
+def click_orca_solvent_options(f):
+    """Common click options for ORCA solvent settings (subcommand level).
+
+    Provides ``--remove-solvent``, ``-sm``/``--solvent-model``,
+    ``-si``/``--solvent-id``, and ``-so``/``--solvent-options`` to every
+    ORCA subcommand that decorates with this function.
+    """
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        default=False,
+        help="Remove the solvent model from the job. Defaults to project "
+        "settings.",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="Solvent model to use: cpcm (CPCM with CPCM epsilon), "
+        "cpcmc (CPCM with COSMO epsilon; replaces legacy COSMO removed in ORCA 4.0), "
+        "smd (Minnesota SMD; route !SMD(solvent)), "
+        "cosmors (openCOSMO-RS; route !COSMORS(solvent)).",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="Solvent identifier (e.g. water, toluene, dichloromethane). "
+        "Optional when specifying a custom solvent via -so (Epsilon/Refrac).",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help=(
+            "Additional solvent options written inside the model's solvent block "
+            "(%%cpcm for cpcm/cpcmc/smd, %%cosmors for cosmors). "
+            "Supports newline-separated entries for multiple options. "
+            "Common %%cpcm parameters: "
+            "'Epsilon 78.36' (dielectric constant, for custom solvents), "
+            "'Refrac 1.33' (refractive index), "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_sas, "
+            "vdw_gaussian, gepol_ses_gaussian), "
+            "'Rsolv 1.30' (probe radius in Angstrom), "
+            "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
+            "Common %%cosmors parameters: 'Temperature 298.15'. "
+            "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_orca_solvent_group_options(f):
+    """Solvent options for the ORCA group level (applicable to all subcommands).
+
+    Uses long-form ``--remove-solvent``/``--no-remove-solvent`` without a
+    ``-rs`` short alias to avoid conflicts with other short flags in
+    :func:`click_orca_settings_options`.
+    """
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        default=False,
+        help="Remove the solvent model from the job (overrides project settings).",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="Solvent model to use: cpcm (CPCM with CPCM epsilon), "
+        "cpcmc (CPCM with COSMO epsilon; replaces legacy COSMO removed in ORCA 4.0), "
+        "smd (Minnesota SMD; route !SMD(solvent)), "
+        "cosmors (openCOSMO-RS; route !COSMORS(solvent)).",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="Solvent identifier (e.g. water, toluene, dichloromethane). "
+        "Optional when specifying a custom solvent via -so (Epsilon/Refrac).",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help=(
+            "Additional solvent options written inside the model's solvent block "
+            "(%%cpcm for cpcm/cpcmc/smd, %%cosmors for cosmors). "
+            "Supports newline-separated entries for multiple options. "
+            "Common %%cpcm parameters: "
+            "'Epsilon 78.36' (dielectric constant, for custom solvents), "
+            "'Refrac 1.33' (refractive index), "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_sas, "
+            "vdw_gaussian, gepol_ses_gaussian), "
+            "'Rsolv 1.30' (probe radius in Angstrom), "
+            "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
+            "Common %%cosmors parameters: 'Temperature 298.15'. "
+            "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_orca_jobtype_options(f):
     """
     Common click options decorator for ORCA job type specifications.
@@ -259,6 +376,7 @@ def click_orca_jobtype_options(f):
 @click_filename_options
 @click_file_label_and_index_options
 @click_orca_settings_options
+@click_orca_solvent_group_options
 @click_pubchem_options
 @click.pass_context
 def orca(
@@ -288,6 +406,10 @@ def orca(
     index,
     additional_route_parameters,
     forces,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
     pubchem,
 ):
     """
@@ -393,6 +515,26 @@ def orca(
     if forces is not None:
         job_settings.forces = forces
         keywords += ("forces",)
+
+    # Handle solvent options specified at the orca group level.
+    # These are propagated to every subcommand via the merge mechanism,
+    # allowing e.g. `orca -sm cpcm -si water sp` or
+    # `orca -sm smd -si water -so 'Epsilon 78.36' opt`.
+    if remove_solvent:
+        job_settings.solvent_model = None
+        job_settings.solvent_id = None
+        job_settings.custom_solvent = None
+        keywords += ("solvent_model", "solvent_id", "custom_solvent")
+    else:
+        if solvent_model is not None:
+            job_settings.solvent_model = solvent_model
+            keywords += ("solvent_model",)
+        if solvent_id is not None:
+            job_settings.solvent_id = solvent_id
+            keywords += ("solvent_id",)
+        if solvent_options is not None:
+            job_settings.additional_solvent_options = solvent_options
+            keywords += ("additional_solvent_options",)
 
     # obtain molecule structure from file or PubChem
     molecules = None

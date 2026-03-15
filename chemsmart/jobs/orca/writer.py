@@ -225,13 +225,98 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
 
         Note:
-            Currently placeholder for complex solvents specified via
-            %cpcm, %cosmo, or %smd blocks that cannot be captured by route.
+            Dispatches to the correct named ORCA block based on
+            ``solvent_model``:
+
+            * ``cpcm``, ``cpcmc``, ``smd`` (or unset) → ``%cpcm … end``
+            * ``cosmors`` → ``%cosmors … end``
+
+            A block is emitted whenever any of the following apply:
+
+            * ``custom_solvent`` is set — the string is written line-by-line
+              inside the block.  In ORCA, custom solvent parameters (Epsilon,
+              Refrac, etc.) are specified directly in the solvent block
+              rather than as a separate appended section (as in Gaussian).
+              For CPCM/CPCMC/SMD, the block is ``%cpcm``; for COSMO-RS it is
+              ``%cosmors``.  A typical ORCA project YAML entry for CPCM looks
+              like::
+
+                  custom_solvent : |
+                    Epsilon 16.7
+                    Refrac 1.275
+
+              which produces:
+
+              .. code-block:: text
+
+                  ! CPCM B3LYP def2-SVP
+                  %cpcm
+                    Epsilon 16.7
+                    Refrac 1.275
+                  end
+
+            * ``additional_solvent_options`` is set — each line of the string
+              is written indented inside the block. Commonly used ORCA block
+              options that can be passed here:
+
+              For ``%cpcm`` (``cpcm``, ``cpcmc``, ``smd`` models):
+              - ``Epsilon <value>`` — static dielectric constant (e.g.
+                ``Epsilon 78.36``), used for custom/non-named solvents
+              - ``Refrac <value>`` — refractive index (e.g. ``Refrac 1.33``)
+              - ``SurfaceType <type>`` — cavity surface (``gepol_ses``,
+                ``gepol_sas``, ``vdw_gaussian``, or ``gepol_ses_gaussian``;
+                default is ``vdw_gaussian`` since ORCA 5)
+              - ``Rsolv <value>`` — solvent probe radius in Ångström
+                (e.g. ``Rsolv 1.30``)
+              - ``MaxIter <n>`` — maximum iterations
+              - ``Tolerance <value>`` — convergence tolerance
+              - SMD descriptors: ``soln``, ``soln25``, ``sola``, ``solb``,
+                ``solg``, ``solc``, ``solh``
+
+              For ``%cosmors`` (``cosmors`` model):
+              - ``Temperature <value>`` — temperature in K (e.g.
+                ``Temperature 298.15``)
+              - ``dftfunc``, ``dftbas``, ``solventfilename``, etc.
+
+            Both conditions can apply simultaneously in the same block:
+            ``custom_solvent`` lines are written first, then
+            ``additional_solvent_options``.
+
+        Note on SMD: In ORCA 6.0, SMD is invoked via ``!SMD(solvent)`` in the
+        route line.  No ``SMD true`` / ``SMDsolvent`` activation is needed in
+        the ``%cpcm`` block; the route line handles that automatically.  The
+        ``%cpcm`` block is only written when ``custom_solvent`` or
+        ``additional_solvent_options`` are present.
+
+        Note on COSMO: The standalone COSMO model (``!COSMO(solvent)``) was
+        removed from ORCA in version 4.0.  Use ``cpcmc`` (``!CPCMC(solvent)``)
+        to apply CPCM with the COSMO epsilon function.
         """
-        # to implement if there is more complex solvents to be specified via
-        # %cpcm block, %cosmo block, or %smd
-        # block that cannot be capture by route
-        pass
+        solvent_model = self.settings.solvent_model
+        custom_solvent = self.settings.custom_solvent
+        additional = self.settings.additional_solvent_options
+
+        model_lower = (solvent_model or "").lower()
+        is_cosmors = model_lower == "cosmors"
+
+        # Choose the block name based on the model
+        if is_cosmors:
+            block_name = "cosmors"
+        else:
+            block_name = "cpcm"
+
+        needs_block = custom_solvent is not None or additional is not None
+
+        if needs_block:
+            logger.debug("Writing %%%s solvent block", block_name)
+            f.write(f"%{block_name}\n")
+            if custom_solvent is not None:
+                for line in custom_solvent.splitlines():
+                    f.write(f"  {line.rstrip()}\n")
+            if additional is not None:
+                for line in additional.splitlines():
+                    f.write(f"  {line.rstrip()}\n")
+            f.write("end\n")
 
     def _write_mdci_block(self, f):
         """
