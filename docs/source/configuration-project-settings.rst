@@ -244,9 +244,9 @@ Key ORCA-Specific Parameters
 Example: Custom Solvent Parameters for ORCA
 ===========================================
 
-For non-standard solvents in ORCA, custom solvent parameters are written directly into the model's solvent block.
-Unlike Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads these parameters
-from the appropriate block (``%cpcm`` or ``%cosmors``).
+For non-standard solvents in ORCA, custom solvent parameters are written directly into the model's solvent block. Unlike
+Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads these parameters from the
+appropriate block (``%cpcm`` or ``%cosmors``).
 
 Supported solvent models and their corresponding ORCA blocks:
 
@@ -257,15 +257,19 @@ Supported solvent models and their corresponding ORCA blocks:
    -  -  Model
       -  Route keyword
       -  Block written
+
    -  -  ``cpcm``
       -  ``CPCM(solvent)`` or bare ``CPCM``
       -  ``%cpcm … end``
+
    -  -  ``cpcmc``
       -  ``CPCMC(solvent)`` or bare ``CPCMC``
       -  ``%cpcm … end`` (CPCM with COSMO epsilon function; replaces legacy COSMO removed in ORCA 4.0)
+
    -  -  ``smd``
       -  ``SMD(solvent)`` or bare ``SMD``
       -  ``%cpcm … end`` only if ``custom_solvent`` / ``-so`` options present
+
    -  -  ``cosmors``
       -  ``COSMORS(solvent)`` or bare ``COSMORS``
       -  ``%cosmors … end``
@@ -366,8 +370,8 @@ This produces:
 
 .. note::
 
-   The ``custom_solvent`` block and ``-so``/``--solvent-options`` CLI parameters all appear together in a single
-   solvent block, in that order: ``custom_solvent`` lines first, then any extra options from ``-so``.
+   The ``custom_solvent`` block and ``-so``/``--solvent-options`` CLI parameters all appear together in a single solvent
+   block, in that order: ``custom_solvent`` lines first, then any extra options from ``-so``.
 
    For SMD in ORCA 6.0, the model is activated by the ``SMD(solvent)`` route keyword alone — no ``SMD true`` /
    ``SMDsolvent`` lines are needed in the ``%cpcm`` block.

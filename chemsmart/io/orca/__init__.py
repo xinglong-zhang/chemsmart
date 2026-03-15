@@ -461,10 +461,10 @@ class ORCARefs:
     ]
 
     ORCA_SOLVENT_MODELS = [
-        "cpcm",    # conductor-like polarizable continuum model (CPCM epsilon)
-        "cpcmc",   # CPCM with COSMO epsilon function (!CPCMC keyword)
-        "smd",     # solvation model based on density (!SMD keyword)
-        "cosmors", # openCOSMO-RS interface (!COSMORS keyword)
+        "cpcm",  # conductor-like polarizable continuum model (CPCM epsilon)
+        "cpcmc",  # CPCM with COSMO epsilon function (!CPCMC keyword)
+        "smd",  # solvation model based on density (!SMD keyword)
+        "cosmors",  # openCOSMO-RS interface (!COSMORS keyword)
     ]
 
     ORCA_SOLVENT_IDS = [

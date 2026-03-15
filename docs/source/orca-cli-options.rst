@@ -230,9 +230,8 @@ They can also be specified at the **subcommand level** to override the group-lev
 
    -  -  ``-sm, --solvent-model``
       -  string
-      -  Implicit solvent model: ``cpcm`` (CPCM with CPCM epsilon), ``cpcmc`` (CPCM with COSMO epsilon;
-         replaces the legacy COSMO model removed in ORCA 4.0), ``smd`` (Minnesota SMD), or ``cosmors``
-         (openCOSMO-RS interface)
+      -  Implicit solvent model: ``cpcm`` (CPCM with CPCM epsilon), ``cpcmc`` (CPCM with COSMO epsilon; replaces the
+         legacy COSMO model removed in ORCA 4.0), ``smd`` (Minnesota SMD), or ``cosmors`` (openCOSMO-RS interface)
 
    -  -  ``-si, --solvent-id``
       -  string
@@ -246,15 +245,20 @@ They can also be specified at the **subcommand level** to override the group-lev
 .. note::
 
    -  For **CPCM** with a named solvent, ``CPCM(solvent_id)`` is written in the route line.
-   -  For **CPCMC** (CPCM + COSMO epsilon, replaces old ``COSMO`` keyword removed in ORCA 4.0),
-      ``CPCMC(solvent_id)`` is written in the route line.
-   -  For **SMD**, ``SMD(solvent_id)`` is written in the route line (canonical ORCA 6.0 form).
-      Any additional options (e.g. ``SurfaceType``, SMD descriptors) go into the ``%cpcm`` block via ``-so``.
-   -  For **openCOSMO-RS** (``cosmors``), ``COSMORS(solvent_id)`` is written in the route line and a
-      ``%cosmors`` block is added with any ``-so`` parameters.
-   -  For a **custom dielectric** (no named solvent), the bare keyword (``CPCM``, ``CPCMC``, ``SMD``, or
-      ``COSMORS``) is written in the route line and the dielectric constants go into the corresponding block
-      via ``-so`` (or ``custom_solvent`` in the project YAML).
+
+   -  For **CPCMC** (CPCM + COSMO epsilon, replaces old ``COSMO`` keyword removed in ORCA 4.0), ``CPCMC(solvent_id)`` is
+      written in the route line.
+
+   -  For **SMD**, ``SMD(solvent_id)`` is written in the route line (canonical ORCA 6.0 form). Any additional options
+      (e.g. ``SurfaceType``, SMD descriptors) go into the ``%cpcm`` block via ``-so``.
+
+   -  For **openCOSMO-RS** (``cosmors``), ``COSMORS(solvent_id)`` is written in the route line and a ``%cosmors`` block
+      is added with any ``-so`` parameters.
+
+   -  For a **custom dielectric** (no named solvent), the bare keyword (``CPCM``, ``CPCMC``, ``SMD``, or ``COSMORS``) is
+      written in the route line and the dielectric constants go into the corresponding block via ``-so`` (or
+      ``custom_solvent`` in the project YAML).
+
    -  ``-so`` is only applied when a solvent model is active — it is ignored when ``--remove-solvent`` is used.
 
 Supported ``%cpcm`` block options (via ``-so``, for ``cpcm``, ``cpcmc``, and ``smd`` models):
@@ -265,19 +269,26 @@ Supported ``%cpcm`` block options (via ``-so``, for ``cpcm``, ``cpcmc``, and ``s
 
    -  -  Option
       -  Description
+
    -  -  ``Epsilon <value>``
       -  Static dielectric constant (used for custom/non-named solvents, e.g. ``Epsilon 78.36``)
+
    -  -  ``Refrac <value>``
       -  Refractive index (e.g. ``Refrac 1.33``)
+
    -  -  ``SurfaceType <type>``
-      -  Cavity surface type: ``gepol_ses``, ``gepol_sas``, ``vdw_gaussian`` (default since ORCA 5),
-         or ``gepol_ses_gaussian``
+      -  Cavity surface type: ``gepol_ses``, ``gepol_sas``, ``vdw_gaussian`` (default since ORCA 5), or
+         ``gepol_ses_gaussian``
+
    -  -  ``Rsolv <value>``
       -  Solvent probe radius in Ångström (e.g. ``Rsolv 1.30``)
+
    -  -  ``MaxIter <n>``
       -  Maximum iterations (e.g. ``MaxIter 100``)
+
    -  -  ``Tolerance <value>``
       -  Convergence tolerance
+
    -  -  ``soln``, ``soln25``, ``sola``, ``solb``, ``solg``, ``solc``, ``solh``
       -  SMD solvent descriptors (refractive index, H-bond acidity/basicity, surface tension, aromaticity,
          halogenicity); used only with the ``smd`` model
