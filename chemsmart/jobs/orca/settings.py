@@ -557,17 +557,18 @@ class ORCAJobSettings(MolecularJobSettings):
         route_kw = self._get_solvent_route_keyword()
         if self.custom_solvent is not None:
             # Custom solvent parameters will be written in the appropriate
-            # solvent block (%cpcm for CPCM/SMD, %cosmo for COSMO,
-            # %cosmors for COSMO-RS).  The route keyword depends on the model.
+            # solvent block (%cpcm for CPCM/CPCMC/SMD, %cosmors for COSMO-RS).
+            # The route keyword depends on the model.
             if self.solvent_id is not None:
                 route_string += f" {route_kw}({self.solvent_id})"
             else:
                 route_string += f" {route_kw}"
         elif self.solvent_model is not None and self.solvent_id is not None:
-            # Both CPCM and SMD use CPCM(solvent) in the route line; COSMO
-            # and COSMO-RS use COSMO(solvent).  For SMD and COSMO-RS the
-            # activation parameters are written in the solvent block by
-            # _write_solvent_block in the writer.
+            # Each model uses its own route keyword:
+            #   cpcm    → CPCM(solvent)
+            #   cpcmc   → CPCMC(solvent)
+            #   smd     → SMD(solvent)
+            #   cosmors → COSMORS(solvent)
             route_string += f" {route_kw}({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
             # Custom solvent case (e.g. user-specified Epsilon/Refrac via
@@ -673,16 +674,28 @@ class ORCAJobSettings(MolecularJobSettings):
     def _get_solvent_route_keyword(self):
         """Return the ORCA simple-input keyword for the active solvent model.
 
-        CPCM and SMD both use the ``CPCM`` route keyword.  COSMO and COSMO-RS
-        use the ``COSMO`` route keyword.  When no model is set the default is
-        ``CPCM``.
+        Mapping (per ORCA 6.0 manual):
+
+        * ``cpcm``    → ``CPCM``   (C-PCM with CPCM epsilon function)
+        * ``cpcmc``   → ``CPCMC``  (C-PCM with COSMO epsilon function;
+          replaces the legacy ``COSMO`` keyword removed in ORCA 4.0)
+        * ``smd``     → ``SMD``    (invokes C-PCM internally; canonical
+          simple-input is ``!SMD(solvent)``)
+        * ``cosmors`` → ``COSMORS`` (openCOSMO-RS interface; route is
+          ``!COSMORS(solvent)``)
+
+        When no model is set the default is ``CPCM``.
 
         Returns:
-            str: ``"CPCM"`` or ``"COSMO"``
+            str: One of ``"CPCM"``, ``"CPCMC"``, ``"SMD"``, or ``"COSMORS"``
         """
         model_lower = (self.solvent_model or "").lower()
-        if model_lower in ("cosmo", "cosmors"):
-            return "COSMO"
+        if model_lower == "cpcmc":
+            return "CPCMC"
+        if model_lower == "smd":
+            return "SMD"
+        if model_lower == "cosmors":
+            return "COSMORS"
         return "CPCM"
 
     def _check_solvent(self, solvent_model):

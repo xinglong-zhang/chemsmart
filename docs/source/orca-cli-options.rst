@@ -230,7 +230,9 @@ They can also be specified at the **subcommand level** to override the group-lev
 
    -  -  ``-sm, --solvent-model``
       -  string
-      -  Implicit solvent model: ``cpcm``, ``smd``, ``cosmo``, or ``cosmors``
+      -  Implicit solvent model: ``cpcm`` (CPCM with CPCM epsilon), ``cpcmc`` (CPCM with COSMO epsilon;
+         replaces the legacy COSMO model removed in ORCA 4.0), ``smd`` (Minnesota SMD), or ``cosmors``
+         (openCOSMO-RS interface)
 
    -  -  ``-si, --solvent-id``
       -  string
@@ -244,17 +246,18 @@ They can also be specified at the **subcommand level** to override the group-lev
 .. note::
 
    -  For **CPCM** with a named solvent, ``CPCM(solvent_id)`` is written in the route line.
-   -  For **SMD**, ``CPCM(solvent_id)`` is written in the route line **and** a ``%cpcm`` block is added with ``SMD
-      true`` and ``SMDsolvent "solvent_id"``.
-   -  For **COSMO** with a named solvent, ``COSMO(solvent_id)`` is written in the route line.
-   -  For **COSMO-RS** (``cosmors``), ``COSMO(solvent_id)`` is written in the route line and a ``%cosmors`` block
-      is added.
-   -  For a **custom dielectric** (no named solvent), the bare keyword (``CPCM`` or ``COSMO``) is written in the
-      route line and the dielectric constants go into the corresponding block via ``-so`` (or ``custom_solvent``
-      in the project YAML).
+   -  For **CPCMC** (CPCM + COSMO epsilon, replaces old ``COSMO`` keyword removed in ORCA 4.0),
+      ``CPCMC(solvent_id)`` is written in the route line.
+   -  For **SMD**, ``SMD(solvent_id)`` is written in the route line (canonical ORCA 6.0 form).
+      Any additional options (e.g. ``SurfaceType``, SMD descriptors) go into the ``%cpcm`` block via ``-so``.
+   -  For **openCOSMO-RS** (``cosmors``), ``COSMORS(solvent_id)`` is written in the route line and a
+      ``%cosmors`` block is added with any ``-so`` parameters.
+   -  For a **custom dielectric** (no named solvent), the bare keyword (``CPCM``, ``CPCMC``, ``SMD``, or
+      ``COSMORS``) is written in the route line and the dielectric constants go into the corresponding block
+      via ``-so`` (or ``custom_solvent`` in the project YAML).
    -  ``-so`` is only applied when a solvent model is active — it is ignored when ``--remove-solvent`` is used.
 
-Supported ``%cpcm`` / ``%cosmo`` block options (via ``-so``, for ``cpcm``, ``smd``, and ``cosmo`` models):
+Supported ``%cpcm`` block options (via ``-so``, for ``cpcm``, ``cpcmc``, and ``smd`` models):
 
 .. list-table::
    :header-rows: 1
@@ -267,13 +270,17 @@ Supported ``%cpcm`` / ``%cosmo`` block options (via ``-so``, for ``cpcm``, ``smd
    -  -  ``Refrac <value>``
       -  Refractive index (e.g. ``Refrac 1.33``)
    -  -  ``SurfaceType <type>``
-      -  Cavity surface type: ``gepol_ses``, ``gepol_vdw``, or ``delley`` (default: ``gepol_ses``)
+      -  Cavity surface type: ``gepol_ses``, ``gepol_sas``, ``vdw_gaussian`` (default since ORCA 5),
+         or ``gepol_ses_gaussian``
    -  -  ``Rsolv <value>``
       -  Solvent probe radius in Ångström (e.g. ``Rsolv 1.30``)
    -  -  ``MaxIter <n>``
       -  Maximum iterations (e.g. ``MaxIter 100``)
    -  -  ``Tolerance <value>``
       -  Convergence tolerance
+   -  -  ``soln``, ``soln25``, ``sola``, ``solb``, ``solg``, ``solc``, ``solh``
+      -  SMD solvent descriptors (refractive index, H-bond acidity/basicity, surface tension, aromaticity,
+         halogenicity); used only with the ``smd`` model
 
 Supported ``%cosmors`` block options (via ``-so``, for the ``cosmors`` model):
 
@@ -284,7 +291,11 @@ Supported ``%cosmors`` block options (via ``-so``, for the ``cosmors`` model):
    -  -  Option
       -  Description
    -  -  ``Temperature <value>``
-      -  Temperature in Kelvin (e.g. ``Temperature 298.15``)
+      -  Reference temperature in Kelvin (e.g. ``Temperature 298.15``)
+   -  -  ``dftfunc <name>``
+      -  DFT functional for COSMO-RS sub-calculations (default: ``BP86``)
+   -  -  ``dftbas <name>``
+      -  Basis set for COSMO-RS sub-calculations (default: ``def2-TZVPD``)
 
 Examples:
 
@@ -293,19 +304,19 @@ Examples:
    # CPCM with a named solvent (group-level, applies to all subcommands)
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cpcm -si water sp
 
-   # SMD with a named solvent
+   # CPCMC (CPCM + COSMO epsilon) with a named solvent
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cpcmc -si water sp
+
+   # SMD with a named solvent (route: ! SMD(water))
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm smd -si water opt
 
-   # SMD with a surface-type option
+   # SMD with a surface-type option (goes into %cpcm block)
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm smd -si water -so 'SurfaceType gepol_ses' opt
 
-   # COSMO with a named solvent
-   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmo -si water sp
+   # CPCMC with custom dielectric (no named solvent; replaces old COSMO usage)
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cpcmc -so $'Epsilon 16.7\nRefrac 1.275' sp
 
-   # COSMO with custom dielectric (no named solvent)
-   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmo -so $'Epsilon 16.7\nRefrac 1.275' sp
-
-   # COSMO-RS with a named solvent and temperature
+   # openCOSMO-RS with a named solvent and temperature (route: ! COSMORS(water))
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -so 'Temperature 298.15' sp
 
    # Custom dielectric (no named solvent): remove project solvent first, then set custom Epsilon/Refrac
@@ -321,17 +332,22 @@ The SMD example produces:
 
 .. code:: text
 
-   ! CPCM(water) B3LYP def2-SVP ...
-   %cpcm
-     SMD true
-     SMDsolvent "water"
-   end
+   ! SMD(water) B3LYP def2-SVP ...
 
-The COSMO-RS example produces:
+The SMD + SurfaceType example produces:
 
 .. code:: text
 
-   ! COSMO(water) B3LYP def2-SVP ...
+   ! SMD(water) B3LYP def2-SVP ...
+   %cpcm
+     SurfaceType gepol_ses
+   end
+
+The openCOSMO-RS example produces:
+
+.. code:: text
+
+   ! COSMORS(water) B3LYP def2-SVP ...
    %cosmors
      Temperature 298.15
    end
