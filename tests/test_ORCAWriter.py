@@ -792,3 +792,180 @@ class TestORCAInputWriter:
         epsilon_pos = content.index("Epsilon 78.36")
         surface_pos = content.index("SurfaceType gepol_ses")
         assert smd_pos < epsilon_pos < surface_pos
+
+    def test_cosmo_solvent_uses_cosmo_in_route_no_block(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Pure COSMO solvation writes COSMO(solvent) in route and no %cosmo block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmo"
+        settings.solvent_id = "water"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmo_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmo_opt.inp")
+        content = open(orca_file).read()
+
+        assert "COSMO(water)" in content
+        assert "CPCM" not in content
+        # No block needed for pure COSMO with named solvent
+        assert "%cosmo" not in content
+
+    def test_cosmo_custom_epsilon_no_solvent_name(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """COSMO with custom Epsilon (no solvent_id) writes bare COSMO + %cosmo block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmo"
+        settings.additional_solvent_options = "Epsilon 16.7\nRefrac 1.275"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmo_custom",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmo_custom.inp")
+        content = open(orca_file).read()
+
+        # Bare COSMO in route (no parens) — use regex to match whole word COSMO
+        # not followed by a parenthesis
+        assert re.search(r"\bCOSMO\b(?!\()", content)
+        assert "COSMO(" not in content
+        assert "CPCM" not in content
+        # %cosmo block with custom parameters
+        assert "%cosmo" in content
+        assert "Epsilon 16.7" in content
+        assert "Refrac 1.275" in content
+        assert "end" in content
+
+    def test_cosmo_custom_solvent_yaml(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """COSMO with custom_solvent YAML goes into %cosmo block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmo"
+        settings.custom_solvent = "Epsilon 32.6\nRefrac 1.34"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmo_yaml",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmo_yaml.inp")
+        content = open(orca_file).read()
+
+        assert "%cosmo" in content
+        assert "Epsilon 32.6" in content
+        assert "Refrac 1.34" in content
+        assert "%cpcm" not in content
+
+    def test_cosmors_uses_cosmo_in_route_and_cosmors_block(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """COSMO-RS writes COSMO(solvent) in route and %cosmors block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solvent_id = "water"
+        settings.additional_solvent_options = "Temperature 298.15"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_opt",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmors_opt.inp")
+        content = open(orca_file).read()
+
+        assert "COSMO(water)" in content
+        assert "CPCM" not in content
+        assert "%cosmors" in content
+        assert "Temperature 298.15" in content
+        assert "%cpcm" not in content
+        # Any %cosmo occurrence must be part of %cosmors, not a standalone %cosmo block
+        assert "%cosmo" not in content or "%cosmors" in content
+
+    def test_cosmors_custom_solvent_in_cosmors_block(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """COSMO-RS with custom_solvent YAML goes into %cosmors block."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.custom_solvent = "Temperature 298.15\nDensity 1.0"
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_custom",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmors_custom.inp")
+        content = open(orca_file).read()
+
+        assert "%cosmors" in content
+        assert "Temperature 298.15" in content
+        assert "Density 1.0" in content
+        assert "%cpcm" not in content
+        # Any %cosmo occurrence must be part of %cosmors, not a standalone %cosmo block
+        assert "%cosmo" not in content or "%cosmors" in content

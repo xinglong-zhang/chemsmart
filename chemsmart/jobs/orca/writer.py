@@ -225,7 +225,14 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
 
         Note:
-            Writes a ``%cpcm`` block when any of the following apply:
+            Dispatches to the correct named ORCA block based on
+            ``solvent_model``:
+
+            * ``cpcm`` or ``smd`` (or unset) → ``%cpcm … end``
+            * ``cosmo`` → ``%cosmo … end``
+            * ``cosmors`` → ``%cosmors … end``
+
+            A block is emitted whenever any of the following apply:
 
             * ``solvent_model`` is ``"smd"`` — emits ``SMD true`` and, if
               ``solvent_id`` is provided, ``SMDsolvent "<solvent_id>"`` so
@@ -233,9 +240,11 @@ class ORCAInputWriter(InputWriter):
               framework.
             * ``custom_solvent`` is set — the string is written line-by-line
               inside the block.  In ORCA, custom solvent parameters (Epsilon,
-              Refrac, etc.) are specified directly in the ``%cpcm`` block
+              Refrac, etc.) are specified directly in the solvent block
               rather than as a separate appended section (as in Gaussian).
-              A typical ORCA project YAML entry looks like::
+              For CPCM/SMD, the block is ``%cpcm``; for COSMO it is
+              ``%cosmo``; for COSMO-RS it is ``%cosmors``.  A typical ORCA
+              project YAML entry for COSMO looks like::
 
                   custom_solvent : |
                     Epsilon 16.7
@@ -245,16 +254,17 @@ class ORCAInputWriter(InputWriter):
 
               .. code-block:: text
 
-                  ! CPCM B3LYP def2-SVP
-                  %cpcm
+                  ! COSMO B3LYP def2-SVP
+                  %cosmo
                     Epsilon 16.7
                     Refrac 1.275
                   end
 
             * ``additional_solvent_options`` is set — each line of the string
-              is written indented inside the block. Commonly used ORCA
-              ``%cpcm`` options that can be passed here:
+              is written indented inside the block. Commonly used ORCA block
+              options that can be passed here:
 
+              For ``%cpcm`` / ``%cosmo``:
               - ``Epsilon <value>`` — static dielectric constant (e.g.
                 ``Epsilon 78.36``), used for custom/non-named solvents
               - ``Refrac <value>`` — refractive index (e.g. ``Refrac 1.33``)
@@ -262,11 +272,15 @@ class ORCAInputWriter(InputWriter):
                 ``gepol_vdw``, or ``delley``; default ``gepol_ses``)
               - ``Rsolv <value>`` — solvent probe radius in Ångström
                 (e.g. ``Rsolv 1.30``)
-              - ``MaxIter <n>`` — maximum CPCM iterations
-              - ``Tolerance <value>`` — CPCM convergence tolerance
+              - ``MaxIter <n>`` — maximum iterations
+              - ``Tolerance <value>`` — convergence tolerance
+
+              For ``%cosmors``:
+              - ``Temperature <value>`` — temperature in K (e.g.
+                ``Temperature 298.15``)
 
             All three conditions can apply simultaneously in the same
-            ``%cpcm`` block: SMD activation lines are written first, then
+            block: SMD activation lines are written first, then
             ``custom_solvent`` lines, then ``additional_solvent_options``.
         """
         solvent_model = self.settings.solvent_model
@@ -274,14 +288,26 @@ class ORCAInputWriter(InputWriter):
         custom_solvent = self.settings.custom_solvent
         additional = self.settings.additional_solvent_options
 
-        is_smd = solvent_model is not None and solvent_model.lower() == "smd"
+        model_lower = (solvent_model or "").lower()
+        is_smd = model_lower == "smd"
+        is_cosmo = model_lower == "cosmo"
+        is_cosmors = model_lower == "cosmors"
+
+        # Choose the block name based on the model
+        if is_cosmo:
+            block_name = "cosmo"
+        elif is_cosmors:
+            block_name = "cosmors"
+        else:
+            block_name = "cpcm"
+
         needs_block = (
             is_smd or custom_solvent is not None or additional is not None
         )
 
         if needs_block:
-            logger.debug("Writing %cpcm solvent block")
-            f.write("%cpcm\n")
+            logger.debug("Writing %%%s solvent block", block_name)
+            f.write(f"%{block_name}\n")
             if is_smd:
                 f.write("  SMD true\n")
                 if solvent_id is not None:

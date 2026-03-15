@@ -225,7 +225,7 @@ def click_orca_solvent_options(f):
         "--solvent-model",
         type=str,
         default=None,
-        help="Solvent model to use (e.g. cpcm, smd).",
+        help="Solvent model to use (e.g. cpcm, smd, cosmo, cosmors).",
     )
     @click.option(
         "-si",
@@ -241,9 +241,10 @@ def click_orca_solvent_options(f):
         type=str,
         default=None,
         help=(
-            "Additional solvent options written inside the %%cpcm block. "
+            "Additional solvent options written inside the model's solvent block "
+            "(%%cpcm for cpcm/smd, %%cosmo for cosmo, %%cosmors for cosmors). "
             "Supports newline-separated entries for multiple options. "
-            "Common ORCA %%cpcm parameters: "
+            "Common %%cpcm/%%cosmo parameters: "
             "'Epsilon 78.36' (dielectric constant, for custom solvents), "
             "'Refrac 1.33' (refractive index), "
             "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_vdw, delley), "
@@ -276,7 +277,7 @@ def click_orca_solvent_group_options(f):
         "--solvent-model",
         type=str,
         default=None,
-        help="Solvent model to use (e.g. cpcm, smd).",
+        help="Solvent model to use (e.g. cpcm, smd, cosmo, cosmors).",
     )
     @click.option(
         "-si",
@@ -292,9 +293,10 @@ def click_orca_solvent_group_options(f):
         type=str,
         default=None,
         help=(
-            "Additional solvent options written inside the %%cpcm block. "
+            "Additional solvent options written inside the model's solvent block "
+            "(%%cpcm for cpcm/smd, %%cosmo for cosmo, %%cosmors for cosmors). "
             "Supports newline-separated entries for multiple options. "
-            "Common ORCA %%cpcm parameters: "
+            "Common %%cpcm/%%cosmo parameters: "
             "'Epsilon 78.36' (dielectric constant, for custom solvents), "
             "'Refrac 1.33' (refractive index), "
             "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_vdw, delley), "
