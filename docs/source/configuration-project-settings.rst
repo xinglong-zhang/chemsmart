@@ -379,9 +379,8 @@ This produces:
      orbs_vac          false
    end
 
-All parameters listed in the ``custom_solvent`` block correspond directly to
-keywords in the ORCA ``%cosmors`` section.  Any subset of these can be used —
-only the parameters you want to override from their defaults need to be listed.
+All parameters listed in the ``custom_solvent`` block correspond directly to keywords in the ORCA ``%cosmors`` section.
+Any subset of these can be used — only the parameters you want to override from their defaults need to be listed.
 
 **SMD with named solvent and extra parameters:**
 

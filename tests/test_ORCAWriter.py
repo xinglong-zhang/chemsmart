@@ -1046,7 +1046,9 @@ class TestORCAInputWriter:
             i for i, ln in enumerate(lines) if ln.strip() == "%cosmors"
         )
         cosmors_end = next(
-            i for i, ln in enumerate(lines) if ln.strip() == "end" and i > cosmors_start
+            i
+            for i, ln in enumerate(lines)
+            if ln.strip() == "end" and i > cosmors_start
         )
         block_lines = lines[cosmors_start + 1 : cosmors_end]
         # All non-empty lines inside the block must be indented

@@ -297,8 +297,7 @@ Supported ``%cosmors`` block options (via ``-so``, for the ``cosmors`` model):
 
 .. note::
 
-   The ORCA ``%cosmors`` keyword for temperature is ``temp`` (lowercase), as listed in the ORCA 6.0
-   manual.
+   The ORCA ``%cosmors`` keyword for temperature is ``temp`` (lowercase), as listed in the ORCA 6.0 manual.
 
 .. list-table::
    :header-rows: 1
