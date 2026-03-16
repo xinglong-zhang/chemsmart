@@ -310,6 +310,7 @@ class ORCAInputWriter(InputWriter):
         solvent_model = self.settings.solvent_model
         custom_solvent = self.settings.custom_solvent
         additional = self.settings.additional_solvent_options
+        solvent_id = self.settings.solvent_id
 
         model_lower = (solvent_model or "").lower()
         is_cosmors = model_lower == "cosmors"
@@ -320,17 +321,43 @@ class ORCAInputWriter(InputWriter):
         else:
             block_name = "cpcm"
 
-        needs_block = custom_solvent is not None or additional is not None
+        # ORCA 6.1 INPUT ERROR guard: when solvent_id is already encoded in the
+        # route as COSMORS(solvent_id), having 'solvent "name"' in the %cosmors
+        # block causes a "DUPLICATED KEYWORD" error.  Filter those lines out.
+        # 'solventfilename' is a distinct keyword (file path) and is preserved.
+        # Filtering is case-insensitive (matches 'solvent', 'Solvent', 'SOLVENT').
+        filter_solvent_name = is_cosmors and solvent_id is not None
+
+        def _accepted(line):
+            if not filter_solvent_name:
+                return True
+            stripped = line.strip()
+            if not stripped:
+                return True  # preserve blank lines unchanged
+            # 'solvent "name"' starts with 'solvent ' (with space, case-insensitive)
+            # 'solventfilename "..."' starts with 'solventf' — not filtered
+            return not stripped.lower().startswith("solvent ")
+
+        custom_lines = (
+            [ln for ln in custom_solvent.splitlines() if _accepted(ln)]
+            if custom_solvent is not None
+            else []
+        )
+        additional_lines = (
+            [ln for ln in additional.splitlines() if _accepted(ln)]
+            if additional is not None
+            else []
+        )
+
+        needs_block = bool(custom_lines) or bool(additional_lines)
 
         if needs_block:
             logger.debug("Writing %%%s solvent block", block_name)
             f.write(f"%{block_name}\n")
-            if custom_solvent is not None:
-                for line in custom_solvent.splitlines():
-                    f.write(f"  {line.rstrip()}\n")
-            if additional is not None:
-                for line in additional.splitlines():
-                    f.write(f"  {line.rstrip()}\n")
+            for line in custom_lines:
+                f.write(f"  {line.rstrip()}\n")
+            for line in additional_lines:
+                f.write(f"  {line.rstrip()}\n")
             f.write("end\n")
 
     def _write_mdci_block(self, f):

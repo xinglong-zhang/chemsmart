@@ -255,6 +255,16 @@ They can also be specified at the **subcommand level** to override the group-lev
    -  For **openCOSMO-RS** (``cosmors``), ``COSMORS(solvent_id)`` is written in the route line and a ``%cosmors`` block
       is added with any ``-so`` parameters.
 
+      .. warning::
+
+         **ORCA 6.1 duplicate-keyword guard (openCOSMO-RS only):** ORCA raises an
+         ``INPUT ERROR`` if ``COSMORS(solvent_id)`` is on the route line *and*
+         ``solvent "solvent_id"`` also appears in the ``%cosmors`` block.  When
+         ``-si`` / ``solvent_id`` is set, chemsmart automatically filters out any
+         ``solvent "..."`` lines from the ``%cosmors`` block to prevent this error.
+         Note that ``solventfilename "..."`` is a **different** keyword (it specifies
+         the path to a ``.cosmorsxyz`` file) and is **not** filtered.
+
    -  For a **custom dielectric** (no named solvent), the bare keyword (``CPCM``, ``CPCMC``, ``SMD``, or ``COSMORS``) is
       written in the route line and the dielectric constants go into the corresponding block via ``-so`` (or
       ``custom_solvent`` in the project YAML).
