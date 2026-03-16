@@ -451,36 +451,50 @@ def _build_gaussian_pka_settings(
     }
 
     # ── 3. Prefer project solvent settings when CLI omitted ──
-    solvent_model = pka_kwargs.get("solvent_model")
-    if solvent_model is None:
-        try:
-            solvent_model = opt_settings.solvent_model
-        except AttributeError:
-            solvent_model = None
-    if solvent_model is None and sp_settings is not None:
-        try:
-            solvent_model = sp_settings.solvent_model
-        except AttributeError:
-            solvent_model = None
+    # Solvent-related options: prefer CLI/shared, then opt settings, then sp settings
+    def _first_non_none(*values):
+        for val in values:
+            if val is not None:
+                return val
+        return None
 
-    solvent_id = pka_kwargs.get("solvent_id")
-    if solvent_id is None:
+    def _maybe_attr(obj, name):
+        if obj is None:
+            return None
         try:
-            solvent_id = opt_settings.solvent_id
+            return obj.__getattribute__(name)
         except AttributeError:
-            solvent_id = None
-    if solvent_id is None and sp_settings is not None:
-        try:
-            solvent_id = sp_settings.solvent_id
-        except AttributeError:
-            solvent_id = None
+            return None
 
-    if solvent_model is None:
-        solvent_model = "SMD"
-    if solvent_id is None:
-        solvent_id = "water"
+    solvent_model = _first_non_none(
+        pka_kwargs.get("solvent_model"),
+        _maybe_attr(opt_settings, "solvent_model"),
+        _maybe_attr(sp_settings, "solvent_model"),
+        "SMD",
+    )
+    solvent_id = _first_non_none(
+        pka_kwargs.get("solvent_id"),
+        _maybe_attr(opt_settings, "solvent_id"),
+        _maybe_attr(sp_settings, "solvent_id"),
+        "water",
+    )
+    additional_solvent_options = _first_non_none(
+        pka_kwargs.get("additional_solvent_options"),
+        _maybe_attr(opt_settings, "additional_solvent_options"),
+        _maybe_attr(sp_settings, "additional_solvent_options"),
+    )
+    custom_solvent = _first_non_none(
+        pka_kwargs.get("custom_solvent"),
+        _maybe_attr(opt_settings, "custom_solvent"),
+        _maybe_attr(sp_settings, "custom_solvent"),
+    )
+
     pka_kwargs["solvent_model"] = solvent_model
     pka_kwargs["solvent_id"] = solvent_id
+    if additional_solvent_options is not None:
+        pka_kwargs["additional_solvent_options"] = additional_solvent_options
+    if custom_solvent is not None:
+        pka_kwargs["custom_solvent"] = custom_solvent
 
     return GaussianpKaJobSettings(
         proton_index=proton_index,
