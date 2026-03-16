@@ -94,7 +94,7 @@ Options
 
    -  -  ``-w, --weighted``
       -  bool
-      -  Use isotopically weighted masses
+      -  Use natural abundance weighted masses (default: True)
 
    -  -  ``-T, --temperature``
       -  float

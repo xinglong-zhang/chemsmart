@@ -86,11 +86,11 @@ def click_thermochemistry_options(f):
         "-w",
         "--weighted",
         is_flag=True,
-        default=False,
+        default=True,
         show_default=True,
         help="Use natural abundance weighted masses (True) or use most "
-        "abundant masses (False).\nDefault to False, i.e., use single "
-        "isotopic mass.",
+        "abundant masses (False).\nDefault to True, i.e., use natural "
+        "abundance weighted masses, which is the real world scenario.",
     )
     @click.option(
         "-u",
