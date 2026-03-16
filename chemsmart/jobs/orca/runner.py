@@ -21,7 +21,10 @@ from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import ORCAExecutable
 from chemsmart.utils.periodictable import PeriodicTable
-from chemsmart.utils.repattern import allxyz_filename_pattern, solventfilename_block_pattern
+from chemsmart.utils.repattern import (
+    allxyz_filename_pattern,
+    solventfilename_block_pattern,
+)
 
 pt = PeriodicTable()
 
@@ -338,9 +341,7 @@ class ORCAJobRunner(JobRunner):
                         os.path.basename(cosmorsxyz_path),
                     )
                     copy(cosmorsxyz_path, dest)
-                    logger.info(
-                        f"Copied {cosmorsxyz_path} to {dest}."
-                    )
+                    logger.info(f"Copied {cosmorsxyz_path} to {dest}.")
 
     def _write_input(self, job):
         """
