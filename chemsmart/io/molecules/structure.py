@@ -319,6 +319,17 @@ class Molecule:
         ob_mol = pybel.readstring("xyz", xyz_string)
         return ob_mol.write("inchikey").strip()
 
+    @property
+    def cxsmiles(self):
+        """
+        Return the CXSMILES string for the molecule using RDKit.
+
+        CXSMILES extends standard SMILES with additional information
+        such as 3D coordinates, atom labels, and stereo group data,
+        appended in a ``|...|`` block after the SMILES string.
+        """
+        return Chem.MolToCXSmiles(self.to_rdkit())
+
     @cached_property
     def chemical_symbols(self):
         """
