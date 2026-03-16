@@ -210,8 +210,9 @@ def click_orca_solvent_options(f):
     """Common click options for ORCA solvent settings (subcommand level).
 
     Provides ``--remove-solvent``, ``-sm``/``--solvent-model``,
-    ``-si``/``--solvent-id``, and ``-so``/``--solvent-options`` to every
-    ORCA subcommand that decorates with this function.
+    ``-si``/``--solvent-id``, ``-so``/``--solvent-options``, and
+    ``-sf``/``--solventfilename`` to every ORCA subcommand that decorates
+    with this function.
     """
 
     @click.option(
@@ -260,6 +261,19 @@ def click_orca_solvent_options(f):
             "'dftbas \"def2-TZVPD\"', 'solvent \"water\"', "
             "'solventfilename \"water\"', 'orbs_vac false'. "
             "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
+    )
+    @click.option(
+        "-sf",
+        "--solventfilename",
+        type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+        default=None,
+        help=(
+            "Path to a .cosmorsxyz solvent file for the cosmors model. "
+            "The file is copied to the running directory (scratch or job folder) "
+            "and its basename (without the .cosmorsxyz extension) is written as "
+            "'solventfilename \"name\"' in the %%cosmors block. "
+            "Example: -sf /path/to/water.cosmorsxyz"
         ),
     )
     @functools.wraps(f)
@@ -322,6 +336,19 @@ def click_orca_solvent_group_options(f):
             "'dftbas \"def2-TZVPD\"', 'solvent \"water\"', "
             "'solventfilename \"water\"', 'orbs_vac false'. "
             "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
+    )
+    @click.option(
+        "-sf",
+        "--solventfilename",
+        type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+        default=None,
+        help=(
+            "Path to a .cosmorsxyz solvent file for the cosmors model. "
+            "The file is copied to the running directory (scratch or job folder) "
+            "and its basename (without the .cosmorsxyz extension) is written as "
+            "'solventfilename \"name\"' in the %%cosmors block. "
+            "Example: -sf /path/to/water.cosmorsxyz"
         ),
     )
     @functools.wraps(f)
@@ -418,6 +445,7 @@ def orca(
     solvent_model,
     solvent_id,
     solvent_options,
+    solventfilename,
     pubchem,
 ):
     """
@@ -532,7 +560,8 @@ def orca(
         job_settings.solvent_model = None
         job_settings.solvent_id = None
         job_settings.custom_solvent = None
-        keywords += ("solvent_model", "solvent_id", "custom_solvent")
+        job_settings.solventfilename = None
+        keywords += ("solvent_model", "solvent_id", "custom_solvent", "solventfilename")
     else:
         if solvent_model is not None:
             job_settings.solvent_model = solvent_model
@@ -543,6 +572,9 @@ def orca(
         if solvent_options is not None:
             job_settings.additional_solvent_options = solvent_options
             keywords += ("additional_solvent_options",)
+        if solventfilename is not None:
+            job_settings.solventfilename = solventfilename
+            keywords += ("solventfilename",)
 
     # obtain molecule structure from file or PubChem
     molecules = None

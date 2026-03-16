@@ -394,6 +394,21 @@ This produces:
 All other parameters listed in the ``custom_solvent`` block correspond directly to keywords in the ORCA ``%cosmors`` section.
 Any subset of these can be used — only the parameters you want to override from their defaults need to be listed.
 
+.. note::
+
+   **Using a custom ``.cosmorsxyz`` file via ``-sf``:**
+   If you have a custom solvent file (e.g. ``mysolvent.cosmorsxyz``), specify it via the ``-sf`` / ``--solventfilename``
+   CLI option instead of (or in addition to) the YAML ``custom_solvent`` block::
+
+      chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 \
+          -sm cosmors -si mysolvent -sf /path/to/mysolvent.cosmorsxyz sp
+
+   The file is copied to the running directory (scratch or job folder) and
+   ``solventfilename "mysolvent"`` is injected into the ``%cosmors`` block automatically.
+   If scratch is enabled, chemsmart also detects ``solventfilename "..."`` entries in the
+   written input and copies the corresponding ``.cosmorsxyz`` file to scratch so ORCA can
+   locate it.
+
 **SMD with named solvent and extra parameters:**
 
 .. code:: yaml

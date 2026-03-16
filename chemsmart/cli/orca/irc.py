@@ -169,6 +169,7 @@ def irc(
     solvent_model,
     solvent_id,
     solvent_options,
+    solventfilename,
     maxiter,
     printlevel,
     direction,
@@ -226,6 +227,8 @@ def irc(
     )
     if solvent_options is not None:
         irc_settings.additional_solvent_options = solvent_options
+    if solventfilename is not None:
+        irc_settings.solventfilename = solventfilename
 
     # update irc_settings if any attribute is specified in cli options
     # note: only update value if user explicitly specifies a value for

@@ -497,3 +497,74 @@ class TestORCACpcmBlockOptions:
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
         assert settings.additional_solvent_options == "Rsolv 1.30"
+
+    def test_solventfilename_injected_into_sp_settings(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """-sf /path/water.cosmorsxyz stores solventfilename on sp settings."""
+        # Create a dummy .cosmorsxyz file so click.Path(exists=True) is satisfied
+        sf = tmp_path / "water.cosmorsxyz"
+        sf.write_text("")
+
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "cosmors",
+                "-si",
+                "water",
+                "-sf",
+                str(sf),
+                "sp",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.solvent_model == "cosmors"
+        assert settings.solvent_id == "water"
+        assert settings.solventfilename == str(sf)
+
+    def test_solventfilename_group_level_injected_into_sp_settings(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        run_orca_and_capture_settings,
+    ):
+        """-sf at the orca group level propagates solventfilename to sp settings."""
+        sf = tmp_path / "custom.cosmorsxyz"
+        sf.write_text("")
+
+        result, settings = run_orca_and_capture_settings(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "cosmors",
+                "-sf",
+                str(sf),
+                "sp",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.solventfilename == str(sf)

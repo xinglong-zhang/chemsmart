@@ -55,6 +55,8 @@ class ORCAInputWriter(InputWriter):
         Args:
             target_directory: Directory to write the file to
         """
+        import shutil
+
         if target_directory is not None:
             if not os.path.exists(target_directory):
                 os.makedirs(target_directory)
@@ -71,6 +73,18 @@ class ORCAInputWriter(InputWriter):
             self._write_all(f)
         logger.info(f"Finished writing ORCA input file: {job_inputfile}")
         f.close()
+
+        # Copy the .cosmorsxyz file to the target directory so that ORCA can
+        # find it when running in scratch.  Only done when solventfilename is
+        # set via the -sf CLI option (an explicit file path).
+        sf_path = getattr(self.job.settings, "solventfilename", None)
+        if sf_path is not None and os.path.isfile(sf_path):
+            dest = os.path.join(folder, os.path.basename(sf_path))
+            if os.path.abspath(sf_path) != os.path.abspath(dest):
+                shutil.copy2(sf_path, dest)
+                logger.info(
+                    f"Copied solventfilename file {sf_path} to {dest}."
+                )
 
     def _write_all(self, f):
         """
@@ -311,6 +325,7 @@ class ORCAInputWriter(InputWriter):
         custom_solvent = self.settings.custom_solvent
         additional = self.settings.additional_solvent_options
         solvent_id = self.settings.solvent_id
+        sf_path = getattr(self.settings, "solventfilename", None)
 
         model_lower = (solvent_model or "").lower()
         is_cosmors = model_lower == "cosmors"
@@ -349,11 +364,26 @@ class ORCAInputWriter(InputWriter):
             else []
         )
 
-        needs_block = bool(custom_lines) or bool(additional_lines)
+        # Build the solventfilename line from the settings attribute (CLI -sf).
+        # The basename without the .cosmorsxyz extension is written, matching
+        # ORCA convention: solventfilename "water" → looks for water.cosmorsxyz.
+        sf_line = None
+        if sf_path is not None and is_cosmors:
+            sf_basename = os.path.basename(sf_path)
+            # Strip .cosmorsxyz extension if present
+            if sf_basename.lower().endswith(".cosmorsxyz"):
+                sf_name = sf_basename[: -len(".cosmorsxyz")]
+            else:
+                sf_name = sf_basename
+            sf_line = f'solventfilename "{sf_name}"'
+
+        needs_block = bool(custom_lines) or bool(additional_lines) or sf_line is not None
 
         if needs_block:
             logger.debug("Writing %%%s solvent block", block_name)
             f.write(f"%{block_name}\n")
+            if sf_line is not None:
+                f.write(f"  {sf_line}\n")
             for line in custom_lines:
                 f.write(f"  {line.rstrip()}\n")
             for line in additional_lines:

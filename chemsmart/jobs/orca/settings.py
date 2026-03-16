@@ -58,6 +58,12 @@ class ORCAJobSettings(MolecularJobSettings):
         solvent_id (str | None): Solvent identifier.
         additional_solvent_options (str | None): Extra solvent options written
             inside the ``%cpcm`` block (e.g. ``'Epsilon 78.36'``).
+        solventfilename (str | None): Path to a ``.cosmorsxyz`` solvent file
+            for use with the ``cosmors`` model.  The basename (without the
+            ``.cosmorsxyz`` extension) is written as ``solventfilename "name"``
+            inside the ``%cosmors`` block, and the file itself is copied to the
+            running directory (scratch or job folder) so that ORCA can locate it.
+            Set via the ``-sf``/``--solventfilename`` CLI option.
         additional_route_parameters (str | None): Extra route parameters.
         route_to_be_written (str | None): Custom route string to write.
         modred (list | dict | None): Modredundant coordinates specification.
@@ -108,6 +114,7 @@ class ORCAJobSettings(MolecularJobSettings):
         solvent_model=None,
         solvent_id=None,
         additional_solvent_options=None,
+        solventfilename=None,
         additional_route_parameters=None,
         route_to_be_written=None,
         modred=None,
@@ -151,6 +158,10 @@ class ORCAJobSettings(MolecularJobSettings):
             solvent_id: Solvent identifier
             additional_solvent_options: Additional solvent options written
                 inside the ``%cpcm`` block (e.g. ``'Epsilon 78.36'``).
+            solventfilename: Path to a ``.cosmorsxyz`` file for the ``cosmors``
+                model.  The file is copied to the running directory and its
+                basename (without extension) is written as
+                ``solventfilename "name"`` in the ``%cosmors`` block.
             additional_route_parameters: Additional route parameters
             route_to_be_written: Custom route string
             modred: Modified redundant coordinates
@@ -205,6 +216,7 @@ class ORCAJobSettings(MolecularJobSettings):
         self.quadrupole = quadrupole
         self.invert_constraints = invert_constraints
         self.additional_solvent_options = additional_solvent_options
+        self.solventfilename = solventfilename
 
         # Validate frequency and force settings
         if forces is True and (freq is True or numfreq is True):

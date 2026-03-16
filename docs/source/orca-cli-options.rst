@@ -242,6 +242,12 @@ They can also be specified at the **subcommand level** to override the group-lev
       -  string
       -  Additional parameters for the model's solvent block (see tables below), newline-separated for multiple options
 
+   -  -  ``-sf, --solventfilename``
+      -  path
+      -  Path to a ``.cosmorsxyz`` solvent file for the ``cosmors`` model.  The file is copied to the running
+         directory (scratch or job folder) and its basename (without the ``.cosmorsxyz`` extension) is written as
+         ``solventfilename "name"`` inside the ``%cosmors`` block.
+
 .. note::
 
    -  For **CPCM** with a named solvent, ``CPCM(solvent_id)`` is written in the route line.
@@ -372,7 +378,10 @@ Examples:
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cpcmc -so $'Epsilon 16.7\nRefrac 1.275' sp
 
    # openCOSMO-RS with a named solvent and temperature (route: ! COSMORS(water))
-   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -so 'Temperature 298.15' sp
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -so 'temp 298.15' sp
+
+   # openCOSMO-RS with a named solvent and a custom .cosmorsxyz file
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -sf /path/to/water.cosmorsxyz sp
 
    # Custom dielectric (no named solvent): remove project solvent first, then set custom Epsilon/Refrac
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 --remove-solvent sp -sm cpcm -so $'Epsilon 16.7\nRefrac 1.275'
@@ -404,7 +413,16 @@ The openCOSMO-RS example produces:
 
    ! COSMORS(water) B3LYP def2-SVP ...
    %cosmors
-     Temperature 298.15
+     temp 298.15
+   end
+
+The openCOSMO-RS with custom ``.cosmorsxyz`` file example produces:
+
+.. code:: text
+
+   ! COSMORS(water) B3LYP def2-SVP ...
+   %cosmors
+     solventfilename "water"
    end
 
 The custom-dielectric CPCM example produces:

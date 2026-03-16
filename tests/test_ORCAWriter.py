@@ -1283,3 +1283,166 @@ class TestORCAInputWriter:
         assert '%cosmors' in content
         assert 'solvent           "THF"' in content
         assert "temp" in content
+
+    # ------------------------------------------------------------------
+    # Tests for solventfilename (-sf CLI option)
+    # ------------------------------------------------------------------
+
+    def test_solventfilename_written_in_cosmors_block(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """solventfilename setting writes solventfilename line in %cosmors block."""
+        import os
+
+        # create a dummy .cosmorsxyz file so the writer can copy it
+        sf_path = os.path.join(str(tmpdir), "mysolvent.cosmorsxyz")
+        open(sf_path, "w").close()
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_sf",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        out_dir = str(tmpdir.join("out"))
+        orca_writer.write(target_directory=out_dir)
+        orca_file = os.path.join(out_dir, "orca_cosmors_sf.inp")
+        content = open(orca_file).read()
+
+        # %cosmors block must be written
+        assert "%cosmors" in content
+        # solventfilename line (without .cosmorsxyz extension)
+        assert 'solventfilename "mysolvent"' in content
+        # Route uses bare COSMORS (no solvent_id given)
+        assert "COSMORS" in content
+
+    def test_solventfilename_with_solvent_id_in_route(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """solventfilename + solvent_id: route has COSMORS(id), block has solventfilename."""
+        import os
+
+        sf_path = os.path.join(str(tmpdir), "water.cosmorsxyz")
+        open(sf_path, "w").close()
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solvent_id = "water"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_sf_id",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        out_dir = str(tmpdir.join("out2"))
+        orca_writer.write(target_directory=out_dir)
+        orca_file = os.path.join(out_dir, "orca_cosmors_sf_id.inp")
+        content = open(orca_file).read()
+
+        # Route uses COSMORS(water)
+        assert "COSMORS(water)" in content
+        # %cosmors block with solventfilename
+        assert "%cosmors" in content
+        assert 'solventfilename "water"' in content
+
+    def test_solventfilename_file_copied_to_target_directory(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """The .cosmorsxyz file is copied to the target directory during write."""
+        import os
+
+        sf_path = os.path.join(str(tmpdir), "custom.cosmorsxyz")
+        open(sf_path, "w").close()
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_sf_copy",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        out_dir = str(tmpdir.join("out3"))
+        orca_writer.write(target_directory=out_dir)
+
+        # The .cosmorsxyz file must be copied alongside the .inp file
+        copied = os.path.join(out_dir, "custom.cosmorsxyz")
+        assert os.path.isfile(copied)
+
+    def test_solventfilename_not_written_for_non_cosmors_model(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """solventfilename is silently ignored for non-cosmors models (cpcm, smd)."""
+        import os
+
+        sf_path = os.path.join(str(tmpdir), "water.cosmorsxyz")
+        open(sf_path, "w").close()
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cpcm"
+        settings.solvent_id = "water"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_sf_cpcm",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        out_dir = str(tmpdir.join("out4"))
+        orca_writer.write(target_directory=out_dir)
+        orca_file = os.path.join(out_dir, "orca_sf_cpcm.inp")
+        content = open(orca_file).read()
+
+        # No %cpcm block should be written (CPCM with named solvent, no extras)
+        assert "%cpcm" not in content
+        # solventfilename line must NOT appear for cpcm model
+        assert "solventfilename" not in content

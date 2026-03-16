@@ -48,6 +48,7 @@ def scan(
     solvent_model=None,
     solvent_id=None,
     solvent_options=None,
+    solventfilename=None,
     jobtype=None,
     coordinates=None,
     dist_start=None,
@@ -101,6 +102,8 @@ def scan(
     )
     if solvent_options is not None:
         scan_settings.additional_solvent_options = solvent_options
+    if solventfilename is not None:
+        scan_settings.solventfilename = solventfilename
 
     logger.info(f"Final scan settings: {scan_settings.__dict__}")
 
