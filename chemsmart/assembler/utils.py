@@ -184,3 +184,16 @@ def bool_to_str(val):
     if val is None:
         return "NULL"
     return "Yes" if bool(val) else "No"
+
+
+def standardize_basis_set(basis):
+    """
+    Standardize basis set names across different quantum chemistry programs.
+
+    Converts ORCA-style basis names (e.g., 'def2-svp', 'def2-tzvp') to a
+    standardized Gaussian-like format (e.g., 'def2svp', 'def2tzvp') by
+    removing hyphens between 'def2' and the polarization level.
+    """
+    if basis.startswith("def2-"):
+        return basis.replace("def2-", "def2", 1)
+    return basis

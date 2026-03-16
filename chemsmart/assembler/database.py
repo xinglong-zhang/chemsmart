@@ -12,7 +12,12 @@ import sqlite3
 from pathlib import Path
 
 from chemsmart.assembler.records import AssembledRecord
-from chemsmart.assembler.utils import convert_numpy, from_json, to_json
+from chemsmart.assembler.utils import (
+    convert_numpy,
+    from_json,
+    standardize_basis_set,
+    to_json,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +220,10 @@ class Database:
         results = record_dict.get("results", {})
         provenance = record_dict.get("provenance", {})
 
+        # Standardize basis set name (e.g., def2-svp -> def2svp)
+        basis = meta.get("basis")
+        if basis:
+            basis = standardize_basis_set(basis)
         conn.execute(
             """
             INSERT OR REPLACE INTO records (
@@ -249,7 +258,7 @@ class Database:
                 program,
                 # Meta
                 meta.get("functional"),
-                meta.get("basis"),
+                basis,  # Use standardized basis
                 meta.get("num_basis_functions"),
                 meta.get("spin"),
                 meta.get("jobtype"),
