@@ -1,16 +1,12 @@
 import os.path
-from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 from ase import units
-from click.testing import CliRunner
 
 from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
     Thermochemistry,
 )
-from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
@@ -3364,60 +3360,28 @@ class TestThermochemistryBatchMode:
 
 
 class TestThermochemistryCLI:
-    """CLI option-propagation tests for the thermochemistry command.
+    """CLI option-propagation tests for the thermochemistry command."""
 
-    Verifies that the ``--weighted/--no-weighted`` flag pair is correctly
-    forwarded to :class:`~chemsmart.jobs.thermochemistry.settings.ThermochemistryJobSettings`.
-    """
+    def test_weighted_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--weighted"]
+        )
 
-    _FROM_FILENAME = (
-        "chemsmart.cli.thermochemistry.thermochemistry"
-        ".ThermochemistryJob.from_filename"
-    )
-    _GET_PROGRAM_TYPE = (
-        "chemsmart.cli.thermochemistry.thermochemistry"
-        ".get_program_type_from_file"
-    )
-
-    def _run_thermochemistry_cli(self, extra_args=None):
-        """Invoke the thermochemistry CLI and return (result, captured_settings).
-
-        The real job construction and calculation are mocked so no actual
-        output files are required.
-        """
-        runner = CliRunner()
-        captured_settings = None
-        mock_job = MagicMock()
-
-        base_args = ["-f", "dummy.log", "-T", "298.15"]
-        cli_args = base_args + (extra_args or [])
-
-        with patch(self._GET_PROGRAM_TYPE, return_value="gaussian"), patch(
-            self._FROM_FILENAME, return_value=mock_job
-        ) as mock_from_filename:
-            result = runner.invoke(
-                thermochemistry,
-                cli_args,
-                obj={},
-                catch_exceptions=False,
-            )
-            if mock_from_filename.call_args is not None:
-                captured_settings = mock_from_filename.call_args[1].get(
-                    "settings"
-                )
-
-        return result, captured_settings
-
-    def test_weighted_default_is_true(self):
-        """Default ``--weighted`` flag sets ``use_weighted_mass=True``."""
-        result, settings = self._run_thermochemistry_cli()
         assert result.exit_code == 0, result.output
-        assert settings is not None, "ThermochemistryJob.from_filename was never called"
+        assert settings is not None
         assert settings.use_weighted_mass is True
 
-    def test_no_weighted_sets_use_weighted_mass_false(self):
-        """``--no-weighted`` sets ``use_weighted_mass=False``."""
-        result, settings = self._run_thermochemistry_cli(["--no-weighted"])
+    def test_no_weighted_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--no-weighted"]
+        )
+
         assert result.exit_code == 0, result.output
-        assert settings is not None, "ThermochemistryJob.from_filename was never called"
+        assert settings is not None
         assert settings.use_weighted_mass is False
