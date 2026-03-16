@@ -985,3 +985,149 @@ class TestORCAInputWriter:
         assert "Density 1.0" in content
         assert "%cpcm" not in content
         assert "COSMO(" not in content
+
+    def test_cosmors_full_params_from_yaml_project(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_custom_solv_cosmors_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Full %cosmors parameter set written from custom_solvent in project YAML.
+
+        The ``custom_solv_cosmors.yaml`` project sets ``solvent_model: cosmors``
+        and provides a multi-parameter ``custom_solvent`` block containing
+        COSMO-RS parameters (``aeff``, ``lnalpha``, ``lnchb``, ``temp``,
+        ``dftfunc``, ``dftbas``, ``solvent``).  All lines must be written into
+        the ``%cosmors … end`` block unchanged.
+        """
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_custom_solv_cosmors_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_full_params",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmors_full_params.inp")
+        assert os.path.isfile(orca_file)
+
+        content = open(orca_file).read()
+
+        # Route must use COSMORS(water) — solvent_id from YAML
+        assert "COSMORS(water)" in content
+        assert "CPCM" not in content
+        assert "COSMO(" not in content
+
+        # All custom_solvent lines must appear in %cosmors block
+        assert "%cosmors" in content
+        assert "aeff" in content
+        assert "lnalpha" in content
+        assert "lnchb" in content
+        assert "temp" in content
+        assert "dftfunc" in content
+        assert "dftbas" in content
+        assert "solvent" in content
+        assert "end" in content
+
+        # No %cpcm block should appear
+        assert "%cpcm" not in content
+
+        # Verify each parameter line is indented inside the block
+        lines = content.splitlines()
+        cosmors_start = next(
+            i for i, ln in enumerate(lines) if ln.strip() == "%cosmors"
+        )
+        cosmors_end = next(
+            i for i, ln in enumerate(lines) if ln.strip() == "end" and i > cosmors_start
+        )
+        block_lines = lines[cosmors_start + 1 : cosmors_end]
+        # All non-empty lines inside the block must be indented
+        for line in block_lines:
+            if line.strip():
+                assert line.startswith("  "), f"Line not indented: {line!r}"
+
+    def test_cosmors_programmatic_full_params(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Full %cosmors parameter set set programmatically via custom_solvent.
+
+        Verifies that all ORCA COSMO-RS block parameters can be set via
+        ``settings.custom_solvent`` and that ``additional_solvent_options``
+        appends further lines in the same ``%cosmors`` block.
+        """
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solvent_id = "water"
+        # All known %cosmors parameters as custom_solvent
+        settings.custom_solvent = (
+            "aeff              5.925\n"
+            "lnalpha           0.202\n"
+            "lnchb             0.166\n"
+            "chbt              1.50\n"
+            "sigmahb           9.61e-3\n"
+            "rav               0.50\n"
+            "fcorr             2.40\n"
+            "ravcorr           1.00\n"
+            "astd              41.624\n"
+            "zcoord            10.0\n"
+            "dgsolv_eta       -4.4480\n"
+            "dgsolv_omegaring  0.2630\n"
+            "temp              298.15\n"
+            'dftfunc           "BP86"\n'
+            'dftbas            "def2-TZVPD"\n'
+            # solvent and solventfilename are independent: solvent names the
+            # internal database entry; solventfilename points to the .cosmorsxyz
+            # file — they can differ (e.g. internal "THF" with a custom file)
+            'solvent           "THF"\n'
+            'solventfilename   "water"\n'
+            "orbs_vac          false"
+        )
+        settings.additional_solvent_options = 'dftfunc "PBE0"'
+
+        job = ORCAOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_all_params",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmors_all_params.inp")
+        content = open(orca_file).read()
+
+        # Route must use COSMORS(water)
+        assert "COSMORS(water)" in content
+        # All parameters must appear in %cosmors block
+        assert "%cosmors" in content
+        assert "aeff" in content
+        assert "lnalpha" in content
+        assert "chbt" in content
+        assert "sigmahb" in content
+        assert "rav" in content
+        assert "fcorr" in content
+        assert "dgsolv_eta" in content
+        assert "orbs_vac" in content
+        assert "solventfilename" in content
+        assert "%cpcm" not in content
+
+        # additional_solvent_options appended after custom_solvent
+        custom_pos = content.index("orbs_vac")
+        additional_pos = content.index('dftfunc "PBE0"')
+        assert custom_pos < additional_pos

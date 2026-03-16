@@ -254,7 +254,11 @@ def click_orca_solvent_options(f):
             "vdw_gaussian, gepol_ses_gaussian), "
             "'Rsolv 1.30' (probe radius in Angstrom), "
             "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
-            "Common %%cosmors parameters: 'Temperature 298.15'. "
+            "Common %%cosmors parameters: 'temp 298.15' (temperature in K), "
+            "'aeff 5.925' (contact area), 'lnalpha 0.202' (misfit prefactor), "
+            "'lnchb 0.166' (HB strength), 'dftfunc \"BP86\"', "
+            "'dftbas \"def2-TZVPD\"', 'solvent \"water\"', "
+            "'solventfilename \"water\"', 'orbs_vac false'. "
             "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
         ),
     )
@@ -312,7 +316,11 @@ def click_orca_solvent_group_options(f):
             "vdw_gaussian, gepol_ses_gaussian), "
             "'Rsolv 1.30' (probe radius in Angstrom), "
             "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
-            "Common %%cosmors parameters: 'Temperature 298.15'. "
+            "Common %%cosmors parameters: 'temp 298.15' (temperature in K), "
+            "'aeff 5.925' (contact area), 'lnalpha 0.202' (misfit prefactor), "
+            "'lnchb 0.166' (HB strength), 'dftfunc \"BP86\"', "
+            "'dftbas \"def2-TZVPD\"', 'solvent \"water\"', "
+            "'solventfilename \"water\"', 'orbs_vac false'. "
             "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
         ),
     )

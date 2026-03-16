@@ -274,9 +274,24 @@ class ORCAInputWriter(InputWriter):
                 ``solg``, ``solc``, ``solh``
 
               For ``%cosmors`` (``cosmors`` model):
-              - ``Temperature <value>`` — temperature in K (e.g.
-                ``Temperature 298.15``)
-              - ``dftfunc``, ``dftbas``, ``solventfilename``, etc.
+              - ``temp <value>`` — reference temperature in K (e.g. ``temp 298.15``)
+              - ``aeff <value>`` — effective contact area between surface segments (Å²)
+              - ``lnalpha <value>`` — logarithm of the misfit prefactor
+              - ``lnchb <value>`` — hydrogen bond (HB) strength parameter
+              - ``chbt <value>`` — parameter for temperature dependence of HB
+              - ``sigmahb <value>`` — HB threshold parameter (e/Å²)
+              - ``rav <value>`` — radius to average ideal screening charges (Å)
+              - ``fcorr <value>`` — parameter from dielectric screening energies
+              - ``ravcorr <value>`` — radius for misfit energy calculation (Å)
+              - ``astd <value>`` — standard surface area normalization factor (Å²)
+              - ``zcoord <value>`` — coordination number
+              - ``dgsolv_eta <value>`` — offset for solvation energy calculation
+              - ``dgsolv_omegaring <value>`` — solvation energy correction for rings
+              - ``dftfunc "name"`` — DFT functional (e.g. ``dftfunc "BP86"``)
+              - ``dftbas "name"`` — basis set (e.g. ``dftbas "def2-TZVPD"``)
+              - ``solvent "name"`` — solvent from internal database (e.g. ``solvent "THF"``)
+              - ``solventfilename "name"`` — name of the ``.cosmorsxyz`` solvent file
+              - ``orbs_vac true|false`` — reuse gas-phase orbitals for conductor calc
 
             Both conditions can apply simultaneously in the same block:
             ``custom_solvent`` lines are written first, then
