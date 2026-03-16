@@ -60,7 +60,7 @@ class Thermochemistry:
         temperature=None,
         concentration=None,
         pressure=1.0,
-        use_weighted_mass=True,
+        use_weighted_mass=False,
         alpha=4,
         s_freq_cutoff=None,
         entropy_method=None,
