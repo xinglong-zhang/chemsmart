@@ -39,10 +39,10 @@ def assemble(
     index,
     output,
 ):
-    """Assemble calculation output files into a SQLite database.
+    """Assemble calculation output files into a chemsmart database.
 
     This command collects calculation data from output files in the specified
-    directory and assembles them into a unified SQLite database (.db).
+    directory and assembles them into a unified chemsmart database (.db).
 
     \b
     Examples:
@@ -105,7 +105,7 @@ def assemble(
         logger.error("No valid data parsed. Aborting.")
         return None
 
-    # Write to SQLite database
+    # Write to chemsmart database
     db = Database(db_file=output)
     db.create()
     attempted = db.insert_records(rows)

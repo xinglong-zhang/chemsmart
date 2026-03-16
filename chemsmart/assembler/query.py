@@ -4,6 +4,7 @@ import re
 import sqlite3
 
 from chemsmart.assembler.database import Database
+from chemsmart.assembler.utils import format_float, separator
 from chemsmart.utils.repattern import (
     query_condition_pattern,
     query_logic_split_pattern,
@@ -53,7 +54,7 @@ SUPPORTED_OPERATORS = {"<", "<=", ">", ">=", "=", "!=", "~"}
 
 
 class DatabaseQuery:
-    """Query and filter records from a chemsmart SQLite database."""
+    """Query and filter records from a chemsmart database."""
 
     _SUMMARY_SQL = """
         SELECT DISTINCT
@@ -77,7 +78,7 @@ class DatabaseQuery:
         ("Formula", "chemical_formula", 16, "<"),
         ("Job", "jobtype", 6, "<"),
         ("Program", "program", 8, "<"),
-        ("Functional", "functional", 32, "<"),
+        ("Method", "functional", 32, "<"),
         ("Basis", "basis", 12, "<"),
         ("Total Energy (Eh)", "total_energy", 16, ">"),
     ]
@@ -86,7 +87,7 @@ class DatabaseQuery:
         """Initialize a database query.
 
         Args:
-            db_file: Path to the SQLite database file.
+            db_file: Path to the chemsmart database file.
             query_string: Optional query expression to filter records.
             output_file: Optional output database file path for exporting results.
             limit: Maximum number of records to query.
@@ -264,10 +265,8 @@ class DatabaseQuery:
         db_name = os.path.basename(self.db_file)
 
         # Build header
-        separator1 = "=" * 3 + " Query Summary " + "=" * 120
-        separator2 = "=" * 138
         header_lines = [
-            separator1,
+            separator("Query Summary"),
             f"DB      : {db_name}",
             f"Total   : {self.count_records()} record(s)",
         ]
@@ -281,7 +280,7 @@ class DatabaseQuery:
         if self.output_file:
             output_name = os.path.basename(self.output_file)
             header_lines.append(f"Output  : {output_name}")
-        header_lines.append(separator2)
+        header_lines.append(separator())
 
         # Build body
         if summaries:
@@ -317,7 +316,7 @@ class DatabaseQuery:
                 elif key == "source_file":
                     text = os.path.basename(str(val))[:width]
                 elif key == "total_energy" and isinstance(val, (int, float)):
-                    text = f"{val:.6f}"
+                    text = format_float(val)
                 else:
                     text = str(val)
                 parts.append(

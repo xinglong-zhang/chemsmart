@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseInspector:
-    """Inspect a chemsmart SQLite database.
+    """Inspect a chemsmart database.
 
     Provides three views:
     Overview – database-level metadata and statistics
@@ -255,8 +255,8 @@ class DatabaseInspector:
         lines.append(
             format_kv("Program Version", provenance.get("program_version"))
         )
-        lines.append(format_kv("Functional", meta.get("functional")))
-        lines.append(format_kv("Basis", meta.get("basis")))
+        lines.append(format_kv("Method", meta.get("functional")))
+        lines.append(format_kv("Basis Set", meta.get("basis")))
         lines.append(format_kv("Spin", meta.get("spin")))
         lines.append(format_kv("Job Type", meta.get("jobtype")))
         lines.append(format_kv("Solvent", bool_to_str(meta.get("solvent_on"))))
