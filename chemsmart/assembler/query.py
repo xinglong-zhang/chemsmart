@@ -78,8 +78,8 @@ class DatabaseQuery:
         ("Formula", "chemical_formula", 16, "<"),
         ("Job", "jobtype", 6, "<"),
         ("Program", "program", 8, "<"),
-        ("Method", "functional", 32, "<"),
-        ("Basis", "basis", 12, "<"),
+        ("Method", "functional", 12, "<"),
+        ("Basis", "basis", 16, "<"),
         ("Total Energy (Eh)", "total_energy", 16, ">"),
     ]
 
