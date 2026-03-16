@@ -458,35 +458,31 @@ def _build_gaussian_pka_settings(
                 return val
         return None
 
-    def _maybe_attr(obj, name):
-        if obj is None:
-            return None
-        try:
-            return obj.__getattribute__(name)
-        except AttributeError:
-            return None
-
     solvent_model = _first_non_none(
         pka_kwargs.get("solvent_model"),
-        _maybe_attr(opt_settings, "solvent_model"),
-        _maybe_attr(sp_settings, "solvent_model"),
+        getattr(opt_settings, "solvent_model", None),
+        getattr(sp_settings, "solvent_model", None) if sp_settings else None,
         "SMD",
     )
     solvent_id = _first_non_none(
         pka_kwargs.get("solvent_id"),
-        _maybe_attr(opt_settings, "solvent_id"),
-        _maybe_attr(sp_settings, "solvent_id"),
+        getattr(opt_settings, "solvent_id", None),
+        getattr(sp_settings, "solvent_id", None) if sp_settings else None,
         "water",
     )
     additional_solvent_options = _first_non_none(
         pka_kwargs.get("additional_solvent_options"),
-        _maybe_attr(opt_settings, "additional_solvent_options"),
-        _maybe_attr(sp_settings, "additional_solvent_options"),
+        getattr(opt_settings, "additional_solvent_options", None),
+        (
+            getattr(sp_settings, "additional_solvent_options", None)
+            if sp_settings
+            else None
+        ),
     )
     custom_solvent = _first_non_none(
         pka_kwargs.get("custom_solvent"),
-        _maybe_attr(opt_settings, "custom_solvent"),
-        _maybe_attr(sp_settings, "custom_solvent"),
+        getattr(opt_settings, "custom_solvent", None),
+        getattr(sp_settings, "custom_solvent", None) if sp_settings else None,
     )
 
     pka_kwargs["solvent_model"] = solvent_model
