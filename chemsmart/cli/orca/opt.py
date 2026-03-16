@@ -44,6 +44,7 @@ def opt(
     solvent_model,
     solvent_id,
     solvent_options,
+    solventfilename,
     freeze_atoms,
     invert_constraints,
     skip_completed,
@@ -84,6 +85,8 @@ def opt(
     )
     if solvent_options is not None:
         opt_settings.additional_solvent_options = solvent_options
+    if solventfilename is not None:
+        opt_settings.solventfilename = solventfilename
 
     logger.info(f"Final optimization settings: {opt_settings.__dict__}")
 

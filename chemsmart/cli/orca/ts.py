@@ -98,6 +98,7 @@ def ts(
     solvent_model=None,
     solvent_id=None,
     solvent_options=None,
+    solventfilename=None,
     jobtype=None,
     coordinates=None,
     dist_start=None,
@@ -149,6 +150,8 @@ def ts(
     )
     if solvent_options is not None:
         ts_settings.additional_solvent_options = solvent_options
+    if solventfilename is not None:
+        ts_settings.solventfilename = solventfilename
 
     # get label for the job output files
     label = ctx.obj["label"]

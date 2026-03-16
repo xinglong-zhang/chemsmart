@@ -29,6 +29,7 @@ def sp(
     solvent_model,
     solvent_id,
     solvent_options,
+    solventfilename,
     skip_completed,
     **kwargs,
 ):
@@ -66,6 +67,8 @@ def sp(
     )
     if solvent_options is not None:
         sp_settings.additional_solvent_options = solvent_options
+    if solventfilename is not None:
+        sp_settings.solventfilename = solventfilename
 
     logger.info(f"Final single point settings: {sp_settings.__dict__}")
 
