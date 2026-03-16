@@ -19,6 +19,8 @@ from chemsmart.assembler.utils import (
     canonical_geometry_string,
     file_size,
     get_record_id,
+    is_custom_basis,
+    is_custom_solvent,
     sha256_content,
     utcnow_iso,
 )
@@ -101,9 +103,10 @@ class BaseAssembler:
         )
 
     def get_meta_data(self):
+        basis = self.output.basis
         meta_data = {
             "functional": self.output.functional,
-            "basis": self.output.basis,
+            "basis": "customized_basis" if is_custom_basis(basis) else basis,
             "num_basis_functions": self.output.num_basis_functions,
             "spin": self.output.spin,
             "jobtype": self.output.jobtype,
@@ -111,10 +114,15 @@ class BaseAssembler:
             "route_string": self.output.route_string,
         }
         if self.output.solvent_on:
+            solvent_id = self.output.solvent_id
             meta_data.update(
                 {
                     "solvent_model": self.output.solvent_model,
-                    "solvent_id": self.output.solvent_id,
+                    "solvent_id": (
+                        "customized_solvent"
+                        if is_custom_solvent(solvent_id)
+                        else solvent_id
+                    ),
                     "custom_solvent": self.output.custom_solvent,
                 }
             )

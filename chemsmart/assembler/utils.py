@@ -8,6 +8,26 @@ import numpy as np
 # Width of the separator lines
 LINE_WIDTH = 100
 
+# Keywords that indicate a custom (inline) basis set
+CUSTOM_BASIS_KEYWORDS = {"gen", "genecp"}
+
+# Keywords that indicate a custom (inline) solvent
+CUSTOM_SOLVENT_KEYWORDS = {"generic,read"}
+
+
+def is_custom_basis(basis):
+    """Return True if the basis set keyword indicates a custom inline basis."""
+    if basis is None:
+        return False
+    return basis.strip().lower() in CUSTOM_BASIS_KEYWORDS
+
+
+def is_custom_solvent(solvent_id):
+    """Return True if the solvent ID indicates a custom inline solvent."""
+    if solvent_id is None:
+        return False
+    return solvent_id.strip().lower() in CUSTOM_SOLVENT_KEYWORDS
+
 
 def get_record_id(
     canonical_geometry, charge, multiplicity, program, functional, basis
