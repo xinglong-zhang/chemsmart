@@ -92,9 +92,10 @@ Options
       -  float
       -  Gas-phase pressure in atm (default: 1.0)
 
-   -  -  ``-w, --weighted``
+   -  -  ``-w, --weighted, --no-weighted``
       -  bool
-      -  Use natural abundance weighted masses (default: True)
+      -  Toggle between natural abundance weighted masses (``--weighted``) and most abundant isotope masses
+         (``--no-weighted``). Default: ``--weighted``.
 
    -  -  ``-T, --temperature``
       -  float
