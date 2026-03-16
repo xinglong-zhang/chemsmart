@@ -19,7 +19,7 @@ Usage
 
    chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
-                                 [-ch h_freq_cutoff] [-c concentration] [-P pressure] [-w]
+                                 [-ch h_freq_cutoff] [-c concentration] [-P pressure] [--weighted | --no-weighted]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
                                  [-o outfile.dat] [-O] [-i] [-S|-R]
 
