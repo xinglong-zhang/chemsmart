@@ -1282,6 +1282,11 @@ def orca_yaml_settings_custom_solv_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "custom_solv")
 
 
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_cosmors_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):

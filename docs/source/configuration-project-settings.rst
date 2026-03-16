@@ -324,7 +324,7 @@ This produces:
      Refrac 1.275
    end
 
-**openCOSMO-RS with named solvent:**
+**openCOSMO-RS with named solvent and full parameter block:**
 
 .. code:: yaml
 
@@ -334,7 +334,24 @@ This produces:
      solvent_model: cosmors
      solvent_id: water
      custom_solvent : |
-       Temperature 298.15
+       aeff              5.925
+       lnalpha           0.202
+       lnchb             0.166
+       chbt              1.50
+       sigmahb           9.61e-3
+       rav               0.50
+       fcorr             2.40
+       ravcorr           1.00
+       astd              41.624
+       zcoord            10.0
+       dgsolv_eta       -4.4480
+       dgsolv_omegaring  0.2630
+       temp              298.15
+       dftfunc           "BP86"
+       dftbas            "def2-TZVPD"
+       solvent           "THF"
+       solventfilename   "water"
+       orbs_vac          false
 
 This produces:
 
@@ -342,8 +359,29 @@ This produces:
 
    ! COSMORS(water) M062X def2-tzvp ...
    %cosmors
-     Temperature 298.15
+     aeff              5.925
+     lnalpha           0.202
+     lnchb             0.166
+     chbt              1.50
+     sigmahb           9.61e-3
+     rav               0.50
+     fcorr             2.40
+     ravcorr           1.00
+     astd              41.624
+     zcoord            10.0
+     dgsolv_eta       -4.4480
+     dgsolv_omegaring  0.2630
+     temp              298.15
+     dftfunc           "BP86"
+     dftbas            "def2-TZVPD"
+     solvent           "THF"
+     solventfilename   "water"
+     orbs_vac          false
    end
+
+All parameters listed in the ``custom_solvent`` block correspond directly to
+keywords in the ORCA ``%cosmors`` section.  Any subset of these can be used —
+only the parameters you want to override from their defaults need to be listed.
 
 **SMD with named solvent and extra parameters:**
 
