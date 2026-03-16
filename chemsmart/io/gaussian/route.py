@@ -408,13 +408,24 @@ class GaussianRoute:
 
                     # get solvent identity
                     if "solvent" in scrf_string:
-                        solvent_id = (
+                        after_solvent = (
                             scrf_string.strip()
                             .split("solvent=")[-1]
-                            .split(",")[0]
                             .split(")")[0]
                         )
-                        if "read" in each_input:
+                        parts = after_solvent.split(",")
+                        while (
+                            len(parts) > 1
+                            and parts[-1] != "read"
+                            and parts[-1] not in gaussian_solvation_models
+                            and "=" not in parts[-1]
+                            and "-" not in parts[-1]
+                        ):
+                            parts.pop()
+                        solvent_id = ",".join(parts)
+                        if "read" in each_input and not solvent_id.endswith(
+                            ",read"
+                        ):
                             # include read in solvent_id
                             solvent_id = f"{solvent_id},read"
                         return solvent_id
