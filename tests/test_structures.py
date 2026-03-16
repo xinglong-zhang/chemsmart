@@ -1971,7 +1971,7 @@ class TestInChIKey:
             mol = mol[-1]
         return mol
 
-    def test_normal_molecule_inchikey(self, inchikey_normal_file):
+    def test_regression_inchikey(self, inchikey_normal_file):
         """InChIKey for a simple small molecule should be
         deterministic across repeated calls."""
         mol = self._load_molecule(inchikey_normal_file)
@@ -1979,16 +1979,14 @@ class TestInChIKey:
             assert mol.inchikey == self.EXPECTED_NORMAL
 
     def test_r_enantiomer_inchikey(self, inchikey_r_enantiomer_file):
-        """InChIKey for the R-enantiomer should be deterministic."""
+        """InChIKey for the R-enantiomer should match the expected value."""
         mol = self._load_molecule(inchikey_r_enantiomer_file)
-        for _ in range(3):
-            assert mol.inchikey == self.EXPECTED_R_ENANTIOMER
+        assert mol.inchikey == self.EXPECTED_R_ENANTIOMER
 
     def test_s_enantiomer_inchikey(self, inchikey_s_enantiomer_file):
-        """InChIKey for the S-enantiomer should be deterministic."""
+        """InChIKey for the S-enantiomer should match the expected value."""
         mol = self._load_molecule(inchikey_s_enantiomer_file)
-        for _ in range(3):
-            assert mol.inchikey == self.EXPECTED_S_ENANTIOMER
+        assert mol.inchikey == self.EXPECTED_S_ENANTIOMER
 
     def test_enantiomers_share_connectivity_layer(
         self, inchikey_r_enantiomer_file, inchikey_s_enantiomer_file
@@ -2006,16 +2004,14 @@ class TestInChIKey:
         assert mol_r.inchikey != mol_s.inchikey
 
     def test_large_molecule_c3_inchikey(self, inchikey_large_molecule_c3_file):
-        """InChIKey for a large molecule (c3) should be deterministic."""
+        """InChIKey for a large molecule (c3) should match the expected value."""
         mol = self._load_molecule(inchikey_large_molecule_c3_file)
-        for _ in range(3):
-            assert mol.inchikey == self.EXPECTED_LARGE_C3
+        assert mol.inchikey == self.EXPECTED_LARGE_C3
 
     def test_large_molecule_c2_inchikey(self, inchikey_large_molecule_c2_file):
-        """InChIKey for a large molecule (c2) should be deterministic."""
+        """InChIKey for a large molecule (c2) should match the expected value."""
         mol = self._load_molecule(inchikey_large_molecule_c2_file)
-        for _ in range(3):
-            assert mol.inchikey == self.EXPECTED_LARGE_C2
+        assert mol.inchikey == self.EXPECTED_LARGE_C2
 
     def test_large_molecules_differ(
         self, inchikey_large_molecule_c3_file, inchikey_large_molecule_c2_file
@@ -2165,8 +2161,9 @@ class TestCXSMILES:
         with open(filepath, "r") as f:
             return f.read().strip()
 
-    def test_normal_molecule_cxsmiles(self, cxsmiles_normal_file):
-        """CXSMILES for a simple molecule should match the expected value."""
+    def test_regression_cxsmiles(self, cxsmiles_normal_file):
+        """CXSMILES for a simple molecule should be deterministic across
+        repeated calls."""
         mol = self._load_molecule(cxsmiles_normal_file)
         for _ in range(3):
             assert mol.cxsmiles == self.EXPECTED_NORMAL
@@ -2174,14 +2171,12 @@ class TestCXSMILES:
     def test_r_enantiomer_cxsmiles(self, cxsmiles_r_enantiomer_file):
         """CXSMILES for the R-enantiomer should match the expected value."""
         mol = self._load_molecule(cxsmiles_r_enantiomer_file)
-        for _ in range(3):
-            assert mol.cxsmiles == self.EXPECTED_R_ENANTIOMER
+        assert mol.cxsmiles == self.EXPECTED_R_ENANTIOMER
 
     def test_s_enantiomer_cxsmiles(self, cxsmiles_s_enantiomer_file):
         """CXSMILES for the S-enantiomer should match the expected value."""
         mol = self._load_molecule(cxsmiles_s_enantiomer_file)
-        for _ in range(3):
-            assert mol.cxsmiles == self.EXPECTED_S_ENANTIOMER
+        assert mol.cxsmiles == self.EXPECTED_S_ENANTIOMER
 
     def test_enantiomers_differ(
         self, cxsmiles_r_enantiomer_file, cxsmiles_s_enantiomer_file
@@ -2200,14 +2195,12 @@ class TestCXSMILES:
     def test_r_rotamer_cxsmiles(self, cxsmiles_r_rotamer_file):
         """CXSMILES for the R-rotamer should match the expected value."""
         mol = self._load_molecule(cxsmiles_r_rotamer_file)
-        for _ in range(3):
-            assert mol.cxsmiles == self.EXPECTED_R_ROTAMER
+        assert mol.cxsmiles == self.EXPECTED_R_ROTAMER
 
     def test_s_rotamer_cxsmiles(self, cxsmiles_s_rotamer_file):
         """CXSMILES for the S-rotamer should match the expected value."""
         mol = self._load_molecule(cxsmiles_s_rotamer_file)
-        for _ in range(3):
-            assert mol.cxsmiles == self.EXPECTED_S_ROTAMER
+        assert mol.cxsmiles == self.EXPECTED_S_ROTAMER
 
     def test_rotamers_differ(
         self, cxsmiles_r_rotamer_file, cxsmiles_s_rotamer_file
@@ -2230,8 +2223,7 @@ class TestCXSMILES:
         """CXSMILES for a large molecule (c2) should match the expected value."""
         expected = self._load_expected(cxsmiles_expected_large_c2_file)
         mol = self._load_molecule(cxsmiles_large_molecule_c2_file)
-        for _ in range(3):
-            assert mol.cxsmiles == expected
+        assert mol.cxsmiles == expected
 
     def test_large_molecule_c3_cxsmiles(
         self, cxsmiles_large_molecule_c3_file, cxsmiles_expected_large_c3_file
@@ -2239,8 +2231,7 @@ class TestCXSMILES:
         """CXSMILES for a large molecule (c3) should match the expected value."""
         expected = self._load_expected(cxsmiles_expected_large_c3_file)
         mol = self._load_molecule(cxsmiles_large_molecule_c3_file)
-        for _ in range(3):
-            assert mol.cxsmiles == expected
+        assert mol.cxsmiles == expected
 
     def test_large_molecules_differ(
         self, cxsmiles_large_molecule_c2_file, cxsmiles_large_molecule_c3_file
