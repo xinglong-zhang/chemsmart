@@ -1815,3 +1815,54 @@ def iterate_expected_output_file(iterate_expected_output_directory):
         iterate_expected_output_directory,
         "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
     )
+
+
+# ── InChIKey test data ──
+@pytest.fixture()
+def inchikey_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "inchikey")
+
+
+@pytest.fixture()
+def inchikey_normal_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "normal_testing",
+        "inchikey_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_r_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_s_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c3_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c2_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c2.xyz",
+    )

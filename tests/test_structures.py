@@ -1927,3 +1927,74 @@ def test_qmmm_partition_out_of_range_raises():
     with pytest.raises(ValueError) as exc:
         q._get_partition_levels()
     assert "out of range" in str(exc.value)
+
+
+class TestInChIKey:
+    """Tests for Molecule.inchikey property (Open Babel backend)."""
+
+    EXPECTED_NORMAL = "NNJYFTBCZFRDIO-UHFFFAOYSA-N"
+    EXPECTED_R_ENANTIOMER = "YDCAVENCOFCEDV-HSZRJFAPSA-N"
+    EXPECTED_S_ENANTIOMER = "YDCAVENCOFCEDV-QHCPKHFHSA-N"
+    EXPECTED_LARGE_C3 = "WYLDIUSELJCHHK-MMELAICESA-M"
+    EXPECTED_LARGE_C2 = "KRPJGRYSEYYRSW-YWQHEUOTSA-M"
+
+    @staticmethod
+    def _load_molecule(filepath):
+        mol = Molecule.from_filepath(filepath)
+        if isinstance(mol, list):
+            mol = mol[-1]
+        return mol
+
+    def test_normal_molecule_inchikey(self, inchikey_normal_file):
+        """InChIKey for a simple small molecule should be
+        deterministic across repeated calls."""
+        mol = self._load_molecule(inchikey_normal_file)
+        for _ in range(3):
+            assert mol.inchikey == self.EXPECTED_NORMAL
+
+    def test_r_enantiomer_inchikey(self, inchikey_r_enantiomer_file):
+        """InChIKey for the R-enantiomer should be deterministic."""
+        mol = self._load_molecule(inchikey_r_enantiomer_file)
+        for _ in range(3):
+            assert mol.inchikey == self.EXPECTED_R_ENANTIOMER
+
+    def test_s_enantiomer_inchikey(self, inchikey_s_enantiomer_file):
+        """InChIKey for the S-enantiomer should be deterministic."""
+        mol = self._load_molecule(inchikey_s_enantiomer_file)
+        for _ in range(3):
+            assert mol.inchikey == self.EXPECTED_S_ENANTIOMER
+
+    def test_enantiomers_share_connectivity_layer(
+        self, inchikey_r_enantiomer_file, inchikey_s_enantiomer_file
+    ):
+        """R and S enantiomers share the same first (connectivity) layer of
+        the InChIKey (identical constitution) but differ in the stereo layer,
+        confirming that Open Babel correctly resolves the axial chirality."""
+        mol_r = self._load_molecule(inchikey_r_enantiomer_file)
+        mol_s = self._load_molecule(inchikey_s_enantiomer_file)
+        # First 14-character block: same connectivity
+        assert mol_r.inchikey.split("-")[0] == mol_s.inchikey.split("-")[0]
+        # Second block: stereo layer must differ for a chiral pair
+        assert mol_r.inchikey.split("-")[1] != mol_s.inchikey.split("-")[1]
+        # Overall InChIKeys are distinct
+        assert mol_r.inchikey != mol_s.inchikey
+
+    def test_large_molecule_c3_inchikey(self, inchikey_large_molecule_c3_file):
+        """InChIKey for a large molecule (c3) should be deterministic."""
+        mol = self._load_molecule(inchikey_large_molecule_c3_file)
+        for _ in range(3):
+            assert mol.inchikey == self.EXPECTED_LARGE_C3
+
+    def test_large_molecule_c2_inchikey(self, inchikey_large_molecule_c2_file):
+        """InChIKey for a large molecule (c2) should be deterministic."""
+        mol = self._load_molecule(inchikey_large_molecule_c2_file)
+        for _ in range(3):
+            assert mol.inchikey == self.EXPECTED_LARGE_C2
+
+    def test_large_molecules_differ(
+        self, inchikey_large_molecule_c3_file, inchikey_large_molecule_c2_file
+    ):
+        """Two different large molecules should produce different InChIKeys."""
+        mol_c3 = self._load_molecule(inchikey_large_molecule_c3_file)
+        mol_c2 = self._load_molecule(inchikey_large_molecule_c2_file)
+        assert mol_c3.inchikey != mol_c2.inchikey
