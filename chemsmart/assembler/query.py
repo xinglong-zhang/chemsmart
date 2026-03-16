@@ -72,7 +72,7 @@ class DatabaseQuery:
 
     _TABLE_COLUMNS = [
         ("Idx", "record_index", 4, ">"),
-        ("Record ID", "record_id", 14, "<"),
+        ("Record ID", "record_id", 12, "<"),
         ("File", "source_file", 22, "<"),
         ("Formula", "chemical_formula", 16, "<"),
         ("Job", "jobtype", 6, "<"),

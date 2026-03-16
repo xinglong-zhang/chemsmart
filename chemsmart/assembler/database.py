@@ -637,6 +637,42 @@ class Database:
             )
         return mol
 
+    def get_record_by_partial_id(self, partial_id):
+        """Resolve a partial record ID to the full record ID.
+
+        Matches record IDs that start with the given prefix. Requires
+        exactly one match; raises ValueError otherwise.
+
+        Args:
+            partial_id: Prefix of a record ID (at least 12 characters recommended).
+
+        Returns:
+            Full record ID string.
+
+        Raises:
+            ValueError: If zero or multiple records match the prefix.
+        """
+        conn = sqlite3.connect(self.db_file)
+        try:
+            cursor = conn.execute(
+                "SELECT record_id FROM records WHERE record_id LIKE ?",
+                (partial_id + "%",),
+            )
+            matches = [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+        if len(matches) == 0:
+            raise ValueError(
+                f"No record found matching ID prefix '{partial_id}'."
+            )
+        if len(matches) > 1:
+            preview = ", ".join(m[:12] for m in matches[:10])
+            raise ValueError(
+                f"Ambiguous ID prefix '{partial_id}' matches {len(matches)} records: {preview}"
+            )
+        return matches[0]
+
     def get_record_summary(
         self,
         record_index=None,

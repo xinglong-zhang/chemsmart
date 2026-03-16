@@ -5,6 +5,9 @@ from pathlib import Path
 
 import numpy as np
 
+# Width of the separator lines
+LINE_WIDTH = 100
+
 
 def get_record_id(
     canonical_geometry, charge, multiplicity, program, functional, basis
@@ -68,8 +71,27 @@ def utcnow_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+def truncate_iso(iso_str):
+    """Shorten an ISO datetime to 'YYYY-MM-DD HH:MM'."""
+    if iso_str is None:
+        return None
+    return iso_str[:16].replace("T", " ")
+
+
 def file_size(filename):
+    """Return file size in bytes."""
     return Path(filename).stat().st_size
+
+
+def human_size(size_bytes):
+    """Convert byte count to human-readable string."""
+    if size_bytes is None:
+        return "-"
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(size_bytes) < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} TB"
 
 
 def sha256_content(output):
@@ -107,3 +129,38 @@ def from_json(json_str):
     if json_str is None:
         return None
     return json.loads(json_str)
+
+
+def separator(title=""):
+    """Build a separator line with an optional centred title."""
+    if title:
+        return f"=== {title} " + "=" * max(1, LINE_WIDTH - len(title) - 5)
+    return "=" * LINE_WIDTH
+
+
+def format_kv(key, value, key_width=28):
+    """Format a key-value pair for terminal display."""
+    if value is None:
+        return f"  {key:<{key_width}}: NULL"
+    return f"  {key:<{key_width}}: {value}"
+
+
+def format_energy(val):
+    """Format an energy value (Hartree) for display."""
+    if val is None:
+        return "NULL"
+    return f"{val:.10f}"
+
+
+def format_float(val, decimals=6):
+    """Format a generic float value."""
+    if val is None:
+        return "NULL"
+    return f"{val:.{decimals}f}"
+
+
+def bool_to_str(val):
+    """Convert boolean-ish value to Yes/No."""
+    if val is None:
+        return "NULL"
+    return "Yes" if bool(val) else "No"
