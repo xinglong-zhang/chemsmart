@@ -145,6 +145,7 @@ class Database:
                     center_of_mass_json TEXT,
                     is_chiral INTEGER,
                     is_ring INTEGER,
+                    is_aromatic INTEGER,
                     is_monoatomic INTEGER,
                     is_diatomic INTEGER,
                     is_linear INTEGER,
@@ -322,7 +323,7 @@ class Database:
                     is_optimized_structure, charge, multiplicity,
                     chemical_symbols_json, positions_json, chemical_formula,
                     number_of_atoms, mass, elements_json, element_counts_json,
-                    center_of_mass_json, is_chiral, is_ring, is_monoatomic,
+                    center_of_mass_json, is_chiral, is_ring, is_aromatic, is_monoatomic,
                     is_diatomic, is_linear, smiles, moments_of_inertia_json,
                     frozen_atoms_json, energy, forces_json,
                     mulliken_atomic_charges_json, rotational_symmetry_number,
@@ -330,7 +331,7 @@ class Database:
                     vibrational_modes_json
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 (
@@ -350,6 +351,7 @@ class Database:
                     to_json(mol.get("center_of_mass")),
                     1 if mol.get("is_chiral") else 0,
                     1 if mol.get("is_ring") else 0,
+                    1 if mol.get("is_aromatic") else 0,
                     1 if mol.get("is_monoatomic") else 0,
                     1 if mol.get("is_diatomic") else 0,
                     1 if mol.get("is_linear") else 0,
@@ -609,6 +611,7 @@ class Database:
             "center_of_mass": from_json(row.get("center_of_mass_json")),
             "is_chiral": bool(row.get("is_chiral")),
             "is_ring": bool(row.get("is_ring")),
+            "is_aromatic": bool(row.get("is_aromatic")),
             "is_monoatomic": bool(row.get("is_monoatomic")),
             "is_diatomic": bool(row.get("is_diatomic")),
             "is_linear": bool(row.get("is_linear")),

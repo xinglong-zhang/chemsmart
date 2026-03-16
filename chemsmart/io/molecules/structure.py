@@ -518,7 +518,7 @@ class Molecule:
         """
         Check if molecule is a ring or not.
         """
-        return Chem.GetSymmSSSR(self.to_rdkit()) != []
+        return len(Chem.GetSymmSSSR(self.to_rdkit())) > 0
 
     @property
     def is_monoatomic(self):

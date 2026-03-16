@@ -151,6 +151,7 @@ class BaseAssembler:
             "center_of_mass": mol.center_of_mass,
             "is_chiral": mol.is_chiral,
             "is_ring": mol.is_ring,
+            "is_aromatic": mol.is_aromatic,
             "is_monoatomic": mol.is_monoatomic,
             "is_diatomic": mol.is_diatomic,
             "is_linear": mol.is_linear,

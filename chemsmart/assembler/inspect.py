@@ -567,6 +567,9 @@ class DatabaseInspector:
         lines.append(format_kv("Is Chiral", bool_to_str(mol.get("is_chiral"))))
         lines.append(format_kv("Is Ring", bool_to_str(mol.get("is_ring"))))
         lines.append(
+            format_kv("Is Aromatic", bool_to_str(mol.get("is_aromatic")))
+        )
+        lines.append(
             format_kv("Is Monoatomic", bool_to_str(mol.get("is_monoatomic")))
         )
         lines.append(
