@@ -262,6 +262,7 @@ class GaussianRoute:
         """
         functional = None
         basis = None
+        dispersion = None
         for each_input in self.route_inputs:
             # Extract functional and basis from method/basis format
             if "/" in each_input:
@@ -289,8 +290,6 @@ class GaussianRoute:
                     functional = each_input
                 if "empiricaldispersion" in each_input:
                     dispersion = each_input
-                    functional_with_dispersion = functional + " " + dispersion
-                    functional = functional_with_dispersion
                 if (
                     any(basisset in each_input for basisset in GAUSSIAN_BASES)
                     and "generic" not in each_input
@@ -300,6 +299,19 @@ class GaussianRoute:
         # non standard input by user e.g., `#wb897xd` without space
         if functional is not None and functional.startswith("#"):
             functional = functional[1:]
+
+        # Merge empirical dispersion into functional shorthand
+        # e.g., b3lyp + empiricaldispersion=gd3bj -> b3lyp-d3bj
+        if functional is not None and dispersion is not None:
+            _dispersion_suffix_map = {
+                "gd3bj": "d3bj",
+                "gd3": "d3",
+                "gd2": "d2",
+            }
+            for key, suffix in _dispersion_suffix_map.items():
+                if key in dispersion:
+                    functional = f"{functional}-{suffix}"
+                    break
 
         return functional, basis
 

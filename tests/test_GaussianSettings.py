@@ -416,7 +416,7 @@ class TestGaussianRoute:
         assert isinstance(route_object2, object)
         assert route_object2.jobtype == "opt"
         assert route_object2.freq is False
-        assert route_object2.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert route_object2.functional == "b3lyp-d3bj"
         assert route_object2.basis == "6-31G(d)".lower()
         assert route_object2.solvent_model is None
         assert route_object2.solvent_id is None

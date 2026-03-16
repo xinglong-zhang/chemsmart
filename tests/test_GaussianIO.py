@@ -31,7 +31,7 @@ class TestRouteString:
     def test_read_route_string_standard2(self):
         s1b = "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-311+G(d,p) empiricaldispersion=gd3bj"
         r1b = GaussianRoute(s1b)
-        assert r1b.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert r1b.functional == "b3lyp-d3bj"
         assert r1b.basis == "6-311+g(d,p)"
         assert r1b.jobtype == "ts"
         assert r1b.solv is False
@@ -81,7 +81,7 @@ class TestRouteString:
     def test_read_route_string_standard5(self):
         s1e = "#p opt=modred freq tpsstpss/def2tzvp/fit empiricaldispersion=gd3bj scrf=(cpcm,solvent=toluene)"
         r1e = GaussianRoute(s1e)
-        assert r1e.functional == "tpsstpss empiricaldispersion=gd3bj"
+        assert r1e.functional == "tpsstpss-d3bj"
         assert (
             r1e.basis == "def2tzvp/fit"
         )  # density fitting basis set (for pure functionals)
