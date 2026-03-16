@@ -75,7 +75,7 @@ class DatabaseQuery:
         ("Idx", "record_index", 4, ">"),
         ("Record ID", "record_id", 12, "<"),
         ("File", "source_file", 22, "<"),
-        ("Formula", "chemical_formula", 16, "<"),
+        ("Formula", "chemical_formula", 18, "<"),
         ("Job", "jobtype", 6, "<"),
         ("Program", "program", 8, "<"),
         ("Method", "functional", 12, "<"),
