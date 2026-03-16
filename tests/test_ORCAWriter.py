@@ -1026,7 +1026,7 @@ class TestORCAInputWriter:
         assert "CPCM" not in content
         assert "COSMO(" not in content
 
-        # All custom_solvent lines must appear in %cosmors block
+        # All custom_solvent lines (except filtered 'solvent') appear in %cosmors block
         assert "%cosmors" in content
         assert "aeff" in content
         assert "lnalpha" in content
@@ -1034,13 +1034,11 @@ class TestORCAInputWriter:
         assert "temp" in content
         assert "dftfunc" in content
         assert "dftbas" in content
-        assert "solvent" in content
         assert "end" in content
 
-        # No %cpcm block should appear
-        assert "%cpcm" not in content
-
-        # Verify each parameter line is indented inside the block
+        # ORCA 6.1 guard: 'solvent "water"' must NOT appear in the block since
+        # solvent_id is already encoded in the route as COSMORS(water).
+        # Verify the block lines do not contain a bare 'solvent "..."' keyword.
         lines = content.splitlines()
         cosmors_start = next(
             i for i, ln in enumerate(lines) if ln.strip() == "%cosmors"
@@ -1051,10 +1049,18 @@ class TestORCAInputWriter:
             if ln.strip() == "end" and i > cosmors_start
         )
         block_lines = lines[cosmors_start + 1 : cosmors_end]
-        # All non-empty lines inside the block must be indented
         for line in block_lines:
+            stripped_lower = line.strip().lower()
+            assert not stripped_lower.startswith("solvent "), (
+                f"'solvent name' keyword must not appear in %cosmors block "
+                f"when solvent_id is already in the route: {line!r}"
+            )
+            # All non-empty lines inside the block must be indented
             if line.strip():
                 assert line.startswith("  "), f"Line not indented: {line!r}"
+
+        # No %cpcm block should appear
+        assert "%cpcm" not in content
 
     def test_cosmors_programmatic_full_params(
         self,
@@ -1116,20 +1122,164 @@ class TestORCAInputWriter:
 
         # Route must use COSMORS(water)
         assert "COSMORS(water)" in content
-        # All parameters must appear in %cosmors block
-        assert "%cosmors" in content
-        assert "aeff" in content
-        assert "lnalpha" in content
-        assert "chbt" in content
-        assert "sigmahb" in content
-        assert "rav" in content
-        assert "fcorr" in content
-        assert "dgsolv_eta" in content
-        assert "orbs_vac" in content
-        assert "solventfilename" in content
         assert "%cpcm" not in content
+
+        # Extract the %cosmors block lines for verification
+        lines = content.splitlines()
+        block_lines = []
+        in_block = False
+        for line in lines:
+            if line.strip() == "%cosmors":
+                in_block = True
+                continue
+            if in_block and line.strip() == "end":
+                break
+            if in_block:
+                block_lines.append(line)
+        block_content = "\n".join(block_lines)
+
+        # All non-solvent parameters must appear inside the %cosmors block
+        assert "aeff" in block_content
+        assert "lnalpha" in block_content
+        assert "chbt" in block_content
+        assert "sigmahb" in block_content
+        assert "rav" in block_content
+        assert "fcorr" in block_content
+        assert "dgsolv_eta" in block_content
+        assert "orbs_vac" in block_content
+
+        # ORCA 6.1 guard: 'solvent "THF"' must be filtered (solvent_id="water" in route)
+        assert '  solvent           "THF"' not in content
+        # 'solventfilename' is a distinct keyword — must appear inside the block
+        assert 'solventfilename   "water"' in block_content
 
         # additional_solvent_options appended after custom_solvent
         custom_pos = content.index("orbs_vac")
         additional_pos = content.index('dftfunc "PBE0"')
         assert custom_pos < additional_pos
+
+    def test_cosmors_solvent_name_filtered_when_in_route(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """ORCA 6.1 guard: 'solvent "name"' filtered from %cosmors block when route has COSMORS(name).
+
+        When solvent_id is set, the route already encodes the solvent as
+        COSMORS(solvent_id).  Writing 'solvent "name"' in the %cosmors block
+        causes an ORCA 6.1 INPUT ERROR (DUPLICATED KEYWORD).  The writer must
+        filter out those lines automatically — case-insensitively.
+
+        'solventfilename "..."' is a distinct keyword (points to a .cosmorsxyz
+        file) and must NOT be filtered even when solvent_id is set.
+        """
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solvent_id = "water"
+        # Include 'solvent' in all three case variants (all should be filtered),
+        # 'solventfilename' (preserved), and regular parameters (preserved).
+        settings.custom_solvent = (
+            'temp              298.15\n'
+            'solvent           "water"\n'       # lowercase — filtered
+            'Solvent           "acetone"\n'     # mixed case — also filtered
+            'SOLVENT           "toluene"\n'     # uppercase — also filtered
+            'solventfilename   "custom_thf"\n'  # different keyword — NOT filtered
+            'dftfunc           "BP86"\n'
+        )
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_filter_test",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmors_filter_test.inp")
+        content = open(orca_file).read()
+
+        # Route must use COSMORS(water)
+        assert "COSMORS(water)" in content
+
+        # Extract the %cosmors block lines for verification
+        lines = content.splitlines()
+        block_lines = []
+        in_block = False
+        for line in lines:
+            if line.strip() == "%cosmors":
+                in_block = True
+                continue
+            if in_block and line.strip() == "end":
+                break
+            if in_block:
+                block_lines.append(line)
+
+        # %cosmors block is still written (has non-solvent content)
+        assert block_lines, "Expected %cosmors block to be present"
+        block_content = "\n".join(block_lines)
+        assert "temp" in block_content
+        assert "dftfunc" in block_content
+
+        # All three case variants of 'solvent "..."' must be filtered
+        for line in block_lines:
+            stripped_lower = line.strip().lower()
+            assert not stripped_lower.startswith("solvent "), (
+                f"'solvent name' (any case) must not appear in %cosmors block: {line!r}"
+            )
+
+        # 'solventfilename' starts with 'solventf', not 'solvent ' — preserved
+        assert 'solventfilename   "custom_thf"' in block_content
+
+    def test_cosmors_solvent_name_preserved_without_solvent_id(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """When solvent_id is NOT set, 'solvent "name"' in custom_solvent is preserved.
+
+        Option 2 workflow: user omits solvent_id and instead puts
+        'solvent "name"' directly in custom_solvent → route gets bare
+        'COSMORS' keyword, and the %cosmors block contains the solvent name.
+        """
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        # Explicitly clear solvent_id so the base project YAML's solvent_id
+        # (if any) does not carry over — solvent name goes into block only
+        settings.solvent_id = None
+        settings.custom_solvent = (
+            'solvent           "THF"\n'
+            'temp              298.15\n'
+        )
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_no_id",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_cosmors_no_id.inp")
+        content = open(orca_file).read()
+
+        # Bare COSMORS in route (no parentheses)
+        assert "COSMORS" in content
+        assert "COSMORS(" not in content
+        # 'solvent "THF"' must appear in %cosmors block (no filtering)
+        assert '%cosmors' in content
+        assert 'solvent           "THF"' in content
+        assert "temp" in content
