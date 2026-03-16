@@ -561,7 +561,12 @@ def orca(
         job_settings.solvent_id = None
         job_settings.custom_solvent = None
         job_settings.solventfilename = None
-        keywords += ("solvent_model", "solvent_id", "custom_solvent", "solventfilename")
+        keywords += (
+            "solvent_model",
+            "solvent_id",
+            "custom_solvent",
+            "solventfilename",
+        )
     else:
         if solvent_model is not None:
             job_settings.solvent_model = solvent_model

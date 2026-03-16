@@ -1186,10 +1186,10 @@ class TestORCAInputWriter:
         # Include 'solvent' in all three case variants (all should be filtered),
         # 'solventfilename' (preserved), and regular parameters (preserved).
         settings.custom_solvent = (
-            'temp              298.15\n'
-            'solvent           "water"\n'       # lowercase — filtered
-            'Solvent           "acetone"\n'     # mixed case — also filtered
-            'SOLVENT           "toluene"\n'     # uppercase — also filtered
+            "temp              298.15\n"
+            'solvent           "water"\n'  # lowercase — filtered
+            'Solvent           "acetone"\n'  # mixed case — also filtered
+            'SOLVENT           "toluene"\n'  # uppercase — also filtered
             'solventfilename   "custom_thf"\n'  # different keyword — NOT filtered
             'dftfunc           "BP86"\n'
         )
@@ -1230,9 +1230,9 @@ class TestORCAInputWriter:
         # All three case variants of 'solvent "..."' must be filtered
         for line in block_lines:
             stripped_lower = line.strip().lower()
-            assert not stripped_lower.startswith("solvent "), (
-                f"'solvent name' (any case) must not appear in %cosmors block: {line!r}"
-            )
+            assert not stripped_lower.startswith(
+                "solvent "
+            ), f"'solvent name' (any case) must not appear in %cosmors block: {line!r}"
 
         # 'solventfilename' starts with 'solventf', not 'solvent ' — preserved
         assert 'solventfilename   "custom_thf"' in block_content
@@ -1261,8 +1261,7 @@ class TestORCAInputWriter:
         # (if any) does not carry over — solvent name goes into block only
         settings.solvent_id = None
         settings.custom_solvent = (
-            'solvent           "THF"\n'
-            'temp              298.15\n'
+            'solvent           "THF"\n' "temp              298.15\n"
         )
 
         job = ORCASinglePointJob.from_filename(
@@ -1280,7 +1279,7 @@ class TestORCAInputWriter:
         assert "COSMORS" in content
         assert "COSMORS(" not in content
         # 'solvent "THF"' must appear in %cosmors block (no filtering)
-        assert '%cosmors' in content
+        assert "%cosmors" in content
         assert 'solvent           "THF"' in content
         assert "temp" in content
 

@@ -377,7 +377,9 @@ class ORCAInputWriter(InputWriter):
                 sf_name = sf_basename
             sf_line = f'solventfilename "{sf_name}"'
 
-        needs_block = bool(custom_lines) or bool(additional_lines) or sf_line is not None
+        needs_block = (
+            bool(custom_lines) or bool(additional_lines) or sf_line is not None
+        )
 
         if needs_block:
             logger.debug("Writing %%%s solvent block", block_name)
