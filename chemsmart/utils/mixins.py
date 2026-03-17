@@ -1006,10 +1006,9 @@ class ORCAFileMixin(FileMixin):
         """
         Extract solvent identifier from ORCA input file.
 
-        First searches for a solvent name in quoted strings on lines that
-        contain a solvent keyword (``solvent``, ``SMDsolvent``), explicitly
-        excluding ``solventfilename`` lines (which point to a file, not a
-        solvent name).
+        First searches for a solvent name in lines that contain a solvent
+        keyword (``solvent``, ``SMDsolvent``), explicitly excluding
+        ``solventfilename`` lines (which point to a file, not a solvent name).
 
         If no match is found in the file body, falls back to extracting the
         solvent name from the route line using ``MODEL(solvent)`` patterns
@@ -1017,37 +1016,17 @@ class ORCAFileMixin(FileMixin):
 
         Returns:
             str or None: Solvent identifier or None if not found.
-
-        Raises:
-            Exception: If a solvent keyword line has no quoted value, or if
-                multiple quoted values are found on the same line.
         """
-        pattern = re.compile(
-            r'"([^"]*)"'
-        )  # pattern to find text between double quotes
         for line in self.contents:
-            line_lower = line.lower()
-            # Match lines with a solvent keyword but NOT 'solventfilename'
-            # ("solventfilename" starts with "solvent" but refers to a file
-            # path, not a solvent name; it must be excluded to avoid
-            # misidentifying the filename as the solvent id).
-            if "solvent" in line_lower and not re.search(
-                r"\bsolventfilename\b", line_lower
+            if line.startswith("Solvent name"):
+                return line.split()[-1]
+            if "solvent" in line.lower() and not re.search(
+                r"\bsolventfilename\b", line.lower()
             ):
-                if not pattern.search(line_lower):
-                    raise Exception(
-                        "Your input file specifies solvent but solvent is not in quotes, "
-                        "thus, your input file is not valid to run for ORCA!"
-                    )
-
-                # Find all matches of the pattern in the line
-                matches = pattern.findall(line_lower)
+                pattern = re.compile(r'"([^"]*)"')
+                matches = pattern.findall(line.lower())
                 if len(matches) == 1:
                     return matches[0]
-
-                raise Exception(
-                    f"{len(matches)} solvents found! Only can specify 1 solvent!"
-                )
 
         # Fallback: extract solvent from route-line pattern 'MODEL(solvent)'.
         try:
