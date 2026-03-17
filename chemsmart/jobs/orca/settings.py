@@ -567,6 +567,17 @@ class ORCAJobSettings(MolecularJobSettings):
 
         # write solvent if solvation is turned on
         route_kw = self._get_solvent_route_keyword()
+
+        # Deduplication guard: if the route already contains this solvent
+        # keyword (e.g. because a settings field was mistakenly set to the
+        # model name, or because ORCA echoed extra keywords in a previous
+        # output), skip adding it a second time to avoid the ORCA 6.1
+        # "UNRECOGNIZED OR DUPLICATED KEYWORD" error.
+        if self.solvent_model is not None and re.search(
+            rf"\b{re.escape(route_kw)}\b", route_string, re.IGNORECASE
+        ):
+            return route_string
+
         if self.custom_solvent is not None:
             # Custom solvent parameters will be written in the appropriate
             # solvent block (%cpcm for CPCM/CPCMC/SMD, %cosmors for COSMO-RS).
@@ -2071,6 +2082,13 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
         # write solvent if solvation is turned on
         route_kw = self._get_solvent_route_keyword()
+
+        # Deduplication guard (same as _get_route_string_from_jobtype).
+        if self.solvent_model is not None and re.search(
+            rf"\b{re.escape(route_kw)}\b", route_string, re.IGNORECASE
+        ):
+            return route_string
+
         if self.custom_solvent is not None:
             # Custom solvent parameters will be written in the appropriate
             # solvent block.  The route keyword depends on the model.
