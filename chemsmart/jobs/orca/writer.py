@@ -9,6 +9,7 @@ based on job settings and molecular structures.
 import logging
 import os
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCANEBJobSettings,
@@ -368,18 +369,26 @@ class ORCAInputWriter(InputWriter):
         # ORCA convention: solventfilename "water" → looks for water.cosmorsxyz.
         sf_line = None
         if sf_path is not None and is_cosmors:
+            logger.info(f"Solvent filename is: {sf_path}")
             sf_basename = os.path.basename(sf_path)
+            logger.info(f"Solvent basename is: {sf_basename}")
             # Strip .cosmorsxyz extension if present
             if sf_basename.lower().endswith(".cosmorsxyz"):
                 sf_name = sf_basename[: -len(".cosmorsxyz")]
             else:
-                sf_cosmorsxyz = (
-                    os.path.dirname(sf_path)
-                    + sf_basename.split(".")[0]
-                    + ".cosmorsxyz"
+                sf_cosmorsxyz = os.path.join(
+                    os.path.dirname(sf_path),
+                    f"{sf_basename.split('.')[0]}.cosmorsxyz",
                 )
                 # write to cosmorsxyz file in the same directory as the input file
-                self.job.molecule.write_cosmorsxyz(sf_cosmorsxyz)
+                logger.info(f"Creating molecule from solvent file: {sf_path}")
+                solvent_mol = Molecule.from_filepath(sf_path)
+                logger.info(f"Solvent molecule is: {solvent_mol}")
+                logger.info(
+                    f"Writing solvent molecule .cosmorsxyz to {sf_cosmorsxyz}"
+                )
+                solvent_mol.write_cosmorsxyz(sf_cosmorsxyz)
+                sf_name = sf_basename.split(".")[0]
             sf_line = f'solventfilename "{sf_name}"'
 
         needs_block = (
