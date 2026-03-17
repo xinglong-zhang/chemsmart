@@ -1377,6 +1377,30 @@ class Molecule:
                 )
         return bond_distances
 
+    def to_cosmorsxyz(self):
+        """
+        Convert Molecule to COSMORSXYZ format string.
+        """
+        lines = [f"{self.num_atoms}", f"{self.charge} {self.multiplicity}"]
+        for symbol, pos in zip(self.symbols, self.positions):
+            lines.append(
+                f"{symbol:>4} {pos[0]:12.6f} {pos[1]:12.6f} {pos[2]:12.6f}"
+            )
+        return "\n".join(lines)
+
+    def write_cosmorsxyz(self, filename, mode="w", **kwargs):
+        """
+        Write molecule to .cosmorsxyz format file.
+
+        Args:
+            filename (str): Output cosmorsxyz file path
+            mode (str): File write mode
+            **kwargs: Additional keyword arguments (unused)
+        """
+        with open(filename, mode) as f:
+            for line in self.to_cosmorsxyz():
+                f.write(line)
+
     def to_smiles(self):
         """
         Convert molecule to SMILES string.
