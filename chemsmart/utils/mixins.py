@@ -1020,6 +1020,7 @@ class ORCAFileMixin(FileMixin):
         for line in self.contents:
             if line.startswith("Solvent name"):
                 return line.split()[-1]
+        for line in self.contents:
             if "solvent" in line.lower() and not re.search(
                 r"\bsolventfilename\b", line.lower()
             ):
@@ -1027,6 +1028,10 @@ class ORCAFileMixin(FileMixin):
                 matches = pattern.findall(line.lower())
                 if len(matches) == 1:
                     return matches[0]
+                raise Exception(
+                    "Your input file specifies solvent but solvent is not in quotes, "
+                    "thus, your input file is not valid to run for ORCA!"
+                )
 
         # Fallback: extract solvent from route-line pattern 'MODEL(solvent)'.
         try:
