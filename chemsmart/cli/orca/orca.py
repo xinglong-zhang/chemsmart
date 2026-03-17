@@ -269,7 +269,9 @@ def click_orca_solvent_options(f):
         type=click.Path(exists=True, dir_okay=False, resolve_path=True),
         default=None,
         help=(
-            "Path to a .cosmorsxyz solvent file for the cosmors model. "
+            "Path to a solvent file for the cosmors model. If in .cosmorsxyz, this"
+            "file will be used directly, else, CHEMSMART will convert it into"
+            ".cosmorsxyz format."
             "The file is copied to the running directory (scratch or job folder) "
             "and its basename (without the .cosmorsxyz extension) is written as "
             "'solventfilename \"name\"' in the %%cosmors block. "
@@ -344,7 +346,9 @@ def click_orca_solvent_group_options(f):
         type=click.Path(exists=True, dir_okay=False, resolve_path=True),
         default=None,
         help=(
-            "Path to a .cosmorsxyz solvent file for the cosmors model. "
+            "Path to a solvent file for the cosmors model. If in .cosmorsxyz, this"
+            "file will be used directly, else, CHEMSMART will convert it into"
+            ".cosmorsxyz format."
             "The file is copied to the running directory (scratch or job folder) "
             "and its basename (without the .cosmorsxyz extension) is written as "
             "'solventfilename \"name\"' in the %%cosmors block. "

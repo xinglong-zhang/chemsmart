@@ -77,7 +77,7 @@ class ORCAInputWriter(InputWriter):
         # Copy the .cosmorsxyz file to the target directory so that ORCA can
         # find it when running in scratch.  Only done when solventfilename is
         # set via the -sf CLI option (an explicit file path).
-        sf_path = getattr(self.job.settings, "solventfilename", None)
+        sf_path = self.job.settings.solventfilename
         if sf_path is not None and os.path.isfile(sf_path):
             dest = os.path.join(folder, os.path.basename(sf_path))
             if os.path.abspath(sf_path) != os.path.abspath(dest):
@@ -324,7 +324,7 @@ class ORCAInputWriter(InputWriter):
         custom_solvent = self.settings.custom_solvent
         additional = self.settings.additional_solvent_options
         solvent_id = self.settings.solvent_id
-        sf_path = getattr(self.settings, "solventfilename", None)
+        sf_path = self.settings.solventfilename
 
         model_lower = (solvent_model or "").lower()
         is_cosmors = model_lower == "cosmors"
@@ -381,7 +381,7 @@ class ORCAInputWriter(InputWriter):
         )
 
         if needs_block:
-            logger.debug("Writing %%%s solvent block", block_name)
+            logger.debug(f"Writing {block_name} solvent block")
             f.write(f"%{block_name}\n")
             if sf_line is not None:
                 f.write(f"  {sf_line}\n")
