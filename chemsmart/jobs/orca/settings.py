@@ -16,6 +16,7 @@ import re
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
+    deduplicate_string_keywords,
     get_list_from_string_range,
     get_prepend_string_list_from_modred_free_format,
 )
@@ -567,17 +568,6 @@ class ORCAJobSettings(MolecularJobSettings):
 
         # write solvent if solvation is turned on
         route_kw = self._get_solvent_route_keyword()
-
-        # Deduplication guard: if the route already contains this solvent
-        # keyword (e.g. because a settings field was mistakenly set to the
-        # model name, or because ORCA echoed extra keywords in a previous
-        # output), skip adding it a second time to avoid the ORCA 6.1
-        # "UNRECOGNIZED OR DUPLICATED KEYWORD" error.
-        if self.solvent_model is not None and re.search(
-            rf"\b{re.escape(route_kw)}\b", route_string, re.IGNORECASE
-        ):
-            return route_string
-
         if self.custom_solvent is not None:
             # Custom solvent parameters will be written in the appropriate
             # solvent block (%cpcm for CPCM/CPCMC/SMD, %cosmors for COSMO-RS).
@@ -607,6 +597,23 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" CPCM({self.solvent_id})"
         else:
             pass
+
+        # Deduplication: if solvent model appears twice,
+        # the first time it appears is removed
+        if (
+            self.solvent_model is not None
+            and len(
+                re.findall(
+                    rf"\b{re.escape(self.solvent_model)}\b",
+                    route_string,
+                    re.IGNORECASE,
+                )
+            )
+            > 1
+        ):
+            route_string = deduplicate_string_keywords(
+                route_string, self.solvent_model
+            )
 
         return route_string
 
@@ -2082,13 +2089,6 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
         # write solvent if solvation is turned on
         route_kw = self._get_solvent_route_keyword()
-
-        # Deduplication guard (same as _get_route_string_from_jobtype).
-        if self.solvent_model is not None and re.search(
-            rf"\b{re.escape(route_kw)}\b", route_string, re.IGNORECASE
-        ):
-            return route_string
-
         if self.custom_solvent is not None:
             # Custom solvent parameters will be written in the appropriate
             # solvent block.  The route keyword depends on the model.
@@ -2108,5 +2108,22 @@ class ORCANEBJobSettings(ORCAJobSettings):
             route_string += f" CPCM({self.solvent_id})"
         else:
             pass
+
+        # Deduplication: if solvent model appears twice,
+        # the first time it appears is removed
+        if (
+            self.solvent_model is not None
+            and len(
+                re.findall(
+                    rf"\b{re.escape(self.solvent_model)}\b",
+                    route_string,
+                    re.IGNORECASE,
+                )
+            )
+            > 1
+        ):
+            route_string = deduplicate_string_keywords(
+                route_string, self.solvent_model
+            )
 
         return route_string
