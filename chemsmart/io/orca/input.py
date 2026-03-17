@@ -119,7 +119,7 @@ class ORCAInput(ORCAFileMixin):
         for line in self.contents:
             if line.startswith("*") and len(line) > 1:
                 line_elem = line.split()
-                return int(line_elem[3])
+                return int(line_elem[-1])
         return None
 
     @property
@@ -180,7 +180,7 @@ class ORCAInput(ORCAFileMixin):
             # update charge and spin multiplicity
         if molecule:
             molecule.charge = self.charge
-            molecule.spin_multiplicity = self.multiplicity
+            molecule.multiplicity = self.multiplicity
         return molecule
 
     @property

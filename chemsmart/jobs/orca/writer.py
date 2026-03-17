@@ -972,8 +972,8 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If charge or multiplicity is not specified
         """
-        charge = getattr(self.settings, "charge", None)
-        multiplicity = getattr(self.settings, "multiplicity", None)
+        charge = self.settings.charge
+        multiplicity = self.settings.multiplicity
 
         # If missing, attempt to populate from common QMMM-related fields.
         # Common names across settings: charge_qm,
