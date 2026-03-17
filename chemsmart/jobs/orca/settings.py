@@ -59,11 +59,12 @@ class ORCAJobSettings(MolecularJobSettings):
         solvent_id (str | None): Solvent identifier.
         additional_solvent_options (str | None): Extra solvent options written
             inside the ``%cpcm`` block (e.g. ``'Epsilon 78.36'``).
-        solventfilename (str | None): Path to a ``.cosmorsxyz`` solvent file
-            for use with the ``cosmors`` model.  The basename (without the
-            ``.cosmorsxyz`` extension) is written as ``solventfilename "name"``
-            inside the ``%cosmors`` block, and the file itself is copied to the
-            running directory (scratch or job folder) so that ORCA can locate it.
+        solventfilename (str | None): Path to a solvent file for use with the
+            ``cosmors`` model. If in .cosmorsxyz, this file will be used directly,
+            else, CHEMSMART will convert it into .cosmorsxyz format. The basename
+            (without the ``.cosmorsxyz`` extension) is written as ``solventfilename
+            "name"`` inside the ``%cosmors`` block, and the file itself is copied to
+            the running directory (scratch or job folder) so that ORCA can locate it.
             Set via the ``-sf``/``--solventfilename`` CLI option.
         additional_route_parameters (str | None): Extra route parameters.
         route_to_be_written (str | None): Custom route string to write.
@@ -462,12 +463,16 @@ class ORCAJobSettings(MolecularJobSettings):
             gbw=True,
             freq=True,
             numfreq=False,
+            dipole=False,
+            quadrupole=False,
             mdci_cutoff=None,
             mdci_density=None,
             jobtype=None,
             title=None,
             solvent_model=None,
             solvent_id=None,
+            additional_solvent_options=None,
+            solventfilename=None,
             additional_route_parameters=None,
             route_to_be_written=None,
             modred=None,
