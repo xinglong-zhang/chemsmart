@@ -1,7 +1,7 @@
 import logging
 import os
 
-from chemsmart.io.file import SDFFile
+from chemsmart.io.file import CDXFile, SDFFile
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.folder import (
     GaussianInputFolder,
@@ -133,6 +133,11 @@ class FileConverter:
             all_files = sdf_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
                 filetype="sdf"
             )
+        elif type in ("cdxml", "cdx"):
+            cdx_folder = BaseFolder(folder=directory)
+            all_files = cdx_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
+                filetype=type
+            )
         else:
             raise ValueError(f"File type {type} is not supported.")
 
@@ -155,6 +160,28 @@ class FileConverter:
                 outfile = XYZFile(filename=file)
             elif type == "sdf":
                 outfile = SDFFile(filename=file)
+            elif type in ("cdxml", "cdx"):
+                cdxfile = CDXFile(filename=file)
+                mols = cdxfile.molecules
+                filedir, fname = os.path.split(file)
+                file_basename = os.path.splitext(fname)[0]
+                if len(mols) == 1:
+                    mols[0].write(
+                        os.path.join(
+                            filedir, f"{file_basename}.{output_filetype}"
+                        ),
+                        format=output_filetype,
+                    )
+                else:
+                    for i, m in enumerate(mols, start=1):
+                        m.write(
+                            os.path.join(
+                                filedir,
+                                f"{file_basename}_{i}.{output_filetype}",
+                            ),
+                            format=output_filetype,
+                        )
+                continue
             else:
                 raise ValueError(f"File type {type} is not supported.")
             if self.include_intermediate_structures:
@@ -204,6 +231,27 @@ class FileConverter:
             outfile = XYZFile(filename=filename)
         elif self.type == "sdf":
             outfile = SDFFile(filename=filename)
+        elif self.type in ("cdxml", "cdx"):
+            cdxfile = CDXFile(filename=filename)
+            mols = cdxfile.molecules
+            filedir, fname = os.path.split(filename)
+            file_basename = os.path.splitext(fname)[0]
+            if len(mols) == 1:
+                mols[0].write(
+                    os.path.join(
+                        filedir, f"{file_basename}.{output_filetype}"
+                    ),
+                    format=output_filetype,
+                )
+            else:
+                for i, m in enumerate(mols, start=1):
+                    m.write(
+                        os.path.join(
+                            filedir, f"{file_basename}_{i}.{output_filetype}"
+                        ),
+                        format=output_filetype,
+                    )
+            return
         else:
             raise ValueError(f"File type {self.type} is not supported.")
         if self.include_intermediate_structures:

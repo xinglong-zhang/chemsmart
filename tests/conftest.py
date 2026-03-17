@@ -1322,6 +1322,61 @@ def complex_molecule_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def chemdraw_expected_directory(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "expected")
+
+
+@pytest.fixture()
+def expected_methane_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "methane.xyz")
+
+
+@pytest.fixture()
+def expected_benzene_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "benzene.xyz")
+
+
+@pytest.fixture()
+def expected_imidazole_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "imidazole.xyz")
+
+
+@pytest.fixture()
+def expected_two_molecules_1_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_1.xyz")
+
+
+@pytest.fixture()
+def expected_two_molecules_2_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_2.xyz")
+
+
+@pytest.fixture()
+def expected_benzene_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "benzene.com")
+
+
+@pytest.fixture()
+def expected_methane_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "methane.com")
+
+
+@pytest.fixture()
+def expected_two_molecules_1_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_1.com")
+
+
+@pytest.fixture()
+def expected_two_molecules_2_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_2.com")
+
+
+@pytest.fixture()
+def expected_complex_molecule_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "complex_molecule.com")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
