@@ -373,7 +373,13 @@ class ORCAInputWriter(InputWriter):
             if sf_basename.lower().endswith(".cosmorsxyz"):
                 sf_name = sf_basename[: -len(".cosmorsxyz")]
             else:
-                sf_name = sf_basename
+                sf_cosmorsxyz = (
+                    os.path.dirname(sf_path)
+                    + sf_basename.split(".")[0]
+                    + ".cosmorsxyz"
+                )
+                # write to cosmorsxyz file in the same directory as the input file
+                self.job.molecule.write_cosmorsxyz(sf_cosmorsxyz)
             sf_line = f'solventfilename "{sf_name}"'
 
         needs_block = (
