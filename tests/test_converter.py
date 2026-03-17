@@ -2,6 +2,7 @@ import os.path
 from shutil import copy, copytree, rmtree
 
 import numpy as np
+import pytest
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import (
@@ -424,3 +425,188 @@ class TestConverter:
         assert mol.num_atoms == 483
         assert mol.chemical_formula == "C155H180CuN53O82P12"
         assert mol.energy == -5300.535128
+
+    # ------------------------------------------------------------------
+    # CDXML / CDX conversion tests
+    # ------------------------------------------------------------------
+
+    def test_convert_single_cdxml_to_xyz(
+        self, tmpdir, single_molecule_cdxml_file_methane, expected_methane_xyz
+    ):
+        tmp_path = os.path.join(tmpdir, "methane.cdxml")
+        copy(single_molecule_cdxml_file_methane, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="xyz").convert_files()
+
+        output = tmp_path.replace(".cdxml", ".xyz")
+        assert os.path.exists(output)
+        mol = Molecule.from_filepath(output)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 5
+        assert mol.chemical_formula == "CH4"
+
+        ref = Molecule.from_filepath(expected_methane_xyz)
+        assert mol.num_atoms == ref.num_atoms
+        assert mol.chemical_formula == ref.chemical_formula
+        assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
+
+    def test_convert_single_cdxml_to_com(
+        self, tmpdir, single_molecule_cdxml_file_benzene, expected_benzene_com
+    ):
+        tmp_path = os.path.join(tmpdir, "benzene.cdxml")
+        copy(single_molecule_cdxml_file_benzene, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="com").convert_files()
+
+        output = tmp_path.replace(".cdxml", ".com")
+        assert os.path.exists(output)
+        mol = Molecule.from_filepath(output)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 12
+        assert mol.chemical_formula == "C6H6"
+
+        ref = Molecule.from_filepath(expected_benzene_com)
+        assert mol.num_atoms == ref.num_atoms
+        assert mol.chemical_formula == ref.chemical_formula
+        assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
+
+    def test_convert_single_cdx_to_xyz(
+        self,
+        tmpdir,
+        single_molecule_cdx_file_imidazole,
+        expected_imidazole_xyz,
+    ):
+        tmp_path = os.path.join(tmpdir, "imidazole.cdx")
+        copy(single_molecule_cdx_file_imidazole, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="xyz").convert_files()
+
+        output = tmp_path.replace(".cdx", ".xyz")
+        assert os.path.exists(output)
+        mol = Molecule.from_filepath(output)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 21
+        assert mol.chemical_formula == "C8H10N2O"
+
+        ref = Molecule.from_filepath(expected_imidazole_xyz)
+        assert mol.num_atoms == ref.num_atoms
+        assert mol.chemical_formula == ref.chemical_formula
+        assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
+
+    def test_convert_multi_molecule_cdxml_to_xyz_splits_files(
+        self,
+        tmpdir,
+        multi_molecule_cdxml_file,
+        expected_two_molecules_1_xyz,
+        expected_two_molecules_2_xyz,
+    ):
+        # Multi-molecule cdxml should produce basename_1.xyz, basename_2.xyz
+        tmp_path = os.path.join(tmpdir, "two_molecules.cdxml")
+        copy(multi_molecule_cdxml_file, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="xyz").convert_files()
+
+        output_1 = os.path.join(tmpdir, "two_molecules_1.xyz")
+        output_2 = os.path.join(tmpdir, "two_molecules_2.xyz")
+        assert os.path.exists(output_1)
+        assert os.path.exists(output_2)
+
+        mol1 = Molecule.from_filepath(output_1)
+        assert isinstance(mol1, Molecule)
+        assert mol1.chemical_formula == "CH2O"
+
+        ref1 = Molecule.from_filepath(expected_two_molecules_1_xyz)
+        assert mol1.num_atoms == ref1.num_atoms
+        assert mol1.chemical_formula == ref1.chemical_formula
+        assert mol1.positions == pytest.approx(ref1.positions, abs=1e-5)
+
+        mol2 = Molecule.from_filepath(output_2)
+        assert isinstance(mol2, Molecule)
+        assert mol2.chemical_formula == "N2"
+        assert mol2.num_atoms == 2
+
+        ref2 = Molecule.from_filepath(expected_two_molecules_2_xyz)
+        assert mol2.num_atoms == ref2.num_atoms
+        assert mol2.chemical_formula == ref2.chemical_formula
+        assert mol2.positions == pytest.approx(ref2.positions, abs=1e-5)
+
+    def test_convert_cdxml_folder_to_xyz(self, tmpdir, chemdraw_directory):
+        from shutil import copytree
+
+        tmp_cdxml_folder = os.path.join(tmpdir, "chemdraw")
+        copytree(chemdraw_directory, tmp_cdxml_folder)
+
+        FileConverter(
+            directory=tmp_cdxml_folder, type="cdxml", output_filetype="xyz"
+        ).convert_files()
+
+        # Single-molecule cdxml files produce basename.xyz
+        for fname in (
+            "benzene.cdxml",
+            "methane.cdxml",
+            "complex_molecule.cdxml",
+        ):
+            assert os.path.exists(
+                os.path.join(tmp_cdxml_folder, fname.replace(".cdxml", ".xyz"))
+            )
+
+        # two_molecules.cdxml contains 2 molecules → split into _1.xyz and _2.xyz
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_1.xyz")
+        )
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_2.xyz")
+        )
+
+    def test_convert_cdxml_folder_to_com(
+        self,
+        tmpdir,
+        chemdraw_directory,
+        expected_benzene_com,
+        expected_methane_com,
+        expected_complex_molecule_com,
+        expected_two_molecules_1_com,
+        expected_two_molecules_2_com,
+    ):
+        from shutil import copytree
+
+        tmp_cdxml_folder = os.path.join(tmpdir, "chemdraw")
+        copytree(chemdraw_directory, tmp_cdxml_folder)
+
+        FileConverter(
+            directory=tmp_cdxml_folder, type="cdxml", output_filetype="com"
+        ).convert_files()
+
+        # Single-molecule cdxml files produce basename.com
+        for fname in (
+            "benzene.cdxml",
+            "methane.cdxml",
+            "complex_molecule.cdxml",
+        ):
+            assert os.path.exists(
+                os.path.join(tmp_cdxml_folder, fname.replace(".cdxml", ".com"))
+            )
+
+        # two_molecules.cdxml contains 2 molecules → split into _1.com and _2.com
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_1.com")
+        )
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_2.com")
+        )
+
+        # Compare contents against reference files
+        for out_name, ref_path in (
+            ("benzene.com", expected_benzene_com),
+            ("methane.com", expected_methane_com),
+            ("complex_molecule.com", expected_complex_molecule_com),
+            ("two_molecules_1.com", expected_two_molecules_1_com),
+            ("two_molecules_2.com", expected_two_molecules_2_com),
+        ):
+            mol = Molecule.from_filepath(
+                os.path.join(tmp_cdxml_folder, out_name)
+            )
+            ref = Molecule.from_filepath(ref_path)
+            assert mol.num_atoms == ref.num_atoms
+            assert mol.chemical_formula == ref.chemical_formula
+            assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
