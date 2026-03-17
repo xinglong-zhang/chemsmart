@@ -859,6 +859,17 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith(".db"):
+            from chemsmart.assembler.utils import is_chemsmart_database
+
+            if is_chemsmart_database(filepath):
+                return cls._read_database_file(
+                    filepath=filepath,
+                    index=index,
+                    return_list=return_list,
+                    **kwargs,
+                )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -979,6 +990,39 @@ class Molecule:
         chemdraw_file = CDXFile(filename=filepath)
         return chemdraw_file.get_molecules(
             index=index, return_list=return_list
+        )
+
+    @classmethod
+    def _read_database_file(
+        cls,
+        filepath,
+        index="-1",
+        return_list=False,
+        record_index=None,
+        record_id=None,
+    ):
+        """Read molecules from a chemsmart database file (.db).
+
+        Args:
+            filepath (str): Path to the .db file.
+            index (str or int): Molecule index within the selected record(s).
+                Uses 1-based indexing. ``"-1"`` for the last molecule,
+                ``":"`` for all molecules.
+            return_list (bool): If True, always return a list.
+            record_index (int or None): 1-based record index to select.
+            record_id (str or None): Record ID (or prefix) to select.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from the database.
+        """
+        from chemsmart.io.database import DatabaseFile
+
+        database_file = DatabaseFile(filename=filepath)
+        return database_file.get_molecules(
+            index=index,
+            return_list=return_list,
+            record_index=record_index,
+            record_id=record_id,
         )
 
     # @staticmethod

@@ -15,6 +15,27 @@ CUSTOM_BASIS_KEYWORDS = {"gen", "genecp"}
 CUSTOM_SOLVENT_KEYWORDS = {"generic,read"}
 
 
+def is_chemsmart_database(filepath):
+    """Check if a .db file is a chemsmart database (has both 'records' and 'molecules' tables)."""
+    import sqlite3
+
+    try:
+        conn = sqlite3.connect(filepath)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='records'"
+        )
+        has_records = cursor.fetchone() is not None
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='molecules'"
+        )
+        has_molecules = cursor.fetchone() is not None
+        conn.close()
+        return has_records and has_molecules
+    except Exception:
+        return False
+
+
 def is_custom_basis(basis):
     """Return True if the basis set keyword indicates a custom inline basis."""
     if basis is None:
