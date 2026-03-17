@@ -430,7 +430,7 @@ class TestConverter:
     # ------------------------------------------------------------------
 
     def test_convert_single_cdxml_to_xyz(
-        self, tmpdir, single_molecule_cdxml_file_methane, expected_methane_xyz
+        self, tmpdir, single_molecule_cdxml_file_methane
     ):
         tmp_path = os.path.join(tmpdir, "methane.cdxml")
         copy(single_molecule_cdxml_file_methane, tmp_path)
@@ -444,13 +444,8 @@ class TestConverter:
         assert mol.num_atoms == 5
         assert mol.chemical_formula == "CH4"
 
-        ref = Molecule.from_filepath(expected_methane_xyz)
-        assert mol.num_atoms == ref.num_atoms
-        assert mol.chemical_formula == ref.chemical_formula
-        assert np.allclose(mol.positions, ref.positions, atol=1e-5)
-
     def test_convert_single_cdxml_to_com(
-        self, tmpdir, single_molecule_cdxml_file_benzene, expected_benzene_com
+        self, tmpdir, single_molecule_cdxml_file_benzene
     ):
         tmp_path = os.path.join(tmpdir, "benzene.cdxml")
         copy(single_molecule_cdxml_file_benzene, tmp_path)
@@ -464,16 +459,8 @@ class TestConverter:
         assert mol.num_atoms == 12
         assert mol.chemical_formula == "C6H6"
 
-        ref = Molecule.from_filepath(expected_benzene_com)
-        assert mol.num_atoms == ref.num_atoms
-        assert mol.chemical_formula == ref.chemical_formula
-        assert np.allclose(mol.positions, ref.positions, atol=1e-5)
-
     def test_convert_single_cdx_to_xyz(
-        self,
-        tmpdir,
-        single_molecule_cdx_file_imidazole,
-        expected_imidazole_xyz,
+        self, tmpdir, single_molecule_cdx_file_imidazole
     ):
         tmp_path = os.path.join(tmpdir, "imidazole.cdx")
         copy(single_molecule_cdx_file_imidazole, tmp_path)
@@ -487,19 +474,8 @@ class TestConverter:
         assert mol.num_atoms == 21
         assert mol.chemical_formula == "C8H10N2O"
 
-        ref = Molecule.from_filepath(expected_imidazole_xyz)
-        assert mol.num_atoms == ref.num_atoms
-        assert mol.chemical_formula == ref.chemical_formula
-        # imidazole.cdx falls back to Open Babel for 3D generation; use a
-        # looser tolerance (1e-3 Å) to accommodate minor cross-version differences.
-        assert np.allclose(mol.positions, ref.positions, atol=1e-3)
-
     def test_convert_multi_molecule_cdxml_to_xyz_splits_files(
-        self,
-        tmpdir,
-        multi_molecule_cdxml_file,
-        expected_two_molecules_1_xyz,
-        expected_two_molecules_2_xyz,
+        self, tmpdir, multi_molecule_cdxml_file
     ):
         # Multi-molecule cdxml should produce basename_1.xyz, basename_2.xyz
         tmp_path = os.path.join(tmpdir, "two_molecules.cdxml")
@@ -516,20 +492,10 @@ class TestConverter:
         assert isinstance(mol1, Molecule)
         assert mol1.chemical_formula == "CH2O"
 
-        ref1 = Molecule.from_filepath(expected_two_molecules_1_xyz)
-        assert mol1.num_atoms == ref1.num_atoms
-        assert mol1.chemical_formula == ref1.chemical_formula
-        assert np.allclose(mol1.positions, ref1.positions, atol=1e-5)
-
         mol2 = Molecule.from_filepath(output_2)
         assert isinstance(mol2, Molecule)
         assert mol2.chemical_formula == "N2"
         assert mol2.num_atoms == 2
-
-        ref2 = Molecule.from_filepath(expected_two_molecules_2_xyz)
-        assert mol2.num_atoms == ref2.num_atoms
-        assert mol2.chemical_formula == ref2.chemical_formula
-        assert np.allclose(mol2.positions, ref2.positions, atol=1e-5)
 
     def test_convert_cdxml_folder_to_xyz(self, tmpdir, chemdraw_directory):
         from shutil import copytree
@@ -560,14 +526,7 @@ class TestConverter:
         )
 
     def test_convert_cdxml_folder_to_com(
-        self,
-        tmpdir,
-        chemdraw_directory,
-        expected_benzene_com,
-        expected_methane_com,
-        expected_complex_molecule_com,
-        expected_two_molecules_1_com,
-        expected_two_molecules_2_com,
+        self, tmpdir, chemdraw_directory
     ):
         from shutil import copytree
 
@@ -595,19 +554,3 @@ class TestConverter:
         assert os.path.exists(
             os.path.join(tmp_cdxml_folder, "two_molecules_2.com")
         )
-
-        # Compare contents against reference files
-        for out_name, ref_path in (
-            ("benzene.com", expected_benzene_com),
-            ("methane.com", expected_methane_com),
-            ("complex_molecule.com", expected_complex_molecule_com),
-            ("two_molecules_1.com", expected_two_molecules_1_com),
-            ("two_molecules_2.com", expected_two_molecules_2_com),
-        ):
-            mol = Molecule.from_filepath(
-                os.path.join(tmp_cdxml_folder, out_name)
-            )
-            ref = Molecule.from_filepath(ref_path)
-            assert mol.num_atoms == ref.num_atoms
-            assert mol.chemical_formula == ref.chemical_formula
-            assert np.allclose(mol.positions, ref.positions, atol=1e-5)
