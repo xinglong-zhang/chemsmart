@@ -119,7 +119,7 @@ class ORCAInput(ORCAFileMixin):
         for line in self.contents:
             if line.startswith("*") and len(line) > 1:
                 line_elem = line.split()
-                return int(line_elem[-1])
+                return int(line_elem[3])
         return None
 
     @property
