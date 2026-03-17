@@ -1445,3 +1445,95 @@ class TestORCAInputWriter:
         assert "%cpcm" not in content
         # solventfilename line must NOT appear for cpcm model
         assert "solventfilename" not in content
+
+    # ------------------------------------------------------------------
+    # Tests for route deduplication and improved solvent detection
+    # ------------------------------------------------------------------
+
+    def test_no_duplicate_solvent_keyword_when_already_in_route(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Route deduplication guard: COSMORS(water) must appear exactly once."""
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solvent_id = "water"
+        # Simulate a misconfigured defgrid that accidentally contains the
+        # solvent keyword (triggering the duplication scenario).
+        settings.defgrid = "COSMORS"
+
+        # The route_string must NOT produce "COSMORS COSMORS(water)".
+        route = settings.route_string
+        # Exactly one COSMORS token (the bare one from defgrid)
+        assert route.upper().count("COSMORS") == 1
+        # No parenthesized COSMORS(water) appended on top
+        assert "COSMORS(water)" not in route or route.upper().count("COSMORS") == 1
+
+    def test_solvent_model_detected_from_route_line_cosmors(self):
+        """ORCAFileMixin.solvent_model detects cosmors from route line."""
+        import tempfile, os
+        from chemsmart.io.orca.input import ORCAInput
+
+        inp_content = "!  m062x def2-tzvp COSMORS(water) defgrid2\n* xyz 0 1\nO 0 0 0\n*\n"
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".inp", delete=False
+        ) as f:
+            f.write(inp_content)
+            fname = f.name
+        try:
+            orca_inp = ORCAInput(fname)
+            assert orca_inp.solvent_model == "cosmors"
+            assert orca_inp.solvent_id == "water"
+        finally:
+            os.unlink(fname)
+
+    def test_solvent_model_detected_from_route_line_smd(self):
+        """ORCAFileMixin.solvent_model detects smd from route line."""
+        import tempfile, os
+        from chemsmart.io.orca.input import ORCAInput
+
+        inp_content = "!  m062x def2-tzvp SMD(cyclohexane)\n* xyz 0 1\nO 0 0 0\n*\n"
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".inp", delete=False
+        ) as f:
+            f.write(inp_content)
+            fname = f.name
+        try:
+            orca_inp = ORCAInput(fname)
+            assert orca_inp.solvent_model == "smd"
+            assert orca_inp.solvent_id == "cyclohexane"
+        finally:
+            os.unlink(fname)
+
+    def test_solvent_id_not_from_solventfilename_line(self):
+        """solvent_id must not be extracted from a solventfilename line."""
+        import tempfile, os
+        from chemsmart.io.orca.input import ORCAInput
+
+        inp_content = (
+            "!  m062x def2-tzvp COSMORS(water)\n"
+            "%cosmors\n"
+            '  solventfilename "water"\n'
+            "  temp 298.15\n"
+            "end\n"
+            "* xyz 0 1\nO 0 0 0\n*\n"
+        )
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".inp", delete=False
+        ) as f:
+            f.write(inp_content)
+            fname = f.name
+        try:
+            orca_inp = ORCAInput(fname)
+            # solventfilename line must NOT be mistaken for solvent_id
+            assert orca_inp.solvent_id == "water"  # from route line, not from solventfilename
+        finally:
+            os.unlink(fname)
