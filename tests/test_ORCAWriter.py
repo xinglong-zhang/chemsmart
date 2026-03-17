@@ -1475,11 +1475,16 @@ class TestORCAInputWriter:
         # Exactly one COSMORS token (the bare one from defgrid)
         assert route.upper().count("COSMORS") == 1
         # No parenthesized COSMORS(water) appended on top
-        assert "COSMORS(water)" not in route or route.upper().count("COSMORS") == 1
+        assert (
+            "COSMORS(water)" not in route
+            or route.upper().count("COSMORS") == 1
+        )
 
     def test_solvent_model_detected_from_route_line_cosmors(self):
         """ORCAFileMixin.solvent_model detects cosmors from route line."""
-        import tempfile, os
+        import os
+        import tempfile
+
         from chemsmart.io.orca.input import ORCAInput
 
         inp_content = "!  m062x def2-tzvp COSMORS(water) defgrid2\n* xyz 0 1\nO 0 0 0\n*\n"
@@ -1497,10 +1502,14 @@ class TestORCAInputWriter:
 
     def test_solvent_model_detected_from_route_line_smd(self):
         """ORCAFileMixin.solvent_model detects smd from route line."""
-        import tempfile, os
+        import os
+        import tempfile
+
         from chemsmart.io.orca.input import ORCAInput
 
-        inp_content = "!  m062x def2-tzvp SMD(cyclohexane)\n* xyz 0 1\nO 0 0 0\n*\n"
+        inp_content = (
+            "!  m062x def2-tzvp SMD(cyclohexane)\n* xyz 0 1\nO 0 0 0\n*\n"
+        )
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".inp", delete=False
         ) as f:
@@ -1515,7 +1524,9 @@ class TestORCAInputWriter:
 
     def test_solvent_id_not_from_solventfilename_line(self):
         """solvent_id must not be extracted from a solventfilename line."""
-        import tempfile, os
+        import os
+        import tempfile
+
         from chemsmart.io.orca.input import ORCAInput
 
         inp_content = (
@@ -1534,6 +1545,8 @@ class TestORCAInputWriter:
         try:
             orca_inp = ORCAInput(fname)
             # solventfilename line must NOT be mistaken for solvent_id
-            assert orca_inp.solvent_id == "water"  # from route line, not from solventfilename
+            assert (
+                orca_inp.solvent_id == "water"
+            )  # from route line, not from solventfilename
         finally:
             os.unlink(fname)

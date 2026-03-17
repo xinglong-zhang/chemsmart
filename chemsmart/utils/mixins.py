@@ -986,7 +986,9 @@ class ORCAFileMixin(FileMixin):
         # Fallback: detect ORCA 6.0 style keyword from the route line.
         # Check in priority order (most specific first).
         try:
-            route_lower = self.route_string.lower() if self.route_string else ""
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
         except NotImplementedError:
             route_lower = ""
         if re.search(r"\bcosmors\b", route_lower):
@@ -1049,12 +1051,12 @@ class ORCAFileMixin(FileMixin):
 
         # Fallback: extract solvent from route-line pattern 'MODEL(solvent)'.
         try:
-            route_lower = self.route_string.lower() if self.route_string else ""
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
         except NotImplementedError:
             route_lower = ""
-        m = re.search(
-            r"\b(?:cosmors|cpcmc|smd|cpcm)\(([^)]+)\)", route_lower
-        )
+        m = re.search(r"\b(?:cosmors|cpcmc|smd|cpcm)\(([^)]+)\)", route_lower)
         if m:
             return m.group(1)
         return None
