@@ -525,9 +525,7 @@ class TestConverter:
             os.path.join(tmp_cdxml_folder, "two_molecules_2.xyz")
         )
 
-    def test_convert_cdxml_folder_to_com(
-        self, tmpdir, chemdraw_directory
-    ):
+    def test_convert_cdxml_folder_to_com(self, tmpdir, chemdraw_directory):
         from shutil import copytree
 
         tmp_cdxml_folder = os.path.join(tmpdir, "chemdraw")
