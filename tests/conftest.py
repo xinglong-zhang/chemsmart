@@ -1815,3 +1815,141 @@ def iterate_expected_output_file(iterate_expected_output_directory):
         iterate_expected_output_directory,
         "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
     )
+
+
+# ── InChIKey test data ──
+@pytest.fixture()
+def inchikey_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "inchikey")
+
+
+@pytest.fixture()
+def inchikey_normal_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "normal_testing",
+        "inchikey_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_r_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_s_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c3_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c2_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c2.xyz",
+    )
+
+
+# ── CXSMILES test data ──
+@pytest.fixture()
+def cxsmiles_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "cxsmiles")
+
+
+@pytest.fixture()
+def cxsmiles_normal_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "normal_testing",
+        "rotamer_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_r_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_s_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c2.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c2.txt",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c3.txt",
+    )
