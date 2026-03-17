@@ -2,7 +2,6 @@ import os.path
 from shutil import copy, copytree, rmtree
 
 import numpy as np
-import pytest
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import (
@@ -448,7 +447,7 @@ class TestConverter:
         ref = Molecule.from_filepath(expected_methane_xyz)
         assert mol.num_atoms == ref.num_atoms
         assert mol.chemical_formula == ref.chemical_formula
-        assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
+        assert np.allclose(mol.positions, ref.positions, atol=1e-5)
 
     def test_convert_single_cdxml_to_com(
         self, tmpdir, single_molecule_cdxml_file_benzene, expected_benzene_com
@@ -468,7 +467,7 @@ class TestConverter:
         ref = Molecule.from_filepath(expected_benzene_com)
         assert mol.num_atoms == ref.num_atoms
         assert mol.chemical_formula == ref.chemical_formula
-        assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
+        assert np.allclose(mol.positions, ref.positions, atol=1e-5)
 
     def test_convert_single_cdx_to_xyz(
         self,
@@ -491,7 +490,9 @@ class TestConverter:
         ref = Molecule.from_filepath(expected_imidazole_xyz)
         assert mol.num_atoms == ref.num_atoms
         assert mol.chemical_formula == ref.chemical_formula
-        assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
+        # imidazole.cdx falls back to Open Babel for 3D generation; use a
+        # looser tolerance (1e-3 Å) to accommodate minor cross-version differences.
+        assert np.allclose(mol.positions, ref.positions, atol=1e-3)
 
     def test_convert_multi_molecule_cdxml_to_xyz_splits_files(
         self,
@@ -518,7 +519,7 @@ class TestConverter:
         ref1 = Molecule.from_filepath(expected_two_molecules_1_xyz)
         assert mol1.num_atoms == ref1.num_atoms
         assert mol1.chemical_formula == ref1.chemical_formula
-        assert mol1.positions == pytest.approx(ref1.positions, abs=1e-5)
+        assert np.allclose(mol1.positions, ref1.positions, atol=1e-5)
 
         mol2 = Molecule.from_filepath(output_2)
         assert isinstance(mol2, Molecule)
@@ -528,7 +529,7 @@ class TestConverter:
         ref2 = Molecule.from_filepath(expected_two_molecules_2_xyz)
         assert mol2.num_atoms == ref2.num_atoms
         assert mol2.chemical_formula == ref2.chemical_formula
-        assert mol2.positions == pytest.approx(ref2.positions, abs=1e-5)
+        assert np.allclose(mol2.positions, ref2.positions, atol=1e-5)
 
     def test_convert_cdxml_folder_to_xyz(self, tmpdir, chemdraw_directory):
         from shutil import copytree
@@ -609,4 +610,4 @@ class TestConverter:
             ref = Molecule.from_filepath(ref_path)
             assert mol.num_atoms == ref.num_atoms
             assert mol.chemical_formula == ref.chemical_formula
-            assert mol.positions == pytest.approx(ref.positions, abs=1e-5)
+            assert np.allclose(mol.positions, ref.positions, atol=1e-5)
