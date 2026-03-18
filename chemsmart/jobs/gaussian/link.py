@@ -168,7 +168,9 @@ class GaussianLinkJob(GaussianJob):
 
             # Check if jobs should be run in serial based on jobrunner flag
             if self.jobrunner and self.jobrunner.run_in_serial:
-                logger.info("Running IRC jobs in serial mode (one after another)")
+                logger.info(
+                    "Running IRC jobs in serial mode (one after another)"
+                )
                 for job in irc_jobs:
                     logger.debug(f"Running IRC job: {job.settings.jobtype}")
                     job.run()

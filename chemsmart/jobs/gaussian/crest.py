@@ -219,7 +219,9 @@ class GaussianCrestJob(GaussianJob):
         """
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
-            logger.info("Running conformer jobs in serial mode (one after another)")
+            logger.info(
+                "Running conformer jobs in serial mode (one after another)"
+            )
             for job in self.all_conformers_jobs[: self.num_confs_to_opt]:
                 job.run()
                 # Enforce that job completed before proceeding to next

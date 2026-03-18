@@ -82,6 +82,13 @@ class ORCApKaJob(ORCAJob):
         import threading
 
         self.parallel = bool(parallel)
+        if self.jobrunner and getattr(self.jobrunner, "run_in_serial", False):
+            if self.parallel:
+                logger.info(
+                    "Parallel execution disabled due to run_in_serial=True in JobRunner"
+                )
+            self.parallel = False
+
         self._pka_lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -371,30 +378,56 @@ class ORCApKaJob(ORCAJob):
     # ------------------------------------------------------------------
 
     def _run_opt_jobs(self):
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.opt_jobs:
             logger.info(f"Running gas phase optimization job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking opt loop.")
+                break
 
     def _run_ref_opt_jobs(self):
         if not self.has_reference_jobs:
             return
+
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.ref_opt_jobs:
             logger.info(f"Running reference gas phase optimization job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking ref opt loop.")
+                break
 
     def _run_sp_jobs(self):
         self._sp_jobs = None  # refresh with optimised geometries
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.sp_jobs:
             logger.info(f"Running solution phase SP job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking sp loop.")
+                break
 
     def _run_ref_sp_jobs(self):
         if not self.has_reference_jobs:
             return
+
         self._ref_sp_jobs = None
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.ref_sp_jobs:
             logger.info(f"Running reference solution phase SP job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking ref sp loop.")
+                break
 
     def _make_sp_job_for_role(self, role):
         # create SP job using optimized geometry if available
@@ -483,10 +516,37 @@ class ORCApKaJob(ORCAJob):
             logger.info("Running ORCA pKa calculation in parallel mode")
             self._run_parallel()
             return
+
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
+
         self._run_opt_jobs()
+
+        if run_in_serial and not all(j.is_complete() for j in self.opt_jobs):
+            logger.info("Opt jobs incomplete, halting serial execution.")
+            return
+
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
+            if run_in_serial and not all(
+                j.is_complete() for j in self.ref_opt_jobs
+            ):
+                logger.info(
+                    "Ref Opt jobs incomplete, halting serial execution."
+                )
+                return
+
         self._run_sp_jobs()
+
+        if self.sp_jobs is None:
+            # Should have been created
+            return
+
+        if run_in_serial and not all(j.is_complete() for j in self.sp_jobs):
+            logger.info("SP jobs incomplete, halting serial execution.")
+            return
+
         if self.has_reference_jobs:
             self._run_ref_sp_jobs()
 

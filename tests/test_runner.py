@@ -1,9 +1,8 @@
 """Tests for JobRunner class and run_in_serial flag."""
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+
+from unittest.mock import Mock
 
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.settings.server import Server
 
 
 class TestJobRunner:
@@ -12,21 +11,17 @@ class TestJobRunner:
     def test_jobrunner_default_run_in_serial(self, pbs_server):
         """Test that run_in_serial defaults to False."""
         runner = JobRunner(server=pbs_server, fake=True)
-        assert hasattr(runner, 'run_in_serial')
+        assert hasattr(runner, "run_in_serial")
         assert runner.run_in_serial is False
 
     def test_jobrunner_run_in_serial_true(self, pbs_server):
         """Test that run_in_serial can be set to True."""
-        runner = JobRunner(
-            server=pbs_server, fake=True, run_in_serial=True
-        )
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
         assert runner.run_in_serial is True
 
     def test_jobrunner_run_in_serial_false(self, pbs_server):
         """Test that run_in_serial can be set to False."""
-        runner = JobRunner(
-            server=pbs_server, fake=True, run_in_serial=False
-        )
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
         assert runner.run_in_serial is False
 
 
@@ -68,7 +63,7 @@ class TestSerialExecution:
 
         # Patch _get_irc_jobs to return our mocked jobs
         mocker.patch.object(
-            job, '_get_irc_jobs', return_value=[mock_irc_job1, mock_irc_job2]
+            job, "_get_irc_jobs", return_value=[mock_irc_job1, mock_irc_job2]
         )
 
         # Run the job
@@ -111,9 +106,7 @@ class TestSerialExecution:
             mock_jobs.append(mock_job)
 
         # Patch the all_conformers_jobs property
-        mocker.patch.object(
-            job, 'all_conformers_jobs', mock_jobs
-        )
+        mocker.patch.object(job, "all_conformers_jobs", mock_jobs)
 
         # Run the job
         job._run()
@@ -154,9 +147,7 @@ class TestSerialExecution:
         mock_job2.is_complete.return_value = True
 
         # Patch both_qrc_jobs
-        mocker.patch.object(
-            job, 'both_qrc_jobs', [mock_job1, mock_job2]
-        )
+        mocker.patch.object(job, "both_qrc_jobs", [mock_job1, mock_job2])
 
         # Run the job
         job._run()
@@ -164,4 +155,3 @@ class TestSerialExecution:
         # Verify both jobs were run despite first one not completing
         mock_job1.run.assert_called_once()
         mock_job2.run.assert_called_once()
-

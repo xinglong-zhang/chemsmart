@@ -619,7 +619,9 @@ class Server(RegistryMixin):
             p = subprocess.Popen(shlex.split(command), cwd=job.folder)
         return p.wait()
 
-    def submit_array_job(self, jobs, num_nodes=None, test=False, cli_args=None, **kwargs):
+    def submit_array_job(
+        self, jobs, num_nodes=None, test=False, cli_args=None, **kwargs
+    ):
         """
         Submit a list of jobs as an array job to the scheduler.
 
@@ -637,17 +639,19 @@ class Server(RegistryMixin):
         if not jobs:
             logger.warning("No jobs to submit")
             return
-        
+
         # Use first job as template for checking
         first_job = jobs[0]
-        
+
         # Check for duplicate jobs
         self._check_running_jobs(first_job)
-        
+
         # Write array job submission script
         submitter = self.get_submitter(first_job, **kwargs)
-        submitter.write_array_job(jobs=jobs, num_nodes=num_nodes, cli_args=cli_args)
-        
+        submitter.write_array_job(
+            jobs=jobs, num_nodes=num_nodes, cli_args=cli_args
+        )
+
         # Submit the array job
         if not test:
             self._submit_array_job(first_job, submitter)

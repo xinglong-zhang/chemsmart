@@ -136,6 +136,13 @@ class GaussianpKaJob(GaussianJob):
 
         # Parallel execution flag
         self.parallel = bool(parallel)
+        if self.jobrunner and getattr(self.jobrunner, "run_in_serial", False):
+            if self.parallel:
+                logger.info(
+                    "Parallel execution disabled due to run_in_serial=True in JobRunner"
+                )
+            self.parallel = False
+
         # Lock to protect shared state when running in threads
         import threading
 
@@ -644,9 +651,15 @@ class GaussianpKaJob(GaussianJob):
         Runs the optimization + frequency jobs for both the protonated
         form (HA) and the conjugate base (A-) in sequence.
         """
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.opt_jobs:
             logger.info(f"Running gas phase optimization job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking opt loop.")
+                break
 
     def _run_ref_opt_jobs(self):
         """
@@ -661,9 +674,15 @@ class GaussianpKaJob(GaussianJob):
             )
             return
 
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.ref_opt_jobs:
             logger.info(f"Running reference gas phase optimization job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking ref opt loop.")
+                break
 
     def _run_sp_jobs(self):
         """
@@ -676,9 +695,15 @@ class GaussianpKaJob(GaussianJob):
         # Clear cached SP jobs to get fresh ones with optimized geometries
         self._sp_jobs = None
 
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.sp_jobs:
             logger.info(f"Running solution phase SP job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking sp loop.")
+                break
 
     def _run_ref_sp_jobs(self):
         """
@@ -697,9 +722,15 @@ class GaussianpKaJob(GaussianJob):
         # Clear cached ref SP jobs to get fresh ones with optimized geometries
         self._ref_sp_jobs = None
 
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
         for job in self.ref_sp_jobs:
             logger.info(f"Running reference solution phase SP job: {job}")
             job.run()
+            if run_in_serial and not job.is_complete():
+                logger.info(f"Job {job} incomplete, breaking ref sp loop.")
+                break
 
     def _make_sp_job_for_role(self, role):
         """Create a single SP job for the given role: 'HA' or 'A'.
@@ -826,15 +857,32 @@ class GaussianpKaJob(GaussianJob):
             return
 
         # Default sequential behaviour preserved
+        run_in_serial = self.jobrunner and getattr(
+            self.jobrunner, "run_in_serial", False
+        )
+
         # Run gas phase optimization jobs for target acid (HA, A-)
         self._run_opt_jobs()
+
+        if run_in_serial and not self._opt_jobs_are_complete():
+            logger.info("Opt jobs incomplete, halting serial execution.")
+            return
 
         # Run gas phase optimization jobs for reference acid (HB, B-) if provided
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
+            if run_in_serial and not self._ref_opt_jobs_are_complete():
+                logger.info(
+                    "Ref Opt jobs incomplete, halting serial execution."
+                )
+                return
 
         # Run solution phase SP jobs for target acid
         self._run_sp_jobs()
+
+        if run_in_serial and not self._sp_jobs_are_complete():
+            logger.info("SP jobs incomplete, halting serial execution.")
+            return
 
         # Run solution phase SP jobs for reference acid if provided
         if self.has_reference_jobs:

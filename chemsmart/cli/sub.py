@@ -115,7 +115,9 @@ def sub(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
-    ctx.obj["num_nodes"] = num_nodes  # Store num_nodes for array job submission
+    ctx.obj["num_nodes"] = (
+        num_nodes  # Store num_nodes for array job submission
+    )
 
 
 @sub.result_callback(replace=True)
@@ -208,15 +210,21 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
-        
+
         # Check if we should use array job submission
-        if num_nodes is not None and num_nodes > 1 and not jobrunner.run_in_serial:
-            logger.info(f"Submitting {len(job)} jobs as array job with {num_nodes} nodes")
-            
+        if (
+            num_nodes is not None
+            and num_nodes > 1
+            and not jobrunner.run_in_serial
+        ):
+            logger.info(
+                f"Submitting {len(job)} jobs as array job with {num_nodes} nodes"
+            )
+
             # Attach jobrunner to all jobs
             for single_job in job:
                 single_job.jobrunner = jobrunner
-            
+
             # Submit as array job
             cli_args = _reconstruct_cli_args(ctx, job[0])
             server = Server.from_servername(kwargs.get("server"))
@@ -224,7 +232,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
                 jobs=job,
                 num_nodes=num_nodes,
                 test=kwargs.get("test"),
-                cli_args=cli_args
+                cli_args=cli_args,
             )
         else:
             # Submit jobs individually (serial or when num_nodes not specified)

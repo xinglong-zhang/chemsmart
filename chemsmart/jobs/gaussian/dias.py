@@ -351,7 +351,9 @@ class GaussianDIASJob(GaussianJob):
         """
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
-            logger.info("Running molecule jobs in serial mode (one after another)")
+            logger.info(
+                "Running molecule jobs in serial mode (one after another)"
+            )
             for job in self.all_molecules_jobs:
                 job.run()
                 # Enforce that job completed before proceeding to next
@@ -376,7 +378,9 @@ class GaussianDIASJob(GaussianJob):
         """
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
-            logger.info("Running fragment 1 jobs in serial mode (one after another)")
+            logger.info(
+                "Running fragment 1 jobs in serial mode (one after another)"
+            )
             for job in self.fragment1_jobs:
                 job.run()
                 # Enforce that job completed before proceeding to next
@@ -401,7 +405,9 @@ class GaussianDIASJob(GaussianJob):
         """
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
-            logger.info("Running fragment 2 jobs in serial mode (one after another)")
+            logger.info(
+                "Running fragment 2 jobs in serial mode (one after another)"
+            )
             for job in self.fragment2_jobs:
                 job.run()
                 # Enforce that job completed before proceeding to next

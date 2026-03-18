@@ -297,14 +297,14 @@ class Submitter(RegistryMixin):
         if not jobs:
             logger.warning("No jobs provided for array job")
             return
-        
+
         # Store job list for array processing
         self.jobs = jobs
         self.num_nodes = num_nodes
-        
+
         # Write run scripts for each job
         self._write_array_runscripts(jobs, cli_args)
-        
+
         # Write array submit script
         self._write_array_submitscript(num_nodes)
 
@@ -334,7 +334,9 @@ class Submitter(RegistryMixin):
             num_nodes (int): Number of nodes to request.
         """
         with open(self.array_submit_script, "w") as f:
-            logger.debug(f"Writing array submission script: {self.array_submit_script}")
+            logger.debug(
+                f"Writing array submission script: {self.array_submit_script}"
+            )
             self._write_bash_header(f)
             self._write_array_scheduler_options(f, num_nodes)
             self._write_program_specifics(f)
@@ -364,16 +366,16 @@ class Submitter(RegistryMixin):
         """
         # Default implementation - use task array index
         f.write("# Array job execution\n")
-        f.write(f"if [ $SLURM_ARRAY_TASK_ID ]; then\n")
-        f.write(f"  TASK_ID=$SLURM_ARRAY_TASK_ID\n")
-        f.write(f"elif [ $PBS_ARRAYID ]; then\n")
-        f.write(f"  TASK_ID=$PBS_ARRAYID\n")
-        f.write(f"elif [ $LSB_JOBINDEX ]; then\n")
-        f.write(f"  TASK_ID=$LSB_JOBINDEX\n")
-        f.write(f"else\n")
-        f.write(f"  TASK_ID=0\n")
-        f.write(f"fi\n\n")
-        f.write(f"python chemsmart_run_array_${{TASK_ID}}.py\n")
+        f.write("if [ $SLURM_ARRAY_TASK_ID ]; then\n")
+        f.write("  TASK_ID=$SLURM_ARRAY_TASK_ID\n")
+        f.write("elif [ $PBS_ARRAYID ]; then\n")
+        f.write("  TASK_ID=$PBS_ARRAYID\n")
+        f.write("elif [ $LSB_JOBINDEX ]; then\n")
+        f.write("  TASK_ID=$LSB_JOBINDEX\n")
+        f.write("else\n")
+        f.write("  TASK_ID=0\n")
+        f.write("fi\n\n")
+        f.write("python chemsmart_run_array_${TASK_ID}.py\n")
 
     def _write_runscript(self, cli_args):
         """
@@ -745,15 +747,15 @@ class SLURMSubmitter(Submitter):
             num_nodes (int): Number of nodes for the array job.
         """
         # Get number of jobs in array
-        num_jobs = len(self.jobs) if hasattr(self, 'jobs') else 1
-        
+        num_jobs = len(self.jobs) if hasattr(self, "jobs") else 1
+
         f.write(f"#SBATCH --job-name={self.job.label}_array\n")
         f.write(f"#SBATCH --output={self.job.label}_array_%a.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}_array_%a.slurmerr\n")
-        
+
         # Array directive: 0 to num_jobs-1
         f.write(f"#SBATCH --array=0-{num_jobs-1}\n")
-        
+
         if self.server.num_gpus:
             f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
         f.write(
