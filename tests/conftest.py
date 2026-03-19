@@ -64,6 +64,33 @@ def run_gaussian_and_capture_settings():
     return _run
 
 
+@pytest.fixture
+def run_orca_and_capture_settings():
+    """Run the orca CLI with a patched job class and capture settings."""
+    from chemsmart.cli.orca.orca import orca as orca_cli
+
+    def _run(job_class_path, cli_args, ctx_obj=None):
+        if ctx_obj is None:
+            ctx_obj = {}
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                orca_cli,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings
+
+    return _run
+
+
 @pytest.fixture()
 def chemsmart_templates_config(mocker):
     """
@@ -1248,6 +1275,18 @@ def orca_yaml_settings_orca_project_name(orca_yaml_settings_directory):
 @pytest.fixture()
 def orca_yaml_settings_neb_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "neb")
+
+
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv")
+
+
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_cosmors_project_name(
+    orca_yaml_settings_directory,
+):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
 
 
 # test for structure.py
