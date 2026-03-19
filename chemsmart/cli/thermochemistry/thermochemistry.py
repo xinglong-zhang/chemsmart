@@ -83,14 +83,13 @@ def click_thermochemistry_options(f):
         help="Interpolator exponent used in the quasi-RRHO approximation.",
     )
     @click.option(
-        "-w",
-        "--weighted",
-        is_flag=True,
-        default=False,
+        "-w/",
+        "--weighted/--no-weighted",
+        default=True,
         show_default=True,
-        help="Use natural abundance weighted masses (True) or use most "
-        "abundant masses (False).\nDefault to False, i.e., use single "
-        "isotopic mass.",
+        help="Use natural abundance weighted masses (True) or use most abundant "
+        "masses (False, via --no-weighted).\nDefault to True, i.e., use natural "
+        "abundance weighted masses, which is the real world scenario.",
     )
     @click.option(
         "-u",

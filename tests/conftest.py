@@ -1,3 +1,4 @@
+import importlib
 import logging
 import os
 import tempfile
@@ -13,6 +14,7 @@ from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.iterate.runner import IterateJobRunner
@@ -28,9 +30,13 @@ from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
+thermochemistry_cli_module = importlib.import_module(
+    "chemsmart.cli.thermochemistry.thermochemistry"
+)
+
 
 ############ CLI Fixtures ##################
-@pytest.fixture
+@pytest.fixture()
 def make_cli_ctx_obj():
     """Factory for the minimal Click context object."""
 
@@ -40,7 +46,47 @@ def make_cli_ctx_obj():
     return _make
 
 
-@pytest.fixture
+@pytest.fixture()
+def run_thermochemistry_and_capture_settings():
+    """Run the thermochemistry CLI with mocked job construction."""
+
+    def _run(extra_args=None, ctx_obj=None):
+        runner = CliRunner()
+        captured_settings = None
+        mock_job = MagicMock()
+
+        base_args = ["-f", "dummy.log", "-T", "298.15"]
+        cli_args = base_args + (extra_args or [])
+
+        with (
+            patch.object(
+                thermochemistry_cli_module,
+                "get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch.object(
+                thermochemistry_cli_module.ThermochemistryJob,
+                "from_filename",
+                return_value=mock_job,
+            ) as mock_from_filename,
+        ):
+            result = runner.invoke(
+                thermochemistry,
+                cli_args,
+                obj=ctx_obj or {},
+                catch_exceptions=False,
+            )
+            if mock_from_filename.call_args is not None:
+                captured_settings = mock_from_filename.call_args[1].get(
+                    "settings"
+                )
+
+        return result, captured_settings
+
+    return _run
+
+
+@pytest.fixture()
 def run_gaussian_and_capture_settings():
     """Run the gaussian CLI with a patched job class and capture settings."""
 
@@ -64,7 +110,7 @@ def run_gaussian_and_capture_settings():
     return _run
 
 
-@pytest.fixture
+@pytest.fixture()
 def run_orca_and_capture_settings():
     """Run the orca CLI with a patched job class and capture settings."""
     from chemsmart.cli.orca.orca import orca as orca_cli
