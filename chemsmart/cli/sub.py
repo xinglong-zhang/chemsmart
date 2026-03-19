@@ -131,9 +131,9 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     scheduler system.
     """
 
-    def _clean_command(ctx):
+    def _clean_command_list(commands):
         """
-        Remove keywords used in sub.py but not in run.py.
+        Remove keywords used in sub.py but not in run.py from a command list.
 
         Specifically: Some keywords/options (like queue, verbose, etc.)
         are only relevant to sub.py and not applicable to run.py.
@@ -142,28 +142,34 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         command = next(
             (
                 subcommand
-                for subcommand in ctx.obj["subcommand"]
+                for subcommand in commands
                 if subcommand["name"] == "sub"
             ),
             None,
         )
-        if not command:
-            raise ValueError("No 'sub' command found in context.")
 
-        # Find the keywords that are valid in sub.py
-        # but should not be passed to run.py and remove those
-        keywords_not_in_run = [
-            "time_hours",
-            "queue",
-            "verbose",
-            "test",
-            "print_command",
-            "num_nodes",
-        ]
+        if command:
+            # Find the keywords that are valid in sub.py
+            # but should not be passed to run.py and remove those
+            keywords_not_in_run = [
+                "time_hours",
+                "queue",
+                "verbose",
+                "test",
+                "print_command",
+                "num_nodes",
+            ]
 
-        for keyword in keywords_not_in_run:
-            # Remove keyword if it exists
-            command["kwargs"].pop(keyword, None)
+            for keyword in keywords_not_in_run:
+                # Remove keyword if it exists
+                command["kwargs"].pop(keyword, None)
+
+    def _clean_command(ctx):
+        """
+        Remove keywords used in sub.py but not in run.py.
+        """
+        if "subcommand" in ctx.obj:
+            _clean_command_list(ctx.obj["subcommand"])
         return ctx
 
     def _reconstruct_cli_args(ctx, job):
@@ -176,14 +182,20 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         those per-entry subcommands are used instead of the global
         context, so each submitted script processes only its own entry.
         """
+        use_override = (
+            hasattr(job, "_batch_subcommands_override")
+            and job._batch_subcommands_override is not None
+        )
+
         commands = (
             job._batch_subcommands_override
-            if (
-                hasattr(job, "_batch_subcommands_override")
-                and job._batch_subcommands_override is not None
-            )
+            if use_override
             else ctx.obj["subcommand"]
         )
+
+        # Ensure override commands are also cleaned (ctx.obj['subcommand'] is cleaned by _clean_command)
+        if use_override:
+            _clean_command_list(commands)
 
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
