@@ -19,7 +19,7 @@ Usage
 
    chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
-                                 [-ch h_freq_cutoff] [-c concentration] [-P pressure] [-w]
+                                 [-ch h_freq_cutoff] [-c concentration] [-P pressure] [--weighted | --no-weighted]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
                                  [-o outfile.dat] [-O] [-i] [-S|-R]
 
@@ -92,9 +92,10 @@ Options
       -  float
       -  Gas-phase pressure in atm (default: 1.0)
 
-   -  -  ``-w, --weighted``
+   -  -  ``-w, --weighted, --no-weighted``
       -  bool
-      -  Use isotopically weighted masses
+      -  Toggle between natural abundance weighted masses (``--weighted``) and most abundant isotope masses
+         (``--no-weighted``). Default: ``--weighted``.
 
    -  -  ``-T, --temperature``
       -  float

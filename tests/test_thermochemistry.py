@@ -3357,3 +3357,31 @@ class TestThermochemistryBatchMode:
 
         # Verify that the data line contains correct values (structure4)
         assert f"{gibbs_free_energy4:.6f}" in data_lines4[0]
+
+
+class TestThermochemistryCLI:
+    """CLI option-propagation tests for the thermochemistry command."""
+
+    def test_weighted_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--weighted"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.use_weighted_mass is True
+
+    def test_no_weighted_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--no-weighted"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.use_weighted_mass is False
