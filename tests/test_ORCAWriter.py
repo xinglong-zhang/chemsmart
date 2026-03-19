@@ -1489,9 +1489,9 @@ class TestORCAInputWriter:
 
         # The converted .cosmorsxyz file must be present in the target directory
         copied = os.path.join(out_dir, "He_solvent.cosmorsxyz")
-        assert os.path.isfile(copied), (
-            f"Expected converted .cosmorsxyz file at {copied}"
-        )
+        assert os.path.isfile(
+            copied
+        ), f"Expected converted .cosmorsxyz file at {copied}"
         # The original .out file must NOT be copied (only the .cosmorsxyz)
         assert not os.path.isfile(os.path.join(out_dir, "He_solvent.out"))
 
@@ -1537,9 +1537,9 @@ class TestORCAInputWriter:
 
         # The converted .cosmorsxyz file must be present in the target directory
         copied = os.path.join(out_dir, "mysolvent.cosmorsxyz")
-        assert os.path.isfile(copied), (
-            f"Expected converted .cosmorsxyz file at {copied}"
-        )
+        assert os.path.isfile(
+            copied
+        ), f"Expected converted .cosmorsxyz file at {copied}"
 
     # ------------------------------------------------------------------
     # Tests for route deduplication and improved solvent detection

@@ -324,41 +324,59 @@ Supported ``%cosmors`` block options (via ``-so``, for the ``cosmors`` model):
 
    -  -  Option
       -  Description
+
    -  -  ``temp <value>``
       -  Reference temperature in Kelvin (e.g. ``temp 298.15``)
+
    -  -  ``aeff <value>``
       -  Effective contact area between surface segments in Å² (default: ``5.925``)
+
    -  -  ``lnalpha <value>``
       -  Logarithm of the misfit prefactor (default: ``0.202``)
+
    -  -  ``lnchb <value>``
       -  Hydrogen bond (HB) strength parameter (default: ``0.166``)
+
    -  -  ``chbt <value>``
       -  Parameter for temperature dependence of HB (default: ``1.50``)
+
    -  -  ``sigmahb <value>``
       -  HB threshold parameter in e/Å² (default: ``9.61e-3``)
+
    -  -  ``rav <value>``
       -  Radius to average ideal screening charges in Å (default: ``0.50``)
+
    -  -  ``fcorr <value>``
       -  Parameter adjusted from dielectric screening energies (default: ``2.40``)
+
    -  -  ``ravcorr <value>``
       -  Additional radius for misfit energy calculation in Å (default: ``1.00``)
+
    -  -  ``astd <value>``
       -  Standard surface area normalization factor in Å² (default: ``41.624``)
+
    -  -  ``zcoord <value>``
       -  Coordination number (default: ``10.0``)
+
    -  -  ``dgsolv_eta <value>``
       -  Offset for solvation energy calculation (default: ``-4.4480``)
+
    -  -  ``dgsolv_omegaring <value>``
       -  Correction for solvation energy of molecules with rings (default: ``0.2630``)
+
    -  -  ``dftfunc "name"``
       -  DFT functional for COSMO-RS sub-calculations (default: ``"BP86"``)
+
    -  -  ``dftbas "name"``
       -  Basis set for COSMO-RS sub-calculations (default: ``"def2-TZVPD"``)
+
    -  -  ``solvent "name"``
       -  Solvent from the internal COSMO-RS database (e.g. ``solvent "water"``)
+
    -  -  ``solventfilename "name"``
       -  Name of the ``.cosmorsxyz`` solvent file to read (prefer the ``-sf`` CLI option, which also handles
          auto-conversion from ``.log``/``.out`` files)
+
    -  -  ``orbs_vac true|false``
       -  Reuse gas-phase orbitals for the conductor calculation (default: ``false``)
 
@@ -424,8 +442,8 @@ The openCOSMO-RS example produces:
      temp 298.15
    end
 
-The openCOSMO-RS with custom solvent file example produces (regardless of whether ``-sf`` points to a
-``.cosmorsxyz``, ``.log``, or ``.out`` file — non-``.cosmorsxyz`` files are auto-converted first):
+The openCOSMO-RS with custom solvent file example produces (regardless of whether ``-sf`` points to a ``.cosmorsxyz``,
+``.log``, or ``.out`` file — non-``.cosmorsxyz`` files are auto-converted first):
 
 .. code:: text
 
