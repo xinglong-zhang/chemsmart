@@ -1446,6 +1446,101 @@ class TestORCAInputWriter:
         # solventfilename line must NOT appear for cpcm model
         assert "solventfilename" not in content
 
+    def test_solventfilename_orca_out_converted_to_cosmorsxyz(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+        orca_he_output_freq,
+    ):
+        """Non-.cosmorsxyz solvent file (ORCA .out) is converted to .cosmorsxyz."""
+        import os
+        import shutil
+
+        # Copy the ORCA output file to a temp location so it has a clean basename
+        sf_path = os.path.join(str(tmpdir), "He_solvent.out")
+        shutil.copy2(orca_he_output_freq, sf_path)
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_out",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        out_dir = str(tmpdir.join("out_conv"))
+        orca_writer.write(target_directory=out_dir)
+        orca_file = os.path.join(out_dir, "orca_cosmors_out.inp")
+        content = open(orca_file).read()
+
+        # %cosmors block must be written with solventfilename (without extension)
+        assert "%cosmors" in content
+        assert 'solventfilename "He_solvent"' in content
+
+        # The converted .cosmorsxyz file must be present in the target directory
+        copied = os.path.join(out_dir, "He_solvent.cosmorsxyz")
+        assert os.path.isfile(
+            copied
+        ), f"Expected converted .cosmorsxyz file at {copied}"
+        # The original .out file must NOT be copied (only the .cosmorsxyz)
+        assert not os.path.isfile(os.path.join(out_dir, "He_solvent.out"))
+
+    def test_solventfilename_xyz_converted_to_cosmorsxyz(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Non-.cosmorsxyz solvent file (.xyz) is converted to .cosmorsxyz."""
+        import os
+        import shutil
+
+        # Copy the xyz file to a temp location so it has a clean basename
+        sf_path = os.path.join(str(tmpdir), "mysolvent.xyz")
+        shutil.copy2(single_molecule_xyz_file, sf_path)
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_cosmors_xyz",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        out_dir = str(tmpdir.join("out_xyz"))
+        orca_writer.write(target_directory=out_dir)
+        orca_file = os.path.join(out_dir, "orca_cosmors_xyz.inp")
+        content = open(orca_file).read()
+
+        # %cosmors block must be written with solventfilename (without extension)
+        assert "%cosmors" in content
+        assert 'solventfilename "mysolvent"' in content
+
+        # The converted .cosmorsxyz file must be present in the target directory
+        copied = os.path.join(out_dir, "mysolvent.cosmorsxyz")
+        assert os.path.isfile(
+            copied
+        ), f"Expected converted .cosmorsxyz file at {copied}"
+
     # ------------------------------------------------------------------
     # Tests for route deduplication and improved solvent detection
     # ------------------------------------------------------------------
