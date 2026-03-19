@@ -30,6 +30,10 @@ from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
+thermochemistry_cli_module = importlib.import_module(
+    "chemsmart.cli.thermochemistry.thermochemistry"
+)
+
 
 ############ CLI Fixtures ##################
 @pytest.fixture()
@@ -77,6 +81,10 @@ def run_thermochemistry_and_capture_settings():
                     "settings"
                 )
 
+        return result, captured_settings
+
+    return _run
+
 
 @pytest.fixture()
 def run_gaussian_and_capture_settings():
@@ -100,11 +108,6 @@ def run_gaussian_and_capture_settings():
         return result, captured_settings
 
     return _run
-
-
-thermochemistry_cli_module = importlib.import_module(
-    "chemsmart.cli.thermochemistry.thermochemistry"
-)
 
 
 @pytest.fixture()
