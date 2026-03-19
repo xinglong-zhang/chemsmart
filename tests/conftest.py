@@ -43,35 +43,6 @@ def make_cli_ctx_obj():
 
 
 @pytest.fixture()
-def run_gaussian_and_capture_settings():
-    """Run the gaussian CLI with a patched job class and capture settings."""
-
-    def _run(job_class_path, cli_args, ctx_obj):
-        runner = CliRunner()
-        captured_settings = None
-
-        with patch(job_class_path) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                cli_args,
-                obj=ctx_obj,
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured_settings = mock_job_cls.call_args[1].get("settings")
-
-        return result, captured_settings
-
-    return _run
-
-
-thermochemistry_cli_module = importlib.import_module(
-    "chemsmart.cli.thermochemistry.thermochemistry"
-)
-
-
-@pytest.fixture()
 def run_thermochemistry_and_capture_settings():
     """Run the thermochemistry CLI with mocked job construction."""
 
@@ -105,6 +76,58 @@ def run_thermochemistry_and_capture_settings():
                 captured_settings = mock_from_filename.call_args[1].get(
                     "settings"
                 )
+
+
+@pytest.fixture()
+def run_gaussian_and_capture_settings():
+    """Run the gaussian CLI with a patched job class and capture settings."""
+
+    def _run(job_class_path, cli_args, ctx_obj):
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings
+
+    return _run
+
+
+thermochemistry_cli_module = importlib.import_module(
+    "chemsmart.cli.thermochemistry.thermochemistry"
+)
+
+
+@pytest.fixture()
+def run_orca_and_capture_settings():
+    """Run the orca CLI with a patched job class and capture settings."""
+    from chemsmart.cli.orca.orca import orca as orca_cli
+
+    def _run(job_class_path, cli_args, ctx_obj=None):
+        if ctx_obj is None:
+            ctx_obj = {}
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                orca_cli,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
 
         return result, captured_settings
 
@@ -1297,6 +1320,18 @@ def orca_yaml_settings_neb_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "neb")
 
 
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv")
+
+
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_cosmors_project_name(
+    orca_yaml_settings_directory,
+):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
@@ -1861,4 +1896,142 @@ def iterate_expected_output_file(iterate_expected_output_directory):
     return os.path.join(
         iterate_expected_output_directory,
         "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+    )
+
+
+# ── InChIKey test data ──
+@pytest.fixture()
+def inchikey_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "inchikey")
+
+
+@pytest.fixture()
+def inchikey_normal_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "normal_testing",
+        "inchikey_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_r_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_s_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c3_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c2_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c2.xyz",
+    )
+
+
+# ── CXSMILES test data ──
+@pytest.fixture()
+def cxsmiles_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "cxsmiles")
+
+
+@pytest.fixture()
+def cxsmiles_normal_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "normal_testing",
+        "rotamer_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_r_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_s_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c2.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c2.txt",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c3.txt",
     )

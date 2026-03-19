@@ -21,7 +21,10 @@ from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import ORCAExecutable
 from chemsmart.utils.periodictable import PeriodicTable
-from chemsmart.utils.repattern import allxyz_filename_pattern
+from chemsmart.utils.repattern import (
+    allxyz_filename_pattern,
+    solventfilename_block_pattern,
+)
 
 pt = PeriodicTable()
 
@@ -141,6 +144,7 @@ class ORCAJobRunner(JobRunner):
         if self.scratch and os.path.exists(job.inputfile):
             # copy input file to scratch directory
             self._copy_over_xyz_files(job)
+            self._copy_over_extra_files(job)
 
     def _assign_variables(self, job):
         """
@@ -280,26 +284,94 @@ class ORCAJobRunner(JobRunner):
                             f"Copied {xyz_file_path} to {xyz_file_scratch}."
                         )
 
+    def _copy_over_extra_files(self, job):
+        """
+        Copy extra files referenced in the input to the running (scratch) directory.
+
+        Scans the written input file for ``solventfilename "name"`` entries in
+        ``%cosmors`` blocks and copies the corresponding ``name.cosmorsxyz`` file
+        to the running directory so that ORCA can locate it.  This is the
+        generalised counterpart of :meth:`_copy_over_xyz_files`: any file
+        referenced by name in the input is copied as long as it exists in the
+        job folder.
+
+        Called both from :meth:`_prerun` (when the input pre-exists, e.g. for
+        restart jobs) and from :meth:`_write_input` (after freshly writing the
+        input) to ensure coverage of all execution paths.
+
+        Args:
+            job: The job object whose input file will be scanned
+        """
+        if not (self.scratch and self.scratch_dir):
+            return
+
+        # Read from the written input (scratch location if available, else job folder)
+        input_file_to_read = (
+            self.job_inputfile
+            if os.path.exists(self.job_inputfile)
+            else job.inputfile
+        )
+
+        if not os.path.exists(input_file_to_read):
+            return
+
+        with open(input_file_to_read, "r") as f:
+            for line in f:
+                match = re.search(solventfilename_block_pattern, line)
+                if match:
+                    solvent_name = match.group(1)
+                    # Construct the .cosmorsxyz filename
+                    cosmorsxyz_file = solvent_name + ".cosmorsxyz"
+
+                    # Resolve against job folder first, then cwd
+                    cosmorsxyz_path = os.path.join(job.folder, cosmorsxyz_file)
+                    if not os.path.exists(cosmorsxyz_path):
+                        cosmorsxyz_path = os.path.abspath(cosmorsxyz_file)
+
+                    if not os.path.exists(cosmorsxyz_path):
+                        logger.debug(
+                            f"solventfilename '{solvent_name}' referenced in "
+                            f"input but '{cosmorsxyz_file}' not found in "
+                            f"{job.folder} or cwd — skipping copy."
+                        )
+                        continue
+
+                    dest = os.path.join(
+                        self.running_directory,
+                        os.path.basename(cosmorsxyz_path),
+                    )
+                    copy(cosmorsxyz_path, dest)
+                    logger.info(f"Copied {cosmorsxyz_path} to {dest}.")
+
     def _write_input(self, job):
         """
         Write the input file for the job.
 
         Creates the ORCA input file in the running directory (scratch or job folder).
-        After writing the input, automatically copies any referenced XYZ files to
-        scratch directory if scratch is enabled. This is essential for NEB jobs
-        that reference multiple geometry files.
+        After writing the input, automatically copies any referenced XYZ files and
+        extra input files (e.g. .cosmorsxyz) to the scratch directory if scratch is
+        enabled. This is essential for NEB jobs that reference multiple geometry files
+        and for COSMO-RS jobs that reference solvent files.
 
         Args:
             job: The job object to write input for
 
         Note:
-            XYZ file copying happens after input writing so the input file can
+            File copying happens after input writing so the input file can
             be parsed to discover file references.
         """
         from chemsmart.jobs.orca.writer import ORCAInputWriter
 
         input_writer = ORCAInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
+
+        # Copy any .cosmorsxyz files referenced in the written input to the
+        # running directory.  The writer already copies the file when
+        # settings.solventfilename is set explicitly, but this also handles
+        # the general case where solventfilename appears inside custom_solvent
+        # YAML content and the referenced file exists in the job folder.
+        if self.scratch and self.scratch_dir:
+            self._copy_over_extra_files(job)
 
     def _get_command(self, job):
         """
