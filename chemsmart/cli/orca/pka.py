@@ -67,7 +67,6 @@ def pka(
     cutoff_enthalpy,
     proton_index,
     color_code,
-    parallel,
     **kwargs,
 ):
     """ORCA pKa job submission.
@@ -119,7 +118,6 @@ def pka(
     if ctx.invoked_subcommand is None:
         ctx.invoke(
             submit,
-            parallel=parallel,
             skip_completed=skip_completed,
         )
 
@@ -133,7 +131,7 @@ def pka(
 @click_job_options
 @click_pka_submit_options
 @click.pass_context
-def submit(ctx, parallel, skip_completed, **kwargs):
+def submit(ctx, skip_completed, **kwargs):
     """Submit a single-molecule ORCA pKa calculation.
 
     \b
@@ -148,6 +146,10 @@ def submit(ctx, parallel, skip_completed, **kwargs):
     filename = ctx.obj.get("filename")
     proton_index = ctx.obj.get("pka_proton_index")
     color_code = ctx.obj.get("pka_color_code")
+    jobrunner = ctx.obj["jobrunner"]
+
+    # Align pKa parallel execution with global --run-in-serial flag
+    parallel = not jobrunner.run_in_serial
 
     proton_index, pka_molecules = resolve_proton_index(
         filename, proton_index, color_code
@@ -195,6 +197,7 @@ def submit(ctx, parallel, skip_completed, **kwargs):
                 molecule=mol,
                 settings=pka_settings,
                 label=f"{base_label}_idx{idx}",
+                jobrunner=jobrunner,
                 skip_completed=skip_completed,
                 parallel=parallel,
                 **kwargs,
@@ -206,6 +209,7 @@ def submit(ctx, parallel, skip_completed, **kwargs):
         molecule=molecules[-1],
         settings=pka_settings,
         label=base_label,
+        jobrunner=jobrunner,
         skip_completed=skip_completed,
         parallel=parallel,
         **kwargs,
@@ -219,13 +223,8 @@ def submit(ctx, parallel, skip_completed, **kwargs):
 
 @pka.command("batch", cls=MyCommand)
 @click_job_options
-@click.option(
-    "--parallel/--no-parallel",
-    default=False,
-    help="Run per-species opt->SP pipelines in parallel.",
-)
 @click.pass_context
-def batch(ctx, skip_completed, parallel, **kwargs):
+def batch(ctx, skip_completed, **kwargs):
     """Table-driven batch ORCA pKa job submission.
 
     \b
@@ -238,6 +237,11 @@ def batch(ctx, skip_completed, parallel, **kwargs):
           -t "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
     """
     shared = ctx.obj["pka_shared"]
+    jobrunner = ctx.obj["jobrunner"]
+
+    # Align pKa parallel execution with global --run-in-serial flag
+    parallel = not jobrunner.run_in_serial
+
     input_table_path = ctx.obj.get("filename")
     if not input_table_path:
         raise click.UsageError(
@@ -368,6 +372,7 @@ def batch(ctx, skip_completed, parallel, **kwargs):
                 molecule=molecule,
                 settings=pka_settings,
                 label=base_label,
+                jobrunner=jobrunner,
                 skip_completed=skip_completed,
                 parallel=parallel,
                 **kwargs,
@@ -467,6 +472,7 @@ def _create_orca_pka_jobs_from_molecules(
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+    jobrunner = ctx.obj["jobrunner"]
 
     filename = ctx.obj.get("filename", "")
     base_name = os.path.splitext(os.path.basename(filename))[0]
@@ -488,6 +494,7 @@ def _create_orca_pka_jobs_from_molecules(
                 molecule=pka_mol,
                 settings=pka_settings,
                 label=mol_label,
+                jobrunner=jobrunner,
                 skip_completed=skip_completed,
                 parallel=parallel,
                 **kwargs,

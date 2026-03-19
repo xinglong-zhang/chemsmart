@@ -71,7 +71,6 @@ def pka(
     proton_index,
     color_code,
     # submit options
-    parallel,
     **kwargs,
 ):
     """Gaussian pKa job submission.
@@ -129,7 +128,6 @@ def pka(
     if ctx.invoked_subcommand is None:
         ctx.invoke(
             submit,
-            parallel=parallel,
             skip_completed=skip_completed,
         )
 
@@ -143,7 +141,7 @@ def pka(
 @click_job_options
 @click_pka_submit_options
 @click.pass_context
-def submit(ctx, parallel, skip_completed, **kwargs):
+def submit(ctx, skip_completed, **kwargs):
     """Submit a single-molecule Gaussian pKa calculation.
 
     \b
@@ -168,6 +166,10 @@ def submit(ctx, parallel, skip_completed, **kwargs):
     filename = ctx.obj.get("filename")
     proton_index = ctx.obj.get("pka_proton_index")
     color_code = ctx.obj.get("pka_color_code")
+    jobrunner = ctx.obj["jobrunner"]
+
+    # Align pKa parallel execution with global --run-in-serial flag
+    parallel = not jobrunner.run_in_serial
 
     # ── resolve proton index (CDXML auto-detect) ──
     proton_index, pka_molecules = resolve_proton_index(
@@ -246,13 +248,8 @@ def submit(ctx, parallel, skip_completed, **kwargs):
 
 @pka.command("batch", cls=MyCommand)
 @click_job_options
-@click.option(
-    "--parallel/--no-parallel",
-    default=False,
-    help="Run per-species opt->SP pipelines in parallel.",
-)
 @click.pass_context
-def batch(ctx, skip_completed, parallel, **kwargs):
+def batch(ctx, skip_completed, **kwargs):
     """Table-driven batch pKa job submission.
 
     The table file path is taken from the parent Gaussian ``-f/--filename``
@@ -275,6 +272,10 @@ def batch(ctx, skip_completed, parallel, **kwargs):
           -t direct batch
     """
     shared = ctx.obj["pka_shared"]
+    jobrunner = ctx.obj["jobrunner"]
+
+    # Align pKa parallel execution with global --run-in-serial flag
+    parallel = not jobrunner.run_in_serial
 
     input_table_path = ctx.obj.get("filename")
     if not input_table_path:
@@ -339,7 +340,9 @@ def batch(ctx, skip_completed, parallel, **kwargs):
     kw = ctx.obj.get("keywords", {})
     if job_settings:
         opt_settings = opt_settings.merge(job_settings, keywords=kw)
-    jobrunner = ctx.obj["jobrunner"]
+    jobrunner = ctx.obj[
+        "jobrunner"
+    ]  # Re-assigned but fine, can also remove duplicates if preferred, but existing code has it. Let's not remove it to minimize changes unless nearby.
 
     import copy
 

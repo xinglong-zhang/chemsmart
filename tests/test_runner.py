@@ -2,7 +2,24 @@
 
 from unittest.mock import Mock
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
+
+
+class MockMolecule(Molecule):
+    def __init__(self, symbols=None, **kwargs):
+        self.symbols = symbols or ["C"]
+        self.coordinates = [[0.0, 0.0, 0.0]]
+        self.charge = 0
+        self.multiplicity = 1
+        self.num_atoms = len(self.symbols)
+
+    @property
+    def has_vibrations(self):
+        return True
+
+    def vibrationally_displaced(self, *args, **kwargs):
+        return MockMolecule()
 
 
 class TestJobRunner:
@@ -36,7 +53,7 @@ class TestSerialExecution:
         from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 
         # Create a mock molecule
-        mock_molecule = Mock()
+        mock_molecule = MockMolecule()
 
         # Create settings for IRC job
         settings = GaussianLinkJobSettings()
@@ -83,7 +100,7 @@ class TestSerialExecution:
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
         # Create mock molecules
-        mock_molecules = [Mock(), Mock(), Mock()]
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
 
         # Create settings
         settings = GaussianJobSettings()
@@ -105,8 +122,8 @@ class TestSerialExecution:
             mock_job.is_complete.return_value = True
             mock_jobs.append(mock_job)
 
-        # Patch the all_conformers_jobs property
-        mocker.patch.object(job, "all_conformers_jobs", mock_jobs)
+        # Patch _prepare_all_jobs instead of the property
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
 
         # Run the job
         job._run()
@@ -123,7 +140,7 @@ class TestSerialExecution:
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
         # Create mock molecule
-        mock_molecule = Mock()
+        mock_molecule = MockMolecule()
 
         # Create settings
         settings = GaussianJobSettings()
@@ -146,8 +163,10 @@ class TestSerialExecution:
         mock_job2.label = "qrc_r"
         mock_job2.is_complete.return_value = True
 
-        # Patch both_qrc_jobs
-        mocker.patch.object(job, "both_qrc_jobs", [mock_job1, mock_job2])
+        # Patch _prepare_both_qrc_jobs instead of the property
+        mocker.patch.object(
+            job, "_prepare_both_qrc_jobs", return_value=[mock_job1, mock_job2]
+        )
 
         # Run the job
         job._run()

@@ -211,11 +211,6 @@ def click_pka_proton_options(f):
 def click_pka_submit_options(f):
     """Options specific to the ``submit`` / ``batch`` subcommand layer."""
 
-    @click.option(
-        "--parallel/--no-parallel",
-        default=False,
-        help="Run per-species opt→SP pipelines in parallel.",
-    )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
