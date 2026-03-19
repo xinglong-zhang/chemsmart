@@ -9,6 +9,7 @@ based on job settings and molecular structures.
 import logging
 import os
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCANEBJobSettings,
@@ -55,6 +56,8 @@ class ORCAInputWriter(InputWriter):
         Args:
             target_directory: Directory to write the file to
         """
+        import shutil
+
         if target_directory is not None:
             if not os.path.exists(target_directory):
                 os.makedirs(target_directory)
@@ -71,6 +74,18 @@ class ORCAInputWriter(InputWriter):
             self._write_all(f)
         logger.info(f"Finished writing ORCA input file: {job_inputfile}")
         f.close()
+
+        # Copy the .cosmorsxyz file to the target directory so that ORCA can
+        # find it when running in scratch.  Only done when solventfilename is
+        # set via the -sf CLI option (an explicit file path).
+        sf_path = self.job.settings.solventfilename
+        if sf_path is not None and os.path.isfile(sf_path):
+            dest = os.path.join(folder, os.path.basename(sf_path))
+            if os.path.abspath(sf_path) != os.path.abspath(dest):
+                shutil.copy2(sf_path, dest)
+                logger.info(
+                    f"Copied solventfilename file {sf_path} to {dest}."
+                )
 
     def _write_all(self, f):
         """
@@ -123,7 +138,6 @@ class ORCAInputWriter(InputWriter):
         logger.debug("Writing ORCA route section")
 
         if self.job.molecule.is_monoatomic:
-            # TODO: need to merge thermo branch into main branch
             logger.info(f"Molecule {self.job.molecule} is monoatomic.")
             logger.info(
                 "Removing `opt` keyword from route string, since ORCA cannot run OPT on monoatomic molecule."
@@ -225,13 +239,172 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
 
         Note:
-            Currently placeholder for complex solvents specified via
-            %cpcm, %cosmo, or %smd blocks that cannot be captured by route.
+            Dispatches to the correct named ORCA block based on
+            ``solvent_model``:
+
+            * ``cpcm``, ``cpcmc``, ``smd`` (or unset) → ``%cpcm … end``
+            * ``cosmors`` → ``%cosmors … end``
+
+            A block is emitted whenever any of the following apply:
+
+            * ``custom_solvent`` is set — the string is written line-by-line
+              inside the block.  In ORCA, custom solvent parameters (Epsilon,
+              Refrac, etc.) are specified directly in the solvent block
+              rather than as a separate appended section (as in Gaussian).
+              For CPCM/CPCMC/SMD, the block is ``%cpcm``; for COSMO-RS it is
+              ``%cosmors``.  A typical ORCA project YAML entry for CPCM looks
+              like::
+
+                  custom_solvent : |
+                    Epsilon 16.7
+                    Refrac 1.275
+
+              which produces:
+
+              .. code-block:: text
+
+                  ! CPCM B3LYP def2-SVP
+                  %cpcm
+                    Epsilon 16.7
+                    Refrac 1.275
+                  end
+
+            * ``additional_solvent_options`` is set — each line of the string
+              is written indented inside the block. Commonly used ORCA block
+              options that can be passed here:
+
+              For ``%cpcm`` (``cpcm``, ``cpcmc``, ``smd`` models):
+              - ``Epsilon <value>`` — static dielectric constant (e.g.
+                ``Epsilon 78.36``), used for custom/non-named solvents
+              - ``Refrac <value>`` — refractive index (e.g. ``Refrac 1.33``)
+              - ``SurfaceType <type>`` — cavity surface (``gepol_ses``,
+                ``gepol_sas``, ``vdw_gaussian``, or ``gepol_ses_gaussian``;
+                default is ``vdw_gaussian`` since ORCA 5)
+              - ``Rsolv <value>`` — solvent probe radius in Ångström
+                (e.g. ``Rsolv 1.30``)
+              - ``MaxIter <n>`` — maximum iterations
+              - ``Tolerance <value>`` — convergence tolerance
+              - SMD descriptors: ``soln``, ``soln25``, ``sola``, ``solb``,
+                ``solg``, ``solc``, ``solh``
+
+              For ``%cosmors`` (``cosmors`` model):
+              - ``temp <value>`` — reference temperature in K (e.g. ``temp 298.15``)
+              - ``aeff <value>`` — effective contact area between surface segments (Å²)
+              - ``lnalpha <value>`` — logarithm of the misfit prefactor
+              - ``lnchb <value>`` — hydrogen bond (HB) strength parameter
+              - ``chbt <value>`` — parameter for temperature dependence of HB
+              - ``sigmahb <value>`` — HB threshold parameter (e/Å²)
+              - ``rav <value>`` — radius to average ideal screening charges (Å)
+              - ``fcorr <value>`` — parameter from dielectric screening energies
+              - ``ravcorr <value>`` — radius for misfit energy calculation (Å)
+              - ``astd <value>`` — standard surface area normalization factor (Å²)
+              - ``zcoord <value>`` — coordination number
+              - ``dgsolv_eta <value>`` — offset for solvation energy calculation
+              - ``dgsolv_omegaring <value>`` — solvation energy correction for rings
+              - ``dftfunc "name"`` — DFT functional (e.g. ``dftfunc "BP86"``)
+              - ``dftbas "name"`` — basis set (e.g. ``dftbas "def2-TZVPD"``)
+              - ``solvent "name"`` — solvent from internal database (e.g. ``solvent "THF"``)
+              - ``solventfilename "name"`` — name of the ``.cosmorsxyz`` solvent file
+              - ``orbs_vac true|false`` — reuse gas-phase orbitals for conductor calc
+
+            Both conditions can apply simultaneously in the same block:
+            ``custom_solvent`` lines are written first, then
+            ``additional_solvent_options``.
+
+        Note on SMD: In ORCA 6.0, SMD is invoked via ``!SMD(solvent)`` in the
+        route line.  No ``SMD true`` / ``SMDsolvent`` activation is needed in
+        the ``%cpcm`` block; the route line handles that automatically.  The
+        ``%cpcm`` block is only written when ``custom_solvent`` or
+        ``additional_solvent_options`` are present.
+
+        Note on COSMO: The standalone COSMO model (``!COSMO(solvent)``) was
+        removed from ORCA in version 4.0.  Use ``cpcmc`` (``!CPCMC(solvent)``)
+        to apply CPCM with the COSMO epsilon function.
         """
-        # to implement if there is more complex solvents to be specified via
-        # %cpcm block, %cosmo block, or %smd
-        # block that cannot be capture by route
-        pass
+        solvent_model = self.settings.solvent_model
+        custom_solvent = self.settings.custom_solvent
+        additional = self.settings.additional_solvent_options
+        solvent_id = self.settings.solvent_id
+        sf_path = self.settings.solventfilename
+
+        model_lower = (solvent_model or "").lower()
+        is_cosmors = model_lower == "cosmors"
+
+        # Choose the block name based on the model
+        if is_cosmors:
+            block_name = "cosmors"
+        else:
+            block_name = "cpcm"
+
+        # ORCA 6.1 INPUT ERROR guard: when solvent_id is already encoded in the
+        # route as COSMORS(solvent_id), having 'solvent "name"' in the %cosmors
+        # block causes a "DUPLICATED KEYWORD" error.  Filter those lines out.
+        # 'solventfilename' is a distinct keyword (file path) and is preserved.
+        # Filtering is case-insensitive (matches 'solvent', 'Solvent', 'SOLVENT').
+        filter_solvent_name = is_cosmors and solvent_id is not None
+
+        def _accepted(line):
+            if not filter_solvent_name:
+                return True
+            stripped = line.strip()
+            if not stripped:
+                return True  # preserve blank lines unchanged
+            # 'solvent "name"' starts with 'solvent ' (with space, case-insensitive)
+            # 'solventfilename "..."' starts with 'solventf' — not filtered
+            return not stripped.lower().startswith("solvent ")
+
+        custom_lines = (
+            [ln for ln in custom_solvent.splitlines() if _accepted(ln)]
+            if custom_solvent is not None
+            else []
+        )
+        additional_lines = (
+            [ln for ln in additional.splitlines() if _accepted(ln)]
+            if additional is not None
+            else []
+        )
+
+        # Build the solventfilename line from the settings attribute (CLI -sf).
+        # The basename without the .cosmorsxyz extension is written, matching
+        # ORCA convention: solventfilename "water" → looks for water.cosmorsxyz.
+        sf_line = None
+        if sf_path is not None and is_cosmors:
+            logger.info(f"Solvent filename is: {sf_path}")
+            sf_basename = os.path.basename(sf_path)
+            logger.info(f"Solvent basename is: {sf_basename}")
+            # Strip .cosmorsxyz extension if present
+            if sf_basename.lower().endswith(".cosmorsxyz"):
+                sf_name = sf_basename[: -len(".cosmorsxyz")]
+            else:
+                sf_cosmorsxyz = os.path.join(
+                    os.path.dirname(sf_path),
+                    f"{sf_basename.split('.')[0]}.cosmorsxyz",
+                )
+                # write to cosmorsxyz file in the same directory as the input file
+                logger.info(f"Creating molecule from solvent file: {sf_path}")
+                solvent_mol = Molecule.from_filepath(sf_path)
+                logger.info(f"Solvent molecule is: {solvent_mol}")
+                logger.info(
+                    f"Writing solvent molecule .cosmorsxyz to {sf_cosmorsxyz}"
+                )
+                solvent_mol.write_cosmorsxyz(sf_cosmorsxyz)
+                sf_name = sf_basename.split(".")[0]
+            sf_line = f'solventfilename "{sf_name}"'
+
+        needs_block = (
+            bool(custom_lines) or bool(additional_lines) or sf_line is not None
+        )
+
+        if needs_block:
+            logger.debug(f"Writing {block_name} solvent block")
+            f.write(f"%{block_name}\n")
+            if sf_line is not None:
+                f.write(f"  {sf_line}\n")
+            for line in custom_lines:
+                f.write(f"  {line.rstrip()}\n")
+            for line in additional_lines:
+                f.write(f"  {line.rstrip()}\n")
+            f.write("end\n")
 
     def _write_mdci_block(self, f):
         """
@@ -814,8 +987,8 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If charge or multiplicity is not specified
         """
-        charge = getattr(self.settings, "charge", None)
-        multiplicity = getattr(self.settings, "multiplicity", None)
+        charge = self.settings.charge
+        multiplicity = self.settings.multiplicity
 
         # If missing, attempt to populate from common QMMM-related fields.
         # Common names across settings: charge_qm,
