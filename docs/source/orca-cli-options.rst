@@ -246,7 +246,10 @@ They can also be specified at the **subcommand level** to override the group-lev
 
       -  path
 
-      -  Path to a ``.cosmorsxyz`` solvent file for the ``cosmors`` model. The file is copied to the running directory
+      -  Path to a solvent file for the ``cosmors`` model. Any file format is accepted — it does **not** have to be a
+         ``.cosmorsxyz`` file. If the path points to a Gaussian output file (e.g. ``basename.log``) or an ORCA output
+         file (e.g. ``basename.out``), chemsmart automatically converts it to ``basename.cosmorsxyz`` (via
+         ``Molecule.write_cosmorsxyz()``) before use. The ``.cosmorsxyz`` file is then copied to the running directory
          (scratch or job folder) and its basename (without the ``.cosmorsxyz`` extension) is written as
          ``solventfilename "name"`` inside the ``%cosmors`` block.
 
@@ -354,7 +357,8 @@ Supported ``%cosmors`` block options (via ``-so``, for the ``cosmors`` model):
    -  -  ``solvent "name"``
       -  Solvent from the internal COSMO-RS database (e.g. ``solvent "water"``)
    -  -  ``solventfilename "name"``
-      -  Name of the ``.cosmorsxyz`` solvent file to read
+      -  Name of the ``.cosmorsxyz`` solvent file to read (prefer the ``-sf`` CLI option, which also handles
+         auto-conversion from ``.log``/``.out`` files)
    -  -  ``orbs_vac true|false``
       -  Reuse gas-phase orbitals for the conductor calculation (default: ``false``)
 
@@ -382,6 +386,10 @@ Examples:
 
    # openCOSMO-RS with a named solvent and a custom .cosmorsxyz file
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -sf /path/to/water.cosmorsxyz sp
+
+   # openCOSMO-RS with a named solvent and a Gaussian/ORCA output file (auto-converted to .cosmorsxyz)
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -sf /path/to/water.log sp
+   chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 -sm cosmors -si water -sf /path/to/water.out sp
 
    # Custom dielectric (no named solvent): remove project solvent first, then set custom Epsilon/Refrac
    chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 --remove-solvent sp -sm cpcm -so $'Epsilon 16.7\nRefrac 1.275'
@@ -416,7 +424,8 @@ The openCOSMO-RS example produces:
      temp 298.15
    end
 
-The openCOSMO-RS with custom ``.cosmorsxyz`` file example produces:
+The openCOSMO-RS with custom solvent file example produces (regardless of whether ``-sf`` points to a
+``.cosmorsxyz``, ``.log``, or ``.out`` file — non-``.cosmorsxyz`` files are auto-converted first):
 
 .. code:: text
 

@@ -78,14 +78,26 @@ class ORCAInputWriter(InputWriter):
         # Copy the .cosmorsxyz file to the target directory so that ORCA can
         # find it when running in scratch.  Only done when solventfilename is
         # set via the -sf CLI option (an explicit file path).
+        # If sf_path is already a .cosmorsxyz file, copy it directly.
+        # If sf_path is any other format (e.g. .log, .out), the converted
+        # .cosmorsxyz file produced by _write_solvent_block() is copied instead.
         sf_path = self.job.settings.solventfilename
         if sf_path is not None and os.path.isfile(sf_path):
-            dest = os.path.join(folder, os.path.basename(sf_path))
-            if os.path.abspath(sf_path) != os.path.abspath(dest):
-                shutil.copy2(sf_path, dest)
-                logger.info(
-                    f"Copied solventfilename file {sf_path} to {dest}."
+            if sf_path.lower().endswith(".cosmorsxyz"):
+                file_to_copy = sf_path
+            else:
+                sf_basename = os.path.basename(sf_path)
+                file_to_copy = os.path.join(
+                    os.path.dirname(sf_path),
+                    f"{os.path.splitext(sf_basename)[0]}.cosmorsxyz",
                 )
+            if os.path.isfile(file_to_copy):
+                dest = os.path.join(folder, os.path.basename(file_to_copy))
+                if os.path.abspath(file_to_copy) != os.path.abspath(dest):
+                    shutil.copy2(file_to_copy, dest)
+                    logger.info(
+                        f"Copied solventfilename file {file_to_copy} to {dest}."
+                    )
 
     def _write_all(self, f):
         """
@@ -378,7 +390,7 @@ class ORCAInputWriter(InputWriter):
             else:
                 sf_cosmorsxyz = os.path.join(
                     os.path.dirname(sf_path),
-                    f"{sf_basename.split('.')[0]}.cosmorsxyz",
+                    f"{os.path.splitext(sf_basename)[0]}.cosmorsxyz",
                 )
                 # write to cosmorsxyz file in the same directory as the input file
                 logger.info(f"Creating molecule from solvent file: {sf_path}")
@@ -388,7 +400,7 @@ class ORCAInputWriter(InputWriter):
                     f"Writing solvent molecule .cosmorsxyz to {sf_cosmorsxyz}"
                 )
                 solvent_mol.write_cosmorsxyz(sf_cosmorsxyz)
-                sf_name = sf_basename.split(".")[0]
+                sf_name = os.path.splitext(sf_basename)[0]
             sf_line = f'solventfilename "{sf_name}"'
 
         needs_block = (
