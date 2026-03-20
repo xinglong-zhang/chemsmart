@@ -2108,6 +2108,8 @@ class TestpKaCDXFile:
         assert len(mol2) == 8
         assert mol2[-1]["symbol"] == "H"
         assert mol2[-1]["color"] == 5
+        print(mol1)
+        print(mol2)
 
     def test_detect_proton_in_fragment_explicit_h(
         self, colored_proton_two_molecule_cdxml_file

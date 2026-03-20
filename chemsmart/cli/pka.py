@@ -348,10 +348,12 @@ def build_per_entry_subcommands(
                 kw["proton_index"]["value"] = proton_index
             break
 
-    # ── 3. Remove the "batch" command ──
-    # Without "batch" in the chain, `pka` will be invoked without a
-    # subcommand, which triggers `ctx.invoke(submit, …)` automatically.
-    subcommands = [cmd for cmd in subcommands if cmd["name"] != "batch"]
+    # ── 3. Replace "batch" with "submit" ──
+    # Explicitly invoke `submit` subcommand.
+    for cmd in subcommands:
+        if cmd["name"] == "batch":
+            cmd["name"] = "submit"
+            break
 
     return subcommands
 
