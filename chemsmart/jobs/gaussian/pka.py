@@ -105,6 +105,14 @@ class GaussianpKaBatchJob(Job):
         # Implementation required by Job abstracts, but no files to backup for batch container
         pass
 
+    def is_complete(self):
+        """
+        Check if all jobs in the batch are complete.
+        """
+        if not self.jobs:
+            return True
+        return all(job.is_complete() for job in self.jobs)
+
 
 class GaussianpKaJob(GaussianJob):
     """
