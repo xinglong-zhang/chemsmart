@@ -435,25 +435,6 @@ class GaussianpKaJob(GaussianJob):
 
     def _run_parallel(self):
         """Run pKa workflow in parallel mode."""
-        from concurrent.futures import ThreadPoolExecutor
-
-        # Define workflow for one species (Opt -> SP)
-        def run_species_chain(opt_job, create_sp_func):
-            # Propagate runner to ensure correct execution context
-            if self.jobrunner:
-                opt_job.jobrunner = self.jobrunner
-
-            opt_job.run()
-            if opt_job.is_complete():
-                sp_job = create_sp_func(opt_job)
-                if sp_job:
-                    if self.jobrunner:
-                        sp_job.jobrunner = self.jobrunner
-                    sp_job.run()
-
-        # We need a way to create sp job for a specific species
-        # This is getting complex. For now, just run opt jobs in parallel, then sp jobs in parallel.
-
         # Ensure we have a valid runner
         runner = self.jobrunner
         if runner and not isinstance(runner, GaussianJobRunner):
@@ -476,35 +457,77 @@ class GaussianpKaJob(GaussianJob):
             except Exception as e:
                 logger.warning(f"Failed to upgrade runner: {e}")
 
-        with ThreadPoolExecutor() as executor:
+        # Calculate resources per job to prevent contention
+        total_cores = runner.num_cores if runner and runner.num_cores else 1
+        total_mem = runner.mem_gb if runner and runner.mem_gb else 1
+
+        concurrent_opt_jobs = len(self.opt_jobs)
+        if self.has_reference_jobs:
+            concurrent_opt_jobs += len(self.ref_opt_jobs)
+
+        opt_cores_per_job = max(1, int(total_cores // concurrent_opt_jobs))
+        opt_mem_per_job = max(1, int(total_mem // concurrent_opt_jobs))
+
+        logger.info(
+            f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
+            f"among {concurrent_opt_jobs} concurrent opt jobs "
+            f"({opt_cores_per_job} cores, {opt_mem_per_job}GB each)."
+        )
+
+        with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
             futures = []
-            for job in self.opt_jobs:
+
+            def submit_job(job, cores, mem):
                 if runner:
-                    job.jobrunner = runner
+                    # Create a specific runner for this job with fraction of resources
+                    job.jobrunner = runner.copy()
+                    job.jobrunner.num_cores = cores
+                    job.jobrunner.mem_gb = mem
                 futures.append(executor.submit(job.run))
+
+            for job in self.opt_jobs:
+                submit_job(job, opt_cores_per_job, opt_mem_per_job)
 
             if self.has_reference_jobs:
                 for job in self.ref_opt_jobs:
-                    if runner:
-                        job.jobrunner = runner
-                    futures.append(executor.submit(job.run))
+                    submit_job(job, opt_cores_per_job, opt_mem_per_job)
 
-            for f in futures:
+            for f in as_completed(futures):
                 f.result()
 
         # Create SP jobs
         self._create_sp_jobs()
         # Create Ref SP jobs if needed
 
+        sp_jobs_to_run = []
         if self.sp_jobs:
-            with ThreadPoolExecutor() as executor:
+            sp_jobs_to_run.extend(self.sp_jobs)
+        if self.has_reference_jobs and self.ref_sp_jobs:
+            sp_jobs_to_run.extend(self.ref_sp_jobs)
+
+        if sp_jobs_to_run:
+            concurrent_sp_jobs = len(sp_jobs_to_run)
+            sp_cores_per_job = max(1, int(total_cores // concurrent_sp_jobs))
+            sp_mem_per_job = max(1, int(total_mem // concurrent_sp_jobs))
+
+            logger.info(
+                f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
+                f"among {concurrent_sp_jobs} concurrent sp jobs "
+                f"({sp_cores_per_job} cores, {sp_mem_per_job}GB each)."
+            )
+
+            with ThreadPoolExecutor(
+                max_workers=concurrent_sp_jobs
+            ) as executor:
                 futures = []
-                for job in self.sp_jobs:
+                for job in sp_jobs_to_run:
                     if runner:
-                        job.jobrunner = runner
+                        job.jobrunner = runner.copy()
+                        job.jobrunner.num_cores = sp_cores_per_job
+                        job.jobrunner.mem_gb = sp_mem_per_job
                     futures.append(executor.submit(job.run))
 
-                for f in futures:
+                for f in as_completed(futures):
                     f.result()
 
     def _run(self, **kwargs):
