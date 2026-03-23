@@ -153,11 +153,11 @@ def submit(ctx, skip_completed, **kwargs):
     Examples:
       # Proton exchange cycle
       chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka -pi 10 \\
-          -t "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1 submit
+          -s "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1 submit
 
       # Direct cycle
       chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka -pi 10 \\
-          -t direct submit
+          -s direct submit
 
       # Auto-detect proton from ChemDraw file
       chemsmart run gaussian -f phenol.cdxml -c 0 -m 1 pka submit
@@ -266,10 +266,10 @@ def batch(ctx, skip_completed, **kwargs):
     \b
     Examples:
       chemsmart run gaussian -p myproject -f molecules.txt pka \\
-          -t "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
+          -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
 
       chemsmart run gaussian -p myproject -f molecules.csv pka \\
-          -t direct batch
+          -s direct batch
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]

@@ -134,7 +134,7 @@ For more accurate results, use a reference acid with known pKa:
 
    chemsmart run gaussian -p my_project -f acid.xyz -c 0 -m 1 pka \
        -pi 10 \
-       -t "proton exchange" \
+       -s "proton exchange" \
        -r water.xyz \
        -rpi 1 \
        -rc 0 \
@@ -157,7 +157,7 @@ Pass a ``.csv`` (or whitespace-delimited ``.txt``) file via the ``-f`` option an
 .. code:: bash
 
    chemsmart run gaussian -p my_project -f pka_input_table.csv pka \
-       -t "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
+       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
 
 Or with the direct cycle (no reference acid required):
 
@@ -206,7 +206,7 @@ Add ``--parallel`` to run the opt→SP pipeline for each species concurrently:
 .. code:: bash
 
    chemsmart run gaussian -p my_project -f molecules.csv pka \
-       -t "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch --parallel
+       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch --parallel
 
 Computing pKa from Existing Output Files
 ========================================
@@ -251,8 +251,8 @@ Core Options
       -  ``--proton-index``
       -  **Required** (single-molecule mode). 1-based index of the proton to remove.
 
-   -  -  ``-t``
-      -  ``--thermodynamic-cycle``
+   -  -  ``-s``
+      -  ``--scheme``
       -  Thermodynamic cycle type: ``"direct"`` or ``"proton exchange"`` (default).
 
    -  -  ``-cc``
@@ -367,7 +367,7 @@ Example 1: Simple pKa with Direct Cycle
 
    chemsmart run gaussian -p b3lyp_project -f phenol.xyz -c 0 -m 1 pka \
        -pi 13 \
-       -t direct \
+       -s direct \
        -T 298.15
 
 Example 2: pKa with Proton Exchange and Custom Temperature
@@ -377,7 +377,7 @@ Example 2: pKa with Proton Exchange and Custom Temperature
 
    chemsmart run gaussian -p m062x_project -f benzoic_acid.xyz -c 0 -m 1 pka \
        -pi 15 \
-       -t "proton exchange" \
+       -s "proton exchange" \
        -r acetic_acid.xyz \
        -rpi 10 \
        -rc 0 \
@@ -392,7 +392,7 @@ Example 3: Batch Submission from CSV
 .. code:: bash
 
    chemsmart run gaussian -p m062x_project -f pka_scale.csv pka \
-       -t "proton exchange" \
+       -s "proton exchange" \
        -r collidine.xyz \
        -rpi 21 \
        -rc 1 \

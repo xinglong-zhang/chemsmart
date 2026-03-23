@@ -140,7 +140,7 @@ def submit(ctx, skip_completed, **kwargs):
           -r ref.xyz -rpi 1 -rc 0 -rm 1 submit
 
       chemsmart run orca -f acid.xyz -c 0 -m 1 pka -pi 10 \\
-          -t direct submit
+          -s direct submit
     """
     shared = ctx.obj["pka_shared"]
     filename = ctx.obj.get("filename")
@@ -234,7 +234,7 @@ def batch(ctx, skip_completed, **kwargs):
     \b
     Examples:
       chemsmart run orca -p myproject -f molecules.txt pka \\
-          -t "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
+          -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]
