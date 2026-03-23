@@ -2049,7 +2049,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
     def __init__(
         self,
         proton_index=None,
-        thermodynamic_cycle="proton exchange",
+        scheme="proton exchange",
         reference_file=None,
         reference_proton_index=None,
         reference_charge=None,
@@ -2070,9 +2070,15 @@ class ORCApKaJobSettings(ORCAJobSettings):
         energy_units="hartree",
         **kwargs,
     ):
+        if "thermodynamic_cycle" in kwargs:
+            scheme = kwargs.pop("thermodynamic_cycle")
+            logger.warning(
+                "The 'thermodynamic_cycle' argument is deprecated, use 'scheme' instead."
+            )
+
         super().__init__(**kwargs)
         self.proton_index = proton_index
-        self.scheme = thermodynamic_cycle
+        self.scheme = scheme
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
         self.conjugate_base_charge = conjugate_base_charge
@@ -2089,7 +2095,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
         if not self.title:
             self.title = "ORCA pKa calculation job"
 
-        if thermodynamic_cycle == "proton exchange":
+        if scheme == "proton exchange":
             self.reference_file = reference_file
             self.reference_proton_index = reference_proton_index
             self.reference_charge = reference_charge

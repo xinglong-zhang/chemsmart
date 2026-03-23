@@ -549,7 +549,7 @@ class TestGaussianpKaJobSettings:
         """Test initialization with custom values."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             solvent_model="PCM",
             solvent_id="water",
             charge=0,  # Protonated form charge (inherited from parent)
@@ -576,7 +576,7 @@ class TestGaussianpKaJobSettings:
         """Test that direct cycle does not require reference acid."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="direct",
+            scheme="direct",
             charge=0,
             multiplicity=1,
         )
@@ -588,7 +588,7 @@ class TestGaussianpKaJobSettings:
         """Test direct cycle with custom delta_G_proton."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="direct",
+            scheme="direct",
             delta_G_proton=-270.0,
             charge=0,
             multiplicity=1,
@@ -601,7 +601,7 @@ class TestGaussianpKaJobSettings:
         """Test proton exchange cycle with reference acid file."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file=single_molecule_xyz_file,
             reference_proton_index=1,
             reference_charge=0,
@@ -622,7 +622,7 @@ class TestGaussianpKaJobSettings:
         """Test proton exchange cycle without reference file."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             charge=0,
             multiplicity=1,
         )
@@ -630,7 +630,7 @@ class TestGaussianpKaJobSettings:
         assert settings.reference_file is None
         assert settings.has_reference_file is False
 
-    def test_default_thermodynamic_cycle(self):
+    def test_default_scheme(self):
         """Test that default thermodynamic cycle is proton exchange."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
@@ -644,7 +644,7 @@ class TestGaussianpKaJobSettings:
         """Test that reference settings validation works."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file=single_molecule_xyz_file,
             reference_proton_index=1,
             reference_charge=0,
@@ -661,7 +661,7 @@ class TestGaussianpKaJobSettings:
         """Test validation fails when reference_proton_index is missing."""
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file=single_molecule_xyz_file,
             reference_charge=0,
             reference_multiplicity=1,
@@ -760,7 +760,7 @@ class TestGaussianpKaJobSettings:
 
         settings = GaussianpKaJobSettings(
             proton_index=1,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file=single_molecule_xyz_file,
             reference_proton_index=ref_proton_index,
             reference_charge=0,
@@ -801,7 +801,7 @@ class TestGaussianpKaJobSettings:
 
         settings = GaussianpKaJobSettings(
             proton_index=1,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file=single_molecule_xyz_file,
             reference_proton_index=ref_proton_index,
             reference_charge=0,
@@ -835,7 +835,7 @@ class TestGaussianpKaJobSettings:
 
         settings = GaussianpKaJobSettings(
             proton_index=1,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file=single_molecule_xyz_file,
             reference_proton_index=ref_proton_index,
             reference_charge=0,
@@ -860,7 +860,7 @@ class TestGaussianpKaJobSettings:
 
         settings = GaussianpKaJobSettings(
             proton_index=1,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file=single_molecule_xyz_file,
             reference_proton_index=ref_proton_index,
             reference_charge=0,

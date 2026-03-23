@@ -50,7 +50,7 @@ def pka(
     # job options
     skip_completed,
     # shared pka options
-    thermodynamic_cycle,
+    scheme,
     reference,
     reference_proton_index,
     reference_color_code,
@@ -100,7 +100,7 @@ def pka(
     """
     # Store shared options for subcommands
     shared = dict(
-        thermodynamic_cycle=thermodynamic_cycle,
+        scheme=scheme,
         reference=reference,
         reference_proton_index=reference_proton_index,
         reference_color_code=reference_color_code,

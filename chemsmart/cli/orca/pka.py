@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 def pka(
     ctx,
     skip_completed,
-    thermodynamic_cycle,
+    scheme,
     reference,
     reference_proton_index,
     reference_color_code,
@@ -91,7 +91,7 @@ def pka(
       direct: uses absolute free energy of H+ in water
     """
     shared = dict(
-        thermodynamic_cycle=thermodynamic_cycle,
+        scheme=scheme,
         reference=reference,
         reference_proton_index=reference_proton_index,
         reference_color_code=reference_color_code,
@@ -329,7 +329,7 @@ def batch(ctx, skip_completed, **kwargs):
 
         pka_settings = ORCApKaJobSettings(
             proton_index=int(entry.proton_index),
-            thermodynamic_cycle=shared["scheme"],
+            scheme=shared["scheme"],
             reference_file=shared["reference"],
             reference_proton_index=shared["reference_proton_index"],
             reference_charge=shared["reference_charge"],
@@ -422,7 +422,7 @@ def _build_orca_pka_settings(proton_index, shared, opt_settings):
 
     return ORCApKaJobSettings(
         proton_index=proton_index,
-        thermodynamic_cycle=shared["scheme"],
+        scheme=shared["scheme"],
         reference_file=shared["reference"],
         reference_proton_index=shared["reference_proton_index"],
         reference_charge=shared["reference_charge"],

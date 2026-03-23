@@ -2051,7 +2051,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
     def __init__(
         self,
         proton_index=None,
-        thermodynamic_cycle="proton exchange",
+        scheme="proton exchange",
         reference_file=None,
         reference_proton_index=None,
         reference_charge=None,
@@ -2083,7 +2083,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             proton_index (int, optional): 1-based index of the proton to remove
                 for creating the conjugate base. Must be specified before
                 calling create_conjugate_base_molecule().
-            thermodynamic_cycle (str): Type of thermodynamic cycle to use.
+            scheme (str): Type of thermodynamic cycle to use.
                 Options: 'direct', 'proton exchange'. Default is 'proton exchange'.
             reference_file (str, optional): Path to geometry file for reference acid (HB)
                 for proton exchange cycle. When provided, optimization and SP
@@ -2125,9 +2125,16 @@ class GaussianpKaJobSettings(GaussianJobSettings):
                 including charge and multiplicity for the protonated form,
                 and functional/basis for both gas and solution phases.
         """
+        # Backwards compatibility for thermodynamic_cycle
+        if "thermodynamic_cycle" in kwargs:
+            scheme = kwargs.pop("thermodynamic_cycle")
+            logger.warning(
+                "The 'thermodynamic_cycle' argument is deprecated, use 'scheme' instead."
+            )
+
         super().__init__(**kwargs)
         self.proton_index = proton_index
-        self.scheme = thermodynamic_cycle
+        self.scheme = scheme
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
         self.conjugate_base_charge = conjugate_base_charge
@@ -2145,7 +2152,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             self.title = "Gaussian pKa calculation job"
 
         # Reference acid settings for proton exchange cycle
-        if thermodynamic_cycle == "proton exchange":
+        if scheme == "proton exchange":
             self.reference_file = reference_file
             self.reference_proton_index = reference_proton_index
             self.reference_charge = reference_charge
