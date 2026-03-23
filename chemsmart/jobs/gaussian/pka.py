@@ -16,8 +16,94 @@ from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
+from chemsmart.jobs.job import Job
 
 logger = logging.getLogger(__name__)
+
+
+class GaussianpKaBatchJob(Job):
+    """
+    Gaussian job class for running a batch of pKa calculations.
+
+    Executes a list of GaussianpKaJob instances either serially or in parallel.
+    Inherits from Job directly as it acts as a controller/container.
+    """
+
+    TYPE = "g16pka_batch"
+
+    def __init__(
+        self,
+        jobs,
+        run_in_serial=True,
+        label="batch_pka",
+        jobrunner=None,
+        **kwargs,
+    ):
+        """
+        Initialize a Gaussian pKa batch job.
+
+        Args:
+            jobs (list[GaussianpKaJob]): List of pKa jobs to execute.
+            run_in_serial (bool): If True, execute jobs one by one.
+            label (str): Label for the batch job.
+            jobrunner (JobRunner): Execution backend.
+            **kwargs: Additional arguments for the base Job class.
+        """
+        super().__init__(
+            molecule=None, label=label, jobrunner=jobrunner, **kwargs
+        )
+        self.jobs = jobs
+        self.run_in_serial = run_in_serial
+
+    def run(self):
+        """
+        Run the batch of pKa jobs.
+
+        Implements fault tolerance: if one job fails, the batch continues.
+        Supports parallel execution using ThreadPoolExecutor.
+        """
+        if self.run_in_serial:
+            logger.info(
+                f"Running batch of {len(self.jobs)} pKa jobs serially."
+            )
+            for job in self.jobs:
+                try:
+                    job.run()
+                except Exception as e:
+                    logger.error(
+                        f"Job {job.label} failed during serial batch execution: {e}",
+                        exc_info=True,
+                    )
+        else:
+            logger.info(
+                f"Running batch of {len(self.jobs)} pKa jobs in parallel."
+            )
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            # Use ThreadPoolExecutor because job.run() typically waits on subprocesses
+            # or IO, releasing the GIL.
+            with ThreadPoolExecutor() as executor:
+                future_to_job = {
+                    executor.submit(job.run): job for job in self.jobs
+                }
+
+                for future in as_completed(future_to_job):
+                    job = future_to_job[future]
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logger.error(
+                            f"Job {job.label} failed during parallel batch execution: {e}",
+                            exc_info=True,
+                        )
+
+    def _run(self, **kwargs):
+        # Required implementation of abstract method, though run() is overridden.
+        self.run()
+
+    def _backup_files(self):
+        # Implementation required by Job abstracts, but no files to backup for batch container
+        pass
 
 
 class GaussianpKaJob(GaussianJob):
