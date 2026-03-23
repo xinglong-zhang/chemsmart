@@ -109,17 +109,26 @@ You can parse a table of pre-computed output files to calculate pKa values in ba
        -o pka_output_table.csv \
        -O computed_pka.csv
 
-The output table (e.g., ``pka_output_table.csv``) must contain columns for the basename and paths to all required output
-files.
+The output table (e.g., ``pka_output_table.csv``) must contain at least a ``basename`` column. Other file paths are
+auto-discovered if omitted.
 
-Required columns:
+**Required Column:**
 
--  ``basename``: A unique identifier for each acid.
--  ``ha_gas``: Path to the gas-phase optimization output for HA.
--  ``a_gas``: Path to the gas-phase optimization output for A⁻.
--  ``ha_sp``: Path to the solvent single-point output for HA.
--  ``a_sp``: Path to the solvent single-point output for A⁻.
--  ``href_gas`` (optional): Path to the gas-phase optimization output for the reference acid HRef.
+-  ``basename``: A unique identifier for each acid. Used for file auto-discovery.
+
+**Optional File Columns (Auto-Discovered):**
+
+If these columns are omitted, CHEMSMART automatically looks for files named ``<basename>_suffix.<ext>`` (where ``<ext>``
+is ``.log`` or ``.out``).
+
+-  ``ha_gas``: HA gas-phase optimization output. Auto-discovery suffix: ``_pka``
+-  ``a_gas``: A⁻ gas-phase optimization output. Auto-discovery suffix: ``_pka_cb``
+-  ``ha_sp``: HA solvent single-point output. Auto-discovery suffix: ``_pka_sp``
+-  ``a_sp``: A⁻ solvent single-point output. Auto-discovery suffix: ``_pka_cb_sp``
+
+**Reference Acid Columns (Optional):**
+
+-  ``href_gas``: Path to the gas-phase optimization output for the reference acid HRef.
 -  ``ref_gas`` (optional): Path to the gas-phase optimization output for Ref⁻.
 -  ``href_sp`` (optional): Path to the solvent single-point output for HRef.
 -  ``ref_sp`` (optional): Path to the solvent single-point output for Ref⁻.

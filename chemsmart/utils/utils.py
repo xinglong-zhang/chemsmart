@@ -2533,6 +2533,38 @@ class PKaOutputTableEntry:
             f"basename={self.basename if self.basename is not None else '?'})"
         )
 
+    def _resolve_filenames(self):
+        """Auto-discover output files based on basename if not explicitly provided."""
+        suffixes = {
+            "ha_gas": "_pka",
+            "a_gas": "_pka_cb",
+            "ha_sp": "_pka_sp",
+            "a_sp": "_pka_cb_sp",
+        }
+        extensions = [".log", ".out"]
+
+        for field, suffix in suffixes.items():
+            current_val = getattr(self, field)
+            if current_val is not None and not (
+                isinstance(current_val, float) and np.isnan(current_val)
+            ):
+                continue
+
+            # Try to find file with supported extensions
+            found = False
+            for ext in extensions:
+                candidate = f"{self.basename}{suffix}{ext}"
+                if os.path.exists(candidate):
+                    setattr(self, field, candidate)
+                    found = True
+                    break
+
+            # If not found, fail soft (leave as None) or set default?
+            # Setting default helps validation error be more specific ("File not found" vs "Missing")
+            if not found:
+                # Default to .log for error reporting purposes checking implicit path
+                setattr(self, field, f"{self.basename}{suffix}.log")
+
     def get(self, key, default=None):
         if key in self._data:
             return self._data.get(key, default)
@@ -2573,6 +2605,10 @@ class PKaOutputTableEntry:
         if self.basename is None or self.basename.strip() == "":
             errors.append(f"Missing basename{row_info}")
 
+        # Auto-discover missing files if basename is present
+        if self.basename:
+            self._resolve_filenames()
+
         required_files = [
             ("ha_gas", self.ha_gas),
             ("a_gas", self.a_gas),
@@ -2606,9 +2642,12 @@ class PKaOutputTableEntry:
 def parse_pka_output_table(table_path: str, delimiter: str = None) -> list:
     """Parse an output-table file into a list of :class:`PKaOutputTableEntry`.
 
-    The table must contain a header row.  Columns are resolved by
-    normalised aliases so that both ``ha_gas`` and
-    ``HA_optimization_output`` (etc.) are accepted.
+    The table must contain a header row. Columns are resolved by
+    normalised aliases. At minimum, the ``basename`` column is required.
+    Output file columns (``ha_gas``, ``a_gas``, ``ha_sp``, ``a_sp``) are
+    optional; if omitted, they are auto-discovered by appending standard
+    suffixes (``_pka``, ``_pka_cb``, ``_pka_sp``, ``_pka_cb_sp``) to the
+    basename.
 
     Args:
         table_path: Path to the ``.txt`` / ``.csv`` table file.
@@ -2641,16 +2680,12 @@ def parse_pka_output_table(table_path: str, delimiter: str = None) -> list:
         if resolved is not None:
             rename_map[resolved] = canonical
 
-    # Ensure at least ``basename`` and the four HA/A columns are present.
-    missing_required = []
-    for col in ("basename", "ha_gas", "a_gas", "ha_sp", "a_sp"):
-        if col not in rename_map.values():
-            missing_required.append(col)
-    if missing_required:
+    # Ensure at least ``basename`` is present.
+    # Other file columns are optional and will be auto-discovered if missing.
+    if "basename" not in rename_map.values():
         raise ValueError(
-            f"Output table is missing required columns: "
-            f"{', '.join(missing_required)}.  "
-            f"Accepted aliases: {PKaOutputTableEntry._ALIASES}"
+            "Output table is missing required column: basename. "
+            f"Accepted aliases: {PKaOutputTableEntry._ALIASES['basename']}"
         )
 
     canonical_df = dataset.dataframe.rename(columns=rename_map)
