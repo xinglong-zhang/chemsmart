@@ -201,6 +201,17 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
+
+        # Ensure --run-in-serial is propagated if enabled in jobrunner.
+        # This fixes an issue where the flag might be lost during reconstruction,
+        # ensuring that batch jobs submitted to the cluster run sequentially
+        # instead of triggering simultaneous execution.
+        if (
+            ctx.obj["jobrunner"].run_in_serial
+            and "--run-in-serial" not in cli_args
+        ):
+            cli_args.insert(0, "--run-in-serial")
+
         if kwargs.get("print_command"):
             print(cli_args)
         return cli_args
