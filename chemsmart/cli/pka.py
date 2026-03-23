@@ -34,7 +34,7 @@ def click_pka_shared_options(f):
     @click.option(
         "-s",
         "--scheme",
-        "thermodynamic_cycle",
+        "scheme",
         type=click.Choice(["direct", "proton exchange"]),
         default="proton exchange",
         help=(
@@ -437,7 +437,7 @@ def validate_reference_options(shared):
     if reference is None:
         return
 
-    if shared["thermodynamic_cycle"] != "proton exchange":
+    if shared["scheme"] != "proton exchange":
         raise click.UsageError(
             "Reference acid file can only be used with 'proton exchange' "
             "cycle. Use -s 'proton exchange' or remove the -r option."

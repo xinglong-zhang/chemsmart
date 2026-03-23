@@ -183,7 +183,7 @@ def submit(ctx, skip_completed, **kwargs):
 
     logger.info(f"ORCA pKa job settings: {pka_settings.__dict__}")
     logger.info(f"Proton index to remove: {proton_index}")
-    logger.info(f"Thermodynamic cycle: {shared['thermodynamic_cycle']}")
+    logger.info(f"Thermodynamic cycle: {shared['scheme']}")
 
     molecules = ctx.obj["molecules"]
     molecule_indices = ctx.obj.get("molecule_indices")
@@ -266,7 +266,7 @@ def batch(ctx, skip_completed, **kwargs):
 
     logger.info(f"Found {len(entries)} entries in table")
 
-    if shared["thermodynamic_cycle"] == "proton exchange":
+    if shared["scheme"] == "proton exchange":
         from chemsmart.cli.pka import resolve_reference_proton
 
         missing = []
@@ -329,7 +329,7 @@ def batch(ctx, skip_completed, **kwargs):
 
         pka_settings = ORCApKaJobSettings(
             proton_index=int(entry.proton_index),
-            thermodynamic_cycle=shared["thermodynamic_cycle"],
+            thermodynamic_cycle=shared["scheme"],
             reference_file=shared["reference"],
             reference_proton_index=shared["reference_proton_index"],
             reference_charge=shared["reference_charge"],
@@ -422,7 +422,7 @@ def _build_orca_pka_settings(proton_index, shared, opt_settings):
 
     return ORCApKaJobSettings(
         proton_index=proton_index,
-        thermodynamic_cycle=shared["thermodynamic_cycle"],
+        thermodynamic_cycle=shared["scheme"],
         reference_file=shared["reference"],
         reference_proton_index=shared["reference_proton_index"],
         reference_charge=shared["reference_charge"],

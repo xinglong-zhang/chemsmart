@@ -2034,7 +2034,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
 
     Attributes:
         proton_index (int): 1-based index of the proton to remove.
-        thermodynamic_cycle (str): 'proton exchange' or 'direct'.
+        scheme (str): 'proton exchange' or 'direct'.
         conjugate_base_charge (int): Charge of A-. Defaults to charge - 1.
         conjugate_base_multiplicity (int): Multiplicity of A-.
         solvent_model (str): Solvation model for SP (default 'CPCM').
@@ -2072,7 +2072,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
     ):
         super().__init__(**kwargs)
         self.proton_index = proton_index
-        self.thermodynamic_cycle = thermodynamic_cycle
+        self.scheme = thermodynamic_cycle
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
         self.conjugate_base_charge = conjugate_base_charge
@@ -2121,7 +2121,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
     def has_reference_file(self):
         """Check if a reference acid geometry file is provided."""
         return (
-            self.thermodynamic_cycle == "proton exchange"
+            self.scheme == "proton exchange"
             and self.reference_file is not None
         )
 

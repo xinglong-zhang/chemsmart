@@ -1958,12 +1958,12 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
     Two thermodynamic cycles are supported:
 
-    1. **Direct dissociation** (thermodynamic_cycle='direct'):
+    1. **Direct dissociation** (scheme='direct'):
        Uses the absolute free energy of a proton in water (ΔG°(H+)_aq).
        pKa = [G(A-)_aq - G(HA)_aq + ΔG°(H+)_aq] / (2.303 * R * T)
        Default ΔG°(H+)_aq = -265.9 kcal/mol (Tissandier et al., J Phys Chem A 1998)
 
-    2. **Proton exchange** (thermodynamic_cycle='proton exchange'):
+    2. **Proton exchange** (scheme='proton exchange'):
        Uses a reference acid (HRef) to cancel systematic errors.
        HA + Ref- → A- + HRef
        pKa(HA) = pKa(HRef) + ΔG_exchange / (2.303 * R * T)
@@ -1988,16 +1988,16 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
     Attributes:
         proton_index (int): 1-based index of the proton to remove for deprotonation.
-        thermodynamic_cycle (str): Type of thermodynamic cycle ('direct' or 'proton exchange').
+        scheme (str): Type of thermodynamic cycle ('direct' or 'proton exchange').
         href_file (str): Path to geometry file for reference acid (HRef).
-            Used only when thermodynamic_cycle='proton exchange'.
+            Used only when scheme='proton exchange'.
         reference_proton_index (int): 1-based index of proton to remove from HRef.
         reference_charge (int): Charge of the reference acid (HRef).
         reference_multiplicity (int): Multiplicity of the reference acid (HRef).
         reference_conjugate_base_charge (int): Charge of Ref- (defaults to reference_charge - 1).
         reference_conjugate_base_multiplicity (int): Multiplicity of Ref-.
         delta_G_proton (float): Absolute free energy of H+ in water (kcal/mol).
-            Only used when thermodynamic_cycle='direct'. Default: -265.9 kcal/mol.
+            Only used when scheme='direct'. Default: -265.9 kcal/mol.
         solvent_model (str): Solvation model for SP calculations (e.g., 'SMD', 'PCM').
         solvent_id (str): Solvent ID for SP calculations (e.g., 'water').
         charge (int): Charge of the protonated form (inherited from parent).
@@ -2018,7 +2018,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         # Direct dissociation cycle (no reference acid needed)
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="direct",
+            scheme="direct",
             charge=0,
             multiplicity=1,
             functional="B3LYP",
@@ -2030,7 +2030,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         # Proton exchange cycle with reference acid geometry file
         settings = GaussianpKaJobSettings(
             proton_index=10,
-            thermodynamic_cycle="proton exchange",
+            scheme="proton exchange",
             reference_file="water.xyz",
             reference_proton_index=1,
             reference_charge=0,
@@ -2100,7 +2100,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             reference_conjugate_base_multiplicity (int, optional): Multiplicity of the
                 reference conjugate base (Ref-). Defaults to reference_multiplicity.
             delta_G_proton (float, optional): Absolute free energy of H+ in water
-                (kcal/mol). Only used when thermodynamic_cycle='direct'.
+                (kcal/mol). Only used when scheme='direct'.
                 Default is -265.9 kcal/mol (Tissandier et al., 1998).
             solvent_model (str): Solvation model for solution phase SP.
                 Default is 'SMD'.
@@ -2127,7 +2127,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         """
         super().__init__(**kwargs)
         self.proton_index = proton_index
-        self.thermodynamic_cycle = thermodynamic_cycle
+        self.scheme = thermodynamic_cycle
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
         self.conjugate_base_charge = conjugate_base_charge
@@ -2175,7 +2175,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
     def has_reference_file(self):
         """Check if a reference acid geometry file is provided."""
         return (
-            self.thermodynamic_cycle == "proton exchange"
+            self.scheme == "proton exchange"
             and self.reference_file is not None
         )
 

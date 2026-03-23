@@ -301,7 +301,7 @@ def batch(ctx, skip_completed, **kwargs):
     logger.info(f"Found {len(entries)} entries in table")
 
     # Validate reference acid for proton exchange
-    if shared["thermodynamic_cycle"] == "proton exchange":
+    if shared["scheme"] == "proton exchange":
         from chemsmart.cli.pka import resolve_reference_proton
 
         missing = []
@@ -554,7 +554,7 @@ def _create_pka_jobs_from_molecules(
 def _log_pka_settings(pka_settings, proton_index, shared):
     """Emit informational log messages for a pKa job."""
     logger.info(f"Proton index to remove: {proton_index}")
-    logger.info(f"Thermodynamic cycle: {shared['thermodynamic_cycle']}")
+    logger.info(f"Thermodynamic cycle: {shared['scheme']}")
     logger.info(
         f"Protonated form (HA): charge={pka_settings.charge}, "
         f"mult={pka_settings.multiplicity}"
@@ -572,7 +572,7 @@ def _log_pka_settings(pka_settings, proton_index, shared):
     )
     logger.info(f"Conjugate base (A-): charge={cb_charge}, mult={cb_mult}")
 
-    if shared["thermodynamic_cycle"] == "proton exchange":
+    if shared["scheme"] == "proton exchange":
         if shared["reference"] is not None:
             logger.info(f"Reference acid file: {shared['reference']}")
             logger.info(

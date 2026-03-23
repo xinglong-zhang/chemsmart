@@ -560,7 +560,7 @@ class TestGaussianpKaJobSettings:
             basis="6-311+G(d,p)",
         )
         assert settings.proton_index == 10
-        assert settings.thermodynamic_cycle == "proton exchange"
+        assert settings.scheme == "proton exchange"
         assert settings.solvent_model == "PCM"
         assert settings.solvent_id == "water"
         assert settings.charge == 0
@@ -580,7 +580,7 @@ class TestGaussianpKaJobSettings:
             charge=0,
             multiplicity=1,
         )
-        assert settings.thermodynamic_cycle == "direct"
+        assert settings.scheme == "direct"
         assert settings.reference_file is None  # Not needed for direct cycle
         assert settings.delta_G_proton == -265.9  # Default value
 
@@ -611,7 +611,7 @@ class TestGaussianpKaJobSettings:
             functional="B3LYP",
             basis="6-31G*",
         )
-        assert settings.thermodynamic_cycle == "proton exchange"
+        assert settings.scheme == "proton exchange"
         assert settings.reference_file == single_molecule_xyz_file
         assert settings.reference_proton_index == 1
         assert settings.reference_charge == 0
@@ -626,7 +626,7 @@ class TestGaussianpKaJobSettings:
             charge=0,
             multiplicity=1,
         )
-        assert settings.thermodynamic_cycle == "proton exchange"
+        assert settings.scheme == "proton exchange"
         assert settings.reference_file is None
         assert settings.has_reference_file is False
 
@@ -637,7 +637,7 @@ class TestGaussianpKaJobSettings:
             charge=0,
             multiplicity=1,
         )
-        assert settings.thermodynamic_cycle == "proton exchange"
+        assert settings.scheme == "proton exchange"
         assert settings.has_reference_file is False
 
     def test_reference_validation(self, single_molecule_xyz_file):
