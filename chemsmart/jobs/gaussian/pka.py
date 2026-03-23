@@ -29,7 +29,7 @@ class GaussianpKaBatchJob(Job):
     Inherits from Job directly as it acts as a controller/container.
     """
 
-    TYPE = "g16pka_batch"
+    TYPE = "g16pka"
     PROGRAM = "gaussian"
 
     def __init__(
@@ -69,6 +69,9 @@ class GaussianpKaBatchJob(Job):
             )
             for job in self.jobs:
                 try:
+                    # Provide specific job runner to child jobs
+                    if self.jobrunner:
+                        job.jobrunner = self.jobrunner.copy()
                     job.run()
                 except Exception as e:
                     logger.error(
@@ -84,9 +87,12 @@ class GaussianpKaBatchJob(Job):
             # Use ThreadPoolExecutor because job.run() typically waits on subprocesses
             # or IO, releasing the GIL.
             with ThreadPoolExecutor() as executor:
-                future_to_job = {
-                    executor.submit(job.run): job for job in self.jobs
-                }
+                future_to_job = {}
+                for job in self.jobs:
+                    # Provide specific job runner to child jobs
+                    if self.jobrunner:
+                        job.jobrunner = self.jobrunner.copy()
+                    future_to_job[executor.submit(job.run)] = job
 
                 for future in as_completed(future_to_job):
                     job = future_to_job[future]
