@@ -303,7 +303,7 @@ class GaussianpKaJob(GaussianJob):
 
         # Check existing reference jobs
         self.has_reference_jobs = (
-            self.settings.reference is not None if self.settings else False
+            self.settings.has_reference_file if self.settings else False
         )
 
         self._prepare_pka_jobs()
@@ -783,8 +783,8 @@ class GaussianpKaJob(GaussianJob):
         return Gaussian16pKaOutput.compute_pka_thermochemistry(
             ha_file=ha_file,
             a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
+            href_file=hb_file,
+            ref_file=b_file,
             temperature=self.settings.temperature,
             concentration=self.settings.concentration,
             pressure=self.settings.pressure,
