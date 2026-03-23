@@ -350,12 +350,18 @@ class GaussianpKaJob(GaussianJob):
     def _run_opt_jobs(self):
         """Run gas phase optimization jobs."""
         for job in self.opt_jobs:
+            # Propagate runner to ensure correct execution context
+            if self.jobrunner:
+                job.jobrunner = self.jobrunner
             job.run()
 
     def _run_ref_opt_jobs(self):
         """Run reference gas phase optimization jobs."""
         if self.has_reference_jobs:
             for job in self.ref_opt_jobs:
+                # Propagate runner to ensure correct execution context
+                if self.jobrunner:
+                    job.jobrunner = self.jobrunner
                 job.run()
 
     def _run_sp_jobs(self):
@@ -372,6 +378,9 @@ class GaussianpKaJob(GaussianJob):
 
         if self.sp_jobs:
             for job in self.sp_jobs:
+                # Propagate runner to ensure correct execution context
+                if self.jobrunner:
+                    job.jobrunner = self.jobrunner
                 job.run()
 
     def _run_ref_sp_jobs(self):
