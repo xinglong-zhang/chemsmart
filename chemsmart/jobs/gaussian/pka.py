@@ -30,6 +30,7 @@ class GaussianpKaBatchJob(Job):
     """
 
     TYPE = "g16pka_batch"
+    PROGRAM = "gaussian"
 
     def __init__(
         self,
