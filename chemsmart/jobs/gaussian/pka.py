@@ -20,6 +20,7 @@ import numpy as np
 
 from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.job import Job
 
@@ -429,21 +430,55 @@ class GaussianpKaJob(GaussianJob):
 
         # Define workflow for one species (Opt -> SP)
         def run_species_chain(opt_job, create_sp_func):
+            # Propagate runner to ensure correct execution context
+            if self.jobrunner:
+                opt_job.jobrunner = self.jobrunner
+
             opt_job.run()
             if opt_job.is_complete():
                 sp_job = create_sp_func(opt_job)
                 if sp_job:
+                    if self.jobrunner:
+                        sp_job.jobrunner = self.jobrunner
                     sp_job.run()
 
         # We need a way to create sp job for a specific species
         # This is getting complex. For now, just run opt jobs in parallel, then sp jobs in parallel.
 
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(job.run) for job in self.opt_jobs]
-            if self.has_reference_jobs:
-                futures.extend(
-                    [executor.submit(job.run) for job in self.ref_opt_jobs]
+        # Ensure we have a valid runner
+        runner = self.jobrunner
+        if runner and not isinstance(runner, GaussianJobRunner):
+            # Attempt to upgrade runner if we somehow have a generic one
+            try:
+                server = runner.server
+                runner = GaussianJobRunner(
+                    server=server,
+                    scratch=runner.scratch,
+                    delete_scratch=runner.delete_scratch,
+                    fake=runner.fake,
+                    run_in_serial=runner.run_in_serial,
+                    num_cores=runner.num_cores,
+                    num_gpus=runner.num_gpus,
+                    mem_gb=runner.mem_gb,
                 )
+                logger.info(
+                    f"Upgraded generic runner to GaussianJobRunner: {runner}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to upgrade runner: {e}")
+
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for job in self.opt_jobs:
+                if runner:
+                    job.jobrunner = runner
+                futures.append(executor.submit(job.run))
+
+            if self.has_reference_jobs:
+                for job in self.ref_opt_jobs:
+                    if runner:
+                        job.jobrunner = runner
+                    futures.append(executor.submit(job.run))
 
             for f in futures:
                 f.result()
@@ -454,7 +489,12 @@ class GaussianpKaJob(GaussianJob):
 
         if self.sp_jobs:
             with ThreadPoolExecutor() as executor:
-                futures = [executor.submit(job.run) for job in self.sp_jobs]
+                futures = []
+                for job in self.sp_jobs:
+                    if runner:
+                        job.jobrunner = runner
+                    futures.append(executor.submit(job.run))
+
                 for f in futures:
                     f.result()
 
