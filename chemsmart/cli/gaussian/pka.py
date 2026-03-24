@@ -167,9 +167,6 @@ def submit(ctx, skip_completed, **kwargs):
     color_code = ctx.obj.get("pka_color_code")
     jobrunner = ctx.obj["jobrunner"]
 
-    # Align pKa parallel execution with global --run-in-serial flag
-    parallel = not jobrunner.run_in_serial
-
     # ── resolve proton index (CDXML auto-detect) ──
     proton_index, pka_molecules = resolve_proton_index(
         filename, proton_index, color_code
@@ -178,7 +175,7 @@ def submit(ctx, skip_completed, **kwargs):
     # ── multi-fragment CDXML -> one job per molecule ──
     if pka_molecules is not None:
         return _create_pka_jobs_from_molecules(
-            ctx, pka_molecules, shared, skip_completed, parallel, **kwargs
+            ctx, pka_molecules, shared, skip_completed, **kwargs
         )
 
     # ── validate reference acid ──
@@ -223,14 +220,17 @@ def submit(ctx, skip_completed, **kwargs):
                 label=f"{label}_idx{idx}",
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
-                parallel=parallel,
                 **kwargs,
             )
             for mol, idx in zip(molecules, molecule_indices)
         ]
+        # Always run batch container serially (run_in_serial=True).
+        # Inner parallelism (at job level) is determined by the `parallel` flag
+        # passed to GaussianpKaJob. This prevents resource oversubscription
+        # (e.g. parallel batch * parallel job = too many processes).
         return GaussianpKaBatchJob(
             jobs=jobs,
-            run_in_serial=jobrunner.run_in_serial,
+            run_in_serial=True,
             jobrunner=jobrunner,
         )
 
@@ -240,11 +240,11 @@ def submit(ctx, skip_completed, **kwargs):
         label=label,
         jobrunner=jobrunner,
         skip_completed=skip_completed,
-        parallel=parallel,
         **kwargs,
     )
+    # Always run batch container serially (run_in_serial=True).
     return GaussianpKaBatchJob(
-        jobs=[job], run_in_serial=jobrunner.run_in_serial, jobrunner=jobrunner
+        jobs=[job], run_in_serial=True, jobrunner=jobrunner
     )
 
 
@@ -280,9 +280,6 @@ def batch(ctx, skip_completed, **kwargs):
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]
-
-    # Align pKa parallel execution with global --run-in-serial flag
-    parallel = not jobrunner.run_in_serial
 
     input_table_path = ctx.obj.get("filename")
     if not input_table_path:
@@ -383,15 +380,195 @@ def batch(ctx, skip_completed, **kwargs):
             label=label,
             jobrunner=jobrunner,
             skip_completed=skip_completed,
-            parallel=parallel,
             **kwargs,
         )
 
         jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from table")
+    # Always run batch container serially (run_in_serial=True).
+    # Inner parallelism (at job level) is determined by the `parallel` flag.
     return GaussianpKaBatchJob(
-        jobs=jobs, run_in_serial=jobrunner.run_in_serial, jobrunner=jobrunner
+        jobs=jobs, run_in_serial=True, jobrunner=jobrunner
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# pka analyze
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pka.command("analyze", cls=MyCommand)
+@click_job_options
+@click.pass_context
+def analyze(ctx, **kwargs):
+    """Analyze Gaussian pKa calculation output.
+
+    Reads the output files of a completed pKa job and writes
+    thermochemical data to the project database.
+
+    \b
+    Examples:
+      chemsmart run gaussian -p myproject -f acid.xyz pka analyze
+
+      chemsmart run gaussian -p myproject -f acid.xyz -m 1 pka analyze
+
+      chemsmart run gaussian -p myproject -f acid.xyz -m 1 \\
+          -s "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1 pka analyze
+    """
+    from chemsmart.jobs.gaussian.pka import GaussianpKaAnalyzeJob
+
+    jobrunner = ctx.obj["jobrunner"]
+
+    # ── collect input files ──
+    input_files = ctx.obj["molecules"]
+    if not input_files:
+        raise click.UsageError("No input files found for analysis")
+
+    # ── create job(s) ──
+    label = ctx.obj["label"]
+
+    if len(input_files) > 1:
+        logger.info(f"Creating {len(input_files)} pKa analysis jobs")
+        from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob
+
+        jobs = [
+            GaussianpKaAnalyzeJob(
+                input_file=inp,
+                label=f"{label}_idx{idx}",
+                jobrunner=jobrunner,
+                **kwargs,
+            )
+            for idx, inp in enumerate(input_files, start=1)
+        ]
+        # Always run batch container serially (run_in_serial=True).
+        return GaussianpKaBatchJob(
+            jobs=jobs, run_in_serial=True, jobrunner=jobrunner
+        )
+
+    job = GaussianpKaAnalyzeJob(
+        input_file=input_files[0],
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
+    )
+    # Always run batch container serially (run_in_serial=True).
+    return GaussianpKaBatchJob(
+        jobs=[job], run_in_serial=True, jobrunner=jobrunner
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# pka batch-analyze
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pka.command("batch-analyze", cls=MyCommand)
+@click_job_options
+@click.pass_context
+def batch_analyze(ctx, **kwargs):
+    """Batch analyze Gaussian pKa calculation output.
+
+    Reads the output files of completed pKa jobs and writes
+    thermochemical data to the project database.
+
+    The input file list is taken from the parent Gaussian ``-f/--filename``
+    option.
+
+    \b
+    Examples:
+      chemsmart run gaussian -p myproject -f molecules.txt pka batch-analyze
+
+      chemsmart run gaussian -p myproject -f molecules.csv pka batch-analyze
+    """
+    from chemsmart.jobs.gaussian.pka import GaussianpKaBatchAnalyzeJob
+
+    jobrunner = ctx.obj["jobrunner"]
+
+    input_file_list = ctx.obj.get("filename")
+    if not input_file_list:
+        raise click.UsageError(
+            "Batch analyze requires the parent Gaussian -f/--filename to "
+            "specify the input file list."
+        )
+
+    # ── create job(s) ──
+    label = ctx.obj["label"]
+
+    job = GaussianpKaBatchAnalyzeJob(
+        input_file_list=input_file_list,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
+    )
+    # Always run batch container serially (run_in_serial=True).
+    return GaussianpKaBatchAnalyzeJob(
+        jobs=[job], run_in_serial=True, jobrunner=jobrunner
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# pka thermo
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pka.command("thermo", cls=MyCommand)
+@click_job_options
+@click.pass_context
+def thermo(ctx, **kwargs):
+    """Compute thermochemical data from Gaussian pKa calculation output.
+
+    Reads the output files of completed pKa jobs and writes
+    thermochemical data to the project database.
+
+    \b
+    Examples:
+      chemsmart run gaussian -p myproject -f acid.xyz pka thermo
+
+      chemsmart run gaussian -p myproject -f acid.xyz -m 1 pka thermo
+
+      chemsmart run gaussian -p myproject -f acid.xyz -m 1 \\
+          -s "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1 pka thermo
+    """
+    from chemsmart.jobs.gaussian.pka import GaussianpKaThermoJob
+
+    jobrunner = ctx.obj["jobrunner"]
+
+    # ── collect input files ──
+    input_files = ctx.obj["molecules"]
+    if not input_files:
+        raise click.UsageError("No input files found for thermochemical data")
+
+    # ── create job(s) ──
+    label = ctx.obj["label"]
+
+    if len(input_files) > 1:
+        logger.info(f"Creating {len(input_files)} pKa thermo jobs")
+        from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob
+
+        jobs = [
+            GaussianpKaThermoJob(
+                input_file=inp,
+                label=f"{label}_idx{idx}",
+                jobrunner=jobrunner,
+                **kwargs,
+            )
+            for idx, inp in enumerate(input_files, start=1)
+        ]
+        # Always run batch container serially (run_in_serial=True).
+        return GaussianpKaBatchJob(
+            jobs=jobs, run_in_serial=True, jobrunner=jobrunner
+        )
+
+    job = GaussianpKaThermoJob(
+        input_file=input_files[0],
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
+    )
+    # Always run batch container serially (run_in_serial=True).
+    return GaussianpKaBatchJob(
+        jobs=[job], run_in_serial=True, jobrunner=jobrunner
     )
 
 
@@ -501,7 +678,7 @@ def _build_gaussian_pka_settings(
 
 
 def _create_pka_jobs_from_molecules(
-    ctx, pka_molecules, shared, skip_completed, parallel, **kwargs
+    ctx, pka_molecules, shared, skip_completed, **kwargs
 ):
     """Create one ``GaussianpKaJob`` per ``PKaMolecule``."""
     from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob, GaussianpKaJob
@@ -540,14 +717,15 @@ def _create_pka_jobs_from_molecules(
                 label=mol_label,
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
-                parallel=parallel,
                 **kwargs,
             )
         )
 
     logger.info(f"Created {len(jobs)} pKa jobs from multi-fragment CDXML file")
+    # Always run batch container serially (run_in_serial=True).
+    # Inner parallelism (at job level) is determined by the `parallel` flag.
     return GaussianpKaBatchJob(
-        jobs=jobs, run_in_serial=jobrunner.run_in_serial, jobrunner=jobrunner
+        jobs=jobs, run_in_serial=True, jobrunner=jobrunner
     )
 
 

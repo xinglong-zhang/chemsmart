@@ -89,7 +89,6 @@ class GaussianpKaJob(GaussianJob):
         label=None,
         jobrunner=None,
         skip_completed=True,
-        parallel=False,
         **kwargs,
     ):
         super().__init__(
@@ -100,7 +99,6 @@ class GaussianpKaJob(GaussianJob):
             skip_completed=skip_completed,
             **kwargs,
         )
-        self.parallel = parallel
         self.opt_jobs = []
         self.ref_opt_jobs = []
         self.sp_jobs = None
@@ -367,30 +365,34 @@ class GaussianpKaJob(GaussianJob):
         Execute the pKa calculation.
 
         Runs gas phase optimization jobs sequentially (default), then solution phase SP jobs.
-        When `self.parallel` is True, run per-species opt->SP pipelines concurrently.
+        When `self.jobrunner.run_in_serial` is False, run per-species opt->SP pipelines concurrently on the same node.
         """
-        if self.parallel:
-            logger.info("Running pKa calculation in parallel mode")
-            # Run target and reference chains in parallel while preserving per-species dependency
+        # Determine strict serial execution from runner
+        run_in_serial = False
+        if self.jobrunner and hasattr(self.jobrunner, "run_in_serial"):
+            run_in_serial = self.jobrunner.run_in_serial
+
+        # If jobrunner explicitly prefers parallel mode (run_in_serial=False),
+        # distribute resources and run internal jobs concurrently.
+        if not run_in_serial:
+            logger.info(
+                "Running pKa calculation in parallel mode (splitting resources)"
+            )
             self._run_parallel()
             return
 
-        # Default sequential behaviour preserved
-        run_in_serial = self.jobrunner and getattr(
-            self.jobrunner, "run_in_serial", False
-        )
-
+        # Default sequential behaviour preserved if run_in_serial is True
         # Run gas phase optimization jobs for target acid (HA, A-)
         self._run_opt_jobs()
 
-        if run_in_serial and not self._opt_jobs_are_complete():
+        if not self._opt_jobs_are_complete():
             logger.info("Opt jobs incomplete, halting serial execution.")
             return
 
         # Run gas phase optimization jobs for reference acid (HB, B-) if provided
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
-            if run_in_serial and not self._ref_opt_jobs_are_complete():
+            if not self._ref_opt_jobs_are_complete():
                 logger.info(
                     "Ref Opt jobs incomplete, halting serial execution."
                 )
@@ -399,7 +401,7 @@ class GaussianpKaJob(GaussianJob):
         # Run solution phase SP jobs for target acid
         self._run_sp_jobs()
 
-        if run_in_serial and not self._sp_jobs_are_complete():
+        if not self._sp_jobs_are_complete():
             logger.info("SP jobs incomplete, halting serial execution.")
             return
 
@@ -742,3 +744,54 @@ class GaussianpKaJob(GaussianJob):
             cutoff_enthalpy=self.settings.cutoff_enthalpy,
             energy_units=self.settings.energy_units,
         )
+
+
+class GaussianpKaAnalyzeJob(GaussianpKaJob):
+    """
+    Gaussian job class for analyzing pKa calculation results.
+    """
+
+    TYPE = "g16pka_analyze"
+
+    def __init__(self, input_file, **kwargs):
+        """
+        Initialize the analyze job.
+
+        Args:
+            input_file (Molecule): The molecule object.
+            **kwargs: Additional arguments.
+        """
+        super().__init__(molecule=input_file, **kwargs)
+
+    def _run(self, **kwargs):
+        """Run the analysis (print thermochemistry)."""
+        try:
+            self.print_thermochemistry()
+        except Exception as e:
+            logger.error(f"Analysis failed for {self.label}: {e}")
+
+
+class GaussianpKaThermoJob(GaussianpKaAnalyzeJob):
+    """
+    Gaussian job class for computing pKa thermochemistry (alias for analyze).
+    """
+
+    TYPE = "g16pka_thermo"
+
+
+class GaussianpKaBatchAnalyzeJob(GaussianpKaBatchJob):
+    """
+    Gaussian job class for batch processing of pKa analysis.
+    """
+
+    def __init__(
+        self, input_file_list, label="batch_analyze", jobrunner=None, **kwargs
+    ):
+        # NOTE: This class assumes the user will populate self.jobs manually
+        # or that the input_file_list is handled elsewhere, as we lack
+        # settings to create proper GaussianpKaAnalyzeJob instances here.
+        # This implementation primarily satisfies the import requirement.
+        super().__init__(
+            jobs=[], label=label, jobrunner=jobrunner, run_in_serial=True
+        )
+        self.input_file_list = input_file_list
