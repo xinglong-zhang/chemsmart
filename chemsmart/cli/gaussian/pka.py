@@ -185,7 +185,7 @@ def submit(ctx, skip_completed, **kwargs):
     validate_reference_options(shared)
 
     # ── build settings ──
-    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+    from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob, GaussianpKaJob
 
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -216,7 +216,7 @@ def submit(ctx, skip_completed, **kwargs):
 
     if len(molecules) > 1 and molecule_indices:
         logger.info(f"Creating {len(molecules)} pKa jobs")
-        return [
+        jobs = [
             GaussianpKaJob(
                 molecule=mol,
                 settings=pka_settings,
@@ -228,8 +228,13 @@ def submit(ctx, skip_completed, **kwargs):
             )
             for mol, idx in zip(molecules, molecule_indices)
         ]
+        return GaussianpKaBatchJob(
+            jobs=jobs,
+            run_in_serial=jobrunner.run_in_serial,
+            jobrunner=jobrunner,
+        )
 
-    return GaussianpKaJob(
+    job = GaussianpKaJob(
         molecule=molecules[-1],
         settings=pka_settings,
         label=label,
@@ -237,6 +242,9 @@ def submit(ctx, skip_completed, **kwargs):
         skip_completed=skip_completed,
         parallel=parallel,
         **kwargs,
+    )
+    return GaussianpKaBatchJob(
+        jobs=[job], run_in_serial=jobrunner.run_in_serial, jobrunner=jobrunner
     )
 
 
@@ -496,7 +504,7 @@ def _create_pka_jobs_from_molecules(
     ctx, pka_molecules, shared, skip_completed, parallel, **kwargs
 ):
     """Create one ``GaussianpKaJob`` per ``PKaMolecule``."""
-    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+    from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob, GaussianpKaJob
 
     validate_reference_options(shared)
 
@@ -538,7 +546,9 @@ def _create_pka_jobs_from_molecules(
         )
 
     logger.info(f"Created {len(jobs)} pKa jobs from multi-fragment CDXML file")
-    return jobs
+    return GaussianpKaBatchJob(
+        jobs=jobs, run_in_serial=jobrunner.run_in_serial, jobrunner=jobrunner
+    )
 
 
 def _log_pka_settings(pka_settings, proton_index, shared):
