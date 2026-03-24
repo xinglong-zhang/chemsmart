@@ -212,7 +212,15 @@ class GaussianpKaJob(GaussianJob):
         # Get optimized HA structure
         try:
             prot_out = Gaussian16Output(self.protonated_job.outputfile)
-            if not prot_out.is_complete:
+            if not prot_out.normal_termination:
+                logger.warning(
+                    f"Job {self.protonated_job.label} did not terminate normally."
+                )
+                return
+            if not prot_out.all_structures:
+                logger.error(
+                    f"Job {self.protonated_job.label} has no structures."
+                )
                 return
             prot_opt_mol = prot_out.molecule
         except Exception as e:
@@ -222,7 +230,15 @@ class GaussianpKaJob(GaussianJob):
         # Get optimized A- structure
         try:
             conj_out = Gaussian16Output(self.conjugate_base_job.outputfile)
-            if not conj_out.is_complete:
+            if not conj_out.normal_termination:
+                logger.warning(
+                    f"Job {self.conjugate_base_job.label} did not terminate normally."
+                )
+                return
+            if not conj_out.all_structures:
+                logger.error(
+                    f"Job {self.conjugate_base_job.label} has no structures."
+                )
                 return
             conj_opt_mol = conj_out.molecule
         except Exception as e:
