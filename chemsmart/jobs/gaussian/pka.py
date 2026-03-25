@@ -17,6 +17,7 @@ from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
+from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,11 @@ class GaussianpKaJob(GaussianJob):
         skip_completed=True,
         **kwargs,
     ):
+        if not isinstance(settings, GaussianpKaJobSettings):
+            raise ValueError(
+                f"Settings must be instance of GaussianpKaJobSettings for {self.__class__.__name__}, but is {settings} instead!"
+            )
+
         super().__init__(
             molecule=molecule,
             settings=settings,
