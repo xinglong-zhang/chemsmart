@@ -2515,6 +2515,30 @@ class GaussianpKaJobSettings(GaussianJobSettings):
         """Set the multiplicity of the protonated form."""
         self.multiplicity = value
 
+    def protonated_molecule(self, molecule):
+        """
+        Create and return the protonated molecule.
+
+        Args:
+            molecule (Molecule): The original molecule (HA).
+
+        Returns:
+            Molecule: A copy of the molecule with updated charge/multiplicity.
+        """
+        protonated_mol = molecule.copy()
+
+        if self.charge is not None:
+            protonated_mol.charge = self.charge
+        elif protonated_mol.charge is None:
+            protonated_mol.charge = 0
+
+        if self.multiplicity is not None:
+            protonated_mol.multiplicity = self.multiplicity
+        elif protonated_mol.multiplicity is None:
+            protonated_mol.multiplicity = 1
+
+        return protonated_mol
+
     def conjugate_base_molecule(self, molecule):
         """Create and return the conjugate base molecule."""
         return self._create_conjugate_base_molecule(molecule)

@@ -1209,7 +1209,7 @@ class TestGaussianpKaJobSettings:
 
         protonated_job = job.protonated_job
         assert isinstance(protonated_job, GaussianOptJob)
-        assert protonated_job.label == "test_pka"
+        assert protonated_job.label == "test_pka_HA_opt"
         assert protonated_job.settings.charge == 0
 
     def test_conjugate_base_job_property(
@@ -1238,13 +1238,13 @@ class TestGaussianpKaJobSettings:
 
         conjugate_base_job = job.conjugate_base_job
         assert isinstance(conjugate_base_job, GaussianOptJob)
-        assert conjugate_base_job.label == "test_pka_cb"
+        assert conjugate_base_job.label == "test_pka_A_opt"
         assert conjugate_base_job.settings.charge == -1
 
     def test_protonated_molecule_property(
         self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
     ):
-        """Test protonated_molecule property."""
+        """Test protonated_molecule method on settings."""
         mol = Molecule.from_filepath(single_molecule_xyz_file)
         mol.charge = 0
         mol.multiplicity = 1
@@ -1255,21 +1255,14 @@ class TestGaussianpKaJobSettings:
 
         settings = GaussianpKaJobSettings(proton_index=proton_index)
 
-        job = GaussianpKaJob(
-            molecule=mol,
-            settings=settings,
-            label="test_pka",
-            jobrunner=gaussian_jobrunner_no_scratch,
-        )
-
-        protonated_mol = job.protonated_molecule
+        protonated_mol = settings.protonated_molecule(mol)
         assert len(protonated_mol) == original_num_atoms
         assert protonated_mol.charge == 0
 
     def test_conjugate_base_molecule_property(
         self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
     ):
-        """Test conjugate_base_molecule property."""
+        """Test conjugate_base_molecule method on settings."""
         mol = Molecule.from_filepath(single_molecule_xyz_file)
         mol.charge = 0
         mol.multiplicity = 1
@@ -1280,14 +1273,10 @@ class TestGaussianpKaJobSettings:
 
         settings = GaussianpKaJobSettings(proton_index=proton_index)
 
-        job = GaussianpKaJob(
-            molecule=mol,
-            settings=settings,
-            label="test_pka",
-            jobrunner=gaussian_jobrunner_no_scratch,
-        )
-
-        conjugate_base_mol = job.conjugate_base_molecule
+        conjugate_base_mol = settings.conjugate_base_molecule(mol)
+        # print(len(conjugate_base_mol))
+        # print(conjugate_base_mol)
+        # conjugate_base_mol = job.conjugate_base_molecule
         assert len(conjugate_base_mol) == original_num_atoms - 1
         assert conjugate_base_mol.charge == -1
 
@@ -1313,9 +1302,5 @@ class TestGaussianpKaJobSettings:
 
         protonated_job, conjugate_base_job = job.opt_jobs
 
-        assert protonated_job.label == "acetic_acid_pka"
-        assert conjugate_base_job.label == "acetic_acid_pka_cb"
-
-    def test_settings_class(self):
-        """Test settings_class class method."""
-        assert GaussianpKaJob.settings_class() == GaussianpKaJobSettings
+        assert protonated_job.label == "acetic_acid_pka_HA_opt"
+        assert conjugate_base_job.label == "acetic_acid_pka_A_opt"

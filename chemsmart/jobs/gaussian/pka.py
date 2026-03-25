@@ -751,6 +751,24 @@ class GaussianpKaJob(GaussianJob):
             energy_units=self.settings.energy_units,
         )
 
+    @property
+    def original_mol(self):
+        """
+        Original molecule used to initialize the job (usually HA).
+        """
+        return self.molecule
+
+    @property
+    def conjugate_base_mol(self):
+        """
+        Conjugate base molecule (A-).
+        """
+        if self.conjugate_base_job:
+            return self.conjugate_base_job.molecule
+        # Fallback if jobs not prepared yet (unlikely given __init__)
+        _, conj_mol = self.settings.conjugate_pair_molecules(self.molecule)
+        return conj_mol
+
 
 class GaussianpKaAnalyzeJob(GaussianpKaJob):
     """
