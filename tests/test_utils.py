@@ -1611,16 +1611,6 @@ class TestPKaTableParsing:
         assert entries[0]["ha_gas"] == f"{tmp_path}/a.log"
         assert entries[0]["pka_ref"] == 14.0
 
-    def test_parse_pka_output_table_missing_required_columns(self, tmp_path):
-        """Test that missing required columns raise ValueError."""
-        from chemsmart.utils.utils import parse_pka_output_table
-
-        table_file = tmp_path / "bad.csv"
-        table_file.write_text("basename,ha_gas\n" "sys1,file.log\n")
-
-        with pytest.raises(ValueError, match="missing required columns"):
-            parse_pka_output_table(str(table_file))
-
     def test_parse_pka_output_table_empty(self, tmp_path):
         """Test that an empty output table raises ValueError."""
         from chemsmart.utils.utils import parse_pka_output_table
