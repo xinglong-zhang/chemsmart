@@ -174,3 +174,98 @@ class TestSerialExecution:
         # Verify both jobs were run despite first one not completing
         mock_job1.run.assert_called_once()
         mock_job2.run.assert_called_once()
+
+
+class TestBatchJobRefactor:
+    """Regression tests for the shared BatchJob orchestration layer."""
+
+    def test_split_jobs_across_nodes_balances_chunks(self):
+        from chemsmart.jobs.batch import BatchJob
+
+        jobs = [1, 2, 3, 4, 5]
+        chunks = BatchJob._split_jobs_across_nodes(jobs, 3)
+
+        assert chunks == [[1, 2], [3, 4], [5]]
+
+
+class TestOrcaQRCBatchExecution:
+    """Tests for ORCA QRC execution via the shared batch layer."""
+
+    def test_orca_qrc_job_uses_batch_parallel(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        mock_molecule = MockMolecule()
+        settings = ORCAJobSettings(functional="B3LYP", basis="def2-SVP")
+        settings.jobtype = "qrc"
+
+        orca_jobrunner_no_scratch.run_in_serial = False
+        job = ORCAQRCJob(
+            molecule=mock_molecule,
+            settings=settings,
+            label="test_orca_qrc",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+
+        mock_job1 = Mock()
+        mock_job1.label = "orca_qrc_f"
+        mock_job2 = Mock()
+        mock_job2.label = "orca_qrc_r"
+
+        mocker.patch.object(
+            job,
+            "_prepare_both_qrc_jobs",
+            return_value=[mock_job1, mock_job2],
+        )
+
+        mock_batch_cls = mocker.patch("chemsmart.jobs.orca.qrc.OrcaBatchJob")
+        mock_batch = mock_batch_cls.return_value
+
+        job._run_both_jobs()
+
+        mock_batch_cls.assert_called_once()
+        call_kwargs = mock_batch_cls.call_args[1]
+        assert call_kwargs["run_in_serial"] is False
+        assert len(call_kwargs["jobs"]) == 2
+        assert call_kwargs["label"] == "test_orca_qrc_batch"
+        assert call_kwargs["jobrunner"] == orca_jobrunner_no_scratch
+        mock_batch.run.assert_called_once()
+
+    def test_orca_qrc_job_serial_execution_stops_on_incomplete(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        mock_molecule = MockMolecule()
+        settings = ORCAJobSettings(functional="B3LYP", basis="def2-SVP")
+        settings.jobtype = "qrc"
+
+        orca_jobrunner_no_scratch.run_in_serial = True
+        job = ORCAQRCJob(
+            molecule=mock_molecule,
+            settings=settings,
+            label="test_orca_qrc_serial",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+
+        mock_job1 = Mock()
+        mock_job1.label = "orca_qrc_f"
+        mock_job1.is_complete.return_value = False
+
+        mock_job2 = Mock()
+        mock_job2.label = "orca_qrc_r"
+        mock_job2.is_complete.return_value = True
+
+        mocker.patch.object(
+            job,
+            "_prepare_both_qrc_jobs",
+            return_value=[mock_job1, mock_job2],
+        )
+
+        job._run_both_jobs()
+
+        mock_job1.run.assert_called_once()
+        mock_job2.run.assert_not_called()
