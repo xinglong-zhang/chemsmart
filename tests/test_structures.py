@@ -464,6 +464,47 @@ class TestMoleculeAdvanced:
         assert rdkit_mol.GetNumConformers() == 1
         assert rdkit_mol.GetConformer().GetPositions().shape == (3, 3)
 
+    def test_is_aromatic_non_aromatic_molecules(self):
+        """Regression test: non-aromatic molecules must not be reported as aromatic.
+
+        Bond-order heuristics can assign order 1.5 to bonds like O-H or Mg-I,
+        which previously caused ``is_aromatic`` to return ``True`` for H2O and
+        MgI2.  The property must use ring membership to validate aromaticity.
+        """
+        # H2O – no rings at all
+        mol_h2o = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.119], [0.0, 0.757, -0.476], [0.0, -0.757, -0.476]]
+            ),
+        )
+        assert not mol_h2o.is_aromatic, "H2O must not be aromatic"
+
+        # MgI2 – linear, no rings
+        mol_mgi2 = Molecule(
+            symbols=["Mg", "I", "I"],
+            positions=np.array([[0.0, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]),
+        )
+        assert not mol_mgi2.is_aromatic, "MgI2 must not be aromatic"
+
+        # Benzene – should still be aromatic
+        import math
+
+        r_c, r_h = 1.39, 2.46
+        pos_c = [
+            [r_c * math.cos(2 * math.pi * i / 6), r_c * math.sin(2 * math.pi * i / 6), 0]
+            for i in range(6)
+        ]
+        pos_h = [
+            [r_h * math.cos(2 * math.pi * i / 6), r_h * math.sin(2 * math.pi * i / 6), 0]
+            for i in range(6)
+        ]
+        mol_benz = Molecule(
+            symbols=["C"] * 6 + ["H"] * 6,
+            positions=np.array(pos_c + pos_h),
+        )
+        assert mol_benz.is_aromatic, "Benzene must be aromatic"
+
     def test_molecule_graph_generation(self):
         """Test molecular graph creation with bond detection."""
         mol = Molecule(

@@ -518,9 +518,21 @@ class Molecule:
     def is_aromatic(self):
         """
         Check if molecule is aromatic or not.
+
+        Uses ring membership to validate aromaticity so that bond-order
+        heuristics (which may assign 1.5 to non-ring bonds such as O-H)
+        do not produce false positives.  An atom is only considered
+        aromatic when it both carries the aromatic flag *and* belongs to
+        at least one ring.
         """
         mol = self.to_rdkit()
-        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
+        Chem.FastFindRings(mol)
+        ring_info = mol.GetRingInfo()
+        ring_atoms = {idx for ring in ring_info.AtomRings() for idx in ring}
+        return any(
+            atom.GetIsAromatic() and atom.GetIdx() in ring_atoms
+            for atom in mol.GetAtoms()
+        )
 
     @property
     def is_ring(self):
