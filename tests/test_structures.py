@@ -129,8 +129,35 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 
         # TODO:
 
+    def test_coordinate_block_without_partitions_returns_molecule(self):
+        """Non-ONIOM coordinate block should return Molecule, not QMMMMolecule."""
+        normal_block = [
+            "C   0.000  0.000  0.000",
+            "H   1.089  0.000  0.000",
+            "H  -0.363  1.027  0.000",
+            "H  -0.363 -0.513  0.890",
+            "H  -0.363 -0.513 -0.890",
+        ]
+        cb = CoordinateBlock(coordinate_block=normal_block)
+        mol = cb.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "Molecule"
 
-class TestStructures:
+    def test_coordinate_block_with_partitions_returns_qmmm_molecule(self):
+        """ONIOM coordinate block should return QMMMMolecule."""
+        oniom_block = [
+            "C   0.000  0.000  0.000  H",
+            "H   1.089  0.000  0.000  L",
+            "H  -0.363  1.027  0.000  L",
+            "H  -0.363 -0.513  0.890  L",
+            "H  -0.363 -0.513 -0.890  L",
+        ]
+        cb = CoordinateBlock(coordinate_block=oniom_block)
+        mol = cb.molecule
+        assert isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "QMMMMolecule"
+
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):

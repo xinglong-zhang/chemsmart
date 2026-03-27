@@ -2070,7 +2070,10 @@ class CoordinateBlock:
         supplied as text or as a list of lines into
         Molecule class.
         """
-        if not self.partitions:
+        partitions, high_level_atoms, medium_level_atoms, low_level_atoms = (
+            self.partitions
+        )
+        if not partitions:
             return Molecule(
                 symbols=self.symbols,
                 positions=self.positions,
@@ -2085,9 +2088,9 @@ class CoordinateBlock:
                 frozen_atoms=self.constrained_atoms,
                 pbc_conditions=self.pbc_conditions,
                 translation_vectors=self.translation_vectors,
-                high_level_atoms=self.partitions[1],
-                medium_level_atoms=self.partitions[2],
-                low_level_atoms=self.partitions[3],
+                high_level_atoms=high_level_atoms,
+                medium_level_atoms=medium_level_atoms,
+                low_level_atoms=low_level_atoms,
             )
 
     def _get_symbols(self):
