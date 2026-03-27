@@ -1,6 +1,6 @@
 """Tests for JobRunner class and run_in_serial flag."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, PropertyMock
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
@@ -186,6 +186,225 @@ class TestBatchJobRefactor:
         chunks = BatchJob._split_jobs_across_nodes(jobs, 3)
 
         assert chunks == [[1, 2], [3, 4], [5]]
+
+
+class TestGaussianBatchDelegation:
+    """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""
+
+    def test_crest_job_uses_batch_parallel(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.run_in_serial = False
+        job = GaussianCrestJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_crest",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        mock_jobs = [Mock(label="conf_1"), Mock(label="conf_2")]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.crest.GaussianBatchJob"
+        )
+        mock_batch = mock_batch_cls.return_value
+
+        job._run_all_jobs()
+
+        mock_batch_cls.assert_called_once()
+        call_kwargs = mock_batch_cls.call_args[1]
+        assert call_kwargs["jobs"] == mock_jobs
+        assert call_kwargs["run_in_serial"] is False
+        assert call_kwargs["label"] == "test_crest_batch"
+        assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
+        mock_batch.run.assert_called_once()
+
+    def test_traj_job_uses_batch_parallel(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.run_in_serial = False
+        job = GaussianTrajJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_traj",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+        )
+
+        mock_jobs = [Mock(label="traj_1"), Mock(label="traj_2")]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
+        )
+        mock_batch = mock_batch_cls.return_value
+
+        job._run_all_jobs()
+
+        mock_batch_cls.assert_called_once()
+        call_kwargs = mock_batch_cls.call_args[1]
+        assert call_kwargs["jobs"] == mock_jobs
+        assert call_kwargs["run_in_serial"] is False
+        assert call_kwargs["label"] == "test_traj_batch"
+        assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
+        mock_batch.run.assert_called_once()
+
+    def test_traj_job_serial_execution_stops_on_incomplete(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.run_in_serial = True
+        job = GaussianTrajJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_traj_serial",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+        )
+
+        mock_job1 = Mock()
+        mock_job1.label = "traj_1"
+        mock_job1.is_complete.return_value = False
+
+        mock_job2 = Mock()
+        mock_job2.label = "traj_2"
+        mock_job2.is_complete.return_value = True
+
+        mocker.patch.object(
+            job,
+            "_prepare_all_jobs",
+            return_value=[mock_job1, mock_job2],
+        )
+
+        job._run_all_jobs()
+
+        mock_job1.run.assert_called_once()
+        mock_job2.run.assert_not_called()
+
+    def test_dias_job_uses_batch_parallel_per_stage(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.run_in_serial = False
+        job = GaussianDIASJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_dias",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="irc",
+        )
+
+        molecule_jobs = [Mock(label="mol_1"), Mock(label="mol_2")]
+        fragment1_jobs = [Mock(label="f1_1")]
+        fragment2_jobs = [Mock(label="f2_1")]
+
+        mocker.patch.object(
+            type(job),
+            "all_molecules_jobs",
+            new_callable=PropertyMock,
+            return_value=molecule_jobs,
+        )
+        mocker.patch.object(
+            type(job),
+            "fragment1_jobs",
+            new_callable=PropertyMock,
+            return_value=fragment1_jobs,
+        )
+        mocker.patch.object(
+            type(job),
+            "fragment2_jobs",
+            new_callable=PropertyMock,
+            return_value=fragment2_jobs,
+        )
+
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.dias.GaussianBatchJob"
+        )
+
+        job._run()
+
+        assert mock_batch_cls.call_count == 3
+        first_call = mock_batch_cls.call_args_list[0][1]
+        second_call = mock_batch_cls.call_args_list[1][1]
+        third_call = mock_batch_cls.call_args_list[2][1]
+
+        assert first_call["jobs"] == molecule_jobs
+        assert first_call["label"] == "test_dias_molecules_batch"
+        assert second_call["jobs"] == fragment1_jobs
+        assert second_call["label"] == "test_dias_fragment1_batch"
+        assert third_call["jobs"] == fragment2_jobs
+        assert third_call["label"] == "test_dias_fragment2_batch"
+
+        for call in mock_batch_cls.call_args_list:
+            assert call[1]["run_in_serial"] is False
+            assert call[1]["jobrunner"] == gaussian_jobrunner_no_scratch
+
+        assert mock_batch_cls.return_value.run.call_count == 3
+
+    def test_dias_job_serial_fragment1_stops_on_incomplete(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.dias import GaussianDIASJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.run_in_serial = True
+        job = GaussianDIASJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_dias_serial",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="irc",
+        )
+
+        mock_job1 = Mock()
+        mock_job1.label = "f1_1"
+        mock_job1.is_complete.return_value = False
+
+        mock_job2 = Mock()
+        mock_job2.label = "f1_2"
+        mock_job2.is_complete.return_value = True
+
+        mocker.patch.object(
+            type(job),
+            "fragment1_jobs",
+            new_callable=PropertyMock,
+            return_value=[mock_job1, mock_job2],
+        )
+
+        job._run_fragment1_jobs()
+
+        mock_job1.run.assert_called_once()
+        mock_job2.run.assert_not_called()
 
 
 class TestOrcaQRCBatchExecution:

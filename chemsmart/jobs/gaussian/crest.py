@@ -9,6 +9,7 @@ progress and completion tracking across the ensemble.
 
 import logging
 
+from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 logger = logging.getLogger(__name__)
@@ -217,12 +218,14 @@ class GaussianCrestJob(GaussianJob):
         number specified in num_confs_to_opt. This allows for partial
         ensemble processing when needed.
         """
+        jobs_to_run = self.all_conformers_jobs[: self.num_confs_to_opt]
+
         # Check if jobs should be run in serial based on jobrunner flag
         if self.jobrunner and self.jobrunner.run_in_serial:
             logger.info(
                 "Running conformer jobs in serial mode (one after another)"
             )
-            for job in self.all_conformers_jobs[: self.num_confs_to_opt]:
+            for job in jobs_to_run:
                 job.run()
                 # Enforce that job completed before proceeding to next
                 if not job.is_complete():
@@ -232,9 +235,14 @@ class GaussianCrestJob(GaussianJob):
                     )
                     break
         else:
-            logger.info("Running conformer jobs using default behavior")
-            for job in self.all_conformers_jobs[: self.num_confs_to_opt]:
-                job.run()
+            logger.info("Running conformer jobs using GaussianBatchJob")
+            batch_job = GaussianBatchJob(
+                jobs=jobs_to_run,
+                run_in_serial=False,
+                label=f"{self.label}_batch",
+                jobrunner=self.jobrunner,
+            )
+            batch_job.run()
 
     def _run(self):
         """

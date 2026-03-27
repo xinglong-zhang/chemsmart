@@ -13,6 +13,7 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.grouper import StructureGrouperFactory
 
@@ -354,10 +355,15 @@ class GaussianTrajJob(GaussianJob):
                     break
         else:
             logger.info(
-                "Running trajectory structure jobs using default behavior"
+                "Running trajectory structure jobs using GaussianBatchJob"
             )
-            for job in jobs_to_run:
-                job.run()
+            batch_job = GaussianBatchJob(
+                jobs=jobs_to_run,
+                run_in_serial=False,
+                label=f"{self.label}_batch",
+                jobrunner=self.jobrunner,
+            )
+            batch_job.run()
 
     def _run(self):
         """
