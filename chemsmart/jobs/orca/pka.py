@@ -469,9 +469,21 @@ class ORCApKaJob(ORCAJob):
         logger.info(f"[parallel] Running SP job for role={role}: {sp_job}")
         sp_job.run()
         with self._pka_lock:
-            if self._sp_jobs is None:
-                self._sp_jobs = [None, None]
-            self._sp_jobs[sp_index] = sp_job
+            # Store SP jobs in the appropriate container based on role.
+            if role in ("HA", "A"):
+                if self._sp_jobs is None:
+                    self._sp_jobs = [None, None]
+                target_list = self._sp_jobs
+            elif role in ("HB", "B"):
+                if self._ref_sp_jobs is None:
+                    self._ref_sp_jobs = [None, None]
+                target_list = self._ref_sp_jobs
+            else:
+                # Fallback to main SP jobs if an unexpected role is encountered.
+                if self._sp_jobs is None:
+                    self._sp_jobs = [None, None]
+                target_list = self._sp_jobs
+            target_list[sp_index] = sp_job
 
     def _run_parallel(self):
         import threading
