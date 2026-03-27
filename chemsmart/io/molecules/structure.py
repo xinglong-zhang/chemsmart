@@ -1415,9 +1415,9 @@ class Molecule:
         Example::
 
             mol = Molecule.from_filepath("phenol.xyz")
-            phenoxide = mol.delete_atoms(atom_indices=13)        # 1-based
-            phenoxide = mol.delete_atoms(atom_indices=[13])
-            phenoxide = mol.delete_atoms(atom_indices=12, one_based=False)
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=13)        # 1-based
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=[13])
+            phenoxide = mol.delete_atoms_by_indices(atom_indices=12, one_based=False)
         """
         if atom_indices is None:
             raise ValueError(
