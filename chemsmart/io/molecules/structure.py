@@ -830,6 +830,13 @@ class Molecule:
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
 
+        if basename.endswith(".pdb"):
+            return cls._read_pdb_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         if basename.endswith((".com", ".gjf")):
             return cls._read_gaussian_inputfile(filepath)
 
@@ -1006,6 +1013,129 @@ class Molecule:
     #
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
+
+    @staticmethod
+    @file_cache()
+    def _read_pdb_file(filepath, index="-1", return_list=False):
+        """Read PDB format molecular structure file preserving residue metadata."""
+        models = Molecule._parse_pdb_models(filepath)
+        if not models:
+            raise ValueError(
+                f"No ATOM/HETATM records found in PDB file: {filepath}"
+            )
+
+        parsed_index = string2index_1based(index)
+        molecules = models[parsed_index]
+
+        if return_list and not isinstance(molecules, list):
+            return [molecules]
+        return molecules
+
+    @classmethod
+    def _parse_pdb_models(cls, filepath):
+        """Parse all PDB models from file into ``Molecule`` objects."""
+        with open(filepath, "r") as f:
+            lines = f.readlines()
+
+        models = []
+        current_atom_lines = []
+        seen_model_records = False
+
+        def flush_current_model():
+            if current_atom_lines:
+                models.append(
+                    cls._molecule_from_pdb_atom_lines(current_atom_lines)
+                )
+
+        for line in lines:
+            record_name = line[:6].strip()
+            if record_name == "MODEL":
+                seen_model_records = True
+                current_atom_lines = []
+                continue
+
+            if record_name == "ENDMDL":
+                flush_current_model()
+                current_atom_lines = []
+                continue
+
+            if record_name in {"ATOM", "HETATM"}:
+                current_atom_lines.append(line.rstrip("\n"))
+
+        if seen_model_records:
+            flush_current_model()
+        elif current_atom_lines:
+            models.append(
+                cls._molecule_from_pdb_atom_lines(current_atom_lines)
+            )
+
+        return models
+
+    @classmethod
+    def _molecule_from_pdb_atom_lines(cls, atom_lines):
+        """Build a ``Molecule`` from parsed PDB ATOM/HETATM lines."""
+        symbols = []
+        positions = []
+        atom_names = []
+        residue_names = []
+        residue_numbers = []
+        chain_ids = []
+        record_types = []
+
+        for line in atom_lines:
+            record_types.append(line[:6].strip() or "HETATM")
+            atom_name = line[12:16].strip()
+            residue_name = line[17:20].strip() or "MOL"
+            chain_id = line[21].strip()
+            residue_number_text = line[22:26].strip()
+            residue_number = (
+                int(residue_number_text) if residue_number_text else 1
+            )
+
+            element_text = line[76:78].strip()
+            if element_text:
+                symbol = p.to_element(element_text)
+            else:
+                symbol = cls._infer_pdb_element_from_atom_name(atom_name)
+
+            x = float(line[30:38])
+            y = float(line[38:46])
+            z = float(line[46:54])
+
+            symbols.append(symbol)
+            positions.append([x, y, z])
+            atom_names.append(atom_name or symbol)
+            residue_names.append(residue_name)
+            residue_numbers.append(residue_number)
+            chain_ids.append(chain_id)
+
+        molecule = cls(
+            symbols=symbols,
+            positions=np.array(positions, dtype=float),
+            info={
+                "atom_name": atom_names,
+                "residue_name": residue_names,
+                "residue_number": residue_numbers,
+                "chain_id": chain_ids,
+                "record_type": record_types,
+            },
+        )
+        molecule.atom_names = atom_names
+        molecule.residue_names = residue_names
+        molecule.residue_numbers = residue_numbers
+        molecule.chain_ids = chain_ids
+        molecule.record_type = record_types
+        return molecule
+
+    @staticmethod
+    def _infer_pdb_element_from_atom_name(atom_name):
+        """Infer element symbol from PDB atom-name field when columns 77-78 are blank."""
+        cleaned = re.sub(r"[^A-Za-z]", "", atom_name or "")
+        if not cleaned:
+            raise ValueError(
+                f"Unable to infer element from atom name '{atom_name}'"
+            )
+        return p.to_element(cleaned)
 
     @staticmethod
     @file_cache()

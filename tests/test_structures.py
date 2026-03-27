@@ -1083,6 +1083,54 @@ class TestMoleculeAdvanced:
             assert line[22:26] == "   7"
             assert line[76:78] == f"{element:>2}"
 
+    def test_from_pdb_file_preserves_atom_and_residue_metadata(self, tmpdir):
+        """Test native PDB import preserves atom names and residue metadata."""
+        pdb_content = (
+            "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+            "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+            "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "water.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert mol.symbols == ["O", "H", "H"]
+        assert mol.atom_names == ["O", "H1", "H2"]
+        assert mol.residue_names == ["HOH", "HOH", "HOH"]
+        assert mol.residue_numbers == [7, 7, 7]
+        assert mol.chain_ids == ["A", "A", "A"]
+        assert np.allclose(
+            mol.positions,
+            np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        )
+
+    def test_from_pdb_file_supports_model_index_selection(self, tmpdir):
+        """Test PDB MODEL/ENDMDL parsing and index selection."""
+        pdb_content = (
+            "MODEL        1\n"
+            "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "MODEL        2\n"
+            "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "models.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        models = Molecule.from_filepath(pdb_file, index=":", return_list=True)
+        assert len(models) == 2
+        assert models[0].chain_ids == ["A"]
+        assert models[1].chain_ids == ["B"]
+
+        last_model = Molecule.from_filepath(pdb_file, index="-1")
+        assert np.allclose(last_model.positions, np.array([[1.5, 2.5, 3.5]]))
+        assert last_model.residue_numbers == [2]
+
 
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
