@@ -475,7 +475,11 @@ class TestMoleculeAdvanced:
         mol_h2o = Molecule(
             symbols=["O", "H", "H"],
             positions=np.array(
-                [[0.0, 0.0, 0.119], [0.0, 0.757, -0.476], [0.0, -0.757, -0.476]]
+                [
+                    [0.0, 0.0, 0.119],
+                    [0.0, 0.757, -0.476],
+                    [0.0, -0.757, -0.476],
+                ]
             ),
         )
         assert not mol_h2o.is_aromatic, "H2O must not be aromatic"
@@ -483,7 +487,9 @@ class TestMoleculeAdvanced:
         # MgI2 – linear, no rings
         mol_mgi2 = Molecule(
             symbols=["Mg", "I", "I"],
-            positions=np.array([[0.0, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]),
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]
+            ),
         )
         assert not mol_mgi2.is_aromatic, "MgI2 must not be aromatic"
 
@@ -492,11 +498,19 @@ class TestMoleculeAdvanced:
 
         r_c, r_h = 1.39, 2.46
         pos_c = [
-            [r_c * math.cos(2 * math.pi * i / 6), r_c * math.sin(2 * math.pi * i / 6), 0]
+            [
+                r_c * math.cos(2 * math.pi * i / 6),
+                r_c * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
             for i in range(6)
         ]
         pos_h = [
-            [r_h * math.cos(2 * math.pi * i / 6), r_h * math.sin(2 * math.pi * i / 6), 0]
+            [
+                r_h * math.cos(2 * math.pi * i / 6),
+                r_h * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
             for i in range(6)
         ]
         mol_benz = Molecule(
