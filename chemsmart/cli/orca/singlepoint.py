@@ -67,6 +67,7 @@ def sp(ctx, skip_completed, **kwargs):
     # get label for the job output files
     label = ctx.obj["label"]
 
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
     from chemsmart.utils.cli import create_sp_label
 
@@ -93,7 +94,13 @@ def sp(ctx, skip_completed, **kwargs):
             )
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA single point jobs")
-        return jobs
+
+        run_in_serial = ctx.obj["jobrunner"].run_in_serial
+        return ORCABatchJob(
+            jobs=jobs,
+            run_in_serial=run_in_serial,
+            label=f"{label}_batch",
+        )
     else:
         # Single molecule case
         molecule = molecules[-1]
