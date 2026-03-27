@@ -110,7 +110,8 @@ class GaussianCrestJob(GaussianJob):
             self.all_conformers = unique_molecules
 
         else:
-            # if no grouping strategy is provided, use all molecules as conformers
+            # if no grouping strategy is provided,
+            # use all molecules as conformers
             self.grouper = None
             self.all_conformers = molecules
 

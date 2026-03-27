@@ -48,7 +48,8 @@ class AtomsChargeMultiplicity(Atoms):
             value: The charge of the molecule (must be an integer).
 
         Raises:
-            TypeError: If value is not an integer or cannot be converted to one.
+            TypeError: If value is not an integer
+            or cannot be converted to one.
             ValueError: If value is not a valid molecular charge
                         (optional, depending on constraints).
         """
@@ -77,7 +78,8 @@ class AtomsChargeMultiplicity(Atoms):
             value: The spin multiplicity of the molecule (must be an integer).
 
         Raises:
-            TypeError: If value is not an integer or cannot be converted to one.
+            TypeError: If value is not an integer
+            or cannot be converted to one.
             ValueError: If value is not a valid spin multiplicity
                         (optional, depending on constraints).
         """
@@ -155,7 +157,8 @@ class AtomsChargeMultiplicity(Atoms):
             ]
 
         # if no pbc, then should set translation vectors to None
-        # cannot be set in ASE Atoms, as it defaults to zero Cell (still not None)
+        # cannot be set in ASE Atoms, as it
+        # defaults to zero Cell (still not None)
 
         # TODO: may need to convert velocities from ASE Atoms to Molecule
         # although this is not used in the current implementation

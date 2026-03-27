@@ -1,4 +1,4 @@
-!  m062x def2-tzvp DEFGRID3 smd(cyclohexane)
+!  m062x def2-tzvp DEFGRID3 SMD(cyclohexane)
 # Number of processors
 %pal nprocs 64 end
 # Memory per core

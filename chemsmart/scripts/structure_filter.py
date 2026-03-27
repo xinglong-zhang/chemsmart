@@ -7,12 +7,12 @@ criteria such as similarity, energy, or structural features, helping
 to organize and analyze large sets of molecular conformations.
 """
 
-import glob
 import logging
 import os
 
 import click
 
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.grouper import StructureGrouperFactory
 from chemsmart.utils.logger import create_logger
@@ -32,7 +32,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 )
 @click.option(
     "-t",
-    "--type",
+    "--filetype",
     type=str,
     default=None,
     help="Type of files to filter (e.g., 'log', 'out').",
@@ -72,7 +72,12 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Number of processors for grouping.",
 )
 def entry_point(
-    directory, type, grouping_strategy, num_grouper_processors, value, **kwargs
+    directory,
+    filetype,
+    grouping_strategy,
+    num_grouper_processors,
+    value,
+    **kwargs,
 ):
     """
     Filter molecular structures to remove duplicates.
@@ -81,15 +86,17 @@ def entry_point(
     directory = os.path.abspath(directory)
 
     # Set default file type if not provided
-    if type is None:
+    if filetype is None:
         logger.info(
             "Type of files is not provided! Assuming .log file type "
             "for filtering."
         )
-        type = "log"
+        filetype = "log"
 
     # Obtain all structures from files in the directory
-    filenames = glob.glob(f"{directory}/*.{type}")
+    filenames = BaseFolder(
+        folder=directory
+    ).get_all_files_in_current_folder_by_suffix(filetype=filetype)
 
     # Sort filenames based on numeric part
     sorted_filenames = sorted(filenames, key=extract_number)
@@ -120,7 +127,7 @@ def entry_point(
 
     # Write filtering results to output file
     output_file = os.path.join(
-        directory, f"filter_{base_filename}_{type}files.txt"
+        directory, f"filter_{base_filename}_{filetype}files.txt"
     )
 
     f = open(output_file, "w")
@@ -141,7 +148,7 @@ def entry_point(
     f.close()
 
     # Write unique structure filenames to separate file
-    g = open(f"unique_structures_{base_filename}_{type}.txt", "w")
+    g = open(f"unique_structures_{base_filename}_{filetype}.txt", "w")
     logger.info("Writing unique structures to file.")
     for group_index in group_indices:
         unique_file = sorted_filenames[group_index[0]]

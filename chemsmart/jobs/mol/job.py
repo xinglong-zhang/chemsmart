@@ -79,7 +79,8 @@ class PyMOLJob(Job):
             quiet_mode: Run PyMOL in quiet mode (default: True).
             command_line_only: Use command line interface only (default: True).
             coordinates: Coordinates for atom labeling (default: None).
-            isosurface_value: Isosurface value for NCI visualization (optional).
+            isosurface_value: Isosurface value
+            for NCI visualization (optional).
             transparency_value: Transparency value for surfaces (optional).
             surface_quality: Surface quality setting (optional).
             antialias_value: Antialiasing level for rendering (optional).

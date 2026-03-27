@@ -163,6 +163,14 @@ gas: Null
 ```
 Then all jobs will use settings specified in `solv`, i.e., all calculations will be run in implicit solvation model.
 
+**Note on GEN/GENECP basis sets**: When using `basis: genecp` with `heavy_elements` specified, CHEMSMART automatically determines whether to use the `gen` or `genecp` keyword in the Gaussian input file based on the elements present:
+- If no heavy elements are present in the molecule, the `light_elements_basis` is used directly
+- If all heavy elements have atomic number ≤ 36 (up to Kr), the `gen` keyword is used  
+- If any heavy element has atomic number > 36 (Rb and beyond), the `genecp` keyword is used
+
+For example, with `heavy_elements: ['I', 'Br']`, a molecule containing only Br (Z=35) will use `gen`, while a molecule containing I (Z=53) will use `genecp`.
+This is useful when simulating different structures using one single project settings .yaml file.
+
 ---
 The `~/.chemsmart/orca/` directory contains files related to ORCA project settings, which contain DFT functional and basis set etc, that is required to write the input file for running an ORCA job. For example, we can specify a test project settings in `~/.chemsmart/orca/test.yaml` with the following information:
 
@@ -233,9 +241,14 @@ make clean
 Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
 
 ```bash
+chemsmart --version
+```
+to get the current version of CHEMSMART, and
+
+```bash
 chemsmart --help
 ```
-to get the options for running chemsmart package.
+to get the options for running CHEMSMART package.
 
 ## Usage
 

@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest import mock
 
+from click.testing import CliRunner
+
 
 class TestVersion:
     """Test the version loading logic from chemsmart/__init__.py."""
@@ -17,7 +19,8 @@ class TestVersion:
         # Verify it's a string
         assert isinstance(chemsmart.__version__, str)
 
-        # Verify it's not the fallback value (unless VERSION file is actually "0.0.0")
+        # Verify it's not the fallback value
+        # (unless VERSION file is actually "0.0.0")
         # Read the actual VERSION file to compare
         version_file = Path(chemsmart.__file__).with_name("VERSION")
         expected_version = version_file.read_text(encoding="utf-8").strip()
@@ -40,7 +43,8 @@ class TestVersion:
             assert version == "0.0.0"
 
     def test_version_fallback_when_file_unreadable(self):
-        """Test that fallback to '0.0.0' works when VERSION file is unreadable."""
+        """Test that fallback to '0.0.0' works
+        when VERSION file is unreadable."""
         # Mock the read_text method to raise a PermissionError
         with mock.patch.object(Path, "read_text", side_effect=PermissionError):
             # Simulate the version loading logic
@@ -61,9 +65,20 @@ class TestVersion:
         # Version should be non-empty
         assert len(chemsmart.__version__) > 0
 
-        # Version should follow semantic versioning format: major.minor.patch[optional]
+        # Version should follow semantic versioning
+        # format: major.minor.patch[optional]
         # Examples: "1.0.0", "0.1.16", "2.3.4-dev", "1.2.3.post1"
         version_pattern = r"^\d+\.\d+\.\d+.*$"
         assert re.match(
             version_pattern, chemsmart.__version__
         ), f"Version '{chemsmart.__version__}' does not follow semantic versioning format"
+
+    def test_cli_version_option(self):
+        """Test that `chemsmart --version` outputs the correct version."""
+        import chemsmart
+        from chemsmart.cli.main import entry_point
+
+        runner = CliRunner()
+        result = runner.invoke(entry_point, ["--version"])
+        assert result.exit_code == 0
+        assert chemsmart.__version__ in result.output
