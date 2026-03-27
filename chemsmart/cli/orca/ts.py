@@ -222,10 +222,15 @@ def ts(
 
     logger.debug(f"Final job label: {label}")
 
-    # get molecule from context (use the last molecule if multiple)
+    # normalize to list for batch-friendly handling while preserving
+    # single-molecule backwards compatibility.
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]  # get last molecule from list of molecules
-    logger.info(f"Running TS search on molecule: {molecule}")
+    if not isinstance(molecules, list):
+        molecules = [molecules]
+
+    molecule_indices = ctx.obj.get("molecule_indices")
+    if molecule_indices is None:
+        molecule_indices = list(range(1, len(molecules) + 1))
 
     logger.info(f"Final TS job settings: {ts_settings.__dict__}")
 
@@ -240,8 +245,35 @@ def ts(
     # validate charge and multiplicity consistency only for direct ts jobs
     check_charge_and_multiplicity(ts_settings)
 
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.ts import ORCATSJob
 
+    if len(molecules) > 1:
+        logger.info(f"Creating {len(molecules)} ORCA TS jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running TS search for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+            jobs.append(
+                ORCATSJob(
+                    molecule=molecule,
+                    settings=ts_settings,
+                    label=molecule_label,
+                    skip_completed=skip_completed,
+                    **kwargs,
+                )
+            )
+
+        return ORCABatchJob(
+            jobs=jobs,
+            run_in_serial=ctx.obj["jobrunner"].run_in_serial,
+            label=f"{label}_batch",
+        )
+
+    molecule = molecules[0]
+    logger.info(f"Running TS search on molecule: {molecule}")
     return ORCATSJob(
         molecule=molecule,
         settings=ts_settings,
