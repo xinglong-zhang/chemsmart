@@ -488,3 +488,90 @@ class TestOrcaQRCBatchExecution:
 
         mock_job1.run.assert_called_once()
         mock_job2.run.assert_not_called()
+
+
+class TestOrcaPkaBatchExecution:
+    """Tests for ORCA pKa staged execution via ORCApKaBatchJob."""
+
+    def test_orca_pka_job_parallel_mode_dispatches_to_run_parallel(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.orca.pka import ORCApKaJob
+        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+        mock_molecule = MockMolecule()
+        settings = ORCApKaJobSettings(
+            proton_index=1,
+            scheme="direct",
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="def2-SVP",
+        )
+
+        orca_jobrunner_no_scratch.run_in_serial = False
+        job = ORCApKaJob(
+            molecule=mock_molecule,
+            settings=settings,
+            label="test_orca_pka",
+            jobrunner=orca_jobrunner_no_scratch,
+            parallel=True,
+        )
+
+        run_parallel_spy = mocker.patch.object(job, "_run_parallel")
+        run_opt_spy = mocker.patch.object(job, "_run_opt_jobs")
+        run_sp_spy = mocker.patch.object(job, "_run_sp_jobs")
+
+        job._run()
+
+        run_parallel_spy.assert_called_once()
+        run_opt_spy.assert_not_called()
+        run_sp_spy.assert_not_called()
+
+    def test_orca_pka_job_serial_stops_before_sp_when_opt_incomplete(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.orca.pka import ORCApKaJob
+        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+        mock_molecule = MockMolecule()
+        settings = ORCApKaJobSettings(
+            proton_index=1,
+            scheme="direct",
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="def2-SVP",
+        )
+
+        orca_jobrunner_no_scratch.run_in_serial = True
+        job = ORCApKaJob(
+            molecule=mock_molecule,
+            settings=settings,
+            label="test_orca_pka_serial",
+            jobrunner=orca_jobrunner_no_scratch,
+            parallel=True,
+        )
+
+        opt_job1 = Mock(label="opt_ha")
+        opt_job1.is_complete.return_value = False
+        opt_job2 = Mock(label="opt_a")
+        opt_job2.is_complete.return_value = True
+
+        mocker.patch.object(
+            type(job),
+            "opt_jobs",
+            new_callable=PropertyMock,
+            return_value=[opt_job1, opt_job2],
+        )
+        run_opt_spy = mocker.patch.object(job, "_run_opt_jobs")
+        run_sp_spy = mocker.patch.object(job, "_run_sp_jobs")
+        run_parallel_spy = mocker.patch.object(job, "_run_parallel")
+
+        job._run()
+
+        # Parallel mode is disabled when run_in_serial=True.
+        assert job.parallel is False
+        run_parallel_spy.assert_not_called()
+        run_opt_spy.assert_called_once()
+        run_sp_spy.assert_not_called()
