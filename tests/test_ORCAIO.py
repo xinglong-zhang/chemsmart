@@ -2792,7 +2792,8 @@ class TestORCAOutput:
         self, ethanol_sp_cosmors_water_path
     ):
         """COSMORS output redirects all SP calculations to sub-files, so the
-        main output has no SCF geometry steps; all_structures should be empty."""
+        main output has no SCF geometry steps; all_structures should be empty.
+        """
         orca_out = ORCAOutput(filename=ethanol_sp_cosmors_water_path)
         assert orca_out.all_structures == []
 

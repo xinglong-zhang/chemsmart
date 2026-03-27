@@ -1038,9 +1038,7 @@ def water_sp_gas_path(orca_outputs_directory):
 
 @pytest.fixture()
 def ethanol_sp_cosmors_water_path(orca_outputs_directory):
-    return os.path.join(
-        orca_outputs_directory, "ethanol_sp_cosmors_water.out"
-    )
+    return os.path.join(orca_outputs_directory, "ethanol_sp_cosmors_water.out")
 
 
 @pytest.fixture()
