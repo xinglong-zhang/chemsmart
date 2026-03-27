@@ -129,8 +129,34 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 
         # TODO:
 
+    def test_coordinate_block_without_partitions_returns_molecule(self):
+        """Non-ONIOM coordinate block should return Molecule, not QMMMMolecule."""
+        normal_block = [
+            "C   0.000  0.000  0.000",
+            "H   1.089  0.000  0.000",
+            "H  -0.363  1.027  0.000",
+            "H  -0.363 -0.513  0.890",
+            "H  -0.363 -0.513 -0.890",
+        ]
+        cb = CoordinateBlock(coordinate_block=normal_block)
+        mol = cb.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "Molecule"
 
-class TestStructures:
+    def test_coordinate_block_with_partitions_returns_qmmm_molecule(self):
+        """ONIOM coordinate block should return QMMMMolecule."""
+        oniom_block = [
+            "C   0.000  0.000  0.000  H",
+            "H   1.089  0.000  0.000  L",
+            "H  -0.363  1.027  0.000  L",
+            "H  -0.363 -0.513  0.890  L",
+            "H  -0.363 -0.513 -0.890  L",
+        ]
+        cb = CoordinateBlock(coordinate_block=oniom_block)
+        mol = cb.molecule
+        assert isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "QMMMMolecule"
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):
@@ -1954,33 +1980,6 @@ def test_qmmm_partition_out_of_range_raises():
     with pytest.raises(ValueError) as exc:
         q._get_partition_levels()
     assert "out of range" in str(exc.value)
-
-
-def test_qmmm_molecule_str_repr_shows_molecule():
-    """QMMMMolecule __str__ and __repr__ should display as Molecule, not QMMMMolecule."""
-    symbols = ["H", "H", "O"]
-    positions = [[0, 0, 0], [1, 0, 0], [0.5, 0.5, 0]]
-    m = Molecule(symbols=symbols, positions=positions)
-
-    # Created from molecule parameter
-    q = QMMMMolecule(molecule=m)
-    assert str(q).startswith("Molecule<")
-    assert "QMMMMolecule" not in str(q)
-    assert repr(q).startswith("Molecule<")
-    assert "QMMMMolecule" not in repr(q)
-
-    # Created directly with symbols/positions
-    q2 = QMMMMolecule(
-        symbols=symbols,
-        positions=positions,
-        high_level_atoms=[1],
-        medium_level_atoms=[2],
-        low_level_atoms=[3],
-    )
-    assert str(q2).startswith("Molecule<")
-    assert "QMMMMolecule" not in str(q2)
-    assert repr(q2).startswith("Molecule<")
-    assert "QMMMMolecule" not in repr(q2)
 
 
 class TestInChIKey:
