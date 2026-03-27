@@ -1015,6 +1015,74 @@ class TestMoleculeAdvanced:
         ]
         assert len(atom_lines) == mol.num_atoms
 
+    def test_to_pdb_strict_columns_and_final_end_record(self):
+        """Test strict PDB 3.3 atom-column formatting and final END line."""
+        mol = Molecule(
+            symbols=["C", "Cl"],
+            positions=np.array([[0.0, 1.234, -2.5], [3.0, -4.0, 5.0]]),
+            info={
+                "record_type": ["HETATM", "ATOM"],
+                "atom_name": ["C1", "CL1"],
+                "residue_name": ["LIG", "SOL"],
+                "residue_number": [1, 2],
+                "chain_id": ["A", "B"],
+            },
+        )
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        lines = pdb_string.splitlines()
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 2
+        assert lines[-1] == "END"
+
+        first, second = atom_lines
+        assert first.startswith("HETATM")
+        assert second.startswith("ATOM  ")
+
+        # PDB v3.3 fixed columns (1-based): chainID=22, resSeq=23-26, element=77-78
+        assert first[21] == "A"
+        assert second[21] == "B"
+        assert first[22:26] == "   1"
+        assert second[22:26] == "   2"
+        assert first[76:78] == " C"
+        assert second[76:78] == "Cl"
+
+        # Ensure standard atom-record width is preserved.
+        assert len(first) >= 78
+        assert len(second) >= 78
+
+    def test_to_pdb_uses_molecule_attributes_for_chain_and_residue_metadata(
+        self,
+    ):
+        """Test chain/residue metadata taken directly from Molecule attributes."""
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+        )
+        mol.chain_ids = ["A", "A", "A"]
+        mol.residue_numbers = [7, 7, 7]
+        mol.residue_names = ["HOH", "HOH", "HOH"]
+        mol.atom_names = ["O", "H1", "H2"]
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        atom_lines = [
+            line
+            for line in pdb_string.splitlines()
+            if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 3
+        for line, element in zip(atom_lines, ["O", "H", "H"]):
+            assert line[17:20] == "HOH"
+            assert line[21] == "A"
+            assert line[22:26] == "   7"
+            assert line[76:78] == f"{element:>2}"
+
 
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
