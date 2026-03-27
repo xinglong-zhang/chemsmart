@@ -314,12 +314,24 @@ class Submitter(RegistryMixin):
 
         Args:
             jobs (list): List of jobs in the array.
-            cli_args: Command line arguments.
+            cli_args: Command line arguments. This may be either:
+                - a single argument list shared by all jobs (backward-compatible), or
+                - a sequence (e.g., list or tuple) of per-job argument lists,
+                  where ``cli_args[i]`` contains the args for ``jobs[i]``.
         """
         for i, job in enumerate(jobs):
+            # Determine CLI args for this specific job/index.
+            # If cli_args looks like a per-job sequence (same length as jobs and
+            # elements are themselves sequences), use cli_args[i]. Otherwise,
+            # fall back to using cli_args for all jobs (backward-compatible).
+            job_cli_args = cli_args
+            if isinstance(cli_args, (list, tuple)):
+                if len(cli_args) == len(jobs) and isinstance(cli_args[i], (list, tuple)):
+                    job_cli_args = cli_args[i]
+
             # Create a run script for each job with index
             runscript_name = f"chemsmart_run_array_{i}.py"
-            runscript = RunScript(runscript_name, cli_args)
+            runscript = RunScript(runscript_name, job_cli_args)
             logger.debug(f"Writing array run script {i}: {runscript_name}")
             runscript.write()
 
