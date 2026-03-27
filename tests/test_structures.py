@@ -1956,6 +1956,33 @@ def test_qmmm_partition_out_of_range_raises():
     assert "out of range" in str(exc.value)
 
 
+def test_qmmm_molecule_str_repr_shows_molecule():
+    """QMMMMolecule __str__ and __repr__ should display as Molecule, not QMMMMolecule."""
+    symbols = ["H", "H", "O"]
+    positions = [[0, 0, 0], [1, 0, 0], [0.5, 0.5, 0]]
+    m = Molecule(symbols=symbols, positions=positions)
+
+    # Created from molecule parameter
+    q = QMMMMolecule(molecule=m)
+    assert str(q).startswith("Molecule<")
+    assert "QMMMMolecule" not in str(q)
+    assert repr(q).startswith("Molecule<")
+    assert "QMMMMolecule" not in repr(q)
+
+    # Created directly with symbols/positions
+    q2 = QMMMMolecule(
+        symbols=symbols,
+        positions=positions,
+        high_level_atoms=[1],
+        medium_level_atoms=[2],
+        low_level_atoms=[3],
+    )
+    assert str(q2).startswith("Molecule<")
+    assert "QMMMMolecule" not in str(q2)
+    assert repr(q2).startswith("Molecule<")
+    assert "QMMMMolecule" not in repr(q2)
+
+
 class TestInChIKey:
     """Tests for Molecule.inchikey property (Open Babel backend)."""
 

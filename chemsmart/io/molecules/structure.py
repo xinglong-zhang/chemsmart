@@ -2478,6 +2478,18 @@ class QMMMMolecule(Molecule):
             self.charge = self.real_charge
             self.multiplicity = self.real_multiplicity
 
+    def __repr__(self):
+        """
+        Return string representation of molecule.
+        """
+        return f"Molecule<{self.chemical_formula},energy: {self.energy}>"
+
+    def __str__(self):
+        """
+        Return string representation of molecule.
+        """
+        return f"Molecule<{self.empirical_formula},energy: {self.energy}>"
+
     def __getattr__(self, name):
         # Forward any missing attribute to the underlying Molecule.
         # Use object.__getattribute__ to avoid re-entering this __getattr__
