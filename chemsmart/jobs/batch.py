@@ -16,8 +16,13 @@ for example pinning a copied runner to a scheduler node.
 import logging
 import os
 import subprocess
+import threading
+import time
+import types
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import suppress
+from typing import Any, Optional, Sequence
 
 from chemsmart.jobs.job import Job
 from chemsmart.utils.mixins import RegistryMeta
@@ -38,27 +43,36 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     ``_configure_runner_for_node``.
     """
 
-    PROGRAM = None
-    REGISTERABLE = False
+    PROGRAM: Optional[str] = None
+    REGISTERABLE: bool = False
 
     def __init__(
         self,
-        jobs,
-        run_in_serial=True,
-        label="batch_job",
-        jobrunner=None,
+        jobs: Optional[Sequence[Job]],
+        run_in_serial: bool = True,
+        label: str = "batch_job",
+        jobrunner: Any = None,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(
             molecule=None,
             label=label,
             jobrunner=jobrunner,
             **kwargs,
         )
-        self.jobs = list(jobs) if jobs is not None else []
-        self.run_in_serial = run_in_serial
+        self.jobs: list[Job] = list(jobs) if jobs is not None else []
+        self.run_in_serial: bool = run_in_serial
 
-    def run(self, **kwargs):
+        # Cache completion checks to avoid repeatedly reparsing output files
+        # from the head-node monitoring loop.
+        self._status_cache: dict[
+            int,
+            tuple[Optional[tuple[tuple[str, float], ...]], float, bool],
+        ] = {}
+        self._status_cache_ttl_seconds: float = 2.0
+        self._status_cache_lock = threading.Lock()
+
+    def run(self, **kwargs: Any) -> None:
         """
         Run the batch of jobs.
 
@@ -66,9 +80,11 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         executing child jobs directly instead of relying on ``Job.run()``'s
         completion short-circuit at the batch container level.
         """
+        self._invalidate_status_cache()
         self._run(**kwargs)
 
-    def _run(self, **kwargs):
+    def _run(self, **kwargs: Any) -> None:
+        """Dispatch execution to multi-node, serial, or parallel mode."""
         nodes = self._get_allocated_nodes()
 
         if nodes and len(nodes) > 1:
@@ -80,11 +96,22 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             logger.info(f"Running batch of {len(self.jobs)} jobs in parallel.")
             self._run_jobs_in_parallel(self.jobs, **kwargs)
 
-    def _run_jobs_serially(self, jobs, node=None, **kwargs):
+    def _run_jobs_serially(
+        self,
+        jobs: Sequence[Job],
+        node: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Submit child jobs one-by-one."""
         for job in jobs:
             self._submit_job(job, node=node, **kwargs)
 
-    def _run_jobs_in_parallel(self, jobs, **kwargs):
+    def _run_jobs_in_parallel(
+        self,
+        jobs: Sequence[Job],
+        **kwargs: Any,
+    ) -> None:
+        """Submit child jobs concurrently using a thread pool."""
         with ThreadPoolExecutor() as executor:
             future_to_job = {
                 executor.submit(self._submit_job, job, None, **kwargs): job
@@ -101,20 +128,33 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                         exc_info=True,
                     )
 
-    def _submit_job(self, job, node=None, **kwargs):
+    def _submit_job(
+        self,
+        job: Job,
+        node: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Configure a runner copy and execute a single child job."""
         try:
             runner = self._build_jobrunner(job, node=node)
             if runner is not None:
                 job.jobrunner = runner
             job.run(**kwargs)
+            self._job_is_complete_cached(job, force_refresh=True)
         except Exception as e:
             location = f" on node {node}" if node else ""
             logger.error(
                 f"Job {job.label} failed during batch execution{location}: {e}",
                 exc_info=True,
             )
+            self._invalidate_status_cache(job)
 
-    def _build_jobrunner(self, job, node=None):
+    def _build_jobrunner(
+        self,
+        job: Job,
+        node: Optional[str] = None,
+    ) -> Any:
+        """Build a per-job runner copy and apply optional node adaptation."""
         if not self.jobrunner:
             return None
 
@@ -127,7 +167,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             )
         return runner
 
-    def _get_allocated_nodes(self):
+    def _get_allocated_nodes(self) -> Optional[list[str]]:
         """
         Detect allocated compute nodes from environment variables.
 
@@ -162,7 +202,8 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
         return None
 
-    def _run_multi_node(self, nodes, **kwargs):
+    def _run_multi_node(self, nodes: Sequence[str], **kwargs: Any) -> None:
+        """Distribute and execute child jobs across scheduler-allocated nodes."""
         num_nodes = len(nodes)
         logger.info(
             f"Distributing {len(self.jobs)} jobs across {num_nodes} nodes: {nodes}"
@@ -189,13 +230,23 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                 except Exception as e:
                     logger.error(f"Node execution failed: {e}", exc_info=True)
 
-    def _run_chunk_on_node(self, jobs, node, **kwargs):
+    def _run_chunk_on_node(
+        self,
+        jobs: Sequence[Job],
+        node: str,
+        **kwargs: Any,
+    ) -> None:
+        """Run one chunk of jobs serially on a single node."""
         logger.info(f"Node {node} starting to process {len(jobs)} jobs.")
         self._run_jobs_serially(jobs, node=node, **kwargs)
         logger.info(f"Node {node} finished processing.")
 
     @staticmethod
-    def _split_jobs_across_nodes(jobs, num_nodes):
+    def _split_jobs_across_nodes(
+        jobs: Sequence[Job],
+        num_nodes: int,
+    ) -> list[list[Job]]:
+        """Split jobs into near-even chunks while preserving input order."""
         if num_nodes <= 0:
             return []
 
@@ -209,7 +260,12 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         return chunks
 
     @abstractmethod
-    def _configure_runner_for_node(self, runner, node, job):
+    def _configure_runner_for_node(
+        self,
+        runner: Any,
+        node: str,
+        job: Job,
+    ) -> Any:
         """
         Adapt a copied jobrunner for execution on a specific node.
 
@@ -217,10 +273,93 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         """
         raise NotImplementedError
 
-    def _backup_files(self):
+    def _backup_files(self) -> None:
         pass
 
-    def is_complete(self):
+    def _job_status_signature(
+        self,
+        job: Job,
+    ) -> Optional[tuple[tuple[str, float], ...]]:
+        """Return file-mtime signature used to validate cached status."""
+        candidates: list[str] = []
+        for attr in ("outputfile", "joblog", "errfile"):
+            path = getattr(job, attr, None)
+            if isinstance(path, str) and path:
+                candidates.append(path)
+
+        signature: list[tuple[str, float]] = []
+        for path in candidates:
+            if os.path.exists(path):
+                with suppress(OSError):
+                    signature.append((path, os.path.getmtime(path)))
+
+        if not signature:
+            return None
+        signature.sort(key=lambda item: item[0])
+        return tuple(signature)
+
+    def _invalidate_status_cache(self, job: Optional[Job] = None) -> None:
+        """Invalidate status cache for all jobs or a single job."""
+        with self._status_cache_lock:
+            if job is None:
+                self._status_cache.clear()
+                return
+            self._status_cache.pop(id(job), None)
+
+    def _job_is_complete_cached(
+        self,
+        job: Job,
+        *,
+        force_refresh: bool = False,
+    ) -> bool:
+        """Return child completion status using a short-lived cache."""
+        now = time.monotonic()
+        signature = self._job_status_signature(job)
+        key = id(job)
+
+        if not force_refresh:
+            with self._status_cache_lock:
+                cached = self._status_cache.get(key)
+            if cached is not None:
+                cached_signature, cached_at, cached_value = cached
+                signature_match = (
+                    signature is not None and cached_signature == signature
+                )
+                ttl_match = (
+                    signature is None
+                    and (now - cached_at) <= self._status_cache_ttl_seconds
+                )
+                if signature_match or ttl_match:
+                    return cached_value
+
+        value = job.is_complete()
+        with self._status_cache_lock:
+            self._status_cache[key] = (signature, now, value)
+        return value
+
+    def _wrap_runner_command_for_node(self, runner: Any, node: str) -> Any:
+        """Apply SLURM node pinning to runner command generation."""
+        if not os.environ.get("SLURM_JOB_NODELIST"):
+            return runner
+
+        if not hasattr(runner, "_get_command"):
+            return runner
+
+        original_get_command = runner._get_command
+
+        def patched_get_command_slurm(self_runner: Any, job_obj: Job) -> str:
+            command = original_get_command(job_obj)
+            prefix = f"srun --nodelist={node} --exclusive -N1 -n1 "
+            return prefix + command
+
+        runner._get_command = types.MethodType(
+            patched_get_command_slurm,
+            runner,
+        )
+        return runner
+
+    def is_complete(self) -> bool:
+        """Return True when all child jobs are complete."""
         if not self.jobs:
             return True
-        return all(job.is_complete() for job in self.jobs)
+        return all(self._job_is_complete_cached(job) for job in self.jobs)

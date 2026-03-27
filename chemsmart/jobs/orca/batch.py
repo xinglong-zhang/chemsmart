@@ -5,6 +5,8 @@ This module provides the ORCA-specific thin batch wrapper around the shared
 ``BatchJob`` orchestration layer.
 """
 
+from typing import Any
+
 from chemsmart.jobs.batch import BatchJob
 
 
@@ -18,7 +20,12 @@ class OrcaBatchJob(BatchJob):
 
     PROGRAM = "orca"
 
-    def _configure_runner_for_node(self, runner, node, job):
+    def _configure_runner_for_node(
+        self,
+        runner: Any,
+        node: str,
+        job: Any,
+    ) -> Any:
         return runner
 
 

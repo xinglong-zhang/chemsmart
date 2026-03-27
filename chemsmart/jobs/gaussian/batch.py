@@ -6,8 +6,7 @@ around the shared batch orchestration provided by ``BatchJob``.
 """
 
 import logging
-import os
-import types
+from typing import Any
 
 from chemsmart.jobs.batch import BatchJob
 
@@ -24,19 +23,11 @@ class GaussianBatchJob(BatchJob):
 
     PROGRAM = "gaussian"
 
-    def _configure_runner_for_node(self, runner, node, job):
-        if not os.environ.get("SLURM_JOB_NODELIST"):
-            return runner
-
-        original_get_command = runner._get_command
-
-        def patched_get_command_slurm(self_runner, job_obj):
-            command = original_get_command(job_obj)
-            prefix = f"srun --nodelist={node} --exclusive -N1 -n1 "
-            return prefix + command
-
-        runner._get_command = types.MethodType(
-            patched_get_command_slurm,
-            runner,
-        )
-        return runner
+    def _configure_runner_for_node(
+        self,
+        runner: Any,
+        node: str,
+        job: Any,
+    ) -> Any:
+        """Apply Gaussian runner node pinning through shared batch helper."""
+        return self._wrap_runner_command_for_node(runner=runner, node=node)
