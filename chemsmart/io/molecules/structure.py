@@ -351,28 +351,20 @@ class Molecule:
 
     @property
     def estimated_dispersion(self):
-        """Estimated dispersion parameter for Voronoi tessellation.
+        """Bounding box padding for Voronoi-Dirichlet tessellation.
+
+        Returns the maximum VDW radius of the molecule's atoms. This is the
+        physically rigorous choice: the bounding box extends by one VDW radius
+        beyond the outermost atomic centres, so edge atoms' Voronoi cells reach
+        exactly to their VDW surface. Any positive padding guarantees bounded
+        cells (mirrors bound every region), and using max(r_vdw) keeps cells
+        tight enough that the overlap correction in
+        ``calculate_voronoi_dirichlet_occupied_volume`` is meaningful.
+
         Returns:
-        - dispersion (float): Estimated maximum distance for adjacent points.
+        - dispersion (float): Maximum VDW radius across all atoms (Å).
         """
-        n_points = self.distance_matrix.shape[0]
-        max_distance = np.max(
-            self.distance_matrix[np.triu_indices(n_points, k=1)]
-        )
-
-        max_radii_sum = 0.0
-        radii = np.array(self.vdw_radii_list)
-        if len(radii) != n_points:
-            raise ValueError("Number of radii must match number of points.")
-        for i in range(n_points):
-            for j in range(i + 1, n_points):
-                radii_sum = radii[i] + radii[j]
-                max_radii_sum = max(max_radii_sum, radii_sum)
-
-        # Use a factor of 1.5 to ensure sufficient
-        # dispersion for Voronoi tessellation
-        dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
-        return dispersion
+        return max(self.vdw_radii_list)
 
     @property
     def voronoi_dirichlet_occupied_volume(self):

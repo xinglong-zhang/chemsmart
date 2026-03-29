@@ -1148,7 +1148,7 @@ class TestChemicalFeatures:
 
         ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
         assert ozone_vd_vol > 0
-        assert np.isclose(ozone_vd_vol, 44.13068085447146, rtol=0.01)
+        assert np.isclose(ozone_vd_vol, 42.7969798834565, rtol=0.01)
 
         # Test other volume methods
         assert np.isclose(
@@ -1175,7 +1175,7 @@ class TestChemicalFeatures:
 
         acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
         assert acetone_vd_vol > 0
-        assert np.isclose(acetone_vd_vol, 73.5820640781846, rtol=0.01)
+        assert np.isclose(acetone_vd_vol, 73.29919753367922, rtol=0.01)
 
         # Test other volume methods
         assert np.isclose(
