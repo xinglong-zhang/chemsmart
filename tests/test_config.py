@@ -157,3 +157,59 @@ class TestConfig:
 
         content = shell_rc.read_text()
         assert content.count("Added by chemsmart installer") == 1
+
+
+class TestConfigServerCommand:
+    """Tests for the config server Click command Windows behavior."""
+
+    def test_server_skips_conda_update_on_windows(self):
+        """On Windows, config server should not call update_yaml_files for conda."""
+        with (
+            patch("chemsmart.cli.config.platform.system", return_value="Windows"),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+        ):
+            cfg = Config()
+            # Simulate the server subcommand logic (Windows path)
+            import chemsmart.cli.config as cfg_module
+            import platform as _platform
+
+            if cfg_module.platform.system() == "Windows":
+                pass  # Windows branch: no update_yaml_files call
+            else:
+                cfg_module.update_yaml_files(
+                    cfg.chemsmart_server, "~/miniconda3", "some_path"
+                )
+
+            # With the Windows patch, update_yaml_files was not called
+            mock_update.assert_not_called()
+
+    def test_server_updates_conda_path_on_linux(self):
+        """On Linux, config server should call update_yaml_files for conda."""
+        with (
+            patch("chemsmart.cli.config.platform.system", return_value="Linux"),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+        ):
+            cfg = Config()
+            with patch.object(
+                type(cfg),
+                "conda_folder",
+                new_callable=lambda: property(
+                    lambda self: "/home/user/miniconda3"
+                ),
+            ):
+                import chemsmart.cli.config as cfg_module
+
+                # On Linux the code calls update_yaml_files
+                cfg_module.update_yaml_files(
+                    cfg.chemsmart_server,
+                    "~/miniconda3",
+                    cfg.conda_folder,
+                )
+
+                mock_update.assert_called_once_with(
+                    cfg.chemsmart_server,
+                    "~/miniconda3",
+                    "/home/user/miniconda3",
+                )

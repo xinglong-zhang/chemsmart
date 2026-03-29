@@ -291,8 +291,18 @@ def server(ctx):
         prepend_string=" " * 8,
     )
 
-    # update conda path
-    update_yaml_files(cfg.chemsmart_server, "~/miniconda3", cfg.conda_folder)
+    # update conda path — skip on Windows because the server YAML files are
+    # for remote Unix/HPC clusters; a Windows-style path would be incorrect.
+    if platform.system() == "Windows":
+        logger.info(
+            "Windows detected: skipping conda path update in server "
+            "YAML files. Edit ~/.chemsmart/server/*.yaml manually to "
+            "set the correct conda path for your remote cluster."
+        )
+    else:
+        update_yaml_files(
+            cfg.chemsmart_server, "~/miniconda3", cfg.conda_folder
+        )
 
 
 @config.command()
