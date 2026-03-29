@@ -18,10 +18,6 @@ import shutil
 import string
 import subprocess
 from io import BytesIO
-
-# from rdkit import Chem
-#
-# import tempfile
 from pathlib import Path
 from typing import List
 
