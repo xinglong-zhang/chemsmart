@@ -8,7 +8,11 @@ from pathlib import Path
 import click
 import yaml
 
-from chemsmart.utils.io import windows_update_env
+from chemsmart.utils.io import (
+    update_powershell_profiles,
+    update_shell_config,
+    windows_update_env,
+)
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -186,27 +190,9 @@ class Config:
         """
         Append chemsmart ``export`` lines to *shell_file* (idempotent).
 
-        Creates the file if it does not yet exist.
+        Delegates to :func:`chemsmart.utils.io.update_shell_config`.
         """
-        if not shell_file.exists():
-            shell_file.touch()
-
-        with shell_file.open("r+", encoding="utf-8") as f:
-            lines = f.readlines()
-            if not any(
-                "Added by chemsmart installer" in line for line in lines
-            ):
-                f.write("\n# Added by chemsmart installer\n")
-                for var in self.env_vars:
-                    f.write(f"{var}\n")
-                f.write("\n")
-                logger.info(f"Updated shell config: {shell_file}")
-            else:
-                logger.info(f"Shell config already updated: {shell_file}")
-
-        logger.info(
-            f"Please restart your terminal or run 'source {shell_file}'."
-        )
+        update_shell_config(shell_file, self.env_vars)
 
     # ------------------------------------------------------------------ #
     # 4. Windows PowerShell management                                      #
@@ -266,31 +252,11 @@ class Config:
     def _update_powershell_profiles(self, profiles) -> None:
         """
         Append chemsmart ``$env:PATH`` lines to each PowerShell profile
-        (idempotent).  Creates profile directories and files as needed.
+        (idempotent).
+
+        Delegates to :func:`chemsmart.utils.io.update_powershell_profiles`.
         """
-        for ps_profile in profiles:
-            ps_profile.parent.mkdir(parents=True, exist_ok=True)
-            if not ps_profile.exists():
-                ps_profile.touch()
-            with ps_profile.open("r+", encoding="utf-8") as f:
-                lines = f.readlines()
-                if not any(
-                    "Added by chemsmart installer" in line for line in lines
-                ):
-                    f.write("\n# Added by chemsmart installer\n")
-                    for var in self.ps_env_vars:
-                        f.write(f"{var}\n")
-                    f.write("\n")
-                    logger.info(f"Updated PowerShell profile: {ps_profile}")
-                else:
-                    logger.info(
-                        f"PowerShell profile already updated: {ps_profile}"
-                    )
-        logger.info(
-            "PowerShell profiles updated.\n"
-            "To apply changes in the current PowerShell session, run:\n"
-            "  . $PROFILE"
-        )
+        update_powershell_profiles(profiles, self.ps_env_vars)
 
     # ------------------------------------------------------------------ #
     # 5. Windows registry management (CMD / plain Windows fallback)         #

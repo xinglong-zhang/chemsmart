@@ -644,6 +644,80 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
     return mols
 
 
+def update_shell_config(shell_file: Path, env_vars: list) -> None:
+    """
+    Append chemsmart ``export`` lines to *shell_file* (idempotent).
+
+    This is the POSIX equivalent of writing ``$env:PATH`` lines to a
+    PowerShell profile or updating the Windows registry.  The update is
+    idempotent: if the marker comment ``# Added by chemsmart installer`` is
+    already present the file is not modified again.
+
+    Creates the file if it does not yet exist.
+
+    Args:
+        shell_file: Path to the shell startup file (e.g. ``~/.bashrc``).
+        env_vars: List of ``export VAR=...`` lines to append.
+    """
+    if not shell_file.exists():
+        shell_file.touch()
+
+    with shell_file.open("r+", encoding="utf-8") as f:
+        lines = f.readlines()
+        if not any("Added by chemsmart installer" in line for line in lines):
+            f.write("\n# Added by chemsmart installer\n")
+            for var in env_vars:
+                f.write(f"{var}\n")
+            f.write("\n")
+            logger.info(f"Updated shell config: {shell_file}")
+        else:
+            logger.info(f"Shell config already updated: {shell_file}")
+
+    logger.info(
+        f"Please restart your terminal or run 'source {shell_file}'."
+    )
+
+
+def update_powershell_profiles(profiles: list, ps_env_vars: list) -> None:
+    """
+    Append chemsmart ``$env:PATH`` lines to each PowerShell profile
+    (idempotent).  Creates profile directories and files as needed.
+
+    This is the PowerShell equivalent of appending ``export`` lines to
+    ``~/.bashrc``.  The update is idempotent: if the marker comment
+    ``# Added by chemsmart installer`` is already present the file is not
+    modified again.
+
+    Args:
+        profiles: List of :class:`~pathlib.Path` objects pointing to the PS
+            profile files to update.
+        ps_env_vars: List of ``$env:PATH = ...`` assignment lines to append.
+    """
+    for ps_profile in profiles:
+        ps_profile.parent.mkdir(parents=True, exist_ok=True)
+        if not ps_profile.exists():
+            ps_profile.touch()
+        with ps_profile.open("r+", encoding="utf-8") as f:
+            lines = f.readlines()
+            if not any(
+                "Added by chemsmart installer" in line for line in lines
+            ):
+                f.write("\n# Added by chemsmart installer\n")
+                for var in ps_env_vars:
+                    f.write(f"{var}\n")
+                f.write("\n")
+                logger.info(f"Updated PowerShell profile: {ps_profile}")
+            else:
+                logger.info(
+                    f"PowerShell profile already updated: {ps_profile}"
+                )
+    logger.info(
+        "PowerShell profiles updated.\n"
+        "To apply changes in the current PowerShell session, run:\n"
+        "  . $PROFILE"
+    )
+
+
 def windows_update_env(paths_to_add: list, pythonpath_entry: str) -> None:
     """
     Add directories to the Windows user PATH and PYTHONPATH via the registry.
