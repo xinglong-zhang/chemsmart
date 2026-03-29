@@ -69,3 +69,50 @@ This guide covers installing Chemsmart on Windows using Git Bash.
    .. code:: bash
 
       make install-dev
+
+********************
+ Configure Chemsmart
+********************
+
+Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the
+``chemsmart`` command in your Git Bash environment:
+
+.. code:: bash
+
+   make configure
+
+What ``make configure`` does on Git Bash:
+
+1. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to
+   ``~/.chemsmart``.
+2. **Updates** ``~/.bashrc`` — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines so
+   that the ``chemsmart`` command is available in new Git Bash sessions.
+3. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and
+   updates the ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC
+   cluster.  You can override the detected path with the ``--conda-path`` flag:
+
+   .. code:: bash
+
+      chemsmart config server --conda-path ~/miniconda3
+
+To apply the updated ``PATH`` in your **current** Git Bash session without restarting, run:
+
+.. code:: bash
+
+   source ~/.bashrc
+
+After this, you can verify the installation:
+
+.. code:: bash
+
+   chemsmart --version
+
+.. note::
+
+   If ``~/.bashrc`` already contains a chemsmart section (i.e. ``make configure`` has been run
+   before), it will *not* be modified again to avoid duplicate entries.
+
+.. tip::
+
+   If you prefer to use the Anaconda or Miniconda PowerShell Prompt instead of Git Bash, see
+   :doc:`installation-windows-powershell`.

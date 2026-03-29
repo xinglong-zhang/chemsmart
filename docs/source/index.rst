@@ -17,6 +17,7 @@ chemistry software.
    introduction
    installation-linux-macos
    installation-windows-gitbash
+   installation-windows-powershell
    installation-windows-wsl
    installation-hpc-cluster
 

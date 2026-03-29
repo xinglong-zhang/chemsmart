@@ -132,6 +132,96 @@ class Config:
             f'export PYTHONPATH="{self.chemsmart_package_path}:$PYTHONPATH"',
         ]
 
+    @property
+    def powershell_profiles(self):
+        """
+        Return a list of PowerShell profile paths to update when running in a
+        Windows PowerShell session (e.g. Anaconda / Miniconda PowerShell
+        prompt).
+
+        PowerShell is detected via the ``PSModulePath`` environment variable,
+        which is always set by PowerShell regardless of how the session was
+        launched.
+
+        Both Windows PowerShell 5.x
+        (``~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1``)
+        and PowerShell 7+
+        (``~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1``) profiles
+        are returned so that the update works across both versions.
+
+        Returns an empty list on non-Windows platforms or when not running
+        inside a PowerShell session.
+        """
+        if platform.system() != "Windows":
+            return []
+        if not os.environ.get("PSModulePath"):
+            return []
+        home = Path.home()
+        return [
+            # Windows PowerShell 5.x (used by Anaconda/Miniconda Prompt)
+            home / "Documents" / "WindowsPowerShell"
+            / "Microsoft.PowerShell_profile.ps1",
+            # PowerShell 7+ (cross-platform)
+            home / "Documents" / "PowerShell"
+            / "Microsoft.PowerShell_profile.ps1",
+        ]
+
+    @property
+    def ps_env_vars(self):
+        """
+        PowerShell-formatted ``$env:PATH`` / ``$env:PYTHONPATH`` lines to
+        append to the PowerShell profile file.
+
+        These are the PowerShell equivalent of the Unix ``export`` lines
+        written to ``~/.bashrc``.
+        """
+        pkg_path = str(self.chemsmart_package_path)
+        cli_path = str(
+            Path(self.chemsmart_package_path) / "chemsmart" / "cli"
+        )
+        scripts_path = str(
+            Path(self.chemsmart_package_path) / "chemsmart" / "scripts"
+        )
+        return [
+            f'$env:PATH = "{pkg_path};$env:PATH"',
+            f'$env:PATH = "{cli_path};$env:PATH"',
+            f'$env:PATH = "{scripts_path};$env:PATH"',
+            f'$env:PYTHONPATH = "{pkg_path};$env:PYTHONPATH"',
+        ]
+
+    def _update_powershell_profiles(self, profiles) -> None:
+        """
+        Write chemsmart PATH / PYTHONPATH entries into each PowerShell profile
+        file — the PowerShell equivalent of appending ``export`` lines to
+        ``~/.bashrc``.
+
+        The update is idempotent: if the marker comment is already present the
+        file is not modified again.
+        """
+        for ps_profile in profiles:
+            ps_profile.parent.mkdir(parents=True, exist_ok=True)
+            if not ps_profile.exists():
+                ps_profile.touch()
+            with ps_profile.open("r+", encoding="utf-8") as f:
+                lines = f.readlines()
+                if not any(
+                    "Added by chemsmart installer" in line for line in lines
+                ):
+                    f.write("\n# Added by chemsmart installer\n")
+                    for var in self.ps_env_vars:
+                        f.write(f"{var}\n")
+                    f.write("\n")
+                    logger.info(f"Updated PowerShell profile: {ps_profile}")
+                else:
+                    logger.info(
+                        f"PowerShell profile already updated: {ps_profile}"
+                    )
+        logger.info(
+            "PowerShell profiles updated.\n"
+            "To apply changes in the current PowerShell session, run:\n"
+            "  . $PROFILE"
+        )
+
     def _windows_update_env(self) -> None:
         """
         Add chemsmart paths to the Windows user PATH and PYTHONPATH via
@@ -166,18 +256,28 @@ class Config:
 
         shell_file = self.shell_config
         if shell_file is None:
-            # Windows: update the user environment via the registry instead
-            # of writing shell rc files, then advise how to activate in the
-            # current session.
-            self._windows_update_env()
-            logger.info(
-                "Environment variables updated in the Windows registry.\n"
-                "Please restart your terminal for the changes to take effect.\n"
-                "To refresh PATH in the current PowerShell session, run:\n"
-                "  $env:PATH = [System.Environment]::GetEnvironmentVariable("
-                "'PATH', 'Machine') + ';' + "
-                "[System.Environment]::GetEnvironmentVariable('PATH', 'User')"
-            )
+            # Not a POSIX shell (no SHELL env var).
+            # Check whether we are running inside a PowerShell session
+            # (e.g. Anaconda / Miniconda PowerShell Prompt).
+            ps_profiles = self.powershell_profiles
+            if ps_profiles:
+                self._update_powershell_profiles(ps_profiles)
+            else:
+                # Plain CMD or other Windows environment — update the user
+                # environment via the registry.
+                self._windows_update_env()
+                logger.info(
+                    "Environment variables updated in the Windows registry.\n"
+                    "Please restart your terminal for the changes to take "
+                    "effect.\n"
+                    "To refresh PATH in the current PowerShell session, "
+                    "run:\n"
+                    "  $env:PATH = "
+                    "[System.Environment]::GetEnvironmentVariable("
+                    "'PATH', 'Machine') + ';' + "
+                    "[System.Environment]::GetEnvironmentVariable("
+                    "'PATH', 'User')"
+                )
             return
 
         # Create shell config file if it does not exist yet
