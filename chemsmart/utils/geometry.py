@@ -196,7 +196,11 @@ def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion=None):
     Parameters:
     - coords (list or np.array): Nx3 array of atomic coordinates.
     - radii (list or np.array): Atomic radii corresponding to each coordinate.
-    - dispersion: Deprecated, unused parameter kept for API compatibility.
+    - dispersion (float, optional): Padding extent used to construct the
+      bounding box for Voronoi tessellation. When provided, this sets how far
+      the mirrored bounding box extends beyond the molecule; when omitted or
+      None, the maximum atomic radius is used as the padding. Larger values
+      produce bigger cells for edge atoms, which can reduce their contribution.
 
     Returns:
     - occupied_volume (float): Estimated physically occupied volume.
@@ -213,7 +217,9 @@ def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion=None):
     if coords.shape[1] != 3:
         raise ValueError("Coordinates must be 3D (Nx3 array).")
 
-    padding = np.max(radii)
+    # Use dispersion as bounding box padding when provided; fall back to the
+    # maximum atomic radius for a tight, physically meaningful box
+    padding = dispersion if dispersion is not None else np.max(radii)
     box_min = np.min(coords, axis=0) - padding
     box_max = np.max(coords, axis=0) + padding
 
