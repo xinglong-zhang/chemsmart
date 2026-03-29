@@ -221,60 +221,85 @@ class TestConfig:
 
 
 class TestConfigServerCommand:
-    """Tests for the config server Click command Windows behavior."""
+    """Tests for the config server Click command behavior."""
 
-    def test_server_skips_conda_update_on_windows(self):
-        """On Windows, config server should not call update_yaml_files for conda."""
+    def _invoke_server(self, args=None):
+        """Invoke the server subcommand via Click's test runner."""
+        from click.testing import CliRunner
+
+        from chemsmart.cli.config import config
+
+        runner = CliRunner()
+        return runner.invoke(config, ["server"] + (args or []))
+
+    def test_server_skips_conda_update_on_windows_no_flag(self):
+        """On Windows without --conda-path, update_yaml_files is not called."""
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Windows"
             ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
         ):
-            cfg = Config()
-            # Simulate the server subcommand logic (Windows path)
-
-            import chemsmart.cli.config as cfg_module
-
-            if cfg_module.platform.system() == "Windows":
-                pass  # Windows branch: no update_yaml_files call
-            else:
-                cfg_module.update_yaml_files(
-                    cfg.chemsmart_server, "~/miniconda3", "some_path"
-                )
-
-            # With the Windows patch, update_yaml_files was not called
+            result = self._invoke_server()
+            assert result.exit_code == 0
             mock_update.assert_not_called()
 
-    def test_server_updates_conda_path_on_linux(self):
-        """On Linux, config server should call update_yaml_files for conda."""
+    def test_server_uses_conda_path_flag_on_windows(self):
+        """On Windows with --conda-path, update_yaml_files is called with provided path."""
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
+        ):
+            result = self._invoke_server(["--conda-path", "~/miniconda3"])
+            assert result.exit_code == 0
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args[0]
+            assert call_args[1] == "~/miniconda3"
+            assert call_args[2] == "~/miniconda3"
+
+    def test_server_uses_conda_path_flag_on_linux(self):
+        """On Linux with --conda-path, the provided path overrides auto-detection."""
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Linux"
             ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
         ):
-            cfg = Config()
-            with patch.object(
-                type(cfg),
+            result = self._invoke_server(["--conda-path", "/opt/conda"])
+            assert result.exit_code == 0
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args[0]
+            assert call_args[1] == "~/miniconda3"
+            assert call_args[2] == "/opt/conda"
+
+    def test_server_updates_conda_path_on_linux(self):
+        """On Linux without --conda-path, update_yaml_files uses auto-detected conda."""
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Linux"
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
+            patch.object(
+                Config,
                 "conda_folder",
                 new_callable=lambda: property(
                     lambda self: "/home/user/miniconda3"
                 ),
-            ):
-                import chemsmart.cli.config as cfg_module
-
-                # On Linux the code calls update_yaml_files
-                cfg_module.update_yaml_files(
-                    cfg.chemsmart_server,
-                    "~/miniconda3",
-                    cfg.conda_folder,
-                )
-
-                mock_update.assert_called_once_with(
-                    cfg.chemsmart_server,
-                    "~/miniconda3",
-                    "/home/user/miniconda3",
-                )
+            ),
+        ):
+            result = self._invoke_server()
+            assert result.exit_code == 0
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args[0]
+            assert call_args[1] == "~/miniconda3"
+            assert call_args[2] == "/home/user/miniconda3"

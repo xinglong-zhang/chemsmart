@@ -264,7 +264,19 @@ def config(ctx):
 
 @config.command()
 @click.pass_context
-def server(ctx):
+@click.option(
+    "--conda-path",
+    "-cp",
+    default=None,
+    show_default=True,
+    help=(
+        "Path to the conda installation on the remote cluster "
+        "(e.g. ~/miniconda3 or /opt/conda). "
+        "Required on Windows where auto-detection is not possible. "
+        "On Linux/macOS this overrides the auto-detected path."
+    ),
+)
+def server(ctx, conda_path):
     """
     Configure server settings in ~/.chemsmart/server/*.yaml files.
 
@@ -273,8 +285,13 @@ def server(ctx):
     # extra commands to activate chemsmart environment in submission script
     in the *.yaml file.
 
+    On Windows, use --conda-path to supply the Unix-style conda path for
+    the remote HPC cluster (e.g. ~/miniconda3), since auto-detection would
+    return a Windows-style path that is incorrect for remote clusters.
+
     Examples:
         chemsmart config server
+        chemsmart config server --conda-path ~/miniconda3
     """
     cfg = ctx.obj["cfg"]
     logger.info("Configuring servers in ~/.chemsmart/server/*yaml files.")
@@ -288,13 +305,19 @@ def server(ctx):
         prepend_string=" " * 8,
     )
 
-    # update conda path — skip on Windows because the server YAML files are
-    # for remote Unix/HPC clusters; a Windows-style path would be incorrect.
-    if platform.system() == "Windows":
+    # Update the conda path in server YAML files.
+    # On Windows, auto-detection yields a Windows-style path (e.g.
+    # C:\Users\...\miniconda3) which is wrong for remote Unix/HPC clusters.
+    # Users must supply --conda-path with the Unix-style path instead.
+    if conda_path is not None:
+        # Explicit override — works on all platforms
+        update_yaml_files(cfg.chemsmart_server, "~/miniconda3", conda_path)
+    elif platform.system() == "Windows":
         logger.info(
-            "Windows detected: skipping conda path update in server "
-            "YAML files. Edit ~/.chemsmart/server/*.yaml manually to "
-            "set the correct conda path for your remote cluster."
+            "Windows detected: skipping conda path auto-update in server "
+            "YAML files. Run 'chemsmart config server --conda-path "
+            "<path/to/conda>' with the Unix-style conda path for your "
+            "remote cluster to configure it."
         )
     else:
         update_yaml_files(
