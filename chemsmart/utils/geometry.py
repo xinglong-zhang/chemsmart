@@ -189,17 +189,19 @@ def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion=None):
     scaled by atomic radii to ensure a physically reasonable result.
 
     Uses scipy for Voronoi tessellation. Mirror images of all atoms are added
-    across the faces of the bounding box to ensure all Voronoi cells are
-    bounded. For each atom, the occupied contribution is the minimum of its
-    atomic sphere volume and its Voronoi cell volume.
+    across the faces, edges, and corners of the bounding box to ensure all
+    Voronoi cells are bounded. For each atom, the occupied contribution is the
+    minimum of its atomic sphere volume and its Voronoi cell volume.
 
     Parameters:
     - coords (list or np.array): Nx3 array of atomic coordinates.
     - radii (list or np.array): Atomic radii corresponding to each coordinate.
-    - dispersion: Unused parameter, kept for API compatibility.
+    - dispersion: Deprecated, unused parameter kept for API compatibility.
 
     Returns:
     - occupied_volume (float): Estimated physically occupied volume.
+      Atoms whose Voronoi cells remain unbounded after mirroring are excluded
+      from the sum; in practice this should not occur for typical molecules.
     """
     from scipy.spatial import ConvexHull, Voronoi
 
@@ -246,6 +248,7 @@ def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion=None):
         region_idx = vor.point_region[i]
         region = vor.regions[region_idx]
 
+        # Skip atoms whose cell is still open (contains vertex at infinity)
         if -1 in region or not region:
             continue
 
