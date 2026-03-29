@@ -89,12 +89,8 @@ What ``make configure`` does on Git Bash:
    command is available in new Git Bash sessions.
 
 #. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and updates the
-   ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. You can override the
-   detected path with the ``--conda-path`` flag:
-
-   .. code:: bash
-
-      chemsmart config server --conda-path ~/miniconda3
+   ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
+   in PATH, a message is logged — add conda to your PATH and re-run ``chemsmart config server``.
 
 To apply the updated ``PATH`` in your **current** Git Bash session without restarting, run:
 

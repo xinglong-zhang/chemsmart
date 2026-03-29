@@ -90,13 +90,9 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
       Miniconda prompts)
    -  ``~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1`` (PowerShell 7+, if installed)
 
-#. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and updates the
-   ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. You can override the
-   detected path with the ``--conda-path`` flag:
-
-   .. code:: powershell
-
-      python -m chemsmart config server --conda-path ~/miniconda3
+#. **Configures the conda path** — auto-detects your conda installation via ``conda`` in PATH and updates the
+   ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
+   in PATH, a message is logged — add conda to your PATH and re-run ``chemsmart config server``.
 
 To apply the updated PATH in your **current** PowerShell session without restarting, run:
 
@@ -131,14 +127,11 @@ local scripts to run. Open PowerShell **as Administrator** and run:
 **conda not found after make configure**
 
 If ``conda`` is not in your PATH when ``make configure`` runs, the server YAML files will not be updated automatically.
-You can configure the conda path manually afterwards:
+Add conda to your PATH (or activate the conda base environment) and then re-run:
 
 .. code:: powershell
 
-   chemsmart config server --conda-path ~/miniconda3
-
-Replace ``~/miniconda3`` with the actual path to your conda installation on the **remote HPC cluster** (e.g.
-``/home/username/miniconda3``).
+   chemsmart config server
 
 **chemsmart command not found after make configure**
 
