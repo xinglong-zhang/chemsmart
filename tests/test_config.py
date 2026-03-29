@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from chemsmart.cli.config import Config
-from chemsmart.utils.io import windows_update_env
+from chemsmart.utils.io import update_windows_env
 
 
 class TestConfig:
@@ -361,14 +361,14 @@ class TestWindowsUpdateEnvUtil:
         with patch.dict(
             sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}
         ):
-            windows_update_env(paths, fake_pkg)
+            update_windows_env(paths, fake_pkg)
 
         mock_winreg.SetValueEx.assert_called()
 
     def test_windows_update_env_util_handles_missing_winreg(self):
         """windows_update_env must not raise when winreg is unavailable."""
         with patch.dict(sys.modules, {"winreg": None}):
-            windows_update_env(["/some/path"], "/some/path")
+            update_windows_env(["/some/path"], "/some/path")
 
 
 class TestConfigSetupEnvironment:

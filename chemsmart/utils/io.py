@@ -716,7 +716,7 @@ def update_powershell_profiles(profiles: list, ps_env_vars: list) -> None:
     )
 
 
-def windows_update_env(paths_to_add: list, pythonpath_entry: str) -> None:
+def update_windows_env(paths_to_add: list, pythonpath_entry: str) -> None:
     """
     Add directories to the Windows user PATH and PYTHONPATH via the registry.
 

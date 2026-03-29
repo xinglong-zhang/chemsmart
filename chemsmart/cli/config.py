@@ -11,7 +11,7 @@ import yaml
 from chemsmart.utils.io import (
     update_powershell_profiles,
     update_shell_config,
-    windows_update_env,
+    update_windows_env,
 )
 from chemsmart.utils.logger import create_logger
 
@@ -279,7 +279,7 @@ class Config:
             str(Path(self.chemsmart_package_path) / "chemsmart" / "cli"),
             str(Path(self.chemsmart_package_path) / "chemsmart" / "scripts"),
         ]
-        windows_update_env(paths_to_add, pkg_path)
+        update_windows_env(paths_to_add, pkg_path)
 
     # ------------------------------------------------------------------ #
     # High-level orchestration                                              #
