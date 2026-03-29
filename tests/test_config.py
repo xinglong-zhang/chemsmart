@@ -176,7 +176,8 @@ class TestConfig:
         assert marker.read_text() == "keep me"
 
     def test_setup_environment_windows_calls_update_env(self, tmp_path):
-        """On native Windows (no POSIX shell, no PS), setup_environment calls _windows_update_env."""
+        """On native Windows (no POSIX shell, no PS), setup_environment
+        calls _update_windows_env."""
         dest = tmp_path / ".chemsmart"
         cfg = Config()
         with (
@@ -195,14 +196,15 @@ class TestConfig:
                 "powershell_profiles",
                 new_callable=lambda: property(lambda self: []),
             ),
-            patch.object(cfg, "_windows_update_env") as mock_update_env,
+            patch.object(cfg, "_update_windows_env") as mock_update_env,
         ):
             cfg.setup_environment()
         assert dest.exists()
         mock_update_env.assert_called_once()
 
     def test_setup_environment_powershell_writes_ps_profile(self, tmp_path):
-        """On Windows PowerShell (PSModulePath set), setup_environment writes to PS profiles."""
+        """On Windows PowerShell (PSModulePath set), setup_environment
+        writes to PS profiles."""
         dest = tmp_path / ".chemsmart"
         ps_profile = (
             tmp_path
@@ -230,7 +232,7 @@ class TestConfig:
                 "powershell_profiles",
                 new_callable=lambda: property(lambda self: [ps_profile]),
             ),
-            patch.object(cfg, "_windows_update_env") as mock_update_env,
+            patch.object(cfg, "_update_windows_env") as mock_update_env,
         ):
             cfg.setup_environment()
         assert dest.exists()
@@ -266,7 +268,8 @@ class TestConfig:
     def test_powershell_profiles_returns_paths_with_psmodulepath(
         self, tmp_path
     ):
-        """powershell_profiles returns profile paths when PSModulePath is set on Windows."""
+        """powershell_profiles returns profile paths when
+        PSModulePath is set on Windows."""
         cfg = Config()
         with (
             patch(
@@ -285,8 +288,8 @@ class TestConfig:
             for p in profiles
         )
 
-    def test_windows_update_env_adds_paths(self, tmp_path):
-        """_windows_update_env should write chemsmart paths into the registry."""
+    def test_update_windows_env_adds_paths(self, tmp_path):
+        """_update_windows_env should write chemsmart paths into the registry."""
         cfg = Config()
         fake_pkg_path = str(tmp_path / "chemsmart")
 
@@ -328,8 +331,8 @@ class TestConfig:
         # SetValueEx should have been called at least for PATH
         mock_winreg.SetValueEx.assert_called()
 
-    def test_windows_update_env_handles_missing_winreg(self):
-        """_windows_update_env must not raise when winreg is unavailable."""
+    def test_update_windows_env_handles_missing_winreg(self):
+        """_update_windows_env must not raise when winreg is unavailable."""
         cfg = Config()
         with patch.dict(sys.modules, {"winreg": None}):
             # Should log a warning and return gracefully, not raise
@@ -339,7 +342,7 @@ class TestConfig:
 class TestWindowsUpdateEnvUtil:
     """Tests for the standalone chemsmart.utils.utils.windows_update_env function."""
 
-    def test_windows_update_env_util_adds_paths(self, tmp_path):
+    def test_update_windows_env_util_adds_paths(self, tmp_path):
         """windows_update_env writes directories to the registry PATH."""
         fake_pkg = str(tmp_path / "pkg")
         paths = [fake_pkg, str(tmp_path / "cli")]
@@ -366,7 +369,7 @@ class TestWindowsUpdateEnvUtil:
 
         mock_winreg.SetValueEx.assert_called()
 
-    def test_windows_update_env_util_handles_missing_winreg(self):
+    def test_update_windows_env_util_handles_missing_winreg(self):
         """windows_update_env must not raise when winreg is unavailable."""
         with patch.dict(sys.modules, {"winreg": None}):
             update_windows_env(["/some/path"], "/some/path")
