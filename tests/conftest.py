@@ -2038,3 +2038,22 @@ def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
         "large_molecule_testing",
         "expected_cxsmiles_c3.txt",
     )
+
+
+@pytest.fixture()
+def invoke_config_server():
+    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_config_server):
+            result = invoke_config_server(["--conda-path", "~/miniconda3"])
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.config import config
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
