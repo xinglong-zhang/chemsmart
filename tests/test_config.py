@@ -1,7 +1,7 @@
 """Tests for chemsmart.cli.config.Config class."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from chemsmart.cli.config import Config
 
@@ -130,8 +130,8 @@ class TestConfig:
         # Existing content should be untouched
         assert marker.read_text() == "keep me"
 
-    def test_setup_environment_windows_skips_shell_config(self, tmp_path):
-        """On Windows, setup_environment must not touch any shell rc file."""
+    def test_setup_environment_windows_calls_update_env(self, tmp_path):
+        """On Windows, setup_environment must call _windows_update_env."""
         dest = tmp_path / ".chemsmart"
         cfg = Config()
         with (
@@ -143,10 +143,63 @@ class TestConfig:
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Windows"
             ),
+            patch.object(cfg, "_windows_update_env") as mock_update_env,
         ):
-            # Should not raise even though there is no shell rc file on Windows
             cfg.setup_environment()
         assert dest.exists()
+        mock_update_env.assert_called_once()
+
+    def test_windows_update_env_adds_paths(self, tmp_path):
+        """_windows_update_env should write chemsmart paths into the registry."""
+        cfg = Config()
+        fake_pkg_path = str(tmp_path / "chemsmart")
+
+        mock_key = MagicMock()
+        # Simulate empty existing PATH and PYTHONPATH
+        mock_key.__enter__ = lambda self: self
+        mock_key.__exit__ = MagicMock(return_value=False)
+        mock_key.QueryValueEx = MagicMock(side_effect=FileNotFoundError)
+
+        captured_set_calls = {}
+
+        def fake_set_value_ex(key, name, reserved, reg_type, value):
+            captured_set_calls[name] = value
+
+        import sys
+
+        mock_winreg = MagicMock()
+        mock_winreg.HKEY_CURRENT_USER = 0x80000001
+        mock_winreg.KEY_READ = 0x20019
+        mock_winreg.KEY_WRITE = 0x20006
+        mock_winreg.REG_EXPAND_SZ = 2
+        mock_winreg.REG_SZ = 1
+        mock_winreg.OpenKey.return_value = mock_key
+        mock_winreg.QueryValueEx.side_effect = FileNotFoundError
+        mock_winreg.SetValueEx.side_effect = fake_set_value_ex
+
+        mock_ctypes = MagicMock()
+
+        with (
+            patch.object(
+                type(cfg),
+                "chemsmart_package_path",
+                new_callable=lambda: property(lambda self: fake_pkg_path),
+            ),
+            patch.dict(sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}),
+        ):
+            cfg._windows_update_env()
+
+        # SetValueEx should have been called at least for PATH
+        mock_winreg.SetValueEx.assert_called()
+
+    def test_windows_update_env_handles_missing_winreg(self):
+        """_windows_update_env must not raise when winreg is unavailable."""
+        import sys
+
+        cfg = Config()
+        with patch.dict(sys.modules, {"winreg": None}):
+            # Should log a warning and return gracefully, not raise
+            cfg._windows_update_env()
 
     def test_setup_environment_updates_shell_config(self, tmp_path):
         """On Unix, setup_environment should write env vars into the shell rc."""
