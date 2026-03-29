@@ -386,7 +386,6 @@ class Molecule:
         return calculate_voronoi_dirichlet_occupied_volume(
             coords=self.positions,
             radii=self.vdw_radii_list,
-            dispersion=self.estimated_dispersion,
         )
 
     @property
