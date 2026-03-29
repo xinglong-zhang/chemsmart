@@ -1,6 +1,6 @@
-###################################################
+####################################################
  Installation for Windows Using Anaconda PowerShell
-###################################################
+####################################################
 
 This guide covers installing Chemsmart on Windows using the Anaconda or Miniconda PowerShell prompt.
 
@@ -10,20 +10,19 @@ This guide covers installing Chemsmart on Windows using the Anaconda or Minicond
 
 #. Install the required software:
 
-   -  **Conda**: Install either `Anaconda3 <https://www.anaconda.com/products/distribution>`_ or
-      `Miniconda3 <https://docs.conda.io/en/latest/miniconda.html>`_ for Windows.  The
-      Anaconda / Miniconda installer registers the *Anaconda PowerShell Prompt* shortcut in the
-      Start Menu.
+   -  **Conda**: Install either `Anaconda3 <https://www.anaconda.com/products/distribution>`_ or `Miniconda3
+      <https://docs.conda.io/en/latest/miniconda.html>`_ for Windows. The Anaconda / Miniconda installer registers the
+      *Anaconda PowerShell Prompt* shortcut in the Start Menu.
+
    -  **Chocolatey**: Install from https://chocolatey.org/install to enable ``make`` support.
 
 .. note::
 
-   Ensure the Anaconda / Miniconda environment variables are added correctly during installation
-   (select *"Add Anaconda to my PATH environment variable"* or run the installer with default
-   settings and use the dedicated Anaconda Prompt).
+   Ensure the Anaconda / Miniconda environment variables are added correctly during installation (select *"Add Anaconda
+   to my PATH environment variable"* or run the installer with default settings and use the dedicated Anaconda Prompt).
 
-2. Open the **Anaconda PowerShell Prompt** (or **Miniconda PowerShell Prompt**) from the Start Menu
-   and install ``make``:
+2. Open the **Anaconda PowerShell Prompt** (or **Miniconda PowerShell Prompt**) from the Start Menu and install
+   ``make``:
 
    .. code:: powershell
 
@@ -50,8 +49,8 @@ This guide covers installing Chemsmart on Windows using the Anaconda or Minicond
 
 .. note::
 
-   You may need to run ``conda init powershell`` once to allow conda environments to be activated
-   inside PowerShell.  If prompted, close and reopen the Anaconda PowerShell Prompt afterwards.
+   You may need to run ``conda init powershell`` once to allow conda environments to be activated inside PowerShell. If
+   prompted, close and reopen the Anaconda PowerShell Prompt afterwards.
 
 *******************
  Make Installation
@@ -69,12 +68,12 @@ This guide covers installing Chemsmart on Windows using the Anaconda or Minicond
 
       make install-dev
 
-********************
+*********************
  Configure Chemsmart
-********************
+*********************
 
-Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the
-``chemsmart`` command in your PowerShell environment:
+Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the ``chemsmart`` command in
+your PowerShell environment:
 
 .. code:: powershell
 
@@ -82,17 +81,18 @@ Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and 
 
 What ``make configure`` does on Anaconda / Miniconda PowerShell:
 
-1. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to
-   ``~\.chemsmart`` (``%USERPROFILE%\.chemsmart``).
-2. **Updates PowerShell profiles** — appends ``$env:PATH`` and ``$env:PYTHONPATH`` entries to:
+#. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~\.chemsmart``
+   (``%USERPROFILE%\.chemsmart``).
 
-   - ``~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`` (Windows PowerShell 5.x,
-     used by Anaconda / Miniconda prompts)
-   - ``~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1`` (PowerShell 7+, if installed)
+#. **Updates PowerShell profiles** — appends ``$env:PATH`` and ``$env:PYTHONPATH`` entries to:
 
-3. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and
-   updates the ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC
-   cluster.  You can override the detected path with the ``--conda-path`` flag:
+   -  ``~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`` (Windows PowerShell 5.x, used by Anaconda /
+      Miniconda prompts)
+   -  ``~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1`` (PowerShell 7+, if installed)
+
+#. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and updates the
+   ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. You can override the
+   detected path with the ``--conda-path`` flag:
 
    .. code:: powershell
 
@@ -112,17 +112,17 @@ After this, you can verify the installation:
 
 .. note::
 
-   If the profile scripts already contain a chemsmart section (i.e. ``make configure`` has been run
-   before), the profiles will *not* be modified again to avoid duplicate entries.
+   If the profile scripts already contain a chemsmart section (i.e. ``make configure`` has been run before), the
+   profiles will *not* be modified again to avoid duplicate entries.
 
-*****************************
+*****************
  Troubleshooting
-*****************************
+*****************
 
 **PowerShell execution policy error**
 
-If you see an error like ``cannot be loaded because running scripts is disabled on this system``,
-you need to allow local scripts to run.  Open PowerShell **as Administrator** and run:
+If you see an error like ``cannot be loaded because running scripts is disabled on this system``, you need to allow
+local scripts to run. Open PowerShell **as Administrator** and run:
 
 .. code:: powershell
 
@@ -130,15 +130,15 @@ you need to allow local scripts to run.  Open PowerShell **as Administrator** an
 
 **conda not found after make configure**
 
-If ``conda`` is not in your PATH when ``make configure`` runs, the server YAML files will not be
-updated automatically.  You can configure the conda path manually afterwards:
+If ``conda`` is not in your PATH when ``make configure`` runs, the server YAML files will not be updated automatically.
+You can configure the conda path manually afterwards:
 
 .. code:: powershell
 
    chemsmart config server --conda-path ~/miniconda3
 
-Replace ``~/miniconda3`` with the actual path to your conda installation on the **remote HPC
-cluster** (e.g. ``/home/username/miniconda3``).
+Replace ``~/miniconda3`` with the actual path to your conda installation on the **remote HPC cluster** (e.g.
+``/home/username/miniconda3``).
 
 **chemsmart command not found after make configure**
 

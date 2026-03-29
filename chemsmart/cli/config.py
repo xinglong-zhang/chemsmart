@@ -220,10 +220,14 @@ class Config:
         home = Path.home()
         return [
             # Windows PowerShell 5.x (Anaconda/Miniconda default)
-            home / "Documents" / "WindowsPowerShell"
+            home
+            / "Documents"
+            / "WindowsPowerShell"
             / "Microsoft.PowerShell_profile.ps1",
             # PowerShell 7+
-            home / "Documents" / "PowerShell"
+            home
+            / "Documents"
+            / "PowerShell"
             / "Microsoft.PowerShell_profile.ps1",
         ]
 
@@ -236,9 +240,7 @@ class Config:
         written to ``~/.bashrc``.
         """
         pkg_path = str(self.chemsmart_package_path)
-        cli_path = str(
-            Path(self.chemsmart_package_path) / "chemsmart" / "cli"
-        )
+        cli_path = str(Path(self.chemsmart_package_path) / "chemsmart" / "cli")
         scripts_path = str(
             Path(self.chemsmart_package_path) / "chemsmart" / "scripts"
         )

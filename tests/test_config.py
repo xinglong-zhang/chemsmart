@@ -32,7 +32,9 @@ class TestConfig:
     def test_shell_config_windows_returns_none(self):
         """On native Windows (no POSIX shell), shell_config returns None."""
         cfg = Config()
-        env_without_shell = {k: v for k, v in __import__("os").environ.items() if k != "SHELL"}
+        env_without_shell = {
+            k: v for k, v in __import__("os").environ.items() if k != "SHELL"
+        }
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Windows"
@@ -92,7 +94,9 @@ class TestConfig:
     def test_env_vars_windows_empty(self):
         """On native Windows (no POSIX shell), env_vars returns []."""
         cfg = Config()
-        env_without_shell = {k: v for k, v in __import__("os").environ.items() if k != "SHELL"}
+        env_without_shell = {
+            k: v for k, v in __import__("os").environ.items() if k != "SHELL"
+        }
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Windows"
@@ -176,7 +180,8 @@ class TestConfig:
         dest = tmp_path / ".chemsmart"
         cfg = Config()
         env_without_shell_ps = {
-            k: v for k, v in __import__("os").environ.items()
+            k: v
+            for k, v in __import__("os").environ.items()
             if k not in ("SHELL", "PSModulePath")
         }
         with (
@@ -198,7 +203,12 @@ class TestConfig:
     def test_setup_environment_powershell_writes_ps_profile(self, tmp_path):
         """On Windows PowerShell (PSModulePath set), setup_environment writes to PS profiles."""
         dest = tmp_path / ".chemsmart"
-        ps_profile = tmp_path / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
+        ps_profile = (
+            tmp_path
+            / "Documents"
+            / "WindowsPowerShell"
+            / "Microsoft.PowerShell_profile.ps1"
+        )
         cfg = Config()
         env_without_shell = {
             k: v for k, v in __import__("os").environ.items() if k != "SHELL"
@@ -231,34 +241,48 @@ class TestConfig:
     def test_powershell_profiles_returns_empty_on_linux(self):
         """powershell_profiles returns [] on non-Windows platforms."""
         cfg = Config()
-        with patch("chemsmart.cli.config.platform.system", return_value="Linux"):
+        with patch(
+            "chemsmart.cli.config.platform.system", return_value="Linux"
+        ):
             assert cfg.powershell_profiles == []
 
     def test_powershell_profiles_returns_empty_without_psmodulepath(self):
         """powershell_profiles returns [] when PSModulePath is not set."""
         cfg = Config()
         env_without_ps = {
-            k: v for k, v in __import__("os").environ.items()
+            k: v
+            for k, v in __import__("os").environ.items()
             if k != "PSModulePath"
         }
         with (
-            patch("chemsmart.cli.config.platform.system", return_value="Windows"),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
             patch.dict("os.environ", env_without_ps, clear=True),
         ):
             assert cfg.powershell_profiles == []
 
-    def test_powershell_profiles_returns_paths_with_psmodulepath(self, tmp_path):
+    def test_powershell_profiles_returns_paths_with_psmodulepath(
+        self, tmp_path
+    ):
         """powershell_profiles returns profile paths when PSModulePath is set on Windows."""
         cfg = Config()
         with (
-            patch("chemsmart.cli.config.platform.system", return_value="Windows"),
-            patch.dict("os.environ", {"PSModulePath": "C:\\Windows"}, clear=False),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict(
+                "os.environ", {"PSModulePath": "C:\\Windows"}, clear=False
+            ),
             patch.object(Path, "home", return_value=tmp_path),
         ):
             profiles = cfg.powershell_profiles
         assert len(profiles) == 2
         assert any("WindowsPowerShell" in str(p) for p in profiles)
-        assert any("PowerShell" in str(p) and "Windows" not in str(p) for p in profiles)
+        assert any(
+            "PowerShell" in str(p) and "Windows" not in str(p)
+            for p in profiles
+        )
 
     def test_windows_update_env_adds_paths(self, tmp_path):
         """_windows_update_env should write chemsmart paths into the registry."""

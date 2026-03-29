@@ -673,9 +673,7 @@ def update_shell_config(shell_file: Path, env_vars: list) -> None:
         else:
             logger.info(f"Shell config already updated: {shell_file}")
 
-    logger.info(
-        f"Please restart your terminal or run 'source {shell_file}'."
-    )
+    logger.info(f"Please restart your terminal or run 'source {shell_file}'.")
 
 
 def update_powershell_profiles(profiles: list, ps_env_vars: list) -> None:

@@ -70,12 +70,12 @@ This guide covers installing Chemsmart on Windows using Git Bash.
 
       make install-dev
 
-********************
+*********************
  Configure Chemsmart
-********************
+*********************
 
-Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the
-``chemsmart`` command in your Git Bash environment:
+Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the ``chemsmart`` command in
+your Git Bash environment:
 
 .. code:: bash
 
@@ -83,13 +83,14 @@ Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and 
 
 What ``make configure`` does on Git Bash:
 
-1. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to
-   ``~/.chemsmart``.
-2. **Updates** ``~/.bashrc`` — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines so
-   that the ``chemsmart`` command is available in new Git Bash sessions.
-3. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and
-   updates the ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC
-   cluster.  You can override the detected path with the ``--conda-path`` flag:
+#. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~/.chemsmart``.
+
+#. **Updates** ``~/.bashrc`` — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines so that the ``chemsmart``
+   command is available in new Git Bash sessions.
+
+#. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and updates the
+   ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. You can override the
+   detected path with the ``--conda-path`` flag:
 
    .. code:: bash
 
@@ -109,8 +110,8 @@ After this, you can verify the installation:
 
 .. note::
 
-   If ``~/.bashrc`` already contains a chemsmart section (i.e. ``make configure`` has been run
-   before), it will *not* be modified again to avoid duplicate entries.
+   If ``~/.bashrc`` already contains a chemsmart section (i.e. ``make configure`` has been run before), it will *not* be
+   modified again to avoid duplicate entries.
 
 .. tip::
 
