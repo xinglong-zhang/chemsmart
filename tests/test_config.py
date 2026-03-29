@@ -1,9 +1,11 @@
 """Tests for chemsmart.cli.config.Config class."""
 
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from chemsmart.cli.config import Config
+from chemsmart.utils.utils import windows_update_env
 
 
 class TestConfig:
@@ -165,8 +167,6 @@ class TestConfig:
         def fake_set_value_ex(key, name, reserved, reg_type, value):
             captured_set_calls[name] = value
 
-        import sys
-
         mock_winreg = MagicMock()
         mock_winreg.HKEY_CURRENT_USER = 0x80000001
         mock_winreg.KEY_READ = 0x20019
@@ -194,12 +194,48 @@ class TestConfig:
 
     def test_windows_update_env_handles_missing_winreg(self):
         """_windows_update_env must not raise when winreg is unavailable."""
-        import sys
-
         cfg = Config()
         with patch.dict(sys.modules, {"winreg": None}):
             # Should log a warning and return gracefully, not raise
             cfg._windows_update_env()
+
+
+class TestWindowsUpdateEnvUtil:
+    """Tests for the standalone chemsmart.utils.utils.windows_update_env function."""
+
+    def test_windows_update_env_util_adds_paths(self, tmp_path):
+        """windows_update_env writes directories to the registry PATH."""
+        fake_pkg = str(tmp_path / "pkg")
+        paths = [fake_pkg, str(tmp_path / "cli")]
+
+        mock_key = MagicMock()
+        mock_key.__enter__ = lambda self: self
+        mock_key.__exit__ = MagicMock(return_value=False)
+
+        mock_winreg = MagicMock()
+        mock_winreg.HKEY_CURRENT_USER = 0x80000001
+        mock_winreg.KEY_READ = 0x20019
+        mock_winreg.KEY_WRITE = 0x20006
+        mock_winreg.REG_EXPAND_SZ = 2
+        mock_winreg.REG_SZ = 1
+        mock_winreg.OpenKey.return_value = mock_key
+        mock_winreg.QueryValueEx.side_effect = FileNotFoundError
+
+        mock_ctypes = MagicMock()
+
+        with patch.dict(sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}):
+            windows_update_env(paths, fake_pkg)
+
+        mock_winreg.SetValueEx.assert_called()
+
+    def test_windows_update_env_util_handles_missing_winreg(self):
+        """windows_update_env must not raise when winreg is unavailable."""
+        with patch.dict(sys.modules, {"winreg": None}):
+            windows_update_env(["/some/path"], "/some/path")
+
+
+class TestConfigSetupEnvironment:
+    """Tests for Config.setup_environment Unix shell config update."""
 
     def test_setup_environment_updates_shell_config(self, tmp_path):
         """On Unix, setup_environment should write env vars into the shell rc."""

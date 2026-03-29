@@ -9,6 +9,7 @@ import click
 import yaml
 
 from chemsmart.utils.logger import create_logger
+from chemsmart.utils.utils import windows_update_env
 
 logger = logging.getLogger(__name__)
 
@@ -131,102 +132,15 @@ class Config:
         the registry — the Windows equivalent of appending ``export``
         lines to ``~/.bashrc``.
 
-        Changes take effect in **new** terminal sessions.  For the current
-        session the user must restart their terminal or paste the
-        PowerShell one-liner that :meth:`setup_environment` logs.
+        Delegates to :func:`chemsmart.utils.utils.windows_update_env`.
         """
-        try:
-            import winreg  # noqa: PLC0415 — Windows-only stdlib module
-        except ImportError:
-            logger.warning(
-                "winreg not available; skipping Windows PATH update."
-            )
-            return
-
         pkg_path = str(self.chemsmart_package_path)
         paths_to_add = [
             pkg_path,
             str(Path(self.chemsmart_package_path) / "chemsmart" / "cli"),
             str(Path(self.chemsmart_package_path) / "chemsmart" / "scripts"),
         ]
-
-        try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                "Environment",
-                0,
-                winreg.KEY_READ | winreg.KEY_WRITE,
-            ) as key:
-                # ---- PATH ----
-                try:
-                    current_path, _ = winreg.QueryValueEx(key, "PATH")
-                except FileNotFoundError:
-                    current_path = ""
-
-                path_parts = [p for p in current_path.split(";") if p.strip()]
-                new_paths = [p for p in paths_to_add if p not in path_parts]
-                if new_paths:
-                    winreg.SetValueEx(
-                        key,
-                        "PATH",
-                        0,
-                        winreg.REG_EXPAND_SZ,
-                        ";".join(path_parts + new_paths),
-                    )
-                    logger.info(f"Added to Windows user PATH: {new_paths}")
-                else:
-                    logger.info(
-                        "Windows user PATH already contains all required paths."
-                    )
-
-                # ---- PYTHONPATH ----
-                try:
-                    current_pypath, _ = winreg.QueryValueEx(key, "PYTHONPATH")
-                except FileNotFoundError:
-                    current_pypath = ""
-
-                pypath_parts = [
-                    p for p in current_pypath.split(";") if p.strip()
-                ]
-                if pkg_path not in pypath_parts:
-                    winreg.SetValueEx(
-                        key,
-                        "PYTHONPATH",
-                        0,
-                        winreg.REG_SZ,
-                        ";".join(pypath_parts + [pkg_path]),
-                    )
-                    logger.info(
-                        f"Updated Windows PYTHONPATH to include: {pkg_path}"
-                    )
-                else:
-                    logger.info(
-                        "Windows PYTHONPATH already contains the required path."
-                    )
-
-            # Notify running applications about the environment change so
-            # that new terminal windows inherit the updated PATH immediately.
-            import ctypes
-
-            ctypes.windll.user32.SendMessageTimeoutW(
-                0xFFFF,  # HWND_BROADCAST
-                0x001A,  # WM_SETTINGCHANGE
-                0,
-                "Environment",
-                0x0002,  # SMTO_ABORTIFHUNG
-                5000,
-                None,
-            )
-            logger.info("Broadcasted environment change to Windows.")
-
-        except PermissionError:
-            logger.warning(
-                "Permission denied accessing Windows registry. "
-                "Run as administrator or add these paths to PATH manually:\n"
-                + "\n".join(f"  {p}" for p in paths_to_add)
-            )
-        except Exception as e:
-            logger.warning(f"Could not update Windows environment: {e}")
+        windows_update_env(paths_to_add, pkg_path)
 
     def setup_environment(self):
         """
