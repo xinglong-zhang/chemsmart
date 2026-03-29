@@ -323,7 +323,7 @@ class TestConfig:
                 sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}
             ),
         ):
-            cfg._windows_update_env()
+            cfg._update_windows_env()
 
         # SetValueEx should have been called at least for PATH
         mock_winreg.SetValueEx.assert_called()
@@ -333,7 +333,7 @@ class TestConfig:
         cfg = Config()
         with patch.dict(sys.modules, {"winreg": None}):
             # Should log a warning and return gracefully, not raise
-            cfg._windows_update_env()
+            cfg._update_windows_env()
 
 
 class TestWindowsUpdateEnvUtil:

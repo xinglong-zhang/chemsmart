@@ -264,7 +264,7 @@ class Config:
     # 5. Windows registry management (CMD / plain Windows fallback)         #
     # ------------------------------------------------------------------ #
 
-    def _windows_update_env(self) -> None:
+    def _update_windows_env(self) -> None:
         """
         Add chemsmart paths to the Windows user PATH and PYTHONPATH via
         the registry.
@@ -324,7 +324,7 @@ class Config:
             self._update_powershell_profiles(ps_profiles)
         else:
             # Plain CMD or other Windows environment — use the registry
-            self._windows_update_env()
+            self._update_windows_env()
             logger.info(
                 "Environment variables updated in the Windows registry.\n"
                 "Please restart your terminal for the changes to take "
