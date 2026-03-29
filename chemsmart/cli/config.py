@@ -8,8 +8,8 @@ from pathlib import Path
 import click
 import yaml
 
+from chemsmart.utils.io import windows_update_env
 from chemsmart.utils.logger import create_logger
-from chemsmart.utils.utils import windows_update_env
 
 logger = logging.getLogger(__name__)
 

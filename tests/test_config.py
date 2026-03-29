@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from chemsmart.cli.config import Config
-from chemsmart.utils.utils import windows_update_env
+from chemsmart.utils.io import windows_update_env
 
 
 class TestConfig:
@@ -185,7 +185,9 @@ class TestConfig:
                 "chemsmart_package_path",
                 new_callable=lambda: property(lambda self: fake_pkg_path),
             ),
-            patch.dict(sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}),
+            patch.dict(
+                sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}
+            ),
         ):
             cfg._windows_update_env()
 
@@ -223,7 +225,9 @@ class TestWindowsUpdateEnvUtil:
 
         mock_ctypes = MagicMock()
 
-        with patch.dict(sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}):
+        with patch.dict(
+            sys.modules, {"winreg": mock_winreg, "ctypes": mock_ctypes}
+        ):
             windows_update_env(paths, fake_pkg)
 
         mock_winreg.SetValueEx.assert_called()
