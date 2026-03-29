@@ -233,7 +233,13 @@ class TestConfigServerCommand:
             ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
-            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
+            patch.object(
+                Config,
+                "chemsmart_dest",
+                new_callable=lambda: property(
+                    lambda self: Path("/fake/.chemsmart")
+                ),
+            ),
         ):
             result = invoke_config_server()
             assert result.exit_code == 0
@@ -249,7 +255,13 @@ class TestConfigServerCommand:
             ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
-            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
+            patch.object(
+                Config,
+                "chemsmart_dest",
+                new_callable=lambda: property(
+                    lambda self: Path("/fake/.chemsmart")
+                ),
+            ),
         ):
             result = invoke_config_server(["--conda-path", "~/miniconda3"])
             assert result.exit_code == 0
@@ -266,7 +278,13 @@ class TestConfigServerCommand:
             ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
-            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
+            patch.object(
+                Config,
+                "chemsmart_dest",
+                new_callable=lambda: property(
+                    lambda self: Path("/fake/.chemsmart")
+                ),
+            ),
         ):
             result = invoke_config_server(["--conda-path", "/opt/conda"])
             assert result.exit_code == 0
@@ -283,7 +301,13 @@ class TestConfigServerCommand:
             ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
-            patch.object(Config, "chemsmart_dest", new_callable=lambda: property(lambda self: Path("/fake/.chemsmart"))),
+            patch.object(
+                Config,
+                "chemsmart_dest",
+                new_callable=lambda: property(
+                    lambda self: Path("/fake/.chemsmart")
+                ),
+            ),
             patch.object(
                 Config,
                 "conda_folder",
