@@ -1137,7 +1137,7 @@ class TestChemicalFeatures:
         """Test volume calculation for molecules.
 
         Tests various volume calculation methods:
-        - voronoi_dirichlet_occupied_volume (requires pyvoro, optional)
+        - voronoi_dirichlet_occupied_volume
         - crude_volume_by_vdw_radii
         - crude_volume_by_atomic_radii
         - vdw_volume
@@ -1146,16 +1146,11 @@ class TestChemicalFeatures:
         """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
 
-        # Test pyvoro-based method (optional,
-        # may not be available in Python 3.12+)
-        try:
-            ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
-            assert ozone_vd_vol > 0
-            assert np.isclose(ozone_vd_vol, 42.796979883456515, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+        assert ozone_vd_vol > 0
+        assert np.isclose(ozone_vd_vol, 42.7969798834565, rtol=0.01)
 
-        # Test other volume methods that don't require pyvoro
+        # Test other volume methods
         assert np.isclose(
             ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
         )
@@ -1178,13 +1173,9 @@ class TestChemicalFeatures:
 
         acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
 
-        # Test pyvoro-based method (optional)
-        try:
-            acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
-            assert acetone_vd_vol > 0
-            assert np.isclose(acetone_vd_vol, 108.73483002110545, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+        assert acetone_vd_vol > 0
+        assert np.isclose(acetone_vd_vol, 73.29919753367922, rtol=0.01)
 
         # Test other volume methods
         assert np.isclose(
