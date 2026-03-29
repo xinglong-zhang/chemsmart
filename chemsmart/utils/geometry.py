@@ -183,7 +183,9 @@ def calculate_moments_of_inertia(mass, coords):
     return moi_tensor, evals, evecs.transpose()
 
 
-def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion=None):
+def calculate_voronoi_dirichlet_occupied_volume(
+    coords, radii, dispersion=None
+):
     """
     Estimate the occupied volume of a molecule using Voronoi-Dirichlet method,
     scaled by atomic radii to ensure a physically reasonable result.
