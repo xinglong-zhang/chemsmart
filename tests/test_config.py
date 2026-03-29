@@ -252,16 +252,14 @@ class TestConfig:
     def test_powershell_profiles_returns_empty_without_psmodulepath(self):
         """powershell_profiles returns [] when PSModulePath is not set."""
         cfg = Config()
-        env_without_ps = {
-            k: v
-            for k, v in __import__("os").environ.items()
-            if k != "PSModulePath"
-        }
+        # Override PSModulePath to "" (falsy) rather than clearing the whole
+        # environment — clearing is unreliable on Windows CI runners that run
+        # inside a PowerShell session.
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Windows"
             ),
-            patch.dict("os.environ", env_without_ps, clear=True),
+            patch.dict("os.environ", {"PSModulePath": ""}, clear=False),
         ):
             assert cfg.powershell_profiles == []
 
