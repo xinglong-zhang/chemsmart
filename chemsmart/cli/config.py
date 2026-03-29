@@ -44,9 +44,13 @@ class Config:
         """
         Return the shell startup file on Unix-like systems.
 
-        Returns None on Windows, where shell rc files are not managed here.
+        Returns None on native Windows (no POSIX shell active), where shell rc
+        files are not managed here.  On Windows Git Bash / MSYS2 the ``SHELL``
+        environment variable is set, so the shell rc file is managed like on
+        Linux/macOS.
         """
-        if platform.system() == "Windows":
+        # On native Windows (no POSIX shell), skip shell rc management.
+        if platform.system() == "Windows" and not os.environ.get("SHELL"):
             return None
 
         shell = os.environ.get("SHELL", "")
@@ -112,10 +116,12 @@ class Config:
         """
         Define the environment variables to be added to the shell config.
 
-        Returns an empty list on Windows, where shell rc files are not
-        managed by chemsmart.
+        Returns an empty list on native Windows (no POSIX shell), where shell
+        rc files are not managed by chemsmart.  On Windows Git Bash / MSYS2
+        (``SHELL`` env var is set) the Unix-style exports are returned so that
+        the shell rc file is updated correctly.
         """
-        if platform.system() == "Windows":
+        if platform.system() == "Windows" and not os.environ.get("SHELL"):
             return []
 
         return [
@@ -330,23 +336,22 @@ def server(ctx, conda_path):
     )
 
     # Update the conda path in server YAML files.
-    # On Windows, auto-detection yields a Windows-style path (e.g.
-    # C:\Users\...\miniconda3) which is wrong for remote Unix/HPC clusters.
-    # Users must supply --conda-path with the Unix-style path instead.
+    # Try auto-detection first (works on Linux/macOS and Windows Git Bash).
+    # If conda is not in PATH, log a helpful message instead of failing.
     if conda_path is not None:
         # Explicit override — works on all platforms
         update_yaml_files(cfg.chemsmart_server, "~/miniconda3", conda_path)
-    elif platform.system() == "Windows":
-        logger.info(
-            "Windows detected: skipping conda path auto-update in server "
-            "YAML files. Run 'chemsmart config server --conda-path "
-            "<path/to/conda>' with the Unix-style conda path for your "
-            "remote cluster to configure it."
-        )
     else:
-        update_yaml_files(
-            cfg.chemsmart_server, "~/miniconda3", cfg.conda_folder
-        )
+        try:
+            update_yaml_files(
+                cfg.chemsmart_server, "~/miniconda3", cfg.conda_folder
+            )
+        except FileNotFoundError:
+            logger.info(
+                "Conda not found in PATH. To configure the conda path in "
+                "server YAML files, run:\n"
+                "  chemsmart config server --conda-path <path/to/conda>"
+            )
 
 
 @config.command()

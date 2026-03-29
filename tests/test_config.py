@@ -30,11 +30,32 @@ class TestConfig:
     # ------------------------------------------------------------------
 
     def test_shell_config_windows_returns_none(self):
+        """On native Windows (no POSIX shell), shell_config returns None."""
         cfg = Config()
-        with patch(
-            "chemsmart.cli.config.platform.system", return_value="Windows"
+        env_without_shell = {k: v for k, v in __import__("os").environ.items() if k != "SHELL"}
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict("os.environ", env_without_shell, clear=True),
         ):
             assert cfg.shell_config is None
+
+    def test_shell_config_git_bash_returns_bashrc(self, tmp_path):
+        """On Windows Git Bash (SHELL is set), shell_config returns ~/.bashrc."""
+        cfg = Config()
+        fake_home = tmp_path
+        bashrc = fake_home / ".bashrc"
+        bashrc.touch()
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict("os.environ", {"SHELL": "/usr/bin/bash"}),
+            patch.object(Path, "home", return_value=fake_home),
+        ):
+            result = cfg.shell_config
+        assert result == fake_home / ".bashrc"
 
     def test_shell_config_bash(self, tmp_path):
         cfg = Config()
@@ -69,11 +90,29 @@ class TestConfig:
     # ------------------------------------------------------------------
 
     def test_env_vars_windows_empty(self):
+        """On native Windows (no POSIX shell), env_vars returns []."""
         cfg = Config()
-        with patch(
-            "chemsmart.cli.config.platform.system", return_value="Windows"
+        env_without_shell = {k: v for k, v in __import__("os").environ.items() if k != "SHELL"}
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict("os.environ", env_without_shell, clear=True),
         ):
             assert cfg.env_vars == []
+
+    def test_env_vars_git_bash_non_empty(self):
+        """On Windows Git Bash (SHELL is set), env_vars returns Unix exports."""
+        cfg = Config()
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict("os.environ", {"SHELL": "/usr/bin/bash"}),
+        ):
+            vars_ = cfg.env_vars
+        assert len(vars_) > 0
+        assert all(v.startswith("export ") for v in vars_)
 
     def test_env_vars_linux_non_empty(self):
         cfg = Config()
@@ -133,9 +172,10 @@ class TestConfig:
         assert marker.read_text() == "keep me"
 
     def test_setup_environment_windows_calls_update_env(self, tmp_path):
-        """On Windows, setup_environment must call _windows_update_env."""
+        """On native Windows (no POSIX shell), setup_environment calls _windows_update_env."""
         dest = tmp_path / ".chemsmart"
         cfg = Config()
+        env_without_shell = {k: v for k, v in __import__("os").environ.items() if k != "SHELL"}
         with (
             patch.object(
                 type(cfg),
@@ -145,6 +185,7 @@ class TestConfig:
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Windows"
             ),
+            patch.dict("os.environ", env_without_shell, clear=True),
             patch.object(cfg, "_windows_update_env") as mock_update_env,
         ):
             cfg.setup_environment()
@@ -316,14 +357,11 @@ class TestConfigSetupEnvironment:
 class TestConfigServerCommand:
     """Tests for the config server Click command behavior."""
 
-    def test_server_skips_conda_update_on_windows_no_flag(
+    def test_server_skips_conda_update_when_conda_not_found(
         self, invoke_config_server
     ):
-        """On Windows without --conda-path, update_yaml_files is not called."""
+        """When conda is not in PATH and no --conda-path flag, update_yaml_files is not called."""
         with (
-            patch(
-                "chemsmart.cli.config.platform.system", return_value="Windows"
-            ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
             patch.object(
@@ -331,6 +369,15 @@ class TestConfigServerCommand:
                 "chemsmart_dest",
                 new_callable=lambda: property(
                     lambda self: Path("/fake/.chemsmart")
+                ),
+            ),
+            patch.object(
+                Config,
+                "conda_folder",
+                new_callable=lambda: property(
+                    lambda self: (_ for _ in ()).throw(
+                        FileNotFoundError("Conda not found in PATH.")
+                    )
                 ),
             ),
         ):
@@ -415,3 +462,34 @@ class TestConfigServerCommand:
             call_args = mock_update.call_args[0]
             assert call_args[1] == "~/miniconda3"
             assert call_args[2] == "/home/user/miniconda3"
+
+    def test_server_git_bash_auto_detects_conda(self, invoke_config_server):
+        """On Windows Git Bash (SHELL set), conda is auto-detected and YAML files updated."""
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict("os.environ", {"SHELL": "/usr/bin/bash"}),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+            patch.object(
+                Config,
+                "chemsmart_dest",
+                new_callable=lambda: property(
+                    lambda self: Path("/fake/.chemsmart")
+                ),
+            ),
+            patch.object(
+                Config,
+                "conda_folder",
+                new_callable=lambda: property(
+                    lambda self: "/c/Users/user/miniconda3"
+                ),
+            ),
+        ):
+            result = invoke_config_server()
+            assert result.exit_code == 0
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args[0]
+            assert call_args[1] == "~/miniconda3"
+            assert call_args[2] == "/c/Users/user/miniconda3"
