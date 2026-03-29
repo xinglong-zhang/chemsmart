@@ -166,13 +166,10 @@ class Config:
                 f.write("\n")
                 logger.info(f"Updated shell config: {shell_file}")
             else:
-                logger.info(
-                    f"Shell config already updated: {shell_file}"
-                )
+                logger.info(f"Shell config already updated: {shell_file}")
 
         logger.info(
-            f"Please restart your terminal or run "
-            f"'source {shell_file}'."
+            f"Please restart your terminal or run " f"'source {shell_file}'."
         )
 
 

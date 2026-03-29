@@ -1,10 +1,7 @@
 """Tests for chemsmart.cli.config.Config class."""
-import platform
-import shutil
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-import pytest
+from pathlib import Path
+from unittest.mock import patch
 
 from chemsmart.cli.config import Config
 
@@ -32,7 +29,9 @@ class TestConfig:
 
     def test_shell_config_windows_returns_none(self):
         cfg = Config()
-        with patch("chemsmart.cli.config.platform.system", return_value="Windows"):
+        with patch(
+            "chemsmart.cli.config.platform.system", return_value="Windows"
+        ):
             assert cfg.shell_config is None
 
     def test_shell_config_bash(self, tmp_path):
@@ -41,7 +40,9 @@ class TestConfig:
         bashrc = fake_home / ".bashrc"
         bashrc.touch()
         with (
-            patch("chemsmart.cli.config.platform.system", return_value="Linux"),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Linux"
+            ),
             patch.dict("os.environ", {"SHELL": "/bin/bash"}),
             patch.object(Path, "home", return_value=fake_home),
         ):
@@ -52,7 +53,9 @@ class TestConfig:
         cfg = Config()
         fake_home = tmp_path
         with (
-            patch("chemsmart.cli.config.platform.system", return_value="Darwin"),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Darwin"
+            ),
             patch.dict("os.environ", {"SHELL": "/bin/zsh"}),
             patch.object(Path, "home", return_value=fake_home),
         ):
@@ -65,12 +68,16 @@ class TestConfig:
 
     def test_env_vars_windows_empty(self):
         cfg = Config()
-        with patch("chemsmart.cli.config.platform.system", return_value="Windows"):
+        with patch(
+            "chemsmart.cli.config.platform.system", return_value="Windows"
+        ):
             assert cfg.env_vars == []
 
     def test_env_vars_linux_non_empty(self):
         cfg = Config()
-        with patch("chemsmart.cli.config.platform.system", return_value="Linux"):
+        with patch(
+            "chemsmart.cli.config.platform.system", return_value="Linux"
+        ):
             vars_ = cfg.env_vars
         assert len(vars_) > 0
         assert all(v.startswith("export ") for v in vars_)
@@ -84,8 +91,16 @@ class TestConfig:
         dest = tmp_path / ".chemsmart"
         cfg = Config()
         with (
-            patch.object(type(cfg), "chemsmart_dest", new_callable=lambda: property(lambda self: dest)),
-            patch.object(type(cfg), "shell_config", new_callable=lambda: property(lambda self: None)),
+            patch.object(
+                type(cfg),
+                "chemsmart_dest",
+                new_callable=lambda: property(lambda self: dest),
+            ),
+            patch.object(
+                type(cfg),
+                "shell_config",
+                new_callable=lambda: property(lambda self: None),
+            ),
         ):
             cfg.setup_environment()
         assert dest.exists()
@@ -100,8 +115,16 @@ class TestConfig:
 
         cfg = Config()
         with (
-            patch.object(type(cfg), "chemsmart_dest", new_callable=lambda: property(lambda self: dest)),
-            patch.object(type(cfg), "shell_config", new_callable=lambda: property(lambda self: None)),
+            patch.object(
+                type(cfg),
+                "chemsmart_dest",
+                new_callable=lambda: property(lambda self: dest),
+            ),
+            patch.object(
+                type(cfg),
+                "shell_config",
+                new_callable=lambda: property(lambda self: None),
+            ),
         ):
             cfg.setup_environment()
         # Existing content should be untouched
@@ -112,8 +135,14 @@ class TestConfig:
         dest = tmp_path / ".chemsmart"
         cfg = Config()
         with (
-            patch.object(type(cfg), "chemsmart_dest", new_callable=lambda: property(lambda self: dest)),
-            patch("chemsmart.cli.config.platform.system", return_value="Windows"),
+            patch.object(
+                type(cfg),
+                "chemsmart_dest",
+                new_callable=lambda: property(lambda self: dest),
+            ),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
         ):
             # Should not raise even though there is no shell rc file on Windows
             cfg.setup_environment()
@@ -127,10 +156,26 @@ class TestConfig:
 
         cfg = Config()
         with (
-            patch.object(type(cfg), "chemsmart_dest", new_callable=lambda: property(lambda self: dest)),
-            patch.object(type(cfg), "shell_config", new_callable=lambda: property(lambda self: shell_rc)),
-            patch.object(type(cfg), "env_vars", new_callable=lambda: property(lambda self: ['export FOO="bar"'])),
-            patch("chemsmart.cli.config.platform.system", return_value="Linux"),
+            patch.object(
+                type(cfg),
+                "chemsmart_dest",
+                new_callable=lambda: property(lambda self: dest),
+            ),
+            patch.object(
+                type(cfg),
+                "shell_config",
+                new_callable=lambda: property(lambda self: shell_rc),
+            ),
+            patch.object(
+                type(cfg),
+                "env_vars",
+                new_callable=lambda: property(
+                    lambda self: ['export FOO="bar"']
+                ),
+            ),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Linux"
+            ),
         ):
             cfg.setup_environment()
 
@@ -147,10 +192,26 @@ class TestConfig:
 
         cfg = Config()
         with (
-            patch.object(type(cfg), "chemsmart_dest", new_callable=lambda: property(lambda self: dest)),
-            patch.object(type(cfg), "shell_config", new_callable=lambda: property(lambda self: shell_rc)),
-            patch.object(type(cfg), "env_vars", new_callable=lambda: property(lambda self: ['export FOO="bar"'])),
-            patch("chemsmart.cli.config.platform.system", return_value="Linux"),
+            patch.object(
+                type(cfg),
+                "chemsmart_dest",
+                new_callable=lambda: property(lambda self: dest),
+            ),
+            patch.object(
+                type(cfg),
+                "shell_config",
+                new_callable=lambda: property(lambda self: shell_rc),
+            ),
+            patch.object(
+                type(cfg),
+                "env_vars",
+                new_callable=lambda: property(
+                    lambda self: ['export FOO="bar"']
+                ),
+            ),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Linux"
+            ),
         ):
             cfg.setup_environment()
             cfg.setup_environment()
@@ -165,14 +226,16 @@ class TestConfigServerCommand:
     def test_server_skips_conda_update_on_windows(self):
         """On Windows, config server should not call update_yaml_files for conda."""
         with (
-            patch("chemsmart.cli.config.platform.system", return_value="Windows"),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
         ):
             cfg = Config()
             # Simulate the server subcommand logic (Windows path)
+
             import chemsmart.cli.config as cfg_module
-            import platform as _platform
 
             if cfg_module.platform.system() == "Windows":
                 pass  # Windows branch: no update_yaml_files call
@@ -187,7 +250,9 @@ class TestConfigServerCommand:
     def test_server_updates_conda_path_on_linux(self):
         """On Linux, config server should call update_yaml_files for conda."""
         with (
-            patch("chemsmart.cli.config.platform.system", return_value="Linux"),
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Linux"
+            ),
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
         ):
