@@ -1,6 +1,8 @@
 import logging
 import os
+import platform
 import shutil
+from importlib import resources
 from pathlib import Path
 
 import click
@@ -18,15 +20,16 @@ class Config:
     @property
     def chemsmart_template(self):
         """
-        Define the source path for the .chemsmart templates.
+        Return a Traversable pointing to the bundled .chemsmart template
+        directory.
+
+        Uses importlib.resources so that the path is resolved correctly
+        after installation on Windows, macOS, and Linux alike.
         """
-        return (
-            Path(__file__).resolve().parent
-            / ".."
-            / "settings"
-            / "templates"
-            / ".chemsmart"
+        template_dir = (
+            resources.files("chemsmart.settings") / "templates" / ".chemsmart"
         )
+        return template_dir
 
     @property
     def chemsmart_dest(self):
@@ -38,17 +41,25 @@ class Config:
     @property
     def shell_config(self):
         """
-        Define the shell configuration file path.
+        Return the shell startup file on Unix-like systems.
+
+        Returns None on Windows, where shell rc files are not managed here.
         """
-        if os.environ.get("SHELL", "").endswith("bash"):
+        if platform.system() == "Windows":
+            return None
+
+        shell = os.environ.get("SHELL", "")
+        if shell.endswith("bash"):
             bashrc_filepath = Path.home() / ".bashrc"
             if bashrc_filepath.exists():
                 return bashrc_filepath
             else:
                 logger.info("Bashrc not found. Trying bash_profile.")
                 return Path.home() / ".bash_profile"
-        else:
+        if shell.endswith("zsh"):
             return Path.home() / ".zshrc"
+
+        return Path.home() / ".profile"
 
     @property
     def chemsmart_package_path(self):
@@ -99,7 +110,13 @@ class Config:
     def env_vars(self):
         """
         Define the environment variables to be added to the shell config.
+
+        Returns an empty list on Windows, where shell rc files are not
+        managed by chemsmart.
         """
+        if platform.system() == "Windows":
+            return []
+
         return [
             f'export PATH="{self.chemsmart_package_path}:$PATH"',
             f'export PATH="{self.chemsmart_package_path}/chemsmart/cli:$PATH"',
@@ -112,17 +129,33 @@ class Config:
         """
         Set up configuration files and environment variables.
         """
-        # Copy templates to ~/.chemsmart
+        # Copy templates to ~/.chemsmart using importlib.resources so that
+        # the source path is resolved correctly after installation on all
+        # platforms.
         if not self.chemsmart_dest.exists():
-            shutil.copytree(self.chemsmart_template, self.chemsmart_dest)
+            with resources.as_file(self.chemsmart_template) as src_dir:
+                shutil.copytree(src_dir, self.chemsmart_dest)
             logger.info(f"Copied templates to {self.chemsmart_dest}")
         else:
             logger.info(
                 f"Config directory already exists: {self.chemsmart_dest}"
             )
 
+        shell_file = self.shell_config
+        if shell_file is None:
+            logger.info(
+                "Windows detected: skipping shell config update. "
+                "Please activate the conda environment before using "
+                "chemsmart."
+            )
+            return
+
+        # Create shell config file if it does not exist yet
+        if not shell_file.exists():
+            shell_file.touch()
+
         # Prevent duplicate additions
-        with self.shell_config.open("r+") as f:
+        with shell_file.open("r+", encoding="utf-8") as f:
             lines = f.readlines()
             if not any(
                 "Added by chemsmart installer" in line for line in lines
@@ -131,15 +164,15 @@ class Config:
                 for var in self.env_vars:
                     f.write(f"{var}\n")
                 f.write("\n")
-                logger.info(f"Updated shell config: {self.shell_config}")
+                logger.info(f"Updated shell config: {shell_file}")
             else:
                 logger.info(
-                    f"Shell config already updated: {self.shell_config}"
+                    f"Shell config already updated: {shell_file}"
                 )
 
         logger.info(
             f"Please restart your terminal or run "
-            f"'source {os.path.basename(self.shell_config).split()[-1]}'."
+            f"'source {shell_file}'."
         )
 
 
