@@ -271,7 +271,7 @@ class Config:
 
         This is the fallback for plain CMD sessions that have neither a
         POSIX shell (Git Bash) nor an active PowerShell session.
-        Delegates to :func:`chemsmart.utils.io.windows_update_env`.
+        Delegates to :func:`chemsmart.utils.io.update_windows_env`.
         """
         pkg_path = str(self.chemsmart_package_path)
         paths_to_add = [

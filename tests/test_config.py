@@ -179,21 +179,22 @@ class TestConfig:
         """On native Windows (no POSIX shell, no PS), setup_environment calls _windows_update_env."""
         dest = tmp_path / ".chemsmart"
         cfg = Config()
-        env_without_shell_ps = {
-            k: v
-            for k, v in __import__("os").environ.items()
-            if k not in ("SHELL", "PSModulePath")
-        }
         with (
             patch.object(
                 type(cfg),
                 "chemsmart_dest",
                 new_callable=lambda: property(lambda self: dest),
             ),
-            patch(
-                "chemsmart.cli.config.platform.system", return_value="Windows"
+            patch.object(
+                type(cfg),
+                "shell_config",
+                new_callable=lambda: property(lambda self: None),
             ),
-            patch.dict("os.environ", env_without_shell_ps, clear=True),
+            patch.object(
+                type(cfg),
+                "powershell_profiles",
+                new_callable=lambda: property(lambda self: []),
+            ),
             patch.object(cfg, "_windows_update_env") as mock_update_env,
         ):
             cfg.setup_environment()
