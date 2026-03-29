@@ -27,19 +27,6 @@ more information.
 
    This creates a conda environment named ``chemsmart`` with all required Python packages.
 
-   .. note::
-
-      Some dependencies (e.g. ``pyvoro``) require compilation of C++ extensions during installation. On HPC systems or
-      environments without a default compiler, this step may fail.
-
-      If you encounter build errors when running ``make env``, please ensure that an appropriate C++ compiler (such as
-      ``g++``) is available. On many HPC clusters, this can be done by loading a compiler module first, for example:
-
-      .. code:: bash
-
-         module load gcc
-         make env
-
    If conda is not installed, you can use virtualenv instead:
 
    .. code:: bash
