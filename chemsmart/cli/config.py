@@ -17,39 +17,136 @@ create_logger(debug=True, stream=True)
 
 
 class Config:
+    """
+    Central configuration helper for chemsmart.
+
+    The class is organised into five logical sections:
+
+    1. **Template & destination paths** — where bundled templates live and
+       where they are copied to (``~/.chemsmart``).
+    2. **Conda detection** — locate the active conda installation via
+       ``shutil.which`` (works on Linux, macOS, Git Bash and Conda
+       PowerShell).
+    3. **POSIX shell management** — detect the active shell (bash / zsh / sh)
+       and return the correct rc file path and ``export`` lines.
+    4. **Windows PowerShell management** — detect an Anaconda / Miniconda
+       PowerShell session and write ``$env:PATH`` entries into the PS profile.
+    5. **Windows registry management** — fallback for plain CMD sessions that
+       have neither a POSIX shell nor PowerShell; persists PATH via the
+       Windows registry.
+    """
+
+    # ------------------------------------------------------------------ #
+    # 1. Template & destination paths                                       #
+    # ------------------------------------------------------------------ #
 
     @property
     def chemsmart_template(self):
         """
-        Return a Traversable pointing to the bundled .chemsmart template
+        Return a Traversable pointing to the bundled ``.chemsmart`` template
         directory.
 
-        Uses importlib.resources so that the path is resolved correctly
+        Uses ``importlib.resources`` so that the path is resolved correctly
         after installation on Windows, macOS, and Linux alike.
         """
-        template_dir = (
+        return (
             resources.files("chemsmart.settings") / "templates" / ".chemsmart"
         )
-        return template_dir
 
     @property
     def chemsmart_dest(self):
-        """
-        Define the destination path for the .chemsmart configuration.
-        """
+        """Destination path for the user's ``.chemsmart`` configuration."""
         return Path.home() / ".chemsmart"
+
+    @property
+    def chemsmart_server(self):
+        """Path to the ``server`` sub-directory of the user config."""
+        return self.chemsmart_dest / "server"
+
+    @property
+    def chemsmart_gaussian(self):
+        """Path to the ``gaussian`` sub-directory of the user config."""
+        return self.chemsmart_dest / "gaussian"
+
+    @property
+    def chemsmart_orca(self):
+        """Path to the ``orca`` sub-directory of the user config."""
+        return self.chemsmart_dest / "orca"
+
+    @property
+    def chemsmart_package_path(self):
+        """Absolute path to the root of the chemsmart source/install tree."""
+        chemsmart_path = Path(__file__).resolve().parent / ".." / ".."
+        chemsmart_path = os.path.abspath(chemsmart_path)
+        logger.debug(f"chemsmart package path: {chemsmart_path}")
+        return chemsmart_path
+
+    # ------------------------------------------------------------------ #
+    # 2. Conda detection                                                    #
+    # ------------------------------------------------------------------ #
+
+    @property
+    def conda_path(self):
+        """
+        Locate the ``conda`` executable via ``shutil.which``.
+
+        Works on Linux, macOS, Windows Git Bash, and Anaconda / Miniconda
+        PowerShell Prompt (all of which add conda to ``PATH``).
+
+        Raises :class:`FileNotFoundError` if conda is not found.
+        """
+        conda_path = shutil.which("conda")
+        if conda_path is None or not os.path.exists(conda_path):
+            raise FileNotFoundError(
+                "Conda not found in PATH. "
+                "Ensure conda is installed and its 'Scripts' / 'bin' "
+                "directory is on PATH."
+            )
+        return conda_path
+
+    @property
+    def conda_folder(self):
+        """Root directory of the conda installation (parent of the directory containing the executable)."""
+        return os.path.dirname(os.path.dirname(self.conda_path))
+
+    def configure_conda_in_server_yaml(self) -> None:
+        """
+        Auto-detect the conda installation and update the placeholder
+        ``~/miniconda3`` path in all server YAML files.
+
+        Conda is located via :attr:`conda_folder`, which uses
+        ``shutil.which("conda")`` and therefore works on all supported
+        platforms — Linux, macOS, Windows Git Bash and Anaconda / Miniconda
+        PowerShell Prompt.
+
+        If conda cannot be found a helpful message is logged instead of
+        raising an exception.
+        """
+        try:
+            update_yaml_files(
+                self.chemsmart_server, "~/miniconda3", self.conda_folder
+            )
+        except FileNotFoundError:
+            logger.info(
+                "Conda not found in PATH. "
+                "Add conda to your PATH and re-run 'chemsmart config server', "
+                "or update the conda path in ~/.chemsmart/server/*.yaml manually."
+            )
+
+    # ------------------------------------------------------------------ #
+    # 3. POSIX shell management (bash / zsh / sh)                          #
+    # ------------------------------------------------------------------ #
 
     @property
     def shell_config(self):
         """
-        Return the shell startup file on Unix-like systems.
+        Return the shell startup file path for the active POSIX shell.
 
-        Returns None on native Windows (no POSIX shell active), where shell rc
-        files are not managed here.  On Windows Git Bash / MSYS2 the ``SHELL``
-        environment variable is set, so the shell rc file is managed like on
-        Linux/macOS.
+        Returns ``None`` on native Windows when no POSIX shell is active
+        (i.e. the ``SHELL`` environment variable is not set).  On Windows
+        Git Bash / MSYS2 the ``SHELL`` variable *is* set, so the shell rc
+        file is managed exactly as on Linux / macOS.
         """
-        # On native Windows (no POSIX shell), skip shell rc management.
         if platform.system() == "Windows" and not os.environ.get("SHELL"):
             return None
 
@@ -63,63 +160,16 @@ class Config:
                 return Path.home() / ".bash_profile"
         if shell.endswith("zsh"):
             return Path.home() / ".zshrc"
-
         return Path.home() / ".profile"
-
-    @property
-    def chemsmart_package_path(self):
-        """
-        Define the path for the chemsmart package.
-        """
-        chemsmart_path = Path(__file__).resolve().parent / ".." / ".."
-        chemsmart_path = os.path.abspath(chemsmart_path)
-        logger.debug(f"chemsmart package path: {chemsmart_path}")
-        return chemsmart_path
-
-    @property
-    def chemsmart_server(self):
-        """Define the path for the chemsmart server configuration."""
-        return self.chemsmart_dest / "server"
-
-    @property
-    def chemsmart_gaussian(self):
-        """Define the path for the chemsmart gaussian configuration."""
-        return self.chemsmart_dest / "gaussian"
-
-    @property
-    def chemsmart_orca(self):
-        """Define the path for the chemsmart orca configuration."""
-        return self.chemsmart_dest / "orca"
-
-    @property
-    def conda_path(self):
-        """
-        Define the path for the conda environment.
-        """
-        conda_path = shutil.which("conda")
-        if conda_path is None or not os.path.exists(conda_path):
-            raise FileNotFoundError(
-                "Conda not found in PATH. Please install conda!"
-            )
-        return conda_path
-
-    @property
-    def conda_folder(self):
-        """
-        Define the path to the conda folder.
-        """
-        # Go up 2 directories from the conda path
-        return os.path.dirname(os.path.dirname(self.conda_path))
 
     @property
     def env_vars(self):
         """
-        Define the environment variables to be added to the shell config.
+        Unix-style ``export`` lines to append to the active shell rc file.
 
-        Returns an empty list on native Windows (no POSIX shell), where shell
-        rc files are not managed by chemsmart.  On Windows Git Bash / MSYS2
-        (``SHELL`` env var is set) the Unix-style exports are returned so that
-        the shell rc file is updated correctly.
+        Returns ``[]`` on native Windows (no POSIX shell active).  On
+        Windows Git Bash / MSYS2 the Unix-style exports are returned so
+        that the shell rc file is updated correctly.
         """
         if platform.system() == "Windows" and not os.environ.get("SHELL"):
             return []
@@ -132,25 +182,50 @@ class Config:
             f'export PYTHONPATH="{self.chemsmart_package_path}:$PYTHONPATH"',
         ]
 
+    def _update_shell_config(self, shell_file: Path) -> None:
+        """
+        Append chemsmart ``export`` lines to *shell_file* (idempotent).
+
+        Creates the file if it does not yet exist.
+        """
+        if not shell_file.exists():
+            shell_file.touch()
+
+        with shell_file.open("r+", encoding="utf-8") as f:
+            lines = f.readlines()
+            if not any(
+                "Added by chemsmart installer" in line for line in lines
+            ):
+                f.write("\n# Added by chemsmart installer\n")
+                for var in self.env_vars:
+                    f.write(f"{var}\n")
+                f.write("\n")
+                logger.info(f"Updated shell config: {shell_file}")
+            else:
+                logger.info(f"Shell config already updated: {shell_file}")
+
+        logger.info(
+            f"Please restart your terminal or run 'source {shell_file}'."
+        )
+
+    # ------------------------------------------------------------------ #
+    # 4. Windows PowerShell management                                      #
+    # ------------------------------------------------------------------ #
+
     @property
     def powershell_profiles(self):
         """
-        Return a list of PowerShell profile paths to update when running in a
-        Windows PowerShell session (e.g. Anaconda / Miniconda PowerShell
-        prompt).
+        Return profile paths to update when running inside a PowerShell
+        session (e.g. Anaconda / Miniconda PowerShell Prompt).
 
         PowerShell is detected via the ``PSModulePath`` environment variable,
-        which is always set by PowerShell regardless of how the session was
-        launched.
+        which is always set by PowerShell regardless of how it was launched.
 
-        Both Windows PowerShell 5.x
-        (``~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1``)
-        and PowerShell 7+
-        (``~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1``) profiles
-        are returned so that the update works across both versions.
+        Both Windows PowerShell 5.x and PowerShell 7+ profile paths are
+        returned so the update works across both versions.
 
-        Returns an empty list on non-Windows platforms or when not running
-        inside a PowerShell session.
+        Returns ``[]`` on non-Windows platforms or outside a PowerShell
+        session.
         """
         if platform.system() != "Windows":
             return []
@@ -158,10 +233,10 @@ class Config:
             return []
         home = Path.home()
         return [
-            # Windows PowerShell 5.x (used by Anaconda/Miniconda Prompt)
+            # Windows PowerShell 5.x (Anaconda/Miniconda default)
             home / "Documents" / "WindowsPowerShell"
             / "Microsoft.PowerShell_profile.ps1",
-            # PowerShell 7+ (cross-platform)
+            # PowerShell 7+
             home / "Documents" / "PowerShell"
             / "Microsoft.PowerShell_profile.ps1",
         ]
@@ -169,8 +244,7 @@ class Config:
     @property
     def ps_env_vars(self):
         """
-        PowerShell-formatted ``$env:PATH`` / ``$env:PYTHONPATH`` lines to
-        append to the PowerShell profile file.
+        PowerShell ``$env:PATH`` / ``$env:PYTHONPATH`` assignment lines.
 
         These are the PowerShell equivalent of the Unix ``export`` lines
         written to ``~/.bashrc``.
@@ -191,12 +265,8 @@ class Config:
 
     def _update_powershell_profiles(self, profiles) -> None:
         """
-        Write chemsmart PATH / PYTHONPATH entries into each PowerShell profile
-        file — the PowerShell equivalent of appending ``export`` lines to
-        ``~/.bashrc``.
-
-        The update is idempotent: if the marker comment is already present the
-        file is not modified again.
+        Append chemsmart ``$env:PATH`` lines to each PowerShell profile
+        (idempotent).  Creates profile directories and files as needed.
         """
         for ps_profile in profiles:
             ps_profile.parent.mkdir(parents=True, exist_ok=True)
@@ -222,13 +292,18 @@ class Config:
             "  . $PROFILE"
         )
 
+    # ------------------------------------------------------------------ #
+    # 5. Windows registry management (CMD / plain Windows fallback)         #
+    # ------------------------------------------------------------------ #
+
     def _windows_update_env(self) -> None:
         """
         Add chemsmart paths to the Windows user PATH and PYTHONPATH via
-        the registry — the Windows equivalent of appending ``export``
-        lines to ``~/.bashrc``.
+        the registry.
 
-        Delegates to :func:`chemsmart.utils.utils.windows_update_env`.
+        This is the fallback for plain CMD sessions that have neither a
+        POSIX shell (Git Bash) nor an active PowerShell session.
+        Delegates to :func:`chemsmart.utils.io.windows_update_env`.
         """
         pkg_path = str(self.chemsmart_package_path)
         paths_to_add = [
@@ -238,13 +313,27 @@ class Config:
         ]
         windows_update_env(paths_to_add, pkg_path)
 
+    # ------------------------------------------------------------------ #
+    # High-level orchestration                                              #
+    # ------------------------------------------------------------------ #
+
     def setup_environment(self):
         """
-        Set up configuration files and environment variables.
+        Copy bundled templates to ``~/.chemsmart`` and register the
+        ``chemsmart`` command in the active shell environment.
+
+        Dispatch logic:
+
+        * **POSIX shell** (Linux, macOS, Git Bash on Windows): append
+          ``export`` lines to the shell rc file (``~/.bashrc``,
+          ``~/.zshrc``, …).
+        * **Windows PowerShell** (Anaconda / Miniconda PS Prompt, detected
+          via ``PSModulePath``): append ``$env:PATH`` lines to the PS
+          profile.
+        * **Windows CMD / other**: update PATH / PYTHONPATH in the Windows
+          user registry.
         """
-        # Copy templates to ~/.chemsmart using importlib.resources so that
-        # the source path is resolved correctly after installation on all
-        # platforms.
+        # -- Copy templates -----------------------------------------------
         if not self.chemsmart_dest.exists():
             with resources.as_file(self.chemsmart_template) as src_dir:
                 shutil.copytree(src_dir, self.chemsmart_dest)
@@ -254,53 +343,31 @@ class Config:
                 f"Config directory already exists: {self.chemsmart_dest}"
             )
 
+        # -- Register chemsmart in the active shell environment -----------
         shell_file = self.shell_config
-        if shell_file is None:
-            # Not a POSIX shell (no SHELL env var).
-            # Check whether we are running inside a PowerShell session
-            # (e.g. Anaconda / Miniconda PowerShell Prompt).
-            ps_profiles = self.powershell_profiles
-            if ps_profiles:
-                self._update_powershell_profiles(ps_profiles)
-            else:
-                # Plain CMD or other Windows environment — update the user
-                # environment via the registry.
-                self._windows_update_env()
-                logger.info(
-                    "Environment variables updated in the Windows registry.\n"
-                    "Please restart your terminal for the changes to take "
-                    "effect.\n"
-                    "To refresh PATH in the current PowerShell session, "
-                    "run:\n"
-                    "  $env:PATH = "
-                    "[System.Environment]::GetEnvironmentVariable("
-                    "'PATH', 'Machine') + ';' + "
-                    "[System.Environment]::GetEnvironmentVariable("
-                    "'PATH', 'User')"
-                )
+        if shell_file is not None:
+            # POSIX shell (Linux / macOS / Git Bash on Windows)
+            self._update_shell_config(shell_file)
             return
 
-        # Create shell config file if it does not exist yet
-        if not shell_file.exists():
-            shell_file.touch()
-
-        # Prevent duplicate additions
-        with shell_file.open("r+", encoding="utf-8") as f:
-            lines = f.readlines()
-            if not any(
-                "Added by chemsmart installer" in line for line in lines
-            ):
-                f.write("\n# Added by chemsmart installer\n")
-                for var in self.env_vars:
-                    f.write(f"{var}\n")
-                f.write("\n")
-                logger.info(f"Updated shell config: {shell_file}")
-            else:
-                logger.info(f"Shell config already updated: {shell_file}")
-
-        logger.info(
-            f"Please restart your terminal or run " f"'source {shell_file}'."
-        )
+        ps_profiles = self.powershell_profiles
+        if ps_profiles:
+            # Anaconda / Miniconda PowerShell Prompt
+            self._update_powershell_profiles(ps_profiles)
+        else:
+            # Plain CMD or other Windows environment — use the registry
+            self._windows_update_env()
+            logger.info(
+                "Environment variables updated in the Windows registry.\n"
+                "Please restart your terminal for the changes to take "
+                "effect.\n"
+                "To refresh PATH in the current PowerShell session, run:\n"
+                "  $env:PATH = "
+                "[System.Environment]::GetEnvironmentVariable("
+                "'PATH', 'Machine') + ';' + "
+                "[System.Environment]::GetEnvironmentVariable("
+                "'PATH', 'User')"
+            )
 
 
 def update_yaml_files(target_directory, value_in_file, user_value):
@@ -394,19 +461,7 @@ def config(ctx):
 
 @config.command()
 @click.pass_context
-@click.option(
-    "--conda-path",
-    "-cp",
-    default=None,
-    show_default=True,
-    help=(
-        "Path to the conda installation on the remote cluster "
-        "(e.g. ~/miniconda3 or /opt/conda). "
-        "Required on Windows where auto-detection is not possible. "
-        "On Linux/macOS this overrides the auto-detected path."
-    ),
-)
-def server(ctx, conda_path):
+def server(ctx):
     """
     Configure server settings in ~/.chemsmart/server/*.yaml files.
 
@@ -415,13 +470,12 @@ def server(ctx, conda_path):
     # extra commands to activate chemsmart environment in submission script
     in the *.yaml file.
 
-    On Windows, use --conda-path to supply the Unix-style conda path for
-    the remote HPC cluster (e.g. ~/miniconda3), since auto-detection would
-    return a Windows-style path that is incorrect for remote clusters.
+    Conda is auto-detected via ``which conda`` (works on Linux, macOS,
+    Windows Git Bash and Anaconda / Miniconda PowerShell Prompt).  If
+    conda is not found a helpful message is logged.
 
     Examples:
         chemsmart config server
-        chemsmart config server --conda-path ~/miniconda3
     """
     cfg = ctx.obj["cfg"]
     logger.info("Configuring servers in ~/.chemsmart/server/*yaml files.")
@@ -435,23 +489,8 @@ def server(ctx, conda_path):
         prepend_string=" " * 8,
     )
 
-    # Update the conda path in server YAML files.
-    # Try auto-detection first (works on Linux/macOS and Windows Git Bash).
-    # If conda is not in PATH, log a helpful message instead of failing.
-    if conda_path is not None:
-        # Explicit override — works on all platforms
-        update_yaml_files(cfg.chemsmart_server, "~/miniconda3", conda_path)
-    else:
-        try:
-            update_yaml_files(
-                cfg.chemsmart_server, "~/miniconda3", cfg.conda_folder
-            )
-        except FileNotFoundError:
-            logger.info(
-                "Conda not found in PATH. To configure the conda path in "
-                "server YAML files, run:\n"
-                "  chemsmart config server --conda-path <path/to/conda>"
-            )
+    # Auto-detect conda and update server YAML files.
+    cfg.configure_conda_in_server_yaml()
 
 
 @config.command()

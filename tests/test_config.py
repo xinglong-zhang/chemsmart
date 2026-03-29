@@ -428,7 +428,7 @@ class TestConfigServerCommand:
     def test_server_skips_conda_update_when_conda_not_found(
         self, invoke_config_server
     ):
-        """When conda is not in PATH and no --conda-path flag, update_yaml_files is not called."""
+        """When conda is not in PATH, update_yaml_files is not called."""
         with (
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.add_lines_in_yaml_files"),
@@ -453,56 +453,8 @@ class TestConfigServerCommand:
             assert result.exit_code == 0
             mock_update.assert_not_called()
 
-    def test_server_uses_conda_path_flag_on_windows(
-        self, invoke_config_server
-    ):
-        """On Windows with --conda-path, update_yaml_files is called with provided path."""
-        with (
-            patch(
-                "chemsmart.cli.config.platform.system", return_value="Windows"
-            ),
-            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
-            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
-            patch.object(
-                Config,
-                "chemsmart_dest",
-                new_callable=lambda: property(
-                    lambda self: Path("/fake/.chemsmart")
-                ),
-            ),
-        ):
-            result = invoke_config_server(["--conda-path", "~/miniconda3"])
-            assert result.exit_code == 0
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args[0]
-            assert call_args[1] == "~/miniconda3"
-            assert call_args[2] == "~/miniconda3"
-
-    def test_server_uses_conda_path_flag_on_linux(self, invoke_config_server):
-        """On Linux with --conda-path, the provided path overrides auto-detection."""
-        with (
-            patch(
-                "chemsmart.cli.config.platform.system", return_value="Linux"
-            ),
-            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
-            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
-            patch.object(
-                Config,
-                "chemsmart_dest",
-                new_callable=lambda: property(
-                    lambda self: Path("/fake/.chemsmart")
-                ),
-            ),
-        ):
-            result = invoke_config_server(["--conda-path", "/opt/conda"])
-            assert result.exit_code == 0
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args[0]
-            assert call_args[1] == "~/miniconda3"
-            assert call_args[2] == "/opt/conda"
-
     def test_server_updates_conda_path_on_linux(self, invoke_config_server):
-        """On Linux without --conda-path, update_yaml_files uses auto-detected conda."""
+        """On Linux, update_yaml_files uses auto-detected conda."""
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Linux"
@@ -561,3 +513,83 @@ class TestConfigServerCommand:
             call_args = mock_update.call_args[0]
             assert call_args[1] == "~/miniconda3"
             assert call_args[2] == "/c/Users/user/miniconda3"
+
+    def test_server_powershell_auto_detects_conda(self, invoke_config_server):
+        """On Windows Conda PowerShell (PSModulePath set), conda is auto-detected."""
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict(
+                "os.environ",
+                {"PSModulePath": "C:\\Windows\\system32"},
+                clear=False,
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.add_lines_in_yaml_files"),
+            patch.object(
+                Config,
+                "chemsmart_dest",
+                new_callable=lambda: property(
+                    lambda self: Path("/fake/.chemsmart")
+                ),
+            ),
+            patch.object(
+                Config,
+                "conda_folder",
+                new_callable=lambda: property(
+                    lambda self: "C:\\Users\\user\\miniconda3"
+                ),
+            ),
+        ):
+            result = invoke_config_server()
+            assert result.exit_code == 0
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args[0]
+            assert call_args[1] == "~/miniconda3"
+            assert call_args[2] == "C:\\Users\\user\\miniconda3"
+
+
+class TestConfigureCondaInServerYaml:
+    """Tests for Config.configure_conda_in_server_yaml."""
+
+    def test_calls_update_yaml_when_conda_found(self, tmp_path):
+        """When conda is found, update_yaml_files is called with the detected folder."""
+        cfg = Config()
+        with (
+            patch.object(
+                type(cfg),
+                "conda_folder",
+                new_callable=lambda: property(
+                    lambda self: "/home/user/miniconda3"
+                ),
+            ),
+            patch.object(
+                type(cfg),
+                "chemsmart_server",
+                new_callable=lambda: property(lambda self: tmp_path),
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+        ):
+            cfg.configure_conda_in_server_yaml()
+        mock_update.assert_called_once_with(
+            tmp_path, "~/miniconda3", "/home/user/miniconda3"
+        )
+
+    def test_logs_message_when_conda_not_found(self, tmp_path):
+        """When conda is not in PATH, configure_conda_in_server_yaml logs a message."""
+        cfg = Config()
+        with (
+            patch.object(
+                type(cfg),
+                "conda_folder",
+                new_callable=lambda: property(
+                    lambda self: (_ for _ in ()).throw(
+                        FileNotFoundError("Conda not found")
+                    )
+                ),
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+        ):
+            cfg.configure_conda_in_server_yaml()
+        mock_update.assert_not_called()

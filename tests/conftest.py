@@ -2047,7 +2047,7 @@ def invoke_config_server():
     Usage in tests::
 
         def test_something(invoke_config_server):
-            result = invoke_config_server(["--conda-path", "~/miniconda3"])
+            result = invoke_config_server()
             assert result.exit_code == 0
     """
     from chemsmart.cli.config import config
