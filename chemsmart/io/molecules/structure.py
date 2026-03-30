@@ -1771,7 +1771,7 @@ class Molecule:
             logger.debug(f"Converted energy from Hartree to eV: {energy} eV")
         forces = self.forces
         if forces is not None:
-            logger.debug(f"Converting forces from {forces} Hartree/Å to eV/Å.")
+            logger.debug(f"Converting forces from {forces} Hartree/Bohr to eV/Å.")
             forces = forces * units.Hartree / units.Bohr
             logger.debug(
                 f"Converted forces from Hartree/Bohr to eV/Å: {forces} eV/Å."
