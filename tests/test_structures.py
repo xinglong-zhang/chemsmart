@@ -1919,6 +1919,7 @@ class TestCDXFile:
         assert mol.num_atoms == 75
         assert mol.is_aromatic
 
+
 def test_qmmm_partition_overlap_raises():
     """Creating a QMMMMolecule with overlapping
     partitions should raise a ValueError."""

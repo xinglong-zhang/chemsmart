@@ -337,8 +337,8 @@ class TestNormalizeMetalBonds:
             )
             # Benzene has 6 aromatic bonds when not connected to metal
             assert aromatic_bonds >= 0  # May vary based on sanitization state
-            
-            
+
+
 class TestLoadMoleculesFromPaths:
     """Tests for the load_molecules_from_paths function."""
 

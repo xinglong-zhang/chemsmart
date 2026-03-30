@@ -142,8 +142,8 @@ ChemDraw Files
 ChemDraw XML (.cdxml) and Binary (.cdx) Files
 ---------------------------------------------
 
-Chemsmart supports reading molecular structures directly from ChemDraw files, including
-**organometallic complexes** with aromatic ligands such as Cp, Cp\*, and benzene rings.
+Chemsmart supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
+with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 .. code:: bash
 
@@ -174,10 +174,10 @@ Chemsmart supports reading molecular structures directly from ChemDraw files, in
    -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates.
    -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule.
    -  3D coordinates are automatically generated from 2D structures.
-   -  Reading binary ``.cdx`` files requires Open Babel (``obabel``) to be installed.
-      If Open Babel is not available, save the file as ``.cdxml`` instead.
-   -  Charge and multiplicity of organometallic complexes are **not** inferred from the
-      ChemDraw file – always specify ``-c`` and ``-m`` explicitly.
+   -  Reading binary ``.cdx`` files requires Open Babel (``obabel``) to be installed. If Open Babel is not available,
+      save the file as ``.cdxml`` instead.
+   -  Charge and multiplicity of organometallic complexes are **not** inferred from the ChemDraw file – always specify
+      ``-c`` and ``-m`` explicitly.
 
 **Example: Multi-molecule ChemDraw file**
 
@@ -186,8 +186,7 @@ Chemsmart supports reading molecular structures directly from ChemDraw files, in
    # Select the 2nd molecule from a ChemDraw file with multiple structures
    chemsmart sub -s server gaussian -p project -f molecules.cdxml -i 2 -c 0 -m 1 opt
 
-For full details on organometallic complex support and its restrictions, see
-:doc:`chemdraw-organometallic`.
+For full details on organometallic complex support and its restrictions, see :doc:`chemdraw-organometallic`.
 
 *********************
  Molecular Databases
