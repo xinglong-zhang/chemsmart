@@ -137,6 +137,15 @@ ifeq ($(OS),Windows)
 	@echo "  chemsmart config gaussian --folder <path>"
 	@echo "  chemsmart config orca --folder <path>"
 	@echo "  chemsmart config nciplot --folder <path>"
+	@echo.
+	@echo ===========================================================
+	@echo  Configuration complete!
+	@echo  chemsmart paths have been registered in your shell profile.
+	@echo  To activate chemsmart in your current session:
+	@echo    Git Bash:        source ~/.bashrc
+	@echo    Conda PowerShell: . $$PROFILE
+	@echo  Or open a new terminal window.
+	@echo ===========================================================
 else
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
@@ -163,6 +172,16 @@ else
 	else \
 		$(ECHO) "Skipping NCIPLOT configuration."; \
 	fi
+	@echo ""
+	@echo "==========================================================="
+	@echo " Configuration complete!"
+	@echo " chemsmart paths have been written to your shell config."
+	@echo "==========================================================="
+	@. $${HOME}/.bashrc 2>/dev/null || . $${HOME}/.bash_profile 2>/dev/null || . $${HOME}/.profile 2>/dev/null || true
+	@echo "chemsmart is now active for the current make session."
+	@echo "To activate chemsmart in your current terminal, run:"
+	@echo "  source ~/.bashrc   (bash)  or  source ~/.zshrc   (zsh)"
+	@echo "Or simply open a new terminal window."
 endif
 
 .PHONY: show
