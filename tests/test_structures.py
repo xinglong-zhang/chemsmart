@@ -596,6 +596,42 @@ class TestMoleculeAdvanced:
         assert ase_atoms.energy is None
         assert ase_atoms.forces is None
 
+    def test_to_ase_none_energy_with_forces(self):
+        """Test that to_ase() converts forces when energy is None."""
+        from ase import units
+
+        forces_hartree_per_angstrom = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_angstrom,
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_angstrom * units.Hartree / units.Angstrom
+        )
+        assert np.allclose(ase_atoms.forces, expected_forces_ev_per_angstrom)
+
+    def test_to_ase_energy_with_none_forces(self):
+        """Test that to_ase() converts energy when forces are None."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+        assert ase_atoms.forces is None
+
     def test_convert_ase_atoms_with_constraints_to_molecule(
         self, constrained_atoms
     ):
