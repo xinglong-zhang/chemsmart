@@ -4,7 +4,7 @@ import os
 import queue
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
 from chemsmart.io.molecules.structure import Molecule
@@ -25,16 +25,39 @@ DEFAULT_WORKER_TIMEOUT = 120  # 2 minutes
 
 
 @dataclass
+class IterateMoleculePool:
+    """Shared pool of unique Molecule objects for iterate combinations.
+
+    Avoids duplicating Molecule objects across combinations. Each combination
+    references molecules by index; actual copies are made only at worker
+    dispatch time.
+
+    Attributes
+    ----------
+    skeletons : list[Molecule]
+        Pool of unique skeleton molecules.
+    substituents : list[Molecule]
+        Pool of unique substituent molecules.
+    """
+
+    skeletons: list[Molecule] = field(default_factory=list)
+    substituents: list[Molecule] = field(default_factory=list)
+
+
+@dataclass
 class IterateCombination:
     """
     Represents a single combination of skeleton, link_index, and substituent.
+
+    Molecules are stored in a shared IterateMoleculePool and referenced by
+    index. Actual Molecule copies are created only at worker dispatch time.
     """
 
-    skeleton: Molecule
+    skeleton_idx: int
     skeleton_label: str
     skeleton_link_index: int  # 1-based
     skeleton_indices: Optional[list[int]]  # 1-based, or None
-    substituent: Molecule
+    substituent_idx: int
     substituent_label: str
     substituent_link_index: int  # 1-based
     method: str = "lagrange_multipliers"
@@ -55,6 +78,7 @@ class IterateCombination:
 
 def _run_combination_task(
     combination: IterateCombination,
+    pool: IterateMoleculePool,
 ) -> tuple[str, Optional[Molecule]]:
     """
     Core logic to run a single combination.
@@ -62,7 +86,9 @@ def _run_combination_task(
     Parameters
     ----------
     combination : IterateCombination
-        The combination to process
+        The combination to process (lightweight, references pool by index)
+    pool : IterateMoleculePool
+        Shared molecule pool; molecules are copied here at execution time
 
     Returns
     -------
@@ -72,9 +98,13 @@ def _run_combination_task(
     label = combination.label
 
     try:
+        # Copy molecules from pool at execution time
+        skeleton = pool.skeletons[combination.skeleton_idx].copy()
+        substituent = pool.substituents[combination.substituent_idx].copy()
+
         # Preprocess skeleton if needed
         skeleton_preprocessor = SkeletonPreprocessor(
-            molecule=combination.skeleton,
+            molecule=skeleton,
             link_index=combination.skeleton_link_index,
             skeleton_indices=combination.skeleton_indices,
         )
@@ -83,7 +113,7 @@ def _run_combination_task(
 
         # Preprocess substituent if needed
         substituent_preprocessor = SubstituentPreprocessor(
-            molecule=combination.substituent,
+            molecule=substituent,
             link_index=combination.substituent_link_index,
         )
         processed_substituent = substituent_preprocessor.run()
@@ -118,6 +148,7 @@ def _run_combination_task(
 
 def _run_combination_worker(
     combination: IterateCombination,
+    pool: IterateMoleculePool,
     result_queue: "multiprocessing.Queue",
 ) -> None:
     """
@@ -127,11 +158,13 @@ def _run_combination_worker(
     ----------
     combination : IterateCombination
         The combination to process
+    pool : IterateMoleculePool
+        Shared molecule pool
     result_queue : multiprocessing.Queue
         Queue to put the result tuple
     """
     try:
-        result_pair = _run_combination_task(combination)
+        result_pair = _run_combination_task(combination, pool)
         result_queue.put(result_pair)
     except Exception as e:
         logger.error(f"Worker process panic for {combination.label}: {e}")
@@ -181,7 +214,7 @@ class IterateJobRunner(JobRunner):
         return None
 
     def run_single(
-        self, combination: IterateCombination
+        self, combination: IterateCombination, pool: IterateMoleculePool
     ) -> tuple[str, Optional[Molecule]]:
         """
         Run a single combination to generate a combined molecule.
@@ -190,6 +223,8 @@ class IterateJobRunner(JobRunner):
         ----------
         combination : IterateCombination
             The combination to process
+        pool : IterateMoleculePool
+            Shared molecule pool
 
         Returns
         -------
@@ -202,10 +237,11 @@ class IterateJobRunner(JobRunner):
             )
             return (combination.label, None)
 
-        return _run_combination_task(combination)
+        return _run_combination_task(combination, pool)
 
     def run_combinations(
         self,
+        pool: IterateMoleculePool,
         combinations: list[IterateCombination],
         nprocs: int = 1,
         timeout: float = DEFAULT_WORKER_TIMEOUT,
@@ -220,6 +256,8 @@ class IterateJobRunner(JobRunner):
 
         Parameters
         ----------
+        pool : IterateMoleculePool
+            Shared molecule pool; workers copy molecules at execution time
         combinations : list[IterateCombination]
             List of combinations to process
         nprocs : int
@@ -275,7 +313,7 @@ class IterateJobRunner(JobRunner):
                     comb = pending_combinations.popleft()
                     p = multiprocessing.Process(
                         target=_run_combination_worker,
-                        args=(comb, result_queue),
+                        args=(comb, pool, result_queue),
                         daemon=True,
                     )
                     p.start()
@@ -488,10 +526,13 @@ class IterateJobRunner(JobRunner):
 
     def _generate_combinations(
         self, job: "IterateJob"
-    ) -> list[IterateCombination]:
+    ) -> tuple[IterateMoleculePool, list[IterateCombination]]:
         """
         Generate all combinations of (skeleton,
         skeleton_link_index, substituent).
+
+        Molecules are loaded once into a shared IterateMoleculePool.
+        Combinations reference molecules by index, avoiding redundant copies.
 
         Parameters
         ----------
@@ -500,9 +541,10 @@ class IterateJobRunner(JobRunner):
 
         Returns
         -------
-        list[IterateCombination]
-            List of all valid combinations
+        tuple[IterateMoleculePool, list[IterateCombination]]
+            Shared molecule pool and list of all valid combinations
         """
+        pool = IterateMoleculePool()
         combinations = []
 
         skeleton_list = job.settings.skeleton_list or []
@@ -532,7 +574,9 @@ class IterateJobRunner(JobRunner):
                 )
                 continue
 
-            valid_skeletons.append((skeleton, skel_label, skel_config))
+            pool_idx = len(pool.skeletons)
+            pool.skeletons.append(skeleton)
+            valid_skeletons.append((pool_idx, skel_label, skel_config))
 
         valid_substituents = []
         for sub_idx, sub_config in enumerate(substituent_list):
@@ -551,10 +595,11 @@ class IterateJobRunner(JobRunner):
                 )
                 continue
 
-            valid_substituents.append((substituent, sub_label, sub_config))
+            pool_idx = len(pool.substituents)
+            pool.substituents.append(substituent)
+            valid_substituents.append((pool_idx, sub_label, sub_config))
 
-        for skeleton, skel_label, skel_config in valid_skeletons:
-            # skel_label is returned by _load_molecule
+        for skel_pool_idx, skel_label, skel_config in valid_skeletons:
             skel_link_indices = skel_config.get(
                 "link_index"
             )  # list[int], 1-based
@@ -562,8 +607,7 @@ class IterateJobRunner(JobRunner):
                 "skeleton_indices"
             )  # list[int] or None
 
-            for substituent, sub_label, sub_config in valid_substituents:
-                # sub_label is returned by _load_molecule
+            for sub_pool_idx, sub_label, sub_config in valid_substituents:
                 sub_link_index = sub_config.get(
                     "link_index"
                 )  # list[int], 1-based
@@ -574,11 +618,11 @@ class IterateJobRunner(JobRunner):
                 # For each skeleton link position, create a combination
                 for skel_link_idx in skel_link_indices:
                     combination = IterateCombination(
-                        skeleton=skeleton.copy(),
+                        skeleton_idx=skel_pool_idx,
                         skeleton_label=skel_label,
                         skeleton_link_index=skel_link_idx,
                         skeleton_indices=skeleton_indices,
-                        substituent=substituent.copy(),
+                        substituent_idx=sub_pool_idx,
                         substituent_label=sub_label,
                         sphere_direction_samples_num=sphere_direction_samples_num,
                         axial_rotations_sample_num=axial_rotations_sample_num,
@@ -588,7 +632,7 @@ class IterateJobRunner(JobRunner):
                     combinations.append(combination)
                     logger.info(f"Created combination: {combination.label}")
 
-        return combinations
+        return pool, combinations
 
     def _write_outputs(
         self, results: list[tuple[str, Optional[Molecule]]], job: "IterateJob"
@@ -694,7 +738,7 @@ class IterateJobRunner(JobRunner):
             return
 
         # Generate combinations from job settings
-        combinations = self._generate_combinations(job)
+        pool, combinations = self._generate_combinations(job)
         logger.info(f"Generated {len(combinations)} combination(s)")
 
         if not combinations:
@@ -703,7 +747,7 @@ class IterateJobRunner(JobRunner):
 
         # Run combinations with multiprocessing
         results = self.run_combinations(
-            combinations, nprocs=job.nprocs, timeout=job.timeout
+            pool, combinations, nprocs=job.nprocs, timeout=job.timeout
         )
 
         # Write output results
