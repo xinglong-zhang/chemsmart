@@ -1,6 +1,6 @@
 # Detect the operating system
 OS := $(shell uname -s 2>/dev/null || echo Windows)
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
     SHELL := cmd
     ENV_PREFIX := $(if $(shell where conda >nul 2>&1 && conda env list | findstr chemsmart >nul 2>&1),conda activate chemsmart && ,)
     SEP := \\
@@ -26,7 +26,7 @@ CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart$(SEP)cli$(SEP)chemsmart  # Use platfo
 # === Help messages for make ===
 
 .PHONY: help
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 help:             ## Show the help menu.
 	@echo "Usage: make <target>"
 	@echo ""
@@ -45,7 +45,7 @@ endif
 .PHONY: env
 env:  ## Create a Conda environment if USE_CONDA=true.
 	@echo Debug: USE_CONDA=$(USE_CONDA)
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@if "$(USE_CONDA)"=="true" ( \
 		$(ECHO) "Using Conda" && $(MAKE) conda-env \
 	) else ( \
@@ -64,7 +64,7 @@ endif
 .PHONY: conda-env
 conda-env:  ## Create or update the Conda environment using environment.yml.
 	@echo Managing Conda environment 'chemsmart' with environment.yml...
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@if not exist environment.yml ( \
 		$(ECHO) "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first." && exit 1 \
 	)
@@ -92,7 +92,7 @@ endif
 
 .PHONY: virtualenv
 virtualenv:  ## Create a virtual environment using virtualenv.
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@where python3 >$(NULL) 2>&1 || ( $(ECHO) "Python 3 is required but not installed. Exiting." && exit 1 )
 	@if not exist "venv" ( python3 -m venv venv )
 	@call venv\Scripts\activate.bat && pip install -U pip
@@ -127,7 +127,7 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
@@ -165,7 +165,7 @@ endif
 .PHONY: show
 show: ## Display the current environment information.
 	@echo Current environment:
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@if "$(USE_CONDA)"=="true" conda env list ^| findstr "*"
 else
 	@if [ "$(USE_CONDA)" = "true" ]; then conda env list | grep '*'; fi
@@ -195,7 +195,7 @@ lint:             ## Run linters (ruff).
 
 .PHONY: coverage-clean
 coverage-clean:   ## Remove any stale coverage files prior to running tests.
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	-@for /R . %%f in (.coverage*) do @$(RM) "%%f" 2>$(NULL)
 else
 	-@rm -f .coverage .coverage.* 2>/dev/null
@@ -216,7 +216,7 @@ docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
 	@echo "==> Running doc8..."
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 	@echo "==> Running rstcheck..."
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	$(ENV_PREFIX)rstcheck -r docs\source
 else
 	$(ENV_PREFIX)rstcheck -r docs/source
@@ -239,7 +239,7 @@ docs-clean: ## Clean documentation artifacts.
 
 .PHONY: clean
 clean: ## Remove temporary and unnecessary files.
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@for /R . %%f in (*.pyc) do @$(RM) "%%f" 2>$(NULL)
 	@for /D /R . %%d in (__pycache__) do @if exist "%%d" $(RMDIR) "%%d" 2>$(NULL)
 	@for /R . %%f in (Thumbs.db) do @$(RM) "%%f" 2>$(NULL)
@@ -259,7 +259,7 @@ REPOSITORY ?= testpypi
 PACKAGE_NAME := chemsmart
 VERSION_FILE := chemsmart$(SEP)VERSION
 
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
     VERSION := $(shell type $(VERSION_FILE))
     GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
     GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >$(NULL) 2>&1
@@ -285,7 +285,7 @@ build: clean ## Build source and wheel distributions.
 
 .PHONY: check-clean
 check-clean: ## Fail if git working tree is not clean.
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@$(GIT_STATUS_CLEAN_CMD) || ( \
 		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first." && \
 		exit 1 \
@@ -299,7 +299,7 @@ endif
 
 .PHONY: check-git-tag
 check-git-tag: ## Fail if git tag v<VERSION> already exists.
-ifeq ($(OS),Windows)
+ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@$(GIT_TAG_EXISTS_CMD) && ( \
 		$(ECHO) "Error: git tag v$(VERSION) already exists." && \
 		exit 1 \
