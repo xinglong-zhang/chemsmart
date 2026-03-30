@@ -1050,6 +1050,11 @@ class Molecule:
         for line in lines:
             record_name = line[:6].strip()
             if record_name == "MODEL":
+                # If there are accumulated atoms (e.g., from a model without ENDMDL
+                # or atoms before the first MODEL), flush them as a complete model
+                # before starting a new one.
+                if current_atom_lines:
+                    flush_current_model()
                 seen_model_records = True
                 current_atom_lines = []
                 continue
