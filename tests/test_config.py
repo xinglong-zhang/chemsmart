@@ -715,12 +715,18 @@ class TestConfigurePathsInteractively:
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
             patch("chemsmart.cli.config.click.prompt") as mock_prompt,
         ):
-            mock_prompt.side_effect = ["/path/to/g16", "/path/to/orca", "/path/to/nci"]
+            mock_prompt.side_effect = [
+                "/path/to/g16",
+                "/path/to/orca",
+                "/path/to/nci",
+            ]
             cfg.configure_paths_interactively()
 
         assert mock_update.call_count == 3
         mock_update.assert_any_call(tmp_path, "~/bin/g16", "/path/to/g16")
-        mock_update.assert_any_call(tmp_path, "~/bin/orca_6_0_0", "/path/to/orca")
+        mock_update.assert_any_call(
+            tmp_path, "~/bin/orca_6_0_0", "/path/to/orca"
+        )
         mock_update.assert_any_call(tmp_path, "~/bin/nciplot", "/path/to/nci")
 
     def test_skips_when_all_prompts_empty(self, tmp_path):
