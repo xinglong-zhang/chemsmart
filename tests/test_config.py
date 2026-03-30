@@ -395,7 +395,10 @@ class TestUpdatePowershellProfiles:
     def test_creates_profile_with_alias(self, tmp_path):
         """Creates a new profile containing the Set-Alias declaration."""
         ps_profile = (
-            tmp_path / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
+            tmp_path
+            / "Documents"
+            / "WindowsPowerShell"
+            / "Microsoft.PowerShell_profile.ps1"
         )
         update_powershell_profiles(
             [ps_profile],
@@ -422,7 +425,9 @@ class TestUpdatePowershellProfiles:
         content = ps_profile.read_text()
         assert "function chemsmart" not in content
         assert "Set-Alias -Name chemsmart -Value chemsmart.exe" in content
-        assert content.count("chemsmart initialize") == 2  # BEGIN + END markers
+        assert (
+            content.count("chemsmart initialize") == 2
+        )  # BEGIN + END markers
 
     def test_migrates_legacy_profile_entries(self, tmp_path):
         """Old-style '# Added by chemsmart installer' blocks are replaced."""

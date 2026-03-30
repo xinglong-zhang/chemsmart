@@ -84,8 +84,8 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~\.chemsmart``
    (``%USERPROFILE%\.chemsmart``).
 
-#. **Updates PowerShell profiles** — writes a ``$env:PYTHONPATH`` entry and a
-   ``Set-Alias -Name chemsmart -Value chemsmart.exe`` declaration to:
+#. **Updates PowerShell profiles** — writes a ``$env:PYTHONPATH`` entry and a ``Set-Alias -Name chemsmart -Value
+   chemsmart.exe`` declaration to:
 
    -  ``~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`` (Windows PowerShell 5.x, used by Anaconda /
       Miniconda prompts)
@@ -94,9 +94,9 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
    .. note::
 
       A **``Set-Alias``** declaration (rather than a bare ``$env:PATH`` addition) is used because PowerShell resolves
-      aliases **before** external commands in PATH.  This means that even if a bare POSIX-style ``chemsmart`` script
-      (no ``.exe`` extension) is present somewhere on PATH — for example in ``chemsmart/cli/`` in a development install
-      — the alias wins and ``chemsmart.exe`` (which pip places in the conda ``Scripts/`` directory) is called directly.
+      aliases **before** external commands in PATH. This means that even if a bare POSIX-style ``chemsmart`` script (no
+      ``.exe`` extension) is present somewhere on PATH — for example in ``chemsmart/cli/`` in a development install —
+      the alias wins and ``chemsmart.exe`` (which pip places in the conda ``Scripts/`` directory) is called directly.
       This avoids the Windows *"Open with"* popup.
 
       If you previously ran ``make configure`` and your profile contained old ``$env:PATH`` or ``function chemsmart``
@@ -131,8 +131,8 @@ After this, you can verify the installation:
 
 .. note::
 
-   Each time ``make configure`` is run, the installer replaces the previous chemsmart block in the PS profile with
-   the latest settings.  Re-running configure is therefore safe and idempotent.
+   Each time ``make configure`` is run, the installer replaces the previous chemsmart block in the PS profile with the
+   latest settings. Re-running configure is therefore safe and idempotent.
 
 *****************
  Troubleshooting
@@ -169,7 +169,7 @@ Or open a new Anaconda PowerShell Prompt — the profile is sourced automaticall
 **chemsmart opens an "Open with" popup instead of running**
 
 This means Windows found a bare POSIX script named ``chemsmart`` (no ``.exe`` extension) in ``$env:PATH`` before
-resolving the alias.  Re-run ``make configure`` to update the profile with the ``Set-Alias`` declaration that takes
+resolving the alias. Re-run ``make configure`` to update the profile with the ``Set-Alias`` declaration that takes
 precedence over external files, then reload the profile:
 
 .. code:: powershell
