@@ -127,11 +127,11 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
-	@echo Running chemsmart configuration...
-	$(ENV_PREFIX)--no-capture-output python $(CHEMSMART_PATH) config
-	@echo Running chemsmart server configuration...
-	$(ENV_PREFIX)--no-capture-output python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 ifeq ($(OS),Windows)
+	@echo Running chemsmart configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
+	@echo Running chemsmart server configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 	@echo.
 	@echo ===========================================================
 	@echo  Configuration complete!
@@ -142,6 +142,10 @@ ifeq ($(OS),Windows)
 	@echo  Or open a new terminal window.
 	@echo ===========================================================
 else
+	@echo Running chemsmart configuration...
+	$(ENV_PREFIX)--no-capture-output python $(CHEMSMART_PATH) config
+	@echo Running chemsmart server configuration...
+	$(ENV_PREFIX)--no-capture-output python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 	@echo ""
 	@echo "==========================================================="
 	@echo " Configuration complete!"
