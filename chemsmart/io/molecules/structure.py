@@ -1129,14 +1129,60 @@ class Molecule:
 
     @staticmethod
     def _infer_pdb_element_from_atom_name(atom_name):
-        """Infer element symbol from PDB atom-name field when columns 77-78 are blank."""
-        cleaned = re.sub(r"[^A-Za-z]", "", atom_name or "")
+        """Infer element symbol from PDB atom-name field when columns 77-78 are blank.
+
+        This uses PDB-specific heuristics instead of interpreting the full atom
+        name as an element symbol. The rules are:
+
+        - Strip leading digits (e.g. ``1H`` -> ``H``).
+        - Keep only letters from the remaining name.
+        - If the first two letters look like an element symbol with a lowercase
+          second letter (e.g. ``Fe``), use both letters.
+        - Otherwise, use only the first letter as the element (e.g. ``CA`` ->
+          ``C`` for C-alpha).
+        """
+        if not atom_name:
+            raise ValueError(
+                f"Unable to infer element from atom name '{atom_name}'"
+            )
+
+        # Remove leading digits (e.g. "1H", "2CA")
+        name = re.sub(r"^[0-9]+", "", atom_name.strip())
+        # Keep only letters thereafter
+        cleaned = re.sub(r"[^A-Za-z]", "", name)
+
         if not cleaned:
             raise ValueError(
                 f"Unable to infer element from atom name '{atom_name}'"
             )
-        return p.to_element(cleaned)
 
+        # Determine a candidate element symbol following PDB conventions
+        if len(cleaned) == 1:
+            candidate = cleaned[0].upper()
+        else:
+            first = cleaned[0]
+            second = cleaned[1]
+            if second.islower():
+                # Two-letter element symbol like Fe, Cl, etc.
+                candidate = first.upper() + second.lower()
+            else:
+                # Most biomolecular atoms: use first letter only (e.g. CA -> C)
+                candidate = first.upper()
+
+        # Validate/normalize via periodic table, with a simple fallback
+        try:
+            return p.to_element(candidate)
+        except Exception:
+            # If we tried two letters and failed, fall back to first letter only
+            if len(candidate) > 1:
+                fallback = candidate[0].upper()
+                try:
+                    return p.to_element(fallback)
+                except Exception:
+                    pass
+            raise ValueError(
+                f"Unable to infer element from atom name '{atom_name}'"
+            )
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
