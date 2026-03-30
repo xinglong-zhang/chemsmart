@@ -1183,6 +1183,7 @@ class Molecule:
             raise ValueError(
                 f"Unable to infer element from atom name '{atom_name}'"
             )
+
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
