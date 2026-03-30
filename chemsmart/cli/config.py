@@ -294,6 +294,37 @@ class Config:
     # High-level orchestration                                              #
     # ------------------------------------------------------------------ #
 
+    def configure_paths_interactively(self) -> None:
+        """Interactively prompt for optional software folder paths.
+
+        Prompts the user for the Gaussian g16, ORCA, and NCIPLOT
+        installation folders.  Pressing Enter skips a prompt.
+
+        Uses :func:`click.prompt` so the prompts work correctly on all
+        platforms — Linux, macOS, Windows Git Bash, and Conda PowerShell —
+        without any shell-specific ``read`` syntax in the Makefile.
+        """
+        click.echo(
+            "\nConfigure optional software paths "
+            "(press Enter to skip each):"
+        )
+        for sw_name, placeholder, label in [
+            ("Gaussian g16", "~/bin/g16", "Gaussian g16 folder"),
+            ("ORCA", "~/bin/orca_6_0_0", "ORCA folder"),
+            ("NCIPLOT", "~/bin/nciplot", "NCIPLOT folder"),
+        ]:
+            try:
+                folder = click.prompt(
+                    f"  {label}", default="", show_default=False
+                ).strip()
+            except (click.exceptions.Abort, EOFError):
+                folder = ""
+            if folder:
+                update_yaml_files(self.chemsmart_server, placeholder, folder)
+                logger.info(f"Configured {sw_name} with folder: {folder}")
+            else:
+                logger.info(f"Skipping {sw_name} configuration.")
+
     def setup_environment(self):
         """
         Copy bundled templates to ``~/.chemsmart`` and register the
@@ -435,6 +466,7 @@ def config(ctx):
     if ctx.invoked_subcommand is None:
         # Run the default environment setup when no subcommand is provided
         cfg.setup_environment()
+        cfg.configure_paths_interactively()
 
 
 @config.command()

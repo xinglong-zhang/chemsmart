@@ -698,3 +698,78 @@ class TestConfigureCondaInServerYaml:
         ):
             cfg.configure_conda_in_server_yaml()
         mock_update.assert_not_called()
+
+
+class TestConfigurePathsInteractively:
+    """Tests for Config.configure_paths_interactively."""
+
+    def test_updates_yaml_for_provided_paths(self, tmp_path):
+        """When the user provides all three paths, update_yaml_files is called for each."""
+        cfg = Config()
+        with (
+            patch.object(
+                type(cfg),
+                "chemsmart_server",
+                new_callable=lambda: property(lambda self: tmp_path),
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.click.prompt") as mock_prompt,
+        ):
+            mock_prompt.side_effect = ["/path/to/g16", "/path/to/orca", "/path/to/nci"]
+            cfg.configure_paths_interactively()
+
+        assert mock_update.call_count == 3
+        mock_update.assert_any_call(tmp_path, "~/bin/g16", "/path/to/g16")
+        mock_update.assert_any_call(tmp_path, "~/bin/orca_6_0_0", "/path/to/orca")
+        mock_update.assert_any_call(tmp_path, "~/bin/nciplot", "/path/to/nci")
+
+    def test_skips_when_all_prompts_empty(self, tmp_path):
+        """When the user presses Enter for all prompts, no YAML updates are made."""
+        cfg = Config()
+        with (
+            patch.object(
+                type(cfg),
+                "chemsmart_server",
+                new_callable=lambda: property(lambda self: tmp_path),
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.click.prompt", return_value=""),
+        ):
+            cfg.configure_paths_interactively()
+
+        mock_update.assert_not_called()
+
+    def test_partial_paths_updates_only_provided(self, tmp_path):
+        """Only paths that the user fills in are updated; skipped ones are ignored."""
+        cfg = Config()
+        with (
+            patch.object(
+                type(cfg),
+                "chemsmart_server",
+                new_callable=lambda: property(lambda self: tmp_path),
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.click.prompt") as mock_prompt,
+        ):
+            # Provide Gaussian, skip ORCA and NCIPLOT
+            mock_prompt.side_effect = ["/opt/g16", "", ""]
+            cfg.configure_paths_interactively()
+
+        assert mock_update.call_count == 1
+        mock_update.assert_called_once_with(tmp_path, "~/bin/g16", "/opt/g16")
+
+    def test_handles_eof_gracefully(self, tmp_path):
+        """When stdin raises EOFError (non-interactive), all paths are skipped."""
+        cfg = Config()
+        with (
+            patch.object(
+                type(cfg),
+                "chemsmart_server",
+                new_callable=lambda: property(lambda self: tmp_path),
+            ),
+            patch("chemsmart.cli.config.update_yaml_files") as mock_update,
+            patch("chemsmart.cli.config.click.prompt", side_effect=EOFError),
+        ):
+            cfg.configure_paths_interactively()
+
+        mock_update.assert_not_called()

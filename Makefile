@@ -127,16 +127,11 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
-ifeq ($(OS),Windows)
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@echo "Interactive path prompts are not implemented for Windows shell in this Makefile."
-	@echo "Please run these manually if needed:"
-	@echo "  chemsmart config gaussian --folder <path>"
-	@echo "  chemsmart config orca --folder <path>"
-	@echo "  chemsmart config nciplot --folder <path>"
+ifeq ($(OS),Windows)
 	@echo.
 	@echo ===========================================================
 	@echo  Configuration complete!
@@ -147,31 +142,6 @@ ifeq ($(OS),Windows)
 	@echo  Or open a new terminal window.
 	@echo ===========================================================
 else
-	@echo Running chemsmart configuration...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
-	@echo Running chemsmart server configuration...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder || true; \
-	if [ -n "$$gaussian_folder" ]; then \
-		$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
-		$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "$$gaussian_folder"; \
-	else \
-		$(ECHO) "Skipping Gaussian configuration."; \
-	fi; \
-	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder || true; \
-	if [ -n "$$orca_folder" ]; then \
-		$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
-		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
-	else \
-		$(ECHO) "Skipping ORCA configuration."; \
-	fi; \
-	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder || true; \
-	if [ -n "$$nciplot_folder" ]; then \
-		$(ECHO) "Configuring NCIPLOT with folder: $$nciplot_folder"; \
-		$(ENV_PREFIX)python $(CHEMSMART_PATH) config nciplot --folder "$$nciplot_folder"; \
-	else \
-		$(ECHO) "Skipping NCIPLOT configuration."; \
-	fi
 	@echo ""
 	@echo "==========================================================="
 	@echo " Configuration complete!"
@@ -181,7 +151,7 @@ else
 		if [ -f "$$rc" ]; then . "$$rc" 2>/dev/null || true; fi; \
 	done; \
 	echo "chemsmart is now active for the current make session."; \
-	echo "To activate chemsmart in your current terminal, run the command for your shell:"; \
+	echo "To activate chemsmart in your current terminal, run:"; \
 	if [ -f "$${HOME}/.bashrc" ]; then echo "  source ~/.bashrc  (bash / Git Bash)"; fi; \
 	if [ -f "$${HOME}/.zshrc" ]; then echo "  source ~/.zshrc   (zsh)"; fi; \
 	if [ -f "$${HOME}/.profile" ]; then echo "  source ~/.profile (sh / other)"; fi; \
