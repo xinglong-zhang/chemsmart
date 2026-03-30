@@ -1413,8 +1413,24 @@ class Molecule:
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
             adjust_H (bool): Adjust bond distances to H atoms.
             **kwargs: Additional keyword arguments. Legacy conformer-selection
-                arguments like ``confId`` and ``conf_id`` are not supported.
+                arguments like ``confId`` and ``conf_id`` are not supported and
+                will raise :class:`TypeError` if provided.
         """
+        if kwargs:
+            # Explicitly reject unsupported legacy conformer-selection arguments
+            legacy_keys = {"confId", "conf_id"}
+            provided_keys = set(kwargs.keys())
+            legacy_provided = legacy_keys & provided_keys
+            if legacy_provided:
+                provided_str = ", ".join(sorted(legacy_provided))
+                raise TypeError(
+                    f"Legacy conformer-selection arguments not supported in write_pdb(): {provided_str}"
+                )
+            # Reject any other unexpected keyword arguments to avoid silently ignoring them
+            unexpected_str = ", ".join(sorted(provided_keys))
+            raise TypeError(
+                f"write_pdb() got unexpected keyword argument(s): {unexpected_str}"
+            )
         pdb_block = self.to_pdb(
             flavor=flavor,
             add_bonds=add_bonds,
