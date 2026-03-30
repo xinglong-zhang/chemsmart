@@ -3,6 +3,7 @@ OS := $(shell uname -s 2>/dev/null || echo Windows)
 ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
     SHELL := cmd
     ENV_PREFIX := $(if $(shell where conda >nul 2>&1 && conda env list | findstr chemsmart >nul 2>&1),conda activate chemsmart && ,)
+    CONDA_RUN := $(if $(shell where conda >nul 2>&1 && conda env list | findstr chemsmart >nul 2>&1),conda run -n chemsmart --no-capture-output,)
     SEP := \\
     RM := del /Q
     RMDIR := rmdir /S /Q
@@ -11,6 +12,7 @@ ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 else
     SHELL := /bin/bash
     ENV_PREFIX := $(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart "; fi)
+    CONDA_RUN := $(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart --no-capture-output"; fi)
     SEP := /
     RM := rm -f
     RMDIR := rm -rf
@@ -129,9 +131,9 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 configure:        ## Run chemsmart configuration interactively.
 ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@echo Running chemsmart configuration...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
+	$(CONDA_RUN) python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
+	$(CONDA_RUN) python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 	@echo.
 	@echo ===========================================================
 	@echo  Configuration complete!
@@ -143,9 +145,9 @@ ifneq ($(filter Windows Windows_NT MINGW% MSYS% CYGWIN%,$(OS)),)
 	@echo ===========================================================
 else
 	@echo Running chemsmart configuration...
-	$(ENV_PREFIX)--no-capture-output python $(CHEMSMART_PATH) config
+	$(CONDA_RUN) python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
-	$(ENV_PREFIX)--no-capture-output python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
+	$(CONDA_RUN) python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 	@echo ""
 	@echo "==========================================================="
 	@echo " Configuration complete!"
