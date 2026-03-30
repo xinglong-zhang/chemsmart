@@ -727,18 +727,6 @@ class TestOrcaPkaBatchExecution:
             ORCApKaJobSettings,
         )
 
-        class ImmediateThread:
-            def __init__(self, target=None, args=(), kwargs=None):
-                self._target = target
-                self._args = args
-                self._kwargs = kwargs or {}
-
-            def start(self):
-                self._target(*self._args, **self._kwargs)
-
-            def join(self):
-                return None
-
         target_ha_fallback = Molecule(
             symbols=["H"],
             positions=[[0.0, 0.0, 0.0]],
@@ -807,21 +795,30 @@ class TestOrcaPkaBatchExecution:
             parallel=True,
         )
 
+        # Mock opt jobs with vibrational_frequencies (all positive → no imaginary)
         ha_opt_job = Mock(label="ha_opt")
         ha_opt_job._output.return_value = Mock(
-            normal_termination=True, molecule=target_ha_optimized
+            normal_termination=True,
+            molecule=target_ha_optimized,
+            vibrational_frequencies=[100.0, 200.0],
         )
         a_opt_job = Mock(label="a_opt")
         a_opt_job._output.return_value = Mock(
-            normal_termination=True, molecule=target_a_optimized
+            normal_termination=True,
+            molecule=target_a_optimized,
+            vibrational_frequencies=[100.0, 200.0],
         )
         hb_opt_job = Mock(label="hb_opt")
         hb_opt_job._output.return_value = Mock(
-            normal_termination=True, molecule=ref_hb_optimized
+            normal_termination=True,
+            molecule=ref_hb_optimized,
+            vibrational_frequencies=[100.0, 200.0],
         )
         b_opt_job = Mock(label="b_opt")
         b_opt_job._output.return_value = Mock(
-            normal_termination=True, molecule=ref_b_optimized
+            normal_termination=True,
+            molecule=ref_b_optimized,
+            vibrational_frequencies=[100.0, 200.0],
         )
 
         ha_sp_settings = ORCAJobSettings(functional="B3LYP", basis="def2-SVP")
@@ -833,7 +830,6 @@ class TestOrcaPkaBatchExecution:
             functional="wB97X-D", basis="ma-def2-SVP"
         )
 
-        mocker.patch("threading.Thread", side_effect=ImmediateThread)
         mocker.patch.object(
             type(job),
             "has_reference_jobs",

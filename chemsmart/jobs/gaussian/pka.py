@@ -11,6 +11,7 @@ solvation free energy calculations.
 """
 
 import logging
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
@@ -315,8 +316,132 @@ class GaussianpKaJob(GaussianJob):
             self.ref_conjugate_base_sp_job,
         ]
 
+    # ------------------------------------------------------------------
+    # Imaginary frequency validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_imaginary_frequencies(job, role):
+        """Check for imaginary frequencies after an optimisation job.
+
+        Returns:
+            None if validation passes; an error message string otherwise.
+        """
+        out = job._output()
+        if out is None:
+            return (
+                f"[{role}] Optimisation produced no output – "
+                f"cannot validate frequencies for {job.label}."
+            )
+        if not out.normal_termination:
+            return None  # abnormal termination handled separately
+
+        freqs = getattr(out, "vibrational_frequencies", None)
+        if freqs is None:
+            return None  # no frequency data – skip
+
+        imaginary = [f for f in freqs if f < 0.0]
+        if imaginary:
+            return (
+                f"[{role}] Imaginary frequency check FAILED for "
+                f"{job.label}: found {len(imaginary)} imaginary "
+                f"mode(s) {imaginary}. The optimised geometry is not a "
+                f"true minimum – please re-optimise."
+            )
+        return None
+
+    # ------------------------------------------------------------------
+    # Parallel execution helpers
+    # ------------------------------------------------------------------
+
+    def _run_opt_worker(self, job, role, runner, cores, mem):
+        """Run a single opt job and validate its frequencies.
+
+        Returns a dict ``{"role", "label", "success", "error"}``.
+        """
+        result = {
+            "role": role,
+            "label": job.label,
+            "success": False,
+            "error": None,
+        }
+
+        if runner:
+            job.jobrunner = runner.copy()
+            job.jobrunner.num_cores = cores
+            job.jobrunner.mem_gb = mem
+
+        job.run()
+
+        freq_err = self._validate_imaginary_frequencies(job, role)
+        if freq_err:
+            result["error"] = freq_err
+            logger.error(freq_err)
+            return result
+
+        result["success"] = True
+        return result
+
+    @staticmethod
+    def _run_sp_worker(job, role, runner, cores, mem):
+        """Run a single SP job.
+
+        Returns a dict ``{"role", "label", "success", "error"}``.
+        """
+        result = {
+            "role": role,
+            "label": job.label,
+            "success": False,
+            "error": None,
+        }
+
+        if runner:
+            job.jobrunner = runner.copy()
+            job.jobrunner.num_cores = cores
+            job.jobrunner.mem_gb = mem
+
+        job.run()
+        result["success"] = True
+        return result
+
+    @staticmethod
+    def _collect_futures(future_to_role):
+        """Wait for all futures, collecting successes and failures.
+
+        Returns ``(successes, failures)`` where each element is a list
+        of label strings or error message strings respectively.
+        """
+        successes = []
+        failures = []
+
+        for fut in as_completed(future_to_role):
+            role = future_to_role[fut]
+            try:
+                res = fut.result()
+            except Exception:
+                tb = traceback.format_exc()
+                msg = (
+                    f"[{role}] Worker crashed with unhandled exception:\n{tb}"
+                )
+                logger.error(msg)
+                failures.append(msg)
+            else:
+                if res["success"]:
+                    successes.append(res["label"])
+                else:
+                    failures.append(res["error"])
+
+        return successes, failures
+
     def _run_parallel(self):
-        """Run pKa workflow in parallel mode."""
+        """Run pKa workflow in parallel mode.
+
+        Uses ``ThreadPoolExecutor`` so that a crash or validation failure
+        in one worker does **not** prevent other workers from finishing.
+        After all workers complete, a summary is logged and – if any
+        worker failed – a ``RuntimeError`` is raised with every failure
+        message.
+        """
         # Ensure we have a valid runner
         runner = self.jobrunner
         if runner and not isinstance(runner, GaussianJobRunner):
@@ -343,10 +468,14 @@ class GaussianpKaJob(GaussianJob):
         total_cores = runner.num_cores if runner and runner.num_cores else 1
         total_mem = runner.mem_gb if runner and runner.mem_gb else 1
 
-        concurrent_opt_jobs = len(self.opt_jobs)
+        # ── Phase 1: optimisation jobs ──────────────────────────────────
+        opt_job_specs = list(zip(self.opt_jobs, ("HA_opt", "A_opt")))
         if self.has_reference_jobs:
-            concurrent_opt_jobs += len(self.ref_opt_jobs)
+            opt_job_specs.extend(
+                zip(self.ref_opt_jobs, ("HRef_opt", "Ref_opt"))
+            )
 
+        concurrent_opt_jobs = len(opt_job_specs)
         opt_cores_per_job = max(1, int(total_cores // concurrent_opt_jobs))
         opt_mem_per_job = max(1, int(total_mem // concurrent_opt_jobs))
 
@@ -356,37 +485,39 @@ class GaussianpKaJob(GaussianJob):
             f"({opt_cores_per_job} cores, {opt_mem_per_job}GB each)."
         )
 
+        all_successes = []
+        all_failures = []
+
         with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
-            futures = []
+            future_to_role = {}
+            for job, role in opt_job_specs:
+                fut = executor.submit(
+                    self._run_opt_worker,
+                    job,
+                    role,
+                    runner,
+                    opt_cores_per_job,
+                    opt_mem_per_job,
+                )
+                future_to_role[fut] = role
 
-            def submit_job(job, cores, mem):
-                if runner:
-                    # Create a specific runner for this job with fraction of resources
-                    job.jobrunner = runner.copy()
-                    job.jobrunner.num_cores = cores
-                    job.jobrunner.mem_gb = mem
-                futures.append(executor.submit(job.run))
+            successes, failures = self._collect_futures(future_to_role)
+            all_successes.extend(successes)
+            all_failures.extend(failures)
 
-            for job in self.opt_jobs:
-                submit_job(job, opt_cores_per_job, opt_mem_per_job)
-
-            if self.has_reference_jobs:
-                for job in self.ref_opt_jobs:
-                    submit_job(job, opt_cores_per_job, opt_mem_per_job)
-
-            for f in as_completed(futures):
-                f.result()
-
-        # Create SP jobs
+        # ── Phase 2: SP jobs (only if opt phase had no fatal errors) ────
+        # Create SP jobs from optimised geometries
         self._create_sp_jobs()
         if self.has_reference_jobs:
             self._create_ref_sp_jobs()
 
-        sp_jobs_to_run = []
+        sp_job_specs = []
         if self.sp_jobs:
-            sp_jobs_to_run.extend(self.sp_jobs)
+            sp_job_specs.extend(zip(self.sp_jobs, ("HA_sp", "A_sp")))
         if self.has_reference_jobs and self.ref_sp_jobs:
-            sp_jobs_to_run.extend(self.ref_sp_jobs)
+            sp_job_specs.extend(zip(self.ref_sp_jobs, ("HRef_sp", "Ref_sp")))
+        sp_jobs_to_run = [job for job, _ in sp_job_specs]
+        sp_roles = [role for _, role in sp_job_specs]
 
         if sp_jobs_to_run:
             concurrent_sp_jobs = len(sp_jobs_to_run)
@@ -402,16 +533,40 @@ class GaussianpKaJob(GaussianJob):
             with ThreadPoolExecutor(
                 max_workers=concurrent_sp_jobs
             ) as executor:
-                futures = []
-                for job in sp_jobs_to_run:
-                    if runner:
-                        job.jobrunner = runner.copy()
-                        job.jobrunner.num_cores = sp_cores_per_job
-                        job.jobrunner.mem_gb = sp_mem_per_job
-                    futures.append(executor.submit(job.run))
+                future_to_role = {}
+                for job, role in zip(sp_jobs_to_run, sp_roles):
+                    fut = executor.submit(
+                        self._run_sp_worker,
+                        job,
+                        role,
+                        runner,
+                        sp_cores_per_job,
+                        sp_mem_per_job,
+                    )
+                    future_to_role[fut] = role
 
-                for f in as_completed(futures):
-                    f.result()
+                successes, failures = self._collect_futures(future_to_role)
+                all_successes.extend(successes)
+                all_failures.extend(failures)
+
+        # ── Final reporting ─────────────────────────────────────────────
+        total = len(all_successes) + len(all_failures)
+        logger.info(
+            f"Parallel pKa run complete: "
+            f"{len(all_successes)}/{total} succeeded, "
+            f"{len(all_failures)}/{total} failed."
+        )
+        for label in all_successes:
+            logger.info(f"  ✓ {label}")
+        for err in all_failures:
+            logger.error(f"  ✗ {err}")
+
+        if all_failures:
+            summary = (
+                f"{len(all_failures)} of {total} parallel pKa worker(s) failed:\n"
+                + "\n".join(f"  - {e}" for e in all_failures)
+            )
+            raise RuntimeError(summary)
 
     def _run(self, **kwargs):
         """
