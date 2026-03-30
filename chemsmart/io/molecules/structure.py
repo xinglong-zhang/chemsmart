@@ -1014,11 +1014,11 @@ class Molecule:
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
 
-    @staticmethod
+    @classmethod
     @file_cache()
-    def _read_pdb_file(filepath, index="-1", return_list=False):
+    def _read_pdb_file(cls, filepath, index="-1", return_list=False):
         """Read PDB format molecular structure file preserving residue metadata."""
-        models = Molecule._parse_pdb_models(filepath)
+        models = cls._parse_pdb_models(filepath)
         if not models:
             raise ValueError(
                 f"No ATOM/HETATM records found in PDB file: {filepath}"
