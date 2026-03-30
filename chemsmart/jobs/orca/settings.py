@@ -2167,9 +2167,27 @@ class ORCApKaJobSettings(ORCAJobSettings):
     def _create_reference_conjugate_base_molecule(self, reference_molecule):
         """Remove proton from reference acid to create B-."""
         if self.reference_proton_index is None:
-            raise ValueError("reference_proton_index must be specified.")
+            raise ValueError(
+                "reference_proton_index must be specified to create reference "
+                "conjugate base molecule. Use 1-based indexing."
+            )
 
+        # Validate reference_proton_index range (1-based)
+        if (
+            self.reference_proton_index < 1
+            or self.reference_proton_index > len(reference_molecule)
+        ):
+            raise ValueError(
+                f"reference_proton_index {self.reference_proton_index} is out "
+                f"of range. Reference molecule has "
+                f"{len(reference_molecule)} atoms "
+                f"(1-indexed: 1 to {len(reference_molecule)})."
+            )
+
+        # Convert to 0-based index for internal use
         proton_idx_0based = self.reference_proton_index - 1
+
+        # Validate that the atom is a hydrogen
         atom_symbol = reference_molecule.symbols[proton_idx_0based]
         if atom_symbol not in ("H", "h"):
             raise ValueError(
