@@ -1488,9 +1488,10 @@ class Molecule:
             add_bonds (bool): Flag to add bonds to molecule or not. Default True.
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
             adjust_H (bool): Adjust bond distances to H atoms.
-            **kwargs: Additional keyword arguments. Legacy conformer-selection
-                arguments like ``confId`` and ``conf_id`` are not supported and
-                will raise :class:`TypeError` if provided.
+            **kwargs: No additional keyword arguments are accepted.
+                Legacy conformer-selection arguments like ``confId`` and
+                ``conf_id`` raise :class:`TypeError`, and any other unexpected
+                keyword arguments also raise :class:`TypeError`.
         """
         if kwargs:
             # Explicitly reject unsupported legacy conformer-selection arguments

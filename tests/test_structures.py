@@ -1015,14 +1015,15 @@ class TestMoleculeAdvanced:
         ]
         assert len(atom_lines) == mol.num_atoms
 
-    def test_to_pdb_rejects_removed_confid_argument(
-        self, single_molecule_xyz_file
+    def test_write_pdb_rejects_unexpected_keyword_argument(
+        self, single_molecule_xyz_file, tmpdir
     ):
-        """Test PDB export no longer accepts confId in the public API."""
+        """Test write_pdb rejects unexpected kwargs instead of ignoring them."""
         mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+        pdb_file = os.path.join(tmpdir, "unexpected_kwarg.pdb")
 
-        with pytest.raises(TypeError, match="confId"):
-            mol.to_pdb(confId=1)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            mol.write_pdb(pdb_file, unexpected_option=True)
 
     def test_to_pdb_strict_columns_and_final_end_record(self):
         """Test strict PDB 3.3 atom-column formatting and final END line."""
