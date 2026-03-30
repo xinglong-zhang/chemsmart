@@ -1201,10 +1201,7 @@ class Molecule:
             except Exception:
                 pass
 
-        if len(cleaned) == 1:
-            candidate = cleaned[0].upper()
-        else:
-            candidate = cleaned[0].upper()
+        candidate = cleaned[0].upper()
 
         try:
             return p.to_element(candidate)
