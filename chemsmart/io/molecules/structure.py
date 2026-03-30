@@ -1390,7 +1390,6 @@ class Molecule:
         self,
         filename,
         mode="w",
-        confId=-1,
         flavor=0,
         add_bonds=True,
         bond_cutoff_buffer=0.05,
@@ -1403,7 +1402,6 @@ class Molecule:
         Args:
             filename (str): Output PDB file path
             mode (str): File write mode. Default 'w'
-            confId (int): Conformer ID to export (-1 = default conformer)
             flavor (int): Formatting options for PDB output:
                 - flavor & 1: Write MODEL/ENDMDL lines around each record
                 - flavor & 2: Don't write any CONECT records
@@ -1414,10 +1412,10 @@ class Molecule:
             add_bonds (bool): Flag to add bonds to molecule or not. Default True.
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
             adjust_H (bool): Adjust bond distances to H atoms.
-            **kwargs: Additional keyword arguments (unused)
+            **kwargs: Additional keyword arguments. Legacy conformer-selection
+                arguments like ``confId`` and ``conf_id`` are not supported.
         """
         pdb_block = self.to_pdb(
-            confId=confId,
             flavor=flavor,
             add_bonds=add_bonds,
             bond_cutoff_buffer=bond_cutoff_buffer,
@@ -1623,7 +1621,6 @@ class Molecule:
 
     def to_pdb(
         self,
-        confId=-1,
         flavor=0,
         add_bonds=True,
         bond_cutoff_buffer=0.05,
@@ -1633,7 +1630,6 @@ class Molecule:
         Convert molecule to PDB format string.
 
         Args:
-            confId (int): Conformer ID to export (-1 = default conformer)
             flavor (int): Formatting options for PDB output:
                 - flavor & 1: Write MODEL/ENDMDL lines around each record
                 - flavor & 2: Don't write any CONECT records
@@ -1652,6 +1648,8 @@ class Molecule:
         Note:
             If bond detection fails due to kekulization issues, the method
             will automatically retry without bonds and log a warning.
+            ``Molecule`` exports its single stored geometry; conformer
+            selection is not supported.
         """
         # Try to create an RDKit molecule with bonds first
         try:
@@ -1660,9 +1658,7 @@ class Molecule:
                 bond_cutoff_buffer=bond_cutoff_buffer,
                 adjust_H=adjust_H,
             )
-            pdb_block = Chem.MolToPDBBlock(
-                rdkit_mol, confId=confId, flavor=flavor
-            )
+            pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
             return self._format_pdb_block(pdb_block)
         except (
             Chem.AtomKekulizeException,
@@ -1675,9 +1671,7 @@ class Molecule:
                     "Retrying PDB conversion without bonds."
                 )
                 rdkit_mol = self.to_rdkit(add_bonds=False)
-                pdb_block = Chem.MolToPDBBlock(
-                    rdkit_mol, confId=confId, flavor=flavor
-                )
+                pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
                 return self._format_pdb_block(pdb_block)
             else:
                 raise
