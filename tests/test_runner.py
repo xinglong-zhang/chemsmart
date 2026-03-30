@@ -299,6 +299,145 @@ class TestGaussianBatchDelegation:
         mock_job1.run.assert_called_once()
         mock_job2.run.assert_not_called()
 
+
+class TestGaussianPkaReferenceExecution:
+    """Regression tests for Gaussian pKa reference workflow support."""
+
+    @staticmethod
+    def _write_reference_xyz(path):
+        path.write_text("2\nreference\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+    @staticmethod
+    def _build_gaussian_pka_settings(reference_file):
+        from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
+
+        return GaussianpKaJobSettings(
+            proton_index=2,
+            scheme="proton exchange",
+            reference_file=str(reference_file),
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="6-31G(d)",
+        )
+
+    def test_gaussian_pka_job_prepares_reference_opt_jobs(
+        self, tmp_path, pbs_server, gaussian_jobrunner_no_scratch
+    ):
+        from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+
+        reference_file = tmp_path / "reference.xyz"
+        self._write_reference_xyz(reference_file)
+        settings = self._build_gaussian_pka_settings(reference_file)
+        target_molecule = Molecule(
+            symbols=["C", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.1]],
+            charge=0,
+            multiplicity=1,
+        )
+
+        job = GaussianpKaJob(
+            molecule=target_molecule,
+            settings=settings,
+            label="test_gaussian_pka_ref",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        assert job.has_reference_jobs is True
+        assert len(job.ref_opt_jobs) == 2
+        assert job.ref_acid_job is job.ref_opt_jobs[0]
+        assert job.ref_conjugate_base_job is job.ref_opt_jobs[1]
+        assert job.ref_acid_job.label == "test_gaussian_pka_ref_HRef_opt"
+        assert (
+            job.ref_conjugate_base_job.label == "test_gaussian_pka_ref_Ref_opt"
+        )
+        assert list(job.ref_acid_job.molecule.symbols) == ["C", "H"]
+        assert list(job.ref_conjugate_base_job.molecule.symbols) == ["C"]
+
+    def test_gaussian_pka_run_ref_sp_jobs_creates_reference_sp_jobs(
+        self, tmp_path, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+
+        reference_file = tmp_path / "reference.xyz"
+        self._write_reference_xyz(reference_file)
+        settings = self._build_gaussian_pka_settings(reference_file)
+        target_molecule = Molecule(
+            symbols=["C", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.1]],
+            charge=0,
+            multiplicity=1,
+        )
+
+        job = GaussianpKaJob(
+            molecule=target_molecule,
+            settings=settings,
+            label="test_gaussian_pka_ref_sp",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        href_optimized = Molecule(
+            symbols=["N", "H"],
+            positions=[[1.0, 0.0, 0.0], [1.0, 0.0, 1.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        ref_optimized = Molecule(
+            symbols=["N"],
+            positions=[[2.0, 0.0, 0.0]],
+            charge=-1,
+            multiplicity=1,
+        )
+
+        mocker.patch.object(
+            job, "_ref_opt_jobs_are_complete", return_value=True
+        )
+        mocker.patch.object(
+            job.ref_acid_job,
+            "_output",
+            return_value=Mock(
+                normal_termination=True,
+                molecule=href_optimized,
+            ),
+        )
+        mocker.patch.object(
+            job.ref_conjugate_base_job,
+            "_output",
+            return_value=Mock(
+                normal_termination=True,
+                molecule=ref_optimized,
+            ),
+        )
+        run_spy = mocker.patch(
+            "chemsmart.jobs.gaussian.pka.GaussianSinglePointJob.run"
+        )
+
+        job._run_ref_sp_jobs()
+
+        assert len(job.ref_sp_jobs) == 2
+        assert job.ref_acid_sp_job is job.ref_sp_jobs[0]
+        assert job.ref_conjugate_base_sp_job is job.ref_sp_jobs[1]
+        assert job.ref_acid_sp_job.label == "test_gaussian_pka_ref_sp_HRef_sp"
+        assert (
+            job.ref_conjugate_base_sp_job.label
+            == "test_gaussian_pka_ref_sp_Ref_sp"
+        )
+        assert list(job.ref_acid_sp_job.molecule.symbols) == list(
+            href_optimized.symbols
+        )
+        assert list(job.ref_conjugate_base_sp_job.molecule.symbols) == list(
+            ref_optimized.symbols
+        )
+        assert job.ref_acid_sp_job.settings.charge == settings.reference_charge
+        assert (
+            job.ref_conjugate_base_sp_job.settings.charge
+            == settings.reference_charge - 1
+        )
+        assert run_spy.call_count == 2
+
     def test_dias_job_uses_batch_parallel_per_stage(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):

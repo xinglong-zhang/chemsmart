@@ -158,14 +158,42 @@ class GaussianpKaJob(GaussianJob):
         )
         self.opt_jobs = [self.protonated_job, self.conjugate_base_job]
 
-        # 2. Reference Acid (HB / B-)
+        # 2. Reference Acid (HRef / Ref-)
         if self.has_reference_jobs:
-            # We assume settings handle reference details or we need to extract them
-            # Looking at settings.py, reference is usually another molecule or handled in pka logic
-            # For simplicity, if reference logic is complex, we might skip full implementation if not strictly needed for this fix.
-            # But the 'run' method calls _run_ref_opt_jobs, and getters use ref jobs.
-            # For now, initialize empty to prevent crashes, or assume settings has helper.
-            pass
+            self.ref_opt_jobs = self._prepare_ref_opt_jobs()
+            self.ref_acid_job, self.ref_conjugate_base_job = self.ref_opt_jobs
+
+    def _prepare_ref_opt_jobs(self):
+        """Prepare gas phase optimization jobs for HRef and Ref-."""
+        ref_acid_mol, ref_conjugate_base_mol = (
+            self.settings.reference_pair_molecules()
+        )
+        ref_acid_settings, ref_conjugate_base_settings = (
+            self.settings.reference_pair_job_settings()
+        )
+
+        ref_acid_job = GaussianOptJob(
+            molecule=ref_acid_mol,
+            settings=ref_acid_settings,
+            label=f"{self.label}_HRef_opt",
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        ref_conjugate_base_job = GaussianOptJob(
+            molecule=ref_conjugate_base_mol,
+            settings=ref_conjugate_base_settings,
+            label=f"{self.label}_Ref_opt",
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        return [ref_acid_job, ref_conjugate_base_job]
+
+    def _optimized_molecule_from_job(self, job, fallback_molecule):
+        """Return optimized geometry for a finished job, or a fallback molecule."""
+        out = job._output()
+        if out is not None and out.normal_termination:
+            return out.molecule
+        return fallback_molecule
 
     def _run_opt_jobs(self):
         """Run gas phase optimization jobs."""
@@ -193,7 +221,7 @@ class GaussianpKaJob(GaussianJob):
             return
 
         # Create SP jobs if not already created
-        if self.protonated_sp_job is None:
+        if self.sp_jobs is None:
             self._create_sp_jobs()
 
         if self.sp_jobs:
@@ -206,48 +234,32 @@ class GaussianpKaJob(GaussianJob):
     def _run_ref_sp_jobs(self):
         """Run reference solution phase single point jobs."""
         if self.has_reference_jobs:
-            # Logic to create/run ref SP jobs
-            pass
+            if not self._ref_opt_jobs_are_complete():
+                logger.warning(
+                    "Reference optimization jobs not complete. Cannot run reference SP jobs."
+                )
+                return
+
+            if self.ref_sp_jobs is None:
+                self._create_ref_sp_jobs()
+
+            if self.ref_sp_jobs:
+                for job in self.ref_sp_jobs:
+                    if self.jobrunner:
+                        job.jobrunner = self.jobrunner
+                    job.run()
 
     def _create_sp_jobs(self):
         """Create solution phase SP jobs from optimized geometries."""
-        from chemsmart.io.gaussian.output import Gaussian16Output
-
-        # Get optimized HA structure
-        try:
-            prot_out = Gaussian16Output(self.protonated_job.outputfile)
-            if not prot_out.normal_termination:
-                logger.warning(
-                    f"Job {self.protonated_job.label} did not terminate normally."
-                )
-                return
-            if not prot_out.all_structures:
-                logger.error(
-                    f"Job {self.protonated_job.label} has no structures."
-                )
-                return
-            prot_opt_mol = prot_out.molecule
-        except Exception as e:
-            logger.error(f"Failed to read optimized HA structure: {e}")
-            return
-
-        # Get optimized A- structure
-        try:
-            conj_out = Gaussian16Output(self.conjugate_base_job.outputfile)
-            if not conj_out.normal_termination:
-                logger.warning(
-                    f"Job {self.conjugate_base_job.label} did not terminate normally."
-                )
-                return
-            if not conj_out.all_structures:
-                logger.error(
-                    f"Job {self.conjugate_base_job.label} has no structures."
-                )
-                return
-            conj_opt_mol = conj_out.molecule
-        except Exception as e:
-            logger.error(f"Failed to read optimized A- structure: {e}")
-            return
+        _, conj_fallback_mol = self.settings.conjugate_pair_molecules(
+            self.molecule
+        )
+        prot_opt_mol = self._optimized_molecule_from_job(
+            self.protonated_job, self.molecule
+        )
+        conj_opt_mol = self._optimized_molecule_from_job(
+            self.conjugate_base_job, conj_fallback_mol
+        )
 
         prot_sp_settings, conj_sp_settings = (
             self.settings._create_solution_phase_sp_settings(self.molecule)
@@ -268,6 +280,40 @@ class GaussianpKaJob(GaussianJob):
             skip_completed=self.skip_completed,
         )
         self.sp_jobs = [self.protonated_sp_job, self.conjugate_base_sp_job]
+
+    def _create_ref_sp_jobs(self):
+        """Create reference solution phase SP jobs from optimized geometries."""
+        ref_acid_fallback_mol, ref_conjugate_base_fallback_mol = (
+            self.settings.reference_pair_molecules()
+        )
+        ref_acid_opt_mol = self._optimized_molecule_from_job(
+            self.ref_acid_job, ref_acid_fallback_mol
+        )
+        ref_conjugate_base_opt_mol = self._optimized_molecule_from_job(
+            self.ref_conjugate_base_job, ref_conjugate_base_fallback_mol
+        )
+        ref_acid_sp_settings, ref_conjugate_base_sp_settings = (
+            self.settings.reference_pair_sp_job_settings()
+        )
+
+        self.ref_acid_sp_job = GaussianSinglePointJob(
+            molecule=ref_acid_opt_mol,
+            settings=ref_acid_sp_settings,
+            label=f"{self.label}_HRef_sp",
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        self.ref_conjugate_base_sp_job = GaussianSinglePointJob(
+            molecule=ref_conjugate_base_opt_mol,
+            settings=ref_conjugate_base_sp_settings,
+            label=f"{self.label}_Ref_sp",
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        self.ref_sp_jobs = [
+            self.ref_acid_sp_job,
+            self.ref_conjugate_base_sp_job,
+        ]
 
     def _run_parallel(self):
         """Run pKa workflow in parallel mode."""
@@ -333,7 +379,8 @@ class GaussianpKaJob(GaussianJob):
 
         # Create SP jobs
         self._create_sp_jobs()
-        # Create Ref SP jobs if needed
+        if self.has_reference_jobs:
+            self._create_ref_sp_jobs()
 
         sp_jobs_to_run = []
         if self.sp_jobs:
@@ -447,6 +494,8 @@ class GaussianpKaJob(GaussianJob):
         Returns:
             bool: True if all optimization jobs are complete.
         """
+        if not self.opt_jobs:
+            return False
         return all(job.is_complete() for job in self.opt_jobs)
 
     def _ref_opt_jobs_are_complete(self):
@@ -459,6 +508,8 @@ class GaussianpKaJob(GaussianJob):
         """
         if not self.has_reference_jobs:
             return True
+        if not self.ref_opt_jobs:
+            return False
         return all(job.is_complete() for job in self.ref_opt_jobs)
 
     def _sp_jobs_are_complete(self):
@@ -468,7 +519,7 @@ class GaussianpKaJob(GaussianJob):
         Returns:
             bool: True if all SP jobs are complete.
         """
-        if self.sp_jobs is None:
+        if not self.sp_jobs:
             return False
         return all(job.is_complete() for job in self.sp_jobs)
 
@@ -482,7 +533,7 @@ class GaussianpKaJob(GaussianJob):
         """
         if not self.has_reference_jobs:
             return True
-        if self.ref_sp_jobs is None:
+        if not self.ref_sp_jobs:
             return False
         return all(job.is_complete() for job in self.ref_sp_jobs)
 
