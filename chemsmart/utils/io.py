@@ -676,39 +676,78 @@ def update_shell_config(shell_file: Path, env_vars: list) -> None:
     logger.info(f"Please restart your terminal or run 'source {shell_file}'.")
 
 
+_PS_BLOCK_START = "# >>> chemsmart initialize >>>"
+_PS_BLOCK_END = "# <<< chemsmart initialize <<<"
+# Legacy marker written by earlier versions of the installer.
+_PS_BLOCK_LEGACY = "# Added by chemsmart installer"
+
+
 def update_powershell_profiles(profiles: list, ps_env_vars: list) -> None:
     """
-    Append chemsmart ``$env:PATH`` lines to each PowerShell profile
-    (idempotent).  Creates profile directories and files as needed.
+    Write chemsmart initialisation lines to each PowerShell profile,
+    replacing any previously written block.  Creates profile directories
+    and files as needed.
 
-    This is the PowerShell equivalent of appending ``export`` lines to
-    ``~/.bashrc``.  The update is idempotent: if the marker comment
-    ``# Added by chemsmart installer`` is already present the file is not
-    modified again.
+    The block is delimited by ``# >>> chemsmart initialize >>>`` /
+    ``# <<< chemsmart initialize <<<`` markers.  If an older block using
+    the legacy marker ``# Added by chemsmart installer`` is found it is
+    removed and replaced with the current block so that users who ran
+    ``make configure`` with an earlier version are migrated automatically.
 
     Args:
         profiles: List of :class:`~pathlib.Path` objects pointing to the PS
             profile files to update.
-        ps_env_vars: List of ``$env:PATH = ...`` assignment lines to append.
+        ps_env_vars: List of PowerShell assignment / alias lines to write
+            inside the block.
     """
+    new_block = (
+        f"\n{_PS_BLOCK_START}\n"
+        + "\n".join(ps_env_vars)
+        + f"\n{_PS_BLOCK_END}\n"
+    )
+
     for ps_profile in profiles:
         ps_profile.parent.mkdir(parents=True, exist_ok=True)
         if not ps_profile.exists():
-            ps_profile.touch()
-        with ps_profile.open("r+", encoding="utf-8") as f:
-            lines = f.readlines()
-            if not any(
-                "Added by chemsmart installer" in line for line in lines
-            ):
-                f.write("\n# Added by chemsmart installer\n")
-                for var in ps_env_vars:
-                    f.write(f"{var}\n")
-                f.write("\n")
-                logger.info(f"Updated PowerShell profile: {ps_profile}")
+            ps_profile.write_text(new_block, encoding="utf-8")
+            logger.info(f"Created PowerShell profile: {ps_profile}")
+            continue
+
+        content = ps_profile.read_text(encoding="utf-8")
+
+        # ── Remove existing chemsmart block (new-style markers) ──────────
+        if _PS_BLOCK_START in content:
+            start = content.find(_PS_BLOCK_START)
+            end = content.find(_PS_BLOCK_END, start)
+            if end != -1:
+                content = content[:start] + content[end + len(_PS_BLOCK_END) :]
             else:
-                logger.info(
-                    f"PowerShell profile already updated: {ps_profile}"
-                )
+                # Malformed block — remove from start marker to end of file
+                content = content[:start]
+
+        # ── Remove legacy block ("# Added by chemsmart installer") ───────
+        if _PS_BLOCK_LEGACY in content:
+            lines = content.splitlines(keepends=True)
+            filtered = []
+            in_legacy = False
+            for line in lines:
+                if _PS_BLOCK_LEGACY in line:
+                    in_legacy = True
+                    continue
+                if in_legacy and line.strip() == "":
+                    in_legacy = False
+                    continue
+                if not in_legacy:
+                    filtered.append(line)
+            content = "".join(filtered)
+
+        # Ensure exactly one blank line separates existing content from the
+        # new block (strip trailing newlines, then add exactly one).
+        ps_profile.write_text(
+            content.rstrip("\n") + "\n" + new_block, encoding="utf-8"
+        )
+        logger.info(f"Updated PowerShell profile: {ps_profile}")
+
     logger.info(
         "PowerShell profiles updated.\n"
         "To apply changes in the current PowerShell session, run:\n"

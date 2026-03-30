@@ -84,8 +84,8 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~\.chemsmart``
    (``%USERPROFILE%\.chemsmart``).
 
-#. **Updates PowerShell profiles** — appends a ``$env:PYTHONPATH`` entry and a ``function chemsmart { python -m
-   chemsmart.cli.main $args }`` wrapper to:
+#. **Updates PowerShell profiles** — writes a ``$env:PYTHONPATH`` entry and a
+   ``Set-Alias -Name chemsmart -Value chemsmart.exe`` declaration to:
 
    -  ``~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`` (Windows PowerShell 5.x, used by Anaconda /
       Miniconda prompts)
@@ -93,11 +93,15 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 
    .. note::
 
-      A PowerShell **function wrapper** (rather than a bare ``$env:PATH`` addition) is used because the
-      ``chemsmart/cli/`` source directory — which must be on the Python path for editable installs — also contains a
-      POSIX-style script named ``chemsmart`` (no ``.exe`` extension). If that directory were added to ``$env:PATH``,
-      Windows PowerShell would find the bare script first and show an *"Open with"* dialog. The function wrapper calls
-      ``python -m chemsmart.cli.main`` directly, which works correctly in all Conda PowerShell environments.
+      A **``Set-Alias``** declaration (rather than a bare ``$env:PATH`` addition) is used because PowerShell resolves
+      aliases **before** external commands in PATH.  This means that even if a bare POSIX-style ``chemsmart`` script
+      (no ``.exe`` extension) is present somewhere on PATH — for example in ``chemsmart/cli/`` in a development install
+      — the alias wins and ``chemsmart.exe`` (which pip places in the conda ``Scripts/`` directory) is called directly.
+      This avoids the Windows *"Open with"* popup.
+
+      If you previously ran ``make configure`` and your profile contained old ``$env:PATH`` or ``function chemsmart``
+      entries, re-running ``make configure`` will automatically remove the old block and write the new ``Set-Alias``
+      declaration in its place.
 
 #. **Configures the conda path** — auto-detects your conda installation via ``conda`` in PATH and updates the
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
@@ -109,7 +113,7 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 .. note::
 
    On Windows, ``make configure`` does **not** execute ``. $PROFILE`` automatically — it only prints the instruction.
-   You must run ``. $PROFILE`` manually in your Anaconda/Miniconda PowerShell Prompt to load the ``chemsmart`` function
+   You must run ``. $PROFILE`` manually in your Anaconda/Miniconda PowerShell Prompt to load the ``chemsmart`` alias
    into your current session. Alternatively, simply open a new Anaconda PowerShell Prompt.
 
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** Anaconda
@@ -127,8 +131,8 @@ After this, you can verify the installation:
 
 .. note::
 
-   If the profile scripts already contain a chemsmart section (i.e. ``make configure`` has been run before), the
-   profiles will *not* be modified again to avoid duplicate entries.
+   Each time ``make configure`` is run, the installer replaces the previous chemsmart block in the PS profile with
+   the latest settings.  Re-running configure is therefore safe and idempotent.
 
 *****************
  Troubleshooting
@@ -161,3 +165,14 @@ Make sure you have reloaded the PowerShell profile:
    . $PROFILE
 
 Or open a new Anaconda PowerShell Prompt — the profile is sourced automatically on startup.
+
+**chemsmart opens an "Open with" popup instead of running**
+
+This means Windows found a bare POSIX script named ``chemsmart`` (no ``.exe`` extension) in ``$env:PATH`` before
+resolving the alias.  Re-run ``make configure`` to update the profile with the ``Set-Alias`` declaration that takes
+precedence over external files, then reload the profile:
+
+.. code:: powershell
+
+   make configure
+   . $PROFILE

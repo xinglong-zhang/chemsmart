@@ -235,28 +235,35 @@ class Config:
         """
         PowerShell profile lines written by ``make configure``.
 
-        Returns the ``$env:PYTHONPATH`` line needed for editable installs and
-        a ``function chemsmart { ... }`` wrapper that ensures ``chemsmart``
-        resolves to the correct Python entry point on Windows PowerShell.
+        Returns a ``$env:PYTHONPATH`` line for editable installs and a
+        ``Set-Alias`` declaration that maps the bare ``chemsmart`` command to
+        ``chemsmart.exe``.
 
         .. note::
-            We do **not** add the ``chemsmart/cli/`` directory to
-            ``$env:PATH`` here.  That directory contains a bare POSIX script
-            named ``chemsmart`` (no ``.exe`` extension) which Windows
-            PowerShell cannot execute — it would trigger an "Open with"
-            dialog instead of running the CLI.  The function wrapper below
-            is the correct approach for Conda PowerShell environments.
+            We use ``Set-Alias`` rather than adding directories to
+            ``$env:PATH`` or defining a ``function`` wrapper.
+
+            * PowerShell resolves **aliases before functions and before
+              external commands**, so the alias will win even if a bare
+              ``chemsmart`` POSIX script is present somewhere on ``PATH``
+              (e.g. in ``chemsmart/cli/`` from a development install).
+            * Calling ``chemsmart.exe`` directly avoids the Windows "Open
+              with" popup that appears when PowerShell tries to execute a
+              file with no recognised extension.
+            * ``chemsmart.exe`` is always present in the active conda
+              environment's ``Scripts/`` directory after a successful
+              ``pip install``.
         """
         pkg_path = str(self.chemsmart_package_path)
         return [
             f'$env:PYTHONPATH = "{pkg_path};$env:PYTHONPATH"',
-            "function chemsmart { python -m chemsmart.cli.main $args }",
+            "Set-Alias -Name chemsmart -Value chemsmart.exe",
         ]
 
     def _update_powershell_profiles(self, profiles) -> None:
         """
-        Append chemsmart ``$env:PATH`` lines to each PowerShell profile
-        (idempotent).
+        Write chemsmart initialisation lines to each PowerShell profile,
+        replacing any previously written block.
 
         Delegates to :func:`chemsmart.utils.io.update_powershell_profiles`.
         """
@@ -298,8 +305,9 @@ class Config:
           ``export`` lines to the shell rc file (``~/.bashrc``,
           ``~/.zshrc``, …).
         * **Windows PowerShell** (Anaconda / Miniconda PS Prompt, detected
-          via ``PSModulePath``): append ``$env:PATH`` lines to the PS
-          profile.
+          via ``PSModulePath``): write a ``Set-Alias`` declaration and
+          ``$env:PYTHONPATH`` line to the PS profile, replacing any
+          previous chemsmart block.
         * **Windows CMD / other**: update PATH / PYTHONPATH in the Windows
           user registry.
         """

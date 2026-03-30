@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from chemsmart.cli.config import Config
-from chemsmart.utils.io import update_windows_env
+from chemsmart.utils.io import update_powershell_profiles, update_windows_env
 
 
 class TestConfig:
@@ -254,7 +254,8 @@ class TestConfig:
         mock_update_env.assert_not_called()
         assert ps_profile.exists()
         content = ps_profile.read_text()
-        assert "Added by chemsmart installer" in content
+        assert "chemsmart initialize" in content
+        assert "Set-Alias -Name chemsmart -Value chemsmart.exe" in content
 
     def test_powershell_profiles_returns_empty_on_linux(self):
         """powershell_profiles returns [] on non-Windows platforms."""
@@ -386,6 +387,64 @@ class TestWindowsUpdateEnvUtil:
         """windows_update_env must not raise when winreg is unavailable."""
         with patch.dict(sys.modules, {"winreg": None}):
             update_windows_env(["/some/path"], "/some/path")
+
+
+class TestUpdatePowershellProfiles:
+    """Tests for chemsmart.utils.io.update_powershell_profiles."""
+
+    def test_creates_profile_with_alias(self, tmp_path):
+        """Creates a new profile containing the Set-Alias declaration."""
+        ps_profile = (
+            tmp_path / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
+        )
+        update_powershell_profiles(
+            [ps_profile],
+            ["Set-Alias -Name chemsmart -Value chemsmart.exe"],
+        )
+        assert ps_profile.exists()
+        content = ps_profile.read_text()
+        assert "chemsmart initialize" in content
+        assert "Set-Alias -Name chemsmart -Value chemsmart.exe" in content
+
+    def test_replaces_existing_block(self, tmp_path):
+        """Re-running update_powershell_profiles replaces the old block."""
+        ps_profile = tmp_path / "profile.ps1"
+        ps_profile.write_text(
+            "# >>> chemsmart initialize >>>\n"
+            "function chemsmart { python -m chemsmart.cli.main $args }\n"
+            "# <<< chemsmart initialize <<<\n",
+            encoding="utf-8",
+        )
+        update_powershell_profiles(
+            [ps_profile],
+            ["Set-Alias -Name chemsmart -Value chemsmart.exe"],
+        )
+        content = ps_profile.read_text()
+        assert "function chemsmart" not in content
+        assert "Set-Alias -Name chemsmart -Value chemsmart.exe" in content
+        assert content.count("chemsmart initialize") == 2  # BEGIN + END markers
+
+    def test_migrates_legacy_profile_entries(self, tmp_path):
+        """Old-style '# Added by chemsmart installer' blocks are replaced."""
+        ps_profile = tmp_path / "profile.ps1"
+        ps_profile.write_text(
+            "# some existing content\n"
+            "\n# Added by chemsmart installer\n"
+            '$env:PATH = "C:\\old\\cli;$env:PATH"\n'
+            "\n",
+            encoding="utf-8",
+        )
+        update_powershell_profiles(
+            [ps_profile],
+            ["Set-Alias -Name chemsmart -Value chemsmart.exe"],
+        )
+        content = ps_profile.read_text()
+        # Legacy PATH entry must be removed
+        assert "C:\\old\\cli" not in content
+        # New alias must be present
+        assert "Set-Alias -Name chemsmart -Value chemsmart.exe" in content
+        # Original non-chemsmart content must be preserved
+        assert "some existing content" in content
 
 
 class TestConfigSetupEnvironment:
