@@ -98,8 +98,8 @@ What ``make configure`` does on Git Bash:
 .. note::
 
    ``make configure`` sources ``~/.bashrc`` inside its own sub-shell process. Because a child process cannot export
-   environment changes back to its parent, your **current** Git Bash terminal is *not* automatically updated.
-   You must run ``source ~/.bashrc`` manually in your own terminal, or open a new Git Bash window.
+   environment changes back to its parent, your **current** Git Bash terminal is *not* automatically updated. You must
+   run ``source ~/.bashrc`` manually in your own terminal, or open a new Git Bash window.
 
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** terminal. To
 activate it in your **current** Git Bash session without opening a new one, run:

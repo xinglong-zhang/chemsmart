@@ -89,15 +89,15 @@ What ``make configure`` does on Linux and macOS:
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
    in PATH, a message is logged — add conda to your PATH and re-run ``chemsmart config server``.
 
-#. **Automatically sources your shell config** — after writing the ``export`` lines, ``make configure``
-   sources every shell rc file that exists (``~/.bashrc``, ``~/.zshrc``, ``~/.profile``) so that
-   ``chemsmart`` is active for the rest of the current make session, regardless of which file chemsmart wrote to.
+#. **Automatically sources your shell config** — after writing the ``export`` lines, ``make configure`` sources every
+   shell rc file that exists (``~/.bashrc``, ``~/.zshrc``, ``~/.profile``) so that ``chemsmart`` is active for the rest
+   of the current make session, regardless of which file chemsmart wrote to.
 
 .. note::
 
    ``make configure`` sources the rc files inside its own sub-shell process. Because a child process cannot export
-   environment changes back to its parent, your **current** terminal session is *not* automatically updated.
-   You must run the ``source`` command below in your own terminal, or open a new terminal window.
+   environment changes back to its parent, your **current** terminal session is *not* automatically updated. You must
+   run the ``source`` command below in your own terminal, or open a new terminal window.
 
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** terminal. To
 activate it in your **current** terminal without opening a new one, run the command for your shell:
