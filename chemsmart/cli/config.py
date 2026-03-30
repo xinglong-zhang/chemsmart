@@ -233,21 +233,24 @@ class Config:
     @property
     def ps_env_vars(self):
         """
-        PowerShell ``$env:PATH`` / ``$env:PYTHONPATH`` assignment lines.
+        PowerShell profile lines written by ``make configure``.
 
-        These are the PowerShell equivalent of the Unix ``export`` lines
-        written to ``~/.bashrc``.
+        Returns the ``$env:PYTHONPATH`` line needed for editable installs and
+        a ``function chemsmart { ... }`` wrapper that ensures ``chemsmart``
+        resolves to the correct Python entry point on Windows PowerShell.
+
+        .. note::
+            We do **not** add the ``chemsmart/cli/`` directory to
+            ``$env:PATH`` here.  That directory contains a bare POSIX script
+            named ``chemsmart`` (no ``.exe`` extension) which Windows
+            PowerShell cannot execute — it would trigger an "Open with"
+            dialog instead of running the CLI.  The function wrapper below
+            is the correct approach for Conda PowerShell environments.
         """
         pkg_path = str(self.chemsmart_package_path)
-        cli_path = str(Path(self.chemsmart_package_path) / "chemsmart" / "cli")
-        scripts_path = str(
-            Path(self.chemsmart_package_path) / "chemsmart" / "scripts"
-        )
         return [
-            f'$env:PATH = "{pkg_path};$env:PATH"',
-            f'$env:PATH = "{cli_path};$env:PATH"',
-            f'$env:PATH = "{scripts_path};$env:PATH"',
             f'$env:PYTHONPATH = "{pkg_path};$env:PYTHONPATH"',
+            "function chemsmart { python -m chemsmart.cli.main $args }",
         ]
 
     def _update_powershell_profiles(self, profiles) -> None:

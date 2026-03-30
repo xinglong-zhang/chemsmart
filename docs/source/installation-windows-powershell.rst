@@ -84,11 +84,20 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~\.chemsmart``
    (``%USERPROFILE%\.chemsmart``).
 
-#. **Updates PowerShell profiles** — appends ``$env:PATH`` and ``$env:PYTHONPATH`` entries to:
+#. **Updates PowerShell profiles** — appends a ``$env:PYTHONPATH`` entry and a
+   ``function chemsmart { python -m chemsmart.cli.main $args }`` wrapper to:
 
    -  ``~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`` (Windows PowerShell 5.x, used by Anaconda /
       Miniconda prompts)
    -  ``~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1`` (PowerShell 7+, if installed)
+
+   .. note::
+
+      A PowerShell **function wrapper** (rather than a bare ``$env:PATH`` addition) is used because the
+      ``chemsmart/cli/`` source directory — which must be on the Python path for editable installs — also contains a
+      POSIX-style script named ``chemsmart`` (no ``.exe`` extension). If that directory were added to ``$env:PATH``,
+      Windows PowerShell would find the bare script first and show an *"Open with"* dialog. The function wrapper
+      calls ``python -m chemsmart.cli.main`` directly, which works correctly in all Conda PowerShell environments.
 
 #. **Configures the conda path** — auto-detects your conda installation via ``conda`` in PATH and updates the
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
@@ -100,8 +109,8 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 .. note::
 
    On Windows, ``make configure`` does **not** execute ``. $PROFILE`` automatically — it only prints the instruction.
-   You must run ``. $PROFILE`` manually in your Anaconda/Miniconda PowerShell Prompt to apply the PATH changes to your
-   current session. Alternatively, simply open a new Anaconda PowerShell Prompt.
+   You must run ``. $PROFILE`` manually in your Anaconda/Miniconda PowerShell Prompt to load the ``chemsmart``
+   function into your current session. Alternatively, simply open a new Anaconda PowerShell Prompt.
 
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** Anaconda
 PowerShell Prompt. To activate it in your **current** session without opening a new one, run:
