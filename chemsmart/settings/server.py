@@ -640,11 +640,12 @@ class Server(RegistryMixin):
             logger.warning("No jobs to submit")
             return
 
-        # Use first job as template for checking
+        # Use first job as template for submission
         first_job = jobs[0]
 
-        # Check for duplicate jobs
-        self._check_running_jobs(first_job)
+        # Check for duplicate/running jobs for each job in the array
+        for job in jobs:
+            self._check_running_jobs(job)
 
         # Write array job submission script
         submitter = self.get_submitter(first_job, **kwargs)
