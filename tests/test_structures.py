@@ -579,11 +579,17 @@ class TestMoleculeAdvanced:
             forces=forces_hartree_per_bohr,
         )
         ase_atoms = mol.to_ase()
+        print(ase_atoms.forces)
 
-        expected_forces_ev_per_angstrom = (
+        expected_forces_ev_per_angstrom = np.array(
             forces_hartree_per_bohr * units.Hartree / units.Bohr
         )
-        assert np.allclose(ase_atoms.forces, expected_forces_ev_per_angstrom)
+        print(expected_forces_ev_per_angstrom)
+        assert np.allclose(
+            np.array(ase_atoms.forces),
+            np.array(expected_forces_ev_per_angstrom),
+            rtol=1e-5,
+        )
 
     def test_to_ase_none_energy_and_forces(self):
         """Test that to_ase() preserves None for energy and forces."""
