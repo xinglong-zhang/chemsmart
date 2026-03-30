@@ -85,10 +85,20 @@ What ``make configure`` does on Linux and macOS:
 #. **Updates your shell rc file** — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines to ``~/.bashrc``
    (bash) or ``~/.zshrc`` (zsh) so that the ``chemsmart`` command is available in new terminal sessions.
 
-#. **Prompts for optional software paths** — ``chemsmart config`` interactively asks for the installation folders of
-   Gaussian g16, ORCA, and NCIPLOT and writes them into ``~/.chemsmart/server/*.yaml``. Each prompt can be skipped by
-   pressing Enter. These prompts are handled by Python (``click.prompt``) and work on all platforms — no shell-specific
-   ``read`` syntax is used.
+#. **Prompts for optional software paths** — ``chemsmart config`` asks for the installation folders of Gaussian g16,
+   ORCA, and NCIPLOT and writes them into ``~/.chemsmart/server/*.yaml``. Each prompt can be skipped by pressing Enter.
+
+   .. note::
+
+      When ``make configure`` runs ``chemsmart config`` via ``conda run``, stdin is not connected to your terminal and
+      the path prompts are **automatically skipped** with an informational message. To configure these paths
+      interactively, activate the ``chemsmart`` conda environment and run ``chemsmart config`` directly in your
+      terminal after ``make configure`` completes:
+
+      .. code:: bash
+
+         conda activate chemsmart
+         chemsmart config
 
 #. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and updates the
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found

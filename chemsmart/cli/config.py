@@ -303,7 +303,25 @@ class Config:
         Uses :func:`click.prompt` so the prompts work correctly on all
         platforms — Linux, macOS, Windows Git Bash, and Conda PowerShell —
         without any shell-specific ``read`` syntax in the Makefile.
+
+        When stdin is not a TTY (e.g. when invoked via ``conda run`` or
+        with redirected input), the prompts are skipped automatically and
+        an informational message is printed directing the user to run
+        ``chemsmart config`` directly in their terminal.
         """
+        import sys
+
+        if not sys.stdin.isatty():
+            click.echo(
+                "\nNote: stdin is not connected to a terminal "
+                "(e.g. invoked via 'conda run' or with redirected input).\n"
+                "Skipping interactive path configuration.\n"
+                "To configure paths for Gaussian, ORCA, or NCIPLOT, run:\n"
+                "  chemsmart config\n"
+                "directly in your terminal after activating the environment."
+            )
+            return
+
         click.echo(
             "\nConfigure optional software paths "
             "(press Enter to skip each):"
