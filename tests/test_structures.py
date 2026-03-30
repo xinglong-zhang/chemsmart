@@ -579,15 +579,13 @@ class TestMoleculeAdvanced:
             forces=forces_hartree_per_bohr,
         )
         ase_atoms = mol.to_ase()
-        print(ase_atoms.forces)
 
-        expected_forces_ev_per_angstrom = np.array(
+        expected_forces_ev_per_angstrom = (
             forces_hartree_per_bohr * units.Hartree / units.Bohr
         )
-        print(expected_forces_ev_per_angstrom)
         assert np.allclose(
-            np.array(ase_atoms.forces),
-            np.array(expected_forces_ev_per_angstrom),
+            ase_atoms.forces,
+            expected_forces_ev_per_angstrom,
             rtol=1e-5,
         )
 
