@@ -1136,10 +1136,10 @@ class Molecule:
 
         - Strip leading digits (e.g. ``1H`` -> ``H``).
         - Keep only letters from the remaining name.
-        - If the first two letters look like an element symbol with a lowercase
-          second letter (e.g. ``Fe``), use both letters.
-        - Otherwise, use only the first letter as the element (e.g. ``CA`` ->
-          ``C`` for C-alpha).
+        - Try a normalized two-letter element candidate first (e.g. ``FE`` ->
+          ``Fe``), unless the atom name matches a common biomolecular atom-label
+          pattern such as ``CA`` for C-alpha.
+        - Otherwise, use only the first letter as the element.
         """
         if not atom_name:
             raise ValueError(
@@ -1156,30 +1156,59 @@ class Molecule:
                 f"Unable to infer element from atom name '{atom_name}'"
             )
 
-        # Determine a candidate element symbol following PDB conventions
+        if len(cleaned) == 1:
+            try:
+                return p.to_element(cleaned[0].upper())
+            except Exception:
+                raise ValueError(
+                    f"Unable to infer element from atom name '{atom_name}'"
+                )
+
+        # Common biomolecular atom-label prefixes that should remain single-letter
+        # element assignments, e.g. CA/CB/CG for carbon alpha/beta/gamma.
+        ambiguous_biomolecular_names = {
+            "CA",
+            "CB",
+            "CG",
+            "CD",
+            "CE",
+            "CZ",
+            "CH",
+            "HA",
+            "HB",
+            "HG",
+            "HD",
+            "HE",
+            "HZ",
+            "HH",
+            "HN",
+            "ND",
+            "NE",
+            "NH",
+            "NZ",
+            "OD",
+            "OE",
+            "OG",
+            "OH",
+            "SD",
+            "SG",
+        }
+
+        normalized_two_letter = f"{cleaned[0].upper()}{cleaned[1].lower()}"
+        if cleaned[:2].upper() not in ambiguous_biomolecular_names:
+            try:
+                return p.to_element(normalized_two_letter)
+            except Exception:
+                pass
+
         if len(cleaned) == 1:
             candidate = cleaned[0].upper()
         else:
-            first = cleaned[0]
-            second = cleaned[1]
-            if second.islower():
-                # Two-letter element symbol like Fe, Cl, etc.
-                candidate = first.upper() + second.lower()
-            else:
-                # Most biomolecular atoms: use first letter only (e.g. CA -> C)
-                candidate = first.upper()
+            candidate = cleaned[0].upper()
 
-        # Validate/normalize via periodic table, with a simple fallback
         try:
             return p.to_element(candidate)
         except Exception:
-            # If we tried two letters and failed, fall back to first letter only
-            if len(candidate) > 1:
-                fallback = candidate[0].upper()
-                try:
-                    return p.to_element(fallback)
-                except Exception:
-                    pass
             raise ValueError(
                 f"Unable to infer element from atom name '{atom_name}'"
             )

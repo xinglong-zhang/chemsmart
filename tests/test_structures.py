@@ -1116,6 +1116,34 @@ class TestMoleculeAdvanced:
             np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
         )
 
+    def test_infer_pdb_element_from_uppercase_atom_names(self):
+        """Test uppercase PDB atom names can still infer two-letter elements."""
+        assert Molecule._infer_pdb_element_from_atom_name("FE") == "Fe"
+        assert Molecule._infer_pdb_element_from_atom_name("ZN") == "Zn"
+        assert Molecule._infer_pdb_element_from_atom_name("CL") == "Cl"
+        assert Molecule._infer_pdb_element_from_atom_name("CA") == "C"
+
+    def test_from_pdb_file_infers_uppercase_two_letter_elements_when_blank(
+        self, tmpdir
+    ):
+        """Test blank PDB element columns fall back to uppercase atom-name inference."""
+        pdb_content = (
+            "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+            "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "blank_elements.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert list(mol.symbols) == ["Fe", "Zn", "Cl", "C"]
+        assert mol.atom_names == ["FE", "ZN", "CL", "CA"]
+        assert mol.residue_names == ["HEM", "ZN", "CL", "ALA"]
+
     def test_from_pdb_file_supports_model_index_selection(self, tmpdir):
         """Test PDB MODEL/ENDMDL parsing and index selection."""
         pdb_content = (
