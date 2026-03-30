@@ -1535,6 +1535,40 @@ class TestQMMMinMolecule:
         if os.path.exists("tmp.xyz"):
             os.remove("tmp.xyz")
 
+    def test_qmmm_partition_overlap_raises(self):
+        """Creating a QMMMMolecule with overlapping
+        partitions should raise a ValueError."""
+        # Create a small dummy molecule
+        symbols = ["C"] * 5
+        positions = np.zeros((5, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # High and medium overlap (atom index 2 appears in both)
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1, 2],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "Overlap" in str(exc.value)
+
+    def test_qmmm_partition_out_of_range_raises(self):
+        """Specifying out-of-range atom indices should raise a ValueError."""
+        symbols = ["C"] * 4
+        positions = np.zeros((4, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # index 10 out of range
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[10],
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "out of range" in str(exc.value)
+
 
 class TestSDFFile:
     def test_converts_sdf_string_to_molecule_object(self, tmpdir):
@@ -1936,42 +1970,6 @@ class TestCDXFile:
         assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
         assert mol.num_atoms == 75
         assert mol.is_aromatic
-
-
-def test_qmmm_partition_overlap_raises():
-    """Creating a QMMMMolecule with overlapping
-    partitions should raise a ValueError."""
-    # Create a small dummy molecule
-    symbols = ["C"] * 5
-    positions = np.zeros((5, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # High and medium overlap (atom index 2 appears in both)
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1, 2],
-        medium_level_atoms=[2, 3],
-        low_level_atoms=None,
-    )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "Overlap" in str(exc.value)
-
-
-def test_qmmm_partition_out_of_range_raises():
-    """Specifying out-of-range atom indices should raise a ValueError."""
-    symbols = ["C"] * 4
-    positions = np.zeros((4, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # index 10 out of range
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1],
-        medium_level_atoms=[2],
-        low_level_atoms=[10],
-    )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "out of range" in str(exc.value)
 
 
 class TestInChIKey:
