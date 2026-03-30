@@ -81,8 +81,6 @@ class ORCApKaJob(ORCAJob):
         self._ref_sp_jobs = None
 
         # parallel support
-        import threading
-
         self.parallel = bool(parallel)
         if self.jobrunner and getattr(self.jobrunner, "run_in_serial", False):
             if self.parallel:
@@ -90,8 +88,6 @@ class ORCApKaJob(ORCAJob):
                     "Parallel execution disabled due to run_in_serial=True in JobRunner"
                 )
             self.parallel = False
-
-        self._pka_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Basename helpers for label derivation
@@ -433,7 +429,7 @@ class ORCApKaJob(ORCAJob):
                 break
 
     def _make_sp_job(self, opt_job, fallback_molecule, sp_settings, sp_label):
-        # create SP job using optimized geometry if available
+        """Create SP job using optimized geometry if available."""
         out = opt_job._output()
         if out is not None and out.normal_termination is True:
             mol = out.molecule
@@ -449,212 +445,236 @@ class ORCApKaJob(ORCAJob):
         )
         return sp_job
 
-    def _validate_imaginary_frequencies(self, opt_job, role):
-        """Check for imaginary frequencies in a completed optimisation job.
+    # ------------------------------------------------------------------
+    # Imaginary frequency validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_imaginary_frequencies(job, role):
+        """Check for imaginary frequencies after an optimisation job.
 
         Returns:
             None if validation passes; an error message string otherwise.
         """
-        out = opt_job._output()
+        out = job._output()
         if out is None:
             return (
                 f"[{role}] Optimisation produced no output – "
-                f"cannot validate frequencies."
+                f"cannot validate frequencies for {job.label}."
             )
         if not out.normal_termination:
-            # Abnormal termination is not an imaginary-frequency issue;
-            # it will be caught elsewhere.
-            return None
+            return None  # abnormal termination handled separately
 
         freqs = getattr(out, "vibrational_frequencies", None)
         if freqs is None:
-            # No frequency data available (e.g. SP-only job) – skip check.
-            return None
+            return None  # no frequency data – skip
 
         imaginary = [f for f in freqs if f < 0.0]
         if imaginary:
             return (
                 f"[{role}] Imaginary frequency check FAILED for "
-                f"{opt_job.label}: found {len(imaginary)} imaginary "
+                f"{job.label}: found {len(imaginary)} imaginary "
                 f"mode(s) {imaginary}. The optimised geometry is not a "
                 f"true minimum – please re-optimise."
             )
         return None
 
-    def _worker_opt_then_sp(
-        self,
-        opt_job,
-        role,
-        sp_index,
-        fallback_molecule,
-        sp_settings,
-        sp_label,
-    ):
-        """Run opt → validate frequencies → SP for a single species.
+    # ------------------------------------------------------------------
+    # Parallel execution helpers
+    # ------------------------------------------------------------------
 
-        Returns a dict describing the outcome so the caller can collect
-        successes and failures without any silent swallowing.
+    def _run_opt_worker(self, job, role, runner, cores, mem):
+        """Run a single opt job and validate its frequencies.
+
+        Returns a dict ``{"role", "label", "success", "error"}``.
         """
         result = {
             "role": role,
-            "label": opt_job.label,
+            "label": job.label,
             "success": False,
             "error": None,
         }
 
-        # --- Optimisation ---------------------------------------------------
-        logger.info(f"[parallel] Running opt job for role={role}: {opt_job}")
-        opt_job.run()
+        if runner:
+            job.jobrunner = runner.copy()
+            job.jobrunner.num_cores = cores
+            job.jobrunner.mem_gb = mem
 
-        # --- Imaginary frequency validation ---------------------------------
-        freq_error = self._validate_imaginary_frequencies(opt_job, role)
-        if freq_error:
-            result["error"] = freq_error
-            logger.error(freq_error)
-            # Store the SP slot as None so downstream code knows it failed.
-            with self._pka_lock:
-                self._store_sp_slot(role, sp_index, None)
+        job.run()
+
+        freq_err = self._validate_imaginary_frequencies(job, role)
+        if freq_err:
+            result["error"] = freq_err
+            logger.error(freq_err)
             return result
-
-        # --- Single-point ----------------------------------------------------
-        sp_job = self._make_sp_job(
-            opt_job=opt_job,
-            fallback_molecule=fallback_molecule,
-            sp_settings=sp_settings,
-            sp_label=sp_label,
-        )
-        logger.info(f"[parallel] Running SP job for role={role}: {sp_job}")
-        sp_job.run()
-
-        with self._pka_lock:
-            self._store_sp_slot(role, sp_index, sp_job)
 
         result["success"] = True
         return result
 
-    def _store_sp_slot(self, role, sp_index, sp_job):
-        """Store an SP job (or *None*) into the correct container slot.
+    @staticmethod
+    def _run_sp_worker(job, role, runner, cores, mem):
+        """Run a single SP job.
 
-        Must be called while holding ``self._pka_lock``.
+        Returns a dict ``{"role", "label", "success", "error"}``.
         """
-        if role in ("HA", "A"):
-            if self._sp_jobs is None:
-                self._sp_jobs = [None, None]
-            self._sp_jobs[sp_index] = sp_job
-        elif role in ("Href", "Ref"):
-            if self._ref_sp_jobs is None:
-                self._ref_sp_jobs = [None, None]
-            self._ref_sp_jobs[sp_index] = sp_job
-        else:
-            if self._sp_jobs is None:
-                self._sp_jobs = [None, None]
-            self._sp_jobs[sp_index] = sp_job
+        result = {
+            "role": role,
+            "label": job.label,
+            "success": False,
+            "error": None,
+        }
 
-    def _run_parallel(self):
-        """Run pKa workflow with ``ThreadPoolExecutor``.
+        if runner:
+            job.jobrunner = runner.copy()
+            job.jobrunner.num_cores = cores
+            job.jobrunner.mem_gb = mem
 
-        Each worker runs opt → imaginary-frequency check → SP for one
-        species.  Failures are **collected** (not raised) so that every
-        worker has a chance to finish.  After all workers complete a
-        summary is logged and, if any worker failed, a ``RuntimeError``
-        is raised containing every failure message.
+        job.run()
+        result["success"] = True
+        return result
+
+    @staticmethod
+    def _collect_futures(future_to_role):
+        """Wait for all futures, collecting successes and failures.
+
+        Returns ``(successes, failures)`` where each element is a list
+        of label strings or error message strings respectively.
         """
-        opt_jobs = self.opt_jobs
-        protonated_sp_settings, conjugate_base_sp_settings = (
-            self.settings.conjugate_pair_sp_job_settings(self.molecule)
-        )
-        with self._pka_lock:
-            self._sp_jobs = [None, None]
-
-        # Build a list of (args-tuple) for each worker submission.
-        worker_args = [
-            (
-                opt_jobs[0],
-                "HA",
-                0,
-                self.protonated_molecule,
-                protonated_sp_settings,
-                f"{self._acid_basename}_sp",
-            ),
-            (
-                opt_jobs[1],
-                "A",
-                1,
-                self.conjugate_base_molecule,
-                conjugate_base_sp_settings,
-                f"{self._conjugate_base_label}_sp",
-            ),
-        ]
-
-        if self.has_reference_jobs:
-            ref_opt_jobs = self.ref_opt_jobs
-            ref_acid_sp_settings, ref_cb_sp_settings = (
-                self.settings.reference_pair_sp_job_settings()
-            )
-            with self._pka_lock:
-                self._ref_sp_jobs = [None, None]
-            worker_args.append(
-                (
-                    ref_opt_jobs[0],
-                    "Href",
-                    0,
-                    self.reference_molecule,
-                    ref_acid_sp_settings,
-                    f"{self._ref_basename}_sp",
-                )
-            )
-            worker_args.append(
-                (
-                    ref_opt_jobs[1],
-                    "Ref",
-                    1,
-                    self.reference_conjugate_base_molecule,
-                    ref_cb_sp_settings,
-                    f"{self._ref_conjugate_base_label}_sp",
-                )
-            )
-
-        # ----- submit all workers -------------------------------------------
         successes = []
         failures = []
 
-        with ThreadPoolExecutor(max_workers=len(worker_args)) as executor:
-            future_to_role = {}
-            for args in worker_args:
-                fut = executor.submit(self._worker_opt_then_sp, *args)
-                future_to_role[fut] = args[1]  # role name
-
-            for fut in as_completed(future_to_role):
-                role = future_to_role[fut]
-                try:
-                    result = fut.result()
-                except Exception:
-                    tb = traceback.format_exc()
-                    msg = f"[{role}] Worker crashed with unhandled exception:\n{tb}"
-                    logger.error(msg)
-                    failures.append(msg)
+        for fut in as_completed(future_to_role):
+            role = future_to_role[fut]
+            try:
+                res = fut.result()
+            except Exception:
+                tb = traceback.format_exc()
+                msg = (
+                    f"[{role}] Worker crashed with unhandled exception:\n{tb}"
+                )
+                logger.error(msg)
+                failures.append(msg)
+            else:
+                if res["success"]:
+                    successes.append(res["label"])
                 else:
-                    if result["success"]:
-                        successes.append(result["label"])
-                    else:
-                        failures.append(result["error"])
+                    failures.append(res["error"])
 
-        # ----- Final reporting ----------------------------------------------
-        total = len(worker_args)
+        return successes, failures
+
+    def _run_parallel(self):
+        """Run pKa workflow in parallel mode.
+
+        Uses ``ThreadPoolExecutor`` so that a crash or validation failure
+        in one worker does **not** prevent other workers from finishing.
+        After all workers complete, a summary is logged and – if any
+        worker failed – a ``RuntimeError`` is raised with every failure
+        message.
+        """
+        runner = self.jobrunner
+
+        # Calculate resources per job to prevent contention
+        total_cores = runner.num_cores if runner and runner.num_cores else 1
+        total_mem = runner.mem_gb if runner and runner.mem_gb else 1
+
+        # ── Phase 1: optimisation jobs ──────────────────────────────────
+        opt_job_specs = list(zip(self.opt_jobs, ("HA_opt", "A_opt")))
+        if self.has_reference_jobs:
+            opt_job_specs.extend(
+                zip(self.ref_opt_jobs, ("HRef_opt", "Ref_opt"))
+            )
+
+        concurrent_opt_jobs = len(opt_job_specs)
+        opt_cores_per_job = max(1, int(total_cores // concurrent_opt_jobs))
+        opt_mem_per_job = max(1, int(total_mem // concurrent_opt_jobs))
+
+        logger.info(
+            f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
+            f"among {concurrent_opt_jobs} concurrent opt jobs "
+            f"({opt_cores_per_job} cores, {opt_mem_per_job}GB each)."
+        )
+
+        all_successes = []
+        all_failures = []
+
+        with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
+            future_to_role = {}
+            for job, role in opt_job_specs:
+                fut = executor.submit(
+                    self._run_opt_worker,
+                    job,
+                    role,
+                    runner,
+                    opt_cores_per_job,
+                    opt_mem_per_job,
+                )
+                future_to_role[fut] = role
+
+            successes, failures = self._collect_futures(future_to_role)
+            all_successes.extend(successes)
+            all_failures.extend(failures)
+
+        # ── Phase 2: SP jobs ────────────────────────────────────────────
+        # Refresh SP jobs so they pick up optimised geometries
+        self._sp_jobs = None
+        if self.has_reference_jobs:
+            self._ref_sp_jobs = None
+
+        sp_job_specs = []
+        if self.sp_jobs:
+            sp_job_specs.extend(zip(self.sp_jobs, ("HA_sp", "A_sp")))
+        if self.has_reference_jobs and self.ref_sp_jobs:
+            sp_job_specs.extend(zip(self.ref_sp_jobs, ("HRef_sp", "Ref_sp")))
+
+        if sp_job_specs:
+            sp_jobs_to_run = [job for job, _ in sp_job_specs]
+            sp_roles = [role for _, role in sp_job_specs]
+
+            concurrent_sp_jobs = len(sp_jobs_to_run)
+            sp_cores_per_job = max(1, int(total_cores // concurrent_sp_jobs))
+            sp_mem_per_job = max(1, int(total_mem // concurrent_sp_jobs))
+
+            logger.info(
+                f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
+                f"among {concurrent_sp_jobs} concurrent sp jobs "
+                f"({sp_cores_per_job} cores, {sp_mem_per_job}GB each)."
+            )
+
+            with ThreadPoolExecutor(
+                max_workers=concurrent_sp_jobs
+            ) as executor:
+                future_to_role = {}
+                for job, role in zip(sp_jobs_to_run, sp_roles):
+                    fut = executor.submit(
+                        self._run_sp_worker,
+                        job,
+                        role,
+                        runner,
+                        sp_cores_per_job,
+                        sp_mem_per_job,
+                    )
+                    future_to_role[fut] = role
+
+                successes, failures = self._collect_futures(future_to_role)
+                all_successes.extend(successes)
+                all_failures.extend(failures)
+
+        # ── Final reporting ─────────────────────────────────────────────
+        total = len(all_successes) + len(all_failures)
         logger.info(
             f"Parallel pKa run complete: "
-            f"{len(successes)}/{total} succeeded, "
-            f"{len(failures)}/{total} failed."
+            f"{len(all_successes)}/{total} succeeded, "
+            f"{len(all_failures)}/{total} failed."
         )
-        for label in successes:
+        for label in all_successes:
             logger.info(f"  ✓ {label}")
-        for err in failures:
+        for err in all_failures:
             logger.error(f"  ✗ {err}")
 
-        if failures:
+        if all_failures:
             summary = (
-                f"{len(failures)} of {total} parallel pKa worker(s) failed:\n"
-                + "\n".join(f"  - {e}" for e in failures)
+                f"{len(all_failures)} of {total} parallel pKa worker(s) failed:\n"
+                + "\n".join(f"  - {e}" for e in all_failures)
             )
             raise RuntimeError(summary)
 

@@ -874,7 +874,7 @@ class TestOrcaPkaBatchExecution:
         )
         mocker.patch.object(
             job.settings,
-            "conjugate_pair_sp_job_settings",
+            "_create_solution_phase_sp_settings",
             return_value=(ha_sp_settings, a_sp_settings),
         )
         mocker.patch.object(
