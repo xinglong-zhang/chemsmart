@@ -14,7 +14,7 @@ from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.utils.repattern import (
     gaussian_dias_filename_point_with_fragment1,
     gaussian_dias_filename_point_with_fragment2,
-    gaussian_dias_filename_point_without_fragment,
+    gaussian_dias_filename_point_without_fragment_without_reactant,
     gaussian_dias_filename_with_reactant,
     orca_dias_filename_point_with_fragment1,
     orca_dias_filename_point_with_fragment2,
@@ -229,7 +229,8 @@ class DIASOutputFolder(BaseFolder):
                 # ref file is given, zero ref wrt to the ref file given
                 lowest_rel_tot_e = self.ref_file_rel_energy
         else:
-            # no zeroing reference, plot as given (whether ref file is given or not)
+            # no zeroing reference, plot as given
+            # (whether ref file is given or not)
             lowest_rel_tot_e = 0.0
         rel_total_energies = [
             i - lowest_rel_tot_e for i in self.list_rel_total_energies
@@ -428,7 +429,7 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         all_files_full_molecule_indices = []
         # find all files for full molecule
         full_molecule_pattern = re.compile(
-            gaussian_dias_filename_point_without_fragment
+            gaussian_dias_filename_point_without_fragment_without_reactant
         )
 
         # file all the files that match

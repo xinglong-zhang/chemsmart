@@ -25,7 +25,8 @@ class ThermochemistryJobRunner(JobRunner):
     execution for both single and Boltzmann-averaged calculations.
 
     Attributes:
-        JOBTYPES (list): Supported job types (['thermochemistry', 'boltzmann']).
+        JOBTYPES (list): Supported job types
+        (['thermochemistry', 'boltzmann']).
         PROGRAM (str): Program identifier ('Thermochemistry').
         FAKE (bool): Whether this runner operates in fake/test mode.
         SCRATCH (bool): Whether to use scratch directories by default.

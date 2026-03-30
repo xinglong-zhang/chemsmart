@@ -408,7 +408,7 @@ def entry_point(
             # Warning for imaginary frequency.
             if thermochemistry.imaginary_frequencies:
                 if (
-                    thermochemistry.job_type == "ts"
+                    thermochemistry.jobtype == "ts"
                     and thermochemistry.vibrational_frequencies[0] < 0.0
                 ):
                     if len(thermochemistry.imaginary_frequencies) > 1:

@@ -4,6 +4,8 @@ import os
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCAJobSettings,
+    ORCANEBJobSettings,
+    ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -17,7 +19,8 @@ project_settings_registry: list[str] = []
 # Type annotation required for Python's type checker (e.g., mypy)
 # which has stricter requirements when working in contexts where type inference
 # is insufficient or ambiguous.
-# This is not due to Python 3.9 itself, but type checking rules enforced by tools
+# This is not due to Python 3.9 itself,
+# but type checking rules enforced by tools
 # like mypy or stricter typing practices.
 
 
@@ -49,7 +52,8 @@ class ORCAProjectSettings(RegistryMixin):
         for all other job types. Includes functional and basis set assignments.
 
         Returns:
-            ORCAJobSettings: Default ORCA job settings with functional and basis set.
+            ORCAJobSettings: Default ORCA job
+            settings with functional and basis set.
         """
         default_orca_job_settings = ORCAJobSettings.default()
         default_orca_job_settings.functional = self.functional
@@ -67,7 +71,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for geometry optimization.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "opt"
+        settings.jobtype = "opt"
         return settings
 
     def modred_settings(self):
@@ -81,7 +85,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for modredundant optimization.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "modred"
+        settings.jobtype = "modred"
         return settings
 
     def ts_settings(self):
@@ -92,13 +96,14 @@ class ORCAProjectSettings(RegistryMixin):
         specialized TS optimization algorithms in ORCA.
 
         Returns:
-            ORCATSJobSettings: Settings configured for transition state optimization.
+            ORCATSJobSettings: Settings configured
+            for transition state optimization.
         """
         settings = self.main_settings().copy()
         settings = ORCATSJobSettings(
             **settings.__dict__
         )  # convert settings to ORCATSJobSettings
-        settings.job_type = "ts"
+        settings.jobtype = "ts"
         return settings
 
     def irc_settings(self):
@@ -106,7 +111,8 @@ class ORCAProjectSettings(RegistryMixin):
         ORCA settings for intrinsic reaction coordinate calculations.
 
         Creates settings for IRC calculations that trace reaction pathways
-        from transition states to reactants and products. Frequency calculations
+        from transition states to reactants
+        and products. Frequency calculations
         are disabled by default for IRC jobs.
 
         Returns:
@@ -116,7 +122,7 @@ class ORCAProjectSettings(RegistryMixin):
         settings = ORCAIRCJobSettings(
             **settings.__dict__
         )  # convert settings to ORCAIRCJobSettings
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.freq = False
         return settings
 
@@ -129,10 +135,11 @@ class ORCAProjectSettings(RegistryMixin):
         calculations are disabled by default.
 
         Returns:
-            ORCAJobSettings: Settings configured for coordinate scan calculations.
+            ORCAJobSettings: Settings configured
+            for coordinate scan calculations.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "scan"
+        settings.jobtype = "scan"
         settings.freq = False
         return settings
 
@@ -140,7 +147,8 @@ class ORCAProjectSettings(RegistryMixin):
         """
         ORCA settings for non-covalent interaction analysis.
 
-        Creates settings for NCI (Non-Covalent Interaction) analysis calculations
+        Creates settings for NCI (Non-Covalent
+        Interaction) analysis calculations
         that identify and characterize weak intermolecular interactions.
         Frequency calculations are disabled by default.
 
@@ -148,7 +156,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for NCI analysis.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "nci"
+        settings.jobtype = "nci"
         settings.freq = False
         return settings
 
@@ -164,7 +172,7 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for WBI calculations.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "wbi"
+        settings.jobtype = "wbi"
         settings.freq = False
         return settings
 
@@ -172,7 +180,8 @@ class ORCAProjectSettings(RegistryMixin):
         """
         ORCA settings for single point energy calculations.
 
-        Creates settings for single point calculations at higher level of theory
+        Creates settings for single point
+        calculations at higher level of theory
         using large basis set. Frequency calculations are disabled and the
         large basis set is used for improved accuracy.
 
@@ -180,9 +189,35 @@ class ORCAProjectSettings(RegistryMixin):
             ORCAJobSettings: Settings configured for single point calculations.
         """
         settings = self.main_settings().copy()
-        settings.job_type = "sp"
+        settings.jobtype = "sp"
         settings.freq = False  # turn off freq calculation for sp job
         settings.basis = self.large_basis
+        return settings
+
+    def neb_settings(self):
+        """
+        Create default ORCA NEB job settings.
+
+        Returns ORCANEBJobSettings instance with base configuration
+        inherited from main settings and NEB-specific defaults.
+
+        Returns:
+            ORCANEBJobSettings: Default NEB settings with freq disabled
+        """
+        settings = self.main_settings().copy()
+        settings = ORCANEBJobSettings(
+            **settings.__dict__
+        )  # convert settings to ORCANEBJobSettings
+        settings.jobtype = "neb"
+        settings.freq = False
+        return settings
+
+    def qmmm_settings(self):
+        """ORCA default settings for QMMM job."""
+        settings = self.main_settings().copy()
+        settings = ORCAQMMMJobSettings(**settings.__dict__)
+        settings.jobtype = "qmmm"
+        settings.freq = False
         return settings
 
     @classmethod
@@ -198,7 +233,8 @@ class ORCAProjectSettings(RegistryMixin):
             project (str): Name of the project to load settings for.
 
         Returns:
-            YamlORCAProjectSettings: Configured YAML-based project settings instance.
+            YamlORCAProjectSettings: Configured
+            YAML-based project settings instance.
 
         Raises:
             FileNotFoundError: If no project settings are found for the
@@ -227,14 +263,16 @@ class ORCAProjectSettings(RegistryMixin):
         """
         Load project settings using a project manager.
 
-        Internal method for loading project settings through a manager instance.
+        Internal method for loading project
+        settings through a manager instance.
         Handles exceptions and provides error logging for failed operations.
 
         Args:
             manager: Project settings manager instance.
 
         Returns:
-            YamlORCAProjectSettings or None: YAML-based loaded settings or None if loading fails.
+            YamlORCAProjectSettings or None: YAML-based
+            loaded settings or None if loading fails.
         """
         try:
             return manager.create()
@@ -253,7 +291,8 @@ class ORCAProjectSettings(RegistryMixin):
             project_name (str): Name of the project to load.
 
         Returns:
-            YamlORCAProjectSettings or None: YAML-based loaded settings or None if not found.
+            YamlORCAProjectSettings or None: YAML-based
+            loaded settings or None if not found.
         """
         project_name_yaml_path = os.path.join(
             ChemsmartUserSettings().user_orca_settings_dir,
@@ -279,7 +318,8 @@ class ORCAProjectSettings(RegistryMixin):
             project_name (str): Name of the test project to load.
 
         Returns:
-            YamlORCAProjectSettings or None: YAML-based loaded settings or None if not found.
+            YamlORCAProjectSettings or None: YAML-based
+            loaded settings or None if not found.
         """
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
         test_projects_dir = os.path.join(
@@ -332,6 +372,8 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        qmmm_settings,
+        neb_settings,
     ):
         """
         Initialize YAML-based ORCA project settings.
@@ -346,6 +388,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
             sp_settings: Settings for single point calculations.
             td_settings: Settings for TD-DFT calculations.
             wbi_settings: Settings for Wiberg bond index calculations.
+            neb_settings: Settings for NEB calculations.
         """
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings
@@ -356,6 +399,8 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._qmmm_settings = qmmm_settings
+        self._neb_settings = neb_settings
 
     def opt_settings(self):
         """
@@ -438,17 +483,28 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         """
         return self._wbi_settings
 
-    @classmethod
-    def from_yaml(cls, filename):
-        """
-        Create project settings from YAML configuration file.
+    def qmmm_settings(self):
+        return self._qmmm_settings
 
-        Args:
-            filename (str): Path to YAML configuration file.
+    def neb_settings(self):
+        """
+        Get Nudged Elastic Band calculation settings.
 
         Returns:
-            YamlORCAProjectSettings: Configured project settings instance.
+            ORCANEBJobSettings: Pre-configured NEB calculation settings.
         """
+        if self._neb_settings is None:
+            from copy import deepcopy
+
+            from chemsmart.jobs.orca.settings import ORCANEBJobSettings
+
+            # Fall back to opt settings when no NEB section is provided
+            base_opt = deepcopy(self._opt_settings)
+            self._neb_settings = ORCANEBJobSettings(**base_opt.__dict__)
+        return self._neb_settings
+
+    @classmethod
+    def from_yaml(cls, filename):
         builder = YamlORCAProjectSettingsBuilder(filename=filename)
         return builder.build()
 
@@ -491,15 +547,17 @@ class YamlORCAProjectSettingsBuilder:
             FileNotFoundError: If the YAML configuration file is not found.
             ValueError: If the YAML file contains invalid configuration.
         """
-        opt_settings = self._project_settings_for_job(job_type="opt")
-        modred_settings = self._project_settings_for_job(job_type="modred")
-        ts_settings = self._project_settings_for_job(job_type="ts")
-        irc_settings = self._project_settings_for_job(job_type="irc")
-        scan_settings = self._project_settings_for_job(job_type="scan")
-        nci_settings = self._project_settings_for_job(job_type="nci")
-        sp_settings = self._project_settings_for_job(job_type="sp")
-        td_settings = self._project_settings_for_job(job_type="td")
-        wbi_settings = self._project_settings_for_job(job_type="wbi")
+        opt_settings = self._project_settings_for_job(jobtype="opt")
+        modred_settings = self._project_settings_for_job(jobtype="modred")
+        ts_settings = self._project_settings_for_job(jobtype="ts")
+        irc_settings = self._project_settings_for_job(jobtype="irc")
+        scan_settings = self._project_settings_for_job(jobtype="scan")
+        nci_settings = self._project_settings_for_job(jobtype="nci")
+        sp_settings = self._project_settings_for_job(jobtype="sp")
+        td_settings = self._project_settings_for_job(jobtype="td")
+        wbi_settings = self._project_settings_for_job(jobtype="wbi")
+        qmmm_settings = self._project_settings_for_job(jobtype="qmmm")
+        neb_settings = self._project_settings_for_job(jobtype="neb")
 
         # Create complete project settings with all job configurations
         project_settings = YamlORCAProjectSettings(
@@ -512,6 +570,8 @@ class YamlORCAProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            qmmm_settings=qmmm_settings,
+            neb_settings=neb_settings,
         )
 
         # Set project name from filename and return
@@ -530,7 +590,7 @@ class YamlORCAProjectSettingsBuilder:
 
         return read_molecular_job_yaml(self.filename, program="orca")
 
-    def _project_settings_for_job(self, job_type):
+    def _project_settings_for_job(self, jobtype):
         """
         Create job-specific settings from YAML configuration.
 
@@ -538,31 +598,39 @@ class YamlORCAProjectSettingsBuilder:
         configured instances based on YAML data.
 
         Args:
-            job_type (str): Type of job (opt, ts, irc, scan, etc.).
+            jobtype (str): Type of job (opt, ts, irc, scan, etc.).
 
         Returns:
-            ORCAJobSettings or ORCAIRCJobSettings or ORCATSJobSettings: Configured
-                settings for the specified job type. Returns ORCAIRCJobSettings for
-                IRC jobs, ORCATSJobSettings for TS jobs, and ORCAJobSettings for
+            ORCAJobSettings or ORCAIRCJobSettings
+            or ORCATSJobSettings: Configured
+                settings for the specified job
+                type. Returns ORCAIRCJobSettings for
+                IRC jobs, ORCATSJobSettings for
+                TS jobs, and ORCAJobSettings for
                 all other job types.
 
         Raises:
             RuntimeError: If configuration for the job type is not found.
         """
         # Map job types to their specific settings classes
-        settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
+        settings_mapping = {
+            "irc": ORCAIRCJobSettings,
+            "ts": ORCATSJobSettings,
+            "qmmm": ORCAQMMMJobSettings,
+            "neb": ORCANEBJobSettings,
+        }
 
         try:
-            job_type_config = self._read_config().get(job_type)
-            if job_type_config is not None:
+            jobtype_config = self._read_config().get(jobtype)
+            if jobtype_config is not None:
                 # Use specific settings class if available, otherwise default
                 return settings_mapping.get(
-                    job_type, ORCAJobSettings
-                ).from_dict(job_type_config)
+                    jobtype, ORCAJobSettings
+                ).from_dict(jobtype_config)
         except KeyError as e:
             available_jobs = list(self._read_config().keys())
             raise RuntimeError(
-                f"ORCA settings for job {job_type} cannot be found!\n"
+                f"ORCA settings for job {jobtype} cannot be found!\n"
                 f"Available ORCA jobs with settings are: {available_jobs}"
             ) from e
 

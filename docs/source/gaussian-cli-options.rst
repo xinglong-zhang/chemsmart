@@ -227,6 +227,73 @@ Examples:
    # Add route parameters
    chemsmart sub gaussian -p test -f molecule.com -r nosymm opt
 
+Solvent Options
+===============
+
+Solvent settings can be specified at the Gaussian group level, which means they apply to **any** subcommand (``opt``,
+``td``, ``sp``, ``ts``, etc.). This is useful when the project settings define a gas-phase calculation but you want to
+add solvation for a particular run without modifying the project file.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 15 50
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``--remove-solvent/--no-remove-solvent``
+      -  bool
+      -  Remove solvent from the job, overriding project settings (default: disabled)
+
+   -  -  ``-sm, --solvent-model``
+      -  string
+      -  Implicit solvent model (e.g. ``smd``, ``cpcm``, ``iefpcm``)
+
+   -  -  ``-si, --solvent-id``
+      -  string
+      -  Solvent identifier (e.g. ``water``, ``toluene``, ``dichloromethane``)
+
+   -  -  ``-so, --solvent-options``
+      -  string
+      -  Additional options appended inside the ``scrf=()`` keyword (e.g. ``iterative``)
+
+.. note::
+
+   Both ``-sm`` and ``-si`` must be provided together; specifying only one will raise an error when Gaussian processes
+   the input file. ``-so`` is only applied when solvent is active — it is ignored when ``--remove-solvent`` is used.
+
+Examples:
+
+.. code:: bash
+
+   # Gas phase optimization (project default)
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -a no_solv opt
+
+   # Solvated optimization with SMD/water (overrides project gas-phase settings)
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -a solv opt
+
+   # Solvated optimization with additional iterative SCRF option
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -so iterative -a solv opt
+
+   # Solvated TD-DFT calculation
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -so iterative -a solv_td td
+
+   # Remove solvent when project settings include one
+   chemsmart sub gaussian -p solv_project -f molecule.xyz -c 0 -m 1 --remove-solvent opt
+
+The solvated opt example above produces a route line of the form:
+
+.. code:: text
+
+   # opt freq b3lyp def2svp scrf=(smd,solvent=water,iterative)
+
+and the solvated TD-DFT example gives:
+
+.. code:: text
+
+   # freq cam-b3lyp def2svp scrf=(smd,solvent=water,iterative) TD(singlets,nstates=3,root=1)
+
 ***********************
  Available Subcommands
 ***********************

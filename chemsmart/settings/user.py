@@ -1,9 +1,12 @@
 """
 User configuration management for ChemSmart computational chemistry software.
 
-This module provides comprehensive user settings management including configuration
-file handling, directory structure management, and access to user-specific settings
-for computational chemistry software (Gaussian, ORCA) and server configurations.
+This module provides comprehensive user
+settings management including configuration
+file handling, directory structure management,
+and access to user-specific settings
+for computational chemistry software
+(Gaussian, ORCA) and server configurations.
 Manages the ~/.chemsmart user configuration directory and associated files.
 
 Classes:

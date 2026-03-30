@@ -46,7 +46,8 @@ class TestGaussianJobs:
             g16_file, gaussian_written_opt_file, shallow=False
         )  # writes input file as expected
 
-        # job run will result in the job being run and the output file copied back to run folder
+        # job run will result in the job being run and
+        # the output file copied back to run folder
         # job.run(jobrunner=jobrunner_no_scratch)
         # assert job.is_complete()
 
@@ -89,7 +90,8 @@ class TestGaussianJobs:
                 " -1 " in lines[i + 8]
             )  # 8 lines before the coordinates in Gaussian input file
             # this structure has frozen atoms at these positions,
-            # see test_structure.py::TestMoleculeAdvanced::test_molecule_from_db_with_pbc_and_constraints.py
+            # see test_structure.py::TestMoleculeAdvanced::
+            # test_molecule_from_db_with_pbc_and_constraints.py
             # mol object (last structure/image).
 
         job2 = GaussianOptJob.from_filename(
@@ -116,10 +118,12 @@ class TestGaussianJobs:
                 " -1 " in lines[i + 8]
             )  # 8 lines before the coordinates in Gaussian input file
             # this structure has frozen atoms at these positions,
-            # see test_structure.py::TestMoleculeAdvanced::test_molecule_from_db_with_pbc_and_constraints.py
+            # see test_structure.py::TestMoleculeAdvanced::
+            # test_molecule_from_db_with_pbc_and_constraints.py
             # mol2 object (first structure/image).
 
-        # job3 will fail to be created because the index is not valid (1-indexed)
+        # job3 will fail to be created because
+        # the index is not valid (1-indexed)
         with pytest.raises(ValueError):
             GaussianOptJob.from_filename(
                 filename=constrained_pbc_db_file,
@@ -149,7 +153,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = None  # Both forward and reverse IRC
 
         # create link IRC job
@@ -161,7 +165,7 @@ class TestGaussianlinkIRCJobs:
         )
 
         assert isinstance(job, GaussianLinkJob)
-        assert job.settings.job_type == "irc"
+        assert job.settings.jobtype == "irc"
         assert job._is_irc_job()
 
     def test_gaussian_link_irc_subjob_creation(
@@ -182,7 +186,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
 
         # create main IRC job
         job = GaussianLinkJob.from_filename(
@@ -195,13 +199,13 @@ class TestGaussianlinkIRCJobs:
         # test forward IRC subjob creation
         ircf_job = job._ircf_link_job()
         assert isinstance(ircf_job, GaussianLinkJob)
-        assert ircf_job.settings.job_type == "ircf"
+        assert ircf_job.settings.jobtype == "ircf"
         assert "irc_test_f" in ircf_job.label
 
         # test reverse IRC subjob creation
         ircr_job = job._ircr_link_job()
         assert isinstance(ircr_job, GaussianLinkJob)
-        assert ircr_job.settings.job_type == "ircr"
+        assert ircr_job.settings.jobtype == "ircr"
         assert "irc_test_r" in ircr_job.label
 
     def test_gaussian_link_irc_job_label_naming(
@@ -222,7 +226,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.flat_irc = False
 
         # create main IRC job with standard link naming
@@ -261,7 +265,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.flat_irc = True
 
         # create main IRC job with flat IRC option
@@ -300,7 +304,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = "forward"
 
         # create forward-only IRC job
@@ -314,7 +318,7 @@ class TestGaussianlinkIRCJobs:
         # test that only forward IRC job is returned
         irc_jobs = job._get_irc_jobs()
         assert len(irc_jobs) == 1
-        assert irc_jobs[0].settings.job_type == "ircf"
+        assert irc_jobs[0].settings.jobtype == "ircf"
 
     def test_gaussian_link_irc_job_reverse_only(
         self,
@@ -334,7 +338,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = "reverse"
 
         # create reverse-only IRC job
@@ -348,7 +352,7 @@ class TestGaussianlinkIRCJobs:
         # test that only reverse IRC job is returned
         irc_jobs = job._get_irc_jobs()
         assert len(irc_jobs) == 1
-        assert irc_jobs[0].settings.job_type == "ircr"
+        assert irc_jobs[0].settings.jobtype == "ircr"
 
     def test_gaussian_link_irc_job_both_directions(
         self,
@@ -368,7 +372,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = None
 
         # create both-directions IRC job
@@ -382,9 +386,9 @@ class TestGaussianlinkIRCJobs:
         # test that both forward and reverse IRC jobs are returned
         irc_jobs = job._get_irc_jobs()
         assert len(irc_jobs) == 2
-        job_types = [j.settings.job_type for j in irc_jobs]
-        assert "ircf" in job_types
-        assert "ircr" in job_types
+        jobtypes = [j.settings.jobtype for j in irc_jobs]
+        assert "ircf" in jobtypes
+        assert "ircr" in jobtypes
 
 
 class TestGaussianCrestJobs:
@@ -395,7 +399,8 @@ class TestGaussianCrestJobs:
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_no_scratch,
     ):
-        """Test that GaussianCrestJob creates jobs for all conformers in the file."""
+        """Test that GaussianCrestJob creates
+        jobs for all conformers in the file."""
         from chemsmart.io.molecules.structure import Molecule
         from chemsmart.jobs.gaussian.crest import GaussianCrestJob
         from chemsmart.settings.gaussian import GaussianProjectSettings

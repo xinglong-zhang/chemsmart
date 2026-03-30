@@ -36,7 +36,8 @@ def visualize(
     hybrid,
     **kwargs,
 ):
-    """CLI subcommand for running automatic PyMOL visualization and save as PSE file.
+    """CLI subcommand for running automatic
+    PyMOL visualization and save as PSE file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com visualize -v
     This visualizes phenyldioxazolone.com file and saves as
@@ -51,7 +52,8 @@ def visualize(
     When --hybrid flag is used, the hybrid visualization mode is enabled,
     which allows the user to draw different groups in different styles.
     Example usage:
-    chemsmart run mol -f 'structure_file' visualize -G  '233,468-512' -G '308,397-414,416-423'
+    chemsmart run mol -f 'structure_file' visualize
+    -G '233,468-512' -G '308,397-414,416-423'
     """
 
     # get molecule
@@ -88,7 +90,8 @@ def visualize(
     colors = kwargs.pop("colors", ())
     hybrid_opts["colors"] = colors
 
-    # raise error if -G/-C/-sc/-st or new_color_* is provided when --hybrid is false
+    # raise error if -G/-C/-sc/-st or new_color_*
+    # is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
         "colors",

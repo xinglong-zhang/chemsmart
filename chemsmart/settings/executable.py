@@ -14,11 +14,13 @@ logger = logging.getLogger(__name__)
 
 class Executable(RegistryMixin):
     """
-    Abstract base class for obtaining program executable paths and configurations.
+    Abstract base class for obtaining program
+    executable paths and configurations.
 
     This class provides a framework for managing executable configurations for
     different computational chemistry programs. It reads configuration from
-    server YAML files and handles environment setup including conda environments,
+    server YAML files and handles environment
+    setup including conda environments,
     modules, scripts, and environment variables.
     """
 
@@ -182,7 +184,8 @@ class GaussianExecutable(Executable):
         Initialize GaussianExecutable instance.
 
         Args:
-            executable_folder (str, optional): Path to Gaussian executable directory.
+            executable_folder (str, optional):
+            Path to Gaussian executable directory.
             **kwargs: Additional arguments passed to parent Executable class.
         """
         super().__init__(executable_folder=executable_folder, **kwargs)
@@ -192,7 +195,8 @@ class GaussianExecutable(Executable):
         Get the full path to the Gaussian executable.
 
         Returns:
-            str or None: Full path to g16 executable if executable_folder is set,
+            str or None: Full path to g16
+            executable if executable_folder is set,
                         None otherwise.
         """
         if self.executable_folder is not None:
@@ -215,7 +219,8 @@ class ORCAExecutable(Executable):
         Initialize ORCAExecutable instance.
 
         Args:
-            executable_folder (str, optional): Path to ORCA executable directory.
+            executable_folder (str, optional):
+            Path to ORCA executable directory.
             **kwargs: Additional arguments passed to parent Executable class.
         """
         super().__init__(executable_folder=executable_folder, **kwargs)
@@ -225,7 +230,8 @@ class ORCAExecutable(Executable):
         Get the full path to the ORCA executable.
 
         Returns:
-            str or None: Full path to orca executable if executable_folder is set,
+            str or None: Full path to orca
+            executable if executable_folder is set,
                         None otherwise.
         """
         if self.executable_folder is not None:
@@ -248,7 +254,8 @@ class NCIPLOTExecutable(Executable):
         Initialize NCIPLOTExecutable instance.
 
         Args:
-            executable_folder (str, optional): Path to NCIPLOT executable directory.
+            executable_folder (str, optional):
+            Path to NCIPLOT executable directory.
             **kwargs: Additional arguments passed to parent Executable class.
         """
         super().__init__(executable_folder=executable_folder, **kwargs)
@@ -258,7 +265,8 @@ class NCIPLOTExecutable(Executable):
         Get the full path to the NCIPLOT executable.
 
         Returns:
-            str or None: Full path to nciplot executable if executable_folder is set,
+            str or None: Full path to nciplot
+            executable if executable_folder is set,
                         None otherwise.
         """
         if self.executable_folder is not None:

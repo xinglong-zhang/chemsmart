@@ -29,7 +29,8 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
         PROGRAM (str): Program identifier ('Thermochemistry').
         TYPE (str): Job type identifier ('boltzmann').
         files (list[str] | None): List of output files to analyze (.log/.out).
-        energy_type (str): Energy used for weighting ('gibbs', 'enthalpy', 'electronic').
+        energy_type (str): Energy used for weighting
+        ('gibbs', 'enthalpy', 'electronic').
         settings (ThermochemistryJobSettings): Thermochemistry configuration.
         label (str): Job identifier used for file naming.
         jobrunner (JobRunner): Execution backend that runs the job.

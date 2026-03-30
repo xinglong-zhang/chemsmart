@@ -159,7 +159,8 @@ class TestNCIPLOTInputWriter:
         assert lines[20] == "0.02 0.1\n"
         assert lines[21] == "ULTRAFINE\n"
 
-        # job run will result in the job being run and the output file copied back to run folder
+        # job run will result in the job being run and
+        # the output file copied back to run folder
         # job.run()
         # assert job.is_complete()
 
@@ -192,7 +193,8 @@ class TestNCIPLOTInputWriter:
             jobrunner=nciplot_jobrunner_scratch,
         )
 
-        # Simulate the runner's prerun which creates scratch dir and copies files
+        # Simulate the runner's prerun which
+        # creates scratch dir and copies files
         nciplot_jobrunner_scratch._prerun(job)
 
         # Now write the input file - this should not raise FileNotFoundError
@@ -233,7 +235,8 @@ class TestNCIPLOTPathHandling:
         """
         job_settings = NCIPLOTJobSettings()
 
-        # Create a source directory to simulate files being in a different location
+        # Create a source directory to simulate
+        # files being in a different location
         source_dir = os.path.join(tmpdir, "source")
         os.makedirs(source_dir)
 
@@ -273,7 +276,8 @@ class TestNCIPLOTPathHandling:
         )
         assert os.path.exists(nci_file)
 
-        # Check that the filename written is just the basename, not the full path
+        # Check that the filename written is
+        # just the basename, not the full path
         with open(nci_file, "r") as f:
             lines = f.readlines()
         assert lines[0] == "1\n"
@@ -297,7 +301,8 @@ class TestNCIPLOTPathHandling:
         os.makedirs(source_dir)
         source_log_file = os.path.join(source_dir, "test_calculation.log")
 
-        # Create a minimal fake log file (won't actually be converted in this test)
+        # Create a minimal fake log file (won't
+        # actually be converted in this test)
         with open(source_log_file, "w") as f:
             f.write("Fake log file content\n")
 
