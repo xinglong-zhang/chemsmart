@@ -50,9 +50,9 @@ class Molecule:
     translation_vectors: list of lists
         The translation vectors for the molecule.
     energy: float
-        The energy of the molecule in eV.
+        The energy of the molecule in Hartree.
     forces: numpy array
-        The forces on the atoms in the molecule in eV/Å.
+        The forces on the atoms in the molecule in Hartree/Bohr.
     velocities: numpy array
         The velocities of the atoms in the molecule.
     qm high/medium/low_level_atoms：list of integers to define QM/MM layers
@@ -193,7 +193,7 @@ class Molecule:
     @property
     def energy(self):
         """
-        Total molecular energy in eV.
+        Total molecular energy in Hartree.
         """
         return self._energy
 
@@ -1753,9 +1753,31 @@ class Molecule:
 
     def to_ase(self):
         """
-        Convert molecule object to ASE atoms object.
+        Convert molecule object to ASE atoms object, with
+        energy and forces in eV and eV per Angstrom, respectively.
         """
+        from ase import units
+
         from .atoms import AtomsChargeMultiplicity
+
+        logger.info("Converting molecule to ASE Atoms object.")
+
+        # convert energy and forces to ASE-compatible
+        # units if they are not None
+        energy = self.energy
+        if energy is not None:
+            logger.debug(f"Converting energy from {energy} Hartree to eV")
+            energy = energy * units.Hartree
+            logger.debug(f"Converted energy from Hartree to eV: {energy} eV")
+        forces = self.forces
+        if forces is not None:
+            logger.debug(
+                f"Converting forces from {forces} Hartree/Bohr to eV/Å."
+            )
+            forces = forces * units.Hartree / units.Bohr
+            logger.debug(
+                f"Converted forces from Hartree/Bohr to eV/Å: {forces} eV/Å."
+            )
 
         return AtomsChargeMultiplicity(
             symbols=self.chemical_symbols,
@@ -1765,8 +1787,8 @@ class Molecule:
             charge=self.charge,
             multiplicity=self.multiplicity,
             frozen_atoms=self.frozen_atoms,
-            energy=self.energy,
-            forces=self.forces,
+            energy=energy,
+            forces=forces,
             velocities=self.velocities,
             info=self.info,
         )
