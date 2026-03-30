@@ -129,8 +129,35 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 
         # TODO:
 
+    def test_coordinate_block_without_partitions_returns_molecule(self):
+        """Non-ONIOM coordinate block should return Molecule, not QMMMMolecule."""
+        normal_block = [
+            "C   0.000  0.000  0.000",
+            "H   1.089  0.000  0.000",
+            "H  -0.363  1.027  0.000",
+            "H  -0.363 -0.513  0.890",
+            "H  -0.363 -0.513 -0.890",
+        ]
+        cb = CoordinateBlock(coordinate_block=normal_block)
+        mol = cb.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "Molecule"
 
-class TestStructures:
+    def test_coordinate_block_with_partitions_returns_qmmm_molecule(self):
+        """ONIOM coordinate block should return QMMMMolecule."""
+        oniom_block = [
+            "C   0.000  0.000  0.000  H",
+            "H   1.089  0.000  0.000  L",
+            "H  -0.363  1.027  0.000  L",
+            "H  -0.363 -0.513  0.890  L",
+            "H  -0.363 -0.513 -0.890  L",
+        ]
+        cb = CoordinateBlock(coordinate_block=oniom_block)
+        mol = cb.molecule
+        assert isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "QMMMMolecule"
+
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):
@@ -1110,7 +1137,7 @@ class TestChemicalFeatures:
         """Test volume calculation for molecules.
 
         Tests various volume calculation methods:
-        - voronoi_dirichlet_occupied_volume (requires pyvoro, optional)
+        - voronoi_dirichlet_occupied_volume
         - crude_volume_by_vdw_radii
         - crude_volume_by_atomic_radii
         - vdw_volume
@@ -1119,16 +1146,11 @@ class TestChemicalFeatures:
         """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
 
-        # Test pyvoro-based method (optional,
-        # may not be available in Python 3.12+)
-        try:
-            ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
-            assert ozone_vd_vol > 0
-            assert np.isclose(ozone_vd_vol, 42.796979883456515, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+        assert ozone_vd_vol > 0
+        assert np.isclose(ozone_vd_vol, 42.7969798834565, rtol=0.01)
 
-        # Test other volume methods that don't require pyvoro
+        # Test other volume methods
         assert np.isclose(
             ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
         )
@@ -1151,13 +1173,9 @@ class TestChemicalFeatures:
 
         acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
 
-        # Test pyvoro-based method (optional)
-        try:
-            acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
-            assert acetone_vd_vol > 0
-            assert np.isclose(acetone_vd_vol, 108.73483002110545, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+        assert acetone_vd_vol > 0
+        assert np.isclose(acetone_vd_vol, 73.29919753367922, rtol=0.01)
 
         # Test other volume methods
         assert np.isclose(
