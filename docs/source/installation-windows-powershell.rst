@@ -94,8 +94,8 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
    in PATH, a message is logged — add conda to your PATH and re-run ``chemsmart config server``.
 
-#. **Outputs activation instructions** — at the end of ``make configure``, the Makefile prints a reminder to run
-   ``. $PROFILE`` so that ``chemsmart`` is immediately available in the current session.
+#. **Outputs activation instructions** — at the end of ``make configure``, the Makefile prints a reminder to run ``.
+   $PROFILE`` so that ``chemsmart`` is immediately available in the current session.
 
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** Anaconda
 PowerShell Prompt. To activate it in your **current** session without opening a new one, run:

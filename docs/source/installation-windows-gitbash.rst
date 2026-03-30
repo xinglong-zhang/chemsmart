@@ -92,8 +92,8 @@ What ``make configure`` does on Git Bash:
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
    in PATH, a message is logged — add conda to your PATH and re-run ``chemsmart config server``.
 
-#. **Automatically sources** ``~/.bashrc`` — after writing to ``~/.bashrc``, ``make configure`` automatically runs
-   ``. ~/.bashrc`` so that ``chemsmart`` is active for the rest of the current make session.
+#. **Automatically sources** ``~/.bashrc`` — after writing to ``~/.bashrc``, ``make configure`` automatically runs ``.
+   ~/.bashrc`` so that ``chemsmart`` is active for the rest of the current make session.
 
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** terminal. To
 activate it in your **current** Git Bash session without opening a new one, run:
