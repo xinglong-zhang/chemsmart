@@ -151,21 +151,21 @@ else
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
+	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder || true; \
 	if [ -n "$$gaussian_folder" ]; then \
 		$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "$$gaussian_folder"; \
 	else \
 		$(ECHO) "Skipping Gaussian configuration."; \
 	fi; \
-	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
+	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder || true; \
 	if [ -n "$$orca_folder" ]; then \
 		$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
 	else \
 		$(ECHO) "Skipping ORCA configuration."; \
 	fi; \
-	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder; \
+	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder || true; \
 	if [ -n "$$nciplot_folder" ]; then \
 		$(ECHO) "Configuring NCIPLOT with folder: $$nciplot_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config nciplot --folder "$$nciplot_folder"; \
@@ -177,16 +177,14 @@ else
 	@echo " Configuration complete!"
 	@echo " chemsmart paths have been written to your shell config."
 	@echo "==========================================================="
-	@SHELL_NAME=$$(basename "$${SHELL:-/bin/sh}" | sed 's/\.exe$$//'); \
-	case "$$SHELL_NAME" in \
-		zsh)  SHELL_RC="$${HOME}/.zshrc" ;; \
-		bash) SHELL_RC="$${HOME}/.bashrc" ;; \
-		*)    SHELL_RC="$${HOME}/.profile" ;; \
-	esac; \
-	. "$$SHELL_RC" 2>/dev/null || true; \
+	@for rc in "$${HOME}/.bashrc" "$${HOME}/.zshrc" "$${HOME}/.profile"; do \
+		if [ -f "$$rc" ]; then . "$$rc" 2>/dev/null || true; fi; \
+	done; \
 	echo "chemsmart is now active for the current make session."; \
-	echo "To activate chemsmart in your current terminal, run:"; \
-	echo "  source $$SHELL_RC"; \
+	echo "To activate chemsmart in your current terminal, run the command for your shell:"; \
+	if [ -f "$${HOME}/.bashrc" ]; then echo "  source ~/.bashrc  (bash / Git Bash)"; fi; \
+	if [ -f "$${HOME}/.zshrc" ]; then echo "  source ~/.zshrc   (zsh)"; fi; \
+	if [ -f "$${HOME}/.profile" ]; then echo "  source ~/.profile (sh / other)"; fi; \
 	echo "Or simply open a new terminal window."
 endif
 
