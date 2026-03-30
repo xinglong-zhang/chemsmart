@@ -177,11 +177,17 @@ else
 	@echo " Configuration complete!"
 	@echo " chemsmart paths have been written to your shell config."
 	@echo "==========================================================="
-	@. $${HOME}/.bashrc 2>/dev/null || . $${HOME}/.bash_profile 2>/dev/null || . $${HOME}/.profile 2>/dev/null || true
-	@echo "chemsmart is now active for the current make session."
-	@echo "To activate chemsmart in your current terminal, run:"
-	@echo "  source ~/.bashrc   (bash)  or  source ~/.zshrc   (zsh)"
-	@echo "Or simply open a new terminal window."
+	@SHELL_NAME=$$(basename "$${SHELL:-/bin/sh}" | sed 's/\.exe$$//'); \
+	case "$$SHELL_NAME" in \
+		zsh)  SHELL_RC="$${HOME}/.zshrc" ;; \
+		bash) SHELL_RC="$${HOME}/.bashrc" ;; \
+		*)    SHELL_RC="$${HOME}/.profile" ;; \
+	esac; \
+	. "$$SHELL_RC" 2>/dev/null || true; \
+	echo "chemsmart is now active for the current make session."; \
+	echo "To activate chemsmart in your current terminal, run:"; \
+	echo "  source $$SHELL_RC"; \
+	echo "Or simply open a new terminal window."
 endif
 
 .PHONY: show

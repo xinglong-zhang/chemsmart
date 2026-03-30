@@ -90,7 +90,8 @@ What ``make configure`` does on Linux and macOS:
    in PATH, a message is logged — add conda to your PATH and re-run ``chemsmart config server``.
 
 #. **Automatically sources your shell config** — after writing to ``~/.bashrc`` / ``~/.zshrc``, ``make configure``
-   automatically runs ``. ~/.bashrc`` so that ``chemsmart`` is active for the rest of the current make session.
+   automatically sources the correct file for your active shell (``~/.zshrc`` for zsh, ``~/.bashrc`` for bash,
+   ``~/.profile`` as fallback) so that ``chemsmart`` is active for the rest of the current make session.
 
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** terminal. To
 activate it in your **current** terminal without opening a new one, run:
