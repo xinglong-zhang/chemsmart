@@ -41,7 +41,8 @@ class GaussianCustomJob(GaussianJob):
 
         Args:
             molecule (Molecule): Molecular structure for calculation.
-            settings (GaussianJobSettings, optional): Calculation configuration.
+            settings (GaussianJobSettings,
+            optional): Calculation configuration.
             label (str, optional): Job identifier for file naming.
             jobrunner (JobRunner, optional): Job execution handler.
             **kwargs: Additional keyword arguments for parent class.

@@ -2,7 +2,8 @@
 
 Source data has been compiled by NIST:
 
-    https://www.nist.gov/pml/atomic-weights-and-isotopic-compositions-relative-atomic-masses
+    https://www.nist.gov/pml/
+    atomic-weights-and-isotopic-compositions-relative-atomic-masses
 
 The atomic weights data were published in:
 

@@ -1,8 +1,6 @@
 import re
 from functools import cached_property
 
-from ase import units
-
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.repattern import raw_energy_value_pattern
 from chemsmart.utils.utils import string2index_1based
@@ -122,9 +120,11 @@ class XYZFile(FileMixin):
             return_list (bool): Whether to return list format
 
         Returns:
-            Molecule or list: Single molecule or list of molecules with energies
+            Molecule or list: Single molecule
+            or list of molecules with energies
         """
-        # Ensure that when return_list=False, molecules is always treated as a list before iteration:
+        # Ensure that when return_list=False, molecules
+        # is always treated as a list before iteration:
         molecules, comments = self._get_molecules_and_comments(
             index=index, return_list=True
         )
@@ -133,13 +133,14 @@ class XYZFile(FileMixin):
         if len(comments) != 0:
             for i, comment in enumerate(comments):
                 # will extract the first float number in the line.
-                # example case 1: "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
-                # energy will be -25900.214629 in Hartree, which we convert to eV.
+                # example case 1: "Empirical formula:
+                # C191H241Cu2N59O96P14 Energy(Hartree): -25900.214629"
+                # energy will be -25900.214629.
                 match = re.findall(raw_energy_value_pattern, comment)
                 if match:
-                    molecules[i].energy = float(match[0]) * units.Hartree
-                    # Assign energy to the only or the first negative float number
-                    # Convert from Hartree to eV for consistency with Molecule class
+                    molecules[i].energy = float(match[0])
+                    # Assign energy to the only or
+                    # the first negative float number
                 else:
                     # No energy found, skip
                     continue

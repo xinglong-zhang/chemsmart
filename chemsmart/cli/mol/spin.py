@@ -36,7 +36,8 @@ def spin(
     skip_completed,
     **kwargs,
 ):
-    """CLI subcommand for generating spin density visualization and save as PSE file.
+    """CLI subcommand for generating spin
+    density visualization and save as PSE file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.log spin
     This visualizes phenyldioxazolone.log file and saves as

@@ -48,7 +48,8 @@ def is_collinear(coords, tol=1e-5):
 
 # def calculate_moments_of_inertia(mass, coords):
 #     """Calculate the principal moments of inertia from mass and coordinates.
-#     Mass parameter is a list of atomic masses corresponding to each coordinate in coords."""
+# Mass parameter is a list of atomic masses
+# corresponding to each coordinate in coords."""
 #     # Convert inputs to numpy arrays
 #     mass = np.array(mass)
 #     coords = np.array(coords)
@@ -76,40 +77,48 @@ def is_collinear(coords, tol=1e-5):
 #     moi_tensor[2, 1] = moi_tensor[1, 2]
 #
 #     # Step 3: Compute principal moments of inertia (eigenvalues)
-#     moments_of_inertia_principal_axes = np.linalg.eigvalsh(moi_tensor)  # Sorted eigenvalues
+# moments_of_inertia_principal_axes =
+# np.linalg.eigvalsh(moi_tensor) # Sorted eigenvalues
 #
 #     return moments_of_inertia_principal_axes, moi_tensor
 
 # def calculate_moments_of_inertia(mass, coords):
-#     """Calculate the moment of inertia tensor and principal moments of inertia.
+# """Calculate the moment of inertia
+# tensor and principal moments of inertia.
 #
 #     Parameters:
-#     - mass (list or np.array): Atomic masses corresponding to each coordinate.
+# - mass (list or np.array): Atomic
+# masses corresponding to each coordinate.
 #     - coords (list or np.array): Nx3 array of atomic coordinates.
 #
 #     Returns:
-#     - moments_of_inertia_principal_axes (np.array): Sorted eigenvalues of moi_tensor.
+# - moments_of_inertia_principal_axes
+# (np.array): Sorted eigenvalues of moi_tensor.
 #     - moi_tensor (np.array): 3x3 moment of inertia tensor.
 #     """
 #     # Convert inputs to NumPy arrays
-#     mass = np.array(mass).reshape(-1, 1)  # Ensure column vector for broadcasting
+# mass = np.array(mass).reshape(-1, 1) #
+# Ensure column vector for broadcasting
 #     coords = np.array(coords)
 #
 #     # Compute center of mass (COM)
 #     center_of_mass = np.average(coords, axis=0, weights=mass.flatten())
-#     shifted_coords = coords - center_of_mass  # Shift coordinates to COM frame
+# shifted_coords = coords - center_of_mass
+# # Shift coordinates to COM frame
 #
 #     # Compute squared distances (x², y², z²)
 #     r2 = np.sum(shifted_coords ** 2, axis=1, keepdims=True)  # Shape (N,1)
 #
 #     # Compute moment of inertia tensor using vectorized operations
-#     moi_tensor = np.diag(np.sum(mass * (r2 - shifted_coords ** 2), axis=0)) - \
+# moi_tensor = np.diag(np.sum(mass * (r2
+# - shifted_coords ** 2), axis=0)) - \
 #                  (mass * shifted_coords).T @ shifted_coords
 #
 #     print(f'moi_tensor: {moi_tensor}')
 #
 #     evals, evecs = np.linalg.eigh(moi_tensor)  # Eigenvalues and eigenvectors
-#     # Instead of returning evecs.T as in ASE, we return evecs directly, as in Gaussian
+# # Instead of returning evecs.T as in ASE,
+# we return evecs directly, as in Gaussian
 #     return moi_tensor, evals, evecs
 
 
@@ -174,31 +183,33 @@ def calculate_moments_of_inertia(mass, coords):
     return moi_tensor, evals, evecs.transpose()
 
 
-def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion):
+def calculate_voronoi_dirichlet_occupied_volume(
+    coords, radii, dispersion=None
+):
     """
     Estimate the occupied volume of a molecule using Voronoi-Dirichlet method,
     scaled by atomic radii to ensure a physically reasonable result.
 
+    Uses scipy for Voronoi tessellation. Mirror images of all atoms are added
+    across the faces, edges, and corners of the bounding box to ensure all
+    Voronoi cells are bounded. For each atom, the occupied contribution is the
+    minimum of its atomic sphere volume and its Voronoi cell volume.
+
     Parameters:
     - coords (list or np.array): Nx3 array of atomic coordinates.
     - radii (list or np.array): Atomic radii corresponding to each coordinate.
-    - dispersion (float): Size of blocks for the Voronoi grid (used by pyvoro).
+    - dispersion (float, optional): Padding extent used to construct the
+      bounding box for Voronoi tessellation. When provided, this sets how far
+      the mirrored bounding box extends beyond the molecule; when omitted or
+      None, the maximum atomic radius is used as the padding. Larger values
+      produce bigger cells for edge atoms, which can reduce their contribution.
 
     Returns:
     - occupied_volume (float): Estimated physically occupied volume.
-
-    Raises:
-    - ImportError: If pyvoro is not installed. Install with: pip install pyvoro
-        Note: pyvoro requires Python < 3.12
+      Atoms whose Voronoi cells remain unbounded after mirroring are excluded
+      from the sum; in practice this should not occur for typical molecules.
     """
-    try:
-        import pyvoro
-    except ImportError:
-        raise ImportError(
-            "pyvoro is required for Voronoi-Dirichlet volume calculation. "
-            "Install with: pip install chemsmart[voronoi]. "
-            "Note: pyvoro requires Python < 3.12."
-        )
+    from scipy.spatial import ConvexHull, Voronoi
 
     coords = np.array(coords)
     radii = np.array(radii)
@@ -208,25 +219,54 @@ def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion):
     if coords.shape[1] != 3:
         raise ValueError("Coordinates must be 3D (Nx3 array).")
 
-    padding = np.max(radii)
+    # Use dispersion as bounding box padding when provided; fall back to the
+    # maximum atomic radius for a tight, physically meaningful box
+    padding = dispersion if dispersion is not None else np.max(radii)
     box_min = np.min(coords, axis=0) - padding
     box_max = np.max(coords, axis=0) + padding
-    limits = [[box_min[i], box_max[i]] for i in range(3)]
+
+    # Add mirror images of all atoms across each face, edge, and corner of the
+    # bounding box to ensure all Voronoi cells are bounded within the box
+    all_coords = [coords]
+    for di in [-1, 0, 1]:
+        for dj in [-1, 0, 1]:
+            for dk in [-1, 0, 1]:
+                if di == 0 and dj == 0 and dk == 0:
+                    continue
+                mirror = coords.copy()
+                for axis, (offset, box_lo, box_hi) in enumerate(
+                    zip([di, dj, dk], box_min, box_max)
+                ):
+                    if offset == -1:
+                        mirror[:, axis] = 2 * box_lo - mirror[:, axis]
+                    elif offset == 1:
+                        mirror[:, axis] = 2 * box_hi - mirror[:, axis]
+                all_coords.append(mirror)
+
+    all_points = np.vstack(all_coords)
 
     try:
-        cells = pyvoro.compute_voronoi(
-            points=coords,
-            limits=limits,
-            dispersion=dispersion,
-            radii=radii,
-            periodic=[False, False, False],
-        )
+        vor = Voronoi(all_points)
     except Exception as e:
         raise RuntimeError(f"Voronoi-Dirichlet tessellation failed: {e}")
 
+    n = len(coords)
     occupied_volume = 0.0
-    for i, cell in enumerate(cells):
-        cell_volume = cell["volume"]
+    for i in range(n):
+        region_idx = vor.point_region[i]
+        region = vor.regions[region_idx]
+
+        # Skip atoms whose cell is still open (contains vertex at infinity)
+        if -1 in region or not region:
+            continue
+
+        vertices = vor.vertices[region]
+        try:
+            hull = ConvexHull(vertices)
+            cell_volume = hull.volume
+        except Exception:
+            continue
+
         atomic_volume = (4 / 3) * np.pi * radii[i] ** 3
 
         # We cannot occupy more than the atomic volume
@@ -328,7 +368,8 @@ def calculate_crude_occupied_volume(coords, radii):
 
     Returns:
     - occupied_volume (float): Total occupied volume of the molecule.
-    Ignores overlaps between atoms and gives an upper bound to true occupied volumes.
+    Ignores overlaps between atoms and gives
+    an upper bound to true occupied volumes.
     """
     coords = np.array(coords)
     radii = np.array(radii)
@@ -350,7 +391,8 @@ def calculate_vdw_volume(coords, radii):
     is computed using the exact lens-shaped intersection formula derived from
     spherical cap volumes:
 
-        V_overlap = π(r_i + r_j - d)² × [d² + 2d(r_i + r_j) - 3(r_i - r_j)²] / (12d)
+        V_overlap = π(r_i + r_j - d)² × [d² +
+        2d(r_i + r_j) - 3(r_i - r_j)²] / (12d)
 
     Parameters
     ----------
@@ -413,8 +455,10 @@ def calculate_vdw_volume(coords, radii):
                     # Smaller sphere is completely inside the larger
                     overlap = (4 / 3) * math.pi * min(r_i, r_j) ** 3
                 else:
-                    # Partial overlap: use exact lens-shaped intersection formula
-                    # V = π(r_i + r_j - d)² × [d² + 2d(r_i + r_j) - 3(r_i - r_j)²] / (12d)
+                    # Partial overlap: use exact
+                    # lens-shaped intersection formula
+                    # V = π(r_i + r_j - d)² × [d² + 2d(r_i
+                    # + r_j) - 3(r_i - r_j)²] / (12d)
                     overlap = (
                         math.pi
                         * (sum_radii - d) ** 2
@@ -434,7 +478,8 @@ def calculate_grid_vdw_volume(coords, radii, grid_spacing=0.2):
     all orders of atomic overlaps (pairwise, triple, etc.) and provides
     more accurate volume estimates for complex molecules.
 
-    This implementation is similar in concept to RDKit's DoubleCubicLatticeVolume
+    This implementation is similar in concept
+    to RDKit's DoubleCubicLatticeVolume
     algorithm, which also uses grid-based integration for molecular volume
     calculation.
 

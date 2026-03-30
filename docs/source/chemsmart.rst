@@ -10,6 +10,7 @@
    :maxdepth: 4
 
    chemsmart.cli
+   chemsmart.jobs
    chemsmart.settings
 
 *****************

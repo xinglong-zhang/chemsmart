@@ -2,17 +2,19 @@ import os.path
 from shutil import copy, copytree, rmtree
 
 import numpy as np
-from ase import units
 
 from chemsmart.io.converter import FileConverter
-from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
+from chemsmart.io.gaussian.folder import (
+    GaussianInputFolder,
+    GaussianOutputFolder,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xyz.folder import XYZFolder
 
 
 class TestConverter:
 
-    def test_convert_log_foler_to_xyz(
+    def test_convert_log_folder_to_xyz(
         self, tmpdir, gaussian_outputs_test_directory
     ):
         # copy whole directory gaussian_outputs_test_directory to tmpdir
@@ -34,8 +36,8 @@ class TestConverter:
         file_converter.convert_files()
 
         # check if the files are converted
-        g16_folder = GaussianLogFolder(folder=tmp_log_folder)
-        all_logfiles = g16_folder.all_logfiles
+        g16_folder = GaussianOutputFolder(folder=tmp_log_folder)
+        all_logfiles = g16_folder.all_log_files
 
         # check all .log files have been converted to .xyz files
         for file in all_logfiles:
@@ -49,7 +51,7 @@ class TestConverter:
             assert len(lines) == 5  # 5 lines in the log file
             assert lines[0] == "3\n"  # first line is number of atoms
 
-    def test_convert_log_foler_to_com(
+    def test_convert_log_folder_to_com(
         self, tmpdir, gaussian_outputs_test_directory
     ):
         # copy whole directory gaussian_outputs_test_directory to tmpdir
@@ -72,8 +74,8 @@ class TestConverter:
         file_converter.convert_files()
 
         # check all .log files have been converted to .com files
-        g16_folder = GaussianLogFolder(folder=tmp_log_folder)
-        all_logfiles = g16_folder.all_logfiles
+        g16_folder = GaussianOutputFolder(folder=tmp_log_folder)
+        all_logfiles = g16_folder.all_log_files
         for file in all_logfiles:
             assert os.path.exists(file.replace(".log", ".com"))
 
@@ -84,7 +86,7 @@ class TestConverter:
             assert len(lines) == 12
             assert lines[5].startswith("Generated from")
 
-    def test_convert_com_foler_to_xyz(
+    def test_convert_com_folder_to_xyz(
         self, tmpdir, gaussian_inputs_test_directory
     ):
         # copy whole directory gaussian_pbc_inputs_test_directory to tmpdir
@@ -97,7 +99,7 @@ class TestConverter:
         file_converter.convert_files()
 
         # check all .com files have been converted to .xyz files
-        g16_folder = GaussianComFolder(folder=tmp_com_folder)
+        g16_folder = GaussianInputFolder(folder=tmp_com_folder)
         all_comfiles = g16_folder.all_com_files
         for file in all_comfiles:
             assert os.path.exists(file.replace(".com", ".xyz"))
@@ -199,7 +201,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 603
         assert mol.chemical_formula == "C191H241Cu2N59O96P14"
-        assert mol.energy == -25900.214629 * units.Hartree
+        assert mol.energy == -25900.214629
 
     def test_convert_single_link_opt_logfile_to_xyz(
         self,
@@ -229,7 +231,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 55
         assert mol.chemical_formula == "C26H24Cl2FeP2"
-        assert mol.energy == -3869.013518 * units.Hartree
+        assert mol.energy == -3869.013518
 
         tmp_path_error_termination = os.path.join(
             tmpdir,
@@ -254,7 +256,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 72
         assert mol.chemical_formula == "C34H29Cl2FeNO3P2"
-        assert mol.energy == -4456.134472 * units.Hartree
+        assert mol.energy == -4456.134472
 
     def test_convert_single_link_ts_logfile_to_xyz(
         self, tmpdir, gaussian_link_ts_outputfile
@@ -278,13 +280,13 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 2
         assert mol.chemical_formula == "O2"
-        assert mol.energy == -150.116584 * units.Hartree
+        assert mol.energy == -150.116584
 
     def test_convert_single_link_logfile_to_xyz(
         self, tmpdir, gaussian_link_sp_outfile
     ):
         # copy file to tmpdir
-        tmp_path = os.path.join(tmpdir, "dna_link_sp.log")
+        tmp_path = os.path.join(tmpdir, "intervening_n_Ap_A.log")
         copy(gaussian_link_sp_outfile, tmp_path)
         assert os.path.exists(tmp_path)
         file_converter = FileConverter(
@@ -298,7 +300,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 603
         assert mol.chemical_formula == "C191H241Cu2N59O96P14"
-        assert mol.energy == -25900.214629 * units.Hartree
+        assert mol.energy == -25900.214629
 
     def test_convert_single_comfile_to_xyz(
         self, tmpdir, gaussian_opt_inputfile
@@ -343,7 +345,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 12
         assert mol.chemical_formula == "C6H6"
-        assert mol.energy == -231.977725 * units.Hartree
+        assert mol.energy == -231.977725
 
     def test_convert_single_opt_log_file_to_xyz(
         self, gaussian_acetone_opt_outfile, tmpdir
@@ -363,7 +365,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 10
         assert mol.chemical_formula == "C3H6O"
-        assert mol.energy == -192.919416 * units.Hartree
+        assert mol.energy == -192.919416
 
     def test_convert_single_wbi_log_file_to_xyz(self, wbi_outputfile, tmpdir):
         # copy file to tmpdir
@@ -381,7 +383,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 128
         assert mol.chemical_formula == "C51H63NNiO9P2Si"
-        assert mol.energy == -5189.249707 * units.Hartree
+        assert mol.energy == -5189.249707
 
     def test_convert_single_failed_modred_log_file_to_xyz(
         self, gaussian_failed_modred_outfile, tmpdir
@@ -401,7 +403,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 10
         assert mol.chemical_formula == "C3H4O3"
-        assert mol.energy == -341.883317 * units.Hartree
+        assert mol.energy == -341.883317
 
     def test_convert_single_failed_oniom_log_file_to_xyz(
         self, gaussian_oniom_outputfile, tmpdir
@@ -421,4 +423,132 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 483
         assert mol.chemical_formula == "C155H180CuN53O82P12"
-        assert mol.energy == -5300.535128 * units.Hartree
+        assert mol.energy == -5300.535128
+
+    # ------------------------------------------------------------------
+    # CDXML / CDX conversion tests
+    # ------------------------------------------------------------------
+
+    def test_convert_single_cdxml_to_xyz(
+        self, tmpdir, single_molecule_cdxml_file_methane
+    ):
+        tmp_path = os.path.join(tmpdir, "methane.cdxml")
+        copy(single_molecule_cdxml_file_methane, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="xyz").convert_files()
+
+        output = tmp_path.replace(".cdxml", ".xyz")
+        assert os.path.exists(output)
+        mol = Molecule.from_filepath(output)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 5
+        assert mol.chemical_formula == "CH4"
+
+    def test_convert_single_cdxml_to_com(
+        self, tmpdir, single_molecule_cdxml_file_benzene
+    ):
+        tmp_path = os.path.join(tmpdir, "benzene.cdxml")
+        copy(single_molecule_cdxml_file_benzene, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="com").convert_files()
+
+        output = tmp_path.replace(".cdxml", ".com")
+        assert os.path.exists(output)
+        mol = Molecule.from_filepath(output)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 12
+        assert mol.chemical_formula == "C6H6"
+
+    def test_convert_single_cdx_to_xyz(
+        self, tmpdir, single_molecule_cdx_file_imidazole
+    ):
+        tmp_path = os.path.join(tmpdir, "imidazole.cdx")
+        copy(single_molecule_cdx_file_imidazole, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="xyz").convert_files()
+
+        output = tmp_path.replace(".cdx", ".xyz")
+        assert os.path.exists(output)
+        mol = Molecule.from_filepath(output)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 21
+        assert mol.chemical_formula == "C8H10N2O"
+
+    def test_convert_multi_molecule_cdxml_to_xyz_splits_files(
+        self, tmpdir, multi_molecule_cdxml_file
+    ):
+        # Multi-molecule cdxml should produce basename_1.xyz, basename_2.xyz
+        tmp_path = os.path.join(tmpdir, "two_molecules.cdxml")
+        copy(multi_molecule_cdxml_file, tmp_path)
+
+        FileConverter(filename=tmp_path, output_filetype="xyz").convert_files()
+
+        output_1 = os.path.join(tmpdir, "two_molecules_1.xyz")
+        output_2 = os.path.join(tmpdir, "two_molecules_2.xyz")
+        assert os.path.exists(output_1)
+        assert os.path.exists(output_2)
+
+        mol1 = Molecule.from_filepath(output_1)
+        assert isinstance(mol1, Molecule)
+        assert mol1.chemical_formula == "CH2O"
+
+        mol2 = Molecule.from_filepath(output_2)
+        assert isinstance(mol2, Molecule)
+        assert mol2.chemical_formula == "N2"
+        assert mol2.num_atoms == 2
+
+    def test_convert_cdxml_folder_to_xyz(self, tmpdir, chemdraw_directory):
+        from shutil import copytree
+
+        tmp_cdxml_folder = os.path.join(tmpdir, "chemdraw")
+        copytree(chemdraw_directory, tmp_cdxml_folder)
+
+        FileConverter(
+            directory=tmp_cdxml_folder, type="cdxml", output_filetype="xyz"
+        ).convert_files()
+
+        # Single-molecule cdxml files produce basename.xyz
+        for fname in (
+            "benzene.cdxml",
+            "methane.cdxml",
+            "complex_molecule.cdxml",
+        ):
+            assert os.path.exists(
+                os.path.join(tmp_cdxml_folder, fname.replace(".cdxml", ".xyz"))
+            )
+
+        # two_molecules.cdxml contains 2 molecules → split into _1.xyz and _2.xyz
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_1.xyz")
+        )
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_2.xyz")
+        )
+
+    def test_convert_cdxml_folder_to_com(self, tmpdir, chemdraw_directory):
+        from shutil import copytree
+
+        tmp_cdxml_folder = os.path.join(tmpdir, "chemdraw")
+        copytree(chemdraw_directory, tmp_cdxml_folder)
+
+        FileConverter(
+            directory=tmp_cdxml_folder, type="cdxml", output_filetype="com"
+        ).convert_files()
+
+        # Single-molecule cdxml files produce basename.com
+        for fname in (
+            "benzene.cdxml",
+            "methane.cdxml",
+            "complex_molecule.cdxml",
+        ):
+            assert os.path.exists(
+                os.path.join(tmp_cdxml_folder, fname.replace(".cdxml", ".com"))
+            )
+
+        # two_molecules.cdxml contains 2 molecules → split into _1.com and _2.com
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_1.com")
+        )
+        assert os.path.exists(
+            os.path.join(tmp_cdxml_folder, "two_molecules_2.com")
+        )

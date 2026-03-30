@@ -12,15 +12,17 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.orca.orca import orca
-from chemsmart.utils.cli import MyCommand
+from chemsmart.cli.orca.orca import click_orca_solvent_options, orca
+from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("opt", cls=MyCommand)
+@orca.group("opt", cls=MyGroup, invoke_without_command=True)
 @click_job_options
+@click_orca_solvent_options
 @click.option(
     "-f",
     "--freeze-atoms",
@@ -36,7 +38,18 @@ logger = logging.getLogger(__name__)
     help="Invert the constraints for frozen atoms in optimization.",
 )
 @click.pass_context
-def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
+def opt(
+    ctx,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
+    solventfilename,
+    freeze_atoms,
+    invert_constraints,
+    skip_completed,
+    **kwargs,
+):
     """
     Run ORCA geometry optimization calculations.
 
@@ -63,9 +76,29 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
     # merge project opt settings with job settings from cli keywords
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
     opt_settings.invert_constraints = invert_constraints
+
+    # cli-supplied solvent model, solvent id, and additional solvent options
+    opt_settings.modify_solvent(
+        remove_solvent=remove_solvent,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
+    )
+    if solvent_options is not None:
+        opt_settings.additional_solvent_options = solvent_options
+    if solventfilename is not None:
+        opt_settings.solventfilename = solventfilename
+
     logger.info(f"Final optimization settings: {opt_settings.__dict__}")
 
-    # validate charge and multiplicity consistency
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = opt_settings
+    ctx.obj["parent_jobtype"] = "opt"
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # validate charge and multiplicity consistency only for direct opt jobs
     check_charge_and_multiplicity(opt_settings)
 
     # get molecules from context
@@ -140,3 +173,6 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
         )
         logger.debug(f"Created ORCA optimization job: {job}")
         return job
+
+
+create_orca_qmmm_subcommand(opt)

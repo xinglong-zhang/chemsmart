@@ -48,6 +48,36 @@ Constrained optimization with frozen atoms:
    # Freeze atoms 1, 2, 3, 5, and 7
    chemsmart sub gaussian -p project -f input.com opt -f 1-3,5,7
 
+Solvated Optimization
+=====================
+
+Solvent options are specified at the Gaussian group level (before the ``opt`` subcommand) and apply to all job types.
+See :ref:`Solvent Options <gaussian-cli-options:Solvent Options>` for the full option reference.
+
+Gas phase optimization (project default, no solvent):
+
+.. code:: bash
+
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -a no_solv opt
+
+Add SMD solvation for a single run without modifying the project settings:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -a solv opt
+
+With an additional SCRF option (e.g. iterative solver):
+
+.. code:: bash
+
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -so iterative -a solv opt
+
+Remove solvent when the project settings already specify one:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p solv_project -f molecule.xyz -c 0 -m 1 --remove-solvent -a gas opt
+
 Examples
 ========
 

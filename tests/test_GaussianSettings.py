@@ -1,5 +1,11 @@
+import pytest
+
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
+from chemsmart.jobs.gaussian.settings import (
+    GaussianJobSettings,
+    GaussianQMMMJobSettings,
+)
 from chemsmart.jobs.settings import read_molecular_job_yaml
 
 
@@ -111,6 +117,284 @@ class TestGaussianJobSettings:
         assert settings.solvent_id is None
 
 
+class TestGaussianQMMMJobSettings:
+    def test_qmmm_settings(self):
+        settings1 = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+            freq=True,
+        )
+        assert settings1.route_string == "# opt freq oniom(b3lyp/6-31g(d):uff)"
+
+        settings2 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="sp",
+        )
+        assert (
+            settings2.route_string
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff)"
+        )
+
+        settings3 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            high_level_force_field="uff",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="sp",
+        )
+        # assert settings3.route_string == "#
+        # oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
+        # ValueError: For high level of theory, one should
+        # specify only functional/basis or force field!
+        with pytest.raises(ValueError):
+            settings3.route_string
+
+        # settings with solvent specification
+        settings4 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            solvent_model="smd",
+            solvent_id="toluene",
+            parent_jobtype="sp",
+        )
+        assert (
+            settings4.route_string
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for opt job
+        settings5 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+            freq=True,
+            solvent_model="smd",
+            solvent_id="toluene",
+        )
+        assert (
+            settings5.route_string
+            == "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for ts job
+        settings5 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            freq=True,
+            solvent_model="smd",
+            solvent_id="toluene",
+        )
+        assert (
+            settings5.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for ts job
+        settings6 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            freq=False,
+            numfreq=True,
+            solvent_model="smd",
+            solvent_id="toluene",
+        )
+        assert (
+            settings6.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+    def test_qmmm_settings_for_atoms(
+        self,
+        gaussian_inputs_test_directory,
+        gaussian_semiempirical_pm6_output_file,
+    ):
+        mol1 = QMMMMolecule(
+            molecule=Molecule.from_filepath(
+                gaussian_semiempirical_pm6_output_file
+            )
+        )
+
+        settings1 = QMMMMolecule(
+            symbols=mol1.symbols,
+            positions=mol1.positions,
+            high_level_atoms=[1, 2, 3, 8, 9, 10],
+            bonded_atoms=[[1, 2], [2, 3], [8, 9], [9, 10]],
+        )
+        assert settings1.high_level_atoms == [1, 2, 3, 8, 9, 10]
+        assert settings1.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
+
+        # Test for 3-layer ONIOM calculation with example
+        # input dppeFeCl2_phenyldioxazolone_qmmm.com
+        # mol2 = QMMM(molecule=Molecule._read_gaussian_inputfile(
+        #     os.path.join(
+        #         gaussian_inputs_test_directory,
+        #         "qmmm/dppeFeCl2_phenyldioxazolone_qmmm.com",
+        #     ),
+        # ))
+        # settings2 = QMMM(
+        #     symbols=mol2.symbols,
+        #     positions=mol2.positions,
+        #     high_level_atoms="[18-28,29-39,40-50,51-61,62-72]",
+        #     medium_level_atoms=[1, 2, 3, 16],
+        #     bonded_atoms=[[2, 18], [2, 29], [1, 40], [1, 51], [16, 62]],
+        # )
+        # assert settings2.high_level_atoms == list(range(18, 29)) + list(
+        #     range(29, 40)
+        # ) + list(range(40, 51)) + list(range(51, 62)) + list(range(62, 73))
+        # assert settings2.medium_level_atoms == [1, 2, 3, 16]
+        # assert settings2.low_level_atoms == list(range(4, 16)) + [17]
+
+    def test_qmmm_settings_for_charge_and_multiplicity(self):
+        # test cases for 3-layer ONIOM model
+        settings1 = GaussianQMMMJobSettings(
+            jobtype="opt",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        assert (
+            settings1.charge_and_multiplicity_string
+            == "0 1 0 1 0 1 0 1 0 1 0 1"
+        )
+
+        settings2 = GaussianQMMMJobSettings(
+            jobtype="sp",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            int_charge=1,
+            int_multiplicity=3,
+        )
+        assert (
+            settings2.charge_and_multiplicity_string
+            == "0 1 1 3 1 3 1 3 1 3 1 3"
+        )
+
+        settings3 = GaussianQMMMJobSettings(
+            jobtype="ts",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            int_charge=-1,
+            int_multiplicity=2,
+            model_charge=0,
+            model_multiplicity=1,
+        )
+        assert (
+            settings3.charge_and_multiplicity_string
+            == "0 1 -1 2 -1 2 0 1 0 1 0 1"
+        )
+
+        # test cases for 2-layer ONIOM model
+
+        settings4 = GaussianQMMMJobSettings(
+            jobtype="opt",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        assert settings4.charge_and_multiplicity_string == "0 1 0 1 0 1"
+
+        settings5 = GaussianQMMMJobSettings(
+            jobtype="sp",
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            real_charge=0,
+            real_multiplicity=1,
+            model_charge=-1,
+            model_multiplicity=2,
+        )
+        assert settings5.charge_and_multiplicity_string == "0 1 -1 2 -1 2"
+
+
 class TestGaussianRoute:
     gas_route = "opt=(ts,calcfc,noeigentest) freq m062x def2svp"
     gas_route2 = "opt b3lyp 6-31G(d) empiricaldispersion=gd3bj"
@@ -120,7 +404,7 @@ class TestGaussianRoute:
     def test_settings_from_route(self):
         route_object1 = GaussianRoute(route_string=self.gas_route)
         assert isinstance(route_object1, object)
-        assert route_object1.job_type == "ts"
+        assert route_object1.jobtype == "ts"
         assert route_object1.freq is True
         assert route_object1.functional == "m062x"
         assert route_object1.basis == "def2svp"
@@ -130,7 +414,7 @@ class TestGaussianRoute:
     def test_settings_from_route2(self):
         route_object2 = GaussianRoute(route_string=self.gas_route2)
         assert isinstance(route_object2, object)
-        assert route_object2.job_type == "opt"
+        assert route_object2.jobtype == "opt"
         assert route_object2.freq is False
         assert route_object2.functional == "b3lyp empiricaldispersion=gd3bj"
         assert route_object2.basis == "6-31G(d)".lower()
@@ -140,7 +424,7 @@ class TestGaussianRoute:
     def test_settings_from_route3(self):
         route_object3 = GaussianRoute(route_string=self.solv_route)
         assert isinstance(route_object3, object)
-        assert route_object3.job_type == "sp"
+        assert route_object3.jobtype == "sp"
         assert route_object3.freq is False
         assert route_object3.functional == "mn15"
         assert route_object3.basis == "def2svp"
@@ -150,7 +434,7 @@ class TestGaussianRoute:
     def test_settings_from_route4(self):
         route_object4 = GaussianRoute(route_string=self.solv_route2)
         assert isinstance(route_object4, object)
-        assert route_object4.job_type == "ts"
+        assert route_object4.jobtype == "ts"
         assert route_object4.freq is True
         assert route_object4.functional == "m06"
         assert route_object4.basis == "def2svp"
@@ -162,7 +446,7 @@ class TestGaussianJobFromComFile:
     def test_reads_com_file(self, gaussian_opt_inputfile):
         com_settings = GaussianJobSettings.from_comfile(gaussian_opt_inputfile)
         assert com_settings.chk is True
-        assert com_settings.job_type == "opt"
+        assert com_settings.jobtype == "opt"
         assert com_settings.freq is True
         assert com_settings.functional == "m062x"
         assert com_settings.basis == "def2svp"
@@ -196,6 +480,124 @@ class TestGaussianJobFromComFile:
         assert com_settings.solvent_model is None
         assert com_settings.solvent_id is None
 
+    def test_cli_group_solvent_options_propagate_to_opt(
+        self, gaussian_yaml_settings_gas_solv_project_name
+    ):
+        """Solvent options given at the gaussian group level propagate to opt settings.
+
+        This simulates: ``gaussian -sm smd -si water -so iterative opt``
+        where the solvent options live on the *group* command and are merged
+        into the subcommand settings via :meth:`GaussianJobSettings.merge`.
+        """
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        opt_settings = project_settings.opt_settings()
+        # Project has no solvent for the gas/opt path
+        assert opt_settings.solvent_model is None
+        assert opt_settings.solvent_id is None
+
+        # Simulate what the gaussian group CLI callback does when
+        # -sm smd -si water -so iterative are supplied
+        job_settings = GaussianJobSettings.default()
+        job_settings.solvent_model = "smd"
+        job_settings.solvent_id = "water"
+        job_settings.additional_solvent_options = "iterative"
+        keywords = (
+            "charge",
+            "multiplicity",
+            "solvent_model",
+            "solvent_id",
+            "additional_solvent_options",
+        )
+
+        # Simulate what the opt subcommand does
+        opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+
+        assert opt_settings.solvent_model == "smd"
+        assert opt_settings.solvent_id == "water"
+        assert opt_settings.additional_solvent_options == "iterative"
+        assert (
+            "scrf=(smd,solvent=water,iterative)" in opt_settings.route_string
+        )
+
+    def test_cli_group_solvent_options_propagate_to_td(self):
+        """Solvent options given at the gaussian group level propagate to td settings.
+
+        This simulates: ``gaussian -sm smd -si water -so iterative td``
+        """
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        base_settings = GaussianJobSettings.default()
+        base_settings.functional = "cam-b3lyp"
+        base_settings.basis = "def2svp"
+
+        # Simulate what the gaussian group CLI callback does
+        job_settings = GaussianJobSettings.default()
+        job_settings.solvent_model = "smd"
+        job_settings.solvent_id = "water"
+        job_settings.additional_solvent_options = "iterative"
+        keywords = (
+            "charge",
+            "multiplicity",
+            "solvent_model",
+            "solvent_id",
+            "additional_solvent_options",
+        )
+
+        # Simulate what the td subcommand does
+        td_settings = base_settings.merge(job_settings, keywords=keywords)
+        td_settings = GaussianTDDFTJobSettings(**td_settings.__dict__)
+        td_settings.states = "singlets"
+        td_settings.root = 1
+        td_settings.nstates = 3
+
+        assert td_settings.solvent_model == "smd"
+        assert td_settings.solvent_id == "water"
+        assert td_settings.additional_solvent_options == "iterative"
+        assert "scrf=(smd,solvent=water,iterative)" in td_settings.route_string
+        assert "TD(" in td_settings.route_string
+
+    def test_cli_group_remove_solvent_overrides_project_settings(
+        self, gaussian_yaml_settings_gas_solv_project_name
+    ):
+        """``--remove-solvent`` at the gaussian group level clears project solvent.
+
+        This simulates: ``gaussian --remove-solvent sp`` when the project's
+        solvent-phase sp settings carry a solvent model.
+        """
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        sp_settings = project_settings.sp_settings()
+        # Project has solvent for the sp (solv) path
+        assert sp_settings.solvent_model == "smd"
+        assert sp_settings.solvent_id == "toluene"
+
+        # Simulate what the gaussian group CLI callback does for --remove-solvent
+        job_settings = GaussianJobSettings.default()
+        job_settings.solvent_model = None
+        job_settings.solvent_id = None
+        job_settings.custom_solvent = None
+        keywords = (
+            "charge",
+            "multiplicity",
+            "solvent_model",
+            "solvent_id",
+            "custom_solvent",
+        )
+
+        # Simulate what the sp subcommand does (merge picks up the None values)
+        sp_settings = sp_settings.merge(job_settings, keywords=keywords)
+
+        assert sp_settings.solvent_model is None
+        assert sp_settings.solvent_id is None
+        assert "scrf" not in sp_settings.route_string
+
 
 class TestGaussianJobFromLogFile:
     def test_accumulates_settings(self, tmpdir, gaussian_ts_genecp_outfile):
@@ -221,7 +623,7 @@ class TestGaussianJobFromLogFile:
         self, tmpdir, gaussian_ts_genecp_outfile
     ):
         settings = GaussianJobSettings.from_logfile(gaussian_ts_genecp_outfile)
-        assert settings.job_type == "ts"
+        assert settings.jobtype == "ts"
         assert settings.functional == "mn15"
         assert settings.basis == "genecp"
         assert settings.solvent_model is None
@@ -233,7 +635,7 @@ class TestGaussianJobFromLogFile:
         settings = GaussianJobSettings.from_logfile(
             gaussian_semiempirical_pm6_output_file
         )
-        assert settings.job_type == "opt"
+        assert settings.jobtype == "opt"
         assert settings.ab_initio is None
         assert settings.functional is None
         assert settings.basis is None
@@ -249,7 +651,7 @@ class TestGaussianPBCJob:
         settings = GaussianJobSettings.from_filepath(
             filepath=gaussian_pbc_3d_outputfile
         )
-        assert settings.job_type == "sp"
+        assert settings.jobtype == "sp"
         assert settings.functional.lower() == "pbepbe"
         assert settings.basis.lower() == "6-31g(d,p)/auto"
         assert settings.additional_route_parameters.lower() == "scf=tight"
