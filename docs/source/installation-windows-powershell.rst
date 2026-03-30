@@ -105,8 +105,8 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 
 #. **Prompts for optional software paths** — ``chemsmart config`` interactively asks for the installation folders of
    Gaussian g16, ORCA, and NCIPLOT and writes them into ``~/.chemsmart/server/*.yaml``. Each prompt can be skipped by
-   pressing Enter. These prompts are handled by Python (``click.prompt``) and work reliably on all platforms —
-   including Conda PowerShell — without any shell-specific syntax.
+   pressing Enter. These prompts are handled by Python (``click.prompt``) and work reliably on all platforms — including
+   Conda PowerShell — without any shell-specific syntax.
 
 #. **Configures the conda path** — auto-detects your conda installation via ``conda`` in PATH and updates the
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
