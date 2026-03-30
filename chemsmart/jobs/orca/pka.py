@@ -29,7 +29,7 @@ class ORCApKaJob(ORCAJob):
     2. Optimize A- in gas phase (opt + freq)
     3. Run SP on optimized HA in solution
     4. Run SP on optimized A- in solution
-    5. (Optional) Same for reference acid HB and B-
+    5. (Optional) Same for reference acid Href and Ref-
 
     Attributes:
         TYPE (str): Job type identifier ('orcapka').
@@ -107,8 +107,9 @@ class ORCApKaJob(ORCAJob):
 
     @property
     def _ref_basename(self):
-        """Basename for the reference acid (HB), derived from the reference
-        geometry filename so it stays unique when multiple HA share one HB."""
+        """Basename for the reference acid (Href), derived from the
+        reference geometry filename so it stays unique when multiple HA
+        share one Href."""
         import os
 
         if not self.settings.has_reference_file:
@@ -119,7 +120,7 @@ class ORCApKaJob(ORCAJob):
 
     @property
     def _ref_conjugate_base_label(self):
-        """Label for the reference conjugate base (B⁻)."""
+        """Label for the reference conjugate base (Ref⁻)."""
         ref = self._ref_basename
         if ref is None:
             return None
@@ -202,17 +203,17 @@ class ORCApKaJob(ORCAJob):
 
     @property
     def reference_molecule(self):
-        """Get the reference acid molecule (HB)."""
+        """Get the reference acid molecule (Href)."""
         return self.settings.get_reference_molecule()
 
     @property
     def reference_conjugate_base_molecule(self):
-        """Get the reference conjugate base molecule (B-)."""
+        """Get the reference conjugate base molecule (Ref-)."""
         return self.settings.get_reference_conjugate_base_molecule()
 
     @property
     def ref_opt_jobs(self):
-        """Get gas phase optimization jobs for HB and B-."""
+        """Get gas phase optimization jobs for Href and Ref-."""
         if not self.has_reference_jobs:
             return None
         if self._ref_opt_jobs is None:
@@ -233,7 +234,7 @@ class ORCApKaJob(ORCAJob):
 
     @property
     def ref_sp_jobs(self):
-        """Get solution phase SP jobs for HB and B-."""
+        """Get solution phase SP jobs for Href and Ref-."""
         if not self.has_reference_jobs:
             return None
         if self._ref_sp_jobs is None:
@@ -317,7 +318,7 @@ class ORCApKaJob(ORCAJob):
         return protonated_sp_job, conjugate_base_sp_job
 
     def _prepare_ref_opt_jobs(self):
-        """Create gas phase optimization jobs for HB and B-."""
+        """Create gas phase optimization jobs for Href and Ref-."""
         ref_acid_mol, ref_cb_mol = self.settings.reference_pair_molecules()
         ref_acid_settings, ref_cb_settings = (
             self.settings.reference_pair_job_settings()
@@ -340,7 +341,7 @@ class ORCApKaJob(ORCAJob):
         return ref_acid_job, ref_cb_job
 
     def _prepare_ref_sp_jobs(self):
-        """Create solution phase SP jobs for HB and B-."""
+        """Create solution phase SP jobs for Href and Ref-."""
         ref_acid_sp_settings, ref_cb_sp_settings = (
             self.settings.reference_pair_sp_job_settings()
         )
@@ -429,29 +430,13 @@ class ORCApKaJob(ORCAJob):
                 logger.info(f"Job {job} incomplete, breaking ref sp loop.")
                 break
 
-    def _make_sp_job_for_role(self, role):
+    def _make_sp_job(self, opt_job, fallback_molecule, sp_settings, sp_label):
         # create SP job using optimized geometry if available
-        protonated_sp_settings, conjugate_base_sp_settings = (
-            self.settings._create_solution_phase_sp_settings(self.molecule)
-        )
-        if role == "HA" or role == "HB":
-            sp_settings = protonated_sp_settings
-            opt_job = self.protonated_job
-            sp_label = f"{self._acid_basename}_sp"
-        else:
-            sp_settings = conjugate_base_sp_settings
-            opt_job = self.conjugate_base_job
-            sp_label = f"{self._conjugate_base_label}_sp"
-
         out = opt_job._output()
         if out is not None and out.normal_termination is True:
             mol = out.molecule
         else:
-            mol = (
-                self.protonated_molecule
-                if role == "HA"
-                else self.conjugate_base_molecule
-            )
+            mol = fallback_molecule
 
         sp_job = ORCASinglePointJob(
             molecule=mol,
@@ -462,10 +447,23 @@ class ORCApKaJob(ORCAJob):
         )
         return sp_job
 
-    def _worker_opt_then_sp(self, opt_job, role, sp_index):
+    def _worker_opt_then_sp(
+        self,
+        opt_job,
+        role,
+        sp_index,
+        fallback_molecule,
+        sp_settings,
+        sp_label,
+    ):
         logger.info(f"[parallel] Running opt job for role={role}: {opt_job}")
         opt_job.run()
-        sp_job = self._make_sp_job_for_role(role)
+        sp_job = self._make_sp_job(
+            opt_job=opt_job,
+            fallback_molecule=fallback_molecule,
+            sp_settings=sp_settings,
+            sp_label=sp_label,
+        )
         logger.info(f"[parallel] Running SP job for role={role}: {sp_job}")
         sp_job.run()
         with self._pka_lock:
@@ -474,7 +472,7 @@ class ORCApKaJob(ORCAJob):
                 if self._sp_jobs is None:
                     self._sp_jobs = [None, None]
                 target_list = self._sp_jobs
-            elif role in ("HB", "B"):
+            elif role in ("Href", "Ref"):
                 if self._ref_sp_jobs is None:
                     self._ref_sp_jobs = [None, None]
                 target_list = self._ref_sp_jobs
@@ -489,33 +487,69 @@ class ORCApKaJob(ORCAJob):
         import threading
 
         opt_jobs = self.opt_jobs
+        protonated_sp_settings, conjugate_base_sp_settings = (
+            self.settings.conjugate_pair_sp_job_settings(self.molecule)
+        )
         with self._pka_lock:
             self._sp_jobs = [None, None]
         threads = []
         threads.append(
             threading.Thread(
-                target=self._worker_opt_then_sp, args=(opt_jobs[0], "HA", 0)
+                target=self._worker_opt_then_sp,
+                args=(
+                    opt_jobs[0],
+                    "HA",
+                    0,
+                    self.protonated_molecule,
+                    protonated_sp_settings,
+                    f"{self._acid_basename}_sp",
+                ),
             )
         )
         threads.append(
             threading.Thread(
-                target=self._worker_opt_then_sp, args=(opt_jobs[1], "A", 1)
+                target=self._worker_opt_then_sp,
+                args=(
+                    opt_jobs[1],
+                    "A",
+                    1,
+                    self.conjugate_base_molecule,
+                    conjugate_base_sp_settings,
+                    f"{self._conjugate_base_label}_sp",
+                ),
             )
         )
         if self.has_reference_jobs:
             ref_opt_jobs = self.ref_opt_jobs
+            ref_acid_sp_settings, ref_cb_sp_settings = (
+                self.settings.reference_pair_sp_job_settings()
+            )
             with self._pka_lock:
                 self._ref_sp_jobs = [None, None]
             threads.append(
                 threading.Thread(
                     target=self._worker_opt_then_sp,
-                    args=(ref_opt_jobs[0], "HB", 0),
+                    args=(
+                        ref_opt_jobs[0],
+                        "Href",
+                        0,
+                        self.reference_molecule,
+                        ref_acid_sp_settings,
+                        f"{self._ref_basename}_sp",
+                    ),
                 )
             )
             threads.append(
                 threading.Thread(
                     target=self._worker_opt_then_sp,
-                    args=(ref_opt_jobs[1], "B", 1),
+                    args=(
+                        ref_opt_jobs[1],
+                        "Ref",
+                        1,
+                        self.reference_conjugate_base_molecule,
+                        ref_cb_sp_settings,
+                        f"{self._ref_conjugate_base_label}_sp",
+                    ),
                 )
             )
         for t in threads:

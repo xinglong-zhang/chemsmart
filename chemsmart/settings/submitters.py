@@ -326,7 +326,9 @@ class Submitter(RegistryMixin):
             # fall back to using cli_args for all jobs (backward-compatible).
             job_cli_args = cli_args
             if isinstance(cli_args, (list, tuple)):
-                if len(cli_args) == len(jobs) and isinstance(cli_args[i], (list, tuple)):
+                if len(cli_args) == len(jobs) and isinstance(
+                    cli_args[i], (list, tuple)
+                ):
                     job_cli_args = cli_args[i]
 
             # Create a run script for each job with index

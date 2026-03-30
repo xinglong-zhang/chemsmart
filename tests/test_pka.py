@@ -65,7 +65,7 @@ def test_run_pka_detects_gaussian_and_dispatches(tmp_path, monkeypatch):
     files = _build_outputs(tmp_path, "gaussian")
     called = {}
 
-    def _fake_print(**kwargs):
+    def _fake_print(*args, **kwargs):
         called["kwargs"] = kwargs
 
     from chemsmart.io.gaussian.output import Gaussian16pKaOutput
@@ -86,7 +86,7 @@ def test_run_pka_detects_orca_and_dispatches(tmp_path, monkeypatch):
     files = _build_outputs(tmp_path, "orca")
     called = {}
 
-    def _fake_print(**kwargs):
+    def _fake_print(*args, **kwargs):
         called["kwargs"] = kwargs
 
     from chemsmart.io.orca.output import ORCApKaOutput

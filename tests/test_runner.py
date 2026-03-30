@@ -508,6 +508,8 @@ class TestOrcaPkaBatchExecution:
             functional="B3LYP",
             basis="def2-SVP",
         )
+        settings.scheme = "proton exchange"
+        settings.reference_file = "reference_acid.xyz"
 
         orca_jobrunner_no_scratch.run_in_serial = False
         job = ORCApKaJob(
@@ -575,3 +577,206 @@ class TestOrcaPkaBatchExecution:
         run_parallel_spy.assert_not_called()
         run_opt_spy.assert_called_once()
         run_sp_spy.assert_not_called()
+
+    def test_orca_pka_parallel_reference_sp_jobs_use_reference_payloads(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.orca.pka import ORCApKaJob
+        from chemsmart.jobs.orca.settings import (
+            ORCAJobSettings,
+            ORCApKaJobSettings,
+        )
+
+        class ImmediateThread:
+            def __init__(self, target=None, args=(), kwargs=None):
+                self._target = target
+                self._args = args
+                self._kwargs = kwargs or {}
+
+            def start(self):
+                self._target(*self._args, **self._kwargs)
+
+            def join(self):
+                return None
+
+        target_ha_fallback = Molecule(
+            symbols=["H"],
+            positions=[[0.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        target_a_fallback = Molecule(
+            symbols=["He"],
+            positions=[[1.0, 0.0, 0.0]],
+            charge=-1,
+            multiplicity=1,
+        )
+        ref_hb_fallback = Molecule(
+            symbols=["Li"],
+            positions=[[2.0, 0.0, 0.0]],
+            charge=1,
+            multiplicity=1,
+        )
+        ref_b_fallback = Molecule(
+            symbols=["Be"],
+            positions=[[3.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+
+        target_ha_optimized = Molecule(
+            symbols=["B"],
+            positions=[[4.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+        target_a_optimized = Molecule(
+            symbols=["C"],
+            positions=[[5.0, 0.0, 0.0]],
+            charge=-1,
+            multiplicity=1,
+        )
+        ref_hb_optimized = Molecule(
+            symbols=["N"],
+            positions=[[6.0, 0.0, 0.0]],
+            charge=1,
+            multiplicity=1,
+        )
+        ref_b_optimized = Molecule(
+            symbols=["O"],
+            positions=[[7.0, 0.0, 0.0]],
+            charge=0,
+            multiplicity=1,
+        )
+
+        settings = ORCApKaJobSettings(
+            proton_index=1,
+            scheme="direct",
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="def2-SVP",
+        )
+
+        orca_jobrunner_no_scratch.run_in_serial = False
+        job = ORCApKaJob(
+            molecule=target_ha_fallback,
+            settings=settings,
+            label="test_orca_pka_parallel_refs",
+            jobrunner=orca_jobrunner_no_scratch,
+            parallel=True,
+        )
+
+        ha_opt_job = Mock(label="ha_opt")
+        ha_opt_job._output.return_value = Mock(
+            normal_termination=True, molecule=target_ha_optimized
+        )
+        a_opt_job = Mock(label="a_opt")
+        a_opt_job._output.return_value = Mock(
+            normal_termination=True, molecule=target_a_optimized
+        )
+        hb_opt_job = Mock(label="hb_opt")
+        hb_opt_job._output.return_value = Mock(
+            normal_termination=True, molecule=ref_hb_optimized
+        )
+        b_opt_job = Mock(label="b_opt")
+        b_opt_job._output.return_value = Mock(
+            normal_termination=True, molecule=ref_b_optimized
+        )
+
+        ha_sp_settings = ORCAJobSettings(functional="B3LYP", basis="def2-SVP")
+        a_sp_settings = ORCAJobSettings(functional="PBE0", basis="def2-SVP")
+        hb_sp_settings = ORCAJobSettings(
+            functional="M06-2X", basis="def2-TZVP"
+        )
+        b_sp_settings = ORCAJobSettings(
+            functional="wB97X-D", basis="ma-def2-SVP"
+        )
+
+        mocker.patch("threading.Thread", side_effect=ImmediateThread)
+        mocker.patch.object(
+            type(job),
+            "has_reference_jobs",
+            new_callable=PropertyMock,
+            return_value=True,
+        )
+        mocker.patch.object(
+            type(job),
+            "opt_jobs",
+            new_callable=PropertyMock,
+            return_value=[ha_opt_job, a_opt_job],
+        )
+        mocker.patch.object(
+            type(job),
+            "ref_opt_jobs",
+            new_callable=PropertyMock,
+            return_value=[hb_opt_job, b_opt_job],
+        )
+        mocker.patch.object(
+            type(job),
+            "protonated_molecule",
+            new_callable=PropertyMock,
+            return_value=target_ha_fallback,
+        )
+        mocker.patch.object(
+            type(job),
+            "conjugate_base_molecule",
+            new_callable=PropertyMock,
+            return_value=target_a_fallback,
+        )
+        mocker.patch.object(
+            type(job),
+            "reference_molecule",
+            new_callable=PropertyMock,
+            return_value=ref_hb_fallback,
+        )
+        mocker.patch.object(
+            type(job),
+            "reference_conjugate_base_molecule",
+            new_callable=PropertyMock,
+            return_value=ref_b_fallback,
+        )
+        mocker.patch.object(
+            job.settings,
+            "conjugate_pair_sp_job_settings",
+            return_value=(ha_sp_settings, a_sp_settings),
+        )
+        mocker.patch.object(
+            job.settings,
+            "reference_pair_sp_job_settings",
+            return_value=(hb_sp_settings, b_sp_settings),
+        )
+        mocker.patch("chemsmart.jobs.orca.pka.ORCASinglePointJob.run")
+
+        job._run_parallel()
+
+        assert [sp_job.label for sp_job in job.sp_jobs] == [
+            f"{job._acid_basename}_sp",
+            f"{job._conjugate_base_label}_sp",
+        ]
+        assert [sp_job.label for sp_job in job.ref_sp_jobs] == [
+            f"{job._ref_basename}_sp",
+            f"{job._ref_conjugate_base_label}_sp",
+        ]
+
+        assert job.sp_jobs[0].molecule.symbols == target_ha_optimized.symbols
+        assert job.sp_jobs[1].molecule.symbols == target_a_optimized.symbols
+        assert job.ref_sp_jobs[0].molecule.symbols == ref_hb_optimized.symbols
+        assert job.ref_sp_jobs[1].molecule.symbols == ref_b_optimized.symbols
+
+        assert job.sp_jobs[0].settings.functional == ha_sp_settings.functional
+        assert job.sp_jobs[1].settings.functional == a_sp_settings.functional
+        assert (
+            job.ref_sp_jobs[0].settings.functional == hb_sp_settings.functional
+        )
+        assert (
+            job.ref_sp_jobs[1].settings.functional == b_sp_settings.functional
+        )
+        assert job.sp_jobs[0].settings.basis == ha_sp_settings.basis
+        assert job.sp_jobs[1].settings.basis == a_sp_settings.basis
+        assert job.ref_sp_jobs[0].settings.basis == hb_sp_settings.basis
+        assert job.ref_sp_jobs[1].settings.basis == b_sp_settings.basis
+
+        assert job.ref_sp_jobs[0].label != job.sp_jobs[0].label
+        assert job.ref_sp_jobs[1].label != job.sp_jobs[1].label
