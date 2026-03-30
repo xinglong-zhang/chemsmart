@@ -1760,27 +1760,21 @@ class Molecule:
 
         from .atoms import AtomsChargeMultiplicity
 
-        logger.debug("Converting molecule to ASE Atoms object.")
+        logger.info("Converting molecule to ASE Atoms object.")
 
         # convert energy and forces to ASE-compatible
         # units if they are not None
         energy = self.energy
         if energy is not None:
-            logger.debug("Converting energy from %s Hartree to eV", energy)
+            logger.debug(f"Converting energy from {energy} Hartree to eV")
             energy = energy * units.Hartree
-            logger.debug("Converted energy from Hartree to eV: %s eV", energy)
+            logger.debug(f"Converted energy from Hartree to eV: {energy} eV")
         forces = self.forces
         if forces is not None:
+            logger.debug(f"Converting forces from {forces} Hartree/Å to eV/Å.")
+            forces = forces * units.Hartree / units.Angstrom
             logger.debug(
-                "Converting forces from Hartree/Bohr to eV/Å for array "
-                "with shape %s",
-                getattr(forces, "shape", None),
-            )
-            forces = forces * units.Hartree / units.Bohr
-            logger.debug(
-                "Converted forces from Hartree/Bohr to eV/Å for array "
-                "with shape %s",
-                getattr(forces, "shape", None),
+                f"Converted forces from Hartree/Å to eV/Å: {forces} eV/Å."
             )
 
         return AtomsChargeMultiplicity(
