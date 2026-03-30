@@ -97,6 +97,12 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 #. **Outputs activation instructions** — at the end of ``make configure``, the Makefile prints a reminder to run ``.
    $PROFILE`` so that ``chemsmart`` is immediately available in the current session.
 
+.. note::
+
+   On Windows, ``make configure`` does **not** execute ``. $PROFILE`` automatically — it only prints the instruction.
+   You must run ``. $PROFILE`` manually in your Anaconda/Miniconda PowerShell Prompt to apply the PATH changes to your
+   current session. Alternatively, simply open a new Anaconda PowerShell Prompt.
+
 After ``make configure`` completes, the ``chemsmart`` command is available immediately in any **new** Anaconda
 PowerShell Prompt. To activate it in your **current** session without opening a new one, run:
 
