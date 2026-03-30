@@ -85,6 +85,16 @@ What ``make configure`` does on Linux and macOS:
 #. **Updates your shell rc file** — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines to ``~/.bashrc``
    (bash) or ``~/.zshrc`` (zsh) so that the ``chemsmart`` command is available in new terminal sessions.
 
+#. **Prompts for optional software paths** — after setting up the shell environment, ``make configure`` interactively
+   asks for the installation folders of optional third-party software:
+
+   -  Gaussian g16
+   -  ORCA
+   -  NCIPLOT
+
+   Press **Enter** to skip any prompt you don't need. The entered paths are written to
+   ``~/.chemsmart/server/*.yaml``. These prompts use Python's ``click.prompt()`` and work correctly on all platforms.
+
 #. **Configures the conda path** — auto-detects your conda installation via ``which conda`` and updates the
    ``~/.chemsmart/server/*.yaml`` files with the correct conda path for your remote HPC cluster. If conda is not found
    in PATH, a message is logged — add conda to your PATH and re-run ``chemsmart config server``.
