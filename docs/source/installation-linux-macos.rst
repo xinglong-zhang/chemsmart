@@ -92,8 +92,8 @@ What ``make configure`` does on Linux and macOS:
 
       When ``make configure`` runs ``chemsmart config`` via ``conda run``, stdin is not connected to your terminal and
       the path prompts are **automatically skipped** with an informational message. To configure these paths
-      interactively, activate the ``chemsmart`` conda environment and run ``chemsmart config`` directly in your
-      terminal after ``make configure`` completes:
+      interactively, activate the ``chemsmart`` conda environment and run ``chemsmart config`` directly in your terminal
+      after ``make configure`` completes:
 
       .. code:: bash
 
