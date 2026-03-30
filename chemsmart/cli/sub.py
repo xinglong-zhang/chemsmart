@@ -248,8 +248,12 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             for single_job in job:
                 single_job.jobrunner = jobrunner
 
-            # Submit as array job
-            cli_args = _reconstruct_cli_args(ctx, job[0])
+            # Submit as array job using per-job reconstructed CLI args so
+            # entry-specific overrides (for example batch pKa entries) are
+            # preserved in each generated array run script.
+            cli_args = [
+                _reconstruct_cli_args(ctx, single_job) for single_job in job
+            ]
             server = Server.from_servername(kwargs.get("server"))
             server.submit_array_job(
                 jobs=job,
