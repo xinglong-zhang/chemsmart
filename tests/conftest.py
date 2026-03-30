@@ -30,6 +30,10 @@ from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
+thermochemistry_cli_module = importlib.import_module(
+    "chemsmart.cli.thermochemistry.thermochemistry"
+)
+
 
 ############ CLI Fixtures ##################
 @pytest.fixture()
@@ -40,35 +44,6 @@ def make_cli_ctx_obj():
         return {"jobrunner": jobrunner}
 
     return _make
-
-
-@pytest.fixture()
-def run_gaussian_and_capture_settings():
-    """Run the gaussian CLI with a patched job class and capture settings."""
-
-    def _run(job_class_path, cli_args, ctx_obj):
-        runner = CliRunner()
-        captured_settings = None
-
-        with patch(job_class_path) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
-            result = runner.invoke(
-                gaussian,
-                cli_args,
-                obj=ctx_obj,
-                catch_exceptions=False,
-            )
-            if mock_job_cls.call_args is not None:
-                captured_settings = mock_job_cls.call_args[1].get("settings")
-
-        return result, captured_settings
-
-    return _run
-
-
-thermochemistry_cli_module = importlib.import_module(
-    "chemsmart.cli.thermochemistry.thermochemistry"
-)
 
 
 @pytest.fixture()
@@ -111,7 +86,31 @@ def run_thermochemistry_and_capture_settings():
     return _run
 
 
-@pytest.fixture
+@pytest.fixture()
+def run_gaussian_and_capture_settings():
+    """Run the gaussian CLI with a patched job class and capture settings."""
+
+    def _run(job_class_path, cli_args, ctx_obj):
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings
+
+    return _run
+
+
+@pytest.fixture()
 def run_orca_and_capture_settings():
     """Run the orca CLI with a patched job class and capture settings."""
     from chemsmart.cli.orca.orca import orca as orca_cli
