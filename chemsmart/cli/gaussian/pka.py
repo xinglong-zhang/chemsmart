@@ -499,12 +499,11 @@ def batch_analyze(ctx, **kwargs):
         input_file_list=input_file_list,
         label=label,
         jobrunner=jobrunner,
+        run_in_serial=True,
         **kwargs,
     )
     # Always run batch container serially (run_in_serial=True).
-    return GaussianpKaBatchAnalyzeJob(
-        jobs=[job], run_in_serial=True, jobrunner=jobrunner
-    )
+    return job
 
 
 # ═══════════════════════════════════════════════════════════════════════
