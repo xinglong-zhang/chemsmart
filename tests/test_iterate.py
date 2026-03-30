@@ -205,8 +205,8 @@ def test_iterate_timeout(
         # ({timeout}s) for combination: {label}"
 
         # We need to construct the label to search for
-        # Carbene1_34_OTf_8
-        label = "Carbene1_34_OTf_8"
+        # Carbene1_34OTf
+        label = "Carbene1_34OTf"
 
         found_timeout_log = False
         for record in caplog.records:
@@ -650,8 +650,8 @@ def test_iterate_cli_pipeline_success(
         # presence which confirms combination logic ran
         # The runner combines skeleton label,
         # link index, sub label, and link index.
-        # e.g. Carbene1 + 8 + OTf + 8 -> Carbene1_8_OTf_8
-        assert "Carbene1_8_OTf_8" in generated_content
+        # e.g. Carbene1 + 8 + OTf -> Carbene1_8OTf
+        assert "Carbene1_8OTf" in generated_content
 
         # Verify line count matches (structure completeness check)
         exp_lines = expected_content.splitlines()

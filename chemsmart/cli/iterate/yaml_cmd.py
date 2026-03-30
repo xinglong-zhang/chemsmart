@@ -1,6 +1,5 @@
 """
 CLI subcommand for running iterate jobs from YAML configuration files.
-Supports both simple mode and multi-site mode.
 """
 
 import functools
@@ -89,6 +88,28 @@ def click_yaml_iterate_options(f):
         help="Number of axial rotations per sphere point.",
     )
     @click.option(
+        "-cm",
+        "--combination-mode",
+        "combination_mode",
+        default="independent",
+        type=click.Choice(
+            ["independent", "global"],
+            case_sensitive=False,
+        ),
+        show_default=True,
+        help="Combination strategy for skeleton slots. "
+        "Each slot specifies a group number; only substituents belonging to "
+        "that group are candidates for the slot. "
+        "Each position includes a 'None' (keep original) option. "
+        "'independent' (default): each slot is expanded separately. "
+        "E.g. slot R1 (group 1), slot R2 (group 2); "
+        "sub A, B in group 1, sub C in group 2: "
+        "R1 → mol(R1=A), mol(R1=B); R2 → mol(R2=C) → 3 structures. "
+        "'global': all slots combined via single Cartesian product. "
+        "Same setup → mol(R1=A), mol(R1=B), mol(R2=C), "
+        "mol(R1=A,R2=C), mol(R1=B,R2=C) → 5 structures.",
+    )
+    @click.option(
         "-d",
         "--directory",
         default=None,
@@ -127,12 +148,15 @@ def yaml_cmd(
     axial_rotations_sample_num,
     directory,
     separate_outputs,
+    combination_mode,
     **kwargs,
 ):
     """
     Run iterate jobs from a YAML configuration file.
 
-    Supports both simple mode (link_index) and multi-site mode (slots/groups).
+    All skeletons participate in global contiguous group numbering.
+    Skeletons with link_index occupy one implicit group each;
+    skeletons with slots occupy one group per slot.
 
     Examples:
 
@@ -204,14 +228,7 @@ def yaml_cmd(
     logger.info(f"  Skeletons: {len(config['skeletons'])}")
     logger.info(f"  Substituents: {len(config['substituents'])}")
 
-    # Detect mode
-    has_multi_site = any(
-        skel.get("slots") for skel in config["skeletons"]
-    )
-    if has_multi_site:
-        logger.info("  Mode: multi-site")
-    else:
-        logger.info("  Mode: simple")
+    logger.info(f"  Combination mode: {combination_mode}")
 
     # Create job settings
     job_settings = IterateJobSettings(
@@ -219,6 +236,7 @@ def yaml_cmd(
         method=method,
         sphere_direction_samples_num=sphere_direction_samples_num,
         axial_rotations_sample_num=axial_rotations_sample_num,
+        combination_mode=combination_mode,
     )
     job_settings.skeleton_list = config["skeletons"]
     job_settings.substituent_list = config["substituents"]

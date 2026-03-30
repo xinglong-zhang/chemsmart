@@ -12,6 +12,7 @@ class IterateJobSettings:
         method="lagrange_multipliers",
         sphere_direction_samples_num=96,
         axial_rotations_sample_num=6,
+        combination_mode="independent",
     ):
         """
         Initialize iterate job settings.
@@ -27,6 +28,12 @@ class IterateJobSettings:
             Number of points to sample on the unit sphere. Default is 96.
         axial_rotations_sample_num : int, optional
             Number of axial rotations per sphere point. Default is 6.
+        combination_mode : str, optional
+            Combination strategy for skeleton slots.
+            'independent' (default): each group generates combinations
+            independently, results are merged.
+            'global': all groups merge into one pool of position
+            options, then a single Cartesian product is taken.
         """
         logger.debug("Initialized iterate job settings.")
         self.config_file = config_file
@@ -35,6 +42,7 @@ class IterateJobSettings:
         self.method = method
         self.sphere_direction_samples_num = sphere_direction_samples_num
         self.axial_rotations_sample_num = axial_rotations_sample_num
+        self.combination_mode = combination_mode
 
     def copy(self):
         """
