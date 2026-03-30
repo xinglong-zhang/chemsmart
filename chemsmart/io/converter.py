@@ -80,9 +80,6 @@ class FileConverter:
                 self.type = self.filename.split(".")[-1]
                 logger.info(f"Converting file: {self.filename}")
                 self._convert_single_file(self.filename, self.output_filetype)
-                logger.info(
-                    f"File converted from {self.filename} to .{self.output_filetype}"
-                )
             else:
                 raise ValueError(
                     "Either directory or filename must be specified."
@@ -166,21 +163,19 @@ class FileConverter:
                 filedir, fname = os.path.split(file)
                 file_basename = os.path.splitext(fname)[0]
                 if len(mols) == 1:
-                    mols[0].write(
-                        os.path.join(
-                            filedir, f"{file_basename}.{output_filetype}"
-                        ),
-                        format=output_filetype,
+                    output_path = os.path.join(
+                        filedir, f"{file_basename}.{output_filetype}"
                     )
+                    mols[0].write(output_path, format=output_filetype)
+                    logger.info(f"Created: {output_path}")
                 else:
                     for i, m in enumerate(mols, start=1):
-                        m.write(
-                            os.path.join(
-                                filedir,
-                                f"{file_basename}_{i}.{output_filetype}",
-                            ),
-                            format=output_filetype,
+                        output_path = os.path.join(
+                            filedir,
+                            f"{file_basename}_{i}.{output_filetype}",
                         )
+                        m.write(output_path, format=output_filetype)
+                        logger.info(f"Created: {output_path}")
                 continue
             else:
                 raise ValueError(f"File type {type} is not supported.")
@@ -237,20 +232,18 @@ class FileConverter:
             filedir, fname = os.path.split(filename)
             file_basename = os.path.splitext(fname)[0]
             if len(mols) == 1:
-                mols[0].write(
-                    os.path.join(
-                        filedir, f"{file_basename}.{output_filetype}"
-                    ),
-                    format=output_filetype,
+                output_path = os.path.join(
+                    filedir, f"{file_basename}.{output_filetype}"
                 )
+                mols[0].write(output_path, format=output_filetype)
+                logger.info(f"Created: {output_path}")
             else:
                 for i, m in enumerate(mols, start=1):
-                    m.write(
-                        os.path.join(
-                            filedir, f"{file_basename}_{i}.{output_filetype}"
-                        ),
-                        format=output_filetype,
+                    output_path = os.path.join(
+                        filedir, f"{file_basename}_{i}.{output_filetype}"
                     )
+                    m.write(output_path, format=output_filetype)
+                    logger.info(f"Created: {output_path}")
             return
         else:
             raise ValueError(f"File type {self.type} is not supported.")
