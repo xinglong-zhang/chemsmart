@@ -44,11 +44,11 @@ class TestConfig:
             assert cfg.shell_config is None
 
     def test_shell_config_git_bash_returns_bashrc(self, tmp_path):
-        """On Windows Git Bash (SHELL is set), shell_config returns ~/.bashrc."""
+        """On Windows Git Bash (SHELL is set), shell_config returns ~/.bashrc
+        even when the file does not yet exist."""
         cfg = Config()
         fake_home = tmp_path
-        bashrc = fake_home / ".bashrc"
-        bashrc.touch()
+        # Do NOT pre-create .bashrc — the property should return it regardless.
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Windows"
@@ -59,11 +59,26 @@ class TestConfig:
             result = cfg.shell_config
         assert result == fake_home / ".bashrc"
 
-    def test_shell_config_bash(self, tmp_path):
+    def test_shell_config_git_bash_exe_returns_bashrc(self, tmp_path):
+        """SHELL=/usr/bin/bash.exe (some Windows Git Bash installs) also maps
+        to ~/.bashrc."""
         cfg = Config()
         fake_home = tmp_path
-        bashrc = fake_home / ".bashrc"
-        bashrc.touch()
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Windows"
+            ),
+            patch.dict("os.environ", {"SHELL": "/usr/bin/bash.exe"}),
+            patch.object(Path, "home", return_value=fake_home),
+        ):
+            result = cfg.shell_config
+        assert result == fake_home / ".bashrc"
+
+    def test_shell_config_bash(self, tmp_path):
+        """On Linux/macOS with bash, shell_config returns ~/.bashrc
+        (creates it if absent via update_shell_config)."""
+        cfg = Config()
+        fake_home = tmp_path
         with (
             patch(
                 "chemsmart.cli.config.platform.system", return_value="Linux"

@@ -155,14 +155,13 @@ class Config:
             return None
 
         shell = os.environ.get("SHELL", "")
-        if shell.endswith("bash"):
-            bashrc_filepath = Path.home() / ".bashrc"
-            if bashrc_filepath.exists():
-                return bashrc_filepath
-            else:
-                logger.info("Bashrc not found. Trying bash_profile.")
-                return Path.home() / ".bash_profile"
-        if shell.endswith("zsh"):
+        # Use Path.stem to strip any .exe extension (e.g. /usr/bin/bash.exe
+        # on some Windows Git Bash installations).
+        shell_name = Path(shell).stem
+        if shell_name == "bash":
+            # Always target ~/.bashrc; update_shell_config creates it if absent.
+            return Path.home() / ".bashrc"
+        if shell_name == "zsh":
             return Path.home() / ".zshrc"
         return Path.home() / ".profile"
 
