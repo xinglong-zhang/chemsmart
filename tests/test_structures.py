@@ -158,6 +158,8 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
         assert isinstance(mol, QMMMMolecule)
         assert type(mol).__name__ == "QMMMMolecule"
 
+
+class TestStructures:
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):
