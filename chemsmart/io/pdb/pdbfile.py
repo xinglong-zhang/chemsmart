@@ -1,4 +1,3 @@
-import logging
 import re
 from functools import cached_property
 
@@ -9,8 +8,6 @@ from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import string2index_1based
 
 p = pt()
-
-logger = logging.getLogger(__name__)
 
 
 class PDBFile(FileMixin):

@@ -96,7 +96,7 @@ class FileConverter:
         Args:
             directory (str): Directory containing files to convert.
             type (str): File type to convert
-            (log, com, gjf, out, inp, xyz, sdf).
+            (log, com, gjf, out, inp, xyz, sdf, pdb).
             output_filetype (str): Target output format.
         """
         if type == "log":
