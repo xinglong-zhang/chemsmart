@@ -1018,202 +1018,47 @@ class Molecule:
     @file_cache()
     def _read_pdb_file(cls, filepath, index="-1", return_list=False):
         """Read PDB format molecular structure file preserving residue metadata."""
-        models = cls._parse_pdb_models(filepath)
-        if not models:
-            raise ValueError(
-                f"No ATOM/HETATM records found in PDB file: {filepath}"
-            )
+        from chemsmart.io.pdb.pdbfile import PDBFile
 
-        parsed_index = string2index_1based(index)
-        molecules = models[parsed_index]
-
-        if return_list and not isinstance(molecules, list):
-            return [molecules]
-        return molecules
+        pdb_file = PDBFile(filename=filepath)
+        return pdb_file.get_molecules(index=index, return_list=return_list)
 
     @classmethod
     def _parse_pdb_models(cls, filepath):
-        """Parse all PDB models from file into ``Molecule`` objects."""
-        with open(filepath, "r") as f:
-            lines = f.readlines()
+        """Parse all PDB models from file into ``Molecule`` objects.
 
-        models = []
-        current_atom_lines = []
-        seen_model_records = False
+        .. deprecated::
+            Parsing is now handled by :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+            This method delegates to ``PDBFile`` for backward compatibility.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
 
-        def flush_current_model():
-            if current_atom_lines:
-                models.append(
-                    cls._molecule_from_pdb_atom_lines(current_atom_lines)
-                )
-
-        for line in lines:
-            record_name = line[:6].strip()
-            if record_name == "MODEL":
-                # If there are accumulated atoms (e.g., from a model without ENDMDL
-                # or atoms before the first MODEL), flush them as a complete model
-                # before starting a new one.
-                if current_atom_lines:
-                    flush_current_model()
-                seen_model_records = True
-                current_atom_lines = []
-                continue
-
-            if record_name == "ENDMDL":
-                flush_current_model()
-                current_atom_lines = []
-                continue
-
-            if record_name in {"ATOM", "HETATM"}:
-                current_atom_lines.append(line.rstrip("\n"))
-
-        if seen_model_records:
-            flush_current_model()
-        elif current_atom_lines:
-            models.append(
-                cls._molecule_from_pdb_atom_lines(current_atom_lines)
-            )
-
-        return models
+        pdb_file = PDBFile(filename=filepath)
+        return pdb_file._parse_models()
 
     @classmethod
     def _molecule_from_pdb_atom_lines(cls, atom_lines):
-        """Build a ``Molecule`` from parsed PDB ATOM/HETATM lines."""
-        symbols = []
-        positions = []
-        atom_names = []
-        residue_names = []
-        residue_numbers = []
-        chain_ids = []
-        record_types = []
+        """Build a ``Molecule`` from parsed PDB ATOM/HETATM lines.
 
-        for line in atom_lines:
-            record_types.append(line[:6].strip() or "HETATM")
-            atom_name = line[12:16].strip()
-            residue_name = line[17:20].strip() or "MOL"
-            chain_id = line[21].strip()
-            residue_number_text = line[22:26].strip()
-            residue_number = (
-                int(residue_number_text) if residue_number_text else 1
-            )
+        .. deprecated::
+            Parsing is now handled by :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+            This method delegates to ``PDBFile`` for backward compatibility.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
 
-            element_text = line[76:78].strip()
-            if element_text:
-                symbol = p.to_element(element_text)
-            else:
-                symbol = cls._infer_pdb_element_from_atom_name(atom_name)
-
-            x = float(line[30:38])
-            y = float(line[38:46])
-            z = float(line[46:54])
-
-            symbols.append(symbol)
-            positions.append([x, y, z])
-            atom_names.append(atom_name or symbol)
-            residue_names.append(residue_name)
-            residue_numbers.append(residue_number)
-            chain_ids.append(chain_id)
-
-        molecule = cls(
-            symbols=symbols,
-            positions=np.array(positions, dtype=float),
-            info={
-                "atom_name": atom_names,
-                "residue_name": residue_names,
-                "residue_number": residue_numbers,
-                "chain_id": chain_ids,
-                "record_type": record_types,
-            },
-        )
-        molecule.atom_names = atom_names
-        molecule.residue_names = residue_names
-        molecule.residue_numbers = residue_numbers
-        molecule.chain_ids = chain_ids
-        molecule.record_type = record_types
-        return molecule
+        return PDBFile._molecule_from_atom_lines(atom_lines)
 
     @staticmethod
     def _infer_pdb_element_from_atom_name(atom_name):
         """Infer element symbol from PDB atom-name field when columns 77-78 are blank.
 
-        This uses PDB-specific heuristics instead of interpreting the full atom
-        name as an element symbol. The rules are:
-
-        - Strip leading digits (e.g. ``1H`` -> ``H``).
-        - Keep only letters from the remaining name.
-        - Try a normalized two-letter element candidate first (e.g. ``FE`` ->
-          ``Fe``), unless the atom name matches a common biomolecular atom-label
-          pattern such as ``CA`` for C-alpha.
-        - Otherwise, use only the first letter as the element.
+        .. deprecated::
+            Parsing is now handled by :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+            This method delegates to ``PDBFile`` for backward compatibility.
         """
-        if not atom_name:
-            raise ValueError(
-                f"Unable to infer element from atom name '{atom_name}'"
-            )
+        from chemsmart.io.pdb.pdbfile import PDBFile
 
-        # Remove leading digits (e.g. "1H", "2CA")
-        name = re.sub(r"^[0-9]+", "", atom_name.strip())
-        # Keep only letters thereafter
-        cleaned = re.sub(r"[^A-Za-z]", "", name)
-
-        if not cleaned:
-            raise ValueError(
-                f"Unable to infer element from atom name '{atom_name}'"
-            )
-
-        if len(cleaned) == 1:
-            try:
-                return p.to_element(cleaned[0].upper())
-            except Exception:
-                raise ValueError(
-                    f"Unable to infer element from atom name '{atom_name}'"
-                )
-
-        # Common biomolecular atom-label prefixes that should remain single-letter
-        # element assignments, e.g. CA/CB/CG for carbon alpha/beta/gamma.
-        ambiguous_biomolecular_names = {
-            "CA",
-            "CB",
-            "CG",
-            "CD",
-            "CE",
-            "CZ",
-            "CH",
-            "HA",
-            "HB",
-            "HG",
-            "HD",
-            "HE",
-            "HZ",
-            "HH",
-            "HN",
-            "ND",
-            "NE",
-            "NH",
-            "NZ",
-            "OD",
-            "OE",
-            "OG",
-            "OH",
-            "SD",
-            "SG",
-        }
-
-        normalized_two_letter = f"{cleaned[0].upper()}{cleaned[1].lower()}"
-        if cleaned[:2].upper() not in ambiguous_biomolecular_names:
-            try:
-                return p.to_element(normalized_two_letter)
-            except Exception:
-                pass
-
-        candidate = cleaned[0].upper()
-
-        try:
-            return p.to_element(candidate)
-        except Exception:
-            raise ValueError(
-                f"Unable to infer element from atom name '{atom_name}'"
-            )
+        return PDBFile._infer_element_from_atom_name(atom_name)
 
     @staticmethod
     @file_cache()

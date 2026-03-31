@@ -12,6 +12,7 @@ from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.folder import ORCAInputFolder, ORCAOutputFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.folder import XYZFolder
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.io import get_program_type_from_file
@@ -133,6 +134,11 @@ class FileConverter:
             all_files = sdf_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
                 filetype="sdf"
             )
+        elif type == "pdb":
+            pdb_folder = BaseFolder(folder=directory)
+            all_files = pdb_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
+                filetype="pdb"
+            )
         else:
             raise ValueError(f"File type {type} is not supported.")
 
@@ -155,6 +161,8 @@ class FileConverter:
                 outfile = XYZFile(filename=file)
             elif type == "sdf":
                 outfile = SDFFile(filename=file)
+            elif type == "pdb":
+                outfile = PDBFile(filename=file)
             else:
                 raise ValueError(f"File type {type} is not supported.")
             if self.include_intermediate_structures:
@@ -204,6 +212,8 @@ class FileConverter:
             outfile = XYZFile(filename=filename)
         elif self.type == "sdf":
             outfile = SDFFile(filename=filename)
+        elif self.type == "pdb":
+            outfile = PDBFile(filename=filename)
         else:
             raise ValueError(f"File type {self.type} is not supported.")
         if self.include_intermediate_structures:
