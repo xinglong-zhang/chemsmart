@@ -200,7 +200,7 @@ class PDBFile(FileMixin):
             record_types.append(line[:6].strip() or "HETATM")
             atom_name = line[12:16].strip()
             residue_name = line[17:20].strip() or "MOL"
-            chain_id = line[21].strip()
+            chain_id = line[21:22].strip() or ""
             residue_number_text = line[22:26].strip()
             residue_number = (
                 int(residue_number_text) if residue_number_text else 1
