@@ -801,8 +801,8 @@ class ORCApKaJob(ORCAJob):
             settings=self.settings,
             ha_file=ha_file,
             a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
+            href_file=hb_file,
+            ref_file=b_file,
         )
 
     def print_thermochemistry(self):
