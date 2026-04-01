@@ -2101,42 +2101,6 @@ class Molecule:
 
         return frames
 
-    def xyz_to_pdb(
-        self,
-        pdb_filename,
-        xyz_filename=None,
-        mode="w",
-        overwrite=True,
-        cleanup=True,
-    ):
-        """
-        Convert an XYZ representation of the molecule to PDB using Open Babel.
-
-        .. deprecated::
-            Conversion logic now lives in
-            :meth:`chemsmart.io.converter.FileConverter.xyz_to_pdb`.
-            This method delegates there for backward compatibility.
-
-        Args:
-            pdb_filename (str): Destination PDB file path.
-            xyz_filename (str, optional): Source XYZ file path; if omitted or
-                missing, a temporary XYZ is written via ``write_xyz``.
-            mode (str): File mode passed to ``write_xyz`` when creating the
-                XYZ file.
-            overwrite (bool): Whether to overwrite an existing PDB file.
-            cleanup (bool): Remove auto-generated XYZ files after conversion.
-        """
-        from chemsmart.io.converter import FileConverter
-
-        FileConverter.xyz_to_pdb(
-            self,
-            pdb_filename,
-            xyz_filename=xyz_filename,
-            mode=mode,
-            overwrite=overwrite,
-            cleanup=cleanup,
-        )
-
 
 class CoordinateBlock:
     """
