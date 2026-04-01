@@ -551,6 +551,91 @@ class TestMoleculeAdvanced:
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
 
+    def test_to_ase_energy_unit_conversion(self):
+        """Test that to_ase() converts energy from Hartree to eV."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+
+    def test_to_ase_forces_unit_conversion(self):
+        """Test that to_ase() converts forces from Hartree/Bohr to eV/Å."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(
+            ase_atoms.forces,
+            expected_forces_ev_per_angstrom,
+            rtol=1e-5,
+        )
+
+    def test_to_ase_none_energy_and_forces(self):
+        """Test that to_ase() preserves None for energy and forces."""
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        assert ase_atoms.forces is None
+
+    def test_to_ase_none_energy_with_forces(self):
+        """Test that to_ase() converts forces when energy is None."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(ase_atoms.forces, expected_forces_ev_per_angstrom)
+
+    def test_to_ase_energy_with_none_forces(self):
+        """Test that to_ase() converts energy when forces are None."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+        assert ase_atoms.forces is None
+
     def test_convert_ase_atoms_with_constraints_to_molecule(
         self, constrained_atoms
     ):
@@ -1392,7 +1477,7 @@ class TestChemicalFeatures:
         """Test volume calculation for molecules.
 
         Tests various volume calculation methods:
-        - voronoi_dirichlet_occupied_volume (requires pyvoro, optional)
+        - voronoi_dirichlet_occupied_volume
         - crude_volume_by_vdw_radii
         - crude_volume_by_atomic_radii
         - vdw_volume
@@ -1401,16 +1486,11 @@ class TestChemicalFeatures:
         """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
 
-        # Test pyvoro-based method (optional,
-        # may not be available in Python 3.12+)
-        try:
-            ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
-            assert ozone_vd_vol > 0
-            assert np.isclose(ozone_vd_vol, 42.796979883456515, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+        assert ozone_vd_vol > 0
+        assert np.isclose(ozone_vd_vol, 42.7969798834565, rtol=0.01)
 
-        # Test other volume methods that don't require pyvoro
+        # Test other volume methods
         assert np.isclose(
             ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
         )
@@ -1433,13 +1513,9 @@ class TestChemicalFeatures:
 
         acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
 
-        # Test pyvoro-based method (optional)
-        try:
-            acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
-            assert acetone_vd_vol > 0
-            assert np.isclose(acetone_vd_vol, 108.73483002110545, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+        assert acetone_vd_vol > 0
+        assert np.isclose(acetone_vd_vol, 73.29919753367922, rtol=0.01)
 
         # Test other volume methods
         assert np.isclose(

@@ -16,8 +16,9 @@ chemistry software.
 
    introduction
    installation-linux-macos
-   installation-windows-gitbash
    installation-windows-wsl
+   installation-windows-gitbash
+   installation-windows-powershell
    installation-hpc-cluster
 
 .. toctree::
