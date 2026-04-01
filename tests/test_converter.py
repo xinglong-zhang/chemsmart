@@ -768,6 +768,7 @@ class TestPDBFile:
         )
         mol = Molecule._molecule_from_pdb_atom_lines([atom_line])
         assert mol.symbols == ["O"]
+
     # ------------------------------------------------------------------
     # CDXML / CDX conversion tests
     # ------------------------------------------------------------------
