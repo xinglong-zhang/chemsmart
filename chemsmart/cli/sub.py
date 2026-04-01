@@ -29,8 +29,10 @@ logger = logging.getLogger(__name__)
     "--num-nodes",
     type=int,
     default=None,
-    help="Number of nodes for parallel job execution. "
-    "When specified with a list of jobs, creates an array job.",
+    help="Maximum number of array tasks that may run simultaneously. "
+    "When specified with a list of jobs, submits them as a SLURM array job "
+    "throttled to at most N concurrent tasks (%%N on --array). "
+    "Omit to allow all tasks to run at the same time.",
 )
 @click.option(
     "-t",
@@ -115,9 +117,7 @@ def sub(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
-    ctx.obj["num_nodes"] = (
-        num_nodes  # Store num_nodes for array job submission
-    )
+    ctx.obj["num_nodes"] = num_nodes  # concurrency throttle for array jobs
 
 
 @sub.result_callback(replace=True)
@@ -234,14 +234,14 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
 
-        # Check if we should use array job submission
-        if (
-            num_nodes is not None
-            and num_nodes > 1
-            and not jobrunner.run_in_serial
-        ):
+        # Use array job submission whenever --num-nodes is given, regardless of
+        # the value. Even --num-nodes=1 is valid: submit as an array but run
+        # only one task at a time. The old `> 1` guard silently fell through to
+        # individual serial submission for --num-nodes=1, which was surprising.
+        if num_nodes is not None and not jobrunner.run_in_serial:
             logger.info(
-                f"Submitting {len(job)} jobs as array job with {num_nodes} nodes"
+                f"Submitting {len(job)} jobs as array job "
+                f"(max {num_nodes} concurrent tasks)"
             )
 
             # Attach jobrunner to all jobs
