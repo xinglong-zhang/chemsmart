@@ -1009,8 +1009,8 @@ class Molecule:
         pdb_file = PDBFile(filename=filepath)
         return pdb_file.get_molecules(index=index, return_list=return_list)
 
-    @classmethod
-    def _parse_pdb_models(cls, filepath):
+    @staticmethod
+    def _parse_pdb_models(filepath):
         """Parse all PDB models from file into ``Molecule`` objects.
 
         .. deprecated::
@@ -1022,8 +1022,8 @@ class Molecule:
         pdb_file = PDBFile(filename=filepath)
         return pdb_file._parse_models()
 
-    @classmethod
-    def _molecule_from_pdb_atom_lines(cls, atom_lines):
+    @staticmethod
+    def _molecule_from_pdb_atom_lines(atom_lines):
         """Build a ``Molecule`` from parsed PDB ATOM/HETATM lines.
 
         .. deprecated::
