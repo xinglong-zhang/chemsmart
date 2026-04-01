@@ -1591,6 +1591,8 @@ class Molecule:
             ``Molecule`` exports its single stored geometry; conformer
             selection is not supported.
         """
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
         # Try to create an RDKit molecule with bonds first
         try:
             rdkit_mol = self.to_rdkit(
@@ -1599,7 +1601,7 @@ class Molecule:
                 adjust_H=adjust_H,
             )
             pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
-            return self._format_pdb_block(pdb_block)
+            return PDBFile.format_pdb_block(self, pdb_block)
         except (
             Chem.AtomKekulizeException,
             Chem.KekulizeException,
@@ -1612,211 +1614,88 @@ class Molecule:
                 )
                 rdkit_mol = self.to_rdkit(add_bonds=False)
                 pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
-                return self._format_pdb_block(pdb_block)
+                return PDBFile.format_pdb_block(self, pdb_block)
             else:
                 raise
 
     def _format_pdb_block(self, pdb_block):
-        """Normalize PDB output to strict PDB v3.3 atom-line formatting."""
-        lines = pdb_block.splitlines()
-        formatted_lines = []
-        atom_index = 0
+        """Normalize PDB output to strict PDB v3.3 atom-line formatting.
 
-        for line in lines:
-            record_name = line[:6].strip()
-            if record_name in {"ATOM", "HETATM"}:
-                formatted_lines.append(
-                    self._format_pdb_atom_line(
-                        atom_index=atom_index,
-                        default_record_name=record_name,
-                    )
-                )
-                atom_index += 1
-                continue
+        .. deprecated::
+            Formatting is now handled by
+            :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+            This method delegates to ``PDBFile`` for backward compatibility.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
 
-            if record_name == "END":
-                continue
-
-            if line.strip():
-                formatted_lines.append(line.rstrip())
-
-        while atom_index < self.num_atoms:
-            formatted_lines.append(
-                self._format_pdb_atom_line(
-                    atom_index=atom_index,
-                    default_record_name="HETATM",
-                )
-            )
-            atom_index += 1
-
-        formatted_lines.append("END")
-        return "\n".join(formatted_lines) + "\n"
+        return PDBFile.format_pdb_block(self, pdb_block)
 
     def _format_pdb_atom_line(self, atom_index, default_record_name="HETATM"):
-        """Create one strict-width PDB v3.3 ATOM/HETATM record."""
-        atom = self._pdb_atom_object(atom_index)
-        raw_atom_type = (
-            self._pdb_atom_field(
-                atom, atom_index, ("atom_type", "type", "symbol", "element")
-            )
-            or self.chemical_symbols[atom_index]
-        )
-        element = self._pdb_element_symbol(raw_atom_type)
+        """Create one strict-width PDB v3.3 ATOM/HETATM record.
 
-        record_name = self._pdb_atom_field(
-            atom,
-            atom_index,
-            ("record_type", "pdb_record_type", "record_name"),
-        )
-        if record_name is None:
-            hetero = self._pdb_atom_field(
-                atom,
-                atom_index,
-                ("hetero", "hetatm", "is_hetero"),
-            )
-            if hetero is not None:
-                record_name = "HETATM" if bool(hetero) else "ATOM"
-        record_name = (record_name or default_record_name or "HETATM").upper()
-        if record_name not in {"ATOM", "HETATM"}:
-            record_name = default_record_name
+        .. deprecated::
+            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
 
-        atom_name = self._pdb_atom_field(
-            atom,
-            atom_index,
-            ("atom_name", "atom_names", "name", "atom_label", "label"),
-        ) or str(raw_atom_type)
-        atom_name_field = self._pdb_atom_name_field(atom_name, element)
-
-        residue_name = (
-            self._pdb_atom_field(
-                atom,
-                atom_index,
-                (
-                    "residue_name",
-                    "residue_names",
-                    "resname",
-                    "residue",
-                    "pdb_residue_name",
-                ),
-            )
-            or "MOL"
-        )
-        residue_name = str(residue_name).strip()[:3].rjust(3)
-
-        residue_number = self._pdb_atom_field(
-            atom,
-            atom_index,
-            (
-                "residue_number",
-                "residue_numbers",
-                "resseq",
-                "resseqs",
-                "pdb_residue_number",
-            ),
-        )
-        if residue_number is None:
-            residue_number = 1
-        residue_number = int(residue_number)
-
-        chain_id = self._pdb_atom_field(
-            atom,
-            atom_index,
-            ("chain_id", "chain", "chain_ids", "pdb_chain_id"),
-        )
-        chain_id = "" if chain_id is None else str(chain_id).strip()[:1]
-
-        occupancy = self._pdb_atom_field(
-            atom,
-            atom_index,
-            ("occupancy", "pdb_occupancy"),
-        )
-        occupancy = 1.00 if occupancy is None else float(occupancy)
-
-        temp_factor = self._pdb_atom_field(
-            atom,
-            atom_index,
-            ("temp_factor", "bfactor", "b_factor", "pdb_temp_factor"),
-        )
-        temp_factor = 0.00 if temp_factor is None else float(temp_factor)
-
-        x, y, z = self.positions[atom_index]
-        serial = atom_index + 1
-
-        return (
-            f"{record_name:<6}{serial:>5} "
-            f"{atom_name_field}"
-            f" {residue_name} {chain_id:1}"
-            f"{residue_number:>4} "
-            f"   {x:>8.3f}{y:>8.3f}{z:>8.3f}"
-            f"{occupancy:>6.2f}{temp_factor:>6.2f}"
-            f"          {element:>2}"
+        return PDBFile._format_pdb_atom_line(
+            self, atom_index, default_record_name
         )
 
     def _pdb_atom_object(self, atom_index):
-        """Return an atom-like object from ``self.atoms`` when available."""
-        atoms = getattr(self, "atoms", None)
-        if atoms is None:
-            return None
-        try:
-            if len(atoms) == self.num_atoms:
-                return atoms[atom_index]
-        except TypeError:
-            return None
-        return None
+        """Return an atom-like object from ``self.atoms`` when available.
+
+        .. deprecated::
+            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        return PDBFile._pdb_atom_object(self, atom_index)
 
     def _pdb_atom_field(self, atom, atom_index, keys):
-        """Resolve atom metadata from atom object, Molecule attrs, or info."""
-        for key in keys:
-            value = self._pdb_lookup(atom, key)
-            if value is not None:
-                return value
+        """Resolve atom metadata from atom object, Molecule attrs, or info.
 
-            value = self._pdb_lookup(self, key)
-            resolved = self._pdb_indexed_value(value, atom_index)
-            if resolved is not None:
-                return resolved
+        .. deprecated::
+            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
 
-            value = self._pdb_lookup(self.info, key)
-            resolved = self._pdb_indexed_value(value, atom_index)
-            if resolved is not None:
-                return resolved
-        return None
+        return PDBFile._pdb_atom_field(self, atom, atom_index, keys)
 
     @staticmethod
     def _pdb_lookup(container, key):
-        if container is None:
-            return None
-        if isinstance(container, dict):
-            return container.get(key)
-        return getattr(container, key, None)
+        """.. deprecated:: Delegates to PDBFile."""
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        return PDBFile._pdb_lookup(container, key)
 
     @staticmethod
     def _pdb_indexed_value(value, atom_index):
-        if value is None:
-            return None
-        if isinstance(value, np.ndarray):
-            if value.ndim == 0:
-                return value.item()
-            if atom_index < len(value):
-                return value[atom_index]
-            return None
-        if isinstance(value, (list, tuple)):
-            if atom_index < len(value):
-                return value[atom_index]
-            return None
-        return value
+        """.. deprecated:: Delegates to PDBFile."""
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        return PDBFile._pdb_indexed_value(value, atom_index)
 
     def _pdb_element_symbol(self, atom_type):
-        """Map atom type/symbol text to a canonical PDB element symbol."""
-        return p.to_element(str(atom_type))
+        """Map atom type/symbol text to a canonical PDB element symbol.
+
+        .. deprecated::
+            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        return PDBFile._pdb_element_symbol(atom_type)
 
     @staticmethod
     def _pdb_atom_name_field(atom_name, element):
-        """Format atom name into PDB columns 13-16."""
-        cleaned = "".join(str(atom_name).strip().split())[:4] or element
-        if len(element.strip()) == 1 and not cleaned[:1].isdigit():
-            return cleaned.rjust(4)
-        return cleaned.ljust(4)
+        """Format atom name into PDB columns 13-16.
+
+        .. deprecated::
+            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        return PDBFile._pdb_atom_name_field(atom_name, element)
 
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol
