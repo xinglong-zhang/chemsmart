@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 
 from chemsmart.io.file import SDFFile
 from chemsmart.io.folder import BaseFolder
@@ -233,3 +234,84 @@ class FileConverter:
                 m.write(output_filepath, format=output_filetype)
         else:
             mol.write(output_filepath, format=output_filetype)
+
+    @staticmethod
+    def xyz_to_pdb(
+        molecule,
+        pdb_filename,
+        xyz_filename=None,
+        mode="w",
+        overwrite=True,
+        cleanup=True,
+    ):
+        """
+        Convert a molecule's XYZ representation to PDB using Open Babel.
+
+        This is an alternative to ``Molecule.write_pdb`` / ``Molecule.to_pdb``
+        for cases where Open Babel's interpretation of connectivity or atom
+        typing is preferred over the RDKit-based path.
+
+        Args:
+            molecule (Molecule): Source molecule whose coordinates are used.
+            pdb_filename (str): Destination PDB file path.
+            xyz_filename (str, optional): Path to an existing XYZ file to
+                convert. When omitted or the file is absent, a temporary XYZ
+                is written from *molecule* via ``write_xyz``.
+            mode (str): File mode passed to ``write_xyz`` when the XYZ file
+                must be created. Default ``'w'``.
+            overwrite (bool): Whether to overwrite *pdb_filename* if it
+                already exists. Default ``True``.
+            cleanup (bool): Remove any auto-generated temporary XYZ file after
+                the conversion. Default ``True``.
+
+        Raises:
+            ImportError: If Open Babel (``openbabel``) is not installed.
+            ValueError: If the XYZ file cannot be parsed by Open Babel.
+        """
+        auto_xyz = False
+        if xyz_filename is None:
+            tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
+            tmp.close()
+            xyz_filename = tmp.name
+            auto_xyz = True
+            logger.debug(
+                f"Created temporary XYZ {xyz_filename} for PDB conversion."
+            )
+            molecule.write_xyz(xyz_filename, mode=mode)
+        elif not os.path.isfile(xyz_filename):
+            logger.debug(
+                f"XYZ {xyz_filename} missing; writing coordinates before "
+                "conversion."
+            )
+            molecule.write_xyz(xyz_filename, mode=mode)
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:  # pragma: no cover
+            if auto_xyz and cleanup:
+                os.remove(xyz_filename)
+            raise ImportError(
+                "xyz_to_pdb requires Open Babel. "
+                "Use 'conda install -c conda-forge openbabel' to install it."
+            ) from exc
+
+        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
+        if xyz_mol is None:
+            if auto_xyz and cleanup:
+                os.remove(xyz_filename)
+            raise ValueError(f"Unable to read molecule from {xyz_filename}")
+
+        logger.info(
+            f"Converting XYZ {xyz_filename} to PDB {pdb_filename} via "
+            f"Open Babel (overwrite={overwrite})"
+        )
+        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
+
+        if auto_xyz and cleanup:
+            try:
+                os.remove(xyz_filename)
+                logger.debug(f"Removed temporary XYZ {xyz_filename}")
+            except OSError as exc:
+                logger.warning(
+                    f"Could not remove temporary XYZ {xyz_filename}: {exc}"
+                )

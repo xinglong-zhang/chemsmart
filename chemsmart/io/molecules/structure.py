@@ -4,7 +4,6 @@ import inspect
 import logging
 import os
 import re
-import tempfile
 from functools import cached_property, lru_cache
 
 import networkx as nx
@@ -1618,85 +1617,6 @@ class Molecule:
             else:
                 raise
 
-    def _format_pdb_block(self, pdb_block):
-        """Normalize PDB output to strict PDB v3.3 atom-line formatting.
-
-        .. deprecated::
-            Formatting is now handled by
-            :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-            This method delegates to ``PDBFile`` for backward compatibility.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile.format_pdb_block(self, pdb_block)
-
-    def _format_pdb_atom_line(self, atom_index, default_record_name="HETATM"):
-        """Create one strict-width PDB v3.3 ATOM/HETATM record.
-
-        .. deprecated::
-            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._format_pdb_atom_line(
-            self, atom_index, default_record_name
-        )
-
-    def _pdb_atom_object(self, atom_index):
-        """Return an atom-like object from ``self.atoms`` when available.
-
-        .. deprecated::
-            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._pdb_atom_object(self, atom_index)
-
-    def _pdb_atom_field(self, atom, atom_index, keys):
-        """Resolve atom metadata from atom object, Molecule attrs, or info.
-
-        .. deprecated::
-            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._pdb_atom_field(self, atom, atom_index, keys)
-
-    @staticmethod
-    def _pdb_lookup(container, key):
-        """.. deprecated:: Delegates to PDBFile."""
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._pdb_lookup(container, key)
-
-    @staticmethod
-    def _pdb_indexed_value(value, atom_index):
-        """.. deprecated:: Delegates to PDBFile."""
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._pdb_indexed_value(value, atom_index)
-
-    def _pdb_element_symbol(self, atom_type):
-        """Map atom type/symbol text to a canonical PDB element symbol.
-
-        .. deprecated::
-            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._pdb_element_symbol(atom_type)
-
-    @staticmethod
-    def _pdb_atom_name_field(atom_name, element):
-        """Format atom name into PDB columns 13-16.
-
-        .. deprecated::
-            Delegates to :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._pdb_atom_name_field(atom_name, element)
-
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol
         with proper stereochemistry handling.
@@ -2183,60 +2103,30 @@ class Molecule:
         """
         Convert an XYZ representation of the molecule to PDB using Open Babel.
 
+        .. deprecated::
+            Conversion logic now lives in
+            :meth:`chemsmart.io.converter.FileConverter.xyz_to_pdb`.
+            This method delegates there for backward compatibility.
+
         Args:
             pdb_filename (str): Destination PDB file path.
-            xyz_filename (str, optional): Source
-            XYZ file path; if omitted or missing, a
-                temporary XYZ is written via ``write_xyz``.
-            mode (str): File mode passed to
-            ``write_xyz`` when creating the XYZ file.
+            xyz_filename (str, optional): Source XYZ file path; if omitted or
+                missing, a temporary XYZ is written via ``write_xyz``.
+            mode (str): File mode passed to ``write_xyz`` when creating the
+                XYZ file.
             overwrite (bool): Whether to overwrite an existing PDB file.
             cleanup (bool): Remove auto-generated XYZ files after conversion.
         """
-        auto_xyz = False
-        if xyz_filename is None:
-            tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
-            tmp.close()
-            xyz_filename = tmp.name
-            auto_xyz = True
-            logger.debug(
-                f"Created temporary XYZ {xyz_filename} for PDB conversion. "
-            )
-            self.write_xyz(xyz_filename, mode=mode)
-        elif not os.path.isfile(xyz_filename):
-            logger.debug(
-                f"XYZ {xyz_filename} missing; writing coordinates before conversion."
-            )
-            self.write_xyz(xyz_filename, mode=mode)
+        from chemsmart.io.converter import FileConverter
 
-        try:
-            from openbabel import pybel
-        except ImportError as exc:  # pragma: no cover
-            if auto_xyz and cleanup:
-                os.remove(xyz_filename)
-            raise ImportError(
-                "xyz_to_pdb requires Open Babel. Use 'conda install -c conda-forge openbabel' to install Openbabel and to enable this conversion."
-            ) from exc
-
-        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
-        if xyz_mol is None:
-            if auto_xyz and cleanup:
-                os.remove(xyz_filename)
-            raise ValueError(f"Unable to read molecule from {xyz_filename}")
-
-        logger.info(
-            f"Converting XYZ {xyz_filename} to PDB {pdb_filename} using Open Babel (overwrite={overwrite})"
+        FileConverter.xyz_to_pdb(
+            self,
+            pdb_filename,
+            xyz_filename=xyz_filename,
+            mode=mode,
+            overwrite=overwrite,
+            cleanup=cleanup,
         )
-        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
-
-        if auto_xyz and cleanup:
-            try:
-                os.remove(xyz_filename)
-                logger.debug(f"Removed temporary XYZ {xyz_filename}")
-            except OSError as exc:
-                logger.warning(
-                    f"Could not remove temporary XYZ {xyz_filename}: {exc}"
-                )
 
 
 class CoordinateBlock:
