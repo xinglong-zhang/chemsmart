@@ -91,6 +91,7 @@ class GaussianpKaJob(GaussianJob):
         label=None,
         jobrunner=None,
         skip_completed=True,
+        parallel=False,
         **kwargs,
     ):
         if not isinstance(settings, GaussianpKaJobSettings):
@@ -106,6 +107,19 @@ class GaussianpKaJob(GaussianJob):
             skip_completed=skip_completed,
             **kwargs,
         )
+
+        # parallel support – opt-in only, matching ORCApKaJob behaviour.
+        # When False (default), jobs run serially regardless of the jobrunner's
+        # run_in_serial flag, so software that does not support concurrent
+        # processes (e.g. single-licence Gaussian) is never affected.
+        self.parallel = bool(parallel)
+        if self.jobrunner and getattr(self.jobrunner, "run_in_serial", False):
+            if self.parallel:
+                logger.info(
+                    "Parallel execution disabled due to run_in_serial=True in JobRunner"
+                )
+            self.parallel = False
+
         self.opt_jobs = []
         self.ref_opt_jobs = []
         self.sp_jobs = None
@@ -572,24 +586,18 @@ class GaussianpKaJob(GaussianJob):
         """
         Execute the pKa calculation.
 
-        Runs gas phase optimization jobs sequentially (default), then solution phase SP jobs.
-        When `self.jobrunner.run_in_serial` is False, run per-species opt->SP pipelines concurrently on the same node.
+        Runs gas phase optimization jobs sequentially by default, then
+        solution phase SP jobs.  Pass ``parallel=True`` to the constructor
+        to enable concurrent execution of per-species jobs on the same node.
         """
-        # Determine strict serial execution from runner
-        run_in_serial = False
-        if self.jobrunner and hasattr(self.jobrunner, "run_in_serial"):
-            run_in_serial = self.jobrunner.run_in_serial
-
-        # If jobrunner explicitly prefers parallel mode (run_in_serial=False),
-        # distribute resources and run internal jobs concurrently.
-        if not run_in_serial:
+        if self.parallel:
             logger.info(
-                "Running pKa calculation in parallel mode (splitting resources)"
+                "Running Gaussian pKa calculation in parallel mode (splitting resources)"
             )
             self._run_parallel()
             return
 
-        # Default sequential behaviour preserved if run_in_serial is True
+        # Default sequential behaviour
         # Run gas phase optimization jobs for target acid (HA, A-)
         self._run_opt_jobs()
 

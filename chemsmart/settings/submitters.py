@@ -756,6 +756,16 @@ class SLURMSubmitter(Submitter):
         """
         Write SLURM-specific array job scheduler directives.
 
+        Each array task runs exactly one independent Gaussian job on a single
+        node. Gaussian is a shared-memory program and cannot span multiple
+        nodes, so ``--nodes=1`` is always correct per task. Parallelism across
+        jobs is achieved by SLURM scheduling multiple ``--nodes=1`` tasks
+        simultaneously on separate nodes — not by one task using multiple nodes.
+
+        ``num_nodes`` controls the maximum number of concurrently running array
+        tasks (the ``%N`` throttle on ``--array``). When *None*, all tasks may
+        run at the same time.
+
         Args:
             f: File handle for writing SLURM directives.
             num_nodes (int): Number of nodes for the array job.
@@ -767,11 +777,17 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --output={self.job.label}_array_%a.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}_array_%a.slurmerr\n")
 
-        # Array directive: 0 to num_jobs-1
-        f.write(f"#SBATCH --array=0-{num_jobs-1}\n")
+        # Array directive: 0 to num_jobs-1, optionally throttled so that at
+        # most num_nodes tasks run concurrently (useful for resource limits).
+        if num_nodes is not None:
+            f.write(f"#SBATCH --array=0-{num_jobs-1}%{num_nodes}\n")
+        else:
+            f.write(f"#SBATCH --array=0-{num_jobs-1}\n")
 
         if self.server.num_gpus:
             f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
+        # Each array task runs one Gaussian job → always 1 node per task.
+        # Gaussian uses shared memory only and cannot use MPI across nodes.
         f.write(
             f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
         )
