@@ -524,6 +524,14 @@ class Molecule:
         do not produce false positives.  An atom is only considered
         aromatic when it both carries the aromatic flag *and* belongs to
         at least one ring.
+
+        .. note::
+            **Limitations:** Bond orders are inferred from 3D geometry, not
+            from an electronic structure calculation, so this check is
+            model-dependent.  Edge cases such as the cyclopropenyl cation
+            versus the cyclopropenyl radical may not be distinguished
+            correctly.  For borderline or unusual systems the result should
+            be treated as a heuristic estimate.
         """
         mol = self.to_rdkit()
         Chem.FastFindRings(mol)
