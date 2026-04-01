@@ -2117,3 +2117,154 @@ def empty_pdb_file(tmpdir):
     with open(filepath, "w") as f:
         f.write("REMARK  This PDB has no atoms.\nEND\n")
     return filepath
+
+
+############ Molecule Fixtures for RDKit / PDB conversion tests ##################
+
+
+@pytest.fixture()
+def water_molecule():
+    """H₂O with realistic geometry."""
+    return Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.1173],
+                [0.0000, 0.7572, -0.4692],
+                [0.0000, -0.7572, -0.4692],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def methane_molecule():
+    """CH₄ tetrahedral."""
+    return Molecule(
+        symbols=["C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.0000],
+                [0.6276, 0.6276, 0.6276],
+                [0.6276, -0.6276, -0.6276],
+                [-0.6276, 0.6276, -0.6276],
+                [-0.6276, -0.6276, 0.6276],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def ethylene_molecule():
+    """C₂H₄ – contains a C=C double bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6695],
+                [0.0000, 0.0000, -0.6695],
+                [0.0000, 0.9289, 1.2321],
+                [0.0000, -0.9289, 1.2321],
+                [0.0000, 0.9289, -1.2321],
+                [0.0000, -0.9289, -1.2321],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def acetylene_molecule():
+    """C₂H₂ – contains a C≡C triple bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6013],
+                [0.0000, 0.0000, -0.6013],
+                [0.0000, 0.0000, 1.6644],
+                [0.0000, 0.0000, -1.6644],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def hydrogen_molecule():
+    """H₂ – minimal molecule with H-H bond."""
+    return Molecule(
+        symbols=["H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.74, 0.0, 0.0],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def co2_molecule():
+    """CO₂ – linear molecule with two C=O double bonds."""
+    return Molecule(
+        symbols=["C", "O", "O"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.16],
+                [0.0, 0.0, -1.16],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def single_atom_molecule():
+    """Single argon atom – edge case for bond detection."""
+    return Molecule(
+        symbols=["Ar"],
+        positions=np.array([[0.0, 0.0, 0.0]]),
+    )
+
+
+@pytest.fixture()
+def water_with_metadata_molecule():
+    """Water molecule with PDB residue metadata."""
+    mol = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ]
+        ),
+        info={
+            "record_type": ["HETATM", "HETATM", "HETATM"],
+            "atom_name": ["O", "H1", "H2"],
+            "residue_name": ["HOH", "HOH", "HOH"],
+            "residue_number": [1, 1, 1],
+            "chain_id": ["A", "A", "A"],
+        },
+    )
+    mol.atom_names = ["O", "H1", "H2"]
+    mol.residue_names = ["HOH", "HOH", "HOH"]
+    mol.residue_numbers = [1, 1, 1]
+    mol.chain_ids = ["A", "A", "A"]
+    return mol
+
+
+@pytest.fixture()
+def chiral_molecule():
+    """Molecule with a chiral center (C with 4 different substituents)."""
+    return Molecule(
+        symbols=["C", "Cl", "F", "Br", "I"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.2, 0.0, -0.5],
+                [-0.6, 1.0, 0.5],
+                [-0.6, -1.0, 0.5],
+                [0.0, 0.0, 1.3],
+            ]
+        ),
+    )
