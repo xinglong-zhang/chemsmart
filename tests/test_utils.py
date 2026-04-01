@@ -17,6 +17,7 @@ from chemsmart.utils.utils import (
     cmp_with_ignore,
     content_blocks_by_paragraph,
     convert_string_index_from_1_based_to_0_based,
+    deduplicate_string_keywords,
     get_list_from_string_range,
     get_range_from_list,
     is_float,
@@ -1272,6 +1273,117 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         objects = ["a", "b", "c"]
         with pytest.raises(IndexError):
             return_objects_and_indices_from_string_index(objects, "10")
+
+
+class TestDeduplicateStringKeywords:
+    """Tests for deduplicate_string_keywords utility function."""
+
+    def test_empty_route_string_returns_unchanged(self):
+        """Empty route string is returned as-is regardless of keywords."""
+        assert deduplicate_string_keywords("", "cosmors") == ""
+
+    def test_none_route_string_returns_unchanged(self):
+        """None route string is returned as-is."""
+        assert deduplicate_string_keywords(None, "cosmors") is None
+
+    def test_empty_keywords_returns_unchanged(self):
+        """Route string is returned unchanged when keywords is empty."""
+        route = "! m062x def2-tzvp cosmors"
+        assert deduplicate_string_keywords(route, "") == route
+
+    def test_empty_keywords_list_returns_unchanged(self):
+        """Route string is returned unchanged when keywords is an empty list."""
+        route = "! m062x def2-tzvp cosmors"
+        assert deduplicate_string_keywords(route, []) == route
+
+    def test_no_duplicates_returns_unchanged(self):
+        """Route string without duplicates is returned unchanged."""
+        route = "! m062x def2-tzvp COSMORS(water)"
+        assert deduplicate_string_keywords(route, "cosmors") == route
+
+    def test_bare_keyword_duplicate_keeps_first(self):
+        """When a bare keyword appears twice, the first occurrence is kept."""
+        route = "! m062x cosmors def2-tzvp cosmors"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == "! m062x cosmors def2-tzvp"
+
+    def test_bare_and_args_keyword_keeps_args_form(self):
+        """When bare keyword and keyword(args) both appear, keyword(args) is kept."""
+        route = "! m062x def2-tzvp cosmors defgrid2 COSMORS(water)"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == "! m062x def2-tzvp defgrid2 COSMORS(water)"
+
+    def test_args_and_bare_keyword_keeps_args_form(self):
+        """When keyword(args) appears before the bare keyword, keyword(args) is kept."""
+        route = "! m062x COSMORS(water) def2-tzvp cosmors"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == "! m062x COSMORS(water) def2-tzvp"
+
+    def test_case_insensitive_matching(self):
+        """Matching is case-insensitive."""
+        route = "! m062x CoSmOrS def2-tzvp COSMORS(water)"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == "! m062x def2-tzvp COSMORS(water)"
+
+    def test_keyword_as_string(self):
+        """A single keyword can be passed as a string."""
+        route = "! m062x smd def2-tzvp SMD(water)"
+        result = deduplicate_string_keywords(route, "smd")
+        assert result == "! m062x def2-tzvp SMD(water)"
+
+    def test_keyword_as_list(self):
+        """Keywords can be passed as a list."""
+        route = "! m062x smd def2-tzvp SMD(water)"
+        result = deduplicate_string_keywords(route, ["smd"])
+        assert result == "! m062x def2-tzvp SMD(water)"
+
+    def test_keyword_as_tuple(self):
+        """Keywords can be passed as a tuple."""
+        route = "! m062x smd def2-tzvp SMD(water)"
+        result = deduplicate_string_keywords(route, ("smd",))
+        assert result == "! m062x def2-tzvp SMD(water)"
+
+    def test_multiple_keywords_deduplicated(self):
+        """Multiple keywords are all deduplicated in one pass."""
+        route = "! m062x smd cosmors def2-tzvp SMD(water) COSMORS(methanol)"
+        result = deduplicate_string_keywords(route, ["smd", "cosmors"])
+        assert result == "! m062x def2-tzvp SMD(water) COSMORS(methanol)"
+
+    def test_unrelated_tokens_preserved(self):
+        """Tokens not in the keyword list are always preserved."""
+        route = "! m062x def2-tzvp defgrid2 COSMORS(water)"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == route
+
+    def test_keyword_with_longer_args_preferred_over_shorter(self):
+        """When keyword appears twice with args, the longer args form is kept."""
+        route = "! COSMORS(water) def2-tzvp COSMORS(water_long)"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == "! def2-tzvp COSMORS(water_long)"
+
+    def test_docstring_example(self):
+        """Reproduce the example given in the docstring."""
+        route = "! m062x def2-tzvp cosmors defgrid2 COSMORS(water)"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == "! m062x def2-tzvp defgrid2 COSMORS(water)"
+
+    def test_keyword_not_present_returns_unchanged(self):
+        """Route string is returned unchanged when the keyword is not present."""
+        route = "! m062x def2-tzvp defgrid2"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == route
+
+    def test_three_bare_duplicates_keeps_first(self):
+        """When a bare keyword appears three times, only the first is kept."""
+        route = "! m062x cosmors def2-tzvp cosmors defgrid2 cosmors"
+        result = deduplicate_string_keywords(route, "cosmors")
+        assert result == "! m062x cosmors def2-tzvp defgrid2"
+
+    def test_mixed_case_keyword_argument(self):
+        """The keyword argument itself is matched case-insensitively."""
+        route = "! m062x cosmors def2-tzvp COSMORS"
+        result = deduplicate_string_keywords(route, "COSMORS")
+        assert result == "! m062x cosmors def2-tzvp"
 
 
 class TestPKaTableParsing:

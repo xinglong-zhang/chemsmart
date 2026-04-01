@@ -22,6 +22,12 @@ allxyz_filename_pattern = r"([^\s\"']+\.allxyz\b)"
 # It will match if .xyz is followed by: a
 # space, a quote, end of line, punctuation
 
+# Pattern to match the solvent name in a %cosmors solventfilename line, e.g.:
+#   solventfilename "water"
+# Captures the name (without quotes).  Used to locate the corresponding
+# .cosmorsxyz file (name + ".cosmorsxyz") and copy it to scratch.
+solventfilename_block_pattern = r'(?i)solventfilename\s+"([^"]+)"'
+
 normal_mode_pattern = r"\s*(\d+)\s+(\d+)((?:\s+[+-]?\d*\.\d+)+)\s*"
 frozen_coordinates_pattern = (
     r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"

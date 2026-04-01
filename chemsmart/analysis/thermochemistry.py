@@ -351,7 +351,7 @@ class Thermochemistry:
 
     @property
     def electronic_heat_capacity(self):
-        """The electronic heat capacity is zero for all types of molecules.
+        r"""The electronic heat capacity is zero for all types of molecules.
 
         C_V = (\partial U_e / \partial T)_V = 0
         """

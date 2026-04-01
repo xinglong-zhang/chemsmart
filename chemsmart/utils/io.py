@@ -18,10 +18,6 @@ import shutil
 import string
 import subprocess
 from io import BytesIO
-
-# from rdkit import Chem
-#
-# import tempfile
 from pathlib import Path
 from typing import List
 
@@ -34,6 +30,44 @@ from chemsmart.utils.repattern import float_pattern_with_exponential
 logger = logging.getLogger(__name__)
 
 SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
+
+PROGRAM_INFO = {
+    "crest": {
+        "keywords": [
+            "C R E S T",
+            "Conformer-Rotamer Ensemble Sampling Tool",
+            "https://crest-lab.github.io/crest-docs/",
+            "$ crest",
+        ],
+        "suffixes": [".out"],
+    },
+    "gaussian": {
+        "keywords": [
+            "Entering Gaussian System",
+            "Gaussian, Inc.",
+            "Gaussian(R)",
+        ],
+        "suffixes": [".log", ".out"],
+    },
+    "orca": {
+        "keywords": [
+            "* O   R   C   A *",
+            "Your ORCA version",
+            "ORCA versions",
+        ],
+        "suffixes": [".out"],
+    },
+    "xtb": {
+        "keywords": ["x T B", "xtb version", "xtb is free software:"],
+        "suffixes": [".out"],
+    },
+}
+SUPPORTED_PROGRAMS = set(PROGRAM_INFO.keys())
+ALL_SUFFIXES = tuple(
+    suffix for info in PROGRAM_INFO.values() for suffix in info["suffixes"]
+)
+# Folder-level detection is currently supported only for these programs
+PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
 
 
 def create_molecule_list(
@@ -189,8 +223,7 @@ def replace_word(text, old_word, new_word, case_sensitive=True):
         str: Text with the word replaced.
 
     Example:
-        >>> replace_word("gen test
-        noeigentest","gen","def2svp",case_sensitive=True)
+        >>> replace_word("gen test noeigentest","gen","def2svp",case_sensitive=True)
         'def2svp test noeigentest'
         >>> replace_word("opt=(gen) freq","gen","6-31g",case_sensitive=False)
         'opt=(6-31g) freq'
@@ -249,7 +282,7 @@ def line_of_integer_followed_by_floats(line) -> bool:
     return all(float_pattern.fullmatch(t) for t in tokens[1:])
 
 
-def match_outfile_pattern(line) -> str | None:
+def match_outfile_pattern(line):
     """
     Match a line of text to known quantum chemistry program signatures.
 
@@ -257,35 +290,16 @@ def match_outfile_pattern(line) -> str | None:
         line (str): Line from an output file.
 
     Returns:
-        str | None: Program name ("gaussian", "orca",
-        "xtb", "crest") if matched, else None.
+        str | None: Program name ("gaussian", "orca", "xtb", "crest")
+        if matched, else None.
     """
-    patterns = {
-        "crest": [
-            "C R E S T",
-            "Conformer-Rotamer Ensemble Sampling Tool",
-            "https://crest-lab.github.io/crest-docs/",
-            "$ crest",
-        ],
-        "gaussian": [
-            "Entering Gaussian System",
-            "Gaussian, Inc.",
-            "Gaussian(R)",
-        ],
-        "orca": [
-            "* O   R   C   A *",
-            "Your ORCA version",
-            "ORCA versions",
-        ],
-        "xtb": ["x T B", "xtb version", "xtb is free software:"],
-    }
-    for program, keywords in patterns.items():
-        if any(keyword in line for keyword in keywords):
+    for program, info in PROGRAM_INFO.items():
+        if any(keyword in line for keyword in info["keywords"]):
             return program
     return None
 
 
-def get_program_type_from_file(filepath) -> str:
+def get_program_type_from_file(filepath):
     """
     Detect the type of quantum chemistry output file.
 
@@ -296,8 +310,8 @@ def get_program_type_from_file(filepath) -> str:
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name, one of: "gaussian", "orca", "xtb", "crest",
-        or "unknown" if the format cannot be detected.
+        str: Program name ("gaussian", "orca", "xtb", "crest") or "unknown"
+             if the format cannot be detected.
     """
     max_lines = 200
     try:
@@ -321,43 +335,6 @@ def get_program_type_from_file(filepath) -> str:
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
     return "unknown"
-
-
-def find_output_files_in_directory(directory, program):
-    """
-    Find quantum chemistry output files in a directory by program.
-
-    Args:
-        directory (str): Path to the directory to search.
-        program (str): Target QC program, e.g.,
-        "gaussian", "orca", "xtb", "crest".
-
-    Returns:
-        list[str]: List of file paths matching the specified program.
-    """
-    PROGRAM_SUFFIXES = {
-        "gaussian": [".log", ".out"],
-        "orca": [".out"],
-        "xtb": [".out"],
-        "crest": [".out"],
-    }
-
-    directory = os.path.abspath(directory)
-    logger.info(f"Obtaining {program} output files in directory: {directory}")
-    suffixes = PROGRAM_SUFFIXES.get(program)
-
-    outfiles = []
-    for subdir, _dirs, files in os.walk(directory):
-        for file in files:
-            if file.endswith(tuple(suffixes)):
-                outfiles.append(os.path.join(subdir, file))
-
-    matched_files = [
-        file
-        for file in outfiles
-        if get_program_type_from_file(file) == program
-    ]
-    return matched_files
 
 
 def load_molecules_from_paths(
@@ -490,7 +467,7 @@ def select_items_by_index(
     Note:
         - int indices raise IndexError for out-of-range access.
         - slice indices never raise errors;
-        they return empty or partial results.
+          they return empty or partial results.
         - str indices raise ValueError based on allow_out_of_range parameter.
     """
     # If no filtering needed, return all
@@ -665,3 +642,215 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
         )
 
     return mols
+
+
+def update_shell_config(shell_file: Path, env_vars: list) -> None:
+    """
+    Append chemsmart ``export`` lines to *shell_file* (idempotent).
+
+    This is the POSIX equivalent of writing ``$env:PATH`` lines to a
+    PowerShell profile or updating the Windows registry.  The update is
+    idempotent: if the marker comment ``# Added by chemsmart installer`` is
+    already present the file is not modified again.
+
+    Creates the file if it does not yet exist.
+
+    Args:
+        shell_file: Path to the shell startup file (e.g. ``~/.bashrc``).
+        env_vars: List of ``export VAR=...`` lines to append.
+    """
+    if not shell_file.exists():
+        shell_file.touch()
+
+    with shell_file.open("r+", encoding="utf-8") as f:
+        lines = f.readlines()
+        if not any("Added by chemsmart installer" in line for line in lines):
+            f.write("\n# Added by chemsmart installer\n")
+            for var in env_vars:
+                f.write(f"{var}\n")
+            f.write("\n")
+            logger.info(f"Updated shell config: {shell_file}")
+        else:
+            logger.info(f"Shell config already updated: {shell_file}")
+
+    logger.info(f"Please restart your terminal or run 'source {shell_file}'.")
+
+
+_PS_BLOCK_START = "# >>> chemsmart initialize >>>"
+_PS_BLOCK_END = "# <<< chemsmart initialize <<<"
+# Legacy marker written by earlier versions of the installer.
+_PS_BLOCK_LEGACY = "# Added by chemsmart installer"
+
+
+def update_powershell_profiles(profiles: list, ps_env_vars: list) -> None:
+    """
+    Write chemsmart initialisation lines to each PowerShell profile,
+    replacing any previously written block.  Creates profile directories
+    and files as needed.
+
+    The block is delimited by ``# >>> chemsmart initialize >>>`` /
+    ``# <<< chemsmart initialize <<<`` markers.  If an older block using
+    the legacy marker ``# Added by chemsmart installer`` is found it is
+    removed and replaced with the current block so that users who ran
+    ``make configure`` with an earlier version are migrated automatically.
+
+    Args:
+        profiles: List of :class:`~pathlib.Path` objects pointing to the PS
+            profile files to update.
+        ps_env_vars: List of PowerShell assignment / alias lines to write
+            inside the block.
+    """
+    new_block = (
+        f"\n{_PS_BLOCK_START}\n"
+        + "\n".join(ps_env_vars)
+        + f"\n{_PS_BLOCK_END}\n"
+    )
+
+    for ps_profile in profiles:
+        ps_profile.parent.mkdir(parents=True, exist_ok=True)
+        if not ps_profile.exists():
+            ps_profile.write_text(new_block, encoding="utf-8")
+            logger.info(f"Created PowerShell profile: {ps_profile}")
+            continue
+
+        content = ps_profile.read_text(encoding="utf-8")
+
+        # ── Remove existing chemsmart block (new-style markers) ──────────
+        if _PS_BLOCK_START in content:
+            start = content.find(_PS_BLOCK_START)
+            end = content.find(_PS_BLOCK_END, start)
+            if end != -1:
+                content = content[:start] + content[end + len(_PS_BLOCK_END) :]
+            else:
+                # Malformed block — remove from start marker to end of file
+                content = content[:start]
+
+        # ── Remove legacy block ("# Added by chemsmart installer") ───────
+        if _PS_BLOCK_LEGACY in content:
+            lines = content.splitlines(keepends=True)
+            filtered = []
+            in_legacy = False
+            for line in lines:
+                if _PS_BLOCK_LEGACY in line:
+                    in_legacy = True
+                    continue
+                if in_legacy and line.strip() == "":
+                    in_legacy = False
+                    continue
+                if not in_legacy:
+                    filtered.append(line)
+            content = "".join(filtered)
+
+        # Ensure exactly one blank line separates existing content from the
+        # new block (strip trailing newlines, then add exactly one).
+        ps_profile.write_text(
+            content.rstrip("\n") + "\n" + new_block, encoding="utf-8"
+        )
+        logger.info(f"Updated PowerShell profile: {ps_profile}")
+
+    logger.info(
+        "PowerShell profiles updated.\n"
+        "To apply changes in the current PowerShell session, run:\n"
+        "  . $PROFILE"
+    )
+
+
+def update_windows_env(paths_to_add: list, pythonpath_entry: str) -> None:
+    """
+    Add directories to the Windows user PATH and PYTHONPATH via the registry.
+
+    This is the Windows equivalent of appending ``export PATH=...`` lines to
+    ``~/.bashrc``.  Changes take effect in **new** terminal sessions; users
+    must restart their terminal or execute the PowerShell one-liner below to
+    refresh the current session::
+
+        $env:PATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' +
+                    [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+
+    Args:
+        paths_to_add: List of directory paths to append to the user PATH (only
+            entries that are not already present will be added).
+        pythonpath_entry: Single directory to append to the user PYTHONPATH (no-op
+            if already present).
+    """
+    try:
+        import winreg  # noqa: PLC0415 — Windows-only stdlib module
+    except ImportError:
+        logger.warning("winreg not available; skipping Windows PATH update.")
+        return
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            "Environment",
+            0,
+            winreg.KEY_READ | winreg.KEY_WRITE,
+        ) as key:
+            # ---- PATH ----
+            try:
+                current_path, _ = winreg.QueryValueEx(key, "PATH")
+            except FileNotFoundError:
+                current_path = ""
+
+            path_parts = [p for p in current_path.split(";") if p.strip()]
+            new_paths = [p for p in paths_to_add if p not in path_parts]
+            if new_paths:
+                winreg.SetValueEx(
+                    key,
+                    "PATH",
+                    0,
+                    winreg.REG_EXPAND_SZ,
+                    ";".join(path_parts + new_paths),
+                )
+                logger.info(f"Added to Windows user PATH: {new_paths}")
+            else:
+                logger.info(
+                    "Windows user PATH already contains all required paths."
+                )
+
+            # ---- PYTHONPATH ----
+            try:
+                current_pypath, _ = winreg.QueryValueEx(key, "PYTHONPATH")
+            except FileNotFoundError:
+                current_pypath = ""
+
+            pypath_parts = [p for p in current_pypath.split(";") if p.strip()]
+            if pythonpath_entry not in pypath_parts:
+                winreg.SetValueEx(
+                    key,
+                    "PYTHONPATH",
+                    0,
+                    winreg.REG_SZ,
+                    ";".join(pypath_parts + [pythonpath_entry]),
+                )
+                logger.info(
+                    f"Updated Windows PYTHONPATH to include: {pythonpath_entry}"
+                )
+            else:
+                logger.info(
+                    "Windows PYTHONPATH already contains the required path."
+                )
+
+        # Notify running applications about the environment change so
+        # that new terminal windows inherit the updated PATH immediately.
+        import ctypes
+
+        ctypes.windll.user32.SendMessageTimeoutW(
+            0xFFFF,  # HWND_BROADCAST
+            0x001A,  # WM_SETTINGCHANGE
+            0,
+            "Environment",
+            0x0002,  # SMTO_ABORTIFHUNG
+            5000,
+            None,
+        )
+        logger.info("Broadcasted environment change to Windows.")
+
+    except PermissionError:
+        logger.warning(
+            "Permission denied accessing Windows registry. "
+            "Run as administrator or add these paths to PATH manually:\n"
+            + "\n".join(f"  {p}" for p in paths_to_add)
+        )
+    except Exception as e:
+        logger.warning(f"Could not update Windows environment: {e}")

@@ -16,6 +16,7 @@ import re
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
+    deduplicate_string_keywords,
     get_list_from_string_range,
     get_prepend_string_list_from_modred_free_format,
 )
@@ -56,6 +57,15 @@ class ORCAJobSettings(MolecularJobSettings):
         title (str | None): Job title string.
         solvent_model (str | None): Solvation model identifier.
         solvent_id (str | None): Solvent identifier.
+        additional_solvent_options (str | None): Extra solvent options written
+            inside the ``%cpcm`` block (e.g. ``'Epsilon 78.36'``).
+        solventfilename (str | None): Path to a solvent file for use with the
+            ``cosmors`` model. If in .cosmorsxyz, this file will be used directly,
+            else, CHEMSMART will convert it into .cosmorsxyz format. The basename
+            (without the ``.cosmorsxyz`` extension) is written as ``solventfilename
+            "name"`` inside the ``%cosmors`` block, and the file itself is copied to
+            the running directory (scratch or job folder) so that ORCA can locate it.
+            Set via the ``-sf``/``--solventfilename`` CLI option.
         additional_route_parameters (str | None): Extra route parameters.
         route_to_be_written (str | None): Custom route string to write.
         modred (list | dict | None): Modredundant coordinates specification.
@@ -63,7 +73,17 @@ class ORCAJobSettings(MolecularJobSettings):
         heavy_elements (list | None): Heavy elements list for genecp.
         heavy_elements_basis (str | None): Basis for heavy elements.
         light_elements_basis (str | None): Basis for light elements.
-        custom_solvent (str | None): Custom solvent parameters block.
+        custom_solvent (str | None): Custom solvent parameters written
+            inside the ``%cpcm`` block.  In ORCA, custom dielectric constants
+            are specified as ``%cpcm`` block keywords rather than appended at
+            the end of the input (as in Gaussian).  Example YAML entry::
+
+                custom_solvent : |
+                  Epsilon 16.7
+                  Refrac 1.275
+
+            This produces ``! CPCM B3LYP def2-SVP`` in the route line and
+            a ``%cpcm`` block containing the Epsilon and Refrac lines.
         forces (bool): Calculate forces.
         input_string (str | None): Predefined input content to write directly.
         invert_constraints (bool): Invert modred constraints if True.
@@ -95,6 +115,8 @@ class ORCAJobSettings(MolecularJobSettings):
         title=None,
         solvent_model=None,
         solvent_id=None,
+        additional_solvent_options=None,
+        solventfilename=None,
         additional_route_parameters=None,
         route_to_be_written=None,
         modred=None,
@@ -136,6 +158,12 @@ class ORCAJobSettings(MolecularJobSettings):
             title: Job title
             solvent_model: Solvation model
             solvent_id: Solvent identifier
+            additional_solvent_options: Additional solvent options written
+                inside the ``%cpcm`` block (e.g. ``'Epsilon 78.36'``).
+            solventfilename: Path to a ``.cosmorsxyz`` file for the ``cosmors``
+                model.  The file is copied to the running directory and its
+                basename (without extension) is written as
+                ``solventfilename "name"`` in the ``%cosmors`` block.
             additional_route_parameters: Additional route parameters
             route_to_be_written: Custom route string
             modred: Modified redundant coordinates
@@ -189,6 +217,8 @@ class ORCAJobSettings(MolecularJobSettings):
         self.dipole = dipole
         self.quadrupole = quadrupole
         self.invert_constraints = invert_constraints
+        self.additional_solvent_options = additional_solvent_options
+        self.solventfilename = solventfilename
 
         # Validate frequency and force settings
         if forces is True and (freq is True or numfreq is True):
@@ -433,12 +463,16 @@ class ORCAJobSettings(MolecularJobSettings):
             gbw=True,
             freq=True,
             numfreq=False,
+            dipole=False,
+            quadrupole=False,
             mdci_cutoff=None,
             mdci_density=None,
             jobtype=None,
             title=None,
             solvent_model=None,
             solvent_id=None,
+            additional_solvent_options=None,
+            solventfilename=None,
             additional_route_parameters=None,
             route_to_be_written=None,
             modred=None,
@@ -538,13 +572,28 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
-        if self.solvent_model is not None and self.solvent_id is not None:
-            route_string += f" {self.solvent_model}({self.solvent_id})"
+        route_kw = self._get_solvent_route_keyword()
+        if self.custom_solvent is not None:
+            # Custom solvent parameters will be written in the appropriate
+            # solvent block (%cpcm for CPCM/CPCMC/SMD, %cosmors for COSMO-RS).
+            # The route keyword depends on the model.
+            if self.solvent_id is not None:
+                route_string += f" {route_kw}({self.solvent_id})"
+            else:
+                route_string += f" {route_kw}"
+        elif self.solvent_model is not None and self.solvent_id is not None:
+            # Each model uses its own route keyword:
+            #   cpcm    → CPCM(solvent)
+            #   cpcmc   → CPCMC(solvent)
+            #   smd     → SMD(solvent)
+            #   cosmors → COSMORS(solvent)
+            route_string += f" {route_kw}({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
-            raise ValueError(
-                "Warning: Solvent model is specified but solvent identity "
-                "is missing!"
-            )
+            # Custom solvent case (e.g. user-specified Epsilon/Refrac via
+            # additional_solvent_options): write bare keyword without a
+            # solvent name.  ORCA reads the dielectric parameters from the
+            # corresponding block.
+            route_string += f" {route_kw}"
         elif self.solvent_model is None and self.solvent_id is not None:
             logger.warning(
                 "Warning: Solvent identity is specified but solvent model "
@@ -553,6 +602,23 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" CPCM({self.solvent_id})"
         else:
             pass
+
+        # Deduplication: if solvent model appears twice,
+        # the first time it appears is removed
+        if (
+            self.solvent_model is not None
+            and len(
+                re.findall(
+                    rf"\b{re.escape(self.solvent_model)}\b",
+                    route_string,
+                    re.IGNORECASE,
+                )
+            )
+            > 1
+        ):
+            route_string = deduplicate_string_keywords(
+                route_string, self.solvent_model
+            )
 
         return route_string
 
@@ -639,6 +705,33 @@ class ORCAJobSettings(MolecularJobSettings):
             coordinates += string
         f.write(coordinates)
         f.write("*\n")
+
+    def _get_solvent_route_keyword(self):
+        """Return the ORCA simple-input keyword for the active solvent model.
+
+        Mapping (per ORCA 6.0 manual):
+
+        * ``cpcm``    → ``CPCM``   (C-PCM with CPCM epsilon function)
+        * ``cpcmc``   → ``CPCMC``  (C-PCM with COSMO epsilon function;
+          replaces the legacy ``COSMO`` keyword removed in ORCA 4.0)
+        * ``smd``     → ``SMD``    (invokes C-PCM internally; canonical
+          simple-input is ``!SMD(solvent)``)
+        * ``cosmors`` → ``COSMORS`` (openCOSMO-RS interface; route is
+          ``!COSMORS(solvent)``)
+
+        When no model is set the default is ``CPCM``.
+
+        Returns:
+            str: One of ``"CPCM"``, ``"CPCMC"``, ``"SMD"``, or ``"COSMORS"``
+        """
+        model_lower = (self.solvent_model or "").lower()
+        if model_lower == "cpcmc":
+            return "CPCMC"
+        if model_lower == "smd":
+            return "SMD"
+        if model_lower == "cosmors":
+            return "COSMORS"
+        return "CPCM"
 
     def _check_solvent(self, solvent_model):
         """
@@ -2000,13 +2093,18 @@ class ORCANEBJobSettings(ORCAJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
-        if self.solvent_model is not None and self.solvent_id is not None:
-            route_string += f" {self.solvent_model}({self.solvent_id})"
+        route_kw = self._get_solvent_route_keyword()
+        if self.custom_solvent is not None:
+            # Custom solvent parameters will be written in the appropriate
+            # solvent block.  The route keyword depends on the model.
+            if self.solvent_id is not None:
+                route_string += f" {route_kw}({self.solvent_id})"
+            else:
+                route_string += f" {route_kw}"
+        elif self.solvent_model is not None and self.solvent_id is not None:
+            route_string += f" {route_kw}({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
-            raise ValueError(
-                "Warning: Solvent model is specified but solvent identity "
-                "is missing!"
-            )
+            route_string += f" {route_kw}"
         elif self.solvent_model is None and self.solvent_id is not None:
             logger.warning(
                 "Warning: Solvent identity is specified but solvent model "
@@ -2015,6 +2113,23 @@ class ORCANEBJobSettings(ORCAJobSettings):
             route_string += f" CPCM({self.solvent_id})"
         else:
             pass
+
+        # Deduplication: if solvent model appears twice,
+        # the first time it appears is removed
+        if (
+            self.solvent_model is not None
+            and len(
+                re.findall(
+                    rf"\b{re.escape(self.solvent_model)}\b",
+                    route_string,
+                    re.IGNORECASE,
+                )
+            )
+            > 1
+        ):
+            route_string = deduplicate_string_keywords(
+                route_string, self.solvent_model
+            )
 
         return route_string
 

@@ -183,31 +183,33 @@ def calculate_moments_of_inertia(mass, coords):
     return moi_tensor, evals, evecs.transpose()
 
 
-def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion):
+def calculate_voronoi_dirichlet_occupied_volume(
+    coords, radii, dispersion=None
+):
     """
     Estimate the occupied volume of a molecule using Voronoi-Dirichlet method,
     scaled by atomic radii to ensure a physically reasonable result.
 
+    Uses scipy for Voronoi tessellation. Mirror images of all atoms are added
+    across the faces, edges, and corners of the bounding box to ensure all
+    Voronoi cells are bounded. For each atom, the occupied contribution is the
+    minimum of its atomic sphere volume and its Voronoi cell volume.
+
     Parameters:
     - coords (list or np.array): Nx3 array of atomic coordinates.
     - radii (list or np.array): Atomic radii corresponding to each coordinate.
-    - dispersion (float): Size of blocks for the Voronoi grid (used by pyvoro).
+    - dispersion (float, optional): Padding extent used to construct the
+      bounding box for Voronoi tessellation. When provided, this sets how far
+      the mirrored bounding box extends beyond the molecule; when omitted or
+      None, the maximum atomic radius is used as the padding. Larger values
+      produce bigger cells for edge atoms, which can reduce their contribution.
 
     Returns:
     - occupied_volume (float): Estimated physically occupied volume.
-
-    Raises:
-    - ImportError: If pyvoro is not installed. Install with: pip install pyvoro
-        Note: pyvoro requires Python < 3.12
+      Atoms whose Voronoi cells remain unbounded after mirroring are excluded
+      from the sum; in practice this should not occur for typical molecules.
     """
-    try:
-        import pyvoro
-    except ImportError:
-        raise ImportError(
-            "pyvoro is required for Voronoi-Dirichlet volume calculation. "
-            "Install with: pip install chemsmart[voronoi]. "
-            "Note: pyvoro requires Python < 3.12."
-        )
+    from scipy.spatial import ConvexHull, Voronoi
 
     coords = np.array(coords)
     radii = np.array(radii)
@@ -217,25 +219,54 @@ def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion):
     if coords.shape[1] != 3:
         raise ValueError("Coordinates must be 3D (Nx3 array).")
 
-    padding = np.max(radii)
+    # Use dispersion as bounding box padding when provided; fall back to the
+    # maximum atomic radius for a tight, physically meaningful box
+    padding = dispersion if dispersion is not None else np.max(radii)
     box_min = np.min(coords, axis=0) - padding
     box_max = np.max(coords, axis=0) + padding
-    limits = [[box_min[i], box_max[i]] for i in range(3)]
+
+    # Add mirror images of all atoms across each face, edge, and corner of the
+    # bounding box to ensure all Voronoi cells are bounded within the box
+    all_coords = [coords]
+    for di in [-1, 0, 1]:
+        for dj in [-1, 0, 1]:
+            for dk in [-1, 0, 1]:
+                if di == 0 and dj == 0 and dk == 0:
+                    continue
+                mirror = coords.copy()
+                for axis, (offset, box_lo, box_hi) in enumerate(
+                    zip([di, dj, dk], box_min, box_max)
+                ):
+                    if offset == -1:
+                        mirror[:, axis] = 2 * box_lo - mirror[:, axis]
+                    elif offset == 1:
+                        mirror[:, axis] = 2 * box_hi - mirror[:, axis]
+                all_coords.append(mirror)
+
+    all_points = np.vstack(all_coords)
 
     try:
-        cells = pyvoro.compute_voronoi(
-            points=coords,
-            limits=limits,
-            dispersion=dispersion,
-            radii=radii,
-            periodic=[False, False, False],
-        )
+        vor = Voronoi(all_points)
     except Exception as e:
         raise RuntimeError(f"Voronoi-Dirichlet tessellation failed: {e}")
 
+    n = len(coords)
     occupied_volume = 0.0
-    for i, cell in enumerate(cells):
-        cell_volume = cell["volume"]
+    for i in range(n):
+        region_idx = vor.point_region[i]
+        region = vor.regions[region_idx]
+
+        # Skip atoms whose cell is still open (contains vertex at infinity)
+        if -1 in region or not region:
+            continue
+
+        vertices = vor.vertices[region]
+        try:
+            hull = ConvexHull(vertices)
+            cell_volume = hull.volume
+        except Exception:
+            continue
+
         atomic_volume = (4 / 3) * np.pi * radii[i] ** 3
 
         # We cannot occupy more than the atomic volume

@@ -1840,6 +1840,79 @@ def convert_string_to_slices(index_str):
     return result
 
 
+def deduplicate_string_keywords(route_string, keywords):
+    """Remove repeated route keywords, keeping the most informative form.
+
+    Parameters
+    ----------
+    route_string : str
+        Route string such as:
+        "! m062x def2-tzvp cosmors defgrid2 COSMORS(water)"
+    keywords : str or list[str] or tuple[str]
+        Keyword(s) to deduplicate, e.g. "cosmors" or ["cosmors", "smd"].
+
+    Returns
+    -------
+    str
+        Cleaned route string.
+
+    Notes
+    -----
+    - Matching is case-insensitive.
+    - If both ``keyword`` and ``keyword(...)`` appear, the latter is kept.
+    - If the same keyword appears multiple times with the same information
+      content, the first one is kept.
+    - This assumes the route string is whitespace-tokenized.
+    """
+    if not route_string or not keywords:
+        return route_string
+
+    if isinstance(keywords, str):
+        keywords = [keywords]
+
+    keyword_set = {k.lower() for k in keywords}
+    tokens = route_string.split()
+
+    def keyword_base(token):
+        """Return the base keyword, e.g. 'cosmors' from 'COSMORS(water)'."""
+        stripped = token.strip(",")
+        return stripped.split("(", 1)[0].lower()
+
+    def token_score(token):
+        """Score how informative a token is."""
+        stripped = token.strip(",")
+        has_args = "(" in stripped and ")" in stripped
+        return (has_args, len(stripped))
+
+    # Count matching tokens and find the best token index for each keyword
+    counts = {}
+    best_index = {}
+    best_score = {}
+
+    for i, token in enumerate(tokens):
+        base = keyword_base(token)
+        if base not in keyword_set:
+            continue
+
+        counts[base] = counts.get(base, 0) + 1
+        score = token_score(token)
+
+        if base not in best_score or score > best_score[base]:
+            best_score[base] = score
+            best_index[base] = i
+
+    # Rebuild tokens, removing duplicates but keeping the best one
+    new_tokens = []
+    for i, token in enumerate(tokens):
+        base = keyword_base(token)
+        if base in keyword_set and counts.get(base, 0) > 1:
+            if i != best_index[base]:
+                continue
+        new_tokens.append(token)
+
+    return " ".join(new_tokens)
+
+
 # ---------------------------------------------------------------------------
 # pKa Table Parsing Utilities
 # ---------------------------------------------------------------------------

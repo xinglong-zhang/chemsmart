@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "0.3.4"
+version = "0.4.6"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -38,12 +38,14 @@ dependencies = [
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
     "pytest_mock>=3.14.0",
+    "lockfile>=0.12.2",
+    "contextlib2>=21.6.0",
+    "pillow>=12.1.1",
+    "ipython>=8.12.3",
+    "image>=1.5.33",
 ]
 
 [project.optional-dependencies]
-voronoi = [
-  "pyvoro>=1.3.2; python_version < '3.12'"
-]
 test = [
     "pytest",
     "pytest-mock",
@@ -75,11 +77,18 @@ docs = [
 homepage = "https://github.com/xinglong-zhang/chemsmart/"
 "Source" = "https://github.com/xinglong-zhang/chemsmart/"
 
+[project.scripts]
+chemsmart = "chemsmart.cli.main:main"
+
 [tool.setuptools.packages.find]
 exclude = [".github"]
 
 [tool.setuptools.package-data]
-"chemsmart" = ["VERSION"]
+"chemsmart" = [
+    "VERSION",
+    "settings/templates/**",
+    "settings/templates/.chemsmart/**",
+]
 
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]
