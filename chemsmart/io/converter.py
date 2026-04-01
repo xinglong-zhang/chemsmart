@@ -136,6 +136,7 @@ class FileConverter:
             pdb_folder = BaseFolder(folder=directory)
             all_files = pdb_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
                 filetype="pdb"
+            )
         elif type in ("cdxml", "cdx"):
             cdx_folder = BaseFolder(folder=directory)
             all_files = cdx_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
