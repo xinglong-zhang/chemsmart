@@ -17,6 +17,7 @@ from chemsmart.io.molecules.structure import (
     Molecule,
     QMMMMolecule,
 )
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
@@ -1204,10 +1205,10 @@ class TestMoleculeAdvanced:
 
     def test_infer_pdb_element_from_uppercase_atom_names(self):
         """Test uppercase PDB atom names can still infer two-letter elements."""
-        assert Molecule._infer_pdb_element_from_atom_name("FE") == "Fe"
-        assert Molecule._infer_pdb_element_from_atom_name("ZN") == "Zn"
-        assert Molecule._infer_pdb_element_from_atom_name("CL") == "Cl"
-        assert Molecule._infer_pdb_element_from_atom_name("CA") == "C"
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+        assert PDBFile._infer_element_from_atom_name("ZN") == "Zn"
+        assert PDBFile._infer_element_from_atom_name("CL") == "Cl"
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
 
     def test_from_pdb_file_infers_uppercase_two_letter_elements_when_blank(
         self, tmpdir
