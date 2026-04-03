@@ -47,6 +47,25 @@ def make_cli_ctx_obj():
 
 
 @pytest.fixture()
+def invoke_config_server():
+    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_config_server):
+            result = invoke_config_server()
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.config import config
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
+
+
+@pytest.fixture()
 def run_thermochemistry_and_capture_settings():
     """Run the thermochemistry CLI with mocked job construction."""
 
@@ -2040,20 +2059,212 @@ def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
     )
 
 
+############ Molecule Fixtures for RDKit / PDB conversion tests ##################
+
+
 @pytest.fixture()
-def invoke_config_server():
-    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+def water_molecule():
+    """H₂O with realistic geometry."""
+    return Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.1173],
+                [0.0000, 0.7572, -0.4692],
+                [0.0000, -0.7572, -0.4692],
+            ]
+        ),
+    )
 
-    Usage in tests::
 
-        def test_something(invoke_config_server):
-            result = invoke_config_server()
-            assert result.exit_code == 0
-    """
-    from chemsmart.cli.config import config
+@pytest.fixture()
+def methane_molecule():
+    """CH₄ tetrahedral."""
+    return Molecule(
+        symbols=["C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.0000],
+                [0.6276, 0.6276, 0.6276],
+                [0.6276, -0.6276, -0.6276],
+                [-0.6276, 0.6276, -0.6276],
+                [-0.6276, -0.6276, 0.6276],
+            ]
+        ),
+    )
 
-    def _invoke(args=None):
-        runner = CliRunner()
-        return runner.invoke(config, ["server"] + (args or []))
 
-    return _invoke
+@pytest.fixture()
+def ethylene_molecule():
+    """C₂H₄ – contains a C=C double bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6695],
+                [0.0000, 0.0000, -0.6695],
+                [0.0000, 0.9289, 1.2321],
+                [0.0000, -0.9289, 1.2321],
+                [0.0000, 0.9289, -1.2321],
+                [0.0000, -0.9289, -1.2321],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def acetylene_molecule():
+    """C₂H₂ – contains a C≡C triple bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6013],
+                [0.0000, 0.0000, -0.6013],
+                [0.0000, 0.0000, 1.6644],
+                [0.0000, 0.0000, -1.6644],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def hydrogen_molecule():
+    """H₂ – minimal molecule with H-H bond."""
+    return Molecule(
+        symbols=["H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.74, 0.0, 0.0],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def co2_molecule():
+    """CO₂ – linear molecule with two C=O double bonds."""
+    return Molecule(
+        symbols=["C", "O", "O"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.16],
+                [0.0, 0.0, -1.16],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def single_atom_molecule():
+    """Single argon atom – edge case for bond detection."""
+    return Molecule(
+        symbols=["Ar"],
+        positions=np.array([[0.0, 0.0, 0.0]]),
+    )
+
+
+@pytest.fixture()
+def water_with_metadata_molecule():
+    """Water molecule with PDB residue metadata."""
+    mol = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ]
+        ),
+        info={
+            "record_type": ["HETATM", "HETATM", "HETATM"],
+            "atom_name": ["O", "H1", "H2"],
+            "residue_name": ["HOH", "HOH", "HOH"],
+            "residue_number": [1, 1, 1],
+            "chain_id": ["A", "A", "A"],
+        },
+    )
+    mol.atom_names = ["O", "H1", "H2"]
+    mol.residue_names = ["HOH", "HOH", "HOH"]
+    mol.residue_numbers = [1, 1, 1]
+    mol.chain_ids = ["A", "A", "A"]
+    return mol
+
+
+@pytest.fixture()
+def chiral_molecule():
+    """Molecule with a chiral center (C with 4 different substituents)."""
+    return Molecule(
+        symbols=["C", "Cl", "F", "Br", "I"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.2, 0.0, -0.5],
+                [-0.6, 1.0, 0.5],
+                [-0.6, -1.0, 0.5],
+                [0.0, 0.0, 1.3],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def single_model_pdb_file(tmpdir):
+    """PDB file with one implicit model (no MODEL/ENDMDL records)."""
+    pdb_content = (
+        "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+        "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+        "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "water.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def multi_model_pdb_file(tmpdir):
+    """PDB file with two explicit MODEL/ENDMDL blocks."""
+    pdb_content = (
+        "MODEL        1\n"
+        "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH A   1       0.960   0.000   0.000  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "MODEL        2\n"
+        "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH B   2       2.460   2.500   3.500  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "multi_model.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def blank_element_pdb_file(tmpdir):
+    """PDB file where element columns (77-78) are blank, requiring inference."""
+    pdb_content = (
+        "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+        "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "blank_elements.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def empty_pdb_file(tmpdir):
+    """PDB file with no ATOM/HETATM records."""
+    filepath = os.path.join(str(tmpdir), "empty.pdb")
+    with open(filepath, "w") as f:
+        f.write("REMARK  This PDB has no atoms.\nEND\n")
+    return filepath
