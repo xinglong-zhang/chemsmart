@@ -267,13 +267,12 @@ class TestSafeSanitize:
         """
         from rdkit import Chem
 
-        # Create a ferrocene-like structure with aromatic rings
-        # This is a simplified representation that may trigger kekulization issues
-        mol = Chem.MolFromSmiles("[Fe]c1ccccc1")
-        if mol is not None:
-            # Should handle the molecule even if standard sanitization fails
-            result = safe_sanitize(mol)
-            assert result is not None
+        # Use sanitize=False to ensure a Mol is returned even if standard sanitization fails
+        mol = Chem.MolFromSmiles("[Fe]c1ccccc1", sanitize=False)
+        assert mol is not None
+        # Should handle the molecule even if standard sanitization fails
+        result = safe_sanitize(mol)
+        assert result is not None
 
 
 class TestNormalizeMetalBonds:
@@ -324,19 +323,19 @@ class TestNormalizeMetalBonds:
         """Test that organic aromatic bonds are preserved."""
         from rdkit import Chem
 
-        # Create a metal complex with an aromatic ring
+        # Create a metal complex with an aromatic ring (not directly bonded to metal)
         mol = Chem.MolFromSmiles("[Fe].c1ccccc1", sanitize=False)
-        if mol is not None:
-            result = normalize_metal_bonds(mol)
-            assert result is not None
+        assert mol is not None
+        result = normalize_metal_bonds(mol)
+        assert result is not None
 
-            # Count aromatic bonds in the benzene ring (not connected to Fe)
-            # The benzene ring should still have aromatic bonds
-            aromatic_bonds = sum(
-                1 for bond in result.GetBonds() if bond.GetIsAromatic()
-            )
-            # Benzene has 6 aromatic bonds when not connected to metal
-            assert aromatic_bonds >= 0  # May vary based on sanitization state
+        # Count aromatic bonds in the benzene ring (not connected to Fe)
+        # The benzene ring should still have aromatic bonds
+        aromatic_bonds = sum(
+            1 for bond in result.GetBonds() if bond.GetIsAromatic()
+        )
+        # Benzene has 6 aromatic bonds when not connected to metal
+        assert aromatic_bonds > 0
 
 
 class TestLoadMoleculesFromPaths:

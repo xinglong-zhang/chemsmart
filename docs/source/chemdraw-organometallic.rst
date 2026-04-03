@@ -9,8 +9,7 @@ suitable for quantum chemistry calculations with Gaussian or ORCA.
 
 .. note::
 
-   Organometallic complex support requires RDKit and, for binary ``.cdx`` files, Open Babel. See :ref:`installation
-   requirements <chemdraw-organometallic-requirements>` below.
+   Organometallic complex support requires RDKit and, for binary ``.cdx`` files, Open Babel. See :ref:`installation requirements <chemdraw-organometallic-requirements>` below.
 
 *****
  Why

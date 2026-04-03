@@ -16,8 +16,9 @@ chemistry software.
 
    introduction
    installation-linux-macos
-   installation-windows-gitbash
    installation-windows-wsl
+   installation-windows-gitbash
+   installation-windows-powershell
    installation-hpc-cluster
 
 .. toctree::
@@ -61,11 +62,21 @@ chemistry software.
    orca-direct-input
    orca-multiscale-calculations
 
-.. toctree::
+..
+   .. toctree::
+
+..
    :maxdepth: 2
+
+..
    :caption: ITERATE
 
+..
+
+..
    iterate-cli-options
+
+..
    iterate-structure-generation
 
 .. toctree::
