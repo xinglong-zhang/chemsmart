@@ -47,6 +47,25 @@ def make_cli_ctx_obj():
 
 
 @pytest.fixture()
+def invoke_config_server():
+    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_config_server):
+            result = invoke_config_server()
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.config import config
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
+
+
+@pytest.fixture()
 def run_thermochemistry_and_capture_settings():
     """Run the thermochemistry CLI with mocked job construction."""
 
@@ -2040,85 +2059,6 @@ def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
     )
 
 
-@pytest.fixture()
-def invoke_config_server():
-    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
-
-    Usage in tests::
-
-        def test_something(invoke_config_server):
-            result = invoke_config_server()
-            assert result.exit_code == 0
-    """
-    from chemsmart.cli.config import config
-
-    def _invoke(args=None):
-        runner = CliRunner()
-        return runner.invoke(config, ["server"] + (args or []))
-
-    return _invoke
-
-
-@pytest.fixture()
-def single_model_pdb_file(tmpdir):
-    """PDB file with one implicit model (no MODEL/ENDMDL records)."""
-    pdb_content = (
-        "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
-        "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
-        "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
-        "END\n"
-    )
-    filepath = os.path.join(str(tmpdir), "water.pdb")
-    with open(filepath, "w") as f:
-        f.write(pdb_content)
-    return filepath
-
-
-@pytest.fixture()
-def multi_model_pdb_file(tmpdir):
-    """PDB file with two explicit MODEL/ENDMDL blocks."""
-    pdb_content = (
-        "MODEL        1\n"
-        "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
-        "ATOM      2  H1  HOH A   1       0.960   0.000   0.000  1.00  0.00           H\n"
-        "ENDMDL\n"
-        "MODEL        2\n"
-        "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
-        "ATOM      2  H1  HOH B   2       2.460   2.500   3.500  1.00  0.00           H\n"
-        "ENDMDL\n"
-        "END\n"
-    )
-    filepath = os.path.join(str(tmpdir), "multi_model.pdb")
-    with open(filepath, "w") as f:
-        f.write(pdb_content)
-    return filepath
-
-
-@pytest.fixture()
-def blank_element_pdb_file(tmpdir):
-    """PDB file where element columns (77-78) are blank, requiring inference."""
-    pdb_content = (
-        "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
-        "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
-        "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
-        "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
-        "END\n"
-    )
-    filepath = os.path.join(str(tmpdir), "blank_elements.pdb")
-    with open(filepath, "w") as f:
-        f.write(pdb_content)
-    return filepath
-
-
-@pytest.fixture()
-def empty_pdb_file(tmpdir):
-    """PDB file with no ATOM/HETATM records."""
-    filepath = os.path.join(str(tmpdir), "empty.pdb")
-    with open(filepath, "w") as f:
-        f.write("REMARK  This PDB has no atoms.\nEND\n")
-    return filepath
-
-
 ############ Molecule Fixtures for RDKit / PDB conversion tests ##################
 
 
@@ -2268,3 +2208,63 @@ def chiral_molecule():
             ]
         ),
     )
+
+
+@pytest.fixture()
+def single_model_pdb_file(tmpdir):
+    """PDB file with one implicit model (no MODEL/ENDMDL records)."""
+    pdb_content = (
+        "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+        "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+        "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "water.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def multi_model_pdb_file(tmpdir):
+    """PDB file with two explicit MODEL/ENDMDL blocks."""
+    pdb_content = (
+        "MODEL        1\n"
+        "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH A   1       0.960   0.000   0.000  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "MODEL        2\n"
+        "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH B   2       2.460   2.500   3.500  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "multi_model.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def blank_element_pdb_file(tmpdir):
+    """PDB file where element columns (77-78) are blank, requiring inference."""
+    pdb_content = (
+        "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+        "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "blank_elements.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def empty_pdb_file(tmpdir):
+    """PDB file with no ATOM/HETATM records."""
+    filepath = os.path.join(str(tmpdir), "empty.pdb")
+    with open(filepath, "w") as f:
+        f.write("REMARK  This PDB has no atoms.\nEND\n")
+    return filepath
