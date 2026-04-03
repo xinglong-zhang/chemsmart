@@ -1281,6 +1281,8 @@ class Molecule:
                 - flavor & 8: Don't use multiple CONECTs to encode bond order
                 - flavor & 16: Write MASTER record
                 - flavor & 32: Write TER record
+                - TODO: this may be simplified in the future to use more intuitive
+                  TODO: boolean flags (specifiable via CLI) instead of bitwise flavor
             add_bonds (bool): Flag to add bonds to molecule or not. Default True.
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
             adjust_H (bool): Adjust bond distances to H atoms.
@@ -1297,7 +1299,8 @@ class Molecule:
             if legacy_provided:
                 provided_str = ", ".join(sorted(legacy_provided))
                 raise TypeError(
-                    f"Legacy conformer-selection arguments not supported in write_pdb(): {provided_str}"
+                    f"Legacy conformer-selection arguments not supported in "
+                    f"write_pdb(): {provided_str}"
                 )
             # Reject any other unexpected keyword arguments to avoid silently ignoring them
             unexpected_str = ", ".join(sorted(provided_keys))
@@ -1526,6 +1529,8 @@ class Molecule:
                 - flavor & 8: Don't use multiple CONECTs to encode bond order
                 - flavor & 16: Write MASTER record
                 - flavor & 32: Write TER record
+                - TODO: this may be simplified in the future to use more intuitive
+                  TODO: boolean flags (specifiable via CLI) instead of bitwise flavor
             add_bonds (bool): Flag to add bonds to molecule or not. Default True.
                 If bond detection fails, will retry without bonds.
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
