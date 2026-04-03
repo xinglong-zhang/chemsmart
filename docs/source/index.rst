@@ -61,11 +61,21 @@ chemistry software.
    orca-direct-input
    orca-multiscale-calculations
 
-.. toctree::
+..
+   .. toctree::
+
+..
    :maxdepth: 2
+
+..
    :caption: ITERATE
 
+..
+
+..
    iterate-cli-options
+
+..
    iterate-structure-generation
 
 .. toctree::
