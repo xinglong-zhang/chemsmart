@@ -2301,7 +2301,7 @@ class TestCDXFile:
         assert len(molecules) == 7
 
         # Test molecule 0: Ti complex with Cp ligands
-        # Cp rings are de-aromatized during processing; assert ring structure
+        # Cp rings are dearomatized during processing; assert ring structure
         mol = molecules[0]
         assert isinstance(mol, Molecule)
         assert mol.chemical_formula == "C14H30Ti"
