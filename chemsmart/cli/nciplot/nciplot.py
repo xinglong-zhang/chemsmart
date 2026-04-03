@@ -190,7 +190,8 @@ def nciplot(
     """
     CLI subcommand for running NCIPLOT jobs using the chemsmart framework.
 
-    NCIPLOT uses different density calculation methods based on input file type:
+    NCIPLOT uses different density calculation
+    methods based on input file type:
     - .wfn/.wfx files: Uses SCF wavefunction density
     - .xyz/.log/other files: Uses promolecular density approximation
 
@@ -210,7 +211,8 @@ def nciplot(
         chemsmart sub -s xz nciplot -f test.xyz -f test2.xyz -l nci_test \\
         --fragments "{1: [1,4,5], 2: [3,4,5]}"
 
-    For detailed documentation on file types and behavior, see the NCIPLOT tutorial
+    For detailed documentation on file types
+    and behavior, see the NCIPLOT tutorial
     in the documentation.
     """
 

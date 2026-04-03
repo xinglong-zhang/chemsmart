@@ -20,7 +20,8 @@ class PyMOLMovieJob(PyMOLJob):
     Attributes:
         TYPE (str): Job type identifier ('pymol_movie').
         molecule: Molecule object to animate.
-        label (str): Job identifier used for file naming (suffix '_movie' added).
+        label (str): Job identifier used for
+        file naming (suffix '_movie' added).
         jobrunner (JobRunner): Execution backend for running the job.
         overwrite (bool): Overwrite an existing MP4 when post-processing.
         skip_completed (bool): If True, completed jobs are not rerun.
@@ -47,7 +48,8 @@ class PyMOLMovieJob(PyMOLJob):
             molecule: Molecule object to animate.
             label: Job identifier string.
             jobrunner: Job execution runner (default: None).
-            overwrite: Whether to overwrite existing movie files (default: False).
+            overwrite: Whether to overwrite
+            existing movie files (default: False).
             **kwargs: Additional arguments passed to parent PyMOLJob.
 
         Note:

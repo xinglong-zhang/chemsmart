@@ -16,8 +16,9 @@ chemistry software.
 
    introduction
    installation-linux-macos
-   installation-windows-gitbash
    installation-windows-wsl
+   installation-windows-gitbash
+   installation-windows-powershell
    installation-hpc-cluster
 
 .. toctree::
@@ -47,6 +48,7 @@ chemistry software.
    gaussian-conformational-sampling
    gaussian-qrc
    gaussian-electronic-structure
+   gaussian-qmmm-jobs
    gaussian-other-jobs
 
 .. toctree::
@@ -57,6 +59,14 @@ chemistry software.
    orca-structure-optimization
    orca-transition-state
    orca-direct-input
+   orca-multiscale-calculations
+
+.. toctree::
+   :maxdepth: 2
+   :caption: ITERATE
+
+   iterate-cli-options
+   iterate-structure-generation
 
 .. toctree::
    :maxdepth: 2

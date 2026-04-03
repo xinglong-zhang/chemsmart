@@ -77,7 +77,7 @@ class ORCAQRCJob(ORCAJob):
         self.normalize = normalize
         self.return_xyz = return_xyz
 
-        self.jobtype = self.settings.__dict__["job_type"]
+        self.jobtype = self.settings.__dict__["jobtype"]
 
     @property
     def both_qrc_jobs(self):
@@ -106,7 +106,8 @@ class ORCAQRCJob(ORCAJob):
     @property
     def qrcr_molecule(self):
         """
-        QRC reverse molecule with vibrational displacement at -ve given amplitude.
+        QRC reverse molecule with vibrational
+        displacement at -ve given amplitude.
         """
         return self.molecule.vibrationally_displaced(
             mode_idx=self.mode_idx,

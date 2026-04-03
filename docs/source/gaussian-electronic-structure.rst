@@ -42,6 +42,12 @@ SP Options
       -  string
       -  Additional SCRF options (e.g., ``iterative``)
 
+.. note::
+
+   These solvent options can also be provided at the **Gaussian group level** (before the ``sp`` subcommand), in the
+   same way as for ``opt``, ``td``, and all other subcommands. Group-level options take precedence over project
+   settings. See :ref:`Solvent Options <gaussian-cli-options:Solvent Options>` for details.
+
 Basic Usage
 ===========
 
@@ -126,6 +132,10 @@ Run DI-AS analysis for atoms 5-17 at every 10th point along an IRC:
 .. code:: bash
 
    chemsmart sub gaussian -p project -f irc.log dias -i 5-17 -n 10
+
+.. note::
+
+   The ``irc.log`` file should be the IRC output from the transition state to the **reactant side**.
 
 ***********
  RESP Jobs
@@ -223,6 +233,36 @@ Calculate 50-50 singlet-triplet mix:
 .. code:: bash
 
    chemsmart sub gaussian -p project -f molecule.xyz td -s 50-50 -n 4
+
+Solvated TD-DFT
+---------------
+
+Solvent options are given at the Gaussian group level (before ``td``). See :ref:`Solvent Options
+<gaussian-cli-options:Solvent Options>` for the full option reference.
+
+Gas phase TD-DFT (project default):
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f molecule.xyz -c 0 -m 1 -a no_solv_td td
+
+Solvated TD-DFT with SMD/water:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f molecule.xyz -c 0 -m 1 -sm smd -si water -a solv_td td
+
+With the iterative SCRF solver:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f molecule.xyz -c 0 -m 1 -sm smd -si water -so iterative -a solv_td td
+
+The solvated example produces a route line of the form:
+
+.. code:: text
+
+   cam-b3lyp def2svp scrf=(smd,solvent=water,iterative) TD(singlets,nstates=3,root=1)
 
 .. _wbi-jobs:
 
