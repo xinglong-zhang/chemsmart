@@ -35,6 +35,9 @@ class FileConverter:
             shared extensions.
         filename (str): Input filename to be converted.
         output_filetype (str): Type of files to convert to, defaults to xyz.
+        output_filepath (str | None): Explicit output file path. When provided,
+            the file is written to this path and the format is inferred from
+            the extension. Takes precedence over ``output_filetype``.
         include_intermediate_structures (bool): Include intermediate structures.
     """
 
@@ -45,6 +48,7 @@ class FileConverter:
         program=None,
         filename=None,
         output_filetype="xyz",
+        output_filepath=None,
         include_intermediate_structures=False,
     ):
         self.directory = directory
@@ -52,6 +56,7 @@ class FileConverter:
         self.program = program
         self.filename = filename
         self.output_filetype = output_filetype
+        self.output_filepath = output_filepath
         self.include_intermediate_structures = include_intermediate_structures
 
     def convert_files(self):
@@ -81,11 +86,58 @@ class FileConverter:
                 # get filetype/extension from filename
                 self.type = self.filename.split(".")[-1]
                 logger.info(f"Converting file: {self.filename}")
-                self._convert_single_file(self.filename, self.output_filetype)
+                if self.output_filepath is not None:
+                    self.convert_file(self.filename, self.output_filepath)
+                else:
+                    self._convert_single_file(
+                        self.filename, self.output_filetype
+                    )
             else:
                 raise ValueError(
                     "Either directory or filename must be specified."
                 )
+
+    def convert_file(self, input_filepath, output_filepath):
+        """
+        Convert a single file from one format to another via Molecule object.
+
+        This is the preferred generic method for converting between any two
+        supported file formats. It uses :meth:`Molecule.from_filepath` to
+        load the input file and :meth:`Molecule.write` to write the output,
+        so any file type supported by those methods is accepted.
+
+        Args:
+            input_filepath (str): Path to the input file.
+            output_filepath (str): Path to the output file. The format is
+                inferred from the file extension.
+
+        Raises:
+            ValueError: If the input file cannot be read or the output format
+                is not supported by :meth:`Molecule.write`.
+        """
+        from chemsmart.io.molecules.structure import Molecule
+
+        output_format = os.path.splitext(output_filepath)[1].lstrip(".")
+        logger.info(f"Converting {input_filepath} to {output_filepath}")
+
+        if self.include_intermediate_structures:
+            mols = Molecule.from_filepath(
+                input_filepath, index=":", return_list=True
+            )
+            if mols is None:
+                raise ValueError(
+                    f"Could not read molecule(s) from {input_filepath}"
+                )
+            for m in mols:
+                m.write(output_filepath, format=output_format)
+        else:
+            mol = Molecule.from_filepath(input_filepath)
+            if mol is None:
+                raise ValueError(
+                    f"Could not read molecule from {input_filepath}"
+                )
+            mol.write(output_filepath, format=output_format)
+        logger.info(f"Created: {output_filepath}")
 
     def _convert_all_files(self, directory, type, output_filetype):
         """

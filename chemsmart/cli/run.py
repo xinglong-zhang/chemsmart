@@ -4,6 +4,7 @@ from multiprocessing import set_start_method
 
 import click
 
+from chemsmart.cli.convert import convert
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
@@ -150,6 +151,8 @@ def process_pipeline(ctx, *args, **kwargs):
 
 for subcommand in subcommands:
     run.add_command(subcommand)
+
+run.add_command(convert)
 
 
 if __name__ == "__main__":
