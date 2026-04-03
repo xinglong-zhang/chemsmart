@@ -1317,6 +1317,81 @@ class Molecule:
             logger.info(f"Writing PDB file to {filename}")
             f.write(pdb_block)
 
+    def write_pdb_pybabel(
+        self,
+        pdb_filename,
+        mode="w",
+        overwrite=True,
+        cleanup=True,
+    ):
+        """
+        Convert molecule to PDB format using Open Babel.
+
+        This is an alternative to ``write_pdb`` for cases where Open Babel's
+        interpretation of connectivity or atom typing is preferred over
+        RDKit-based path.
+
+        Parameters
+        ----------
+        pdb_filename : str
+            Destination PDB file path.
+        mode : str, default 'w'
+            File mode passed to ``write_xyz`` when the XYZ file must be created.
+        overwrite : bool, default True
+            Whether to overwrite *pdb_filename* if it already exists.
+        cleanup : bool, default True
+            Remove any auto-generated temporary XYZ file after the conversion.
+
+        Raises
+        ------
+        ImportError
+            If Open Babel (``openbabel``) is not installed.
+        ValueError
+            If the XYZ file cannot be parsed by Open Babel.
+
+        Examples
+        --------
+        >>> molecule.write_pdb_openbabel("output.pdb")
+        """
+        import tempfile
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
+        tmp.close()
+        xyz_filename = tmp.name
+        logger.debug(
+            f"Created temporary XYZ {xyz_filename} for PDB conversion."
+        )
+        self.write_xyz(xyz_filename, mode=mode)
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:
+            if cleanup:
+                try:
+                    os.remove(xyz_filename)
+                except OSError:
+                    pass
+            raise ImportError(
+                "Converting to PDB via Open Babel requires openbabel. "
+                "Install with: ``conda install -c conda-forge openbabel``"
+            ) from exc
+
+        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
+        if xyz_mol is None:
+            raise ValueError(f"Unable to read molecule from {xyz_filename}")
+
+        logger.info(
+            f"Converting Molecule {self.__repr__()} to PDB {pdb_filename} via "
+            f"Open Babel (overwrite={overwrite})"
+        )
+        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
+        if cleanup:
+            try:
+                os.remove(xyz_filename)
+                logger.debug(f"Removed temporary XYZ file {xyz_filename}")
+            except OSError as exc:
+                logger.warning(f"Failed to remove temporary file: {exc}")
+
     def _write_gaussian_coordinates(self, f):
         """
         Write coordinates in Gaussian format.
