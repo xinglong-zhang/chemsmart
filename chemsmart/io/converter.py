@@ -112,8 +112,10 @@ class FileConverter:
                 inferred from the file extension.
 
         Raises:
-            ValueError: If the input file cannot be read or the output format
-                is not supported by :meth:`Molecule.write`.
+            FileNotFoundError: If *input_filepath* does not exist (raised by
+                :meth:`Molecule.from_filepath`).
+            ValueError: If the output format is not supported by
+                :meth:`Molecule.write`.
         """
         from chemsmart.io.molecules.structure import Molecule
 
