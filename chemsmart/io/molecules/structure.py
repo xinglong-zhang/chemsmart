@@ -1010,43 +1010,6 @@ class Molecule:
         return pdb_file.get_molecules(index=index, return_list=return_list)
 
     @staticmethod
-    def _parse_pdb_models(filepath):
-        """Parse all PDB models from file into ``Molecule`` objects.
-
-        .. deprecated::
-            Parsing is now handled by :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-            This method delegates to ``PDBFile`` for backward compatibility.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        pdb_file = PDBFile(filename=filepath)
-        return pdb_file._parse_models()
-
-    @staticmethod
-    def _molecule_from_pdb_atom_lines(atom_lines):
-        """Build a ``Molecule`` from parsed PDB ATOM/HETATM lines.
-
-        .. deprecated::
-            Parsing is now handled by :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-            This method delegates to ``PDBFile`` for backward compatibility.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._molecule_from_atom_lines(atom_lines)
-
-    @staticmethod
-    def _infer_pdb_element_from_atom_name(atom_name):
-        """Infer element symbol from PDB atom-name field when columns 77-78 are blank.
-
-        .. deprecated::
-            Parsing is now handled by :class:`~chemsmart.io.pdb.pdbfile.PDBFile`.
-            This method delegates to ``PDBFile`` for backward compatibility.
-        """
-        from chemsmart.io.pdb.pdbfile import PDBFile
-
-        return PDBFile._infer_element_from_atom_name(atom_name)
-
-    @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
         """
