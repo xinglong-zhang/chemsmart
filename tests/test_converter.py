@@ -689,24 +689,21 @@ class TestPDBFile:
         )
         assert mol_via_molecule.chain_ids == mol_via_pdbfile.chain_ids
 
-    def test_molecule_infer_pdb_element_delegates(self):
-        """Molecule._infer_pdb_element_from_atom_name should still work."""
-        assert Molecule._infer_pdb_element_from_atom_name("FE") == "Fe"
-        assert Molecule._infer_pdb_element_from_atom_name("CA") == "C"
+    def test_pdb_infer_pdb_element(self):
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
 
-    def test_molecule_parse_pdb_models_delegates(self, multi_model_pdb_file):
-        """Molecule._parse_pdb_models should still work."""
-        models = Molecule._parse_pdb_models(multi_model_pdb_file)
+    def test_pdb_parse_pdb_models(self, multi_model_pdb_file):
+        models = PDBFile(multi_model_pdb_file)._parse_models()
         assert len(models) == 2
 
-    def test_molecule_molecule_from_pdb_atom_lines_delegates(self):
-        """Molecule._molecule_from_pdb_atom_lines should still work."""
+    def test_pdb_molecule_from_pdb_atom_lines(self):
         atom_line = (
             "HETATM    1  O   HOH A   7"
             "       0.000   0.000   0.000"
             "  1.00  0.00           O"
         )
-        mol = Molecule._molecule_from_pdb_atom_lines([atom_line])
+        mol = PDBFile._get_molecule_from_atom_lines([atom_line])
         assert mol.symbols == ["O"]
 
     # ------------------------------------------------------------------
