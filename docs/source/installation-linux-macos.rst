@@ -126,6 +126,12 @@ Then verify the installation:
 
    chemsmart --version
 
+or
+
+.. code:: bash
+
+   chemsmart --help
+
 .. note::
 
    If ``~/.bashrc`` (or ``~/.zshrc``) already contains a chemsmart section (i.e. ``make configure`` has been run
