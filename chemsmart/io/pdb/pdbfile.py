@@ -138,7 +138,7 @@ class PDBFile(FileMixin):
         def flush_current_model():
             if current_atom_lines:
                 models.append(
-                    self._molecule_from_atom_lines(current_atom_lines)
+                    self._get_molecule_from_atom_lines(current_atom_lines)
                 )
 
         for line in lines:
@@ -162,12 +162,14 @@ class PDBFile(FileMixin):
         if seen_model_records:
             flush_current_model()
         elif current_atom_lines:
-            models.append(self._molecule_from_atom_lines(current_atom_lines))
+            models.append(
+                self._get_molecule_from_atom_lines(current_atom_lines)
+            )
 
         return models
 
     @staticmethod
-    def _molecule_from_atom_lines(atom_lines):
+    def _get_molecule_from_atom_lines(atom_lines):
         """
         Build a ``Molecule`` from parsed PDB ATOM/HETATM lines.
 
