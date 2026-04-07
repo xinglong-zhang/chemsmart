@@ -42,11 +42,13 @@ Options
 
    -  -  ``-p, --program``
       -  string
-      -  Program that produced the output files: ``gaussian`` or ``orca``. Used with ``-d`` to process all output files from that program.
+      -  Program that produced the output files: ``gaussian`` or ``orca``. Used with ``-d`` to process all output files
+         from that program.
 
    -  -  ``-t, --filetype``
       -  string
-      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Used with ``-d`` to process all files of that type regardless of program.
+      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Used with ``-d`` to process all files of
+         that type regardless of program.
 
    -  -  ``-f, --filenames``
       -  string

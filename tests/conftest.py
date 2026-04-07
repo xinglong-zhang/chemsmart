@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import click
 import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
@@ -14,6 +15,7 @@ from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
@@ -33,6 +35,8 @@ from chemsmart.settings.server import Server
 thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
 )
+
+mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
 
 
 ############ CLI Fixtures ##################
@@ -61,6 +65,28 @@ def invoke_config_server():
     def _invoke(args=None):
         runner = CliRunner()
         return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
+
+
+@pytest.fixture()
+def invoke_folder_command():
+    """Fixture that returns a callable to invoke a folder command with options."""
+
+    @click.command()
+    @click_folder_options
+    @click.pass_context
+    def _folder_cmd(ctx, directory, filetype, program):
+        """Minimal command used only to inspect registered options."""
+        ctx.ensure_object(dict)
+        ctx.obj["directory"] = directory
+        ctx.obj["filetype"] = filetype
+        ctx.obj["program"] = program
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        result = runner.invoke(_folder_cmd, args or [])
+        return result
 
     return _invoke
 
@@ -103,6 +129,42 @@ def run_thermochemistry_and_capture_settings():
         return result, captured_settings
 
     return _run
+
+
+@pytest.fixture()
+def run_thermochemistry_with_directory():
+    """Fixture to invoke thermochemistry CLI with directory options and mocked folder."""
+    from unittest.mock import MagicMock, patch
+
+    from click.testing import CliRunner
+
+    from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
+
+    def _invoke(extra_args, mock_files=None):
+        if mock_files is None:
+            mock_files = ["/fake/dir/mol1.log"]
+
+        runner = CliRunner()
+        mock_job = MagicMock()
+        mock_job.label = "mol1"
+
+        with (
+            patch.object(
+                thermochemistry_cli_module, "BaseFolder"
+            ) as mock_folder_cls,
+            patch.object(
+                thermochemistry_cli_module.ThermochemistryJob, "from_filename"
+            ) as mock_from_filename,
+        ):
+            mock_folder = MagicMock()
+            mock_folder.files = mock_files
+            mock_folder_cls.return_value = mock_folder
+            mock_from_filename.return_value = mock_job
+
+            result = runner.invoke(thermochemistry, extra_args)
+            return result, mock_from_filename
+
+    return _invoke
 
 
 @pytest.fixture()
@@ -154,6 +216,58 @@ def run_orca_and_capture_settings():
         return result, captured_settings
 
     return _run
+
+
+@pytest.fixture
+def invoke_mol_with_visualize():
+    """Invoke ``mol … visualize`` with all PyMOL job execution mocked out."""
+    from chemsmart.cli.mol.mol import mol as mol_group
+
+    def _invoke(cli_args, ctx_obj=None):
+        runner = CliRunner()
+        if ctx_obj is None:
+            ctx_obj = {}
+
+        @mol_group.command("_test_noop")
+        @click.pass_context
+        def _noop(ctx):
+            pass
+
+        try:
+            with (
+                patch.object(
+                    mol_cli_module,
+                    "Molecule",
+                    MagicMock(),
+                ) as mock_molecule_cls,
+                patch.object(
+                    mol_cli_module,
+                    "BaseFolder",
+                    MagicMock(),
+                ) as mock_folder_cls,
+            ):
+                # Setup folder mock to return mock files
+                mock_folder_instance = MagicMock()
+                mock_folder_instance.get_all_output_files_in_current_folder_by_program.return_value = [
+                    "/fake/dir/mol.log"
+                ]
+                mock_folder_cls.return_value = mock_folder_instance
+
+                # Setup molecule mock
+                mock_molecule_cls.from_filepath.return_value = MagicMock()
+
+                result = runner.invoke(
+                    mol_group,
+                    cli_args + ["_test_noop"],
+                    obj=ctx_obj,
+                    catch_exceptions=False,
+                )
+        finally:
+            mol_group.commands.pop("_test_noop", None)
+
+        return result
+
+    return _invoke
 
 
 @pytest.fixture()
