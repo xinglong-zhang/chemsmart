@@ -28,9 +28,20 @@ os.environ["OMP_NUM_THREADS"] = "1"
 )
 @click.option(
     "-t",
-    "--type",
+    "--filetype",
     default=None,
-    help="Type of file to be converted, if directory is specified.",
+    help=(
+        "Type of file to be converted, if directory is specified "
+        "(log, com, gjf, out, inp, xyz, sdf, pdb)."
+    ),
+)
+@click.option(
+    "-p",
+    "--program",
+    default=None,
+    type=click.Choice(["gaussian", "orca"], case_sensitive=False),
+    help="Computational chemistry program whose output files should be converted. "
+    "Required when converting files with shared extensions.",
 )
 @click.option(
     "-f", "--filename", default=None, help="Input filename to be converted."
@@ -52,7 +63,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
 @logger_options
 def entry_point(
     directory,
-    type,
+    filetype,
+    program,
     filename,
     output_filetype,
     include_intermediate_structures,
@@ -66,12 +78,13 @@ def entry_point(
     if directory is not None:
         logger.info(f"Converting files in directory: {directory}")
         assert (
-            type is not None
-        ), "Type of file to be converted must be specified."
+            filetype is not None
+        ), "File extension (--filetype) must be specified when using --directory."
         assert filename is None, "Filename cannot be specified with directory."
         converter = FileConverter(
             directory=directory,
-            type=type,
+            type=filetype,
+            program=program,
             output_filetype=output_filetype,
             include_intermediate_structures=include_intermediate_structures,
         )

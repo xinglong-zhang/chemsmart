@@ -4,7 +4,6 @@ import inspect
 import logging
 import os
 import re
-import tempfile
 from functools import cached_property, lru_cache
 
 import networkx as nx
@@ -50,9 +49,9 @@ class Molecule:
     translation_vectors: list of lists
         The translation vectors for the molecule.
     energy: float
-        The energy of the molecule in eV.
+        The energy of the molecule in Hartree.
     forces: numpy array
-        The forces on the atoms in the molecule in eV/Å.
+        The forces on the atoms in the molecule in Hartree/Bohr.
     velocities: numpy array
         The velocities of the atoms in the molecule.
     qm high/medium/low_level_atoms：list of integers to define QM/MM layers
@@ -193,7 +192,7 @@ class Molecule:
     @property
     def energy(self):
         """
-        Total molecular energy in eV.
+        Total molecular energy in Hartree.
         """
         return self._energy
 
@@ -293,6 +292,43 @@ class Molecule:
         """
         return self.get_chemical_formula()
 
+    @property
+    def inchikey(self):
+        """
+        Return the InChIKey string for the molecule using Open Babel.
+        This provides robust topological perception avoiding artifacts
+        from distance-based bond guessing.
+        """
+        try:
+            from openbabel import pybel
+        except ImportError as exc:
+            raise ImportError(
+                "Calculating InChIKey requires Open Babel. "
+                "Use 'conda install -c conda-forge openbabel' to install."
+            ) from exc
+
+        # Build an XYZ string in memory for topological perception
+        lines = [str(self.num_atoms), "Created for InChIKey via Open Babel"]
+        for s, pos in zip(self.symbols, self.positions):
+            lines.append(
+                f"{s:4s} {pos[0]:15.10f} {pos[1]:15.10f} {pos[2]:15.10f}"
+            )
+        xyz_string = "\n".join(lines)
+
+        ob_mol = pybel.readstring("xyz", xyz_string)
+        return ob_mol.write("inchikey").strip()
+
+    @property
+    def cxsmiles(self):
+        """
+        Return the CXSMILES string for the molecule using RDKit.
+
+        CXSMILES extends standard SMILES with additional information
+        such as 3D coordinates, atom labels, and stereo group data,
+        appended in a ``|...|`` block after the SMILES string.
+        """
+        return Chem.MolToCXSmiles(self.to_rdkit())
+
     @cached_property
     def chemical_symbols(self):
         """
@@ -314,38 +350,25 @@ class Molecule:
 
     @property
     def estimated_dispersion(self):
-        """Estimated dispersion parameter for Voronoi tessellation.
+        """Bounding box padding for Voronoi-Dirichlet tessellation.
+
+        Returns the maximum VDW radius of the molecule's atoms. This is the
+        physically rigorous choice: the bounding box extends by one VDW radius
+        beyond the outermost atomic centres, so edge atoms' Voronoi cells reach
+        exactly to their VDW surface. Any positive padding guarantees bounded
+        cells (mirrors bound every region), and using max(r_vdw) keeps cells
+        tight enough that the overlap correction in
+        ``calculate_voronoi_dirichlet_occupied_volume`` is meaningful.
+
         Returns:
-        - dispersion (float): Estimated maximum distance for adjacent points.
+        - dispersion (float): Maximum VDW radius across all atoms (Å).
         """
-        n_points = self.distance_matrix.shape[0]
-        max_distance = np.max(
-            self.distance_matrix[np.triu_indices(n_points, k=1)]
-        )
-
-        max_radii_sum = 0.0
-        radii = np.array(self.vdw_radii_list)
-        if len(radii) != n_points:
-            raise ValueError("Number of radii must match number of points.")
-        for i in range(n_points):
-            for j in range(i + 1, n_points):
-                radii_sum = radii[i] + radii[j]
-                max_radii_sum = max(max_radii_sum, radii_sum)
-
-        # Use a factor of 1.5 to ensure sufficient
-        # dispersion for Voronoi tessellation
-        dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
-        return dispersion
+        return max(self.vdw_radii_list)
 
     @property
     def voronoi_dirichlet_occupied_volume(self):
         """Calculate the occupied volume of the
         molecule using Voronoi-Dirichlet tessellation.
-
-        Note: This method requires the pyvoro
-        package, which can be installed with:
-            pip install chemsmart[voronoi]
-        Note: pyvoro requires Python < 3.12
         """
         from chemsmart.utils.geometry import (
             calculate_voronoi_dirichlet_occupied_volume,
@@ -793,6 +816,13 @@ class Molecule:
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
 
+        if basename.endswith(".pdb"):
+            return cls._read_pdb_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         if basename.endswith((".com", ".gjf")):
             return cls._read_gaussian_inputfile(filepath)
 
@@ -969,6 +999,15 @@ class Molecule:
     #
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
+
+    @classmethod
+    @file_cache()
+    def _read_pdb_file(cls, filepath, index="-1", return_list=False):
+        """Read PDB format molecular structure file preserving residue metadata."""
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        pdb_file = PDBFile(filename=filepath)
+        return pdb_file.get_molecules(index=index, return_list=return_list)
 
     @staticmethod
     @file_cache()
@@ -1148,7 +1187,7 @@ class Molecule:
 
         Args:
             filename (str): Output file path
-            format (str): File format ('xyz' or 'com'). Default 'xyz'
+            format (str): File format ('xyz', 'com', or 'pdb'). Default 'xyz'
             mode (str): File write mode. Default 'w'
             **kwargs: Additional keyword arguments for format-specific writers
 
@@ -1159,6 +1198,8 @@ class Molecule:
             self.write_xyz(filename, mode=mode, **kwargs)
         elif format.lower() == "com":
             self.write_com(filename, **kwargs)
+        elif format.lower() == "pdb":
+            self.write_pdb(filename, mode=mode, **kwargs)
         # elif format.lower() == "mol":
         #     self.write_mol(filename, **kwargs)
         else:
@@ -1216,6 +1257,140 @@ class Molecule:
                 f.write(f"{charge} {multiplicity}\n")
             self.write_coordinates(f, program="gaussian")
             f.write("\n")
+
+    def write_pdb(
+        self,
+        filename,
+        mode="w",
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+        **kwargs,
+    ):
+        """
+        Write molecule to PDB format file.
+
+        Args:
+            filename (str): Output PDB file path
+            mode (str): File write mode. Default 'w'
+            flavor (int): Formatting options for PDB output:
+                - flavor & 1: Write MODEL/ENDMDL lines around each record
+                - flavor & 2: Don't write any CONECT records
+                - flavor & 4: Write CONECT records in both directions
+                - flavor & 8: Don't use multiple CONECTs to encode bond order
+                - flavor & 16: Write MASTER record
+                - flavor & 32: Write TER record
+                - TODO: this may be simplified in the future to use more intuitive
+                  TODO: boolean flags (specifiable via CLI) instead of bitwise flavor
+            add_bonds (bool): Flag to add bonds to molecule or not. Default True.
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Adjust bond distances to H atoms.
+            **kwargs: No additional keyword arguments are accepted.
+                Legacy conformer-selection arguments like ``confId`` and
+                ``conf_id`` raise :class:`TypeError`, and any other unexpected
+                keyword arguments also raise :class:`TypeError`.
+        """
+        if kwargs:
+            # Explicitly reject unsupported legacy conformer-selection arguments
+            legacy_keys = {"confId", "conf_id"}
+            provided_keys = set(kwargs.keys())
+            legacy_provided = legacy_keys & provided_keys
+            if legacy_provided:
+                provided_str = ", ".join(sorted(legacy_provided))
+                raise TypeError(
+                    f"Legacy conformer-selection arguments not supported in "
+                    f"write_pdb(): {provided_str}"
+                )
+            # Reject any other unexpected keyword arguments to avoid silently ignoring them
+            unexpected_str = ", ".join(sorted(provided_keys))
+            raise TypeError(
+                f"write_pdb() got unexpected keyword argument(s): {unexpected_str}"
+            )
+        pdb_block = self.to_pdb(
+            flavor=flavor,
+            add_bonds=add_bonds,
+            bond_cutoff_buffer=bond_cutoff_buffer,
+            adjust_H=adjust_H,
+        )
+        with open(filename, mode) as f:
+            logger.info(f"Writing PDB file to {filename}")
+            f.write(pdb_block)
+
+    def write_pdb_pybabel(
+        self,
+        pdb_filename,
+        mode="w",
+        overwrite=True,
+        cleanup=True,
+    ):
+        """
+        Convert molecule to PDB format using Open Babel.
+
+        This is an alternative to ``write_pdb`` for cases where Open Babel's
+        interpretation of connectivity or atom typing is preferred over
+        RDKit-based path.
+
+        Parameters
+        ----------
+        pdb_filename : str
+            Destination PDB file path.
+        mode : str, default 'w'
+            File mode passed to ``write_xyz`` when the XYZ file must be created.
+        overwrite : bool, default True
+            Whether to overwrite *pdb_filename* if it already exists.
+        cleanup : bool, default True
+            Remove any auto-generated temporary XYZ file after the conversion.
+
+        Raises
+        ------
+        ImportError
+            If Open Babel (``openbabel``) is not installed.
+        ValueError
+            If the XYZ file cannot be parsed by Open Babel.
+
+        Examples
+        --------
+        >>> molecule.write_pdb_openbabel("output.pdb")
+        """
+        import tempfile
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
+        tmp.close()
+        xyz_filename = tmp.name
+        logger.debug(
+            f"Created temporary XYZ {xyz_filename} for PDB conversion."
+        )
+        self.write_xyz(xyz_filename, mode=mode)
+
+        try:
+            from openbabel import pybel
+        except ImportError as exc:
+            if cleanup:
+                try:
+                    os.remove(xyz_filename)
+                except OSError:
+                    pass
+            raise ImportError(
+                "Converting to PDB via Open Babel requires openbabel. "
+                "Install with: ``conda install -c conda-forge openbabel``"
+            ) from exc
+
+        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
+        if xyz_mol is None:
+            raise ValueError(f"Unable to read molecule from {xyz_filename}")
+
+        logger.info(
+            f"Converting Molecule {self.__repr__()} to PDB {pdb_filename} via "
+            f"Open Babel (overwrite={overwrite})"
+        )
+        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
+        if cleanup:
+            try:
+                os.remove(xyz_filename)
+                logger.debug(f"Removed temporary XYZ file {xyz_filename}")
+            except OSError as exc:
+                logger.warning(f"Failed to remove temporary file: {exc}")
 
     def _write_gaussian_coordinates(self, f):
         """
@@ -1377,6 +1552,30 @@ class Molecule:
                 )
         return bond_distances
 
+    def to_cosmorsxyz(self):
+        """
+        Convert Molecule to COSMORSXYZ format string.
+        """
+        lines = [f"{self.num_atoms}", f"{self.charge} {self.multiplicity}"]
+        for symbol, pos in zip(self.symbols, self.positions):
+            lines.append(
+                f"{symbol:>4} {pos[0]:12.6f} {pos[1]:12.6f} {pos[2]:12.6f}"
+            )
+        return "\n".join(lines)
+
+    def write_cosmorsxyz(self, filename, mode="w", **kwargs):
+        """
+        Write molecule to .cosmorsxyz format file.
+
+        Args:
+            filename (str): Output cosmorsxyz file path
+            mode (str): File write mode
+            **kwargs: Additional keyword arguments (unused)
+        """
+        with open(filename, mode) as f:
+            for line in self.to_cosmorsxyz():
+                f.write(line)
+
     def to_smiles(self):
         """
         Convert molecule to SMILES string.
@@ -1386,6 +1585,67 @@ class Molecule:
 
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
+
+    def to_pdb(
+        self,
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+    ):
+        """
+        Convert molecule to PDB format string.
+
+        Args:
+            flavor (int): Formatting options for PDB output:
+                - flavor & 1: Write MODEL/ENDMDL lines around each record
+                - flavor & 2: Don't write any CONECT records
+                - flavor & 4: Write CONECT records in both directions
+                - flavor & 8: Don't use multiple CONECTs to encode bond order
+                - flavor & 16: Write MASTER record
+                - flavor & 32: Write TER record
+                - TODO: this may be simplified in the future to use more intuitive
+                  TODO: boolean flags (specifiable via CLI) instead of bitwise flavor
+            add_bonds (bool): Flag to add bonds to molecule or not. Default True.
+                If bond detection fails, will retry without bonds.
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Adjust bond distances to H atoms.
+
+        Returns:
+            str: PDB format string representation of the molecule
+
+        Note:
+            If bond detection fails due to kekulization issues, the method
+            will automatically retry without bonds and log a warning.
+            ``Molecule`` exports its single stored geometry; conformer
+            selection is not supported.
+        """
+        from chemsmart.io.pdb.pdbfile import PDBFile
+
+        # Try to create an RDKit molecule with bonds first
+        try:
+            rdkit_mol = self.to_rdkit(
+                add_bonds=add_bonds,
+                bond_cutoff_buffer=bond_cutoff_buffer,
+                adjust_H=adjust_H,
+            )
+            pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
+            return PDBFile.format_pdb_block(self, pdb_block)
+        except (
+            Chem.AtomKekulizeException,
+            Chem.KekulizeException,
+        ) as kekulize_error:
+            # If kekulization fails, retry without bonds
+            if add_bonds:
+                logger.warning(
+                    f"Bond detection failed with kekulization error: {kekulize_error}. "
+                    "Retrying PDB conversion without bonds."
+                )
+                rdkit_mol = self.to_rdkit(add_bonds=False)
+                pdb_block = Chem.MolToPDBBlock(rdkit_mol, flavor=flavor)
+                return PDBFile.format_pdb_block(self, pdb_block)
+            else:
+                raise
 
     def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol
@@ -1705,9 +1965,31 @@ class Molecule:
 
     def to_ase(self):
         """
-        Convert molecule object to ASE atoms object.
+        Convert molecule object to ASE atoms object, with
+        energy and forces in eV and eV per Angstrom, respectively.
         """
+        from ase import units
+
         from .atoms import AtomsChargeMultiplicity
+
+        logger.info("Converting molecule to ASE Atoms object.")
+
+        # convert energy and forces to ASE-compatible
+        # units if they are not None
+        energy = self.energy
+        if energy is not None:
+            logger.debug(f"Converting energy from {energy} Hartree to eV")
+            energy = energy * units.Hartree
+            logger.debug(f"Converted energy from Hartree to eV: {energy} eV")
+        forces = self.forces
+        if forces is not None:
+            logger.debug(
+                f"Converting forces from {forces} Hartree/Bohr to eV/Å."
+            )
+            forces = forces * units.Hartree / units.Bohr
+            logger.debug(
+                f"Converted forces from Hartree/Bohr to eV/Å: {forces} eV/Å."
+            )
 
         return AtomsChargeMultiplicity(
             symbols=self.chemical_symbols,
@@ -1717,8 +1999,8 @@ class Molecule:
             charge=self.charge,
             multiplicity=self.multiplicity,
             frozen_atoms=self.frozen_atoms,
-            energy=self.energy,
-            forces=self.forces,
+            energy=energy,
+            forces=forces,
             velocities=self.velocities,
             info=self.info,
         )
@@ -1862,72 +2144,6 @@ class Molecule:
 
         return frames
 
-    def xyz_to_pdb(
-        self,
-        pdb_filename,
-        xyz_filename=None,
-        mode="w",
-        overwrite=True,
-        cleanup=True,
-    ):
-        """
-        Convert an XYZ representation of the molecule to PDB using Open Babel.
-
-        Args:
-            pdb_filename (str): Destination PDB file path.
-            xyz_filename (str, optional): Source
-            XYZ file path; if omitted or missing, a
-                temporary XYZ is written via ``write_xyz``.
-            mode (str): File mode passed to
-            ``write_xyz`` when creating the XYZ file.
-            overwrite (bool): Whether to overwrite an existing PDB file.
-            cleanup (bool): Remove auto-generated XYZ files after conversion.
-        """
-        auto_xyz = False
-        if xyz_filename is None:
-            tmp = tempfile.NamedTemporaryFile(suffix=".xyz", delete=False)
-            tmp.close()
-            xyz_filename = tmp.name
-            auto_xyz = True
-            logger.debug(
-                f"Created temporary XYZ {xyz_filename} for PDB conversion. "
-            )
-            self.write_xyz(xyz_filename, mode=mode)
-        elif not os.path.isfile(xyz_filename):
-            logger.debug(
-                f"XYZ {xyz_filename} missing; writing coordinates before conversion."
-            )
-            self.write_xyz(xyz_filename, mode=mode)
-
-        try:
-            from openbabel import pybel
-        except ImportError as exc:  # pragma: no cover
-            if auto_xyz and cleanup:
-                os.remove(xyz_filename)
-            raise ImportError(
-                "xyz_to_pdb requires Open Babel. Use 'conda install -c conda-forge openbabel' to install Openbabel and to enable this conversion."
-            ) from exc
-
-        xyz_mol = next(pybel.readfile("xyz", xyz_filename), None)
-        if xyz_mol is None:
-            if auto_xyz and cleanup:
-                os.remove(xyz_filename)
-            raise ValueError(f"Unable to read molecule from {xyz_filename}")
-
-        logger.info(
-            f"Converting XYZ {xyz_filename} to PDB {pdb_filename} using Open Babel (overwrite={overwrite})"
-        )
-        xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
-
-        if auto_xyz and cleanup:
-            try:
-                os.remove(xyz_filename)
-                logger.debug(f"Removed temporary XYZ {xyz_filename}")
-            except OSError as exc:
-                logger.warning(
-                    f"Could not remove temporary XYZ {xyz_filename}: {exc}"
-                )
-
 
 class CoordinateBlock:
     """
@@ -2009,7 +2225,10 @@ class CoordinateBlock:
         supplied as text or as a list of lines into
         Molecule class.
         """
-        if not self.partitions:
+        partitions, high_level_atoms, medium_level_atoms, low_level_atoms = (
+            self.partitions
+        )
+        if not partitions:
             return Molecule(
                 symbols=self.symbols,
                 positions=self.positions,
@@ -2024,9 +2243,9 @@ class CoordinateBlock:
                 frozen_atoms=self.constrained_atoms,
                 pbc_conditions=self.pbc_conditions,
                 translation_vectors=self.translation_vectors,
-                high_level_atoms=self.partitions[1],
-                medium_level_atoms=self.partitions[2],
-                low_level_atoms=self.partitions[3],
+                high_level_atoms=high_level_atoms,
+                medium_level_atoms=medium_level_atoms,
+                low_level_atoms=low_level_atoms,
             )
 
     def _get_symbols(self):

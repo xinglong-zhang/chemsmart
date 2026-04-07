@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest import mock
 
+from click.testing import CliRunner
+
 
 class TestVersion:
     """Test the version loading logic from chemsmart/__init__.py."""
@@ -70,3 +72,13 @@ class TestVersion:
         assert re.match(
             version_pattern, chemsmart.__version__
         ), f"Version '{chemsmart.__version__}' does not follow semantic versioning format"
+
+    def test_cli_version_option(self):
+        """Test that `chemsmart --version` outputs the correct version."""
+        import chemsmart
+        from chemsmart.cli.main import entry_point
+
+        runner = CliRunner()
+        result = runner.invoke(entry_point, ["--version"])
+        assert result.exit_code == 0
+        assert chemsmart.__version__ in result.output

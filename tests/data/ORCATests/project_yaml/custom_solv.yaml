@@ -1,0 +1,16 @@
+# ORCA project settings with a custom solvent (Epsilon/Refrac for HFIP)
+# The custom_solvent block contains ORCA %cpcm parameters written directly
+# into the %cpcm block (ORCA equivalent of Gaussian's appended custom solvent).
+gas:
+  functional: m062x
+  basis: def2-svp
+  defgrid: DEFGRID3
+solv:
+  functional: m062x
+  basis: def2-tzvp
+  defgrid: DEFGRID3
+  freq: False
+  solvent_model: cpcm
+  custom_solvent: |
+    Epsilon 16.7
+    Refrac 1.275

@@ -22,6 +22,3 @@ Before starting:
 
 Since most HPC clusters run Linux, follow the instructions in :doc:`installation-linux-macos` to install Chemsmart on
 your cluster.
-
-Before running ``make env``, you may need to load an appropriate compiler module (e.g. ``gcc``) to ensure that C++
-extensions such as ``pyvoro`` can be built successfully.

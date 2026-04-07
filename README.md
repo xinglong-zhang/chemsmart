@@ -35,9 +35,6 @@ make env
 ```
 to create a running environment.
 
-**Note (HPC users):** Some dependencies (e.g. `pyvoro`) require a C++ compiler.
-On HPC systems, you may need to load a compiler module (e.g. `module load gcc`) before running `make env`.
-
 By default, this will create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 
 If conda is not installed, one can run
@@ -241,9 +238,14 @@ make clean
 Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
 
 ```bash
+chemsmart --version
+```
+to get the current version of CHEMSMART, and
+
+```bash
 chemsmart --help
 ```
-to get the options for running chemsmart package.
+to get the options for running CHEMSMART package.
 
 ## Usage
 

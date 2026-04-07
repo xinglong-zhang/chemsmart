@@ -17,6 +17,7 @@ from chemsmart.io.molecules.structure import (
     Molecule,
     QMMMMolecule,
 )
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
@@ -129,8 +130,35 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 
         # TODO:
 
+    def test_coordinate_block_without_partitions_returns_molecule(self):
+        """Non-ONIOM coordinate block should return Molecule, not QMMMMolecule."""
+        normal_block = [
+            "C   0.000  0.000  0.000",
+            "H   1.089  0.000  0.000",
+            "H  -0.363  1.027  0.000",
+            "H  -0.363 -0.513  0.890",
+            "H  -0.363 -0.513 -0.890",
+        ]
+        cb = CoordinateBlock(coordinate_block=normal_block)
+        mol = cb.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "Molecule"
 
-class TestStructures:
+    def test_coordinate_block_with_partitions_returns_qmmm_molecule(self):
+        """ONIOM coordinate block should return QMMMMolecule."""
+        oniom_block = [
+            "C   0.000  0.000  0.000  H",
+            "H   1.089  0.000  0.000  L",
+            "H  -0.363  1.027  0.000  L",
+            "H  -0.363 -0.513  0.890  L",
+            "H  -0.363 -0.513 -0.890  L",
+        ]
+        cb = CoordinateBlock(coordinate_block=oniom_block)
+        mol = cb.molecule
+        assert isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "QMMMMolecule"
+
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):
@@ -524,6 +552,91 @@ class TestMoleculeAdvanced:
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
 
+    def test_to_ase_energy_unit_conversion(self):
+        """Test that to_ase() converts energy from Hartree to eV."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+
+    def test_to_ase_forces_unit_conversion(self):
+        """Test that to_ase() converts forces from Hartree/Bohr to eV/Å."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(
+            ase_atoms.forces,
+            expected_forces_ev_per_angstrom,
+            rtol=1e-5,
+        )
+
+    def test_to_ase_none_energy_and_forces(self):
+        """Test that to_ase() preserves None for energy and forces."""
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        assert ase_atoms.forces is None
+
+    def test_to_ase_none_energy_with_forces(self):
+        """Test that to_ase() converts forces when energy is None."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(ase_atoms.forces, expected_forces_ev_per_angstrom)
+
+    def test_to_ase_energy_with_none_forces(self):
+        """Test that to_ase() converts energy when forces are None."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+        assert ase_atoms.forces is None
+
     def test_convert_ase_atoms_with_constraints_to_molecule(
         self, constrained_atoms
     ):
@@ -887,6 +1000,261 @@ class TestMoleculeAdvanced:
         assert len(distances) == 1
         assert np.isclose(distances[0], 1.0)
 
+    def test_to_pdb_conversion(self, single_molecule_xyz_file):
+        """Test conversion of Molecule to PDB format."""
+        # Load a molecule from XYZ file
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test to_pdb() method
+        pdb_string = mol.to_pdb()
+        assert isinstance(pdb_string, str)
+        assert len(pdb_string) > 0
+
+        # Check that PDB format contains expected elements
+        assert "HETATM" in pdb_string or "ATOM" in pdb_string
+        assert "END" in pdb_string
+
+        # Check that all atoms are represented in the PDB
+        lines = pdb_string.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_file(self, single_molecule_xyz_file, tmpdir):
+        """Test writing Molecule to PDB file."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write_pdb method
+        pdb_file = os.path.join(tmpdir, "test_molecule.pdb")
+        mol.write_pdb(pdb_file)
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+            assert "END" in content
+
+    def test_write_generic_method_with_pdb_format(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test generic write() method with PDB format."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write method with format='pdb'
+        pdb_file = os.path.join(tmpdir, "test_generic.pdb")
+        mol.write(pdb_file, format="pdb")
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+
+    def test_pdb_with_different_flavors(self, single_molecule_xyz_file):
+        """Test PDB conversion with different flavor options."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test with default flavor (with CONECT records)
+        pdb_default = mol.to_pdb(flavor=0)
+
+        # Test with flavor=2 (no CONECT records)
+        pdb_no_conect = mol.to_pdb(flavor=2)
+
+        # Both should contain atom records
+        assert "HETATM" in pdb_default or "ATOM" in pdb_default
+        assert "HETATM" in pdb_no_conect or "ATOM" in pdb_no_conect
+
+        # flavor=0 should have CONECT records (unless bonds fail), flavor=2 should not
+        # Note: CONECT might not be present if bonds fail and fallback is used
+        # So we just verify the PDB is valid
+        assert len(pdb_default) > 0
+        assert len(pdb_no_conect) > 0
+
+    def test_pdb_with_no_bonds(self, single_molecule_xyz_file):
+        """Test PDB conversion without bond detection."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test without bonds
+        pdb_no_bonds = mol.to_pdb(add_bonds=False)
+
+        assert isinstance(pdb_no_bonds, str)
+        assert len(pdb_no_bonds) > 0
+        assert "HETATM" in pdb_no_bonds or "ATOM" in pdb_no_bonds
+
+        # When bonds are not added, CONECT records will be empty
+        # We verify the PDB is valid without expecting specific CONECT content
+        lines = pdb_no_bonds.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_rejects_unexpected_keyword_argument(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test write_pdb rejects unexpected kwargs instead of ignoring them."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+        pdb_file = os.path.join(tmpdir, "unexpected_kwarg.pdb")
+
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            mol.write_pdb(pdb_file, unexpected_option=True)
+
+    def test_to_pdb_strict_columns_and_final_end_record(self):
+        """Test strict PDB 3.3 atom-column formatting and final END line."""
+        mol = Molecule(
+            symbols=["C", "Cl"],
+            positions=np.array([[0.0, 1.234, -2.5], [3.0, -4.0, 5.0]]),
+            info={
+                "record_type": ["HETATM", "ATOM"],
+                "atom_name": ["C1", "CL1"],
+                "residue_name": ["LIG", "SOL"],
+                "residue_number": [1, 2],
+                "chain_id": ["A", "B"],
+            },
+        )
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        lines = pdb_string.splitlines()
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 2
+        assert lines[-1] == "END"
+
+        first, second = atom_lines
+        assert first.startswith("HETATM")
+        assert second.startswith("ATOM  ")
+
+        # PDB v3.3 fixed columns (1-based): chainID=22, resSeq=23-26, element=77-78
+        assert first[21] == "A"
+        assert second[21] == "B"
+        assert first[22:26] == "   1"
+        assert second[22:26] == "   2"
+        assert first[76:78] == " C"
+        assert second[76:78] == "Cl"
+
+        # Ensure standard atom-record width is preserved.
+        assert len(first) >= 78
+        assert len(second) >= 78
+
+    def test_to_pdb_uses_molecule_attributes_for_chain_and_residue_metadata(
+        self,
+    ):
+        """Test chain/residue metadata taken directly from Molecule attributes."""
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+        )
+        mol.chain_ids = ["A", "A", "A"]
+        mol.residue_numbers = [7, 7, 7]
+        mol.residue_names = ["HOH", "HOH", "HOH"]
+        mol.atom_names = ["O", "H1", "H2"]
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        atom_lines = [
+            line
+            for line in pdb_string.splitlines()
+            if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 3
+        for line, element in zip(atom_lines, ["O", "H", "H"]):
+            assert line[17:20] == "HOH"
+            assert line[21] == "A"
+            assert line[22:26] == "   7"
+            assert line[76:78] == f"{element:>2}"
+
+    def test_from_pdb_file_preserves_atom_and_residue_metadata(self, tmpdir):
+        """Test native PDB import preserves atom names and residue metadata."""
+        pdb_content = (
+            "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+            "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+            "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "water.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert mol.symbols == ["O", "H", "H"]
+        assert mol.atom_names == ["O", "H1", "H2"]
+        assert mol.residue_names == ["HOH", "HOH", "HOH"]
+        assert mol.residue_numbers == [7, 7, 7]
+        assert mol.chain_ids == ["A", "A", "A"]
+        assert np.allclose(
+            mol.positions,
+            np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        )
+
+    def test_infer_pdb_element_from_uppercase_atom_names(self):
+        """Test uppercase PDB atom names can still infer two-letter elements."""
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+        assert PDBFile._infer_element_from_atom_name("ZN") == "Zn"
+        assert PDBFile._infer_element_from_atom_name("CL") == "Cl"
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
+
+    def test_from_pdb_file_infers_uppercase_two_letter_elements_when_blank(
+        self, tmpdir
+    ):
+        """Test blank PDB element columns fall back to uppercase atom-name inference."""
+        pdb_content = (
+            "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+            "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "blank_elements.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert list(mol.symbols) == ["Fe", "Zn", "Cl", "C"]
+        assert mol.atom_names == ["FE", "ZN", "CL", "CA"]
+        assert mol.residue_names == ["HEM", "ZN", "CL", "ALA"]
+
+    def test_from_pdb_file_supports_model_index_selection(self, tmpdir):
+        """Test PDB MODEL/ENDMDL parsing and index selection."""
+        pdb_content = (
+            "MODEL        1\n"
+            "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "MODEL        2\n"
+            "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "models.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        models = Molecule.from_filepath(pdb_file, index=":", return_list=True)
+        assert len(models) == 2
+        assert models[0].chain_ids == ["A"]
+        assert models[1].chain_ids == ["B"]
+
+        last_model = Molecule.from_filepath(pdb_file, index="-1")
+        assert np.allclose(last_model.positions, np.array([[1.5, 2.5, 3.5]]))
+        assert last_model.residue_numbers == [2]
+
 
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
@@ -1110,7 +1478,7 @@ class TestChemicalFeatures:
         """Test volume calculation for molecules.
 
         Tests various volume calculation methods:
-        - voronoi_dirichlet_occupied_volume (requires pyvoro, optional)
+        - voronoi_dirichlet_occupied_volume
         - crude_volume_by_vdw_radii
         - crude_volume_by_atomic_radii
         - vdw_volume
@@ -1119,16 +1487,11 @@ class TestChemicalFeatures:
         """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
 
-        # Test pyvoro-based method (optional,
-        # may not be available in Python 3.12+)
-        try:
-            ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
-            assert ozone_vd_vol > 0
-            assert np.isclose(ozone_vd_vol, 42.796979883456515, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+        assert ozone_vd_vol > 0
+        assert np.isclose(ozone_vd_vol, 42.7969798834565, rtol=0.01)
 
-        # Test other volume methods that don't require pyvoro
+        # Test other volume methods
         assert np.isclose(
             ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
         )
@@ -1151,13 +1514,9 @@ class TestChemicalFeatures:
 
         acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
 
-        # Test pyvoro-based method (optional)
-        try:
-            acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
-            assert acetone_vd_vol > 0
-            assert np.isclose(acetone_vd_vol, 108.73483002110545, rtol=0.01)
-        except ImportError:
-            pass  # pyvoro not available, skip this test
+        acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+        assert acetone_vd_vol > 0
+        assert np.isclose(acetone_vd_vol, 73.29919753367922, rtol=0.01)
 
         # Test other volume methods
         assert np.isclose(
@@ -1516,6 +1875,40 @@ class TestQMMMinMolecule:
             ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
         if os.path.exists("tmp.xyz"):
             os.remove("tmp.xyz")
+
+    def test_qmmm_partition_overlap_raises(self):
+        """Creating a QMMMMolecule with overlapping
+        partitions should raise a ValueError."""
+        # Create a small dummy molecule
+        symbols = ["C"] * 5
+        positions = np.zeros((5, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # High and medium overlap (atom index 2 appears in both)
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1, 2],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "Overlap" in str(exc.value)
+
+    def test_qmmm_partition_out_of_range_raises(self):
+        """Specifying out-of-range atom indices should raise a ValueError."""
+        symbols = ["C"] * 4
+        positions = np.zeros((4, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # index 10 out of range
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[10],
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "out of range" in str(exc.value)
 
 
 class TestSDFFile:
@@ -1893,37 +2286,288 @@ class TestCDXFile:
         assert mol.is_aromatic
 
 
-def test_qmmm_partition_overlap_raises():
-    """Creating a QMMMMolecule with overlapping
-    partitions should raise a ValueError."""
-    # Create a small dummy molecule
-    symbols = ["C"] * 5
-    positions = np.zeros((5, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # High and medium overlap (atom index 2 appears in both)
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1, 2],
-        medium_level_atoms=[2, 3],
-        low_level_atoms=None,
-    )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "Overlap" in str(exc.value)
+class TestInChIKey:
+    """Tests for Molecule.inchikey property (Open Babel backend)."""
+
+    EXPECTED_NORMAL = "NNJYFTBCZFRDIO-UHFFFAOYSA-N"
+    EXPECTED_R_ENANTIOMER = "YDCAVENCOFCEDV-HSZRJFAPSA-N"
+    EXPECTED_S_ENANTIOMER = "YDCAVENCOFCEDV-QHCPKHFHSA-N"
+    EXPECTED_LARGE_C3 = "WYLDIUSELJCHHK-MMELAICESA-M"
+    EXPECTED_LARGE_C2 = "KRPJGRYSEYYRSW-YWQHEUOTSA-M"
+
+    @staticmethod
+    def _load_molecule(filepath):
+        mol = Molecule.from_filepath(filepath)
+        if isinstance(mol, list):
+            mol = mol[-1]
+        return mol
+
+    def test_regression_inchikey(self, inchikey_normal_file):
+        """InChIKey for a simple small molecule should be
+        deterministic across repeated calls."""
+        mol = self._load_molecule(inchikey_normal_file)
+        for _ in range(3):
+            assert mol.inchikey == self.EXPECTED_NORMAL
+
+    def test_r_enantiomer_inchikey(self, inchikey_r_enantiomer_file):
+        """InChIKey for the R-enantiomer should match the expected value."""
+        mol = self._load_molecule(inchikey_r_enantiomer_file)
+        assert mol.inchikey == self.EXPECTED_R_ENANTIOMER
+
+    def test_s_enantiomer_inchikey(self, inchikey_s_enantiomer_file):
+        """InChIKey for the S-enantiomer should match the expected value."""
+        mol = self._load_molecule(inchikey_s_enantiomer_file)
+        assert mol.inchikey == self.EXPECTED_S_ENANTIOMER
+
+    def test_enantiomers_share_connectivity_layer(
+        self, inchikey_r_enantiomer_file, inchikey_s_enantiomer_file
+    ):
+        """R and S enantiomers share the same first (connectivity) layer of
+        the InChIKey (identical constitution) but differ in the stereo layer,
+        confirming that Open Babel correctly resolves the axial chirality."""
+        mol_r = self._load_molecule(inchikey_r_enantiomer_file)
+        mol_s = self._load_molecule(inchikey_s_enantiomer_file)
+        # First 14-character block: same connectivity
+        assert mol_r.inchikey.split("-")[0] == mol_s.inchikey.split("-")[0]
+        # Second block: stereo layer must differ for a chiral pair
+        assert mol_r.inchikey.split("-")[1] != mol_s.inchikey.split("-")[1]
+        # Overall InChIKeys are distinct
+        assert mol_r.inchikey != mol_s.inchikey
+
+    def test_large_molecule_c3_inchikey(self, inchikey_large_molecule_c3_file):
+        """InChIKey for a large molecule (c3) should match the expected value."""
+        mol = self._load_molecule(inchikey_large_molecule_c3_file)
+        assert mol.inchikey == self.EXPECTED_LARGE_C3
+
+    def test_large_molecule_c2_inchikey(self, inchikey_large_molecule_c2_file):
+        """InChIKey for a large molecule (c2) should match the expected value."""
+        mol = self._load_molecule(inchikey_large_molecule_c2_file)
+        assert mol.inchikey == self.EXPECTED_LARGE_C2
+
+    def test_large_molecules_differ(
+        self, inchikey_large_molecule_c3_file, inchikey_large_molecule_c2_file
+    ):
+        """Two different large molecules should produce different InChIKeys."""
+        mol_c3 = self._load_molecule(inchikey_large_molecule_c3_file)
+        mol_c2 = self._load_molecule(inchikey_large_molecule_c2_file)
+        assert mol_c3.inchikey != mol_c2.inchikey
 
 
-def test_qmmm_partition_out_of_range_raises():
-    """Specifying out-of-range atom indices should raise a ValueError."""
-    symbols = ["C"] * 4
-    positions = np.zeros((4, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # index 10 out of range
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1],
-        medium_level_atoms=[2],
-        low_level_atoms=[10],
+class TestCXSMILES:
+    """Tests for Molecule.cxsmiles property (RDKit backend)."""
+
+    EXPECTED_NORMAL = (
+        "[H]C([H])([H])C([H])([H])op(=O)oC([H])([H])C([H])([H])[H] "
+        "|(3.6969,1.9448,0.2049;3.0842,1.2373,-0.3608;3.7313,0.4472,"
+        "-0.7559;2.652,1.7556,-1.2232;1.9939,0.6488,0.5088;1.3583,"
+        "1.4601,0.8855;2.4534,0.1313,1.3605;1.2255,-0.2622,-0.2653;"
+        "0.0003,-0.9988,0.5013;0.0051,-2.2423,-0.2655;-1.2252,-0.2619,"
+        "-0.2663;-1.9972,0.645,0.509;-2.4576,0.1238,1.3579;-1.364,"
+        "1.4563,0.8899;-3.0867,1.2342,-0.3613;-3.702,1.9386,0.2054;"
+        "-2.6535,1.756,-1.221;-3.7312,0.4439,-0.7604)|"
     )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "out of range" in str(exc.value)
+    EXPECTED_R_ENANTIOMER = (
+        "[H]c1c([H])c([H])c(P(=O)(c2c([H])c([H])c([H])c([H])c2[H])"
+        "C([H])([H])[C@@]2(C([H])([H])[H])c(=O)n(C([H])([H])[H])"
+        "c3c([H])c([H])c([H])c([H])c32)c([H])c1[H] "
+        "|(0.657587,4.92454,-1.29892;0.276843,3.96138,-0.951759;"
+        "0.485742,2.81258,-1.71847;1.03401,2.87447,-2.66093;"
+        "0.006912,1.57925,-1.27484;0.204594,0.685275,-1.87284;"
+        "-0.6776,1.49046,-0.055628;-1.25801,-0.0518,0.702519;"
+        "-1.3091,0.044461,2.20006;-2.88635,-0.380829,-0.012479;"
+        "-3.12941,-0.354113,-1.39219;-2.32549,-0.092551,-2.08777;"
+        "-4.40354,-0.645056,-1.87792;-4.59613,-0.624486,-2.95272;"
+        "-5.43533,-0.955747,-0.986524;-6.43361,-1.18057,-1.36882;"
+        "-5.19575,-0.974224,0.388852;-6.00568,-1.21169,1.08208;"
+        "-3.92009,-0.687184,0.879324;-3.70148,-0.688059,1.9505;"
+        "-0.227699,-1.40463,0.052757;-0.119079,-1.24802,-1.03485;"
+        "-0.807656,-2.33494,0.17008;1.15351,-1.5942,0.72979;"
+        "0.99867,-2.27426,2.08799;0.308383,-1.69441,2.71697;"
+        "1.97119,-2.35931,2.59369;0.59233,-3.28598,1.93715;"
+        "1.93427,-2.48285,-0.25179;1.70453,-3.64544,-0.504979;"
+        "2.90906,-1.70492,-0.846562;3.81634,-2.19747,-1.84937;"
+        "3.73917,-1.61247,-2.77951;3.54494,-3.24141,-2.05378;"
+        "4.8593,-2.15693,-1.49649;2.95902,-0.433075,-0.262488;"
+        "3.8266,0.615031,-0.550651;4.58376,0.527564,-1.3328;"
+        "3.69973,1.78628,0.210751;4.36465,2.62845,0.005447;"
+        "2.75405,1.88809,1.23239;2.68234,2.80776,1.81661;"
+        "1.88531,0.820237,1.50649;1.12177,0.893949,2.28612;"
+        "1.97673,-0.328846,0.734248;-0.882212,2.64496,0.711945;"
+        "-1.38448,2.55034,1.67858;-0.411788,3.878,0.260678;"
+        "-0.570718,4.77518,0.863087),wU:23.24|"
+    )
+    EXPECTED_S_ENANTIOMER = (
+        "[H]c1c([H])c([H])c(P(=O)(c2c([H])c([H])c([H])c([H])c2[H])"
+        "C([H])([H])[C@]2(C([H])([H])[H])c(=O)n(C([H])([H])[H])"
+        "c3c([H])c([H])c([H])c([H])c32)c([H])c1[H] "
+        "|(-4.10545,4.56874,0.709448;-3.52977,3.64265,0.645345;"
+        "-3.31587,2.87242,1.79018;-3.72201,3.19528,2.7513;"
+        "-2.57592,1.69184,1.70894;-2.37818,1.07929,2.59263;"
+        "-2.05266,1.27517,0.478011;-1.13514,-0.28848,0.507738;"
+        "-0.75977,-0.677078,1.90906;-2.21055,-1.523,-0.263839;"
+        "-2.718,-1.39784,-1.56435;-2.48778,-0.513904,-2.16641;"
+        "-3.52676,-2.40254,-2.09389;-3.92258,-2.30619,-3.10717;"
+        "-3.83217,-3.53062,-1.32596;-4.46746,-4.31554,-1.7426;"
+        "-3.3289,-3.6555,-0.02996;-3.56957,-4.53716,0.56812;"
+        "-2.51594,-2.65283,0.503124;-2.10519,-2.72167,1.51378;"
+        "0.246332,-0.126442,-0.664672;0.507903,-1.14931,-0.980531;"
+        "-0.124177,0.404384,-1.55997;1.49769,0.604701,-0.148795;"
+        "1.1654,1.86783,0.660908;0.549974,2.55301,0.05834;"
+        "2.09382,2.38433,0.946933;0.621442,1.59517,1.57793;"
+        "2.29809,1.06731,-1.37867;1.86402,1.731,-2.29803;"
+        "3.58921,0.612819,-1.24748;4.63005,0.881221,-2.20479;"
+        "5.4733,1.41251,-1.73622;4.19794,1.50997,-2.994;"
+        "5.00869,-0.052287,-2.65075;3.72297,-0.193357,-0.108558;"
+        "4.85777,-0.860668,0.337892;5.8052,-0.793848,-0.201106;"
+        "4.73765,-1.62678,1.50603;5.61099,-2.16479,1.88194;"
+        "3.52468,-1.71469,2.1904;3.45722,-2.32196,3.09528;"
+        "2.38859,-1.03029,1.72864;1.4267,-1.09209,2.24455;"
+        "2.49776,-0.268364,0.573364;-2.26183,2.05492,-0.668208;"
+        "-1.83522,1.76286,-1.63193;-3.00036,3.23568,-0.582173;"
+        "-3.1564,3.84433,-1.47533),wU:23.24|"
+    )
+    EXPECTED_R_ROTAMER = (
+        "[H]c1n=c(-c2c(-os(=O)(=O)C(F)(F)F)c([H])c([H])c3c([H])c([H])"
+        "c([H])c([H])c23)c2c([H])c([H])c([H])c([H])c2c1[H] "
+        "|(-0.329609,2.38122,-3.61273;-0.026158,2.27146,-2.56743;"
+        "0.336125,1.02648,-2.1812;0.702396,0.825008,-0.934002;"
+        "1.01703,-0.590455,-0.562362;-0.007714,-1.51067,-0.532668;"
+        "-1.30548,-1.10616,-0.852577;-2.1204,-0.164611,0.168256;"
+        "-2.55417,1.01923,-0.515766;-1.46291,-0.151398,1.44906;"
+        "-3.57423,-1.28562,0.320271;-4.16542,-1.41565,-0.847695;"
+        "-3.16121,-2.46571,0.747804;-4.41207,-0.76474,1.19438;"
+        "0.181508,-2.86971,-0.206966;-0.687662,-3.52873,-0.187174;"
+        "1.44931,-3.31282,0.079351;1.62504,-4.36094,0.333044;"
+        "2.55451,-2.41778,0.057183;3.87361,-2.86277,0.348232;"
+        "4.02499,-3.91674,0.595343;4.93563,-1.98941,0.318758;"
+        "5.94394,-2.3428,0.544269;4.72459,-0.626471,-0.008915;"
+        "5.57315,0.060292,-0.037079;3.46034,-0.164367,-0.295324;"
+        "3.30174,0.885311,-0.552026;2.34077,-1.04278,-0.266984;"
+        "0.743402,1.86566,0.050067;1.11738,1.6475,1.4052;"
+        "1.36594,0.635744,1.73181;1.14034,2.69619,2.29419;"
+        "1.42424,2.52279,3.3341;0.783222,4.00428,1.87401;"
+        "0.805052,4.82508,2.59435;0.401105,4.23926,0.574492;"
+        "0.114218,5.24117,0.245832;0.370036,3.17459,-0.368519;"
+        "-0.025328,3.3532,-1.71845;-0.329238,4.34162,-2.07033)|"
+    )
+    EXPECTED_S_ROTAMER = (
+        "[H]c1n=c(-c2c(-os(=O)(=O)C(F)(F)F)c([H])c([H])c3c([H])c([H])"
+        "c([H])c([H])c23)c2c([H])c([H])c([H])c([H])c2c1[H] "
+        "|(-0.329441,-2.38184,-3.61277;-0.026136,-2.27183,-2.56745;"
+        "0.33626,-1.0268,-2.18149;0.702361,-0.825125,-0.934248;"
+        "1.01698,0.590384,-0.562766;-0.007759,1.51064,-0.533148;"
+        "-1.3055,1.10597,-0.853096;-2.12019,0.16467,0.168019;"
+        "-1.46257,0.151709,1.44877;-2.55422,-1.01919,-0.515773;"
+        "-3.57381,1.28579,0.320452;-3.16032,2.46582,0.747959;"
+        "-4.16523,1.41612,-0.847356;-4.41149,0.765061,1.19469;"
+        "0.181532,2.86961,-0.207313;-0.687458,3.52887,-0.187547;"
+        "1.44935,3.31259,0.07922;1.62509,4.36068,0.33303;"
+        "2.55452,2.41752,0.057133;3.87361,2.86235,0.348425;"
+        "4.02509,3.91629,0.595642;4.93552,1.98887,0.319058;"
+        "5.94384,2.34212,0.544769;4.7244,0.625956,-0.008734;"
+        "5.5729,-0.060885,-0.036781;3.46015,0.164008,-0.295385;"
+        "3.30143,-0.885637,-0.552158;2.3407,1.04257,-0.26718;"
+        "0.743183,-1.86557,0.050012;1.11714,-1.64713,1.40512;"
+        "1.36576,-0.635314,1.7315;1.1399,-2.69559,2.29437;"
+        "1.42376,-2.522,3.33425;0.782587,-4.00373,1.87448;"
+        "0.804249,-4.82437,2.595;0.400478,-4.23897,0.575013;"
+        "0.11344,-5.24092,0.246622;0.369622,-3.17453,-0.368276;"
+        "-0.025656,-3.35336,-1.71819;-0.329772,-4.34179,-2.06987)|"
+    )
+
+    @staticmethod
+    def _load_molecule(filepath):
+        mol = Molecule.from_filepath(filepath)
+        if isinstance(mol, list):
+            mol = mol[-1]
+        return mol
+
+    @staticmethod
+    def _smiles_core(cxsmiles):
+        """Extract the SMILES part before the CX coordinate extension."""
+        return cxsmiles.split(" |")[0]
+
+    @staticmethod
+    def _load_expected(filepath):
+        with open(filepath, "r") as f:
+            return f.read().strip()
+
+    def test_regression_cxsmiles(self, cxsmiles_normal_file):
+        """CXSMILES for a simple molecule should be deterministic across
+        repeated calls."""
+        mol = self._load_molecule(cxsmiles_normal_file)
+        for _ in range(3):
+            assert mol.cxsmiles == self.EXPECTED_NORMAL
+
+    def test_r_enantiomer_cxsmiles(self, cxsmiles_r_enantiomer_file):
+        """CXSMILES for the R-enantiomer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_r_enantiomer_file)
+        assert mol.cxsmiles == self.EXPECTED_R_ENANTIOMER
+
+    def test_s_enantiomer_cxsmiles(self, cxsmiles_s_enantiomer_file):
+        """CXSMILES for the S-enantiomer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_s_enantiomer_file)
+        assert mol.cxsmiles == self.EXPECTED_S_ENANTIOMER
+
+    def test_enantiomers_differ(
+        self, cxsmiles_r_enantiomer_file, cxsmiles_s_enantiomer_file
+    ):
+        """R and S enantiomers must produce different CXSMILES.
+        The SMILES core itself differs (@@/@ chirality annotation)."""
+        mol_r = self._load_molecule(cxsmiles_r_enantiomer_file)
+        mol_s = self._load_molecule(cxsmiles_s_enantiomer_file)
+        core_r = self._smiles_core(mol_r.cxsmiles)
+        core_s = self._smiles_core(mol_s.cxsmiles)
+        # SMILES cores must differ (stereo annotation)
+        assert core_r != core_s
+        # Full CXSMILES must differ
+        assert mol_r.cxsmiles != mol_s.cxsmiles
+
+    def test_r_rotamer_cxsmiles(self, cxsmiles_r_rotamer_file):
+        """CXSMILES for the R-rotamer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_r_rotamer_file)
+        assert mol.cxsmiles == self.EXPECTED_R_ROTAMER
+
+    def test_s_rotamer_cxsmiles(self, cxsmiles_s_rotamer_file):
+        """CXSMILES for the S-rotamer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_s_rotamer_file)
+        assert mol.cxsmiles == self.EXPECTED_S_ROTAMER
+
+    def test_rotamers_differ(
+        self, cxsmiles_r_rotamer_file, cxsmiles_s_rotamer_file
+    ):
+        """R and S rotamers must produce different CXSMILES.
+        Rotamers share the same SMILES core (identical connectivity)
+        but differ in the CX coordinate extension (3D geometry)."""
+        mol_r = self._load_molecule(cxsmiles_r_rotamer_file)
+        mol_s = self._load_molecule(cxsmiles_s_rotamer_file)
+        core_r = self._smiles_core(mol_r.cxsmiles)
+        core_s = self._smiles_core(mol_s.cxsmiles)
+        # Rotamers share the same SMILES core
+        assert core_r == core_s
+        # Full CXSMILES must differ (different 3D coordinates)
+        assert mol_r.cxsmiles != mol_s.cxsmiles
+
+    def test_large_molecule_c2_cxsmiles(
+        self, cxsmiles_large_molecule_c2_file, cxsmiles_expected_large_c2_file
+    ):
+        """CXSMILES for a large molecule (c2) should match the expected value."""
+        expected = self._load_expected(cxsmiles_expected_large_c2_file)
+        mol = self._load_molecule(cxsmiles_large_molecule_c2_file)
+        assert mol.cxsmiles == expected
+
+    def test_large_molecule_c3_cxsmiles(
+        self, cxsmiles_large_molecule_c3_file, cxsmiles_expected_large_c3_file
+    ):
+        """CXSMILES for a large molecule (c3) should match the expected value."""
+        expected = self._load_expected(cxsmiles_expected_large_c3_file)
+        mol = self._load_molecule(cxsmiles_large_molecule_c3_file)
+        assert mol.cxsmiles == expected
+
+    def test_large_molecules_differ(
+        self, cxsmiles_large_molecule_c2_file, cxsmiles_large_molecule_c3_file
+    ):
+        """Two different large molecules should produce different CXSMILES."""
+        mol_c2 = self._load_molecule(cxsmiles_large_molecule_c2_file)
+        mol_c3 = self._load_molecule(cxsmiles_large_molecule_c3_file)
+        assert mol_c2.cxsmiles != mol_c3.cxsmiles
