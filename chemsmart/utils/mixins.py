@@ -1691,6 +1691,7 @@ class FolderMixin:
             # Collect files of specified type and program
             if file.endswith(filetype):
                 from chemsmart.utils.io import get_program_type_from_file
+
                 detected_program = get_program_type_from_file(filepath)
                 if detected_program == program:
                     all_files.append(filepath)
@@ -1720,6 +1721,7 @@ class FolderMixin:
                 if file.endswith(filetype):
                     filepath = os.path.join(subdir, file)
                     from chemsmart.utils.io import get_program_type_from_file
+
                     detected_program = get_program_type_from_file(filepath)
                     if detected_program == program:
                         all_files.append(filepath)

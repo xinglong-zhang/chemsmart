@@ -39,7 +39,8 @@ This page documents the CLI options for molecular visualization and analysis usi
 
    -  -  ``-p, --program``
       -  string
-      -  Computational chemistry program whose output files should be visualized (e.g. ``gaussian``, ``orca``). Used with ``-d`` to batch-visualize all output files from that program in one PyMOL session.
+      -  Computational chemistry program whose output files should be visualized (e.g. ``gaussian``, ``orca``). Used
+         with ``-d`` to batch-visualize all output files from that program in one PyMOL session.
 
    -  -  ``-l, --label``
       -  string

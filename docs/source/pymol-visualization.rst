@@ -87,8 +87,7 @@ Batch visualization from a directory (by file type):
 
    chemsmart run mol -d /path/to/outputs -t log visualize
 
-This creates a single PyMOL session visualizing the last structure of every
-``.log`` file in the directory.
+This creates a single PyMOL session visualizing the last structure of every ``.log`` file in the directory.
 
 Batch visualization from a directory (by program):
 
@@ -96,8 +95,7 @@ Batch visualization from a directory (by program):
 
    chemsmart run mol -d /path/to/outputs -p gaussian visualize
 
-This creates a single PyMOL session visualizing the last structure of all
-Gaussian output files in the directory.
+This creates a single PyMOL session visualizing the last structure of all Gaussian output files in the directory.
 
 ************
  Movie Jobs

@@ -3385,3 +3385,117 @@ class TestThermochemistryCLI:
         assert result.exit_code == 0, result.output
         assert settings is not None
         assert settings.use_weighted_mass is False
+
+
+class TestThermochemistryCLIFolderOptions:
+    """Folder options are wired correctly into the ``thermochemistry`` CLI."""
+
+    class TestThermochemistryCLIFolderOptions:
+        """Folder options are wired correctly into the ``thermochemistry`` CLI."""
+
+        def test_directory_with_program_accepted(
+            self, tmp_path, run_thermochemistry_with_directory
+        ):
+            """``-d dir -p gaussian -T 298.15`` is accepted without error."""
+            result, mock_from_filename = run_thermochemistry_with_directory(
+                [
+                    "-d",
+                    str(tmp_path),
+                    "-p",
+                    "gaussian",
+                    "-T",
+                    "298.15",
+                ]
+            )
+            # Add your assertions here
+            assert result.exit_code == 0, result.output
+
+    def test_directory_with_filetype_accepted(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir -t log -T 298.15`` is accepted without error."""
+        result, mock_from_filename = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-t",
+                "log",
+                "-T",
+                "298.15",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_directory_without_program_or_filetype_raises(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir`` alone (no ``-p`` / ``-t``) is rejected."""
+        result, _ = run_thermochemistry_with_directory(
+            ["-d", str(tmp_path), "-T", "298.15"],
+        )
+        assert result.exit_code != 0 or isinstance(
+            result.exception, (ValueError, SystemExit)
+        )
+
+    def test_directory_and_filenames_mutually_exclusive(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """Providing both ``-d`` and ``-f`` raises a ``ValueError``."""
+        result, _ = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-f",
+                "dummy.log",
+                "-p",
+                "gaussian",
+                "-T",
+                "298.15",
+            ],
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "Cannot specify both" in str(result.exception)
+
+    def test_directory_with_unsupported_program_raises(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir -p unsupported_prog`` raises a ``ValueError``."""
+        result, _ = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "unsupported_prog",
+                "-T",
+                "298.15",
+            ],
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "Unsupported program" in str(result.exception)
+
+    def test_directory_with_program_calls_from_filename_for_each_file(
+        self,
+        tmp_path,
+        run_thermochemistry_with_directory,
+        gaussian_co2_opt_outfile,
+        gaussian_ozone_opt_outfile,
+    ):
+        """Each discovered file triggers a ``ThermochemistryJob.from_filename`` call."""
+        result, mock_from_filename = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "gaussian",
+                "-f",
+                gaussian_co2_opt_outfile,
+                "-f",
+                gaussian_ozone_opt_outfile,
+                "-T",
+                "298.15",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_from_filename.call_count == 2
