@@ -59,7 +59,7 @@ def click_pubchem_options(f):
 
 def click_folder_options(f):
     """
-    CLI options for directory-based batch processing of molecule structure files.
+    CLI options for directory-based batch processing.
     """
 
     @click.option(
