@@ -3484,12 +3484,15 @@ class TestThermochemistryCLIFolderOptions:
         gaussian_ozone_opt_outfile,
     ):
         """Each discovered file triggers a ``ThermochemistryJob.from_filename`` call."""
-        # copy gaussian log files to tmp_path
+        # copy two gaussian log files to tmp_path so we have 2 discovered files
+        mock_files = []
         for i, file in enumerate(
             [gaussian_co2_opt_outfile, gaussian_ozone_opt_outfile]
         ):
-            tmp_filepath = os.path.join(tmp_path, f"file{i}.log")
+            tmp_filepath = os.path.join(str(tmp_path), f"file{i}.log")
             copyfile(file, tmp_filepath)
+            mock_files.append(tmp_filepath)
+
         result, mock_from_filename = run_thermochemistry_with_directory(
             [
                 "-d",
@@ -3499,5 +3502,7 @@ class TestThermochemistryCLIFolderOptions:
                 "-T",
                 "298.15",
             ],
+            mock_files=mock_files,
         )
         assert result.exit_code == 0, result.output
+        assert mock_from_filename.call_count == 2
