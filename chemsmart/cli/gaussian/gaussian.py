@@ -9,7 +9,6 @@ from chemsmart.cli.job import (
     click_filename_options,
     click_pubchem_options,
 )
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import (
@@ -526,6 +525,7 @@ def gaussian(
     """CLI subcommand for running Gaussian
     jobs using the chemsmart framework."""
 
+    from chemsmart.io.molecules.structure import Molecule
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
 

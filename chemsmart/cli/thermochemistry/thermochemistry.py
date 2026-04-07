@@ -6,14 +6,17 @@ import click
 from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filenames_options,
+    click_folder_options,
     click_job_options,
-    click_output_folder_options,
 )
 from chemsmart.io.folder import BaseFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import get_program_type_from_file
+from chemsmart.utils.io import (
+    check_program_availability_in_chemsmart,
+    get_program_type_from_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -137,13 +140,14 @@ def click_thermochemistry_options(f):
 @click.group(cls=MyGroup, invoke_without_command=True)
 @click_thermochemistry_options
 @click_job_options
-@click_output_folder_options
+@click_folder_options
 @click_filenames_options
 @click_file_label_and_index_options
 @click.pass_context
 def thermochemistry(
     ctx,
     directory,
+    filetype,
     program,
     filenames,
     cutoff_entropy_grimme,
@@ -184,8 +188,13 @@ def thermochemistry(
         raise ValueError(
             "Cannot specify both --directory and --filenames. Choose one."
         )
-    if directory and not program:
-        raise ValueError("Must specify --program when using --directory.")
+    if directory and not program and not filetype:
+        raise ValueError(
+            "Must specify --program or --filetype when using --directory."
+        )
+    if program:
+        check_program_availability_in_chemsmart(program)
+
     if cutoff_entropy_grimme and cutoff_entropy_truhlar:
         raise ValueError(
             "Cannot specify both --cutoff-entropy-grimme and "
@@ -224,16 +233,29 @@ def thermochemistry(
     files = []
 
     if directory:
-        if program.lower() not in {"gaussian", "orca"}:
-            raise ValueError(
-                f"Unsupported program '{program}' for thermochemistry.\n"
-                f"Please choose one of ['gaussian', 'orca']."
+        if program and not filetype:
+            # obtain all output files belonging to a program
+            files = BaseFolder(
+                folder=directory
+            ).get_all_output_files_in_current_folder_by_program(
+                program=program.lower()
             )
-        files = BaseFolder(
-            folder=directory
-        ).get_all_output_files_in_current_folder_by_program(
-            program=program.lower()
-        )
+        elif filetype and not program:
+            # obtain all files of a specific type, regardless of program
+            files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_suffix(filetype=filetype)
+        elif program and filetype:
+            files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_program_and_suffix(
+                program=program.lower(), filetype=filetype
+            )
+        else:
+            raise ValueError(
+                "Must specify either --program or --filetype when using --directory."
+            )
+
         files = sorted(files)
         for file in files:
             job = ThermochemistryJob.from_filename(
