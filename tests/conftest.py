@@ -134,11 +134,6 @@ def run_thermochemistry_and_capture_settings():
 @pytest.fixture()
 def run_thermochemistry_with_directory():
     """Fixture to invoke thermochemistry CLI with directory options and mocked folder."""
-    from unittest.mock import MagicMock, patch
-
-    from click.testing import CliRunner
-
-    from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 
     def _invoke(extra_args, mock_files=None):
         if mock_files is None:
