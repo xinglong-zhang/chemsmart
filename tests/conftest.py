@@ -171,9 +171,15 @@ def run_thermochemistry_with_directory():
         ):
             mock_folder = MagicMock()
             # Configure every discovery method to return the caller-supplied list
-            mock_folder.get_all_output_files_in_current_folder_by_program.return_value = mock_files
-            mock_folder.get_all_files_in_current_folder_by_suffix.return_value = mock_files
-            mock_folder.get_all_files_in_current_folder_by_program_and_suffix.return_value = mock_files
+            mock_folder.get_all_output_files_in_current_folder_by_program.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_files_in_current_folder_by_suffix.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_files_in_current_folder_by_program_and_suffix.return_value = (
+                mock_files
+            )
             mock_folder_cls.return_value = mock_folder
             mock_from_filename.return_value = mock_job
 

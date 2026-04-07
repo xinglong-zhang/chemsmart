@@ -3391,25 +3391,22 @@ class TestThermochemistryCLI:
 class TestThermochemistryCLIFolderOptions:
     """Folder options are wired correctly into the ``thermochemistry`` CLI."""
 
-    class TestThermochemistryCLIFolderOptions:
-        """Folder options are wired correctly into the ``thermochemistry`` CLI."""
-
-        def test_directory_with_program_accepted(
-            self, tmp_path, run_thermochemistry_with_directory
-        ):
-            """``-d dir -p gaussian -T 298.15`` is accepted without error."""
-            result, mock_from_filename = run_thermochemistry_with_directory(
-                [
-                    "-d",
-                    str(tmp_path),
-                    "-p",
-                    "gaussian",
-                    "-T",
-                    "298.15",
-                ]
-            )
-            # Add your assertions here
-            assert result.exit_code == 0, result.output
+    def test_directory_with_program_accepted(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir -p gaussian -T 298.15`` is accepted without error."""
+        result, mock_from_filename = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "gaussian",
+                "-T",
+                "298.15",
+            ]
+        )
+        # Add your assertions here
+        assert result.exit_code == 0, result.output
 
     def test_directory_with_filetype_accepted(
         self, tmp_path, run_thermochemistry_with_directory
@@ -3436,6 +3433,13 @@ class TestThermochemistryCLIFolderOptions:
         )
         assert result.exit_code != 0 or isinstance(
             result.exception, (ValueError, SystemExit)
+        )
+        error_text = f"{result.exception}\n{result.output}".lower()
+        assert (
+            "program" in error_text
+            or "filetype" in error_text
+            or "-p" in error_text
+            or "-t" in error_text
         )
 
     def test_directory_and_filenames_mutually_exclusive(
