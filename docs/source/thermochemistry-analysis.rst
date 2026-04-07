@@ -17,7 +17,7 @@ Usage
 
 .. code:: text
 
-   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-f filename(s)]
+   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-t filetype] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
                                  [-ch h_freq_cutoff] [-c concentration] [-P pressure] [--weighted | --no-weighted]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
@@ -38,15 +38,19 @@ Options
 
    -  -  ``-d, --directory``
       -  string
-      -  Directory for batch processing (mutually exclusive with -f)
+      -  Directory for batch processing (mutually exclusive with ``-f``)
 
    -  -  ``-p, --program``
       -  string
-      -  Program that produced the output files: ``gaussian`` or ``orca``. Required when using ``-d``.
+      -  Program that produced the output files: ``gaussian`` or ``orca``. Used with ``-d`` to process all output files from that program.
+
+   -  -  ``-t, --filetype``
+      -  string
+      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Used with ``-d`` to process all files of that type regardless of program.
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific file(s) to analyze (repeatable, mutually exclusive with -d)
+      -  Specific file(s) to analyze (repeatable, mutually exclusive with ``-d``)
 
 **Quasi-RRHO Corrections:**
 

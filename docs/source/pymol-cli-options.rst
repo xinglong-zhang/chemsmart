@@ -31,11 +31,15 @@ This page documents the CLI options for molecular visualization and analysis usi
 
    -  -  ``-d, --directory``
       -  string
-      -  Directory for align jobs
+      -  Directory for batch processing of multiple files
 
    -  -  ``-t, --filetype``
       -  string
-      -  File type filter for directory processing (gjf, xyz, mol, log, etc.) for align jobs
+      -  File type filter for directory processing (gjf, xyz, mol, log, etc.)
+
+   -  -  ``-p, --program``
+      -  string
+      -  Computational chemistry program whose output files should be visualized (e.g. ``gaussian``, ``orca``). Used with ``-d`` to batch-visualize all output files from that program in one PyMOL session.
 
    -  -  ``-l, --label``
       -  string
