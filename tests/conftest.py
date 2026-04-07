@@ -133,7 +133,25 @@ def run_thermochemistry_and_capture_settings():
 
 @pytest.fixture()
 def run_thermochemistry_with_directory():
-    """Fixture to invoke thermochemistry CLI with directory options and mocked folder."""
+    """Fixture to invoke thermochemistry CLI with directory options and mocked folder.
+
+    Patches ``BaseFolder`` so that
+    ``get_all_output_files_in_current_folder_by_program``,
+    ``get_all_files_in_current_folder_by_suffix``, and
+    ``get_all_files_in_current_folder_by_program_and_suffix`` all return
+    the caller-supplied ``mock_files`` list.  Also patches
+    ``ThermochemistryJob.from_filename`` to avoid real job execution.
+
+    Usage::
+
+        def test_something(run_thermochemistry_with_directory, tmp_path):
+            result, mock_from_filename = run_thermochemistry_with_directory(
+                ["-d", str(tmp_path), "-p", "gaussian", "-T", "298.15"],
+                mock_files=["/fake/a.log", "/fake/b.log"],
+            )
+            assert result.exit_code == 0
+            assert mock_from_filename.call_count == 2
+    """
 
     def _invoke(extra_args, mock_files=None):
         if mock_files is None:
@@ -152,7 +170,10 @@ def run_thermochemistry_with_directory():
             ) as mock_from_filename,
         ):
             mock_folder = MagicMock()
-            mock_folder.files = mock_files
+            # Configure every discovery method to return the caller-supplied list
+            mock_folder.get_all_output_files_in_current_folder_by_program.return_value = mock_files
+            mock_folder.get_all_files_in_current_folder_by_suffix.return_value = mock_files
+            mock_folder.get_all_files_in_current_folder_by_program_and_suffix.return_value = mock_files
             mock_folder_cls.return_value = mock_folder
             mock_from_filename.return_value = mock_job
 
