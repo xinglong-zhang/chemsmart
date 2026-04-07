@@ -354,14 +354,14 @@ def mol(
         [[413,409],[413,412],[413,505],[413,507]]
 
     Also supports creating one PyMOL file from all files
-        belongint to a filetype in a directory:
+        belonging to a filetype in a directory:
         chemsmart run mol -d directory -t log visualize -c
         [[413,409],[413,412],[413,505],[413,507]]
     This creates a PyMOL file visualizing the last structure
         of all .log files in the specified directory.
 
     Also supports creating one PyMOL file from all output files
-        belongint to a program in a directory:
+        belonging to a program in a directory:
         chemsmart run mol -d directory -p gaussian visualize -c
         [[413,409],[413,412],[413,505],[413,507]]
     This creates a PyMOL file visualizing the last structure
@@ -400,7 +400,7 @@ def mol(
 
     if directory is not None and program is not None:
         ctx.obj["directory"] = directory
-        ctx.obj["program"] = program
+        ctx.obj["program"] = program.lower()
         ctx.obj["index"] = index
         folder = BaseFolder(directory)
         filenames = folder.get_all_output_files_in_current_folder_by_program(
@@ -565,7 +565,7 @@ def mol_qmmm(
         ctx.obj["filenames"] = filenames
         mols = []
         for filename in filenames:
-            mols.append(Molecule.from_filepath(filename))
+            mols.append(QMMMMolecule.from_filepath(filename))
         ctx.obj["molecules"] = mols
         if label is None:
             label = (
