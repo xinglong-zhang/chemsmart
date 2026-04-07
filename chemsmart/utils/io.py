@@ -324,7 +324,8 @@ def get_program_type_from_file(filepath):
                     continue
                 if program := match_outfile_pattern(stripped):
                     logger.debug(
-                        f"Detected output format for '{os.path.basename(filepath)}': {program}."
+                        f"Detected output format for "
+                        f"'{os.path.basename(filepath)}': {program}."
                     )
                     return program
     except Exception as e:
