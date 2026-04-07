@@ -6,8 +6,8 @@ import click
 from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filenames_options,
+    click_folder_options,
     click_job_options,
-    click_output_folder_options,
 )
 from chemsmart.io.folder import BaseFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
@@ -137,7 +137,7 @@ def click_thermochemistry_options(f):
 @click.group(cls=MyGroup, invoke_without_command=True)
 @click_thermochemistry_options
 @click_job_options
-@click_output_folder_options
+@click_folder_options
 @click_filenames_options
 @click_file_label_and_index_options
 @click.pass_context
