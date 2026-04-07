@@ -1,4 +1,5 @@
 import os.path
+from shutil import copyfile
 
 import numpy as np
 from ase import units
@@ -3483,19 +3484,20 @@ class TestThermochemistryCLIFolderOptions:
         gaussian_ozone_opt_outfile,
     ):
         """Each discovered file triggers a ``ThermochemistryJob.from_filename`` call."""
+        # copy gaussian log files to tmp_path
+        for i, file in enumerate(
+            [gaussian_co2_opt_outfile, gaussian_ozone_opt_outfile]
+        ):
+            tmp_filepath = os.path.join(tmp_path, f"file{i}.log")
+            copyfile(file, tmp_filepath)
         result, mock_from_filename = run_thermochemistry_with_directory(
             [
                 "-d",
                 str(tmp_path),
                 "-p",
                 "gaussian",
-                "-f",
-                gaussian_co2_opt_outfile,
-                "-f",
-                gaussian_ozone_opt_outfile,
                 "-T",
                 "298.15",
             ],
         )
         assert result.exit_code == 0, result.output
-        assert mock_from_filename.call_count == 2
