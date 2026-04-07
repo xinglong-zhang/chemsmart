@@ -81,6 +81,24 @@ Custom style:
 
    chemsmart run mol -f molecule.log visualize -f custom_style.py
 
+Batch visualization from a directory (by file type):
+
+.. code:: bash
+
+   chemsmart run mol -d /path/to/outputs -t log visualize
+
+This creates a single PyMOL session visualizing the last structure of every
+``.log`` file in the directory.
+
+Batch visualization from a directory (by program):
+
+.. code:: bash
+
+   chemsmart run mol -d /path/to/outputs -p gaussian visualize
+
+This creates a single PyMOL session visualizing the last structure of all
+Gaussian output files in the directory.
+
 ************
  Movie Jobs
 ************

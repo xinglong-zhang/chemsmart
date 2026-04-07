@@ -24,7 +24,6 @@ from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
-from chemsmart.utils.io import get_program_type_from_file
 
 
 class FileMixin:
@@ -1689,6 +1688,8 @@ class FolderMixin:
                 continue
             # Collect files of specified type and program
             if file.endswith(filetype):
+                from chemsmart.utils.io import get_program_type_from_file
+
                 detected_program = get_program_type_from_file(filepath)
                 if detected_program == program:
                     all_files.append(filepath)
@@ -1715,6 +1716,8 @@ class FolderMixin:
             for file in files:
                 if file.endswith(filetype):
                     filepath = os.path.join(subdir, file)
+                    from chemsmart.utils.io import get_program_type_from_file
+
                     detected_program = get_program_type_from_file(filepath)
                     if detected_program == program:
                         all_files.append(filepath)
