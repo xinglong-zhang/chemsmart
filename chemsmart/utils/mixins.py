@@ -1680,6 +1680,8 @@ class FolderMixin:
             program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
             filetype (str): File name suffix to match (e.g., '.log', '.out').
         """
+        from chemsmart.utils.io import get_program_type_from_file
+
         all_files = []
         for file in os.listdir(self.folder):
             filepath = os.path.join(self.folder, file)
@@ -1709,6 +1711,8 @@ class FolderMixin:
             program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
             filetype (str): File name suffix to match (e.g., '.log', '.out').
         """
+        from chemsmart.utils.io import get_program_type_from_file
+
         all_files = []
         for subdir, _dirs, files in os.walk(self.folder):
             # subdir is the full path to the subdirectory
