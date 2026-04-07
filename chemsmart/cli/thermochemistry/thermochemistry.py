@@ -13,7 +13,10 @@ from chemsmart.io.folder import BaseFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import get_program_type_from_file
+from chemsmart.utils.io import (
+    check_program_availability_in_chemsmart,
+    get_program_type_from_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +192,9 @@ def thermochemistry(
         raise ValueError(
             "Must specify --program or --filetype when using --directory."
         )
+    if program:
+        check_program_availability_in_chemsmart(program)
+
     if cutoff_entropy_grimme and cutoff_entropy_truhlar:
         raise ValueError(
             "Cannot specify both --cutoff-entropy-grimme and "
@@ -229,11 +235,6 @@ def thermochemistry(
     if directory:
         if program and not filetype:
             # obtain all output files belonging to a program
-            if program.lower() not in {"gaussian", "orca"}:
-                raise ValueError(
-                    f"Unsupported program '{program}' for thermochemistry.\n"
-                    f"Please choose one of ['gaussian', 'orca']."
-                )
             files = BaseFolder(
                 folder=directory
             ).get_all_output_files_in_current_folder_by_program(
