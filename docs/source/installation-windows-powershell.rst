@@ -139,6 +139,12 @@ After this, you can verify the installation:
 
    chemsmart --version
 
+or
+
+.. code:: bash
+
+   chemsmart --help
+
 .. note::
 
    Each time ``make configure`` is run, the installer replaces the previous chemsmart block in the PS profile with the

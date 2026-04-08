@@ -2,6 +2,7 @@ import os.path
 from shutil import copy, copytree, rmtree
 
 import numpy as np
+import pytest
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import (
@@ -9,6 +10,7 @@ from chemsmart.io.gaussian.folder import (
     GaussianOutputFolder,
 )
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.folder import XYZFolder
 
 
@@ -424,6 +426,285 @@ class TestConverter:
         assert mol.num_atoms == 483
         assert mol.chemical_formula == "C155H180CuN53O82P12"
         assert mol.energy == -5300.535128
+
+
+class TestPDBFile:
+
+    # -------------------------------------------------------------------
+    # Initialisation and representation
+    # -------------------------------------------------------------------
+
+    def test_init_stores_filename(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.filename == single_model_pdb_file
+
+    def test_repr(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert repr(pdb) == f"PDBFile({single_model_pdb_file})"
+
+    def test_str(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert "PDBFile object" in str(pdb)
+        assert single_model_pdb_file in str(pdb)
+
+    def test_filepath_resolves_absolute(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert os.path.isabs(pdb.filepath)
+
+    # -------------------------------------------------------------------
+    # Raw line access
+    # -------------------------------------------------------------------
+
+    def test_raw_lines_preserves_column_whitespace(
+        self, single_model_pdb_file
+    ):
+        """raw_lines must not strip leading spaces (fixed-width PDB format)."""
+        pdb = PDBFile(filename=single_model_pdb_file)
+        for line in pdb.raw_lines:
+            if line.startswith("HETATM") or line.startswith("ATOM"):
+                assert len(line) >= 54  # at least through z-coordinate
+
+    def test_raw_lines_strips_trailing_newlines(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        for line in pdb.raw_lines:
+            assert not line.endswith("\n")
+
+    # -------------------------------------------------------------------
+    # Single-model parsing
+    # -------------------------------------------------------------------
+
+    def test_molecule_returns_molecule_object(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        mol = pdb.molecule
+        assert isinstance(mol, Molecule)
+
+    def test_num_atoms(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.num_atoms == 3
+
+    def test_symbols(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.molecule.symbols == ["O", "H", "H"]
+
+    def test_positions(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        expected = np.array(
+            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+        )
+        assert np.allclose(pdb.molecule.positions, expected)
+
+    def test_atom_names(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.molecule.atom_names == ["O", "H1", "H2"]
+
+    def test_residue_names(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.molecule.residue_names == ["HOH", "HOH", "HOH"]
+
+    def test_residue_numbers(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.molecule.residue_numbers == [7, 7, 7]
+
+    def test_chain_ids(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.molecule.chain_ids == ["A", "A", "A"]
+
+    def test_record_types(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        assert pdb.molecule.record_type == ["HETATM", "HETATM", "HETATM"]
+
+    def test_info_dict_populated(self, single_model_pdb_file):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        info = pdb.molecule.info
+        assert "atom_name" in info
+        assert "residue_name" in info
+        assert "residue_number" in info
+        assert "chain_id" in info
+        assert "record_type" in info
+
+    # -------------------------------------------------------------------
+    # Multi-model parsing
+    # -------------------------------------------------------------------
+
+    def test_get_molecules_all(self, multi_model_pdb_file):
+        pdb = PDBFile(filename=multi_model_pdb_file)
+        models = pdb.get_molecules(index=":", return_list=True)
+        assert isinstance(models, list)
+        assert len(models) == 2
+
+    def test_get_molecules_first(self, multi_model_pdb_file):
+        pdb = PDBFile(filename=multi_model_pdb_file)
+        mol = pdb.get_molecules(index="1")
+        assert mol.chain_ids == ["A", "A"]
+
+    def test_get_molecules_last(self, multi_model_pdb_file):
+        pdb = PDBFile(filename=multi_model_pdb_file)
+        mol = pdb.get_molecules(index="-1")
+        assert mol.chain_ids == ["B", "B"]
+        assert np.allclose(mol.positions[0], np.array([1.5, 2.5, 3.5]))
+
+    def test_molecule_property_returns_last_model(self, multi_model_pdb_file):
+        pdb = PDBFile(filename=multi_model_pdb_file)
+        assert pdb.molecule.chain_ids == ["B", "B"]
+
+    def test_return_list_wraps_single(self, multi_model_pdb_file):
+        pdb = PDBFile(filename=multi_model_pdb_file)
+        result = pdb.get_molecules(index="-1", return_list=True)
+        assert isinstance(result, list)
+        assert len(result) == 1
+
+    # -------------------------------------------------------------------
+    # Element inference
+    # -------------------------------------------------------------------
+
+    def test_blank_element_columns_infer_two_letter_elements(
+        self, blank_element_pdb_file
+    ):
+        pdb = PDBFile(filename=blank_element_pdb_file)
+        mol = pdb.molecule
+        assert list(mol.symbols) == ["Fe", "Zn", "Cl", "C"]
+
+    def test_infer_element_fe(self):
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+
+    def test_infer_element_zn(self):
+        assert PDBFile._infer_element_from_atom_name("ZN") == "Zn"
+
+    def test_infer_element_cl(self):
+        assert PDBFile._infer_element_from_atom_name("CL") == "Cl"
+
+    def test_infer_element_ca_is_carbon(self):
+        """CA is a biomolecular atom label (C-alpha), should resolve to C."""
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
+
+    def test_infer_element_leading_digit(self):
+        """Leading digits should be stripped: 1H -> H."""
+        assert PDBFile._infer_element_from_atom_name("1H") == "H"
+
+    def test_infer_element_empty_raises(self):
+        with pytest.raises(ValueError, match="Unable to infer"):
+            PDBFile._infer_element_from_atom_name("")
+
+    def test_infer_element_digits_only_raises(self):
+        with pytest.raises(ValueError, match="Unable to infer"):
+            PDBFile._infer_element_from_atom_name("123")
+
+    # -------------------------------------------------------------------
+    # Error handling
+    # -------------------------------------------------------------------
+
+    def test_empty_file_raises_value_error(self, empty_pdb_file):
+        pdb = PDBFile(filename=empty_pdb_file)
+        with pytest.raises(ValueError, match="No ATOM/HETATM records"):
+            pdb.get_molecules()
+
+    def test_molecule_property_raises_on_empty(self, empty_pdb_file):
+        pdb = PDBFile(filename=empty_pdb_file)
+        with pytest.raises(ValueError, match="No ATOM/HETATM records"):
+            _ = pdb.molecule
+
+    # -------------------------------------------------------------------
+    # Writing
+    # -------------------------------------------------------------------
+
+    def test_write_creates_file(self, single_model_pdb_file, tmpdir):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        mol = pdb.molecule
+
+        output_path = os.path.join(str(tmpdir), "output.pdb")
+        PDBFile.write(mol, output_path)
+
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0
+
+    def test_write_round_trip_preserves_atom_count(
+        self, single_model_pdb_file, tmpdir
+    ):
+        """Write then re-read should give the same number of atoms."""
+        pdb = PDBFile(filename=single_model_pdb_file)
+        mol = pdb.molecule
+
+        output_path = os.path.join(str(tmpdir), "round_trip.pdb")
+        PDBFile.write(mol, output_path)
+
+        pdb2 = PDBFile(filename=output_path)
+        assert pdb2.num_atoms == pdb.num_atoms
+
+    def test_write_round_trip_preserves_symbols(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        mol = pdb.molecule
+
+        output_path = os.path.join(str(tmpdir), "round_trip.pdb")
+        PDBFile.write(mol, output_path)
+
+        pdb2 = PDBFile(filename=output_path)
+        assert pdb2.molecule.symbols == mol.symbols
+
+    def test_write_round_trip_preserves_positions(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        mol = pdb.molecule
+
+        output_path = os.path.join(str(tmpdir), "round_trip.pdb")
+        PDBFile.write(mol, output_path)
+
+        pdb2 = PDBFile(filename=output_path)
+        assert np.allclose(pdb2.molecule.positions, mol.positions, atol=1e-3)
+
+    def test_write_output_contains_atom_records(
+        self, single_model_pdb_file, tmpdir
+    ):
+        pdb = PDBFile(filename=single_model_pdb_file)
+        mol = pdb.molecule
+
+        output_path = os.path.join(str(tmpdir), "records.pdb")
+        PDBFile.write(mol, output_path)
+
+        with open(output_path, "r") as f:
+            content = f.read()
+        assert "HETATM" in content or "ATOM" in content
+        assert "END" in content
+
+    # -------------------------------------------------------------------
+    # Backward compatibility (Molecule delegates to PDBFile)
+    # -------------------------------------------------------------------
+
+    def test_molecule_from_filepath_uses_pdbfile(self, single_model_pdb_file):
+        """Molecule.from_filepath for .pdb should produce identical results."""
+        mol_via_molecule = Molecule.from_filepath(single_model_pdb_file)
+        pdb = PDBFile(filename=single_model_pdb_file)
+        mol_via_pdbfile = pdb.molecule
+
+        assert mol_via_molecule.symbols == mol_via_pdbfile.symbols
+        assert np.allclose(
+            mol_via_molecule.positions, mol_via_pdbfile.positions
+        )
+        assert mol_via_molecule.atom_names == mol_via_pdbfile.atom_names
+        assert mol_via_molecule.residue_names == mol_via_pdbfile.residue_names
+        assert (
+            mol_via_molecule.residue_numbers == mol_via_pdbfile.residue_numbers
+        )
+        assert mol_via_molecule.chain_ids == mol_via_pdbfile.chain_ids
+
+    def test_pdb_infer_pdb_element(self):
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
+
+    def test_pdb_parse_pdb_models(self, multi_model_pdb_file):
+        models = PDBFile(multi_model_pdb_file)._parse_models()
+        assert len(models) == 2
+
+    def test_pdb_molecule_from_pdb_atom_lines(self):
+        atom_line = (
+            "HETATM    1  O   HOH A   7"
+            "       0.000   0.000   0.000"
+            "  1.00  0.00           O"
+        )
+        mol = PDBFile._get_molecule_from_atom_lines([atom_line])
+        assert mol.symbols == ["O"]
 
     # ------------------------------------------------------------------
     # CDXML / CDX conversion tests
