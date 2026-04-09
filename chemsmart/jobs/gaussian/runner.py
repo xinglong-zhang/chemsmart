@@ -55,7 +55,8 @@ class GaussianJobRunner(JobRunner):
         mem_gb (int): Memory allocation in gigabytes.
         num_hours (int): Maximum walltime from the server configuration.
         num_threads (int): Thread count from the server configuration.
-        executable (GaussianExecutable): Executable configuration for the server.
+        executable (GaussianExecutable):
+        Executable configuration for the server.
         running_directory (str): Directory where the job is executed
             (scratch or job folder).
         job_inputfile (str): Full path to the input `.com` file for execution.
@@ -368,14 +369,17 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         FAKE (bool): Flag indicating fake/test mode (True for this runner).
         JOBTYPES (list): Supported Gaussian job types (inherited).
         PROGRAM (str): Program identifier ('gaussian').
-        SCRATCH (bool): Whether to use scratch directories by default (inherited).
+        SCRATCH (bool): Whether to use scratch
+        directories by default (inherited).
         server: Server configuration used for execution (inherited).
         scratch (bool): Whether to use a scratch directory (inherited).
         scratch_dir (str): Path to the scratch directory (inherited/derived).
         running_directory (str): Directory where the fake job is executed.
         job_inputfile (str): Full path to the input `.com` file.
-        job_outputfile (str): Full path to the output `.log` file (created by fake run).
-        job_chkfile (str): Full path to the checkpoint `.chk` file (path assigned).
+        job_outputfile (str): Full path to the
+        output `.log` file (created by fake run).
+        job_chkfile (str): Full path to the
+        checkpoint `.chk` file (path assigned).
         job_errfile (str): Full path to the error `.err` file (path assigned).
     """
 

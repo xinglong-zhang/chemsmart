@@ -12,7 +12,10 @@ from chemsmart.jobs.mol.movie import PyMOLMovieJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
-from chemsmart.utils.cluster import is_pubchem_network_available
+from chemsmart.utils.cluster import (
+    is_pubchem_api_available,
+    is_pubchem_network_available,
+)
 
 
 @pytest.fixture(scope="session")
@@ -114,8 +117,8 @@ class TestPyMOLJobs:
         assert os.path.exists(pse_file)
 
     @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
+        reason="Network/API to pubchem is unavailable",
     )
     def test_pymol_visualization_job_on_pubchem_id(
         self, tmpdir, pymol_visualization_jobrunner
@@ -137,8 +140,8 @@ class TestPyMOLJobs:
         assert os.path.exists(pse_file)
 
     @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
+        reason="Network/API to pubchem is unavailable",
     )
     def test_pymol_visualization_job_on_smiles(
         self, tmpdir, pymol_visualization_jobrunner
@@ -147,8 +150,6 @@ class TestPyMOLJobs:
         job = PyMOLVisualizationJob.from_pubchem(
             "C1=CC=C(C=C1)C2=NOC(=O)O2",
             label="phenyldioxazolone",
-            # pymol label should avoid "," which is a separator for commands,
-            # such as e.g., 3-Phenyl-1,4,2-dioxazol-5-one
             jobrunner=pymol_visualization_jobrunner,
         )
         job.set_folder(tmpdir)
@@ -313,7 +314,8 @@ class TestPyMOLJobs:
         dna_hybrid_visualized_xyz_file,
         pymol_hybrid_visualization_jobrunner,
     ):
-        # verify that custom light colors provided to the job are written to the pml
+        # verify that custom light colors provided
+        # to the job are written to the pml
         group1 = "503-523"
         group2 = "336, 397-412, 414-422"
         group3 = "467-495, 497-500, 502"
@@ -691,3 +693,61 @@ class TestPyMOLJobs:
         assert job.outputfile == os.path.join(
             tmpdir, "model_opt_input_spin.pse"
         )
+
+
+class TestPyMOLCLIFolderOptions:
+    """Folder options (``-d``/``-t`` and ``-d``/``-p``) in the ``mol`` CLI."""
+
+    def test_directory_filetype_options_accepted(
+        self, tmp_path, invoke_mol_with_visualize
+    ):
+        """``mol -d dir -t log visualize`` is accepted and populates ``ctx.obj``."""
+        ctx_obj = {}
+        result = invoke_mol_with_visualize(
+            ["-d", str(tmp_path), "-t", "log"],
+            ctx_obj=ctx_obj,
+        )
+        assert "No such option" not in result.output, result.output
+        assert ctx_obj.get("directory") == str(tmp_path)
+        assert ctx_obj.get("filetype") == "log"
+
+    def test_directory_program_options_accepted(
+        self, tmp_path, invoke_mol_with_visualize
+    ):
+        """``mol -d dir -p gaussian visualize`` is accepted and populates ``ctx.obj``."""
+        ctx_obj = {}
+        result = invoke_mol_with_visualize(
+            ["-d", str(tmp_path), "-p", "gaussian"],
+            ctx_obj=ctx_obj,
+        )
+        assert "No such option" not in result.output, result.output
+        assert ctx_obj.get("directory") == str(tmp_path)
+        assert ctx_obj.get("program") == "gaussian"
+
+    def test_directory_filetype_label_auto_generated(
+        self, tmp_path, invoke_mol_with_visualize
+    ):
+        """When ``-d``/``-t`` used, auto-generated label includes dir name."""
+        ctx_obj = {}
+        result = invoke_mol_with_visualize(
+            ["-d", str(tmp_path), "-t", "log"],
+            ctx_obj=ctx_obj,
+        )
+        assert "No such option" not in result.output, result.output
+        label = ctx_obj.get("label", "")
+        dir_name = os.path.basename(os.path.abspath(str(tmp_path)))
+        assert dir_name in label
+        assert "log" in label
+
+    def test_directory_program_label_auto_generated(
+        self, tmp_path, invoke_mol_with_visualize
+    ):
+        """When ``-d``/``-p`` used, auto-generated label includes program name."""
+        ctx_obj = {}
+        result = invoke_mol_with_visualize(
+            ["-d", str(tmp_path), "-p", "gaussian"],
+            ctx_obj=ctx_obj,
+        )
+        assert "No such option" not in result.output, result.output
+        label = ctx_obj.get("label", "")
+        assert "gaussian" in label

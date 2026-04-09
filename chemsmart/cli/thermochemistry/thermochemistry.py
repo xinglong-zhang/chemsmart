@@ -9,11 +9,12 @@ from chemsmart.cli.job import (
     click_folder_options,
     click_job_options,
 )
+from chemsmart.io.folder import BaseFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import (
-    find_output_files_in_directory,
+    check_program_availability_in_chemsmart,
     get_program_type_from_file,
 )
 
@@ -61,7 +62,7 @@ def click_thermochemistry_options(f):
         help="Concentration in mol/L.",
     )
     @click.option(
-        "-p",
+        "-P",
         "--pressure",
         default=1.0,
         type=float,
@@ -85,14 +86,13 @@ def click_thermochemistry_options(f):
         help="Interpolator exponent used in the quasi-RRHO approximation.",
     )
     @click.option(
-        "-w",
-        "--weighted",
-        is_flag=True,
-        default=False,
+        "-w/",
+        "--weighted/--no-weighted",
+        default=True,
         show_default=True,
-        help="Use natural abundance weighted masses (True) or use most "
-        "abundant masses (False).\nDefault to False, i.e., use single "
-        "isotopic mass.",
+        help="Use natural abundance weighted masses (True) or use most abundant "
+        "masses (False, via --no-weighted).\nDefault to True, i.e., use natural "
+        "abundance weighted masses, which is the real world scenario.",
     )
     @click.option(
         "-u",
@@ -148,6 +148,7 @@ def thermochemistry(
     ctx,
     directory,
     filetype,
+    program,
     filenames,
     cutoff_entropy_grimme,
     cutoff_entropy_truhlar,
@@ -165,7 +166,8 @@ def thermochemistry(
     **kwargs,
 ):
     """
-    CLI subcommand for running thermochemistry jobs using the chemsmart framework.
+    CLI subcommand for running thermochemistry
+    jobs using the chemsmart framework.
 
     This command allows you to compute thermochemistry for Gaussian or ORCA
     output files.
@@ -176,7 +178,7 @@ def thermochemistry(
     will save results to `udc3_mCF3_monomer_c9.dat` and
     `udc3_mCF3_monomer_c29.dat`.
 
-    `chemsmart run thermochemistry -d /path/to/directory -t gaussian -T 298.15
+    `chemsmart run thermochemistry -d /path/to/directory -p gaussian -T 298.15
     -o thermochemistry_results.dat`
     will compute thermochemistry for all Gaussian output files in the specified
     directory and save to `thermochemistry_results.dat`.
@@ -186,8 +188,13 @@ def thermochemistry(
         raise ValueError(
             "Cannot specify both --directory and --filenames. Choose one."
         )
-    if directory and not filetype:
-        raise ValueError("Must specify --filetype when using --directory.")
+    if directory and not program and not filetype:
+        raise ValueError(
+            "Must specify --program or --filetype when using --directory."
+        )
+    if program:
+        check_program_availability_in_chemsmart(program)
+
     if cutoff_entropy_grimme and cutoff_entropy_truhlar:
         raise ValueError(
             "Cannot specify both --cutoff-entropy-grimme and "
@@ -226,14 +233,30 @@ def thermochemistry(
     files = []
 
     if directory:
-        if filetype.lower() not in {"gaussian", "orca"}:
-            raise ValueError(
-                f"Unsupported filetype {filetype} for thermochemistry.\n"
-                f"Please choose one of ['gaussian', 'orca']."
+        if program and not filetype:
+            # obtain all output files belonging to a program
+            files = BaseFolder(
+                folder=directory
+            ).get_all_output_files_in_current_folder_by_program(
+                program=program.lower()
             )
-        files = find_output_files_in_directory(
-            directory=directory, program=filetype.lower()
-        )
+        elif filetype and not program:
+            # obtain all files of a specific type, regardless of program
+            files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_suffix(filetype=filetype)
+        elif program and filetype:
+            files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_program_and_suffix(
+                program=program.lower(), filetype=filetype
+            )
+        else:
+            raise ValueError(
+                "Must specify either --program or --filetype when using --directory."
+            )
+
+        files = sorted(files)
         for file in files:
             job = ThermochemistryJob.from_filename(
                 filename=file,
@@ -274,7 +297,7 @@ def thermochemistry(
         filenames if filenames else files if directory else None
     )
     ctx.obj["directory"] = directory
-    ctx.obj["filetype"] = filetype
+    ctx.obj["program"] = program
     ctx.obj["outputfile"] = outputfile
 
 

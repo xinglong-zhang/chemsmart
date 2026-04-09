@@ -129,7 +129,6 @@ class TestGaussianQMMMJobSettings:
             parent_jobtype="opt",
             freq=True,
         )
-        print(settings1.route_string)
         assert settings1.route_string == "# opt freq oniom(b3lyp/6-31g(d):uff)"
 
         settings2 = GaussianQMMMJobSettings(
@@ -160,8 +159,10 @@ class TestGaussianQMMMJobSettings:
             high_level_atoms=[1, 2, 3],
             parent_jobtype="sp",
         )
-        # assert settings3.route_string == "# oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
-        # ValueError: For high level of theory, one should specify only functional/basis or force field!
+        # assert settings3.route_string == "#
+        # oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
+        # ValueError: For high level of theory, one should
+        # specify only functional/basis or force field!
         with pytest.raises(ValueError):
             settings3.route_string
 
@@ -245,8 +246,16 @@ class TestGaussianQMMMJobSettings:
             == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
         )
 
-    def test_qmmm_settings_for_atoms(self, gaussian_inputs_test_directory):
-        mol1 = QMMMMolecule(molecule=Molecule.from_pubchem("81184"))
+    def test_qmmm_settings_for_atoms(
+        self,
+        gaussian_inputs_test_directory,
+        gaussian_semiempirical_pm6_output_file,
+    ):
+        mol1 = QMMMMolecule(
+            molecule=Molecule.from_filepath(
+                gaussian_semiempirical_pm6_output_file
+            )
+        )
 
         settings1 = QMMMMolecule(
             symbols=mol1.symbols,
@@ -285,7 +294,8 @@ class TestGaussianQMMMJobSettings:
             "L",
         ]
 
-        # Test for 3-layer ONIOM calculation with example input dppeFeCl2_phenyldioxazolone_qmmm.com
+        # Test for 3-layer ONIOM calculation with example
+        # input dppeFeCl2_phenyldioxazolone_qmmm.com
         # mol2 = QMMM(molecule=Molecule._read_gaussian_inputfile(
         #     os.path.join(
         #         gaussian_inputs_test_directory,
@@ -469,6 +479,124 @@ class TestGaussianJobFromComFile:
         com_settings.modify_solvent(remove_solvent=True)
         assert com_settings.solvent_model is None
         assert com_settings.solvent_id is None
+
+    def test_cli_group_solvent_options_propagate_to_opt(
+        self, gaussian_yaml_settings_gas_solv_project_name
+    ):
+        """Solvent options given at the gaussian group level propagate to opt settings.
+
+        This simulates: ``gaussian -sm smd -si water -so iterative opt``
+        where the solvent options live on the *group* command and are merged
+        into the subcommand settings via :meth:`GaussianJobSettings.merge`.
+        """
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        opt_settings = project_settings.opt_settings()
+        # Project has no solvent for the gas/opt path
+        assert opt_settings.solvent_model is None
+        assert opt_settings.solvent_id is None
+
+        # Simulate what the gaussian group CLI callback does when
+        # -sm smd -si water -so iterative are supplied
+        job_settings = GaussianJobSettings.default()
+        job_settings.solvent_model = "smd"
+        job_settings.solvent_id = "water"
+        job_settings.additional_solvent_options = "iterative"
+        keywords = (
+            "charge",
+            "multiplicity",
+            "solvent_model",
+            "solvent_id",
+            "additional_solvent_options",
+        )
+
+        # Simulate what the opt subcommand does
+        opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+
+        assert opt_settings.solvent_model == "smd"
+        assert opt_settings.solvent_id == "water"
+        assert opt_settings.additional_solvent_options == "iterative"
+        assert (
+            "scrf=(smd,solvent=water,iterative)" in opt_settings.route_string
+        )
+
+    def test_cli_group_solvent_options_propagate_to_td(self):
+        """Solvent options given at the gaussian group level propagate to td settings.
+
+        This simulates: ``gaussian -sm smd -si water -so iterative td``
+        """
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        base_settings = GaussianJobSettings.default()
+        base_settings.functional = "cam-b3lyp"
+        base_settings.basis = "def2svp"
+
+        # Simulate what the gaussian group CLI callback does
+        job_settings = GaussianJobSettings.default()
+        job_settings.solvent_model = "smd"
+        job_settings.solvent_id = "water"
+        job_settings.additional_solvent_options = "iterative"
+        keywords = (
+            "charge",
+            "multiplicity",
+            "solvent_model",
+            "solvent_id",
+            "additional_solvent_options",
+        )
+
+        # Simulate what the td subcommand does
+        td_settings = base_settings.merge(job_settings, keywords=keywords)
+        td_settings = GaussianTDDFTJobSettings(**td_settings.__dict__)
+        td_settings.states = "singlets"
+        td_settings.root = 1
+        td_settings.nstates = 3
+
+        assert td_settings.solvent_model == "smd"
+        assert td_settings.solvent_id == "water"
+        assert td_settings.additional_solvent_options == "iterative"
+        assert "scrf=(smd,solvent=water,iterative)" in td_settings.route_string
+        assert "TD(" in td_settings.route_string
+
+    def test_cli_group_remove_solvent_overrides_project_settings(
+        self, gaussian_yaml_settings_gas_solv_project_name
+    ):
+        """``--remove-solvent`` at the gaussian group level clears project solvent.
+
+        This simulates: ``gaussian --remove-solvent sp`` when the project's
+        solvent-phase sp settings carry a solvent model.
+        """
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        sp_settings = project_settings.sp_settings()
+        # Project has solvent for the sp (solv) path
+        assert sp_settings.solvent_model == "smd"
+        assert sp_settings.solvent_id == "toluene"
+
+        # Simulate what the gaussian group CLI callback does for --remove-solvent
+        job_settings = GaussianJobSettings.default()
+        job_settings.solvent_model = None
+        job_settings.solvent_id = None
+        job_settings.custom_solvent = None
+        keywords = (
+            "charge",
+            "multiplicity",
+            "solvent_model",
+            "solvent_id",
+            "custom_solvent",
+        )
+
+        # Simulate what the sp subcommand does (merge picks up the None values)
+        sp_settings = sp_settings.merge(job_settings, keywords=keywords)
+
+        assert sp_settings.solvent_model is None
+        assert sp_settings.solvent_id is None
+        assert "scrf" not in sp_settings.route_string
 
 
 class TestGaussianJobFromLogFile:

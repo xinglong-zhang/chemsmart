@@ -175,7 +175,8 @@ class TestContentBlocksByParagraph:
 
 
 class TestWriteListOfListsAsString:
-    """Tests for write_list_of_lists_as_a_string_with_empty_line_between_lists."""
+    """Tests for
+    write_list_of_lists_as_a_string_with_empty_line_between_lists."""
 
     def test_single_list(self):
         """Test single list."""

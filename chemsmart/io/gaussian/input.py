@@ -35,7 +35,8 @@ class Gaussian16Input(GaussianFileMixin):
         - content_groups[0]: Header information and route string
         - content_groups[1]: Job title/description
         - content_groups[2]: Charge/multiplicity and molecular coordinates
-        - content_groups[3:]: Additional sections (modred, gen/genecp, solvents)
+        - content_groups[3:]: Additional
+        sections (modred, gen/genecp, solvents)
 
         Note: Structure may vary depending on calculation type and may need
         updates for job-specific sections.
@@ -440,7 +441,8 @@ class Gaussian16Input(GaussianFileMixin):
 
 
 class Gaussian16QMMMInput(Gaussian16Input):
-    """This class has all the properties of Gaussian16Input but also additional ones
+    """This class has all the properties of
+    Gaussian16Input but also additional ones
     for Gaussian16QMMMInput."""
 
     @property

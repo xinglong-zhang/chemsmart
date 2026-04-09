@@ -43,7 +43,8 @@ class GaussianJobSettings(MolecularJobSettings):
     Inherits common calculation fields from `MolecularJobSettings`, such as
     `ab_initio`, `functional`, `basis`, `semiempirical`, `charge`,
     `multiplicity`, `jobtype`, `title`, `freq`, `numfreq`, `solvent_model`,
-    `solvent_id`, `additional_solvent_options`, `additional_opt_options_in_route`,
+    `solvent_id`, `additional_solvent_options`,
+    `additional_opt_options_in_route`,
     `append_additional_info`, `gen_genecp_file`, `heavy_elements`,
     `heavy_elements_basis`, `light_elements_basis`, `custom_solvent`, `forces`,
     and `input_string`.
@@ -207,9 +208,11 @@ class GaussianJobSettings(MolecularJobSettings):
         Args:
             keywords (list): Specific list of keywords to merge.
                 Defaults to charge and multiplicity.
-                If None, all settings will be merged (Caution: may cause issue if e.g.,
+                If None, all settings will be merged
+                (Caution: may cause issue if e.g.,
                 genecp log file used to prepare input without genecp).
-            other (JobSettings, dict): Settings to merge. Can also take the form of a dictionary
+            other (JobSettings, dict): Settings to
+            merge. Can also take the form of a dictionary
             merge_all (bool): If True, merge all settings.
             If False, only merge the settings specified in keywords.
         """
@@ -874,7 +877,8 @@ class GaussianJobSettings(MolecularJobSettings):
 
     def determine_basis_keyword(self, molecule):
         """
-        Determine the appropriate basis keyword (gen or genecp) for the molecule.
+        Determine the appropriate basis keyword
+        (gen or genecp) for the molecule.
 
         Based on the heavy elements present in the molecule, determines whether
         to use 'gen' (for elements that don't require ECPs) or 'genecp' (for
@@ -988,7 +992,8 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             predictor (str, optional): Predictor method for IRC integration.
             recorrect (str, optional): Recorrection strategy.
             recalc_step (int): Steps between energy recalculations.
-            direction (str, optional): IRC direction ('forward'/'reverse'). If None, run both directions.
+            direction (str, optional): IRC direction
+            ('forward'/'reverse'). If None, run both directions.
             maxpoints (int): Maximum number of IRC points.
             maxcycles (int): Maximum optimization cycles per point.
             stepsize (int): IRC integration step size.
@@ -1080,7 +1085,8 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             )
 
         if self.additional_route_parameters is not None:
-            # Check if the additional parameters are already in the route string
+            # Check if the additional parameters
+            # are already in the route string
             # to avoid duplication (e.g., scf=qc appearing twice)
             additional_params = self.additional_route_parameters.strip()
             if additional_params not in route_string:
@@ -1137,7 +1143,8 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             stable (str): Stability analysis method.
             guess (str): Initial orbital guess method.
             predictor (str, optional): IRC predictor method for IRC link jobs.
-            recorrect (str, optional): IRC recorrection strategy for IRC link jobs.
+            recorrect (str, optional): IRC
+            recorrection strategy for IRC link jobs.
             recalc_step (int): Steps between energy recalculations for IRC.
             direction (str, optional): IRC direction ('forward'/'reverse').
             maxpoints (int): Maximum number of IRC points.
@@ -1239,14 +1246,16 @@ class GaussianLinkJobSettings(GaussianJobSettings):
 
         Creates the second route string that continues from the
         stability analysis by adding checkpoint geometry and orbital
-        reading specifications. Handles IRC jobs by using GaussianIRCJobSettings.
+        reading specifications. Handles IRC
+        jobs by using GaussianIRCJobSettings.
 
         Returns:
             str: Route string for the optimization/IRC step.
         """
         # Special handling for IRC jobs - use GaussianIRCJobSettings
         if self.jobtype in ["ircf", "ircr"]:
-            # Create a temporary GaussianIRCJobSettings instance with current settings
+            # Create a temporary GaussianIRCJobSettings
+            # instance with current settings
             irc_settings = GaussianIRCJobSettings(**self.__dict__)
             # Get the IRC route string from the specialized class
             route_string = irc_settings._get_route_string_from_jobtype()
@@ -1331,12 +1340,17 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
 
 class GaussianQMMMJobSettings(GaussianJobSettings):
     """
-    Configuration settings for Gaussian QM/MM calculations using ONIOM methodology.
+    Configuration settings for Gaussian QM/MM
+    calculations using ONIOM methodology.
 
-    This class manages all parameters needed to set up multi-layer ONIOM calculations
-    in Gaussian, which partition molecular systems into different regions treated with
-    varying levels of theory. The ONIOM approach enables accurate quantum mechanical
-    treatment of chemically active regions while efficiently handling large molecular
+    This class manages all parameters needed
+    to set up multi-layer ONIOM calculations
+    in Gaussian, which partition molecular
+    systems into different regions treated with
+    varying levels of theory. The ONIOM
+    approach enables accurate quantum mechanical
+    treatment of chemically active regions
+    while efficiently handling large molecular
     environments with molecular mechanics.
 
     The class supports 2-layer and 3-layer ONIOM calculations:
@@ -1359,13 +1373,18 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     - Multiple charge/multiplicity specifications per layer
 
     Attributes:
-        jobtype (str, optional): Type of ONIOM calculation ('sp', 'opt', 'freq', 'ts', 'irc',
-            'modred', 'scan'). When using CLI commands, this is automatically inferred from
-            the parent command (e.g., 'chemsmart sub gaussian opt qmmm' sets jobtype='opt').
+        jobtype (str, optional): Type of ONIOM
+        calculation ('sp', 'opt', 'freq', 'ts', 'irc',
+            'modred', 'scan'). When using CLI commands,
+            this is automatically inferred from
+            the parent command (e.g., 'chemsmart sub
+            gaussian opt qmmm' sets jobtype='opt').
 
         Level-specific theory parameters:
-            high_level_functional (str): DFT functional for high layer (e.g., 'B3LYP', 'M06-2X')
-            high_level_basis (str): Basis set for high layer (e.g., '6-31G*', 'def2-TZVP')
+            high_level_functional (str): DFT functional
+            for high layer (e.g., 'B3LYP', 'M06-2X')
+            high_level_basis (str): Basis set for
+            high layer (e.g., '6-31G*', 'def2-TZVP')
             high_level_force_field (str): Force field for high layer (if MM)
             medium_level_functional (str): DFT functional for medium layer
             medium_level_basis (str): Basis set for medium layer
@@ -1375,9 +1394,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             low_level_force_field (str): Force field for low layer (usually MM)
 
         Charge and multiplicity specifications:
-            charge_total/mult_total (int): Full system properties (legacy: charge_total/real_multiplicity)
-            charge_intermediate/mult_intermediate (int): Intermediate system properties (legacy: int_charge/int_multiplicity)
-            charge_high/mult_high (int): Model/high-layer properties (legacy: model_charge/model_multiplicity)
+            charge_total/mult_total (int): Full system
+            properties (legacy: charge_total/real_multiplicity)
+            charge_intermediate/mult_intermediate (int): Intermediate
+            system properties (legacy: int_charge/int_multiplicity)
+            charge_high/mult_high (int): Model/high-layer
+            properties (legacy: model_charge/model_multiplicity)
 
         Atom partitioning:
             high_level_atoms (list/str): Atoms in high layer (1-indexed)
@@ -1416,14 +1438,16 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         ... )
 
     Note:
-        The real/intermediate/model charge and multiplicity specifications follow
+        The real/intermediate/model charge
+        and multiplicity specifications follow
         ONIOM conventions where:
         - Real system: Complete molecular system
         - Intermediate system: High+Medium layers (3-layer only)
         - Model system: High layer only
 
         Scale factors control link atom placement and default to covalent radii
-        ratios if not specified. The format is {(atom1,atom2): [low,medium,high]}.
+        ratios if not specified. The format
+        is {(atom1,atom2): [low,medium,high]}.
 
     See Also:
         - GaussianQMMMJob: Job execution class for QM/MM calculations
@@ -1468,12 +1492,15 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         Args:
             jobtype (str, optional): Type of ONIOM calculation to perform.
-                Options: 'sp' (single-point), 'opt' (optimization), 'freq' (frequency),
+                Options: 'sp' (single-point), 'opt'
+                (optimization), 'freq' (frequency),
                 'ts' (transition state), 'irc' (intrinsic reaction coordinate),
                 'modred' (redundant coordinates), 'scan' (coordinate scan)
 
-                Note: When using the CLI with `chemsmart sub gaussian <jobtype> qmmm`,
-                the jobtype is automatically inferred from the parent command and does
+                Note: When using the CLI with
+                `chemsmart sub gaussian <jobtype> qmmm`,
+                the jobtype is automatically inferred
+                from the parent command and does
                 not need to be specified manually.
 
             Theory level parameters:
@@ -1481,44 +1508,60 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                     (e.g., 'B3LYP', 'M06-2X', 'wB97X-D', 'PBE0')
                 high_level_basis (str): Basis set for high QM layer
                     (e.g., '6-31G*', '6-311++G(d,p)', 'def2-TZVP', 'cc-pVTZ')
-                high_level_force_field (str): Force field for high MM layer (rare)
-                medium_level_functional (str): DFT functional for medium QM layer
+                high_level_force_field (str): Force
+                field for high MM layer (rare)
+                medium_level_functional (str):
+                DFT functional for medium QM layer
                 medium_level_basis (str): Basis set for medium QM layer
                 medium_level_force_field (str): Force field for medium MM layer
-                low_level_functional (str): DFT functional for low QM layer (uncommon)
+                low_level_functional (str): DFT
+                functional for low QM layer (uncommon)
                 low_level_basis (str): Basis set for low QM layer (uncommon)
                 low_level_force_field (str): Force field for low MM layer
                     (e.g., 'AMBER=HardFirst', 'UFF', 'DREIDING', 'MM3')
 
             Charge and multiplicity:
-                charge_total (int): Total charge of complete molecular system (legacy: charge_total)
-                mult_total (int): Spin multiplicity of complete system (legacy: real_multiplicity)
-                charge_intermediate (int): Charge of high+medium layers (legacy: int_charge)
-                mult_intermediate (int): Multiplicity of high+medium layers (legacy: int_multiplicity)
-                charge_high (int): Charge of high layer only (legacy: model_charge)
-                mult_high (int): Multiplicity of high layer only (legacy: model_multiplicity)
+                charge_total (int): Total charge of complete
+                molecular system (legacy: charge_total)
+                mult_total (int): Spin multiplicity of
+                complete system (legacy: real_multiplicity)
+                charge_intermediate (int): Charge of
+                high+medium layers (legacy: int_charge)
+                mult_intermediate (int): Multiplicity of
+                high+medium layers (legacy: int_multiplicity)
+                charge_high (int): Charge of high
+                layer only (legacy: model_charge)
+                mult_high (int): Multiplicity of high
+                layer only (legacy: model_multiplicity)
 
             Atom partitioning:
                 high_level_atoms (list/str): Atoms in high layer. Can be:
                     - List of integers: [1, 2, 3, 5, 8]
                     - Range string: "1-10,15,20-25"
                     - List of ranges: ["1-10", "15", "20-25"]
-                medium_level_atoms (list/str): Atoms in medium layer (3-layer only)
-                low_level_atoms (list/str): Atoms in low layer (usually auto-assigned)
+                medium_level_atoms (list/str):
+                Atoms in medium layer (3-layer only)
+                low_level_atoms (list/str): Atoms
+                in low layer (usually auto-assigned)
                 bonded_atoms (list): Covalent bonds crossing layer boundaries.
-                    Format: [(atom1, atom2), (atom3, atom4)] where atoms are 1-indexed
+                    Format: [(atom1, atom2), (atom3,
+                    atom4)] where atoms are 1-indexed
                 scale_factors (dict): Custom link atom scale factors. Format:
                     {(atom1, atom2): [scale_low, scale_medium, scale_high]}
                     Values typically range from 0.5-1.0, common value is 0.709
 
-            **kwargs: Additional keyword arguments passed to parent GaussianJobSettings
+            **kwargs: Additional keyword arguments
+            passed to parent GaussianJobSettings
 
         Note:
             - All atom indices are 1-based following Gaussian conventions
-            - If only 2 layers specified, use high_level_* and low_level_* parameters
+            - If only 2 layers specified, use
+            high_level_* and low_level_* parameters
             - Force fields must be available in your Gaussian installation
-            - Link atoms are automatically placed for bonded_atoms specifications
-            - The parent class 'functional' and 'basis' attributes are set to high_level values
+            - Link atoms are automatically placed
+            for bonded_atoms specifications
+            - The parent class 'functional' and 'basis'
+            attributes are set to high_level values
         """
         super().__init__(**kwargs)
         self.jobtype = jobtype
@@ -1532,7 +1575,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.low_level_functional = low_level_functional
         self.low_level_basis = low_level_basis
         self.low_level_force_field = low_level_force_field
-        # Canonical charge/multiplicity names (aligned with ORCA) with legacy fallbacks
+        # Canonical charge/multiplicity names
+        # (aligned with ORCA) with legacy fallbacks
         self.charge_total = charge_total
         if self.charge_total is None:
             self.charge_total = real_charge
@@ -1601,13 +1645,16 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             )
             level_of_theory = force_field
         else:
-            # if force field is not given, then functional and basis can be given,
+            # if force field is not given, then
+            # functional and basis can be given,
             # so that level of theory takes functional and basis set
             if functional and basis:
                 level_of_theory = f"{functional}/{basis}"
             else:
-                # but functional and basis set can also not be given, in which case,
-                # all 3 are None and overall level of theory for that layer is None.
+                # but functional and basis set can
+                # also not be given, in which case,
+                # all 3 are None and overall level
+                # of theory for that layer is None.
                 level_of_theory = None
 
         logger.debug(
@@ -1617,7 +1664,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         return level_of_theory
 
     def _get_route_string_from_jobtype(self):
-        """Generate QM/MM route string with job type, freq, and ONIOM specification."""
+        """Generate QM/MM route string with job
+        type, freq, and ONIOM specification."""
         route_string = "#"
         if self.dieze_tag:
             route_string += self.dieze_tag
@@ -1711,18 +1759,25 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         For two-layer ONIOM jobs, the format for this input line is:
 
         chrg_real-low spin_real-low [chrg_model-high spin_model-high
-                                    [chrg_model-low spin_model-low [chrg_real-high spin_real-high]]]
+                                    [chrg_model-low spin_model-low
+                                    [chrg_real-high spin_real-high]]]
 
         Fourth pair applies only to ONIOM=SValue calculations.
-        When only a single value pair is specified, all levels will use those values.
-        If two pairs of values are included, then third pair defaults to same values as second pair.
-        If final pair is omitted for an S-value job, it defaults to values for the real system at low level.
-        For such two-layer ONIOM jobs, users are required to specify the charge and multiplicity of high-level
+        When only a single value pair is specified,
+        all levels will use those values.
+        If two pairs of values are included, then third
+        pair defaults to same values as second pair.
+        If final pair is omitted for an S-value job, it
+        defaults to values for the real system at low level.
+        For such two-layer ONIOM jobs, users are required
+        to specify the charge and multiplicity of high-level
          layer and low-level layer, instead high and medium level.
 
         For 3-layers ONIOM, the format is:
-        cRealL sRealL [cIntM sIntM [cIntL sIntL [cModH sModH [cModM sModM [cModL sModL]]]]]
-        Real, Int=Intermediate system, and Mod=Model system, and second character
+        cRealL sRealL [cIntM sIntM [cIntL sIntL
+        [cModH sModH [cModM sModM [cModL sModL]]]]]
+        Real, Int=Intermediate system, and
+        Mod=Model system, and second character
         is one of: H, M and L for the High, Medium and Low levels).
         """
         assert (
@@ -1802,30 +1857,38 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 model_low_charge,
                 model_low_multiplicity,
             ]
-            # Defaults for missing charge / spin multiplicity pairs are taken from the next highest
+            # Defaults for missing charge / spin multiplicity
+            # pairs are taken from the next highest
             # calculation level and / or system size.
             if all(var is None for var in charge_and_multiplicity_list[2:]):
                 # only charge and multiplicity of real system is specified,
-                # so the charge and multiplicity of other systems will be the same as the real system
+                # so the charge and multiplicity of other
+                # systems will be the same as the real system
                 for i in range(2, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = real_low_charge
                     charge_and_multiplicity_list[i + 1] = real_low_multiplicity
             elif all(var is None for var in charge_and_multiplicity_list[4:]):
-                # only charge and multiplicity of real system and that of intermediate layer,
-                # medium level-of-theory are specified, the charge and multiplicity of other
+                # only charge and multiplicity of real
+                # system and that of intermediate layer,
+                # medium level-of-theory are specified,
+                # the charge and multiplicity of other
                 # systems will be the same as the intermediate layer
                 for i in range(4, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = int_med_charge
                     charge_and_multiplicity_list[i + 1] = int_med_multiplicity
             elif all(var is None for var in charge_and_multiplicity_list[6:]):
-                # only charge and multiplicity of real system, intermediate layer, medium level-of-theory
-                # and intermediate layer, medium level-of-theory are specified, the charge and multiplicity of other
-                # systems will be the same as intermediate layer, medium level-of-theory,...
+                # only charge and multiplicity of real system,
+                # intermediate layer, medium level-of-theory
+                # and intermediate layer, medium level-of-theory are
+                # specified, the charge and multiplicity of other
+                # systems will be the same as intermediate
+                # layer, medium level-of-theory,...
                 for i in range(6, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = int_med_charge
                     charge_and_multiplicity_list[i + 1] = int_med_multiplicity
             elif all(var is None for var in charge_and_multiplicity_list[8:]):
-                # the rest systems will follow the model system, high level-of-theory
+                # the rest systems will follow the
+                # model system, high level-of-theory
                 for i in range(8, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = model_high_charge
                     charge_and_multiplicity_list[i + 1] = (
@@ -1850,7 +1913,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         """
         Compare two GaussianQMMMJobSettings objects for equality.
 
-        Compares all attributes between two QMMM settings objects, including the
+        Compares all attributes between two
+        QMMM settings objects, including the
         QMMM-specific attributes that are not present in the parent class.
 
         Args:
@@ -1867,7 +1931,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
 
-        # Exclude append_additional_info from the comparison (inherited behavior)
+        # Exclude append_additional_info from
+        # the comparison (inherited behavior)
         self_dict.pop("append_additional_info", None)
         other_dict.pop("append_additional_info", None)
 

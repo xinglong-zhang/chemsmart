@@ -1,4 +1,3 @@
-import glob
 import logging
 import os
 
@@ -9,6 +8,7 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
+from chemsmart.io.folder import BaseFolder
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.io import load_molecules_from_paths, select_items_by_index
 
@@ -30,7 +30,8 @@ def align(
     **kwargs,
 ):
     """CLI subcommand for aligning multiple molecule files in PyMOL.
-    In align, the -t option uses file extensions like log, xyz, inp, instead of task types like Gaussian or ORCA to ensure structural visualization for multiple file types.
+    In align, the -t/--filetype option uses file extensions like log, xyz, inp,
+    to match files in a directory for structural visualization.
 
     Examples:
         # Align multiple files
@@ -62,7 +63,7 @@ def align(
 
     if directory and not filetype:
         raise click.BadParameter(
-            "Directory specified but no filetype provided. Use -t/--type to specify file type "
+            "Directory specified but no filetype provided. Use -t/--filetype to specify file type "
             "(e.g., xyz, log, gjf, mol, inp)."
         )
 
@@ -117,12 +118,13 @@ def align(
             f"Obtaining files in directory: {directory} for alignment."
         )
         if filetype:
-            filetype_pattern = os.path.join(directory, f"*.{filetype}")
-            matched_files = glob.glob(filetype_pattern)
+            matched_files = BaseFolder(
+                folder=directory
+            ).get_all_files_in_current_folder_by_suffix(filetype=filetype)
+            matched_files = sorted(matched_files)
             if not matched_files:
-                logger.warning(f"No files matched pattern: {filetype_pattern}")
                 raise click.BadParameter(
-                    f"No files found matching pattern: {filetype_pattern}"
+                    f"No files found with extension '.{filetype}' in: {directory}"
                 )
 
             # Process all matched files with per-file indexing
@@ -135,9 +137,10 @@ def align(
             )
             base_file_for_label = matched_files[0]
         else:
-            # This should not happen due to validation above, but keep as safeguard
+            # This should not happen due to
+            # validation above, but keep as safeguard
             raise click.BadParameter(
-                "Directory specified but no filetype provided. Use -t/--type to specify file type."
+                "Directory specified but no filetype provided. Use -t/--filetype to specify file type."
             )
 
     elif filenames:
@@ -166,7 +169,8 @@ def align(
             except ValueError as e:
                 raise click.BadParameter(str(e))
         else:
-            # Multiple files: use the same per-file processing as directory mode
+            # Multiple files: use the same
+            # per-file processing as directory mode
             process_files_with_per_file_indexing(
                 filenames, add_index_suffix=True, check_exists=True
             )

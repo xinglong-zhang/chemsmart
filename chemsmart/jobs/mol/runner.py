@@ -644,8 +644,10 @@ class PyMOLJobRunner(JobRunner):
             job: PyMOL job object with file paths.
             command: Complete PyMOL command string to execute.
             env: Environment variables for the process.
-            append_mode: If True, append to existing log/err files instead of overwriting.
-                         Used for batch processing to preserve logs from previous batches.
+            append_mode: If True, append to existing
+            log/err files instead of overwriting.
+                         Used for batch processing to
+                         preserve logs from previous batches.
 
         Returns:
             subprocess.Popen: The completed process object.
@@ -788,7 +790,8 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
     Extends the base PyMOL runner to provide hybrid molecular
     visualization capabilities with customizable styling, labeling.
 
-    This job runner supports an arbitrary number of groups, determined dynamically.
+    This job runner supports an arbitrary
+    number of groups, determined dynamically.
     """
 
     JOBTYPES = ["pymol_hybrid_visualization"]
@@ -829,7 +832,8 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_hybrid_pml(self, job):
         """Write the default hybrid style pml if no custom pml is provided.
-        Creates a PyMOL script file that sets up hybrid visualization style with appropriate
+        Creates a PyMOL script file that sets up
+        hybrid visualization style with appropriate
         coloring and transparency settings
 
         Args:
@@ -870,13 +874,15 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         return " or ".join(selection_str)
 
     def _write_default_pymol_style(self, job, f):
-        """Write the pymol style without settings for stick color to the pml file."""
+        """Write the pymol style without settings
+        for stick color to the pml file."""
         f.write("unset stick_color, all\n")
         f.write("hide everything, all\n")
         f.write("show sticks, all\n")
 
     def _write_faded_colors(self, job, f):
-        """Write the faded colors for non-highlighted C, N, O, P in background to the pml file."""
+        """Write the faded colors for non-highlighted
+        C, N, O, P in background to the pml file."""
         new_color_carbon = (
             job.new_color_carbon
             if job.new_color_carbon is not None
@@ -915,15 +921,18 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_highlighted_colors(self, job, f):
         """
-        Write PyMOL commands to highlight and color the defined groups in a job.
+        Write PyMOL commands to highlight and
+        color the defined groups in a job.
 
         Args:
-            job: PyMOLHybridVisualizationJob instance containing group and color info.
+            job: PyMOLHybridVisualizationJob
+            instance containing group and color info.
             f: File object to write the PyMOL commands.
 
         Behavior:
             - Groups are selected using their atom indices (via _get_groups).
-            - Colors are applied according to the user's specification; if no color
+            - Colors are applied according to
+            the user's specification; if no color
               is specified, a default color scheme is used.
         Notes:
             - The order of colors follows the order of defined groups.
@@ -975,13 +984,15 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         # Set transparency for all sticks to 0 (fully opaque)
         f.write("set stick_transparency, 0, all\n")
 
-        # Retrieve the stick radius from the job or use the default value (0.25)
+        # Retrieve the stick radius from the
+        # job or use the default value (0.25)
         if job.stick_radius is None:
             stick_radius = 0.25
         else:
             stick_radius = job.stick_radius
 
-        # Write the PyMOL command to set the stick radius for the selected indices
+        # Write the PyMOL command to set the
+        # stick radius for the selected indices
 
         f.write(
             f"set stick_radius, {stick_radius}, ({self._get_group_selection_str(job)})\n"
@@ -1138,7 +1149,8 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
         Args:
             job: PyMOL movie job holding folder, label, and overwrite flag.
             framerate (int): Output video framerate in frames per second.
-            constant_rate_factor (int): FFmpeg CRF value (0–51, lower = better).
+            constant_rate_factor (int): FFmpeg
+            CRF value (0–51, lower = better).
 
         Raises:
             FileNotFoundError: If no PNG frames are found or FFmpeg is missing.
@@ -1701,7 +1713,8 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
 
     def run(self, job, **kwargs):
         """Execute alignment task with batch processing support"""
-        # Execute preprocessing and input preparation first to set batch processing flag
+        # Execute preprocessing and input preparation
+        # first to set batch processing flag
         self._prerun(job)
         self._write_input(job)
 
@@ -1713,7 +1726,8 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             )
             return self._run_batch_processing(job, **kwargs)
         else:
-            # Use original single batch processing - execute all steps to ensure consistency with original behavior
+            # Use original single batch processing - execute all
+            # steps to ensure consistency with original behavior
             logger.info(
                 f"Using single batch processing: {len(job.xyz_absolute_paths)} molecules"
             )
@@ -1773,7 +1787,8 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             # Subsequent batches: open existing PSE file first
             command = f"{exe} {quote_path(final_pse)}"
 
-        # All batches need to add style script to ensure pymol_style function is available
+        # All batches need to add style script to
+        # ensure pymol_style function is available
         command = self._add_style_script(job, command)
 
         # Add PyMOL options
@@ -1794,7 +1809,8 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                 elif job.style.lower() == "cylview":
                     pymol_commands.append(f"cylview_style {name}")
 
-            # Alignment commands - align all to GLOBAL first molecule (not batch first molecule)
+            # Alignment commands - align all to GLOBAL
+            # first molecule (not batch first molecule)
             global_ref = job.mol_names[
                 0
             ]  # Always use global first molecule as reference
@@ -1807,7 +1823,8 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             if align_cmds:
                 pymol_commands.extend(align_cmds)
         else:
-            # Subsequent batches: load new molecules, apply style, and align to global first molecule
+            # Subsequent batches: load new molecules, apply
+            # style, and align to global first molecule
             for i, path in enumerate(batch_paths):
                 pymol_commands.append(f"load {quote_path(path)}")
                 # Apply style to each newly loaded molecule

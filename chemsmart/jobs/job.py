@@ -20,7 +20,8 @@ class Job(RegistryMixin):
         label (str): A label for the job.
         jobrunner (JobRunner): The JobRunner instance to execute the job.
         local (bool): If True, run the job locally. Defaults to False.
-        skip_completed (bool): If True, completed jobs will not be rerun. Defaults to True.
+        skip_completed (bool): If True, completed
+        jobs will not be rerun. Defaults to True.
         **kwargs: Additional keyword arguments.
     """
 

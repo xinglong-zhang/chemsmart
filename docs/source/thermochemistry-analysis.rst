@@ -17,9 +17,9 @@ Usage
 
 .. code:: text
 
-   chemsmart run thermochemistry [-d path/to/directory] [-t log|out] [-f filename(s)]
+   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-t filetype] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
-                                 [-ch h_freq_cutoff] [-c concentration] [-p pressure] [-w]
+                                 [-ch h_freq_cutoff] [-c concentration] [-P pressure] [--weighted | --no-weighted]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
                                  [-o outfile.dat] [-O] [-i] [-S|-R]
 
@@ -38,15 +38,21 @@ Options
 
    -  -  ``-d, --directory``
       -  string
-      -  Directory for batch processing (mutually exclusive with -f)
+      -  Directory for batch processing (mutually exclusive with ``-f``)
+
+   -  -  ``-p, --program``
+      -  string
+      -  Program that produced the output files: ``gaussian`` or ``orca``. Used with ``-d`` to process all output files
+         from that program.
 
    -  -  ``-t, --filetype``
       -  string
-      -  File type: log (Gaussian) or out (ORCA)
+      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Used with ``-d`` to process all files of
+         that type regardless of program.
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific file(s) to analyze (repeatable, mutually exclusive with -d)
+      -  Specific file(s) to analyze (repeatable, mutually exclusive with ``-d``)
 
 **Quasi-RRHO Corrections:**
 
@@ -86,15 +92,16 @@ Options
 
    -  -  ``-c, --concentration``
       -  float
-      -  Solution concentration in mol/L (mutually exclusive with -p)
+      -  Solution concentration in mol/L (mutually exclusive with -P)
 
-   -  -  ``-p, --pressure``
+   -  -  ``-P, --pressure``
       -  float
       -  Gas-phase pressure in atm (default: 1.0)
 
-   -  -  ``-w, --weighted``
+   -  -  ``-w, --weighted, --no-weighted``
       -  bool
-      -  Use isotopically weighted masses
+      -  Toggle between natural abundance weighted masses (``--weighted``) and most abundant isotope masses
+         (``--no-weighted``). Default: ``--weighted``.
 
    -  -  ``-T, --temperature``
       -  float
@@ -161,7 +168,18 @@ Output:
 
 .. code:: bash
 
-   chemsmart run thermochemistry -T 298.15 -d . -t log -o thermo.dat
+   chemsmart run thermochemistry -T 298.15 -d . -p gaussian -o thermo.dat
+
+**Batch processing with custom pressure:**
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -P 2.5 -d . -p gaussian -o thermo.dat
+
+.. note::
+
+   Both ``-p`` (program) and ``-P`` (pressure) are case-sensitive options that can be used together. ``-p`` specifies
+   the quantum chemistry program that generated the files, while ``-P`` specifies the pressure in atm.
 
 **Solution phase:**
 
@@ -235,6 +253,6 @@ Output:
 
 .. code:: bash
 
-   chemsmart run thermochemistry -T 298.15 -d . -t log boltzmann
+   chemsmart run thermochemistry -T 298.15 -d . -p gaussian boltzmann
 
 Results are saved to ``thermochemistry_job_boltzmann.dat``.

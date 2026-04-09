@@ -164,7 +164,8 @@ class Updater:
         # Normalizes according to PEP 503: lowercase and replace [-_.] with -
         def extract_pkg_name(dep):
             pkg_name = re.split(r"[=<>~!]", dep, maxsplit=1)[0].strip()
-            # PEP 503 normalization: lowercase first, then replace runs of [-_.] with single dash
+            # PEP 503 normalization: lowercase first,
+            # then replace runs of [-_.] with single dash
             pkg_name = pkg_name.lower()
             pkg_name = re.sub(r"[-_.]+", "-", pkg_name)
             return package_mapping.get(pkg_name, pkg_name)

@@ -121,9 +121,12 @@ class NCIPLOTInputWriter(InputWriter):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
 
                     # Extract basename for validation and writing
-                    # The runner copies all files to scratch using only their basename.
-                    # For converted files, _promolecular suffix is added to the basename.
-                    # We must use basename here to find files in scratch directory.
+                    # The runner copies all files to
+                    # scratch using only their basename.
+                    # For converted files, _promolecular
+                    # suffix is added to the basename.
+                    # We must use basename here to
+                    # find files in scratch directory.
                     file_basename = os.path.basename(file)
                     logger.debug(f"Writing filename: {file_basename}.")
 
@@ -281,7 +284,8 @@ class NCIPLOTInputWriter(InputWriter):
 
     def _write_fragments(self, f):
         """Write the fragments section for the input file.
-        # FROM NCIPLOT README: https://github.com/aoterodelaroza/nciplot/blob/master/README
+        # FROM NCIPLOT README:
+        # https://github.com/aoterodelaroza/nciplot/blob/master/README
         # By default, the fragments to which INTERMOLECULAR applies are the
         # molecules defined in input. This behavior can be modified using the
         # **FRAGMENT** keyword:
@@ -292,16 +296,21 @@ class NCIPLOTInputWriter(InputWriter):
         #     END | ENDFRAGMENT
         #
         # Several FRAGMENT environments can appear in the same input, each
-        # defining a different fragment. The same atom should appear only in one
-        # of the defined fragments. If the combined list of all the atoms inside
-        # a FRAGMENT environment is not exhaustive, then the remaining atoms are
-        # not considered. Inside a FRAGMENT environment, atoms can be defined by
+        # defining a different fragment. The
+        # same atom should appear only in one
+        # of the defined fragments. If the
+        # combined list of all the atoms inside
+        # a FRAGMENT environment is not
+        # exhaustive, then the remaining atoms are
+        # not considered. Inside a FRAGMENT
+        # environment, atoms can be defined by
         # choosing the molecule (ifile1.i) and then the list of atoms within
         # that molecule (at1.i at2.i etc.). If the FRAGMENT keyword is used,
         # then the INTERMOLECULAR keyword is automatically activated. Note that
         # if the EXC keyword is used, then the criterion applies also to
         # that cube. That is, if the considered point is intramolecular (more
-        # than 95% of the density coming from only one fragment), then the value
+        # than 95% of the density coming from
+        # only one fragment), then the value
         # of the exc is set to a very high value to remove the point from the
         # isosurface representation.
         #
