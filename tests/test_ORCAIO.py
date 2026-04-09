@@ -2782,6 +2782,40 @@ class TestORCAOutput:
             rtol=1e-6,
         )
 
+    def test_cosmors_output_normal_termination(
+        self, ethanol_sp_cosmors_water_path
+    ):
+        orca_out = ORCAOutput(filename=ethanol_sp_cosmors_water_path)
+        assert orca_out.normal_termination is True
+
+    def test_cosmors_output_all_structures_is_empty(
+        self, ethanol_sp_cosmors_water_path
+    ):
+        """COSMORS output redirects all SP calculations to sub-files, so the
+        main output has no SCF geometry steps; all_structures should be empty.
+        """
+        orca_out = ORCAOutput(filename=ethanol_sp_cosmors_water_path)
+        assert orca_out.all_structures == []
+
+    def test_cosmors_output_energies_is_empty(
+        self, ethanol_sp_cosmors_water_path
+    ):
+        """COSMORS-specific energy lines (with parenthetical labels) should
+        not be collected by _get_energies()."""
+        orca_out = ORCAOutput(filename=ethanol_sp_cosmors_water_path)
+        assert orca_out.energies == []
+
+    def test_cosmors_output_molecule_is_solute(
+        self, ethanol_sp_cosmors_water_path
+    ):
+        """input_coordinates_block should return the solute (ethanol), not
+        the solvent (water)."""
+        orca_out = ORCAOutput(filename=ethanol_sp_cosmors_water_path)
+        mol = orca_out.input_coordinates_block.molecule
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 9
+        assert mol.chemical_symbols[0] == "O"
+
 
 class TestORCAEngrad:
     def test_read_water_output(self, water_engrad_path):
