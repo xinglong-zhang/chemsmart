@@ -38,11 +38,6 @@ The basic command structure for Gaussian ONIOM QM/MM calculations is:
 
 where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, or ``modred``.
 
-.. note::
-
-   In previous versions the ``qmmm`` command was a top-level subcommand (``gaussian qmmm -j opt``). The current API
-   nests ``qmmm`` under the job-type command (``gaussian opt qmmm``, ``gaussian ts qmmm``, etc.).
-
 ************************
  QM/MM-Specific Options
 ************************
