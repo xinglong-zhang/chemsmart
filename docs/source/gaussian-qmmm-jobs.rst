@@ -182,16 +182,18 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hf wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -rc 0 -rm 1 -mc 0 -mm 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hf wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
 
 Frequency Analysis
 ==================
 
-Vibrational analysis of QM/MM optimized structure:
+Vibrational analysis of a QM/MM optimized structure. Enable frequencies via the project settings (``freq: true``) or by
+passing ``-r freq`` to add the keyword to the route. The ``opt qmmm`` parent command is used since there is no
+standalone ``freq`` parent command:
 
 .. code:: console
 
-   chemsmart sub gaussian -p freq_qmmm -f optimized.com freq qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -rc 0 -rm 1 -mc 0 -mm 1
+   chemsmart sub gaussian -p freq_qmmm -f optimized.com opt qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1
 
 Single Point Energy
 ===================
@@ -200,7 +202,7 @@ High-accuracy single point calculation on QM/MM geometry:
 
 .. code:: console
 
-   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hf CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -rc 0 -rm 1 -mc 0 -mm 1
+   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hf CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
 
 ***********************************
  GaussianQMMMJobSettings Reference
@@ -388,39 +390,45 @@ Gaussian supports multiple MM force fields:
 YAML Configuration Files
 ========================
 
-Create project-specific ONIOM settings in YAML format:
+Create project-specific ONIOM settings in YAML format.
+
+.. note::
+
+   When using the CLI (``chemsmart sub gaussian <jobtype> qmmm``), the ``parent_jobtype`` field is set automatically
+   from the parent command (e.g., ``opt``, ``ts``, ``sp``). Set it explicitly in YAML only when using the Python API
+   directly.
 
 **Basic 2-Layer QM/MM** (``~/.chemsmart/gaussian/qmmm.yaml``):
 
 .. code:: yaml
 
    # Basic enzyme active site calculation
-   jobtype: "opt"
+   parent_jobtype: "opt"
    high_level_functional: "B3LYP"
    high_level_basis: "6-31G*"
    low_level_force_field: "AMBER=HardFirst"
-   real_charge: 0
-   real_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
+   charge_total: 0
+   mult_total: 1
+   charge_high: 0
+   mult_high: 1
 
 **3-Layer ONIOM Configuration** (``~/.chemsmart/gaussian/oniom3.yaml``):
 
 .. code:: yaml
 
    # Advanced organometallic catalyst
-   jobtype: "freq"
+   parent_jobtype: "opt"
    high_level_functional: "M06-2X"
    high_level_basis: "def2-TZVP"
    medium_level_functional: "B3LYP"
    medium_level_basis: "6-31G*"
    low_level_force_field: "UFF"
-   real_charge: -1
-   real_multiplicity: 2
-   int_charge: 0
-   int_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
+   charge_total: -1
+   mult_total: 2
+   charge_intermediate: 0
+   mult_intermediate: 1
+   charge_high: 0
+   mult_high: 1
    bonded_atoms: [(10, 11), (50, 51)]
    scale_factors:
      (10, 11): [0.709, 0.709, 0.709]

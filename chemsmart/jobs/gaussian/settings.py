@@ -1674,12 +1674,25 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         parent_jobtype = (
             self.parent_jobtype.lower() if self.parent_jobtype else None
         )
+        extra_opt = self.additional_opt_options_in_route
         if parent_jobtype == "opt":
-            route_string += " opt"
+            if extra_opt is not None:
+                route_string += f" opt=({extra_opt})"
+            else:
+                route_string += " opt"
         elif parent_jobtype == "scan" or parent_jobtype == "modred":
-            route_string += " opt=modredundant"
+            if extra_opt is not None:
+                route_string += f" opt=(modredundant,{extra_opt})"
+            else:
+                route_string += " opt=modredundant"
         elif parent_jobtype == "ts":
-            route_string += " opt=(ts,calcfc,noeigentest)"
+            if extra_opt is not None:
+                if "calcall" in extra_opt:
+                    route_string += f" opt=(ts,noeigentest,{extra_opt})"
+                else:
+                    route_string += f" opt=(ts,calcfc,noeigentest,{extra_opt})"
+            else:
+                route_string += " opt=(ts,calcfc,noeigentest)"
         elif parent_jobtype == "irc":
             route_string += " irc"
         # sp doesn't add any keyword
@@ -1697,6 +1710,20 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             route_string += (
                 f" scrf=({self.solvent_model},solvent={self.solvent_id})"
             )
+
+        # Append additional route parameters (e.g., from -r CLI flag)
+        if self.additional_route_parameters is not None:
+            additional_params = self.additional_route_parameters.strip()
+            if additional_params not in route_string:
+                route_string += f" {additional_params}"
+                logger.debug(
+                    f"Added additional route parameters: {additional_params}"
+                )
+            else:
+                logger.debug(
+                    f"Additional route parameters '{additional_params}' "
+                    "already present in route string"
+                )
 
         return route_string
 
