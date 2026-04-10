@@ -51,7 +51,7 @@ Job Type and Theory Levels
       -  Type
       -  Description
 
-   -  -  ``-hf, --high-level-functional``
+   -  -  ``-hx, --high-level-functional``
       -  string
       -  DFT functional for high layer (e.g., B3LYP, M06-2X, wB97X-D)
 
@@ -63,7 +63,7 @@ Job Type and Theory Levels
       -  string
       -  Force field for high layer (if MM, uncommon)
 
-   -  -  ``-mf, --medium-level-functional``
+   -  -  ``-mx, --medium-level-functional``
       -  string
       -  DFT functional for medium layer
 
@@ -75,7 +75,7 @@ Job Type and Theory Levels
       -  string
       -  Force field for medium layer
 
-   -  -  ``-lf, --low-level-functional``
+   -  -  ``-lx, --low-level-functional``
       -  string
       -  DFT functional for low layer (if QM, uncommon)
 
@@ -164,7 +164,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(25,26)"
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(25,26)"
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -173,7 +173,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz freq qmmm -hf M06-2X -hb def2-TZVP -mf B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba "(10,11),(50,51)"
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba "(10,11),(50,51)"
 
 Transition State Search
 =======================
@@ -182,7 +182,7 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hf wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
 
 Frequency Analysis
 ==================
@@ -193,7 +193,7 @@ standalone ``freq`` parent command:
 
 .. code:: console
 
-   chemsmart sub gaussian -p freq_qmmm -f optimized.com opt qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1
+   chemsmart sub gaussian -p freq_qmmm -f optimized.com opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1
 
 Single Point Energy
 ===================
@@ -202,7 +202,7 @@ High-accuracy single point calculation on QM/MM geometry:
 
 .. code:: console
 
-   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hf CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
+   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hx CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
 
 ***********************************
  GaussianQMMMJobSettings Reference
