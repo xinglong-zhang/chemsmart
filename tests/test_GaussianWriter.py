@@ -348,13 +348,13 @@ class TestGaussianInputWriter:
         g16_writer = GaussianInputWriter(job=job)
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_qmmm.com")
-        print(qmmm_settings.high_level_atoms)
+        assert qmmm_settings.high_level_atoms == [1, 2, 3]
         with open(g16_file, "r") as f:
             g16_content = f.read()
             # check that the qmmm section is present in the written file
         with open(gaussian_written_qmmm_file, "r") as f:
             expected_content = f.read()
-        print(g16_content, expected_content)
+        assert g16_content == expected_content
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
 
