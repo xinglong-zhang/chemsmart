@@ -403,7 +403,6 @@ Create project-specific ONIOM settings in YAML format.
 .. code:: yaml
 
    # Basic enzyme active site calculation
-   parent_jobtype: "opt"
    high_level_functional: "B3LYP"
    high_level_basis: "6-31G*"
    low_level_force_field: "AMBER=HardFirst"
