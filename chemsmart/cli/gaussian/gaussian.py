@@ -11,9 +11,7 @@ from chemsmart.cli.job import (
 )
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
-from chemsmart.utils.utils import (
-    return_objects_and_indices_from_string_index,
-)
+from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 
 logger = logging.getLogger(__name__)
 
