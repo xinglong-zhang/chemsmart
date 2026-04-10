@@ -1674,7 +1674,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         parent_jobtype = (
             self.parent_jobtype.lower() if self.parent_jobtype else None
         )
-        extra_opt = self.additional_opt_options_in_route
+        # Normalise: treat empty / whitespace-only values the same as None so
+        # we never emit invalid keywords like opt=() or opt=(modredundant,).
+        _raw = self.additional_opt_options_in_route
+        extra_opt = _raw.strip() if isinstance(_raw, str) else _raw
+        if not extra_opt:  # catches None, "", "   "
+            extra_opt = None
         if parent_jobtype == "opt":
             if extra_opt is not None:
                 route_string += f" opt=({extra_opt})"

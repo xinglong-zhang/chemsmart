@@ -401,6 +401,53 @@ class TestGaussianQMMMJobSettings:
         )
         assert s_plain.route_string == "# opt oniom(mn15/def2svp:PM6)"
 
+        # empty string and whitespace-only must not produce opt=() or opt=(  )
+        for blank in ("", "   ", "\t"):
+            s_blank = GaussianQMMMJobSettings(
+                high_level_functional="mn15",
+                high_level_basis="def2svp",
+                low_level_force_field="PM6",
+                charge_total=0,
+                mult_total=1,
+                high_level_atoms=[1, 2, 3],
+                parent_jobtype="opt",
+                additional_opt_options_in_route=blank,
+            )
+            assert s_blank.route_string == "# opt oniom(mn15/def2svp:PM6)", (
+                f"blank opt option {blank!r} should produce plain 'opt', "
+                f"got: {s_blank.route_string}"
+            )
+
+        # same guard for ts parent
+        s_ts_blank = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            additional_opt_options_in_route="  ",
+        )
+        assert s_ts_blank.route_string == (
+            "# opt=(ts,calcfc,noeigentest) oniom(mn15/def2svp:UFF)"
+        ), "whitespace-only opt option for ts should fall back to plain ts keyword"
+
+        # same guard for modred parent
+        s_modred_blank = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="modred",
+            additional_opt_options_in_route="",
+        )
+        assert s_modred_blank.route_string == (
+            "# opt=modredundant oniom(b3lyp/6-31g(d):UFF)"
+        ), "empty opt option for modred should fall back to plain opt=modredundant"
+
     def test_qmmm_settings_for_atoms(
         self,
         gaussian_inputs_test_directory,
