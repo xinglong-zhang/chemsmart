@@ -392,7 +392,6 @@ YAML Configuration Files
 
 Create project-specific ONIOM settings in YAML format.
 
-
 **Basic 2-Layer QM/MM** (``~/.chemsmart/gaussian/qmmm.yaml``):
 
 .. code:: yaml
