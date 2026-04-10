@@ -51,10 +51,6 @@ Job Type and Theory Levels
       -  Type
       -  Description
 
-   -  -  ``-j, --jobtype``
-      -  Choice
-      -  ONIOM job type: sp, opt, freq, ts, irc
-
    -  -  ``-hx, --high-level-functional``
       -  string
       -  DFT functional for high layer (e.g., B3LYP, M06-2X, wB97X-D)
@@ -63,9 +59,9 @@ Job Type and Theory Levels
       -  string
       -  Basis set for high layer (e.g., 6-31G*, def2-TZVP, cc-pVTZ)
 
-   -  -  ``-hf, --high-level-force-field``
+   -  -  ``-hff, --high-level-force-field``
       -  string
-      -  Force field for high layer (if MM, rare)
+      -  Force field for high layer (if MM, uncommon)
 
    -  -  ``-mx, --medium-level-functional``
       -  string
@@ -75,7 +71,7 @@ Job Type and Theory Levels
       -  string
       -  Basis set for medium layer
 
-   -  -  ``-mf, --medium-level-force-field``
+   -  -  ``-mff, --medium-level-force-field``
       -  string
       -  Force field for medium layer
 
@@ -87,7 +83,7 @@ Job Type and Theory Levels
       -  string
       -  Basis set for low layer (if QM, uncommon)
 
-   -  -  ``-lf, --low-level-force-field``
+   -  -  ``-lff, --low-level-force-field``
       -  string
       -  Force field for low layer (AMBER=HardFirst, UFF, DREIDING)
 
@@ -114,11 +110,11 @@ Atom Partitioning
       -  string
       -  Atom indices for low layer (usually auto-assigned)
 
-   -  -  ``-b, --bonded-atoms``
+   -  -  ``-ba, --bonded-atoms``
       -  string
       -  Bonds crossing layer boundaries: e.g., '(1,2),(5,6)'
 
-   -  -  ``-s, --scale-factors``
+   -  -  ``-sf, --scale-factors``
       -  dict
       -  Custom link atom scale factors: {(atom1,atom2): [low,med,high]}
 
@@ -133,27 +129,27 @@ Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``-cr, --real-charge``
+   -  -  ``-ct, --charge-total``
       -  int
       -  Charge of complete molecular system
 
-   -  -  ``-mr, --real-multiplicity``
+   -  -  ``-mt, --mult-total``
       -  int
       -  Spin multiplicity of complete system (2S+1)
 
-   -  -  ``-ci, --int-charge``
+   -  -  ``-ci, --charge-intermediate``
       -  int
       -  Charge of high+medium layers (3-layer only)
 
-   -  -  ``-mi, --int-multiplicity``
+   -  -  ``-mi, --mult-intermediate``
       -  int
       -  Multiplicity of high+medium layers
 
-   -  -  ``-cm, --model-charge``
+   -  -  ``-ch, --charge-high``
       -  int
       -  Charge of high layer only
 
-   -  -  ``-mm, --model-multiplicity``
+   -  -  ``-mh, --mult-high``
       -  int
       -  Multiplicity of high layer only
 
@@ -168,7 +164,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb qmmm -j opt -hx B3LYP -hb 6-31G* -lf AMBER=HardFirst -ha 1-25 -cr 0 -mr 1 -cm 0 -mm 1 -b "(25,26)"
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(25,26)"
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -177,7 +173,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz qmmm -j freq -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lf UFF -ha 1-10 -ma 11-50 -cr -1 -mr 2 -ci 0 -mi 1 -cm 0 -mm 1 -b "(10,11),(50,51)"
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba "(10,11),(50,51)"
 
 Transition State Search
 =======================
@@ -186,16 +182,18 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com qmmm -j ts -hx wB97X-D -hb 6-311++G(d,p) -lf AMBER=HardFirst -ha 1-30 -cr 0 -mr 1 -cm 0 -mm 1 -b "(30,31)" -s "{(30,31): [0.709, 0.709, 0.709]}"
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
 
 Frequency Analysis
 ==================
 
-Vibrational analysis of QM/MM optimized structure:
+Vibrational analysis of a QM/MM optimized structure. Enable frequencies via the project settings (``freq: true``) or by
+passing ``-r freq`` to add the keyword to the route. The ``opt qmmm`` parent command is used since there is no
+standalone ``freq`` parent command:
 
 .. code:: console
 
-   chemsmart sub gaussian -p freq_qmmm -f optimized.com qmmm -j freq -hx B3LYP -hb 6-31G* -lf AMBER=HardFirst -ha 1-20 -cr 0 -mr 1 -cm 0 -mm 1
+   chemsmart sub gaussian -p freq_qmmm -f optimized.com opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1
 
 Single Point Energy
 ===================
@@ -204,7 +202,7 @@ High-accuracy single point calculation on QM/MM geometry:
 
 .. code:: console
 
-   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz qmmm -j sp -hx CCSD(T) -hb aug-cc-pVDZ -lf AMBER=HardFirst -ha 1-15 -cr 0 -mr 1 -cm 0 -mm 1
+   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hx CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
 
 ***********************************
  GaussianQMMMJobSettings Reference
@@ -392,39 +390,45 @@ Gaussian supports multiple MM force fields:
 YAML Configuration Files
 ========================
 
-Create project-specific ONIOM settings in YAML format:
+Create project-specific ONIOM settings in YAML format.
+
+.. note::
+
+   When using the CLI (``chemsmart sub gaussian <jobtype> qmmm``), the ``parent_jobtype`` field is set automatically
+   from the parent command (e.g., ``opt``, ``ts``, ``sp``). Set it explicitly in YAML only when using the Python API
+   directly.
 
 **Basic 2-Layer QM/MM** (``~/.chemsmart/gaussian/qmmm.yaml``):
 
 .. code:: yaml
 
    # Basic enzyme active site calculation
-   jobtype: "opt"
+   parent_jobtype: "opt"
    high_level_functional: "B3LYP"
    high_level_basis: "6-31G*"
    low_level_force_field: "AMBER=HardFirst"
-   real_charge: 0
-   real_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
+   charge_total: 0
+   mult_total: 1
+   charge_high: 0
+   mult_high: 1
 
 **3-Layer ONIOM Configuration** (``~/.chemsmart/gaussian/oniom3.yaml``):
 
 .. code:: yaml
 
    # Advanced organometallic catalyst
-   jobtype: "freq"
+   parent_jobtype: "opt"
    high_level_functional: "M06-2X"
    high_level_basis: "def2-TZVP"
    medium_level_functional: "B3LYP"
    medium_level_basis: "6-31G*"
    low_level_force_field: "UFF"
-   real_charge: -1
-   real_multiplicity: 2
-   int_charge: 0
-   int_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
+   charge_total: -1
+   mult_total: 2
+   charge_intermediate: 0
+   mult_intermediate: 1
+   charge_high: 0
+   mult_high: 1
    bonded_atoms: [(10, 11), (50, 51)]
    scale_factors:
      (10, 11): [0.709, 0.709, 0.709]

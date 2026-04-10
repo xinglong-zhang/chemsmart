@@ -1,7 +1,7 @@
 import os.path
+from shutil import copyfile
 
 import numpy as np
-import pytest
 from ase import units
 
 from chemsmart.analysis.thermochemistry import (
@@ -14,7 +14,6 @@ from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
-from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.constants import (
     cal_to_joules,
     hartree_to_joules,
@@ -27,9 +26,11 @@ class TestThermochemistry:
         self, gaussian_singlet_opt_outfile
     ):
         """Values from Goodvices, as a reference:
-                 Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-           ********************************************************************************************************************************
-        o  nhc_neutral_singlet                      -1864.040180   0.284336  -1863.732135   0.079236   0.072784  -1863.811371  -1863.804919
+                 Structure E ZPE H T.S
+                 T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o nhc_neutral_singlet -1864.040180 0.284336
+        -1863.732135 0.079236 0.072784 -1863.811371 -1863.804919
         """
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
@@ -69,13 +70,16 @@ class TestThermochemistry:
             mol_as_ase_atoms_moi_principal_axes,
         )
 
-        # test moments of inertia from molecular structure and from Gaussian output
-        # can't get moments of inertia from Gaussian output due to printing *****
+        # test moments of inertia from molecular
+        # structure and from Gaussian output
+        # can't get moments of inertia from
+        # Gaussian output due to printing *****
         assert np.allclose(
             g16_output.moments_of_inertia, np.array([np.inf, np.inf, np.inf])
         )
 
-        # test moments of inertia principal axes from molecular structure and from Gaussian output
+        # test moments of inertia principal axes from
+        # molecular structure and from Gaussian output
         assert np.allclose(
             mol.moments_of_inertia_principal_axes,
             g16_output.moments_of_inertia_principal_axes,
@@ -87,7 +91,8 @@ class TestThermochemistry:
             [0.99974, -0.02291, 0.00147],
         )
 
-        # test rotational temperatures from molecule (direct calc) same as from Gaussian output
+        # test rotational temperatures from molecule
+        # (direct calc) same as from Gaussian output
         assert np.allclose(
             mol.rotational_temperatures,
             g16_output.rotational_temperatures,
@@ -101,7 +106,8 @@ class TestThermochemistry:
         assert np.isclose(g16_output.energies[-1], expected_E, rtol=10e-6)
 
         expected_ZPE = 0.284336  # in Hartree, from Gaussian output:
-        # Zero-point correction=                           0.284336 (Hartree/Particle)
+        # Zero-point correction=
+        # 0.284336 (Hartree/Particle)
         assert np.isclose(
             g16_output.zero_point_energy, expected_ZPE, rtol=10e-6
         )
@@ -190,20 +196,17 @@ class TestThermochemistry:
             expected_translational_partition_function2,
         )
 
-    @pytest.mark.skipif(
-        not is_pubchem_network_available(),
-        reason="Network to pubchem is unavailable",
-    )
     def test_thermochemistry_co2(
         self,
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_scratch,
+        orca_co2_output,
     ):
         # set scratch
         gaussian_jobrunner_scratch.scratch_dir = tmpdir
 
-        mol = Molecule.from_pubchem("280")
+        mol = Molecule.from_filepath(orca_co2_output)
         tmp_path = os.path.join(tmpdir, "CO2.com")
 
         os.chdir(tmpdir)
@@ -248,7 +251,8 @@ class TestThermochemistry:
 
 
 class TestThermochemistryCO2:
-    """CO2 is used as an example to test the thermochemical properties of linear molecules."""
+    """CO2 is used as an example to test the
+    thermochemical properties of linear molecules."""
 
     def test_thermochemistry_co2_gaussian_output(
         self, gaussian_co2_opt_outfile
@@ -296,7 +300,8 @@ class TestThermochemistryCO2:
             mol.moments_of_inertia_principal_axes,
             mol_as_ase_atoms_moi_principal_axes,
         )
-        # test moments of inertia from molecular structure and from gaussian output
+        # test moments of inertia from molecular
+        # structure and from gaussian output
         assert np.allclose(
             mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
         )
@@ -305,7 +310,8 @@ class TestThermochemistryCO2:
             g16_output.moments_of_inertia_principal_axes[0],
         )
 
-        # components X and Y are swapped but they are physically the same (same moment of inertia values)
+        # components X and Y are swapped but they are
+        # physically the same (same moment of inertia values)
         assert np.allclose(
             mol.moments_of_inertia_principal_axes[1],
             g16_output.moments_of_inertia_principal_axes[2],
@@ -524,7 +530,8 @@ class TestThermochemistryCO2:
             expected_vibrational_partition_function_bot,
         )
 
-        # For the zero reference point is the first vibrational energy level (V=0)
+        # For the zero reference point is the
+        # first vibrational energy level (V=0)
         # q_v,K = 1 / (1 - exp(-Θ_v,K / T))
         # we got [1.04454961, 1.04454961, 1.00122874, 1.00000657]
         expected_vibrational_partition_function_by_mode_v0 = 1 / (
@@ -543,7 +550,8 @@ class TestThermochemistryCO2:
             expected_vibrational_partition_function_v0,
         )
 
-        # S_v = R * Σ((Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T)))
+        # S_v = R * Σ((Θ_v,K / T) / (exp(Θ_v,K
+        # / T) - 1) - ln(1 - exp(-Θ_v,K / T)))
         # we got 3.1412492303422708 J mol^-1 K^-1
         expected_vibrational_entropy = 8.314462145468951 * np.sum(
             (expected_theta / 298.15) / (np.exp(expected_theta / 298.15) - 1)
@@ -565,7 +573,8 @@ class TestThermochemistryCO2:
             expected_vibrational_internal_energy,
         )
 
-        # C_v = R * Σ(exp(-Θ_v,K / T) * ((Θ_v,K / T) / (exp(-Θ_v,K / T) - 1))^2)
+        # C_v = R * Σ(exp(-Θ_v,K / T) * ((Θ_v,K
+        # / T) / (exp(-Θ_v,K / T) - 1))^2)
         # we got 8.16865700927472 J mol^-1 K^-1
         expected_vibrational_heat_capacity = 8.314462145468951 * np.sum(
             np.exp(-expected_theta / 298.15)
@@ -796,11 +805,14 @@ class TestThermochemistryCO2:
 
     def test_thermochemistry_co2_qrrho(self, gaussian_co2_opt_outfile):
         """Values from Goodvibes, as a reference:
-                goodvibes -f 100 -c 1.0 -t 298.15 --qs grimme --bav "conf" co2.log
-        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-           ********************************************************************************************************************************
-        o  co2                                       -188.444680   0.011776   -188.429325   0.021262   0.021262   -188.450587   -188.450588
-           ********************************************************************************************************************************
+                goodvibes -f 100 -c 1.0 -t 298.15
+                --qs grimme --bav "conf" co2.log
+        Structure E ZPE H T.S
+        T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o co2 -188.444680 0.011776 -188.429325
+        0.021262 0.021262 -188.450587 -188.450588
+           ********************************************************************
         """
         assert os.path.exists(gaussian_co2_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
@@ -852,7 +864,8 @@ class TestThermochemistryCO2:
         expected_mu_prime = (
             expected_mu * expected_bav / (expected_mu + expected_bav)
         )
-        # we got S_R,K = [4.13984132, 4.13984132, 1.00676497, -1.39084927] in J mol^-1 K^-1
+        # we got S_R,K = [4.13984132, 4.13984132,
+        # 1.00676497, -1.39084927] in J mol^-1 K^-1
         expected_free_rotor_entropy = 8.314462145468951 * (
             1 / 2
             + np.log(
@@ -873,7 +886,8 @@ class TestThermochemistryCO2:
             expected_free_rotor_entropy,
         )
 
-        # S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
+        # S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K
+        # / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
         # Θ_v,K = h * v_K / k_B
         expected_theta = (
             6.62606957
@@ -883,7 +897,8 @@ class TestThermochemistryCO2:
             * 1e10
             / (1.3806488 * 1e-23)
         )
-        # we got [1.53092635e+00, 1.53092635e+00, 7.86899024e-02, 7.06622985e-04] in J mol^-1 K^-1
+        # we got [1.53092635e+00, 1.53092635e+00,
+        # 7.86899024e-02, 7.06622985e-04] in J mol^-1 K^-1
         expected_rrho_entropy = 8.314462145468951 * (
             (expected_theta / 298.15) / (np.exp(expected_theta / 298.15) - 1)
             - np.log(1 - np.exp(-expected_theta / 298.15))
@@ -927,7 +942,8 @@ class TestThermochemistryCO2:
             np.log(expected_translational_partition_function) + 1 + 3 / 2
         )
         # S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
-        # we got 129.3547287392227 + 54.73729016622342 + 3.144125621155244 + 0 = 187.23614452660138 J mol^-1 K^-1
+        # we got 129.3547287392227 + 54.73729016622342 +
+        # 3.144125621155244 + 0 = 187.23614452660138 J mol^-1 K^-1
         expected_rotational_entropy = 8.314462145468951 * (
             np.log(
                 1
@@ -983,7 +999,8 @@ class TestThermochemistryCO2:
         )
 
         # E_tot = E_t + E_r + E_v + E_e
-        # we got 3718.4353330073513 + 2478.956888671568 + 31636.50928586775 + 0 = 37833.90150754667 J mol^-1
+        # we got 3718.4353330073513 + 2478.956888671568 +
+        # 31636.50928586775 + 0 = 37833.90150754667 J mol^-1
         expected_translational_internal_energy = (
             3 / 2 * 8.314462145468951 * 298.15
         )
@@ -1072,10 +1089,12 @@ class TestThermochemistryCO2:
 
         """Values from Goodvibes, as a reference:
                 goodvibes -f 100 -c 1.0 -t 298.15 -q --bav "conf" co2.log
-           Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
-           **********************************************************************************************************************************************
-        o  co2                                       -188.444680   0.011776   -188.429325   -188.429327   0.021262   0.021262   -188.450587   -188.450589
-           **********************************************************************************************************************************************
+           Structure E ZPE H qh-H
+           T.S T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o co2 -188.444680 0.011776 -188.429325 -188.429327
+        0.021262 0.021262 -188.450587 -188.450589
+           ********************************************************************
         """
         # quasi-rrho correction is turned for both entropy and enthalpy,
         # with default cutoff frequencies of 100 cm^-1
@@ -1088,7 +1107,8 @@ class TestThermochemistryCO2:
         )
 
         # E^rrho_v,K = R * Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1))
-        # we got [4258.62774713, 4258.62774713, 8328.63418484, 14790.61960677] in J mol^-1
+        # we got [4258.62774713, 4258.62774713,
+        # 8328.63418484, 14790.61960677] in J mol^-1
         expected_rrho_internal_energy = (
             8.314462145468951
             * expected_theta
@@ -1115,7 +1135,8 @@ class TestThermochemistryCO2:
         )
 
         # E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
-        # we got 3718.4353330073513 + 2478.956888671568 + 31632.978467909088 + 0 = 37830.37068958801 J mol^-1
+        # we got 3718.4353330073513 + 2478.956888671568 +
+        # 31632.978467909088 + 0 = 37830.37068958801 J mol^-1
         expected_qrrho_total_internal_energy = (
             expected_translational_internal_energy
             + expected_rotational_internal_energy
@@ -1172,10 +1193,12 @@ class TestThermochemistryCO2:
 
         """Values from Goodvibes, as a reference:
                 goodvibes -f 100 -t 298.15 -q --bav "conf" co2.log
-        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
-           **********************************************************************************************************************************************
-        o  co2                                       -188.444680   0.011776   -188.429325   -188.429327   0.024281   0.024281   -188.453606   -188.453608
-           **********************************************************************************************************************************************
+        Structure E ZPE H qh-H
+        T.S T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o co2 -188.444680 0.011776 -188.429325 -188.429327
+        0.024281 0.024281 -188.453606 -188.453608
+           ********************************************************************
         """
         qrrho_thermochem_co2_1_gas = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
@@ -1186,7 +1209,8 @@ class TestThermochemistryCO2:
             s_freq_cutoff=100,
             entropy_method="grimme",
         )
-        # In Goodvibes, if no concentration is specified, the default pressure is 1 atmosphere.
+        # In Goodvibes, if no concentration is specified,
+        # the default pressure is 1 atmosphere.
         assert np.isclose(
             qrrho_thermochem_co2_1_gas.entropy_times_temperature
             / (hartree_to_joules * units._Nav),
@@ -1195,7 +1219,8 @@ class TestThermochemistryCO2:
         )
 
         # S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
-        # we got 155.93822974452405 + 54.73729016622342 + 3.144125621155244 + 0 = 213.81964553190272 J mol^-1 K^-1
+        # we got 155.93822974452405 + 54.73729016622342 +
+        # 3.144125621155244 + 0 = 213.81964553190272 J mol^-1 K^-1
         expected_translational_entropy = 8.314462145468951 * (
             np.log(
                 (
@@ -1256,11 +1281,14 @@ class TestThermochemistryCO2:
         )
 
         """Values from Goodvibes, as a reference:
-                goodvibes -f 100 -c 0.5 -t 598.15 --qs grimme --bav "conf" co2.log
-        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-           ********************************************************************************************************************************
-        o  co2                                       -188.444680   0.011776   -188.424452   0.049327   0.049327   -188.473778   -188.473779
-           ********************************************************************************************************************************
+                goodvibes -f 100 -c 0.5 -t 598.15
+                --qs grimme --bav "conf" co2.log
+        Structure E ZPE H T.S
+        T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o co2 -188.444680 0.011776 -188.424452
+        0.049327 0.049327 -188.473778 -188.473779
+           ********************************************************************
         """
         qrrho_thermochem_co2_2 = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
@@ -1315,10 +1343,12 @@ class TestThermochemistryCO2:
 
         """Values from Goodvibes, as a reference:
                 goodvibes -f 1000 -c 1.0 -t 298.15 -q --bav "conf" co2.log
-        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
-           **********************************************************************************************************************************************
-        o  co2                                       -188.444680   0.011776   -188.429325   -188.431976   0.021262   0.021781   -188.450587   -188.453757
-           **********************************************************************************************************************************************
+        Structure E ZPE H qh-H
+        T.S T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o co2 -188.444680 0.011776 -188.429325 -188.431976
+        0.021262 0.021781 -188.450587 -188.453757
+           ********************************************************************
         """
         qrrho_thermochem_co2_3 = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
@@ -1328,7 +1358,8 @@ class TestThermochemistryCO2:
             entropy_method="grimme",
             h_freq_cutoff=1000,
         )
-        # the cutoff frequency for both entropy and enthalpy is specified as 1000 cm^-1
+        # the cutoff frequency for both entropy
+        # and enthalpy is specified as 1000 cm^-1
         # we got [0.15444091, 0.15444091, 0.78825007, 0.97395018]
         expected_damping_function = 1 / (
             1 + (1000 / vibrational_frequencies) ** 4
@@ -1391,7 +1422,8 @@ class TestThermochemistryCO2:
 
 
 class TestThermochemistryHe:
-    """He is used as an example to test the thermochemical properties of monoatomic molecules."""
+    """He is used as an example to test the
+    thermochemical properties of monoatomic molecules."""
 
     def test_thermochemistry_he_gaussian_output(self, gaussian_he_opt_outfile):
         """Values from Gaussian output
@@ -1440,7 +1472,8 @@ class TestThermochemistryHe:
         Vib (V=0)       0.100000D+01          0.000000          0.000000
         Electronic      0.100000D+01          0.000000          0.000000
         Translational   0.314751D+06          5.497968         12.659538
-        Rotational      0.100000D+01          0.000000          0.000000        
+        Rotational 0.100000D+01
+        0.000000 0.000000
         """
         assert np.isclose(
             thermochem2.translational_partition_function, 0.314751e06
@@ -1590,10 +1623,12 @@ class TestThermochemistryHe:
     def test_thermochemistry_he_qrrho(self, gaussian_he_opt_outfile):
         """Values from Goodvibes, as a reference:
                 goodvibes -f 1000 -c 0.5 -t 598.15 -q --bav "conf" he.log
-        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
-           **********************************************************************************************************************************************
-        o  He                                          -2.915130   0.000000     -2.910394     -2.910394   0.025951   0.025951     -2.936345     -2.936345
-           **********************************************************************************************************************************************
+        Structure E ZPE H qh-H
+        T.S T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o He -2.915130 0.000000 -2.910394 -2.910394
+        0.025951 0.025951 -2.936345 -2.936345
+           ********************************************************************
         """
         assert os.path.exists(gaussian_he_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_he_opt_outfile)
@@ -1657,7 +1692,8 @@ class TestThermochemistryHe:
 
 
 class TestThermochemistryH2O:
-    """Water is used as an example to test the thermochemical properties of non-linear polyatomic molecules."""
+    """Water is used as an example to test the thermochemical
+    properties of non-linear polyatomic molecules."""
 
     def test_thermochemistry_water_gaussian_output(
         self, gaussian_mp2_outputfile
@@ -1891,11 +1927,14 @@ class TestThermochemistryH2O:
 
     def test_thermochemistry_water_qrrho(self, gaussian_mp2_outputfile):
         """Values from Goodvibes, as a reference:
-                goodvibes -f 500 -c 2.0 -t 1298.15 -q --bav "conf" water_mp2.log
-        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
-           **********************************************************************************************************************************************
-        o  water_mp2                                  -76.328992   0.021410    -76.289193    -76.289224   0.098212   0.098221    -76.387404    -76.387445
-           **********************************************************************************************************************************************
+                goodvibes -f 500 -c 2.0 -t 1298.15
+                -q --bav "conf" water_mp2.log
+        Structure E ZPE H qh-H
+        T.S T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o water_mp2 -76.328992 0.021410 -76.289193
+        -76.289224 0.098212 0.098221 -76.387404 -76.387445
+           ********************************************************************
         """
         assert os.path.exists(gaussian_mp2_outputfile)
         g16_output = Gaussian16Output(filename=gaussian_mp2_outputfile)
@@ -2154,11 +2193,14 @@ class TestThermochemistryEntropyMethod:
 
     def test_thermochemistry_grimme_method(self, gaussian_singlet_opt_outfile):
         """Values from Goodvibes, as a reference:
-                goodvibes --fs 500 -t 298.15 --qs grimme --bav "conf" nhc_neutral_singlet.log
-        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-           ********************************************************************************************************************************
-        o  nhc_neutral_singlet                      -1864.040180   0.284336  -1863.732135   0.082255   0.078764  -1863.814390  -1863.810899
-           ********************************************************************************************************************************
+                goodvibes --fs 500 -t 298.15 --qs grimme
+                --bav "conf" nhc_neutral_singlet.log
+        Structure E ZPE H T.S
+        T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o nhc_neutral_singlet -1864.040180 0.284336
+        -1863.732135 0.082255 0.078764 -1863.814390 -1863.810899
+           ********************************************************************
         """
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
@@ -2277,11 +2319,14 @@ class TestThermochemistryEntropyMethod:
         self, gaussian_singlet_opt_outfile
     ):
         """Values from Goodvibes, as a reference:
-                goodvibes --fs 500 -t 298.15 --qs truhlar --bav "conf" nhc_neutral_singlet.log
-        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-           ********************************************************************************************************************************
-        o  nhc_neutral_singlet                      -1864.040180   0.284336  -1863.732135   0.082255   0.052926  -1863.814390  -1863.785062
-           ********************************************************************************************************************************
+                goodvibes --fs 500 -t 298.15 --qs truhlar
+                --bav "conf" nhc_neutral_singlet.log
+        Structure E ZPE H T.S
+        T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o nhc_neutral_singlet -1864.040180 0.284336
+        -1863.732135 0.082255 0.052926 -1863.814390 -1863.785062
+           ********************************************************************
         """
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
@@ -2416,7 +2461,8 @@ class TestBoltzmannWeightedAverage:
         )
 
         # partition function Z = b1 + b2
-        # where boltzmann factors: b_1 = exp(-deltaE1 * beta), b_2 = exp(-deltaE2 * beta)
+        # where boltzmann factors: b_1 = exp(-deltaE1
+        # * beta), b_2 = exp(-deltaE2 * beta)
         # beta = 1 / (R * T)
         # T = 298.15 K, R = 8.314462145468951 J mol^-1 K^-1
         expected_beta = 1 / (8.314462145468951 * 298.15)
@@ -2477,12 +2523,16 @@ class TestBoltzmannWeightedAverage:
             h_freq_cutoff=1000,
         )
         """Values from Goodvibes, as a reference:
-                goodvibes -f 1000 -c 0.5 -t 598.15 -q --bav "conf" udc3_mCF3_monomer_c1.log udc3_mCF3_monomer_c4.log
-        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
-           **********************************************************************************************************************************************
-        o  udc3_mCF3_monomer_c1                     -2189.631874   0.288636  -2189.241594  -2189.344286   0.285181   0.267978  -2189.526775  -2189.612264
-        o  udc3_mCF3_monomer_c4                     -2189.631995   0.288817  -2189.241650  -2189.344328   0.283751   0.267251  -2189.525401  -2189.611579
-           **********************************************************************************************************************************************
+                goodvibes -f 1000 -c 0.5 -t 598.15 -q --bav "conf"
+                udc3_mCF3_monomer_c1.log udc3_mCF3_monomer_c4.log
+        Structure E ZPE H qh-H
+        T.S T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o udc3_mCF3_monomer_c1 -2189.631874 0.288636 -2189.241594
+        -2189.344286 0.285181 0.267978 -2189.526775 -2189.612264
+        o udc3_mCF3_monomer_c4 -2189.631995 0.288817 -2189.241650
+        -2189.344328 0.283751 0.267251 -2189.525401 -2189.611579
+           ********************************************************************
         """
         assert np.isclose(
             thermochem_conformer1.electronic_energy * joule_per_mol_to_hartree,
@@ -2756,12 +2806,16 @@ class TestBoltzmannWeightedAverage:
             entropy_method="grimme",
         )
         """Values from Goodvibes, as a reference:
-                goodvibes --fs 100 -c 1.0 -t 298.15 --qs grimme --bav "conf" udc3_mCF3_monomer_c1.log udc3_mCF3_monomer_c4.log
-        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-           ********************************************************************************************************************************
-        o  udc3_mCF3_monomer_c1                     -2189.631874   0.288636  -2189.312505   0.094364   0.085837  -2189.406868  -2189.398342
-        o  udc3_mCF3_monomer_c4                     -2189.631995   0.288817  -2189.312528   0.093674   0.085518  -2189.406202  -2189.398046
-           ********************************************************************************************************************************
+                goodvibes --fs 100 -c 1.0 -t 298.15 --qs grimme --bav
+                "conf" udc3_mCF3_monomer_c1.log udc3_mCF3_monomer_c4.log
+        Structure E ZPE H T.S
+        T.qh-S G(T) qh-G(T)
+           ********************************************************************
+        o udc3_mCF3_monomer_c1 -2189.631874 0.288636
+        -2189.312505 0.094364 0.085837 -2189.406868 -2189.398342
+        o udc3_mCF3_monomer_c4 -2189.631995 0.288817
+        -2189.312528 0.093674 0.085518 -2189.406202 -2189.398046
+           ********************************************************************
         """
         assert np.isclose(
             thermochem2_conformer1.electronic_energy
@@ -3020,9 +3074,12 @@ class TestThermochemistryBatchMode:
         structures are written to the same output file.
 
         Verifies the following behavior:
-        - First CLI call (T=298.15K): Processes 2 files (singlet + triplet) with header written once
-        - Second CLI call (T=398.15K): Processes 1 file (singlet) with new header for different temperature
-        - Third CLI call (T=198.15K): Processes 1 file (quintet) with overwrite enabled, replacing all previous content
+        - First CLI call (T=298.15K): Processes 2 files
+        (singlet + triplet) with header written once
+        - Second CLI call (T=398.15K): Processes 1 file
+        (singlet) with new header for different temperature
+        - Third CLI call (T=198.15K): Processes 1 file (quintet)
+        with overwrite enabled, replacing all previous content
         """
         # Create a temporary output file path
         output_file = os.path.join(tmpdir, "batch_thermochemistry.dat")
@@ -3092,7 +3149,8 @@ class TestThermochemistryBatchMode:
         assert f"{gibbs_free_energy1:.6f}" in data_lines1[0]
 
         # Create settings for the second job with write_header=False
-        # This simulates the batch mode where header should NOT be written again
+        # This simulates the batch mode where
+        # header should NOT be written again
         settings2 = ThermochemistryJobSettings(
             temperature=298.15,
             outputfile=output_file,
@@ -3300,3 +3358,155 @@ class TestThermochemistryBatchMode:
 
         # Verify that the data line contains correct values (structure4)
         assert f"{gibbs_free_energy4:.6f}" in data_lines4[0]
+
+
+class TestThermochemistryCLI:
+    """CLI option-propagation tests for the thermochemistry command."""
+
+    def test_weighted_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--weighted"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.use_weighted_mass is True
+
+    def test_no_weighted_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--no-weighted"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.use_weighted_mass is False
+
+
+class TestThermochemistryCLIFolderOptions:
+    """Folder options are wired correctly into the ``thermochemistry`` CLI."""
+
+    def test_directory_with_program_accepted(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir -p gaussian -T 298.15`` is accepted without error."""
+        result, mock_from_filename = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "gaussian",
+                "-T",
+                "298.15",
+            ]
+        )
+        # Add your assertions here
+        assert result.exit_code == 0, result.output
+
+    def test_directory_with_filetype_accepted(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir -t log -T 298.15`` is accepted without error."""
+        result, mock_from_filename = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-t",
+                "log",
+                "-T",
+                "298.15",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_directory_without_program_or_filetype_raises(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir`` alone (no ``-p`` / ``-t``) is rejected."""
+        result, _ = run_thermochemistry_with_directory(
+            ["-d", str(tmp_path), "-T", "298.15"],
+        )
+        assert result.exit_code != 0 or isinstance(
+            result.exception, (ValueError, SystemExit)
+        )
+        error_text = f"{result.exception}\n{result.output}".lower()
+        assert (
+            "program" in error_text
+            or "filetype" in error_text
+            or "-p" in error_text
+            or "-t" in error_text
+        )
+
+    def test_directory_and_filenames_mutually_exclusive(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """Providing both ``-d`` and ``-f`` raises a ``ValueError``."""
+        result, _ = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-f",
+                "dummy.log",
+                "-p",
+                "gaussian",
+                "-T",
+                "298.15",
+            ],
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "Cannot specify both" in str(result.exception)
+
+    def test_directory_with_unsupported_program_raises(
+        self, tmp_path, run_thermochemistry_with_directory
+    ):
+        """``-d dir -p unsupported_prog`` raises a ``ValueError``."""
+        result, _ = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "unsupported_prog",
+                "-T",
+                "298.15",
+            ],
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "Unsupported program" in str(result.exception)
+
+    def test_directory_with_program_calls_from_filename_for_each_file(
+        self,
+        tmp_path,
+        run_thermochemistry_with_directory,
+        gaussian_co2_opt_outfile,
+        gaussian_ozone_opt_outfile,
+    ):
+        """Each discovered file triggers a ``ThermochemistryJob.from_filename`` call."""
+        # copy two gaussian log files to tmp_path so we have 2 discovered files
+        mock_files = []
+        for i, file in enumerate(
+            [gaussian_co2_opt_outfile, gaussian_ozone_opt_outfile]
+        ):
+            tmp_filepath = os.path.join(str(tmp_path), f"file{i}.log")
+            copyfile(file, tmp_filepath)
+            mock_files.append(tmp_filepath)
+
+        result, mock_from_filename = run_thermochemistry_with_directory(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "gaussian",
+                "-T",
+                "298.15",
+            ],
+            mock_files=mock_files,
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_from_filename.call_count == 2

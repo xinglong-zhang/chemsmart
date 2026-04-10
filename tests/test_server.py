@@ -1,6 +1,6 @@
 import os
 
-from chemsmart.settings.executable import GaussianExecutable
+from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.server import Server
 
 
@@ -58,14 +58,21 @@ export g16root=~/programs/g16
 
 """
         assert gaussian_executable.envars == gassian_envars
-        print(gaussian_executable.executable_folder)
 
-        # server_yaml = YAMLFile(filename=server_yaml_file)
-        # assert len(server_yaml.yaml_contents_dict) == 3
-        # assert server_yaml.yaml_contents_dict["SERVER"]["SCHEDULER"] == "pbs"
-        # assert len(server_yaml.yaml_contents_dict["SERVER"].keys()) == 12
-        # assert list(server_yaml.yaml_contents_dict.keys())[0] == "SERVER"
-        # assert list(server_yaml.yaml_contents_dict.keys())[1] == "GAUSSIAN"
-        # assert list(server_yaml.yaml_contents_dict.keys())[2] == "ORCA"
-        # assert server_yaml.yaml_contents_dict["GAUSSIAN"]["G16FOLDER"] == "~/programs/g16"
-        # assert server_yaml.yaml_contents_dict["ORCA"]["ORCAFOLDER"] == "~/programs/orca_6_0_0"
+    def test_orca_executable(self, server_yaml_file):
+        orca_executable = ORCAExecutable.from_servername(server_yaml_file)
+        assert orca_executable.executable_folder == os.path.expanduser(
+            "~/programs/orca_6_0_0"
+        )
+        assert orca_executable.local_run is False
+
+        assert orca_executable.conda_env is None
+
+        assert orca_executable.modules is None
+
+        assert orca_executable.scripts is None
+
+        orca_envars = """export PATH=~/programs/openmpi-4.1.6/build/bin:$PATH
+export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
+"""
+        assert orca_executable.envars == orca_envars

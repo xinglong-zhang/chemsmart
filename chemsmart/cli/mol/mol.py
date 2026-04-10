@@ -1,4 +1,5 @@
 import functools
+import glob
 import logging
 import os
 
@@ -10,10 +11,10 @@ from chemsmart.cli.job import (
     click_folder_options,
     click_pubchem_options,
 )
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import clean_label
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.io import clean_label, select_items_by_index
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,8 @@ def click_pymol_hybrid_visualization_options(f):
         multiple=True,
         type=str,
         help=(
-            "Indexes of atoms to select for a group. Repeatable for multiple groups, "
+            "Indexes of atoms to select for a group. "
+            "Repeatable for multiple groups, "
             "e.g., -G '1-5' -G '6,7,8'."
         ),
     )
@@ -339,13 +341,31 @@ def mol(
     index,
     directory,
     filetype,
+    program,
     pubchem,
+    **kwargs,
 ):
     """
-    CLI subcommand for running PyMOL visualization jobs using the chemsmart framework.
+    CLI subcommand for running PyMOL visualization
+    jobs using the chemsmart framework.
 
     Example usage:
-        chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
+        chemsmart run mol -f test.xyz visualize -c
+        [[413,409],[413,412],[413,505],[413,507]]
+
+    Also supports creating one PyMOL file from all files
+        belonging to a filetype in a directory:
+        chemsmart run mol -d directory -t log visualize -c
+        [[413,409],[413,412],[413,505],[413,507]]
+    This creates a PyMOL file visualizing the last structure
+        of all .log files in the specified directory.
+
+    Also supports creating one PyMOL file from all output files
+        belonging to a program in a directory:
+        chemsmart run mol -d directory -p gaussian visualize -c
+        [[413,409],[413,412],[413,505],[413,507]]
+    This creates a PyMOL file visualizing the last structure
+        of all Gaussian output files in the specified directory.
     """
     # Ensure ctx.obj is a dict and initialize molecules variable
     ctx.ensure_object(dict)
@@ -353,13 +373,49 @@ def mol(
     ctx.obj.setdefault("qmmm", False)
     molecules = None
 
+    # Normalize empty tuple to None (click's
+    # multiple=True returns () when no -f provided)
+    if not filenames:
+        filenames = None
+
     # obtain molecule structure
     if directory is not None and filetype is not None:
         ctx.obj["directory"] = directory
         ctx.obj["filetype"] = filetype
+        filenames = glob.glob(f"{directory}/*.{filetype}")
         ctx.obj["index"] = index
-        ctx.obj["filenames"] = None
-        ctx.obj["molecules"] = None
+        ctx.obj["filenames"] = filenames
+        mols = []
+        for filename in filenames:
+            mols.append(Molecule.from_filepath(filename))
+        ctx.obj["molecules"] = mols
+        if label is None:
+            label = (
+                f"all_{filetype}_files_in_"
+                f"{os.path.basename(os.path.abspath(directory))}"
+            )
+        ctx.obj["label"] = label
+        ctx.obj["qmmm"] = False
+        return
+
+    if directory is not None and program is not None:
+        ctx.obj["directory"] = directory
+        ctx.obj["program"] = program.lower()
+        ctx.obj["index"] = index
+        folder = BaseFolder(directory)
+        filenames = folder.get_all_output_files_in_current_folder_by_program(
+            program
+        )
+        ctx.obj["filenames"] = filenames
+        mols = []
+        for filename in filenames:
+            mols.append(Molecule.from_filepath(filename))
+        ctx.obj["molecules"] = mols
+        if label is None:
+            label = (
+                f"all_output_files_from_{program}_in_"
+                f"{os.path.basename(os.path.abspath(directory))}"
+            )
         ctx.obj["label"] = label
         ctx.obj["qmmm"] = False
         return
@@ -374,21 +430,17 @@ def mol(
     # if both filename and pubchem are specified, raise error
     if filenames and pubchem:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+            "Both [filename] and [pubchem] have been specified!\n"
+            "Please specify only one of them."
         )
 
     # if filename is specified, read the file and obtain molecule
     if filenames:
-        if len(filenames) == 1:
-            filenames = filenames[0]
-            molecules = Molecule.from_filepath(
-                filepath=filenames, index=":", return_list=True
-            )
-            assert (
-                molecules is not None
-            ), f"Could not obtain molecule from {filenames}!"
-            logger.debug(f"Obtained molecule {molecules} from {filenames}")
-        else:
+        # Check if this is an align task by looking
+        # for " align" in invokded subcommand
+        is_align_task = ctx.invoked_subcommand == "align"
+
+        if is_align_task:
             # Multiple filenames - pass to align command
             ctx.obj["filenames"] = filenames
             ctx.obj["index"] = index
@@ -398,6 +450,21 @@ def mol(
             ctx.obj["label"] = label
             ctx.obj["qmmm"] = False
             return
+        else:
+            if len(filenames) == 1:
+                filenames = filenames[0]
+                molecules = Molecule.from_filepath(
+                    filepath=filenames, index=":", return_list=True
+                )
+                assert (
+                    molecules is not None
+                ), f"Could not obtain molecule from {filenames}!"
+                logger.debug(f"Obtained molecule {molecules} from {filenames}")
+            else:
+                raise ValueError(
+                    f"This task can only process one file, "
+                    f"but {len(filenames)} files were provided. "
+                )
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
@@ -429,22 +496,14 @@ def mol(
     # then return that structure as a list
     if index is not None:
         logger.debug(f"Using molecule with index: {index}")
-        try:
-            # try to get molecule using python style string indexing,
-            # but in 1-based
-            from chemsmart.utils.utils import string2index_1based
-
-            index = string2index_1based(index)
-            molecules = molecules[index]
-            if not isinstance(molecules, list):
-                molecules = [molecules]
-        except ValueError:
-            # except user defined indices such as s='[1-3,28-31,34-41]'
-            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
-            index = get_list_from_string_range(index)
-            molecules = [molecules[i - 1] for i in index]
+        molecules = select_items_by_index(
+            molecules,
+            index,
+            allow_duplicates=False,
+            allow_out_of_range=False,
+        )
     else:
-        molecules = molecules[-1]
+        molecules = [molecules[-1]]  # Default: last molecule as list
 
     logger.debug(f"Obtained molecules: {molecules}")
 
@@ -453,6 +512,10 @@ def mol(
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
+    ctx.obj["index"] = index
+    ctx.obj["directory"] = directory
+    ctx.obj["filetype"] = filetype
+    ctx.obj["filenames"] = filenames
     ctx.obj["qmmm"] = False
 
 
@@ -478,7 +541,9 @@ def mol_qmmm(
     index,
     directory,
     filetype,
+    program,
     pubchem,
+    **kwargs,
 ):
     """CLI group for working with QMMM-aware Molecules (QMMMMolecule).
 
@@ -495,9 +560,40 @@ def mol_qmmm(
     if directory is not None and filetype is not None:
         ctx.obj["directory"] = directory
         ctx.obj["filetype"] = filetype
+        filenames = glob.glob(f"{directory}/*.{filetype}")
         ctx.obj["index"] = index
-        ctx.obj["filenames"] = None
-        ctx.obj["molecules"] = None
+        ctx.obj["filenames"] = filenames
+        mols = []
+        for filename in filenames:
+            mols.append(QMMMMolecule.from_filepath(filename))
+        ctx.obj["molecules"] = mols
+        if label is None:
+            label = (
+                f"all_{filetype}_files_in_"
+                f"{os.path.basename(os.path.abspath(directory))}"
+            )
+        ctx.obj["label"] = label
+        ctx.obj["qmmm"] = True
+        return
+
+    if directory is not None and program is not None:
+        ctx.obj["directory"] = directory
+        ctx.obj["program"] = program
+        ctx.obj["index"] = index
+        folder = BaseFolder(directory)
+        filenames = folder.get_all_output_files_in_current_folder_by_program(
+            program
+        )
+        ctx.obj["filenames"] = filenames
+        mols = []
+        for filename in filenames:
+            mols.append(Molecule.from_filepath(filename))
+        ctx.obj["molecules"] = mols
+        if label is None:
+            label = (
+                f"all_output_files_from_{program}_in_"
+                f"{os.path.basename(os.path.abspath(directory))}"
+            )
         ctx.obj["label"] = label
         ctx.obj["qmmm"] = True
         return
@@ -510,7 +606,8 @@ def mol_qmmm(
         return
     if filenames and pubchem:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+            "Both [filename] and [pubchem] have been specified!\n"
+            "Please specify only one of them."
         )
 
     if filenames:
@@ -556,16 +653,14 @@ def mol_qmmm(
 
     if index is not None:
         logger.debug(f"Using molecule with index: {index}")
-        try:
-            from chemsmart.utils.utils import string2index_1based
-
-            index = string2index_1based(index)
-            molecules = molecules[index]
-            if not isinstance(molecules, list):
-                molecules = [molecules]
-        except ValueError:
-            index = get_list_from_string_range(index)
-            molecules = [molecules[i - 1] for i in index]
+        molecules = select_items_by_index(
+            molecules,
+            index,
+            allow_duplicates=False,
+            allow_out_of_range=False,
+        )
+    else:
+        molecules = [molecules[-1]]  # Default: last molecule as list
 
     logger.debug(f"Obtained molecules: {molecules}")
 

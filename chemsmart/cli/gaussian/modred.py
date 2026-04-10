@@ -8,7 +8,7 @@ from chemsmart.cli.gaussian.gaussian import (
 )
 
 # Import and register qmmm subcommand
-from chemsmart.cli.gaussian.qmmm_helper import create_qmmm_subcommand
+from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyGroup,
@@ -48,45 +48,74 @@ def modred(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 
+    # Merge gaussian-level CLI overrides (e.g. -c/--charge, -m/--multiplicity).
+    job_settings = ctx.obj["job_settings"]
+    keywords = ctx.obj["keywords"]
+    modred_settings = modred_settings.merge(job_settings, keywords=keywords)
+
     # job setting from filename or default, with updates from user in cli
     # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
-    job_settings = ctx.obj["job_settings"]
-    keywords = ctx.obj["keywords"]
 
     # merge project settings with job settings from cli keywords from
     # cli.gaussian.py subcommands
-    modred_settings = modred_settings.merge(job_settings, keywords=keywords)
-    check_charge_and_multiplicity(modred_settings)
-
-    # get molecule
-    molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-
-    # get label for the job
-    label = ctx.obj["label"]
-    logger.debug(f"Label for job: {label}")
-
-    logger.info(f"Modred settings from project: {modred_settings.__dict__}")
-
     # Store parent context for potential qmmm subcommand
     ctx.obj["parent_skip_completed"] = skip_completed
     ctx.obj["parent_freeze_atoms"] = None  # modred doesn't have freeze_atoms
     ctx.obj["parent_kwargs"] = kwargs
     ctx.obj["parent_settings"] = modred_settings
+    ctx.obj["modred"] = "modred"
+    ctx.obj["parent_jobtype"] = jobtype
 
-    # If no subcommand invoked, run regular modred
     if ctx.invoked_subcommand is None:
+        check_charge_and_multiplicity(modred_settings)
+
+        # get molecule
+        molecules = ctx.obj["molecules"]
+
+        # get label for the job
+        label = ctx.obj["label"]
+        logger.debug(f"Label for job: {label}")
+
+        logger.info(
+            f"Modred settings from project: {modred_settings.__dict__}"
+        )
+
+        # If no subcommand invoked, run regular modred
         from chemsmart.jobs.gaussian.modred import GaussianModredJob
 
-        return GaussianModredJob(
-            molecule=molecule,
-            settings=modred_settings,
-            label=label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
-        )
+        # Get the original molecule indices from context
+        molecule_indices = ctx.obj["molecule_indices"]
+
+        # Handle multiple molecules: create one job per molecule
+        if len(molecules) > 1 and molecule_indices is not None:
+            logger.info(f"Creating {len(molecules)} modred jobs")
+            jobs = []
+            for molecule, idx in zip(molecules, molecule_indices):
+                molecule_label = f"{label}_idx{idx}"
+                logger.info(
+                    f"Running modred for molecule {idx}: {molecule} with label {molecule_label}"
+                )
+
+                job = GaussianModredJob(
+                    molecule=molecule,
+                    settings=modred_settings,
+                    label=molecule_label,
+                    jobrunner=jobrunner,
+                    **kwargs,
+                )
+                jobs.append(job)
+            return jobs
+        else:
+            # Single molecule case
+            molecule = molecules[-1]
+            return GaussianModredJob(
+                molecule=molecule,
+                settings=modred_settings,
+                label=label,
+                jobrunner=jobrunner,
+                **kwargs,
+            )
 
 
 create_qmmm_subcommand(modred)

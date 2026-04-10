@@ -106,7 +106,8 @@ class ORCAQRCJob(ORCAJob):
     @property
     def qrcr_molecule(self):
         """
-        QRC reverse molecule with vibrational displacement at -ve given amplitude.
+        QRC reverse molecule with vibrational
+        displacement at -ve given amplitude.
         """
         return self.molecule.vibrationally_displaced(
             mode_idx=self.mode_idx,

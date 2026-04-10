@@ -169,7 +169,8 @@ class FileMixin:
 
     # -------------------------------------------------------------------------
     # Frontier orbital properties (common to Gaussian and ORCA output parsers)
-    # These depend on subclasses providing: multiplicity, alpha_occ_eigenvalues,
+    # These depend on subclasses providing:
+    # multiplicity, alpha_occ_eigenvalues,
     # beta_occ_eigenvalues, alpha_virtual_eigenvalues, beta_virtual_eigenvalues
     # -------------------------------------------------------------------------
 
@@ -359,7 +360,8 @@ class FileMixin:
 
     @cached_property
     def alpha_fmo_gap(self):
-        """Returns the frontier molecular orbital (FMO) gap for alpha-spin orbitals,
+        """Returns the frontier molecular orbital
+        (FMO) gap for alpha-spin orbitals,
         for open-shell systems.
         For closed-shell systems (multiplicity == 1), returns fmo_gap.
         Returns:
@@ -375,7 +377,8 @@ class FileMixin:
 
     @cached_property
     def beta_fmo_gap(self):
-        """Returns the frontier molecular orbital (FMO) gap for beta-spin orbitals,
+        """Returns the frontier molecular
+        orbital (FMO) gap for beta-spin orbitals,
         for open-shell systems.
         For closed-shell systems (multiplicity == 1), under restricted KS, beta
         orbitals are not printed, and this returns None.
@@ -575,7 +578,8 @@ class GaussianFileMixin(FileMixin):
         """
         modred = {}
         coords = []
-        # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
+        # modred = {'num_steps': 10, 'step_size':
+        # 0.05, 'coords': [[1, 2], [3, 4]]}
         for raw_line in modred_list_of_string:
             if "S" not in raw_line and "s" not in raw_line:
                 continue
@@ -594,7 +598,8 @@ class GaussianFileMixin(FileMixin):
             coords.append(each_modred_list)
             modred["coords"] = coords
 
-            # obtain num_steps and step_size (assumed the same for each scan coordinate)
+            # obtain num_steps and step_size (assumed
+            # the same for each scan coordinate)
             steps_string = line_elems[-1]
             steps_list = steps_string.split()
             num_steps = int(steps_list[0])
@@ -911,8 +916,10 @@ class ORCAFileMixin(FileMixin):
                 next_lines = self.contents[i + 1 :]
                 for next_line in next_lines:
                     if "cutoff" in next_line.lower():
-                        # Find the string prior to it. This is assuming the input is written by
-                        # this program where the comment on the cutoff is also written
+                        # Find the string prior to it. This
+                        # is assuming the input is written by
+                        # this program where the comment
+                        # on the cutoff is also written
                         l_elem = next_line.split()
                         c_idx = l_elem.index("cutoff")
                         return l_elem[c_idx - 1]
@@ -947,23 +954,23 @@ class ORCAFileMixin(FileMixin):
         """
         Determine solvent model type from ORCA input file.
 
-        Scans the "%cpcm" block to detect CPCM/SMD usage. Returns "smd" if a
-        "%cpcm" block is present and contains "smd true"; returns "cpcm" if a
-        "%cpcm" block is present without the SMD flag; returns None otherwise.
-        Note: the route line is not parsed for solvent specification here.
+        First checks the ``%cpcm`` block (old-style ORCA inputs with
+        ``SMD true``/``SMDsolvent``): returns ``"smd"`` if the block contains
+        ``smd true``, ``"cpcm"`` if the block exists without the SMD flag.
+
+        If no ``%cpcm`` block is found, falls back to checking the route line
+        for ORCA 6.0 style simple-input keywords: ``COSMORS``, ``CPCMC``,
+        ``SMD``, or ``CPCM`` (matched as whole words, case-insensitively).
 
         Returns:
-            str or None: "cpcm", "smd", or None if no solvent model found.
+            str or None: One of ``"cpcm"``, ``"cpcmc"``, ``"smd"``,
+            ``"cosmors"``, or ``None`` if no solvent model is found.
         """
         cpcm = False
         smd = False
 
         for i, line in enumerate(self.contents):
-            # not even needed to test the route string for solvent
-            # if '!' in line and 'cpcm' in line:
-            #    cpcm = True
-
-            # solvent specification not in the route string but in the %cpcm block (ORCA_Test_0829.inp)
+            # solvent specification in the %cpcm block (old-style ORCA)
             if "%cpcm" in line.lower():
                 cpcm = True
                 next_lines = self.contents[i + 1 :]
@@ -975,6 +982,23 @@ class ORCAFileMixin(FileMixin):
             if smd:
                 return "smd"
             return "cpcm"
+
+        # Fallback: detect ORCA 6.0 style keyword from the route line.
+        # Check in priority order (most specific first).
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        if re.search(r"\bcosmors\b", route_lower):
+            return "cosmors"
+        if re.search(r"\bcpcmc\b", route_lower):
+            return "cpcmc"
+        if re.search(r"\bsmd\b", route_lower):
+            return "smd"
+        if re.search(r"\bcpcm\b", route_lower):
+            return "cpcm"
         return None
 
     @property
@@ -982,35 +1006,43 @@ class ORCAFileMixin(FileMixin):
         """
         Extract solvent identifier from ORCA input file.
 
-        Searches for solvent specification in quoted strings and
-        validates that exactly one solvent is specified.
+        First searches for a solvent name in lines that contain a solvent
+        keyword (``solvent``, ``SMDsolvent``), explicitly excluding
+        ``solventfilename`` lines (which point to a file, not a solvent name).
+
+        If no match is found in the file body, falls back to extracting the
+        solvent name from the route line using ``MODEL(solvent)`` patterns
+        (e.g. ``COSMORS(water)``, ``SMD(cyclohexane)``).
 
         Returns:
             str or None: Solvent identifier or None if not found.
-
-        Raises:
-            Exception: If solvent not in quotes or multiple solvents found.
         """
-        pattern = re.compile(
-            r'"([^"]*)"'
-        )  # pattern to find text between double quotes
         for line in self.contents:
-            line_lower = line.lower()
-            if "solvent" in line_lower:
-                if not pattern.search(line_lower):
-                    raise Exception(
-                        "Your input file specifies solvent but solvent is not in quotes, "
-                        "thus, your input file is not valid to run for ORCA!"
-                    )
-
-                # Find all matches of the pattern in the line
-                matches = pattern.findall(line_lower)
+            if line.startswith("Solvent name"):
+                return line.split()[-1]
+        for line in self.contents:
+            if "solvent" in line.lower() and not re.search(
+                r"\bsolventfilename\b", line.lower()
+            ):
+                pattern = re.compile(r'"([^"]*)"')
+                matches = pattern.findall(line.lower())
                 if len(matches) == 1:
                     return matches[0]
-
                 raise Exception(
-                    f"{len(matches)} solvents found! Only can specify 1 solvent!"
+                    "Your input file specifies solvent but solvent is not in quotes, "
+                    "thus, your input file is not valid to run for ORCA!"
                 )
+
+        # Fallback: extract solvent from route-line pattern 'MODEL(solvent)'.
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        m = re.search(r"\b(?:cosmors|cpcmc|smd|cpcm)\(([^)]+)\)", route_lower)
+        if m:
+            return m.group(1)
         return None
 
     # properties from orca route string
@@ -1420,13 +1452,172 @@ class FolderMixin:
     Mixin class for folder operations and file discovery.
 
     Provides methods for searching and filtering files within directories
-    based on file extensions, regular expressions, and other criteria.
+    based on contents, file extensions, regular expressions, and other criteria.
     Supports both current directory and recursive subdirectory searches.
 
     Attributes:
         folder (str): Path to the base directory. Consumers are expected to
             set this attribute (e.g., via BaseFolder or a subclass).
     """
+
+    @property
+    def folderpath(self):
+        """
+        Get the absolute path of the folder.
+
+        Returns:
+            str: Absolute folder path.
+        """
+        return os.path.abspath(self.folder)
+
+    def _get_all_output_files_by_program(self, program=None, recursive=False):
+        """
+        Obtain a list of quantum chemistry output files by program.
+        File discovery is performed in two stages:
+        (1) lightweight suffix-based filtering for efficiency;
+        (2) program detection using get_program_type_from_file method.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+            recursive (bool): Whether to search recursively in subdirectories.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+
+        Raises:
+            ValueError: If an unsupported program name is provided.
+        """
+        from chemsmart.utils.io import (
+            ALL_SUFFIXES,
+            PROGRAM_INFO,
+            get_program_type_from_file,
+        )
+
+        # Validate program parameter
+        if program is not None and program not in PROGRAM_INFO:
+            valid_programs = ", ".join(sorted(PROGRAM_INFO))
+            raise ValueError(
+                f"Unsupported program '{program}'. "
+                f"Supported programs: {valid_programs}."
+            )
+
+        candidate_files = []
+        if recursive:
+            for subdir, _dirs, files in os.walk(self.folder):
+                for file in files:
+                    filepath = os.path.join(subdir, file)
+                    # Skip directories and empty files
+                    if not os.path.isfile(filepath):
+                        continue
+                    if os.stat(filepath).st_size == 0:
+                        continue
+                    if program is None:
+                        if file.endswith(ALL_SUFFIXES):
+                            candidate_files.append(filepath)
+                    else:
+                        if file.endswith(
+                            tuple(PROGRAM_INFO[program]["suffixes"])
+                        ):
+                            candidate_files.append(filepath)
+        else:
+            for file in os.listdir(self.folder):
+                filepath = os.path.join(self.folder, file)
+                # Skip directories and empty files
+                if not os.path.isfile(filepath):
+                    continue
+                if os.stat(filepath).st_size == 0:
+                    continue
+                # Filter by suffix first for efficiency
+                if program is None:
+                    if file.endswith(ALL_SUFFIXES):
+                        candidate_files.append(filepath)
+                else:
+                    if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
+                        candidate_files.append(filepath)
+
+        matched_files = []
+        for filepath in candidate_files:
+            detected_program = get_program_type_from_file(filepath)
+            if detected_program == "unknown":
+                continue
+            if program is None or detected_program == program:
+                matched_files.append(filepath)
+        return matched_files
+
+    def get_all_output_files_in_current_folder_by_program(self, program=None):
+        """
+        Obtain a list of quantum chemistry output files in the current folder by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=False
+        )
+
+    def get_all_output_files_in_current_folder_and_subfolders_by_program(
+        self, program=None
+    ):
+        """
+        Obtain quantum chemistry output files in folder and all subfolders by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=True
+        )
+
+    def is_program_calculation_directory(self, program):
+        """
+        Check if the current folder contains output files from a specific program.
+
+        Args:
+            program (str): Target QC program (e.g., "xtb", "crest", "gaussian", "orca").
+
+        Returns:
+            bool: True if the folder contains at least one output file from
+                  the specified program, False otherwise.
+        """
+        if not os.path.isdir(self.folder):
+            return False
+        return bool(
+            self.get_all_output_files_in_current_folder_by_program(program)
+        )
+
+    def get_program_type_from_folder(self):
+        """
+        Detect the type of calculation folder based on programs.
+
+        Note:
+            Folder-level detection is currently only supported for xtb and crest
+            programs. Other supported programs like gaussian and orca require
+            file-level detection (see get_program_type_from_file).
+
+        Returns:
+            str: Program name ("xtb", "crest"), "mixed" if multiple programs detected,
+             or "unknown" if the format cannot be detected.
+        """
+        from chemsmart.utils.io import PROGRAMS_WITH_FOLDER_DETECTION
+
+        programs = []
+        for program in PROGRAMS_WITH_FOLDER_DETECTION:
+            if self.is_program_calculation_directory(program):
+                programs.append(program)
+        if len(programs) == 1:
+            return programs[0]
+        elif len(programs) > 1:
+            return "mixed"
+        return "unknown"
 
     def get_all_files_in_current_folder_by_suffix(self, filetype):
         """
@@ -1473,6 +1664,63 @@ class FolderMixin:
             for file in files:
                 if file.endswith(filetype):
                     all_files.append(os.path.join(subdir, file))
+        return all_files
+
+    def get_all_files_in_current_folder_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in the current folder matching a program.
+
+        Non-recursively lists files in `self.folder` whose names end with
+        `filetype` and are detected as output files from the specified
+        program. Empty files are excluded.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        all_files = []
+        for file in os.listdir(self.folder):
+            filepath = os.path.join(self.folder, file)
+            # Check that the file is not empty:
+            if not os.path.isfile(filepath) or os.stat(filepath).st_size == 0:
+                continue
+            # Collect files of specified type and program
+            if file.endswith(filetype):
+                detected_program = get_program_type_from_file(filepath)
+                if detected_program == program:
+                    all_files.append(filepath)
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in folder and subfolders matching a program.
+
+        Recursively searches `self.folder` for files whose names end with
+        `filetype` and are detected as output files from the specified
+        program. Unlike the non-recursive variant, empty files are not
+        filtered out here.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
+            for file in files:
+                if file.endswith(filetype):
+                    filepath = os.path.join(subdir, file)
+                    detected_program = get_program_type_from_file(filepath)
+                    if detected_program == program:
+                        all_files.append(filepath)
         return all_files
 
     def get_all_files_in_current_folder_and_subfolders_matching_regex(

@@ -42,7 +42,8 @@ class GaussianScanJob(GaussianJob):
 
         Common patterns for `settings.modred`:
         - Constraint optimization (list): `[[i,j], [k,l,m], ...]`
-        - Coordinate scan (dict): `{"num_steps": N, "step_size": dx, "coords": [[...], ...]}`
+        - Coordinate scan (dict): `{"num_steps": N,
+        "step_size": dx, "coords": [[...], ...]}`
 
         Args:
             molecule (Molecule): Molecular structure for scanning.

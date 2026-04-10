@@ -105,12 +105,14 @@ def create_logger(
 
     Stream behavior:
     - Errors are always sent to stderr.
-    - If `stream=True`, all messages (including errors) are also sent to stdout.
+    - If `stream=True`, all messages
+    (including errors) are also sent to stdout.
 
     Args:
         debug (bool, optional): Enable debug level logging. Defaults to True.
         folder (str, optional): Directory for log files. Defaults to ".".
-        logfile (str, optional): Name of the info/debug log file. Defaults to None.
+        logfile (str, optional): Name of the
+        info/debug log file. Defaults to None.
         errfile (str, optional): Name of the error log file. Defaults to None.
         stream (bool, optional): Enable console output to stdout (stderr is
             always used for errors). Defaults to True.

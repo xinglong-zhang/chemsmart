@@ -59,7 +59,7 @@ def click_pubchem_options(f):
 
 def click_folder_options(f):
     """
-    Common click options for specifying directories and file types via CLI.
+    CLI options for directory-based batch processing.
     """
 
     @click.option(
@@ -75,6 +75,14 @@ def click_folder_options(f):
         help="Type of file to run specific jobs for, if directory "
         "is specified.",
     )
+    @click.option(
+        "-p",
+        "--program",
+        default=None,
+        type=str,
+        help="Computational chemistry program whose output files should be "
+        "processed.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -83,7 +91,8 @@ def click_folder_options(f):
 
 
 def click_molecule_vibrational_displacement_options(f):
-    """CLI options for the vibrationally_displaced() method of Molecule object."""
+    """CLI options for the vibrationally_displaced()
+    method of Molecule object."""
 
     @click.option(
         "-m",
@@ -173,7 +182,8 @@ def click_filename_options(f):
 
 
 def click_file_label_and_index_options(f):
-    """Common click options for specifying file label, append-label, and index via CLI."""
+    """Common click options for specifying file
+    label, append-label, and index via CLI."""
 
     @click.option(
         "-l",

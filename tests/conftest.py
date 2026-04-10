@@ -1,17 +1,25 @@
+import importlib
 import logging
 import os
 import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import click
+import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from click.testing import CliRunner
 from pytest_mock import MockerFixture
-
-# from pytest_mock import MockerFixture
 from rdkit import Chem
 
+from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.job import click_folder_options
+from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
     PyMOLHybridVisualizationJobRunner,
@@ -24,16 +32,300 @@ from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
-# each test runs on cwd to its temp dir
-# @pytest.fixture(autouse=True)
-# def go_to_tmpdir(request):
-#     # Get the fixture dynamically by its name.
-#     tmpdir = request.getfixturevalue("tmpdir")
-#     # ensure local test created packages can be imported
-#     sys.path.insert(0, str(tmpdir))
-#     # Chdir only for the duration of the test.
-#     with tmpdir.as_cwd():
-#         yield
+thermochemistry_cli_module = importlib.import_module(
+    "chemsmart.cli.thermochemistry.thermochemistry"
+)
+
+mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
+
+
+############ CLI Fixtures ##################
+@pytest.fixture()
+def make_cli_ctx_obj():
+    """Factory for the minimal Click context object."""
+
+    def _make(jobrunner):
+        return {"jobrunner": jobrunner}
+
+    return _make
+
+
+@pytest.fixture()
+def invoke_config_server():
+    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_config_server):
+            result = invoke_config_server()
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.config import config
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
+
+
+@pytest.fixture()
+def invoke_folder_command():
+    """Fixture that returns a callable to invoke a folder command with options."""
+
+    @click.command()
+    @click_folder_options
+    @click.pass_context
+    def _folder_cmd(ctx, directory, filetype, program):
+        """Minimal command used only to inspect registered options."""
+        ctx.ensure_object(dict)
+        ctx.obj["directory"] = directory
+        ctx.obj["filetype"] = filetype
+        ctx.obj["program"] = program
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        result = runner.invoke(_folder_cmd, args or [])
+        return result
+
+    return _invoke
+
+
+@pytest.fixture()
+def run_thermochemistry_and_capture_settings():
+    """Run the thermochemistry CLI with mocked job construction."""
+
+    def _run(extra_args=None, ctx_obj=None):
+        runner = CliRunner()
+        captured_settings = None
+        mock_job = MagicMock()
+
+        base_args = ["-f", "dummy.log", "-T", "298.15"]
+        cli_args = base_args + (extra_args or [])
+
+        with (
+            patch.object(
+                thermochemistry_cli_module,
+                "get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch.object(
+                thermochemistry_cli_module.ThermochemistryJob,
+                "from_filename",
+                return_value=mock_job,
+            ) as mock_from_filename,
+        ):
+            result = runner.invoke(
+                thermochemistry,
+                cli_args,
+                obj=ctx_obj or {},
+                catch_exceptions=False,
+            )
+            if mock_from_filename.call_args is not None:
+                captured_settings = mock_from_filename.call_args[1].get(
+                    "settings"
+                )
+
+        return result, captured_settings
+
+    return _run
+
+
+@pytest.fixture()
+def run_thermochemistry_with_directory():
+    """Fixture to invoke thermochemistry CLI with directory options and mocked folder.
+
+    Patches ``BaseFolder`` so that
+    ``get_all_output_files_in_current_folder_by_program``,
+    ``get_all_files_in_current_folder_by_suffix``, and
+    ``get_all_files_in_current_folder_by_program_and_suffix`` all return
+    the caller-supplied ``mock_files`` list.  Also patches
+    ``ThermochemistryJob.from_filename`` to avoid real job execution.
+
+    Usage::
+
+        def test_something(run_thermochemistry_with_directory, tmp_path):
+            result, mock_from_filename = run_thermochemistry_with_directory(
+                ["-d", str(tmp_path), "-p", "gaussian", "-T", "298.15"],
+                mock_files=["/fake/a.log", "/fake/b.log"],
+            )
+            assert result.exit_code == 0
+            assert mock_from_filename.call_count == 2
+    """
+
+    def _invoke(extra_args, mock_files=None):
+        if mock_files is None:
+            mock_files = ["/fake/dir/mol1.log"]
+
+        runner = CliRunner()
+        mock_job = MagicMock()
+        mock_job.label = "mol1"
+
+        with (
+            patch.object(
+                thermochemistry_cli_module, "BaseFolder"
+            ) as mock_folder_cls,
+            patch.object(
+                thermochemistry_cli_module.ThermochemistryJob, "from_filename"
+            ) as mock_from_filename,
+        ):
+            mock_folder = MagicMock()
+            # Configure every discovery method to return the caller-supplied list
+            mock_folder.get_all_output_files_in_current_folder_by_program.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_files_in_current_folder_by_suffix.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_files_in_current_folder_by_program_and_suffix.return_value = (
+                mock_files
+            )
+            mock_folder_cls.return_value = mock_folder
+            mock_from_filename.return_value = mock_job
+
+            result = runner.invoke(thermochemistry, extra_args)
+            return result, mock_from_filename
+
+    return _invoke
+
+
+@pytest.fixture()
+def run_gaussian_and_capture_settings():
+    """Run the gaussian CLI with a patched job class and capture settings."""
+
+    def _run(job_class_path, cli_args, ctx_obj):
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings
+
+    return _run
+
+
+@pytest.fixture()
+def run_orca_and_capture_settings():
+    """Run the orca CLI with a patched job class and capture settings."""
+    from chemsmart.cli.orca.orca import orca as orca_cli
+
+    def _run(job_class_path, cli_args, ctx_obj=None):
+        if ctx_obj is None:
+            ctx_obj = {}
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                orca_cli,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings
+
+    return _run
+
+
+@pytest.fixture
+def invoke_mol_with_visualize():
+    """Invoke ``mol … visualize`` with all PyMOL job execution mocked out."""
+    from chemsmart.cli.mol.mol import mol as mol_group
+
+    def _invoke(cli_args, ctx_obj=None):
+        runner = CliRunner()
+        if ctx_obj is None:
+            ctx_obj = {}
+
+        @mol_group.command("_test_noop")
+        @click.pass_context
+        def _noop(ctx):
+            pass
+
+        try:
+            with (
+                patch.object(
+                    mol_cli_module,
+                    "Molecule",
+                    MagicMock(),
+                ) as mock_molecule_cls,
+                patch.object(
+                    mol_cli_module,
+                    "BaseFolder",
+                    MagicMock(),
+                ) as mock_folder_cls,
+            ):
+                # Setup folder mock to return mock files
+                mock_folder_instance = MagicMock()
+                mock_folder_instance.get_all_output_files_in_current_folder_by_program.return_value = [
+                    "/fake/dir/mol.log"
+                ]
+                mock_folder_cls.return_value = mock_folder_instance
+
+                # Setup molecule mock
+                mock_molecule_cls.from_filepath.return_value = MagicMock()
+
+                result = runner.invoke(
+                    mol_group,
+                    cli_args + ["_test_noop"],
+                    obj=ctx_obj,
+                    catch_exceptions=False,
+                )
+        finally:
+            mol_group.commands.pop("_test_noop", None)
+
+        return result
+
+    return _invoke
+
+
+@pytest.fixture()
+def chemsmart_templates_config(mocker):
+    """
+    Point USER_CONFIG_DIR to the local templates directory.
+    This avoids creating a mock directory
+    and instead uses the provided templates.
+    """
+    # Locate templates: chemsmart/settings/templates/.chemsmart
+    package_root = Path(__file__).resolve().parent.parent
+    template_dir = (
+        package_root / "chemsmart" / "settings" / "templates" / ".chemsmart"
+    )
+
+    if not template_dir.exists():
+        raise FileNotFoundError(
+            f"Template directory not found: {template_dir}"
+        )
+
+    # Patch the Class attribute
+    mocker.patch(
+        "chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR",
+        str(template_dir),
+    )
+
+    # Patch the global instance in runner.py
+    from chemsmart.settings.user import ChemsmartUserSettings
+
+    new_settings = ChemsmartUserSettings()
+    mocker.patch("chemsmart.jobs.runner.user_settings", new_settings)
+    # Patch other module-level user_settings singletons used by the CLI path
+    mocker.patch("chemsmart.settings.server.user_settings", new_settings)
+    mocker.patch("chemsmart.settings.executable.user_settings", new_settings)
+
+    return template_dir
 
 
 ############ Gaussian Fixtures ##################
@@ -869,32 +1161,37 @@ def orca_inputs_directory(orca_test_directory):
 
 @pytest.fixture()
 def orca_inputs_xyz_directory(orca_inputs_directory):
-    """Returns the absolute path to the orca inputs that specifies xyz files."""
+    """Returns the absolute path to the
+    orca inputs that specifies xyz files."""
     orca_inputs_xyz_directory = os.path.join(orca_inputs_directory, "xyz")
     return os.path.abspath(orca_inputs_xyz_directory)
 
 
 @pytest.fixture()
 def orca_input_nebts_file(orca_inputs_xyz_directory):
-    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    """Returns the absolute path to the orca
+    input file for NEB with TS optimization."""
     return os.path.join(orca_inputs_xyz_directory, "neb_TS_rot1.inp")
 
 
 @pytest.fixture()
 def orca_input_nebts_reactant_xyz_file(orca_inputs_xyz_directory):
-    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    """Returns the absolute path to the orca
+    input file for NEB with TS optimization."""
     return os.path.join(orca_inputs_xyz_directory, "R-1a_opt.xyz")
 
 
 @pytest.fixture()
 def orca_input_nebts_product_xyz_file(orca_inputs_xyz_directory):
-    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    """Returns the absolute path to the orca
+    input file for NEB with TS optimization."""
     return os.path.join(orca_inputs_xyz_directory, "S-1a_opt.xyz")
 
 
 @pytest.fixture()
 def orca_input_nebts_ts_xyz_file(orca_inputs_xyz_directory):
-    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    """Returns the absolute path to the orca
+    input file for NEB with TS optimization."""
     return os.path.join(orca_inputs_xyz_directory, "TS_rot1.xyz")
 
 
@@ -1041,6 +1338,11 @@ def orca_two_layer_qmmmm_output_file(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_neb_output_file(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "neb_R-TS1-Si.out")
+
+
+@pytest.fixture()
 def orca_errors_directory(orca_test_directory):
     orca_errors_directory = os.path.join(orca_test_directory, "error_files")
     return os.path.abspath(orca_errors_directory)
@@ -1130,6 +1432,11 @@ def orca_written_he_monoatomic_opt_file(orca_written_files_directory):
     )
 
 
+@pytest.fixture()
+def orca_written_neb_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_neb_TS_rot1.inp")
+
+
 # orca yaml files
 @pytest.fixture()
 def orca_yaml_settings_directory(orca_test_directory):
@@ -1164,6 +1471,23 @@ def orca_yaml_settings_solv_project_name(orca_yaml_settings_directory):
 @pytest.fixture()
 def orca_yaml_settings_orca_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "orca")
+
+
+@pytest.fixture()
+def orca_yaml_settings_neb_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "neb")
+
+
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv")
+
+
+@pytest.fixture()
+def orca_yaml_settings_custom_solv_cosmors_project_name(
+    orca_yaml_settings_directory,
+):
+    return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
 
 
 # test for structure.py
@@ -1321,14 +1645,59 @@ def pymol_mo_jobrunner(pbs_server):
     return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
-## conformers for testing
 @pytest.fixture()
-def methanol_molecules():
-    # molecules for testing
-    # methanol
-    methanol = Molecule.from_pubchem(identifier="CO")
-    # f = open("methanol.xyz", "w")
-    # methanol.write_coordinates(f)
+def iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def fake_iterate_jobrunner(pbs_server):
+    return IterateJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+## pytest fixtures for molecules
+@pytest.fixture()
+def methanol_molecule():
+    symbols = ["C", "O", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [0.000000, 0.000000, 0.000000],  # C
+            [1.430000, 0.000000, 0.000000],  # O
+            [1.109545, 0.904936, 0.000000],  # H (hydroxyl)
+            [-0.363849, 1.027479, 0.000000],  # H
+            [-0.363849, -0.513740, 0.889823],  # H
+            [-0.363849, -0.513740, -0.889823],  # H
+        ],
+        dtype=float,
+    )
+    methanol = Molecule(symbols=symbols, positions=coords)
+    return methanol
+
+
+@pytest.fixture()
+def ethanol_molecule():
+    symbols = ["O", "C", "C", "H", "H", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [-1.1712, 0.2997, 0.0000],
+            [-0.0463, -0.5665, 0.0000],
+            [1.2175, 0.2668, 0.0000],
+            [-0.0958, -1.2120, 0.8819],
+            [-0.0952, -1.1938, -0.8946],
+            [2.1050, -0.3720, -0.0177],
+            [1.2426, 0.9307, -0.8704],
+            [1.2616, 0.9052, 0.8886],
+            [-1.1291, 0.8364, 0.8099],
+        ],
+        dtype=float,
+    )
+    ethanol = Molecule(symbols=symbols, positions=coords)
+    return ethanol
+
+
+@pytest.fixture()
+def methanol_molecules(methanol_molecule):
+    methanol = methanol_molecule
 
     # rotated methanol
     ase_atoms = methanol.to_ase()
@@ -1342,6 +1711,88 @@ def methanol_molecules():
     methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
 
     return methanol_molecules
+
+
+@pytest.fixture()
+def methyl3hexane_molecule():
+    symbols = [
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+    ]
+    coords = np.array(
+        [
+            [0.828, -0.5939, -0.4105],
+            [-0.6074, -0.1292, -0.7341],
+            [1.6188, 0.3738, 0.4896],
+            [-1.5335, 0.0189, 0.4761],
+            [0.8379, -1.9975, 0.2043],
+            [1.7539, 1.7749, -0.0888],
+            [-2.8977, 0.553, 0.0634],
+            [1.3601, -0.6621, -1.3694],
+            [-1.0561, -0.849, -1.4317],
+            [-0.5655, 0.8214, -1.2791],
+            [2.6287, -0.0297, 0.6378],
+            [1.1655, 0.4353, 1.4856],
+            [-1.0999, 0.707, 1.2088],
+            [-1.6692, -0.9475, 0.973],
+            [1.8635, -2.3744, 0.2836],
+            [0.4049, -2.004, 1.2096],
+            [0.2737, -2.7005, -0.4174],
+            [2.1704, 1.7451, -1.1005],
+            [2.4243, 2.3747, 0.5353],
+            [0.7895, 2.2899, -0.1235],
+            [-3.384, -0.1214, -0.6486],
+            [-2.8085, 1.5396, -0.4023],
+            [-3.5477, 0.6486, 0.9389],
+        ]
+    )
+    methyl3hexane = Molecule(symbols=symbols, positions=coords)
+    return methyl3hexane
+
+
+@pytest.fixture()
+def tetrahydrofuran_molecule():
+    symbols = ["O", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H", "H", "H"]
+    coords = np.array(
+        [
+            [1.2328, -0.0005, 0.0000],
+            [-1.0107, -0.7202, -0.2205],
+            [-1.0102, 0.7210, 0.2205],
+            [0.3936, -1.1560, 0.1374],
+            [0.3946, 1.1557, -0.1375],
+            [-1.7823, -1.3279, 0.2593],
+            [-1.1544, -0.7757, -1.3060],
+            [-1.7812, 1.3292, -0.2593],
+            [-1.1537, 0.7766, 1.3061],
+            [0.4518, -1.4889, 1.1792],
+            [0.7622, -1.9589, -0.5071],
+            [0.4532, 1.4885, -1.1793],
+            [0.7639, 1.9583, 0.5070],
+        ]
+    )
+    thf_molecule = Molecule(symbols=symbols, positions=coords)
+    return thf_molecule
 
 
 @pytest.fixture()
@@ -1377,13 +1828,13 @@ def constrained_atoms():
 
 
 @pytest.fixture()
-def methanol_and_ethanol():
+def methanol_and_ethanol(methanol_molecule, ethanol_molecule):
     # molecules for testing
     # methanol
-    methanol = Molecule.from_pubchem(identifier="CO")
+    methanol = methanol_molecule
 
     # ethanol
-    ethanol = Molecule.from_pubchem(identifier="CCO")
+    ethanol = ethanol_molecule
 
     methanol_and_ethanol = [methanol, ethanol]
     return methanol_and_ethanol
@@ -1539,3 +1990,417 @@ def capture_log(caplog):
     """
     caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog
+
+
+############ Iterate Fixtures ##################
+@pytest.fixture()
+def iterate_test_directory(test_data_directory):
+    """Returns the absolute path to tests/data/IterateTests."""
+    return os.path.join(test_data_directory, "IterateTests")
+
+
+@pytest.fixture()
+def iterate_input_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/input."""
+    return os.path.join(iterate_test_directory, "input")
+
+
+@pytest.fixture()
+def iterate_expected_output_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output."""
+    return os.path.join(iterate_test_directory, "expected_output")
+
+
+@pytest.fixture()
+def iterate_configs_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs."""
+    return os.path.join(iterate_test_directory, "configs")
+
+
+@pytest.fixture()
+def iterate_integration_config_file(iterate_configs_directory):
+    """Returns the absolute path to
+    tests/data/IterateTests/configs/integration_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "integration_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_timeout_config_file(iterate_configs_directory):
+    """Returns the absolute path to
+    tests/data/IterateTests/configs/timeout_iterate.toml."""
+    return os.path.join(iterate_configs_directory, "timeout_iterate.toml")
+
+
+@pytest.fixture()
+def iterate_template_file(iterate_configs_directory):
+    """Returns the absolute path to
+    tests/data/IterateTests/configs/iterate_template.toml."""
+    return os.path.join(iterate_configs_directory, "iterate_template.toml")
+
+
+@pytest.fixture()
+def iterate_invalid_skeleton_link_index_config_file(iterate_configs_directory):
+    """Returns the absolute path to tests/data/IterateTests/configs/
+    invalid_skeleton_link_index.toml."""
+    return os.path.join(
+        iterate_configs_directory, "invalid_skeleton_link_index.toml"
+    )
+
+
+@pytest.fixture()
+def iterate_expected_output_file(iterate_expected_output_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output/
+    integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz."""
+    return os.path.join(
+        iterate_expected_output_directory,
+        "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+    )
+
+
+# ── InChIKey test data ──
+@pytest.fixture()
+def inchikey_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "inchikey")
+
+
+@pytest.fixture()
+def inchikey_normal_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "normal_testing",
+        "inchikey_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_r_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_s_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c3_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c2_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c2.xyz",
+    )
+
+
+# ── CXSMILES test data ──
+@pytest.fixture()
+def cxsmiles_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "cxsmiles")
+
+
+@pytest.fixture()
+def cxsmiles_normal_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "normal_testing",
+        "rotamer_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_r_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_s_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c2.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c2.txt",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c3.txt",
+    )
+
+
+############ Molecule Fixtures for RDKit / PDB conversion tests ##################
+
+
+@pytest.fixture()
+def water_molecule():
+    """H₂O with realistic geometry."""
+    return Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.1173],
+                [0.0000, 0.7572, -0.4692],
+                [0.0000, -0.7572, -0.4692],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def methane_molecule():
+    """CH₄ tetrahedral."""
+    return Molecule(
+        symbols=["C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.0000],
+                [0.6276, 0.6276, 0.6276],
+                [0.6276, -0.6276, -0.6276],
+                [-0.6276, 0.6276, -0.6276],
+                [-0.6276, -0.6276, 0.6276],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def ethylene_molecule():
+    """C₂H₄ – contains a C=C double bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6695],
+                [0.0000, 0.0000, -0.6695],
+                [0.0000, 0.9289, 1.2321],
+                [0.0000, -0.9289, 1.2321],
+                [0.0000, 0.9289, -1.2321],
+                [0.0000, -0.9289, -1.2321],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def acetylene_molecule():
+    """C₂H₂ – contains a C≡C triple bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6013],
+                [0.0000, 0.0000, -0.6013],
+                [0.0000, 0.0000, 1.6644],
+                [0.0000, 0.0000, -1.6644],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def hydrogen_molecule():
+    """H₂ – minimal molecule with H-H bond."""
+    return Molecule(
+        symbols=["H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.74, 0.0, 0.0],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def co2_molecule():
+    """CO₂ – linear molecule with two C=O double bonds."""
+    return Molecule(
+        symbols=["C", "O", "O"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.16],
+                [0.0, 0.0, -1.16],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def single_atom_molecule():
+    """Single argon atom – edge case for bond detection."""
+    return Molecule(
+        symbols=["Ar"],
+        positions=np.array([[0.0, 0.0, 0.0]]),
+    )
+
+
+@pytest.fixture()
+def water_with_metadata_molecule():
+    """Water molecule with PDB residue metadata."""
+    mol = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ]
+        ),
+        info={
+            "record_type": ["HETATM", "HETATM", "HETATM"],
+            "atom_name": ["O", "H1", "H2"],
+            "residue_name": ["HOH", "HOH", "HOH"],
+            "residue_number": [1, 1, 1],
+            "chain_id": ["A", "A", "A"],
+        },
+    )
+    mol.atom_names = ["O", "H1", "H2"]
+    mol.residue_names = ["HOH", "HOH", "HOH"]
+    mol.residue_numbers = [1, 1, 1]
+    mol.chain_ids = ["A", "A", "A"]
+    return mol
+
+
+@pytest.fixture()
+def chiral_molecule():
+    """Molecule with a chiral center (C with 4 different substituents)."""
+    return Molecule(
+        symbols=["C", "Cl", "F", "Br", "I"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.2, 0.0, -0.5],
+                [-0.6, 1.0, 0.5],
+                [-0.6, -1.0, 0.5],
+                [0.0, 0.0, 1.3],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def single_model_pdb_file(tmpdir):
+    """PDB file with one implicit model (no MODEL/ENDMDL records)."""
+    pdb_content = (
+        "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+        "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+        "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "water.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def multi_model_pdb_file(tmpdir):
+    """PDB file with two explicit MODEL/ENDMDL blocks."""
+    pdb_content = (
+        "MODEL        1\n"
+        "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH A   1       0.960   0.000   0.000  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "MODEL        2\n"
+        "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH B   2       2.460   2.500   3.500  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "multi_model.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def blank_element_pdb_file(tmpdir):
+    """PDB file where element columns (77-78) are blank, requiring inference."""
+    pdb_content = (
+        "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+        "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "blank_elements.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def empty_pdb_file(tmpdir):
+    """PDB file with no ATOM/HETATM records."""
+    filepath = os.path.join(str(tmpdir), "empty.pdb")
+    with open(filepath, "w") as f:
+        f.write("REMARK  This PDB has no atoms.\nEND\n")
+    return filepath

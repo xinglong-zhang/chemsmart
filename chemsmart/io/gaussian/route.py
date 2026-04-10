@@ -268,7 +268,8 @@ class GaussianRoute:
                 func_basis = each_input.split(
                     "/"
                 )  # TODO # not necessarily for non-standard route e.g.
-                # pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly'
+                # pbepbe 6-31g(d,p)/auto force
+                # scrf=(dipole,solvent=water) pbc=gammaonly'
                 if len(func_basis) == 2:
                     functional = func_basis[0]
                     basis = func_basis[1]
@@ -336,8 +337,10 @@ class GaussianRoute:
                     opt_options = opt_route.split(",")
                     for opt_option in opt_options:
                         # if 'eigentest' in opt_option and 'ts' in route_input:
-                        #     additional_opt_options.append(opt_option)   # add `no/eigentest` only for ts jobs
-                        # <-- `eigentest` already included in writing in GaussianSettings.write_gaussian_input()
+                        # additional_opt_options.append(opt_option)
+                        # # add `no/eigentest` only for ts jobs
+                        # <-- `eigentest` already included in writing
+                        # in GaussianSettings.write_gaussian_input()
                         if any(
                             option in opt_option
                             for option in GAUSSIAN_ADDITIONAL_OPT_OPTIONS
@@ -363,7 +366,8 @@ class GaussianRoute:
                     scrf_string = each_input
 
             # get solvation model e.g., scrf=(cpcm,solvent=toluene)
-            # if none of the models are present, set default model to pcm as in Gaussian
+            # if none of the models are present, set
+            # default model to pcm as in Gaussian
             if all(
                 model not in scrf_string for model in gaussian_solvation_models
             ):

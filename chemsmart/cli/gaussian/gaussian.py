@@ -9,7 +9,6 @@ from chemsmart.cli.job import (
     click_filename_options,
     click_pubchem_options,
 )
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import (
@@ -311,6 +310,49 @@ def click_gaussian_solvent_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_solvent_group_options(f):
+    """Solvent options for the Gaussian group level (applicable to all subcommands).
+
+    Uses long-form ``--remove-solvent``/``--no-remove-solvent`` without a
+    ``-r`` short alias to avoid conflicting with the existing ``-r`` /
+    ``--additional-route-parameters`` option in
+    :func:`click_gaussian_settings_options`.
+    """
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        default=False,
+        help="Remove the solvent model from the job (overrides project settings).",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="Solvent model to use (e.g. smd, cpcm, iefpcm).",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="Solvent identifier (e.g. water, toluene, dichloromethane).",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help="Additional options appended inside the scrf=() route keyword "
+        "(e.g. 'iterative' gives scrf=(smd,solvent=water,iterative)).",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_gaussian_td_options(f):
     """Common click options for Gaussian TDDFT calculations."""
 
@@ -494,6 +536,7 @@ def click_gaussian_qmmm_options(f):
 @click_filename_options
 @click_file_label_and_index_options
 @click_gaussian_settings_options
+@click_gaussian_solvent_group_options
 @click_pubchem_options
 @click.pass_context
 def gaussian(
@@ -516,9 +559,15 @@ def gaussian(
     dieze_tag,
     forces,
     pubchem,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
 ):
-    """CLI subcommand for running Gaussian jobs using the chemsmart framework."""
+    """CLI subcommand for running Gaussian
+    jobs using the chemsmart framework."""
 
+    from chemsmart.io.molecules.structure import Molecule
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
 
@@ -588,6 +637,26 @@ def gaussian(
     if forces:
         job_settings.forces = forces
         keywords += ("forces",)
+
+    # Handle solvent options specified at the gaussian group level.
+    # These are propagated to every subcommand via the merge mechanism,
+    # allowing e.g. `gaussian -sm smd -si water opt` or
+    # `gaussian -sm smd -si water -so iterative td`.
+    if remove_solvent:
+        job_settings.solvent_model = None
+        job_settings.solvent_id = None
+        job_settings.custom_solvent = None
+        keywords += ("solvent_model", "solvent_id", "custom_solvent")
+    else:
+        if solvent_model is not None:
+            job_settings.solvent_model = solvent_model
+            keywords += ("solvent_model",)
+        if solvent_id is not None:
+            job_settings.solvent_id = solvent_id
+            keywords += ("solvent_id",)
+        if solvent_options is not None:
+            job_settings.additional_solvent_options = solvent_options
+            keywords += ("additional_solvent_options",)
 
     # obtain molecule structure
     molecules = None
@@ -663,20 +732,42 @@ def gaussian(
             from chemsmart.io.molecules.structure import QMMMMolecule
 
             converted = []
-            for m in molecules:
+            for idx, m in enumerate(molecules):
                 if isinstance(m, QMMMMolecule):
                     converted.append(m)
-                else:
+                    continue
+
+                try:
                     converted.append(QMMMMolecule(molecule=m))
+                except (TypeError, AttributeError, ValueError) as exc:
+                    logger.debug(
+                        "QMMM wrap via molecule= failed at index %s: %s; retrying dict-based init",
+                        idx,
+                        exc,
+                    )
+                    try:
+                        converted.append(
+                            QMMMMolecule(**getattr(m, "__dict__", {}))
+                        )
+                    except Exception as exc2:
+                        logger.warning(
+                            "Failed to convert molecule %s (idx %s) to QMMMMolecule: %s; leaving original",
+                            getattr(m, "label", idx),
+                            idx,
+                            exc2,
+                        )
+                        converted.append(m)
+
             molecules = converted
             logger.debug(
                 "Converted molecules to QMMMMolecule for qmmm subcommand."
             )
-    except Exception:
+    except Exception as exc:
         # Non-fatal: if anything goes wrong, keep original molecules and
         # let the qmmm subcommand attempt conversion itself.
         logger.debug(
-            "Could not convert molecules to QMMMMolecule at group level."
+            "Could not convert molecules to QMMMMolecule at group level: %s",
+            exc,
         )
 
     # store objects

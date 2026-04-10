@@ -34,7 +34,8 @@ class ORCARoute:
         Initialize ORCA route parser.
 
         Args:
-            route_string (str): ORCA route string to parse (e.g., '! B3LYP def2-TZVP')
+            route_string (str): ORCA route string
+            to parse (e.g., '! B3LYP def2-TZVP')
         """
         self.route_string = route_string.lower()
         self.route_inputs = self.route_string.split()

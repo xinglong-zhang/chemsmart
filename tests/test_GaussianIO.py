@@ -39,7 +39,7 @@ class TestRouteString:
             r1b.additional_opt_options_in_route is None
         )  # noeigentest prevents Gaussian from stopping
         # if no negative Hessian eigenvalue was found
-        #                                                   # (not additional opt options for geometry opt)
+        # (not additional opt options for geometry opt)
         assert r1b.additional_route_parameters is None
 
     def test_read_route_string_standard3a(self):
@@ -105,7 +105,8 @@ class TestRouteString:
         # TODO: nmr route to be specified
 
     def test_read_route_string_standard7(self):
-        s1g = "# TD(nstates=30) wB97XD/def2SVP scrf(solvent=dichloroethane)"  # TD-DFT route
+        s1g = "# TD(nstates=30) wB97XD/def2SVP scrf(solvent=dichloroethane)"
+        # TD-DFT route
         r1g = GaussianRoute(s1g)
         assert r1g.functional == "wb97xd"
         assert r1g.basis == "def2svp"
@@ -274,7 +275,7 @@ class TestGaussian16Input:
             filename=gaussian_qmmm_inputfile_3layer
         )
         assert g16_oniom.oniom_charge == {
-            "real_charge": "0",
+            "charge_total": "0",
             "int_charge": "0",
             "model_charge": "0",
         }
@@ -287,8 +288,8 @@ class TestGaussian16Input:
         assert g16_oniom.int_charge == 0
         assert g16_oniom.model_charge == 0
         assert g16_oniom.real_multiplicity == 1
-        assert g16_oniom.real_multiplicity == 1
-        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.int_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
@@ -1555,7 +1556,8 @@ class TestGaussian16Output:
             0,
         ]
 
-        # since use_frozen is False, this is not included in the output structure
+        # since use_frozen is False, this is
+        # not included in the output structure
         assert g16_hide_frozen.optimized_structure.frozen_atoms is None
 
         assert g16_hide_frozen.optimized_structure.energy == -804.614710796
@@ -1818,33 +1820,33 @@ class TestGaussian16Output:
         }
         assert g16_oniom.oniom_partition == {
             "high level atoms": [
-                "183-193",
-                "214-222",
-                "310-319",
-                "332-340",
-                "351-358",
-                "424-427",
-                "441-445",
-                "497-500",
-                "508-512",
-                "520-523",
-                "554-571",
-                "573-608",
+                "50-60",
+                "81-89",
+                "177-186",
+                "199-207",
+                "218-225",
+                "291-294",
+                "308-312",
+                "364-367",
+                "375-379",
+                "387-390",
+                "421-438",
+                "440-475",
             ],
             "low level atoms": [
-                "134-182",
-                "194-213",
-                "223-309",
-                "320-331",
-                "341-350",
-                "359-423",
-                "428-440",
-                "446-496",
-                "501-507",
-                "513-519",
-                "524-553",
-                "572",
-                "609-616",
+                "1-49",
+                "61-80",
+                "90-176",
+                "187-198",
+                "208-217",
+                "226-290",
+                "295-307",
+                "313-363",
+                "368-374",
+                "380-386",
+                "391-420",
+                "439",
+                "476-483",
             ],
         }
         assert g16_oniom.oniom_get_charge_and_multiplicity == {
@@ -1955,8 +1957,10 @@ class TestGaussianWBIOutput:
         assert len(g16_output.standard_orientations) == 1
         assert len(g16_output.all_structures) == 1
 
-    def test_molecules(self):
-        mol = Molecule.from_pubchem("241")  # benzene molecule
+    def test_molecules(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile
+        )  # benzene molecule
         assert mol.is_aromatic
 
 

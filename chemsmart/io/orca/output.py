@@ -38,7 +38,8 @@ class ORCAOutput(ORCAFileMixin):
     """
     Parser for ORCA quantum chemistry output files.
 
-    This class provides comprehensive parsing capabilities for ORCA output files,
+    This class provides comprehensive parsing
+    capabilities for ORCA output files,
     extracting energies, molecular properties, geometries, frequencies, and
     calculation statistics. Supports various ORCA calculation types including
     single-point energies, geometry optimizations, and frequency calculations.
@@ -152,21 +153,28 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def input_coordinates_block(self):
         """
-        Obtain the coordinate block from the input that is printed in the outputfile.
+        Obtain the coordinate block from the
+        input that is printed in the outputfile.
         """
         return self._get_first_structure_coordinates_block_in_output()
 
     def _get_input_structure_coordinates_block_in_output(self):
-        """In ORCA output file, the input structure is rewritten and for single points,
+        """In ORCA output file, the input structure
+        is rewritten and for single points,
         is same as the output structure.
 
-        An example of the relevant part of the output describing the structure is:
+        An example of the relevant part of the
+        output describing the structure is:
         | 20> * xyz 0 1
-        | 21>   O   -0.00000000323406      0.00000000000000      0.08734060152197
-        | 22>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
-        | 23>   H   0.75520524233942      0.00000000000000     -0.50967030177046
+        | 21> O -0.00000000323406
+        0.00000000000000 0.08734060152197
+        | 22> H -0.75520523910536
+        0.00000000000000 -0.50967029975151
+        | 23> H 0.75520524233942
+        0.00000000000000 -0.50967030177046
         | 24> *.
-        # this will not work if the input file is supplied separately as .xyz file
+        # this will not work if the input file
+        # is supplied separately as .xyz file
         """
         coordinates_block_lines_list = []
         pattern = re.compile(orca_input_coordinate_in_output)
@@ -202,7 +210,8 @@ class ORCAOutput(ORCAFileMixin):
             if found_header:
                 match = pattern.match(line)
                 if match:
-                    # Extract the last 4 elements (symbol, x, y, z) and join with double spaces
+                    # Extract the last 4 elements (symbol,
+                    # x, y, z) and join with double spaces
                     coord_line = "  ".join(line.split()[-4:])
                     coordinates_block_lines_list.append(coord_line)
                 elif (
@@ -255,10 +264,12 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def _get_constraints(self):
         """Extract constrained internal coordinates from ORCA output.
-        Reads from Redundant Internal Coordinates block where, if DOF is constrained,
+        Reads from Redundant Internal Coordinates
+        block where, if DOF is constrained,
         there is a "C" at the end of the line.
         Returns:
-             a dict similar to optimized parameters, specifying the constraints and
+             a dict similar to optimized parameters,
+             specifying the constraints and
              the associated values, e.g.,
                 optimized_geometry == {
                     "B(H1,O0)": 0.9627,
@@ -311,7 +322,8 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def optimized_output_lines(self):
-        """Chunk of outputfile where the properties are calculated based on the final optimized structure.
+        """Chunk of outputfile where the properties are
+        calculated based on the final optimized structure.
 
         FOR SP CALCULATION, THIS WILL BE EMPTY!
         """
@@ -628,8 +640,10 @@ class ORCAOutput(ORCAFileMixin):
         pattern = re.compile(r"\|.*>.*convergence", re.IGNORECASE)
         for line in self.contents:
             if pattern.search(line):
-                # return string directly after 'convergence' -- convergence criteria
-                # ['sloppy', 'loose', 'medium', 'strong', 'tight', 'verytight', 'extreme']
+                # return string directly after
+                # 'convergence' -- convergence criteria
+                # ['sloppy', 'loose', 'medium', 'strong',
+                # 'tight', 'verytight', 'extreme']
                 return line.lower().split("convergence")[-1].strip().split()[0]
         return None
 
@@ -673,7 +687,8 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def all_structures(self):
-        """Obtain all structures in ORCA output file, including intermediate points if present.
+        """Obtain all structures in ORCA output file,
+        including intermediate points if present.
         Include corresponding energies and forces where available."""
 
         # Extract all raw structure data
@@ -681,7 +696,8 @@ class ORCAOutput(ORCAFileMixin):
         if not orientations:
             return []  # No structures found
 
-        # Clean duplicate structures (e.g., last structure might repeat in some cases)
+        # Clean duplicate structures (e.g., last
+        # structure might repeat in some cases)
         clean_duplicate_structure(orientations)
 
         # Handle PBC (default to None if not present in ORCA output)
@@ -705,7 +721,8 @@ class ORCAOutput(ORCAFileMixin):
         if self.normal_termination:
             num_structures = len(orientations)
         else:
-            # For abnormal termination, exclude the last structure (likely incomplete)
+            # For abnormal termination, exclude the
+            # last structure (likely incomplete)
             num_structures = max(0, len(orientations) - 1)
             if num_structures == 0:
                 return []
@@ -819,11 +836,11 @@ class ORCAOutput(ORCAFileMixin):
                            (Angstroem and degrees).
 
             Definition                    OldVal   dE/dq     Step     FinalVal
-        ----------------------------------------------------------------------------
+        -----------------------------------------------------------------------
          1. B(H   1,O   0)                0.9627 -0.000014  0.0000    0.9627
          2. B(H   2,O   0)                0.9627 -0.000014  0.0000    0.9627
          3. A(H   1,O   0,H   2)          103.34 -0.000009    0.00    103.35
-        ----------------------------------------------------------------------------
+        -----------------------------------------------------------------------
         #TODO: need to convert to 1-indexing
         """
         optimized_geometry = {}
@@ -853,8 +870,10 @@ class ORCAOutput(ORCAFileMixin):
                     optimized_geometry[parameter] = float(
                         optimized_final_value
                     )
-        ## the above result will return a dictionary storing the optimized parameters:
-        ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }
+        ## the above result will return a dictionary
+        # storing the optimized parameters:
+        ## optimized_geometry = { b(h1,o0) : 0.9627,
+        # b(h2,o0) : 0.9627, a(h1,o0, h2) : 103.35 }
         return optimized_geometry
 
     @cached_property
@@ -865,7 +884,8 @@ class ORCAOutput(ORCAFileMixin):
             return self._get_optimized_final_structure()
 
     def _get_optimized_final_structure(self):
-        """Obtain the final optimized structure from ORCA geometry optimization job.
+        """Obtain the final optimized structure
+        from ORCA geometry optimization job.
 
         An example of the output for this portion will look like:
 
@@ -890,10 +910,12 @@ class ORCAOutput(ORCAFileMixin):
         if len(self.optimized_output_lines) != 0:
             for i, line_i in enumerate(self.optimized_output_lines):
                 if "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" in line_i:
-                    # only start getting the structures that appear after this line (stationary point)
+                    # only start getting the structures that
+                    # appear after this line (stationary point)
                     for line_j in self.optimized_output_lines[i + 4 :]:
                         if len(line_j) == 0:
-                            # stop when an empty line appears, else it will continue parsing non-geometry
+                            # stop when an empty line appears, else
+                            # it will continue parsing non-geometry
                             break
                         # start reading 4 lines after
                         if pattern.match(line_j):
@@ -920,7 +942,8 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def last_structure(self):
         """
-        Return last structure, whether the output file has completed successfully or not.
+        Return last structure, whether the output
+        file has completed successfully or not.
         """
         return self.all_structures[-1]
 
@@ -958,19 +981,25 @@ class ORCAOutput(ORCAFileMixin):
                     molecule = Molecule.from_filepath(filepath=xyz_filepath)
                     break
             else:
-                # If molecule is not found, get it from the input lines in the output file
+                # If molecule is not found, get it from
+                # the input lines in the output file
                 molecule = self._get_input_structure_in_output()
         return molecule
 
     def _get_input_structure_in_output(self):
-        """In ORCA output file, the input structure is rewritten and for single points,
+        """In ORCA output file, the input structure
+        is rewritten and for single points,
         is same as the output structure.
 
-        An example of the relevant part of the output describing the structure is:
+        An example of the relevant part of the
+        output describing the structure is:
         | 20> * xyz 0 1
-        | 21>   O   -0.00000000323406      0.00000000000000      0.08734060152197
-        | 22>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
-        | 23>   H   0.75520524233942      0.00000000000000     -0.50967030177046
+        | 21> O -0.00000000323406
+        0.00000000000000 0.08734060152197
+        | 22> H -0.75520523910536
+        0.00000000000000 -0.50967029975151
+        | 23> H 0.75520524233942
+        0.00000000000000 -0.50967030177046
         | 24> *.
         """
         final_symbols = []
@@ -1474,7 +1503,8 @@ class ORCAOutput(ORCAFileMixin):
         orbital_occupancy = []
         orbital_energies = []
         for line in self._get_last_orbital_energies_section()[2:]:
-            # ignore the lines '----------------' and one empty line that follows
+            # ignore the lines '----------------'
+            # and one empty line that follows
             line_elements = line.split()
             if len(line_elements) == 0:
                 break
@@ -1558,7 +1588,8 @@ class ORCAOutput(ORCAFileMixin):
     def is_unrestricted(self):
         """Check if the calculation is unrestricted.
 
-        Returns True if the calculation used separate alpha and beta spin orbitals.
+        Returns True if the calculation used
+        separate alpha and beta spin orbitals.
         """
         return self.spin == "unrestricted"
 
@@ -2176,7 +2207,8 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def vibrational_frequencies(self):
-        """Return vibrational frequencies without translational and rotational modes."""
+        """Return vibrational frequencies without
+        translational and rotational modes."""
         if self.all_vibrational_frequencies is None:
             return []
         return [x for x in self.all_vibrational_frequencies if x != 0.0]
@@ -2211,7 +2243,8 @@ class ORCAOutput(ORCAFileMixin):
                         mode_numbers = [int(x) for x in j_line.split()]
                         num_modes_in_block = len(mode_numbers)
 
-                        # Read the next 3*num_atoms lines (x, y, z for each atom)
+                        # Read the next 3*num_atoms
+                        # lines (x, y, z for each atom)
                         coord_lines_to_read = 3 * self.num_atoms
 
                         pre_modes = []
@@ -2229,7 +2262,8 @@ class ORCAOutput(ORCAFileMixin):
                                 ]  # Skip coordinate index
                                 pre_modes.append(values)
 
-                        # Convert to numpy array: shape (3N, num_modes_in_block)
+                        # Convert to numpy array: shape
+                        # (3N, num_modes_in_block)
                         pre_modes = np.asarray(pre_modes)
 
                         # Extract each mode
@@ -2237,7 +2271,8 @@ class ORCAOutput(ORCAFileMixin):
                             # Extract the column for this mode: shape (3N,)
                             mode_column = pre_modes[:, mode_col]
 
-                            # Reshape to (num_atoms, 3) by grouping every 3 consecutive values
+                            # Reshape to (num_atoms, 3) by
+                            # grouping every 3 consecutive values
                             mode_data = mode_column.reshape(self.num_atoms, 3)
                             normal_modes.append(mode_data)
 
@@ -2482,10 +2517,13 @@ class ORCAOutput(ORCAFileMixin):
     def internal_energy(self):
         """The inner energy is: U= E(el) + E(ZPE) + E(vib) + E(rot) + E(trans).
 
-        E(el) = E(kin-el) + E(nuc-el) + E(el-el) + E(nuc-nuc)  is the total energy from the electronic structure
+        E(el) = E(kin-el) + E(nuc-el) + E(el-el) + E(nuc-nuc)
+        is the total energy from the electronic structure
             calculation
-        E(ZPE)  - the the zero temperature vibrational energy from the frequency calculation
-        E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states
+        E(ZPE) - the the zero temperature vibrational
+        energy from the frequency calculation
+        E(vib) - the the finite temperature correction to
+        E(ZPE) due to population of excited vibrational states
         E(rot)  - is the rotational thermal energy
         E(trans)- is the translational thermal energy.
         Default units are Hartree.
@@ -2527,7 +2565,8 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def zero_point_energy(self):
-        """E(ZPE)  - the the zero temperature vibrational energy from the frequency calculation.
+        """E(ZPE) - the the zero temperature vibrational
+        energy from the frequency calculation.
         Default units are Hartree."""
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
@@ -2545,7 +2584,8 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def thermal_vibration_correction(self):
         """
-        E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states.
+        E(vib) - the the finite temperature correction to
+        E(ZPE) due to population of excited vibrational states.
         """
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
@@ -2613,7 +2653,8 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def total_thermal_correction_due_to_trans_rot_vib(self):
         """
-        Get total thermal correction due to translation, rotation and vibration.
+        Get total thermal correction due to
+        translation, rotation and vibration.
         """
         return (
             self.thermal_translation_correction
@@ -2788,7 +2829,8 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def entropy_TS(self):
-        """The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
+        """The entropy contributions are T*S
+        = T*(S(el)+S(vib)+S(rot)+S(trans)).
 
         ALREADY MULTIPLIED BY TEMPERATURE.
         The entropies will be listed as multiplied by the temperature
@@ -2988,7 +3030,8 @@ class ORCAEngradFile(ORCAFileMixin):
         """
         for i, line in enumerate(self.contents):
             if "current gradient" in line:
-                # check 3N + 3 lines following the match, where N is number of atoms
+                # check 3N + 3 lines following the
+                # match, where N is number of atoms
                 grad_data = []
                 for content in self.contents[
                     i + 1 : i + 3 * self.num_atoms + 4
@@ -3270,3 +3313,171 @@ class ORCAQMMMOutput(ORCAOutput):
             qm_qm2_energy,
             qm_energy,
         )
+
+
+class ORCANEBOutput(ORCAOutput):
+    """Class to parse the ORCA NEB output files.
+
+    This class is used to parse the NEB output files generated by ORCA.
+    It inherits from the ORCAOutput class and adds additional functionality
+    specific to NEB calculations.
+    """
+
+    def __init__(self, filename):
+        super().__init__(filename)
+        self.filename = filename
+
+    @property
+    def ci_converged(self):
+        for line in self.contents:
+            if "THE NEB OPTIMIZATION HAS CONVERGED" in line:
+                return True
+        return False
+
+    @property
+    def ts_converged(self):
+        for line in self.contents:
+            if "THE TS OPTIMIZATION HAS CONVERGED" in line:
+                return True
+        return False
+
+    @property
+    def ci(self):
+        ci, _, _ = self._get_ci_info()
+        if ci is None:
+            return None
+        return f"Climbing Image:  image {ci}."
+
+    @property
+    def ci_energy(self):
+        _, ci_energy, _ = self._get_ci_info()
+        if ci_energy is None:
+            return None
+        return ci_energy
+
+    @property
+    def ci_max_abs_force(self):
+        _, _, ci_max_abs_force = self._get_ci_info()
+        if ci_max_abs_force is None:
+            return None
+        return ci_max_abs_force
+
+    @property
+    def reactant(self):
+        return self._get_geometries()[0]
+
+    @property
+    def product(self):
+        try:
+            return self._get_geometries()[1]
+        except (TypeError, ValueError):
+            # product geometry may not be found for a free end NEB
+            return None
+
+    @property
+    def nimages(self):
+        return self._get_number_of_images()
+
+    @property
+    def ts_energy(self):
+        ts_energy, _, _, _ = self._get_ts_info()
+        return ts_energy
+
+    @property
+    def ts_delta_energy(self):
+        _, ts_delta_energy, _, _ = self._get_ts_info()
+        return ts_delta_energy
+
+    @property
+    def ts_max_abs_force(self):
+        _, _, ts_max_abs_force, _ = self._get_ts_info()
+        return ts_max_abs_force
+
+    @property
+    def ts_rms_force(self):
+        _, _, _, ts_rms_force = self._get_ts_info()
+        return ts_rms_force
+
+    @property
+    def preopt_ends(self):
+        return self._get_pre_optimization()
+
+    def _get_ci_info(self):
+        ci = ci_energy = ci_max_abs_force = None
+        for i, line in enumerate(self.contents):
+            if "Climbing image                            ...." in line:
+                ci = int(line.split()[-1])
+                for line_j in self.contents[i:]:
+                    if (
+                        "Energy                                    ...."
+                        in line_j
+                    ):
+                        ci_energy = float(line_j.split()[-2])
+                    elif (
+                        "Max. abs. force                           ...."
+                        in line_j
+                    ):
+                        ci_max_abs_force = float(line_j.split()[-2])
+        return ci, ci_energy, ci_max_abs_force
+
+    def _get_geometries(self):
+        """Extract all Cartesian coordinate blocks from the ORCA output."""
+        structures = []
+        for i, line in enumerate(self.contents):
+            if "REACTANT (ANGSTROEM)" in line:
+                coordinate_lines = []
+                for line_j in self.contents[i:]:
+                    pattern = re.compile(standard_coord_pattern)
+                    if len(line_j) == 0:
+                        break
+                    if pattern.match(line_j):
+                        coordinate_lines.append(line_j)
+                cb = CoordinateBlock(coordinate_block=coordinate_lines)
+                structures.append(cb.molecule)
+            elif "PRODUCT (ANGSTROEM)" in line:
+                coordinate_lines = []
+                for line_j in self.contents[i:]:
+                    pattern = re.compile(standard_coord_pattern)
+                    if len(line_j) == 0:
+                        break
+                    if pattern.match(line_j):
+                        coordinate_lines.append(line_j)
+                cb = CoordinateBlock(coordinate_block=coordinate_lines)
+                structures.append(cb.molecule)
+        return structures
+
+    def _get_number_of_images(self):
+        for line in self.contents:
+            if "Number of images (incl. end points)" in line:
+                line_elements = line.split()
+                return int(line_elements[-1])
+        return None
+
+    def _get_pre_optimization(self):
+        preopt_ends = False
+        for line in self.contents:
+            if (
+                "Optimization of end points before NEB" in line
+                and "YES" in line
+            ):
+                preopt_ends = True
+                break
+        return preopt_ends
+
+    def _get_ts_info(self):
+        for line in self.contents:
+            ts_pattern = r"(-?\d+\.\d+)\s+<= TS"
+            match = re.findall(ts_pattern, line)
+            if match:
+                line = line.split()
+                ts_energy = float(line[1])
+                ts_delta_energy = float(line[2])
+                ts_max_abs_force = float(line[3])
+                ts_rms_force = float(line[4])
+                return (
+                    ts_energy,
+                    ts_delta_energy,
+                    ts_max_abs_force,
+                    ts_rms_force,
+                )
+        return None, None, None, None

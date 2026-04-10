@@ -124,7 +124,8 @@ class Server(RegistryMixin):
         Get the job scheduler for this server.
 
         Returns:
-            str or None: Scheduler type (e.g., 'slurm', 'pbs') or None if not set.
+            str or None: Scheduler type (e.g.,
+            'slurm', 'pbs') or None if not set.
         """
         return self.kwargs.get("SCHEDULER", None)
 
@@ -270,7 +271,8 @@ class Server(RegistryMixin):
         for various cluster management systems.
 
         Returns:
-            str or None: Submission command for the scheduler or None if unknown.
+            str or None: Submission command for
+            the scheduler or None if unknown.
         """
         scheduler_submit_commands = {
             "SLURM": "sbatch",
@@ -318,10 +320,12 @@ class Server(RegistryMixin):
         server if no scheduler is detected.
 
         Returns:
-            Server: Server instance for the detected scheduler (or local fallback), typically a YamlServerSettings.
+            Server: Server instance for the detected scheduler
+            (or local fallback), typically a YamlServerSettings.
 
         Raises:
-            ValueError: If no server class is defined for the detected scheduler type.
+            ValueError: If no server class is
+            defined for the detected scheduler type.
         """
         scheduler_type = cls.detect_server_scheduler()
 
@@ -349,7 +353,8 @@ class Server(RegistryMixin):
         the type of job scheduler running on the current system.
 
         Returns:
-            str: The detected scheduler type (e.g., SLURM, PBS, LSF, SGE, HTCondor)
+            str: The detected scheduler type
+            (e.g., SLURM, PBS, LSF, SGE, HTCondor)
                  or "Unknown Scheduler" if none detected.
         """
         schedulers = [
@@ -440,7 +445,8 @@ class Server(RegistryMixin):
         Provides detailed error messages if the server is not found.
 
         Args:
-            server_name (str): Name of the server (with or without .yaml extension).
+            server_name (str): Name of the server
+            (with or without .yaml extension).
 
         Returns:
             Server: Configured server instance.
@@ -483,7 +489,8 @@ class Server(RegistryMixin):
             manager: Server settings manager instance.
 
         Returns:
-            Server or None: Server if loaded; None only when the file is missing.
+            Server or None: Server if loaded;
+            None only when the file is missing.
 
         Raises:
             ValueError: if the YAML is malformed or invalid.
@@ -522,12 +529,14 @@ class Server(RegistryMixin):
 
         Args:
             job (Job): Job instance to be submitted.
-            test (bool): If True, only creates scripts without actual submission.
+            test (bool): If True, only creates
+            scripts without actual submission.
                 Defaults to False.
             cli_args: Command line arguments for the job.
             **kwargs: Additional submission parameters.
         """
-        # First check that the job to be submitted is not already queued/running
+        # First check that the job to be
+        # submitted is not already queued/running
         self._check_running_jobs(job)
         # Then write the submission script
         self._write_submission_script(job=job, cli_args=cli_args, **kwargs)
@@ -622,7 +631,8 @@ class YamlServerSettings(Server):
     Attributes:
         NAME (str): Identifier for YAML-based server settings.
         name (str): YAML file path used as this settings' identifier.
-        kwargs (dict): Parsed configuration values from the YAML under "SERVER".
+        kwargs (dict): Parsed configuration
+        values from the YAML under "SERVER".
         _num_hours (int or None): Default job time allocation in hours.
         _queue_name (str or None): Default submission queue name.
     """

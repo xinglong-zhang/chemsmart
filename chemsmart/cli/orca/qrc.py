@@ -16,7 +16,7 @@ from chemsmart.cli.job import (
     click_molecule_vibrational_displacement_options,
 )
 from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
-from chemsmart.cli.orca.qmmm_helper import create_orca_qmmm_subcommand
+from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
 from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -45,20 +45,28 @@ def qrc(
     **kwargs,
 ):
     """
-    CLI subcommand for running ORCA quick reaction coordinate (QRC) calculations.
+    CLI subcommand for running ORCA quick
+    reaction coordinate (QRC) calculations.
 
     Examples:
         `chemsmart sub orca -p proj -f ts.log qrc` runs QRC optimization jobs
-        after displacing along vibrational mode 1 (default) by +/- 0.5 Angstroms (default).
+        after displacing along vibrational mode 1
+        (default) by +/- 0.5 Angstroms (default).
 
-        `chemsmart sub orca -p proj -f ts.log qrc -m 2 -a 1.2` runs QRC optimization jobs
-        after displacing along vibrational mode 2 (-m 2) by +/- 1.2 Angstroms (-a 1.2).
+        `chemsmart sub orca -p proj -f ts.log qrc
+        -m 2 -a 1.2` runs QRC optimization jobs
+        after displacing along vibrational mode
+        2 (-m 2) by +/- 1.2 Angstroms (-a 1.2).
 
-        `chemsmart sub orca -p proj -f ts.log qrc -j ts -m 2 -a 1.5` runs QRC TS jobs
-        after displacing along vibrational mode 2 (-m 2) by +/- 1.5 Angstroms (-a 1.5).
+        `chemsmart sub orca -p proj -f ts.log
+        qrc -j ts -m 2 -a 1.5` runs QRC TS jobs
+        after displacing along vibrational mode
+        2 (-m 2) by +/- 1.5 Angstroms (-a 1.5).
 
-        `chemsmart sub orca -p proj -f ts.log qrc -j modred -c [1,2] -m 2 -a 1.5`
-        runs QRC modred jobs after displacing along vibrational mode 2 by +/- 1.5 Angstroms.
+        `chemsmart sub orca -p proj -f ts.log
+        qrc -j modred -c [1,2] -m 2 -a 1.5`
+        runs QRC modred jobs after displacing along
+        vibrational mode 2 by +/- 1.5 Angstroms.
     """
 
     # get jobrunner for running Gaussian crest jobs

@@ -35,7 +35,8 @@ class Gaussian16Input(GaussianFileMixin):
         - content_groups[0]: Header information and route string
         - content_groups[1]: Job title/description
         - content_groups[2]: Charge/multiplicity and molecular coordinates
-        - content_groups[3:]: Additional sections (modred, gen/genecp, solvents)
+        - content_groups[3:]: Additional
+        sections (modred, gen/genecp, solvents)
 
         Note: Structure may vary depending on calculation type and may need
         updates for job-specific sections.
@@ -115,7 +116,7 @@ class Gaussian16Input(GaussianFileMixin):
             use_partition=False
         )
         if oniom_charge:
-            return oniom_charge.get("real_charge")
+            return oniom_charge.get("charge_total")
         return None
 
     @property
@@ -175,7 +176,7 @@ class Gaussian16Input(GaussianFileMixin):
             return None
         return [
             i
-            for i in range(self.num_atoms)
+            for i in range(1, self.num_atoms + 1)
             if i not in self.frozen_coordinate_indices
         ]
 
@@ -344,7 +345,7 @@ class Gaussian16Input(GaussianFileMixin):
             ):
                 break
         charge_multiplicity_list = [
-            "real_charge",
+            "charge_total",
             "real_multiplicity",
             "int_charge",
             "int_multiplicity",
@@ -361,7 +362,11 @@ class Gaussian16Input(GaussianFileMixin):
             except RecursionError:
                 partition_len = None
         if partition_len == 2:
-            charge_multiplicity_list = charge_multiplicity_list[0:1, 4:5]
+            # For two-layer ONIOM, keep only the first and last layer
+            # (drop intermediate/int layer): total and model.
+            charge_multiplicity_list = (
+                charge_multiplicity_list[0:2] + charge_multiplicity_list[4:6]
+            )
             full_line = 6
         for j in range(0, int(full_line) - len(line_elements)):
             line_elements.append("Not specified, will use default value.")
@@ -436,7 +441,8 @@ class Gaussian16Input(GaussianFileMixin):
 
 
 class Gaussian16QMMMInput(Gaussian16Input):
-    """This class has all the properties of Gaussian16Input but also additional ones
+    """This class has all the properties of
+    Gaussian16Input but also additional ones
     for Gaussian16QMMMInput."""
 
     @property
@@ -447,7 +453,7 @@ class Gaussian16QMMMInput(Gaussian16Input):
     @property
     def real_charge(self):
         oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
-        return int(oniom_charge["real_charge"])
+        return int(oniom_charge["charge_total"])
 
     @property
     def int_charge(self):
@@ -506,7 +512,7 @@ class Gaussian16QMMMInput(Gaussian16Input):
             ):
                 break
         charge_multiplicity_list = [
-            "real_charge",
+            "charge_total",
             "real_multiplicity",
             "int_charge",
             "int_multiplicity",
