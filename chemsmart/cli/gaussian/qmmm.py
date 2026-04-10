@@ -30,7 +30,7 @@ def create_qmmm_subcommand(parent_command):
 
     @parent_command.command("qmmm", cls=MyCommand)
     @click.option(
-        "-hf",
+        "-hx",
         "--high-level-functional",
         type=str,
         default=None,
@@ -51,7 +51,7 @@ def create_qmmm_subcommand(parent_command):
         help="Force field for high-level region.",
     )
     @click.option(
-        "-mf",
+        "-mx",
         "--medium-level-functional",
         type=str,
         default=None,
@@ -72,7 +72,7 @@ def create_qmmm_subcommand(parent_command):
         help="Force field for medium-level region.",
     )
     @click.option(
-        "-lf",
+        "-lx",
         "--low-level-functional",
         type=str,
         default=None,
