@@ -379,18 +379,11 @@ YAML Configuration Files
 
 Create project-specific ONIOM settings in YAML format.
 
-.. note::
-
-   When using the CLI (``chemsmart sub gaussian <jobtype> qmmm``), the ``parent_jobtype`` field is set automatically
-   from the parent command (e.g., ``opt``, ``ts``, ``sp``). Set it explicitly in YAML only when using the Python API
-   directly.
-
 **Basic 2-Layer QM/MM** (``~/.chemsmart/gaussian/qmmm.yaml``):
 
 .. code:: yaml
 
    # Basic enzyme active site calculation
-   parent_jobtype: "opt"
    high_level_functional: "B3LYP"
    high_level_basis: "6-31G*"
    low_level_force_field: "AMBER=HardFirst"
@@ -404,7 +397,6 @@ Create project-specific ONIOM settings in YAML format.
 .. code:: yaml
 
    # Advanced organometallic catalyst
-   parent_jobtype: "opt"
    high_level_functional: "M06-2X"
    high_level_basis: "def2-TZVP"
    medium_level_functional: "B3LYP"
@@ -422,7 +414,6 @@ Create project-specific ONIOM settings in YAML format.
 .. code:: yaml
 
    # Enzyme transition state search
-   parent_jobtype: "ts"
    high_level_functional: "wB97X-D"
    high_level_basis: "6-311++G(d,p)"
    low_level_force_field: "AMBER=HardFirst"
@@ -449,9 +440,7 @@ Programmatic configuration using the settings class:
    from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
    # Create basic 2-layer QM/MM settings
-   # parent_jobtype controls the route keyword (opt, ts, sp, etc.)
    qmmm_settings = GaussianQMMMJobSettings(
-       parent_jobtype="opt",
        high_level_functional="B3LYP",
        high_level_basis="6-31G*",
        low_level_force_field="AMBER=HardFirst",
@@ -465,7 +454,6 @@ Programmatic configuration using the settings class:
 
    # 3-layer ONIOM configuration
    oniom3_settings = GaussianQMMMJobSettings(
-       parent_jobtype="opt",
        high_level_functional="M06-2X",
        high_level_basis="def2-TZVP",
        medium_level_functional="B3LYP",

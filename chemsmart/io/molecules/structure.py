@@ -381,9 +381,7 @@ class Molecule:
     def voronoi_dirichlet_polyhedra_occupied_volume(self):
         """Calculate the occupied volume of the molecule
         using Voronoi-Dirichlet Polyhedra (VDP)."""
-        from chemsmart.utils.geometry import (
-            calculate_molecular_volume_vdp,
-        )
+        from chemsmart.utils.geometry import calculate_molecular_volume_vdp
 
         return calculate_molecular_volume_vdp(
             coordinates=self.positions,
