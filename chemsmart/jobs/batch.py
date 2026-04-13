@@ -136,9 +136,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     ) -> None:
         """Configure a runner copy and execute a single child job."""
         try:
-            runner = self._build_jobrunner(job, node=node)
-            if runner is not None:
-                job.jobrunner = runner
+            self._build_jobrunner(job, node=node)
             job.run(**kwargs)
             self._job_is_complete_cached(job, force_refresh=True)
         except Exception as e:
@@ -154,18 +152,20 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         job: Job,
         node: Optional[str] = None,
     ) -> Any:
-        """Build a per-job runner copy and apply optional node adaptation."""
-        if not self.jobrunner:
-            return None
+        """Copy the runner onto *job* and apply optional node adaptation.
 
-        runner = self.jobrunner.copy()
-        if node is not None:
-            runner = self._configure_runner_for_node(
-                runner=runner,
+        Uses ``Job._propagate_runner`` for the safe copy-and-assign step,
+        then applies node-specific configuration if a *node* is given.
+        """
+        child_runner = Job._propagate_runner(self.jobrunner, job)
+        if child_runner is not None and node is not None:
+            child_runner = self._configure_runner_for_node(
+                runner=child_runner,
                 node=node,
                 job=job,
             )
-        return runner
+            job.jobrunner = child_runner
+        return child_runner
 
     def _get_allocated_nodes(self) -> Optional[list[str]]:
         """

@@ -84,6 +84,45 @@ class Job(RegistryMixin):
             return
         self._run(**kwargs)
 
+    @staticmethod
+    def _propagate_runner(
+        runner, job, *, num_cores=None, mem_gb=None, num_gpus=None
+    ):
+        """Copy *runner* onto *job*, optionally patching resource fields.
+
+        This is the **single, centralised** mechanism for propagating a
+        runner to a child job.  Every call site that needs to hand a runner
+        to a child should use this helper rather than assigning directly, so
+        that:
+
+        * The child always receives its own ``.copy()`` — no shared-reference
+          mutations between siblings.
+        * Resource overrides (e.g. splitting cores across parallel workers)
+          are applied in one place, making future additions (``num_gpus``,
+          ``mem_per_cpu``, …) a single-line change.
+
+        Args:
+            runner: The parent runner to propagate, or ``None``.
+            job (Job): The child job that will receive the runner copy.
+            num_cores (int, optional): Override ``runner.num_cores`` on the copy.
+            mem_gb (int, optional): Override ``runner.mem_gb`` on the copy.
+            num_gpus (int, optional): Override ``runner.num_gpus`` on the copy.
+
+        Returns:
+            The runner copy that was assigned, or ``None`` if *runner* was falsy.
+        """
+        if not runner:
+            return None
+        child_runner = runner.copy()
+        if num_cores is not None:
+            child_runner.num_cores = num_cores
+        if mem_gb is not None:
+            child_runner.mem_gb = mem_gb
+        if num_gpus is not None:
+            child_runner.num_gpus = num_gpus
+        job.jobrunner = child_runner
+        return child_runner
+
     @abstractmethod
     def _run(self, **kwargs):
         """

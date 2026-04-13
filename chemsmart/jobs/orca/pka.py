@@ -14,6 +14,7 @@ import logging
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
@@ -382,6 +383,7 @@ class ORCApKaJob(ORCAJob):
         )
         for job in self.opt_jobs:
             logger.info(f"Running gas phase optimization job: {job}")
+            self._propagate_runner(self.jobrunner, job)
             job.run()
             if run_in_serial and not job.is_complete():
                 logger.info(f"Job {job} incomplete, breaking opt loop.")
@@ -396,6 +398,7 @@ class ORCApKaJob(ORCAJob):
         )
         for job in self.ref_opt_jobs:
             logger.info(f"Running reference gas phase optimization job: {job}")
+            self._propagate_runner(self.jobrunner, job)
             job.run()
             if run_in_serial and not job.is_complete():
                 logger.info(f"Job {job} incomplete, breaking ref opt loop.")
@@ -408,6 +411,7 @@ class ORCApKaJob(ORCAJob):
         )
         for job in self.sp_jobs:
             logger.info(f"Running solution phase SP job: {job}")
+            self._propagate_runner(self.jobrunner, job)
             job.run()
             if run_in_serial and not job.is_complete():
                 logger.info(f"Job {job} incomplete, breaking sp loop.")
@@ -423,6 +427,7 @@ class ORCApKaJob(ORCAJob):
         )
         for job in self.ref_sp_jobs:
             logger.info(f"Running reference solution phase SP job: {job}")
+            self._propagate_runner(self.jobrunner, job)
             job.run()
             if run_in_serial and not job.is_complete():
                 logger.info(f"Job {job} incomplete, breaking ref sp loop.")
@@ -495,11 +500,7 @@ class ORCApKaJob(ORCAJob):
             "error": None,
         }
 
-        if runner:
-            job.jobrunner = runner.copy()
-            job.jobrunner.num_cores = cores
-            job.jobrunner.mem_gb = mem
-
+        self._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
         job.run()
 
         freq_err = self._validate_imaginary_frequencies(job, role)
@@ -524,11 +525,7 @@ class ORCApKaJob(ORCAJob):
             "error": None,
         }
 
-        if runner:
-            job.jobrunner = runner.copy()
-            job.jobrunner.num_cores = cores
-            job.jobrunner.mem_gb = mem
-
+        Job._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
         job.run()
         result["success"] = True
         return result

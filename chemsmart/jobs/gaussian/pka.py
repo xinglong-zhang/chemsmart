@@ -20,6 +20,7 @@ from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
+from chemsmart.jobs.job import Job
 
 logger = logging.getLogger(__name__)
 
@@ -213,18 +214,14 @@ class GaussianpKaJob(GaussianJob):
     def _run_opt_jobs(self):
         """Run gas phase optimization jobs."""
         for job in self.opt_jobs:
-            # Propagate runner to ensure correct execution context
-            if self.jobrunner:
-                job.jobrunner = self.jobrunner
+            self._propagate_runner(self.jobrunner, job)
             job.run()
 
     def _run_ref_opt_jobs(self):
         """Run reference gas phase optimization jobs."""
         if self.has_reference_jobs:
             for job in self.ref_opt_jobs:
-                # Propagate runner to ensure correct execution context
-                if self.jobrunner:
-                    job.jobrunner = self.jobrunner
+                self._propagate_runner(self.jobrunner, job)
                 job.run()
 
     def _run_sp_jobs(self):
@@ -241,9 +238,7 @@ class GaussianpKaJob(GaussianJob):
 
         if self.sp_jobs:
             for job in self.sp_jobs:
-                # Propagate runner to ensure correct execution context
-                if self.jobrunner:
-                    job.jobrunner = self.jobrunner
+                self._propagate_runner(self.jobrunner, job)
                 job.run()
 
     def _run_ref_sp_jobs(self):
@@ -260,8 +255,7 @@ class GaussianpKaJob(GaussianJob):
 
             if self.ref_sp_jobs:
                 for job in self.ref_sp_jobs:
-                    if self.jobrunner:
-                        job.jobrunner = self.jobrunner
+                    self._propagate_runner(self.jobrunner, job)
                     job.run()
 
     def _create_sp_jobs(self):
@@ -380,11 +374,7 @@ class GaussianpKaJob(GaussianJob):
             "error": None,
         }
 
-        if runner:
-            job.jobrunner = runner.copy()
-            job.jobrunner.num_cores = cores
-            job.jobrunner.mem_gb = mem
-
+        self._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
         job.run()
 
         freq_err = self._validate_imaginary_frequencies(job, role)
@@ -409,11 +399,7 @@ class GaussianpKaJob(GaussianJob):
             "error": None,
         }
 
-        if runner:
-            job.jobrunner = runner.copy()
-            job.jobrunner.num_cores = cores
-            job.jobrunner.mem_gb = mem
-
+        Job._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
         job.run()
         result["success"] = True
         return result
