@@ -441,9 +441,7 @@ def get_setting_from_jobtype_for_gaussian(
 
             # broadcast single step_size/num_steps to all coordinates
             coords_num = (
-                len(modred_info)
-                if isinstance(modred_info[0], list)
-                else 1
+                len(modred_info) if isinstance(modred_info[0], list) else 1
             )
             if len(step_size_info) == 1 and coords_num > 1:
                 step_size_info = step_size_info * coords_num
@@ -616,9 +614,7 @@ def get_setting_from_jobtype_for_orca(
 
             # broadcast single dist_start/dist_end/num_steps to all coordinates
             coords_num = (
-                len(modred_info)
-                if isinstance(modred_info[0], list)
-                else 1
+                len(modred_info) if isinstance(modred_info[0], list) else 1
             )
             if len(dist_start_info) == 1 and coords_num > 1:
                 dist_start_info = dist_start_info * coords_num
