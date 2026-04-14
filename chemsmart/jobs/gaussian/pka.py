@@ -213,16 +213,23 @@ class GaussianpKaJob(GaussianJob):
 
     def _run_opt_jobs(self):
         """Run gas phase optimization jobs."""
-        for job in self.opt_jobs:
-            self._propagate_runner(self.jobrunner, job)
-            job.run()
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=self.opt_jobs,
+            logger_obj=logger,
+            phase_label="gas phase optimization",
+        )
 
     def _run_ref_opt_jobs(self):
         """Run reference gas phase optimization jobs."""
-        if self.has_reference_jobs:
-            for job in self.ref_opt_jobs:
-                self._propagate_runner(self.jobrunner, job)
-                job.run()
+        if not self.has_reference_jobs:
+            return
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=self.ref_opt_jobs,
+            logger_obj=logger,
+            phase_label="reference gas phase optimization",
+        )
 
     def _run_sp_jobs(self):
         """Run solution phase single point jobs using optimized geometries."""
@@ -236,27 +243,32 @@ class GaussianpKaJob(GaussianJob):
         if self.sp_jobs is None:
             self._create_sp_jobs()
 
-        if self.sp_jobs:
-            for job in self.sp_jobs:
-                self._propagate_runner(self.jobrunner, job)
-                job.run()
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=self.sp_jobs,
+            logger_obj=logger,
+            phase_label="solution phase SP",
+        )
 
     def _run_ref_sp_jobs(self):
         """Run reference solution phase single point jobs."""
-        if self.has_reference_jobs:
-            if not self._ref_opt_jobs_are_complete():
-                logger.warning(
-                    "Reference optimization jobs not complete. Cannot run reference SP jobs."
-                )
-                return
+        if not self.has_reference_jobs:
+            return
+        if not self._ref_opt_jobs_are_complete():
+            logger.warning(
+                "Reference optimization jobs not complete. Cannot run reference SP jobs."
+            )
+            return
 
-            if self.ref_sp_jobs is None:
-                self._create_ref_sp_jobs()
+        if self.ref_sp_jobs is None:
+            self._create_ref_sp_jobs()
 
-            if self.ref_sp_jobs:
-                for job in self.ref_sp_jobs:
-                    self._propagate_runner(self.jobrunner, job)
-                    job.run()
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=self.ref_sp_jobs,
+            logger_obj=logger,
+            phase_label="reference solution phase SP",
+        )
 
     def _create_sp_jobs(self):
         """Create solution phase SP jobs from optimized geometries."""

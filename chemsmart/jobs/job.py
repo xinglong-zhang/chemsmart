@@ -6,7 +6,7 @@ import shutil
 import time
 from abc import abstractmethod
 from contextlib import suppress
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -122,6 +122,48 @@ class Job(RegistryMixin):
             child_runner.num_gpus = num_gpus
         job.jobrunner = child_runner
         return child_runner
+
+    @staticmethod
+    def _execute_phase_jobs(
+        *,
+        parent_runner,
+        jobs: Optional[Sequence],
+        jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+        run_in_serial: bool = False,
+        stop_on_incomplete: bool = False,
+        before_run: Optional[Callable[[], None]] = None,
+        logger_obj: Optional[logging.Logger] = None,
+        phase_label: str = "phase",
+    ) -> None:
+        """Run a phase of child jobs using shared orchestration semantics.
+
+        This centralizes the repeated pattern of optional pre-phase refresh,
+        per-job runner propagation, and serial-mode fail-fast behavior.
+        """
+        if before_run is not None:
+            before_run()
+
+        if jobs_factory is not None:
+            jobs = jobs_factory()
+
+        if not jobs:
+            return
+
+        for child_job in jobs:
+            if logger_obj is not None:
+                logger_obj.info(f"Running {phase_label} job: {child_job}")
+            Job._propagate_runner(parent_runner, child_job)
+            child_job.run()
+            if (
+                run_in_serial
+                and stop_on_incomplete
+                and not child_job.is_complete()
+            ):
+                if logger_obj is not None:
+                    logger_obj.info(
+                        f"Job {child_job} incomplete, breaking {phase_label} loop."
+                    )
+                break
 
     @abstractmethod
     def _run(self, **kwargs):

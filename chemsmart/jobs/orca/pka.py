@@ -377,61 +377,58 @@ class ORCApKaJob(ORCAJob):
     # Execution
     # ------------------------------------------------------------------
 
-    def _run_opt_jobs(self):
-        run_in_serial = self.jobrunner and getattr(
-            self.jobrunner, "run_in_serial", False
+    def _is_serial_execution_enabled(self) -> bool:
+        return bool(
+            self.jobrunner and getattr(self.jobrunner, "run_in_serial", False)
         )
-        for job in self.opt_jobs:
-            logger.info(f"Running gas phase optimization job: {job}")
-            self._propagate_runner(self.jobrunner, job)
-            job.run()
-            if run_in_serial and not job.is_complete():
-                logger.info(f"Job {job} incomplete, breaking opt loop.")
-                break
+
+    def _run_opt_jobs(self):
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=self.opt_jobs,
+            run_in_serial=self._is_serial_execution_enabled(),
+            stop_on_incomplete=True,
+            logger_obj=logger,
+            phase_label="opt",
+        )
 
     def _run_ref_opt_jobs(self):
         if not self.has_reference_jobs:
             return
-
-        run_in_serial = self.jobrunner and getattr(
-            self.jobrunner, "run_in_serial", False
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=self.ref_opt_jobs,
+            run_in_serial=self._is_serial_execution_enabled(),
+            stop_on_incomplete=True,
+            logger_obj=logger,
+            phase_label="ref opt",
         )
-        for job in self.ref_opt_jobs:
-            logger.info(f"Running reference gas phase optimization job: {job}")
-            self._propagate_runner(self.jobrunner, job)
-            job.run()
-            if run_in_serial and not job.is_complete():
-                logger.info(f"Job {job} incomplete, breaking ref opt loop.")
-                break
 
     def _run_sp_jobs(self):
-        self._sp_jobs = None  # refresh with optimised geometries
-        run_in_serial = self.jobrunner and getattr(
-            self.jobrunner, "run_in_serial", False
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=None,
+            jobs_factory=lambda: self.sp_jobs,
+            run_in_serial=self._is_serial_execution_enabled(),
+            stop_on_incomplete=True,
+            before_run=lambda: setattr(self, "_sp_jobs", None),
+            logger_obj=logger,
+            phase_label="sp",
         )
-        for job in self.sp_jobs:
-            logger.info(f"Running solution phase SP job: {job}")
-            self._propagate_runner(self.jobrunner, job)
-            job.run()
-            if run_in_serial and not job.is_complete():
-                logger.info(f"Job {job} incomplete, breaking sp loop.")
-                break
 
     def _run_ref_sp_jobs(self):
         if not self.has_reference_jobs:
             return
-
-        self._ref_sp_jobs = None
-        run_in_serial = self.jobrunner and getattr(
-            self.jobrunner, "run_in_serial", False
+        Job._execute_phase_jobs(
+            parent_runner=self.jobrunner,
+            jobs=None,
+            jobs_factory=lambda: self.ref_sp_jobs,
+            run_in_serial=self._is_serial_execution_enabled(),
+            stop_on_incomplete=True,
+            before_run=lambda: setattr(self, "_ref_sp_jobs", None),
+            logger_obj=logger,
+            phase_label="ref sp",
         )
-        for job in self.ref_sp_jobs:
-            logger.info(f"Running reference solution phase SP job: {job}")
-            self._propagate_runner(self.jobrunner, job)
-            job.run()
-            if run_in_serial and not job.is_complete():
-                logger.info(f"Job {job} incomplete, breaking ref sp loop.")
-                break
 
     def _make_sp_job(self, opt_job, fallback_molecule, sp_settings, sp_label):
         """Create SP job using optimized geometry if available."""
@@ -681,9 +678,7 @@ class ORCApKaJob(ORCAJob):
             self._run_parallel()
             return
 
-        run_in_serial = self.jobrunner and getattr(
-            self.jobrunner, "run_in_serial", False
-        )
+        run_in_serial = self._is_serial_execution_enabled()
 
         self._run_opt_jobs()
 
