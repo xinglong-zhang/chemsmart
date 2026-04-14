@@ -22,7 +22,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from chemsmart.utils.io import logger
 
 
 class OrderedSet:
