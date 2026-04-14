@@ -2293,7 +2293,6 @@ class TestCDXFile:
         """Test reading multiple organometallic molecules from a CDXML file with Cp and aromatic ligands."""
         assert os.path.exists(metal_ligand_molecules_cdxml_file)
         assert os.path.isfile(metal_ligand_molecules_cdxml_file)
-
         cdx_file = CDXFile(filename=metal_ligand_molecules_cdxml_file)
         molecules = cdx_file.molecules
 
@@ -2314,7 +2313,6 @@ class TestCDXFile:
         assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
         assert mol.num_atoms == 75
         assert mol.is_aromatic
-
 
 
 class TestInChIKey:

@@ -8,7 +8,6 @@ specialized decorators for function caching and ordered set implementation.
 
 import copy
 import hashlib
-import logging
 import os
 import re
 import shlex
