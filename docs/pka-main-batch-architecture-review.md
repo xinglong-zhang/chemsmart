@@ -35,7 +35,7 @@ Code reviewed includes:
   - either change constructor default to `run_in_serial=None` and resolve from runner when `None`,
   - or keep default but enforce explicit passing at all `BatchJob` call sites and document that requirement.
 
-### 2) High — Parallel pKa path does not gate SP phase on optimization failures
+### 2) High — Parallel pKa path does not gate SP phase on optimization failures (FIXED)
 
 - **Evidence:**
   - `chemsmart/jobs/gaussian/pka.py:530-573` (`GaussianpKaJob._run_parallel`)

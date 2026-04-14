@@ -50,7 +50,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def __init__(
         self,
         jobs: Optional[Sequence[Job]],
-        run_in_serial: bool = True,
+        run_in_serial: Optional[bool] = None,
         label: str = "batch_job",
         jobrunner: Any = None,
         **kwargs,
@@ -63,10 +63,12 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         )
         self.jobs: list[Job] = list(jobs) if jobs is not None else []
         runner_serial_mode = get_serial_mode(jobrunner)
-        # Respect explicit batch-level serial requests and runner-level serial mode.
-        self.run_in_serial: bool = bool(
-            run_in_serial or runner_serial_mode.run_in_serial
-        )
+        # - explicit True/False at call site wins
+        # - None defers to runner policy
+        if run_in_serial is None:
+            self.run_in_serial = runner_serial_mode.run_in_serial
+        else:
+            self.run_in_serial = bool(run_in_serial)
 
         # Cache completion checks to avoid repeatedly reparsing output files
         # from the head-node monitoring loop.

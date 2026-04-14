@@ -40,7 +40,7 @@ class GaussianpKaBatchJob(GaussianBatchJob):
     def __init__(
         self,
         jobs,
-        run_in_serial=True,
+        run_in_serial=None,
         label="batch_pka",
         jobrunner=None,
         **kwargs,
@@ -1011,6 +1011,6 @@ class GaussianpKaBatchAnalyzeJob(GaussianpKaBatchJob):
         # settings to create proper GaussianpKaAnalyzeJob instances here.
         # This implementation primarily satisfies the import requirement.
         super().__init__(
-            jobs=[], label=label, jobrunner=jobrunner, run_in_serial=True
+            jobs=[], label=label, jobrunner=jobrunner, run_in_serial=None
         )
         self.input_file_list = input_file_list

@@ -201,7 +201,20 @@ class TestBatchJobRefactor:
 
         assert chunks == [[1, 2], [3, 4], [5]]
 
-    def test_batch_serial_mode_follows_jobrunner_flag(self, pbs_server):
+    def test_batch_serial_mode_when_unset(self, pbs_server):
+        """Test that BatchJob runs all jobs when they are unset."""
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
+
+        batch = dummy_batch_cls(
+            jobs=[],
+            jobrunner=runner,
+        )
+
+        assert batch.run_in_serial is True
+
+    def test_batch_serial_mode_keeps_explicit_false(self, pbs_server):
+        """Test that BatchJob runs all jobs when they are unset."""
         dummy_batch_cls = self._dummy_batch_cls()
         runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
 
@@ -211,7 +224,7 @@ class TestBatchJobRefactor:
             jobrunner=runner,
         )
 
-        assert batch.run_in_serial is True
+        assert batch.run_in_serial is False
 
     def test_batch_serial_mode_keeps_explicit_true(self, pbs_server):
         dummy_batch_cls = self._dummy_batch_cls()
