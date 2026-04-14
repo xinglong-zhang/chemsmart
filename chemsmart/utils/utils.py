@@ -8,6 +8,7 @@ specialized decorators for function caching and ordered set implementation.
 
 import copy
 import hashlib
+import logging
 import os
 import re
 import shlex
@@ -21,7 +22,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from chemsmart.utils.io import logger
+logger = logging.getLogger(__name__)
 
 
 class OrderedSet:
