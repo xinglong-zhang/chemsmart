@@ -238,6 +238,63 @@ class TestBatchJobRefactor:
 
         assert batch.run_in_serial is True
 
+    def test_batch_writes_success_and_failed_logs(self, pbs_server, tmp_path):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
+
+        success_job = Mock()
+        success_job.label = "success_job"
+        success_job.run.return_value = None
+        success_job.is_complete.return_value = True
+
+        fail_job = Mock()
+        fail_job.label = "fail_job"
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        batch = dummy_batch_cls(
+            jobs=[success_job, fail_job],
+            run_in_serial=False,
+            jobrunner=runner,
+            label="batch_logs_test",
+        )
+        batch.folder = str(tmp_path)
+
+        with pytest.raises(BatchExecutionError):
+            batch.run()
+
+        success_lines = (tmp_path / "success.log").read_text().splitlines()
+        failed_lines = (tmp_path / "failed.log").read_text().splitlines()
+
+        assert "success_job" in success_lines
+        assert any(line.startswith("fail_job\t") for line in failed_lines)
+
+    def test_batch_run_raises_with_failed_job_summary(
+        self, pbs_server, tmp_path
+    ):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
+
+        fail_job = Mock()
+        fail_job.label = "fail_job"
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        batch = dummy_batch_cls(
+            jobs=[fail_job],
+            run_in_serial=True,
+            jobrunner=runner,
+            label="batch_raise_test",
+        )
+        batch.folder = str(tmp_path)
+
+        with pytest.raises(BatchExecutionError, match="fail_job"):
+            batch.run()
+
 
 class TestGaussianBatchDelegation:
     """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""

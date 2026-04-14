@@ -31,6 +31,10 @@ from chemsmart.utils.mixins import RegistryMeta
 logger = logging.getLogger(__name__)
 
 
+class BatchExecutionError(RuntimeError):
+    """Raised when one or more child jobs fail in a batch run."""
+
+
 class BatchJobMeta(RegistryMeta, ABCMeta):
     """Metaclass combining registry support with abstract-base semantics."""
 
@@ -78,6 +82,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         ] = {}
         self._status_cache_ttl_seconds: float = 2.0
         self._status_cache_lock = threading.Lock()
+        self._last_batch_outcomes: list[dict[str, Any]] = []
 
     def run(self, **kwargs: Any) -> None:
         """
@@ -95,30 +100,45 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         nodes = self._get_allocated_nodes()
 
         if nodes and len(nodes) > 1:
-            self._run_multi_node(nodes, **kwargs)
+            outcomes = self._run_multi_node(nodes, **kwargs)
         elif self.run_in_serial:
             logger.info(f"Running batch of {len(self.jobs)} jobs serially.")
-            self._run_jobs_serially(self.jobs, **kwargs)
+            outcomes = self._run_jobs_serially(self.jobs, **kwargs)
         else:
             logger.info(f"Running batch of {len(self.jobs)} jobs in parallel.")
-            self._run_jobs_in_parallel(self.jobs, **kwargs)
+            outcomes = self._run_jobs_in_parallel(self.jobs, **kwargs)
+
+        self._last_batch_outcomes = outcomes
+        self._write_outcome_logs(outcomes)
+        failures = [item for item in outcomes if not item["success"]]
+        if failures:
+            lines = [
+                f"- {item['label']}: {item['error']}" for item in failures
+            ]
+            raise BatchExecutionError(
+                f"{len(failures)} of {len(outcomes)} batch job(s) failed:\n"
+                + "\n".join(lines)
+            )
 
     def _run_jobs_serially(
         self,
         jobs: Sequence[Job],
         node: Optional[str] = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> list[dict[str, Any]]:
         """Submit child jobs one-by-one."""
+        outcomes: list[dict[str, Any]] = []
         for job in jobs:
-            self._submit_job(job, node=node, **kwargs)
+            outcomes.append(self._submit_job(job, node=node, **kwargs))
+        return outcomes
 
     def _run_jobs_in_parallel(
         self,
         jobs: Sequence[Job],
         **kwargs: Any,
-    ) -> None:
+    ) -> list[dict[str, Any]]:
         """Submit child jobs concurrently using a thread pool."""
+        outcomes: list[dict[str, Any]] = []
         with ThreadPoolExecutor() as executor:
             future_to_job = {
                 executor.submit(self._submit_job, job, None, **kwargs): job
@@ -128,24 +148,39 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             for future in as_completed(future_to_job):
                 job = future_to_job[future]
                 try:
-                    future.result()
+                    outcomes.append(future.result())
                 except Exception as e:
                     logger.error(
                         f"Unexpected failure while coordinating job {job.label}: {e}",
                         exc_info=True,
                     )
+                    outcomes.append(
+                        {
+                            "label": job.label,
+                            "success": False,
+                            "error": str(e),
+                            "node": None,
+                        }
+                    )
+        return outcomes
 
     def _submit_job(
         self,
         job: Job,
         node: Optional[str] = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> dict[str, Any]:
         """Configure a runner copy and execute a single child job."""
         try:
             self._build_jobrunner(job, node=node)
             job.run(**kwargs)
             self._job_is_complete_cached(job, force_refresh=True)
+            return {
+                "label": job.label,
+                "success": True,
+                "error": "",
+                "node": node,
+            }
         except Exception as e:
             location = f" on node {node}" if node else ""
             logger.error(
@@ -153,6 +188,12 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                 exc_info=True,
             )
             self._invalidate_status_cache(job)
+            return {
+                "label": job.label,
+                "success": False,
+                "error": str(e),
+                "node": node,
+            }
 
     def _build_jobrunner(
         self,
@@ -209,7 +250,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
         return None
 
-    def _run_multi_node(self, nodes: Sequence[str], **kwargs: Any) -> None:
+    def _run_multi_node(
+        self, nodes: Sequence[str], **kwargs: Any
+    ) -> list[dict[str, Any]]:
         """Distribute and execute child jobs across scheduler-allocated nodes."""
         num_nodes = len(nodes)
         logger.info(
@@ -218,6 +261,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
         job_chunks = self._split_jobs_across_nodes(self.jobs, num_nodes)
 
+        outcomes: list[dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=num_nodes) as executor:
             futures = []
             for node, jobs_chunk in zip(nodes, job_chunks):
@@ -233,20 +277,39 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
             for future in as_completed(futures):
                 try:
-                    future.result()
+                    outcomes.extend(future.result())
                 except Exception as e:
                     logger.error(f"Node execution failed: {e}", exc_info=True)
+        return outcomes
 
     def _run_chunk_on_node(
         self,
         jobs: Sequence[Job],
         node: str,
         **kwargs: Any,
-    ) -> None:
+    ) -> list[dict[str, Any]]:
         """Run one chunk of jobs serially on a single node."""
         logger.info(f"Node {node} starting to process {len(jobs)} jobs.")
-        self._run_jobs_serially(jobs, node=node, **kwargs)
+        outcomes = self._run_jobs_serially(jobs, node=node, **kwargs)
         logger.info(f"Node {node} finished processing.")
+        return outcomes
+
+    def _write_outcome_logs(self, outcomes: Sequence[dict[str, Any]]) -> None:
+        """Write batch outcomes to success.log and failed.log."""
+        success_path = os.path.join(self.folder, "success.log")
+        failed_path = os.path.join(self.folder, "failed.log")
+
+        successes = [item for item in outcomes if item["success"]]
+        failures = [item for item in outcomes if not item["success"]]
+
+        with open(success_path, "w") as fh:
+            for item in successes:
+                fh.write(f"{item['label']}\n")
+
+        with open(failed_path, "w") as fh:
+            for item in failures:
+                error = item["error"] or "unknown error"
+                fh.write(f"{item['label']}\t{error}\n")
 
     @staticmethod
     def _split_jobs_across_nodes(

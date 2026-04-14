@@ -25,7 +25,7 @@ Code reviewed includes:
 
 ## Findings (ordered by severity)
 
-### 1) High — Batch default policy now biases to serial unless caller explicitly overrides
+### 1) High — Batch default policy now biases to serial unless caller explicitly overrides(FIXED)
 
 - **Evidence:** `chemsmart/jobs/batch.py:53-69` (`BatchJob.__init__`)
 - **What changed logically:** `self.run_in_serial` is now `run_in_serial OR runner.run_in_serial` (via `get_serial_mode`).
