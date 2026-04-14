@@ -11,11 +11,7 @@ qmmm:
   mult_high: 1
 
   # Intermediate-level (QM2) region
-<<<<<<< HEAD
   intermediate_level_atoms: 19-20
-=======
-  intermediate_level_atoms: 19-20  
->>>>>>> 4f223c98 (refactoring QMMM job_type to jobtype and adding yaml templates)
   intermediate_level_functional: "B3LYP"
   intermediate_level_basis: "def2-SVP"
   # Or use a built-in method:
@@ -37,11 +33,7 @@ qmmm:
 solv:
   functional: mn15
   basis: def2qzvp
-<<<<<<< HEAD
   freq: false
-=======
-  freq: False
->>>>>>> 4f223c98 (refactoring QMMM job_type to jobtype and adding yaml templates)
   solvent_model: smd
   solvent_id: generic
   custom_solvent : |
