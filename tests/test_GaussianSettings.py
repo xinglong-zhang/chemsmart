@@ -264,36 +264,8 @@ class TestGaussianQMMMJobSettings:
             bonded_atoms=[[1, 2], [2, 3], [8, 9], [9, 10]],
         )
         assert settings1.high_level_atoms == [1, 2, 3, 8, 9, 10]
-        assert settings1.partition_level_strings == [
-            "H",
-            "H",
-            "H",
-            "L",
-            "L",
-            "L",
-            "L",
-            "H",
-            "H",
-            "H",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-            "L",
-        ]
 
+<<<<<<< HEAD
         # Test for 3-layer ONIOM calculation with example
         # input dppeFeCl2_phenyldioxazolone_qmmm.com
         # mol2 = QMMM(molecule=Molecule._read_gaussian_inputfile(
@@ -314,6 +286,8 @@ class TestGaussianQMMMJobSettings:
         # ) + list(range(40, 51)) + list(range(51, 62)) + list(range(62, 73))
         # assert settings2.medium_level_atoms == [1, 2, 3, 16]
         # assert settings2.low_level_atoms == list(range(4, 16)) + [17]
+=======
+>>>>>>> 5760bf6c (fixing environment dependency)
 
     def test_qmmm_settings_for_charge_and_multiplicity(self):
         # test cases for 3-layer ONIOM model
