@@ -466,6 +466,35 @@ class TestGaussianQMMMJobSettings:
             bonded_atoms=[[1, 2], [2, 3], [8, 9], [9, 10]],
         )
         assert settings1.high_level_atoms == [1, 2, 3, 8, 9, 10]
+        assert settings1.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
 
         # Test for 3-layer ONIOM calculation with example
         # input dppeFeCl2_phenyldioxazolone_qmmm.com
