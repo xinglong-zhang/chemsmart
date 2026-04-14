@@ -176,9 +176,10 @@ class RMSDGrouper(MoleculeGrouper):
         for idx, (i, j) in enumerate(indices):
             rmsd = self._calculate_rmsd((i, j))
             rmsd_values.append(rmsd)
-            logger.info(
-                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, RMSD= {rmsd:.7f}"
-            )
+            if (idx + 1) % 10 == 0 or (idx + 1) == total_pairs:
+                logger.info(
+                    f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished"
+                )
 
         # Build full RMSD matrix for output
         rmsd_matrix = np.zeros((n, n))

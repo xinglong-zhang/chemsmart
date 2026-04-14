@@ -280,9 +280,10 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         for idx, (i, j) in enumerate(indices):
             tfd = self._calculate_tfd((i, j))
             tfd_values.append(tfd)
-            logger.info(
-                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, TFD= {tfd:.7f}"
-            )
+            if (idx + 1) % 10 == 0 or (idx + 1) == total_pairs:
+                logger.info(
+                    f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished"
+                )
 
         # Build full TFD matrix
         tfd_matrix = np.zeros((n, n))

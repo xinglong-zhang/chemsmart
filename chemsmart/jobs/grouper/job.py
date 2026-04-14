@@ -125,7 +125,7 @@ class GrouperJob(Job):
     @property
     def outputfile(self) -> str:
         """Get the path to the main output file (unique structures)."""
-        return os.path.join(self.output_dir, f"{self.label}_unique.xyz")
+        return os.path.join(self.output_dir, f"{self.label}_group_1.xyz")
 
     @property
     def logfile(self) -> str:
@@ -142,7 +142,9 @@ class GrouperJob(Job):
 
         Checks if output directory exists.
         """
-        return os.path.exists(self.output_dir)
+        return os.path.exists(self.output_dir) and os.path.isfile(
+            self.outputfile
+        )
 
     def is_complete(self) -> bool:
         """Check if grouping job is complete."""

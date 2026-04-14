@@ -1948,7 +1948,8 @@ def find_irmsd_command():
         return irmsd_in_path
 
     return None
-  
+
+
 def deduplicate_string_keywords(route_string, keywords):
     """Remove repeated route keywords, keeping the most informative form.
 

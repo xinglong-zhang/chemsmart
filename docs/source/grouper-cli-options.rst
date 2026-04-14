@@ -35,9 +35,13 @@ These options are shared across all grouping strategies and must be placed BEFOR
       -  string
       -  Directory containing structure files to group
 
+   -  -  ``-p, --program``
+      -  string
+      -  File type filter for directory processing (for ``gaussian`` and ``orca``)
+
    -  -  ``-t, --filetype``
       -  string
-      -  File type filter for directory processing (``gaussian`` or ``orca``)
+      -  File type filter for directory processing (e.g. log)
 
    -  -  ``-l, --label``
       -  string
@@ -191,8 +195,10 @@ be sorted alphabetically after the numbered conformers.
 
 .. code:: bash
 
-   chemsmart run grouper -d . -t gaussian rmsd
-   chemsmart run grouper -d . -t orca rmsd
+   chemsmart run grouper -d . -p gaussian rmsd
+   chemsmart run grouper -d . -p orca rmsd
+   chemsmart run grouper -d . -t log rmsd
+   chemsmart run grouper -d . -t out rmsd
 
 **Validation:**
 

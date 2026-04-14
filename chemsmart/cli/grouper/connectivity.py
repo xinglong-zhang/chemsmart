@@ -6,7 +6,10 @@ import logging
 
 import click
 
-from chemsmart.cli.grouper.grouper import grouper
+from chemsmart.cli.grouper.grouper import (
+    create_grouper_job_from_context,
+    grouper,
+)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -39,15 +42,7 @@ def connectivity(ctx):
 
     logger.info("Running connectivity grouping (graph isomorphism)")
 
-    from chemsmart.jobs.grouper import GrouperJob
-
-    return GrouperJob(
-        molecules=ctx.obj["molecules"],
-        grouping_strategy="connectivity",
-        threshold=None,
-        num_groups=None,
-        ignore_hydrogens=ctx.obj["ignore_hydrogens"],
-        num_procs=ctx.obj["num_procs"],
-        label=f"{ctx.obj['grouper_label']}_connectivity",
-        conformer_ids=ctx.obj.get("conformer_ids"),
+    return create_grouper_job_from_context(
+        ctx,
+        strategy="connectivity",
     )

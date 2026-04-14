@@ -94,12 +94,24 @@ chemistry software.
    pymol-electronic-structure
    pymol-interaction-analysis
 
-.. toctree::
+..
+   .. toctree::
+
+..
    :maxdepth: 2
+
+..
    :caption: Grouper Tool
 
+..
+
+..
    grouper-cli-options
+
+..
    grouper-strategies
+
+..
    grouper-crest-or-traj-workflow
 
 .. toctree::

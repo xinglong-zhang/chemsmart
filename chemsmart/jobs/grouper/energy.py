@@ -177,10 +177,10 @@ class EnergyGrouper(MoleculeGrouper):
             rel_diff, abs_diff = self._calculate_energy_diff((i, j))
             energy_diff_relative.append(rel_diff)
             energy_diff_absolute.append(abs_diff)
-            logger.info(
-                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, "
-                f"Energy Diff= {rel_diff:+.10f} Hartree ({rel_diff * HARTREE_TO_KCAL:+.4f} kcal/mol)"
-            )
+            if (idx + 1) % 10 == 0 or (idx + 1) == total_pairs:
+                logger.info(
+                    f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished"
+                )
 
         # Build full energy difference matrix for output (with sign, relative to smaller index)
         # matrix[i,j] = E_j - E_i (positive means j has higher energy)

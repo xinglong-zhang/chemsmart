@@ -90,6 +90,7 @@ def grouper(
     output_format,
     directory,
     filetype,
+    program,
     **kwargs,
 ):
     """
@@ -109,15 +110,16 @@ def grouper(
 
     Input modes:
     - Single file: -f conformers.xyz (all structures from one file)
-    - Directory of output files: -d . -t gaussian (or -t orca)
+    - Directory of output files: -d . -p gaussian (or -p orca)
       Loads last structure from each output file with conformer pattern.
       Files should have names like 'xxx_c1_opt.log', 'xxx_c12.out', etc.
 
     Examples:
         chemsmart run grouper -f conformers.xyz irmsd
         chemsmart run grouper -f conformers.xyz -T 0.5 irmsd --inversion on
-        chemsmart run grouper -d . -t gaussian -T 0.5 irmsd
-        chemsmart run grouper -d . -t orca -T 0.5 rmsd
+        chemsmart run grouper -d . -p gaussian -T 0.5 irmsd
+        chemsmart run grouper -d . -p orca -T 0.5 rmsd
+        chemsmart run grouper -d . -t log -T 0.5 irmsd
         chemsmart run grouper -f conformers.xyz -T 0.1 tfd --use-weights
         chemsmart run grouper -f conformers.xyz -N 10 tanimoto --fingerprint-type morgan
         chemsmart run grouper -f conformers.xyz -o csv rmsd
@@ -138,21 +140,15 @@ def grouper(
             "Cannot specify both -f/--filenames and -d/--directory. Choose one."
         )
 
-    if directory and not filetype:
+    if directory and not program and not filetype:
         raise click.BadParameter(
-            "Must specify -t/--filetype when using -d/--directory."
+            "Must specify -p/--program or -t/--filetype when using -d/--directory."
         )
 
-    # Mode 1: Directory of output files (-d . -t gaussian/orca)
-    if directory is not None and filetype is not None:
-        if filetype.lower() not in ("gaussian", "orca"):
-            raise click.BadParameter(
-                f"For grouper with directory mode, only 'gaussian' or 'orca' "
-                f"filetypes are supported. Got: {filetype}"
-            )
-
+    # Mode 1: Directory of output files (-d . -p gaussian)
+    if directory is not None:
         molecules, conformer_ids, auto_label = _load_molecules_from_directory(
-            directory, filetype.lower()
+            directory, program, filetype
         )
         grouper_label = _get_label(label, append_label, auto_label)
         ctx.obj["conformer_ids"] = conformer_ids
@@ -215,7 +211,9 @@ def _extract_conformer_id(filename: str) -> str | None:
     return f"c{match.group(1)}" if match else None
 
 
-def _load_molecules_from_directory(directory: str, filetype: str) -> tuple:
+def _load_molecules_from_directory(
+    directory: str, program: str, filetype: str
+) -> tuple:
     """
     Load molecules from output files in a directory, extracting last structure from each.
 
@@ -230,6 +228,7 @@ def _load_molecules_from_directory(directory: str, filetype: str) -> tuple:
 
     Args:
         directory: Path to directory containing output files
+        program: Program used for calculations ('gaussian' or 'orca')
         filetype: Type of output files ('gaussian' or 'orca')
 
     Returns:
@@ -239,10 +238,36 @@ def _load_molecules_from_directory(directory: str, filetype: str) -> tuple:
         click.BadParameter: If no valid output files found or no molecules loaded
     """
     from chemsmart.analysis.thermochemistry import Thermochemistry
-    from chemsmart.utils.io import find_output_files_in_directory
+    from chemsmart.io.folder import BaseFolder
 
+    directory = os.path.expanduser(directory)
     directory = os.path.abspath(directory)
-    output_files = find_output_files_in_directory(directory, filetype)
+    folder = BaseFolder(directory)
+    print(folder.__dict__)
+    print(folder)
+
+    if program and not filetype:
+        output_files = (
+            folder.get_all_output_files_in_current_folder_by_program(
+                program=program.lower()
+            )
+        )
+    elif filetype and not program:
+        output_files = folder.get_all_files_in_current_folder_by_suffix(
+            filetype=filetype
+        )
+    elif program and filetype:
+        output_files = (
+            folder.get_all_files_in_current_folder_by_program_and_suffix(
+                program=program.lower(), filetype=filetype
+            )
+        )
+    else:
+        raise click.BadParameter(
+            "Must specify either -p/--program or -t/--filetype when using -d/--directory."
+        )
+
+    print(output_files)
 
     if not output_files:
         raise click.BadParameter(
