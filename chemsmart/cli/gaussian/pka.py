@@ -28,6 +28,7 @@ from chemsmart.cli.pka import (
     resolve_proton_index,
     validate_reference_options,
 )
+from chemsmart.jobs.runner import get_serial_mode
 from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,7 @@ def submit(ctx, skip_completed, **kwargs):
     proton_index = ctx.obj.get("pka_proton_index")
     color_code = ctx.obj.get("pka_color_code")
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
 
     # ── resolve proton index (CDXML auto-detect) ──
     proton_index, pka_molecules = resolve_proton_index(
@@ -224,13 +226,10 @@ def submit(ctx, skip_completed, **kwargs):
             )
             for mol, idx in zip(molecules, molecule_indices)
         ]
-        # Always run batch container serially (run_in_serial=True).
-        # Inner parallelism (at job level) is determined by the `parallel` flag
-        # passed to GaussianpKaJob. This prevents resource oversubscription
-        # (e.g. parallel batch * parallel job = too many processes).
+        # Batch execution policy is derived from the shared jobrunner mode.
         return GaussianpKaBatchJob(
             jobs=jobs,
-            run_in_serial=True,
+            run_in_serial=serial_mode.run_in_serial,
             jobrunner=jobrunner,
         )
 
@@ -242,9 +241,11 @@ def submit(ctx, skip_completed, **kwargs):
         skip_completed=skip_completed,
         **kwargs,
     )
-    # Always run batch container serially (run_in_serial=True).
+    # Batch execution policy is derived from the shared jobrunner mode.
     return GaussianpKaBatchJob(
-        jobs=[job], run_in_serial=True, jobrunner=jobrunner
+        jobs=[job],
+        run_in_serial=serial_mode.run_in_serial,
+        jobrunner=jobrunner,
     )
 
 
@@ -280,6 +281,7 @@ def batch(ctx, skip_completed, **kwargs):
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
 
     input_table_path = ctx.obj.get("filename")
     if not input_table_path:
@@ -386,10 +388,11 @@ def batch(ctx, skip_completed, **kwargs):
         jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from table")
-    # Always run batch container serially (run_in_serial=True).
-    # Inner parallelism (at job level) is determined by the `parallel` flag.
+    # Batch execution policy is derived from the shared jobrunner mode.
     return GaussianpKaBatchJob(
-        jobs=jobs, run_in_serial=True, jobrunner=jobrunner
+        jobs=jobs,
+        run_in_serial=serial_mode.run_in_serial,
+        jobrunner=jobrunner,
     )
 
 
@@ -416,9 +419,13 @@ def analyze(ctx, **kwargs):
       chemsmart run gaussian -p myproject -f acid.xyz -m 1 \\
           -s "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1 pka analyze
     """
-    from chemsmart.jobs.gaussian.pka import GaussianpKaAnalyzeJob
+    from chemsmart.jobs.gaussian.pka import (
+        GaussianpKaAnalyzeJob,
+        GaussianpKaBatchJob,
+    )
 
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
 
     # ── collect input files ──
     input_files = ctx.obj["molecules"]
@@ -430,7 +437,6 @@ def analyze(ctx, **kwargs):
 
     if len(input_files) > 1:
         logger.info(f"Creating {len(input_files)} pKa analysis jobs")
-        from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob
 
         jobs = [
             GaussianpKaAnalyzeJob(
@@ -441,9 +447,11 @@ def analyze(ctx, **kwargs):
             )
             for idx, inp in enumerate(input_files, start=1)
         ]
-        # Always run batch container serially (run_in_serial=True).
+        # Batch execution policy is derived from the shared jobrunner mode.
         return GaussianpKaBatchJob(
-            jobs=jobs, run_in_serial=True, jobrunner=jobrunner
+            jobs=jobs,
+            run_in_serial=serial_mode.run_in_serial,
+            jobrunner=jobrunner,
         )
 
     job = GaussianpKaAnalyzeJob(
@@ -452,9 +460,11 @@ def analyze(ctx, **kwargs):
         jobrunner=jobrunner,
         **kwargs,
     )
-    # Always run batch container serially (run_in_serial=True).
+    # Batch execution policy is derived from the shared jobrunner mode.
     return GaussianpKaBatchJob(
-        jobs=[job], run_in_serial=True, jobrunner=jobrunner
+        jobs=[job],
+        run_in_serial=serial_mode.run_in_serial,
+        jobrunner=jobrunner,
     )
 
 
@@ -484,6 +494,7 @@ def batch_analyze(ctx, **kwargs):
     from chemsmart.jobs.gaussian.pka import GaussianpKaBatchAnalyzeJob
 
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
 
     input_file_list = ctx.obj.get("filename")
     if not input_file_list:
@@ -499,10 +510,9 @@ def batch_analyze(ctx, **kwargs):
         input_file_list=input_file_list,
         label=label,
         jobrunner=jobrunner,
-        run_in_serial=True,
+        run_in_serial=serial_mode.run_in_serial,
         **kwargs,
     )
-    # Always run batch container serially (run_in_serial=True).
     return job
 
 
@@ -529,9 +539,13 @@ def thermo(ctx, **kwargs):
       chemsmart run gaussian -p myproject -f acid.xyz -m 1 \\
           -s "proton exchange" -r ref.xyz -rpi 1 -rc 0 -rm 1 pka thermo
     """
-    from chemsmart.jobs.gaussian.pka import GaussianpKaThermoJob
+    from chemsmart.jobs.gaussian.pka import (
+        GaussianpKaBatchJob,
+        GaussianpKaThermoJob,
+    )
 
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
 
     # ── collect input files ──
     input_files = ctx.obj["molecules"]
@@ -543,7 +557,6 @@ def thermo(ctx, **kwargs):
 
     if len(input_files) > 1:
         logger.info(f"Creating {len(input_files)} pKa thermo jobs")
-        from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob
 
         jobs = [
             GaussianpKaThermoJob(
@@ -554,9 +567,11 @@ def thermo(ctx, **kwargs):
             )
             for idx, inp in enumerate(input_files, start=1)
         ]
-        # Always run batch container serially (run_in_serial=True).
+        # Batch execution policy is derived from the shared jobrunner mode.
         return GaussianpKaBatchJob(
-            jobs=jobs, run_in_serial=True, jobrunner=jobrunner
+            jobs=jobs,
+            run_in_serial=serial_mode.run_in_serial,
+            jobrunner=jobrunner,
         )
 
     job = GaussianpKaThermoJob(
@@ -565,9 +580,11 @@ def thermo(ctx, **kwargs):
         jobrunner=jobrunner,
         **kwargs,
     )
-    # Always run batch container serially (run_in_serial=True).
+    # Batch execution policy is derived from the shared jobrunner mode.
     return GaussianpKaBatchJob(
-        jobs=[job], run_in_serial=True, jobrunner=jobrunner
+        jobs=[job],
+        run_in_serial=serial_mode.run_in_serial,
+        jobrunner=jobrunner,
     )
 
 
@@ -690,6 +707,7 @@ def _create_pka_jobs_from_molecules(
     keywords = ctx.obj["keywords"]
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
 
     filename = ctx.obj.get("filename", "")
     base_name = os.path.splitext(os.path.basename(filename))[0]
@@ -721,10 +739,11 @@ def _create_pka_jobs_from_molecules(
         )
 
     logger.info(f"Created {len(jobs)} pKa jobs from multi-fragment CDXML file")
-    # Always run batch container serially (run_in_serial=True).
-    # Inner parallelism (at job level) is determined by the `parallel` flag.
+    # Batch execution policy is derived from the shared jobrunner mode.
     return GaussianpKaBatchJob(
-        jobs=jobs, run_in_serial=True, jobrunner=jobrunner
+        jobs=jobs,
+        run_in_serial=serial_mode.run_in_serial,
+        jobrunner=jobrunner,
     )
 
 

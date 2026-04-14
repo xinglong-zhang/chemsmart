@@ -3,10 +3,13 @@ import logging
 import os
 from abc import abstractmethod
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from shutil import rmtree
+from typing import Callable, Optional, Sequence
 
+from chemsmart.jobs.job import Job
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -15,6 +18,52 @@ user_settings = ChemsmartUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SerialMode:
+    """Simple view of serial-mode flags derived from a jobrunner."""
+
+    run_in_serial: bool
+    no_run_in_serial: bool
+
+
+def get_serial_mode(jobrunner) -> SerialMode:
+    """Return serial-mode flags from a jobrunner.
+
+    This helper intentionally does not encode pKa-specific fail-fast rules.
+    """
+    run_in_serial = bool(
+        jobrunner and getattr(jobrunner, "run_in_serial", False)
+    )
+    return SerialMode(
+        run_in_serial=run_in_serial,
+        no_run_in_serial=not run_in_serial,
+    )
+
+
+def run_phase_jobs(
+    *,
+    parent_runner,
+    serial_mode: SerialMode,
+    jobs: Optional[Sequence] = None,
+    jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+    stop_on_incomplete: bool = False,
+    before_run: Optional[Callable[[], None]] = None,
+    logger_obj=None,
+    phase_label: str = "phase",
+) -> None:
+    """Shared phase runner wrapper that applies serial-mode policy."""
+    Job._execute_phase_jobs(
+        parent_runner=parent_runner,
+        jobs=jobs,
+        jobs_factory=jobs_factory,
+        run_in_serial=serial_mode.run_in_serial,
+        stop_on_incomplete=stop_on_incomplete,
+        before_run=before_run,
+        logger_obj=logger_obj,
+        phase_label=phase_label,
+    )
 
 
 class JobRunner(RegistryMixin):

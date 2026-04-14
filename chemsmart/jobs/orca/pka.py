@@ -19,6 +19,7 @@ from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
+from chemsmart.jobs.runner import get_serial_mode, run_phase_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,8 @@ class ORCApKaJob(ORCAJob):
 
         # parallel support
         self.parallel = bool(parallel)
-        if self.jobrunner and getattr(self.jobrunner, "run_in_serial", False):
+        serial_mode = get_serial_mode(self.jobrunner)
+        if serial_mode.run_in_serial:
             if self.parallel:
                 logger.info(
                     "Parallel execution disabled due to run_in_serial=True in JobRunner"
@@ -377,16 +379,11 @@ class ORCApKaJob(ORCAJob):
     # Execution
     # ------------------------------------------------------------------
 
-    def _is_serial_execution_enabled(self) -> bool:
-        return bool(
-            self.jobrunner and getattr(self.jobrunner, "run_in_serial", False)
-        )
-
     def _run_opt_jobs(self):
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.opt_jobs,
-            run_in_serial=self._is_serial_execution_enabled(),
             stop_on_incomplete=True,
             logger_obj=logger,
             phase_label="opt",
@@ -395,21 +392,21 @@ class ORCApKaJob(ORCAJob):
     def _run_ref_opt_jobs(self):
         if not self.has_reference_jobs:
             return
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.ref_opt_jobs,
-            run_in_serial=self._is_serial_execution_enabled(),
             stop_on_incomplete=True,
             logger_obj=logger,
             phase_label="ref opt",
         )
 
     def _run_sp_jobs(self):
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=None,
             jobs_factory=lambda: self.sp_jobs,
-            run_in_serial=self._is_serial_execution_enabled(),
             stop_on_incomplete=True,
             before_run=lambda: setattr(self, "_sp_jobs", None),
             logger_obj=logger,
@@ -419,11 +416,11 @@ class ORCApKaJob(ORCAJob):
     def _run_ref_sp_jobs(self):
         if not self.has_reference_jobs:
             return
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=None,
             jobs_factory=lambda: self.ref_sp_jobs,
-            run_in_serial=self._is_serial_execution_enabled(),
             stop_on_incomplete=True,
             before_run=lambda: setattr(self, "_ref_sp_jobs", None),
             logger_obj=logger,
@@ -678,17 +675,19 @@ class ORCApKaJob(ORCAJob):
             self._run_parallel()
             return
 
-        run_in_serial = self._is_serial_execution_enabled()
+        serial_mode = get_serial_mode(self.jobrunner)
 
         self._run_opt_jobs()
 
-        if run_in_serial and not all(j.is_complete() for j in self.opt_jobs):
+        if serial_mode.run_in_serial and not all(
+            j.is_complete() for j in self.opt_jobs
+        ):
             logger.info("Opt jobs incomplete, halting serial execution.")
             return
 
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
-            if run_in_serial and not all(
+            if serial_mode.run_in_serial and not all(
                 j.is_complete() for j in self.ref_opt_jobs
             ):
                 logger.info(
@@ -702,7 +701,9 @@ class ORCApKaJob(ORCAJob):
             # Should have been created
             return
 
-        if run_in_serial and not all(j.is_complete() for j in self.sp_jobs):
+        if serial_mode.run_in_serial and not all(
+            j.is_complete() for j in self.sp_jobs
+        ):
             logger.info("SP jobs incomplete, halting serial execution.")
             return
 

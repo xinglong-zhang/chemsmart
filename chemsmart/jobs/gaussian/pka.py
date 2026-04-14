@@ -21,6 +21,7 @@ from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.job import Job
+from chemsmart.jobs.runner import get_serial_mode, run_phase_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,8 @@ class GaussianpKaJob(GaussianJob):
         # run_in_serial flag, so software that does not support concurrent
         # processes (e.g. single-licence Gaussian) is never affected.
         self.parallel = bool(parallel)
-        if self.jobrunner and getattr(self.jobrunner, "run_in_serial", False):
+        serial_mode = get_serial_mode(self.jobrunner)
+        if serial_mode.run_in_serial:
             if self.parallel:
                 logger.info(
                     "Parallel execution disabled due to run_in_serial=True in JobRunner"
@@ -213,9 +215,11 @@ class GaussianpKaJob(GaussianJob):
 
     def _run_opt_jobs(self):
         """Run gas phase optimization jobs."""
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.opt_jobs,
+            stop_on_incomplete=True,
             logger_obj=logger,
             phase_label="gas phase optimization",
         )
@@ -224,9 +228,11 @@ class GaussianpKaJob(GaussianJob):
         """Run reference gas phase optimization jobs."""
         if not self.has_reference_jobs:
             return
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.ref_opt_jobs,
+            stop_on_incomplete=True,
             logger_obj=logger,
             phase_label="reference gas phase optimization",
         )
@@ -243,9 +249,11 @@ class GaussianpKaJob(GaussianJob):
         if self.sp_jobs is None:
             self._create_sp_jobs()
 
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.sp_jobs,
+            stop_on_incomplete=True,
             logger_obj=logger,
             phase_label="solution phase SP",
         )
@@ -263,9 +271,11 @@ class GaussianpKaJob(GaussianJob):
         if self.ref_sp_jobs is None:
             self._create_ref_sp_jobs()
 
-        Job._execute_phase_jobs(
+        run_phase_jobs(
             parent_runner=self.jobrunner,
+            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.ref_sp_jobs,
+            stop_on_incomplete=True,
             logger_obj=logger,
             phase_label="reference solution phase SP",
         )

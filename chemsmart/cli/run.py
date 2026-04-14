@@ -1,5 +1,6 @@
 import logging
 import platform
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import set_start_method
 
 import click
@@ -8,7 +9,7 @@ from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.runner import JobRunner, get_serial_mode
 from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
@@ -110,16 +111,10 @@ def process_pipeline(ctx, *args, **kwargs):
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Running {len(job)} jobs")
-        # Check if jobs should be run in serial
-        if jobrunner.run_in_serial:
-            logger.info("Running jobs in serial mode (one after another)")
-        else:
-            logger.info("Running jobs using default behavior")
+        serial_mode = get_serial_mode(jobrunner)
 
-        for single_job in job:
-            logger.info(f"Running job: {single_job.label}")
-            # Instantiate a specific jobrunner based on job type
-            job_specific_runner = jobrunner.from_job(
+        def _prepare_runner(single_job):
+            return jobrunner.from_job(
                 job=single_job,
                 server=jobrunner.server,
                 scratch=jobrunner.scratch,
@@ -130,9 +125,32 @@ def process_pipeline(ctx, *args, **kwargs):
                 num_gpus=jobrunner.num_gpus,
                 mem_gb=jobrunner.mem_gb,
             )
-            # Attach jobrunner to job and run the job with the jobrunner
-            single_job.jobrunner = job_specific_runner
-            single_job.run()
+
+        if serial_mode.run_in_serial:
+            logger.info("Running jobs in serial mode (one after another)")
+            for single_job in job:
+                logger.info(f"Running job: {single_job.label}")
+                single_job.jobrunner = _prepare_runner(single_job)
+                single_job.run()
+            return None
+
+        logger.info("Running jobs in parallel mode")
+        with ThreadPoolExecutor(max_workers=max(1, len(job))) as executor:
+            future_to_job = {}
+            for single_job in job:
+                single_job.jobrunner = _prepare_runner(single_job)
+                future = executor.submit(single_job.run)
+                future_to_job[future] = single_job
+
+            for future in as_completed(future_to_job):
+                single_job = future_to_job[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    logger.error(
+                        f"Job {single_job.label} failed in list execution: {exc}",
+                        exc_info=True,
+                    )
         return None
 
     # Instantiate a specific jobrunner based on job type

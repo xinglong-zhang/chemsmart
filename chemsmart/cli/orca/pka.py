@@ -29,6 +29,7 @@ from chemsmart.cli.pka import (
     resolve_proton_index,
     validate_reference_options,
 )
+from chemsmart.jobs.runner import get_serial_mode
 from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
@@ -147,9 +148,8 @@ def submit(ctx, skip_completed, **kwargs):
     proton_index = ctx.obj.get("pka_proton_index")
     color_code = ctx.obj.get("pka_color_code")
     jobrunner = ctx.obj["jobrunner"]
-
-    # Align pKa parallel execution with global --run-in-serial flag
-    parallel = not jobrunner.run_in_serial
+    serial_mode = get_serial_mode(jobrunner)
+    parallel = serial_mode.no_run_in_serial
 
     proton_index, pka_molecules = resolve_proton_index(
         filename, proton_index, color_code
@@ -238,9 +238,8 @@ def batch(ctx, skip_completed, **kwargs):
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]
-
-    # Align pKa parallel execution with global --run-in-serial flag
-    parallel = not jobrunner.run_in_serial
+    serial_mode = get_serial_mode(jobrunner)
+    parallel = serial_mode.no_run_in_serial
 
     input_table_path = ctx.obj.get("filename")
     if not input_table_path:
