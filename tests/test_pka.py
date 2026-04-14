@@ -146,6 +146,22 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
         f"{acid2} 2 1 2\n"
     )
 
+    config_root = tmp_path / "chemsmart_cfg"
+    orca_cfg_dir = config_root / "orca"
+    orca_cfg_dir.mkdir(parents=True)
+    (orca_cfg_dir / "test.yaml").write_text(
+        "gas:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "solv:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "  freq: false\n"
+        "  solvent_model: smd\n"
+        "  solvent_id: water\n"
+    )
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
     captured = {}
 
     fake_server = Server(name="dummy")

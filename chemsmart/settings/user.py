@@ -55,6 +55,14 @@ class ChemsmartUserSettings:
     USER_YAML_FILE = "usersettings.yaml"
     USER_CONFIG_DIR = os.path.expanduser("~/.chemsmart")
 
+    @classmethod
+    def resolve_config_dir(cls):
+        """Resolve user config directory with optional env override."""
+        configured_dir = os.environ.get(
+            "CHEMSMART_CONFIG_DIR", cls.USER_CONFIG_DIR
+        )
+        return os.path.expanduser(configured_dir)
+
     def __init__(self):
         """
         Initialize user settings manager.
@@ -62,8 +70,8 @@ class ChemsmartUserSettings:
         Loads user configuration from YAML file if it exists, otherwise
         initializes with empty configuration.
         """
-        self.yaml = os.path.join(self.USER_CONFIG_DIR, self.USER_YAML_FILE)
-        self.config_dir = self.USER_CONFIG_DIR
+        self.config_dir = self.resolve_config_dir()
+        self.yaml = os.path.join(self.config_dir, self.USER_YAML_FILE)
         try:
             self.data = YAMLFile(filename=self.yaml).yaml_contents_dict
         except FileNotFoundError:
