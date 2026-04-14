@@ -5,7 +5,9 @@ import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.io import (
-    attach_one_bond_per_cp_ring,
+    _adjust_metal_above_rings,
+    attach_eta_bonds_for_arene_rings,
+    attach_eta_bonds_for_cp_rings,
     fix_cyclopentadienyl_aromaticity,
 )
 from chemsmart.utils.mixins import FileMixin
@@ -224,10 +226,17 @@ class CDXFile(FileMixin):
         rdkit_mol = normalize_metal_bonds(rdkit_mol)
 
         if has_metals:
+            # Dearomatize isolated Cp rings so the anchor-bond approach below
+            # can correctly preserve the implicit-H count.
             logger.debug(f"Fix cyclopentadienyl aromaticity in {rdkit_mol}.")
             rdkit_mol = fix_cyclopentadienyl_aromaticity(rdkit_mol)
-            logger.debug(f"Attach one bond per Cp ring in {rdkit_mol}.")
-            rdkit_mol = attach_one_bond_per_cp_ring(rdkit_mol, metal_idxs)
+            # Add ONE bond from the metal to each isolated 5-membered Cp ring
+            # and each isolated 6-membered arene ring.  One bond is enough for
+            # ETKDG to succeed; the metal is repositioned after embedding.
+            logger.debug(f"Attach η5 bonds for Cp rings in {rdkit_mol}.")
+            rdkit_mol = attach_eta_bonds_for_cp_rings(rdkit_mol, metal_idxs)
+            logger.debug(f"Attach η6 bonds for arene rings in {rdkit_mol}.")
+            rdkit_mol = attach_eta_bonds_for_arene_rings(rdkit_mol, metal_idxs)
 
         # Sanitize with or without kekulization based on metal presence
         logger.debug(f"Sanitize metal bonds in {rdkit_mol}.")
@@ -253,6 +262,13 @@ class CDXFile(FileMixin):
                 raise ValueError(
                     "Could not generate 3D coordinates for molecule"
                 )
+
+        # For organometallic complexes, ETKDG places the metal at the end of
+        # the single anchor bond.  Move it to the centroid of all bonded rings
+        # to give the correct η5/η6 geometry.
+        if has_metals:
+            logger.debug(f"Adjust metal above rings in {rdkit_mol}.")
+            rdkit_mol = _adjust_metal_above_rings(rdkit_mol, metal_idxs)
 
         # Optimize the geometry (may fail for exotic atom types)
         try:

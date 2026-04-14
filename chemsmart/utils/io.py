@@ -836,6 +836,214 @@ def _order_ring_atoms_by_walk(
     return order
 
 
+def attach_eta_bonds_for_cp_rings(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
+    """
+    Connect isolated 5-membered all-carbon rings (Cp ligands) to the metal.
+
+    ChemDraw stores organometallic Cp complexes with the cyclopentadienyl ring
+    as a separate fragment from the metal centre.  This function finds every
+    5-membered all-carbon ring that is in a different connected component from
+    the metal and adds a single bond from the nearest metal atom to one ring
+    carbon (the anchor).
+
+    One bond per ring is sufficient for ETKDG to embed the molecule
+    successfully.  After embedding, :func:`_adjust_metal_above_rings`
+    re-positions the metal to the correct centroid above the ring so that the
+    final geometry reflects the true η5 coordination.
+
+    The anchor atom is chosen as whichever ring carbon carries a formal charge
+    (set by :func:`fix_cyclopentadienyl_aromaticity`), if any, so that the
+    implicit-H count is not altered; otherwise the first ring atom is used.
+    This function handles both aromatic and dearomatized Cp rings.
+
+    Args:
+        mol: RDKit molecule that may contain disconnected fragments.
+        metal_idxs: Set of atom indices for metal atoms in *mol*.
+
+    Returns:
+        Updated molecule with one metal→Cp-ring bond per isolated Cp ring.
+    """
+    if not metal_idxs:
+        return mol
+
+    from rdkit.Chem import rdmolops
+
+    rw = Chem.RWMol(mol)
+    Chem.GetSymmSSSR(rw)
+
+    metal_idx = min(metal_idxs)
+
+    # Identify which atoms are in the same connected component as the metal.
+    frags = rdmolops.GetMolFrags(rw)
+    metal_frag: set[int] = set()
+    for frag in frags:
+        if any(idx in metal_idxs for idx in frag):
+            metal_frag = set(frag)
+            break
+
+    ring_info = rw.GetRingInfo()
+    for ring in ring_info.AtomRings():
+        if len(ring) != 5:
+            continue
+
+        atoms = [rw.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" for a in atoms):
+            continue
+
+        # Only process rings that are disconnected from the metal.
+        if any(i in metal_frag for i in ring):
+            continue
+
+        # Prefer the atom already carrying a formal charge (set by
+        # fix_cyclopentadienyl_aromaticity) so that the implicit-H count
+        # is unchanged; fall back to ring[0].
+        anchor = next(
+            (i for i in ring if rw.GetAtomWithIdx(i).GetFormalCharge() != 0),
+            ring[0],
+        )
+        if not rw.GetBondBetweenAtoms(metal_idx, anchor):
+            rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
+
+    new_mol = rw.GetMol()
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol
+
+
+def attach_eta_bonds_for_arene_rings(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
+    """
+    Connect isolated 6-membered all-carbon rings (arene ligands) to the metal.
+
+    ChemDraw sometimes stores η6-arene complexes (benzene, etc.) as a metal
+    fragment separate from the ring fragment.  This function finds every
+    6-membered all-carbon ring that is in a different connected component from
+    the metal and adds a single bond from the nearest metal atom to one ring
+    carbon (the anchor).
+
+    One bond per ring is sufficient for the 3D embedding to succeed.  After
+    embedding, :func:`_adjust_metal_above_rings` re-positions the metal to
+    the correct centroid so that the final geometry reflects the true η6
+    coordination.
+
+    Rings already reachable from the metal via any bond path (e.g., phenyl
+    groups in PPh3 ligands bonded through P) are left untouched.
+
+    Args:
+        mol: RDKit molecule that may contain disconnected fragments.
+        metal_idxs: Set of atom indices for metal atoms in *mol*.
+
+    Returns:
+        Updated molecule with one metal→arene-ring bond per isolated arene.
+    """
+    if not metal_idxs:
+        return mol
+
+    from rdkit.Chem import rdmolops
+
+    rw = Chem.RWMol(mol)
+    Chem.GetSymmSSSR(rw)
+
+    metal_idx = min(metal_idxs)
+
+    # Re-compute fragment membership after potential η5 bonds were added.
+    frags = rdmolops.GetMolFrags(rw)
+    metal_frag: set[int] = set()
+    for frag in frags:
+        if any(idx in metal_idxs for idx in frag):
+            metal_frag = set(frag)
+            break
+
+    ring_info = rw.GetRingInfo()
+    for ring in ring_info.AtomRings():
+        if len(ring) != 6:
+            continue
+
+        atoms = [rw.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" for a in atoms):
+            continue
+
+        # Only process rings disconnected from the metal.
+        if any(i in metal_frag for i in ring):
+            continue
+
+        anchor = ring[0]
+        if not rw.GetBondBetweenAtoms(metal_idx, anchor):
+            rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
+
+    new_mol = rw.GetMol()
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol
+
+
+def _adjust_metal_above_rings(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol:
+    """
+    Re-position the metal atom to the correct location above/between its
+    coordinated ring ligands after 3D embedding.
+
+    After ETKDG embedding with a single anchor bond per ring the metal sits at
+    the end of that anchor bond rather than above the ring centre.  This
+    function calculates the centroid of every ring that is directly bonded to
+    the metal and moves the metal to:
+
+    * the midpoint of all ring centroids (sandwich / multi-ring complexes);
+    * ``centroid + ring_normal × 2.0 Å`` for a single coordinated ring.
+
+    Args:
+        mol: RDKit molecule with an existing 3D conformer.
+        metal_idxs: Set of atom indices for metal atoms in *mol*.
+
+    Returns:
+        The same molecule with the metal atom position updated in-place.
+    """
+    import numpy as np
+
+    if not mol.GetNumConformers() or not metal_idxs:
+        return mol
+
+    conf = mol.GetConformer()
+    metal_idx = min(metal_idxs)
+    metal_pos = np.array(list(conf.GetAtomPosition(metal_idx)))
+
+    metal_neighbors = {
+        nb.GetIdx() for nb in mol.GetAtomWithIdx(metal_idx).GetNeighbors()
+    }
+    ring_info = mol.GetRingInfo()
+
+    bonded_ring_data: list[tuple] = []
+    for ring in ring_info.AtomRings():
+        ring_set = set(ring)
+        if not any(n in ring_set for n in metal_neighbors):
+            continue
+        positions = np.array([list(conf.GetAtomPosition(i)) for i in ring])
+        centroid = positions.mean(axis=0)
+        if len(ring) >= 3:
+            v1 = positions[1] - positions[0]
+            v2 = positions[2] - positions[0]
+            normal = np.cross(v1, v2)
+            norm_len = np.linalg.norm(normal)
+            normal = normal / norm_len if norm_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        else:
+            normal = np.array([0.0, 0.0, 1.0])
+        bonded_ring_data.append((centroid, normal))
+
+    if not bonded_ring_data:
+        return mol
+
+    if len(bonded_ring_data) >= 2:
+        new_metal_pos = np.mean([c for c, _ in bonded_ring_data], axis=0)
+    else:
+        centroid, normal = bonded_ring_data[0]
+        if np.dot(metal_pos - centroid, normal) < 0:
+            normal = -normal
+        new_metal_pos = centroid + normal * 2.0  # 2.0 Å M-ring centroid dist
+
+    conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
+    return mol
+
+
 def attach_one_bond_per_cp_ring(
     mol: Chem.Mol, metal_idxs: set[int]
 ) -> Chem.Mol:
@@ -844,6 +1052,10 @@ def attach_one_bond_per_cp_ring(
       - finding aromatic 5-member all-carbon rings (Cp drawn aromatic)
       - de-aromatizing ring to alternating single/double bonds (kekulizable)
       - adding ONE single bond from a metal to an anchor carbon in each ring (if none exists)
+
+    .. deprecated::
+        Use :func:`attach_eta_bonds_for_cp_rings` instead, which adds bonds to
+        all ring carbons for correct η5 geometry.
     """
     if not metal_idxs:
         return mol
