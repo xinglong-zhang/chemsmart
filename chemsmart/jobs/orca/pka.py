@@ -585,8 +585,8 @@ class ORCApKaJob(ORCAJob):
             f"({opt_cores_per_job} cores, {opt_mem_per_job}GB each)."
         )
 
-        all_successes = []
-        all_failures = []
+        successes = []
+        failures = []
 
         with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
             future_to_role = {}
@@ -602,14 +602,14 @@ class ORCApKaJob(ORCAJob):
                 future_to_role[fut] = role
 
             successes, failures = self._collect_futures(future_to_role)
-            all_successes.extend(successes)
-            all_failures.extend(failures)
+            successes.extend(successes)
+            failures.extend(failures)
 
         # Do not proceed to SP when any optimization worker failed.
-        if all_failures:
+        if failures:
             summary = (
-                f"Optimization phase failed in {len(all_failures)} parallel pKa worker(s):\n"
-                + "\n".join(f"  - {e}" for e in all_failures)
+                f"Optimization phase failed in {len(failures)} parallel pKa worker(s):\n"
+                + "\n".join(f"  - {e}" for e in failures)
             )
             raise RuntimeError(summary)
 
@@ -655,25 +655,25 @@ class ORCApKaJob(ORCAJob):
                     future_to_role[fut] = role
 
                 successes, failures = self._collect_futures(future_to_role)
-                all_successes.extend(successes)
-                all_failures.extend(failures)
+                successes.extend(successes)
+                failures.extend(failures)
 
         # ── Final reporting ─────────────────────────────────────────────
-        total = len(all_successes) + len(all_failures)
+        total = len(successes) + len(failures)
         logger.info(
             f"Parallel pKa run complete: "
-            f"{len(all_successes)}/{total} succeeded, "
-            f"{len(all_failures)}/{total} failed."
+            f"{len(successes)}/{total} succeeded, "
+            f"{len(failures)}/{total} failed."
         )
-        for label in all_successes:
+        for label in successes:
             logger.info(f"  ✓ {label}")
-        for err in all_failures:
+        for err in failures:
             logger.error(f"  ✗ {err}")
 
-        if all_failures:
+        if failures:
             summary = (
-                f"{len(all_failures)} of {total} parallel pKa worker(s) failed:\n"
-                + "\n".join(f"  - {e}" for e in all_failures)
+                f"{len(failures)} of {total} parallel pKa worker(s) failed:\n"
+                + "\n".join(f"  - {e}" for e in failures)
             )
             raise RuntimeError(summary)
 
