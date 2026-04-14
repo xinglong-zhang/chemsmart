@@ -55,6 +55,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self,
         jobs: Optional[Sequence[Job]],
         run_in_serial: Optional[bool] = None,
+        write_outcome_logs: bool = False,
         label: str = "batch_job",
         jobrunner: Any = None,
         **kwargs,
@@ -73,6 +74,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             self.run_in_serial = runner_serial_mode.run_in_serial
         else:
             self.run_in_serial = bool(run_in_serial)
+        self.write_outcome_logs = bool(write_outcome_logs)
 
         # Cache completion checks to avoid repeatedly reparsing output files
         # from the head-node monitoring loop.
@@ -109,7 +111,8 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             outcomes = self._run_jobs_in_parallel(self.jobs, **kwargs)
 
         self._last_batch_outcomes = outcomes
-        self._write_outcome_logs(outcomes)
+        if self.write_outcome_logs:
+            self._write_outcome_logs(outcomes)
         failures = [item for item in outcomes if not item["success"]]
         if failures:
             lines = [

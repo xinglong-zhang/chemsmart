@@ -257,6 +257,7 @@ class TestBatchJobRefactor:
         batch = dummy_batch_cls(
             jobs=[success_job, fail_job],
             run_in_serial=False,
+            write_outcome_logs=True,
             jobrunner=runner,
             label="batch_logs_test",
         )

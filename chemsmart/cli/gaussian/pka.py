@@ -392,6 +392,7 @@ def batch(ctx, skip_completed, **kwargs):
     return GaussianpKaBatchJob(
         jobs=jobs,
         run_in_serial=serial_mode.run_in_serial,
+        write_outcome_logs=True,
         jobrunner=jobrunner,
     )
 
@@ -511,6 +512,7 @@ def batch_analyze(ctx, **kwargs):
         label=label,
         jobrunner=jobrunner,
         run_in_serial=serial_mode.run_in_serial,
+        write_outcome_logs=True,
         **kwargs,
     )
     return job
