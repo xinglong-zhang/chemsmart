@@ -179,6 +179,18 @@ class TestSerialExecution:
 class TestBatchJobRefactor:
     """Regression tests for the shared BatchJob orchestration layer."""
 
+    @staticmethod
+    def _dummy_batch_cls():
+        from chemsmart.jobs.batch import BatchJob
+
+        class DummyBatchJob(BatchJob):
+            PROGRAM = "dummy"
+
+            def _configure_runner_for_node(self, runner, node, job):
+                return runner
+
+        return DummyBatchJob
+
     def test_split_jobs_across_nodes_balances_chunks(self):
         from chemsmart.jobs.batch import BatchJob
 
@@ -186,6 +198,30 @@ class TestBatchJobRefactor:
         chunks = BatchJob._split_jobs_across_nodes(jobs, 3)
 
         assert chunks == [[1, 2], [3, 4], [5]]
+
+    def test_batch_serial_mode_follows_jobrunner_flag(self, pbs_server):
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
+
+        batch = dummy_batch_cls(
+            jobs=[],
+            run_in_serial=False,
+            jobrunner=runner,
+        )
+
+        assert batch.run_in_serial is True
+
+    def test_batch_serial_mode_keeps_explicit_true(self, pbs_server):
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
+
+        batch = dummy_batch_cls(
+            jobs=[],
+            run_in_serial=True,
+            jobrunner=runner,
+        )
+
+        assert batch.run_in_serial is True
 
 
 class TestGaussianBatchDelegation:
