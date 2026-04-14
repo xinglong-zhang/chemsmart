@@ -2146,14 +2146,17 @@ class QMMMMolecule(Molecule):
     Minimal wrapper that stores partition lists (1-based indices) and validates them.
     """
 
-    def __init__(self, molecule: Molecule = None,
-                 high_level_atoms =None,
-                medium_level_atoms =None,
-                low_level_atoms =None,
-                bonded_atoms =None,
-                scale_factors =None,
-                 partition_level_strings = None,
-                 **kwargs):
+    def __init__(
+        self,
+        molecule: Molecule = None,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        bonded_atoms=None,
+        scale_factors=None,
+        partition_level_strings=None,
+        **kwargs,
+    ):
         # QMMM-specific attributes (defaults)
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
@@ -2201,7 +2204,11 @@ class QMMMMolecule(Molecule):
             super().__init__(**kwargs)
 
         # Normalize partition lists to python lists if necessary
-        for part in ("high_level_atoms", "medium_level_atoms", "low_level_atoms"):
+        for part in (
+            "high_level_atoms",
+            "medium_level_atoms",
+            "low_level_atoms",
+        ):
             val = getattr(self, part, None)
             if val is not None and not isinstance(val, list):
                 try:
@@ -2217,7 +2224,11 @@ class QMMMMolecule(Molecule):
 
     def _validate_partitions(self):
         """Ensure there are no overlapping atoms in partitions and indices are valid."""
-        parts = [self.high_level_atoms, self.medium_level_atoms, self.low_level_atoms]
+        parts = [
+            self.high_level_atoms,
+            self.medium_level_atoms,
+            self.low_level_atoms,
+        ]
         # Collect indices, ensure they are within 1..num_atoms
         seen = set()
         for p in parts:
@@ -2225,33 +2236,45 @@ class QMMMMolecule(Molecule):
                 continue
             for idx in p:
                 if not isinstance(idx, int):
-                    raise ValueError(f"Partition index must be int, got {type(idx)}")
+                    raise ValueError(
+                        f"Partition index must be int, got {type(idx)}"
+                    )
                 if idx < 1 or idx > self.num_atoms:
                     raise ValueError(
                         f"Partition index {idx} out of range for molecule with {self.num_atoms} atoms"
                     )
                 if idx in seen:
-                    raise ValueError(f"Overlapping partition index detected: {idx}")
+                    raise ValueError(
+                        f"Overlapping partition index detected: {idx}"
+                    )
                 seen.add(idx)
 
     # Ensure QMMMMolecule constructed-from-file returns QMMMMolecule instances
     @classmethod
     def from_filepath(cls, filepath, index="-1", return_list=False, **kwargs):
         # Use Molecule.from_filepath to parse, then wrap results
-        mol = Molecule.from_filepath(filepath=filepath, index=index, return_list=return_list, **kwargs)
+        mol = Molecule.from_filepath(
+            filepath=filepath, index=index, return_list=return_list, **kwargs
+        )
         if mol is None:
             return None
         if return_list:
-            return [cls(molecule=m) if not isinstance(m, cls) else m for m in mol]
+            return [
+                cls(molecule=m) if not isinstance(m, cls) else m for m in mol
+            ]
         return cls(molecule=mol) if not isinstance(mol, cls) else mol
 
     @classmethod
     def from_pubchem(cls, identifier, return_list=False):
-        mol = Molecule.from_pubchem(identifier=identifier, return_list=return_list)
+        mol = Molecule.from_pubchem(
+            identifier=identifier, return_list=return_list
+        )
         if mol is None:
             return None
         if return_list:
-            return [cls(molecule=m) if not isinstance(m, cls) else m for m in mol]
+            return [
+                cls(molecule=m) if not isinstance(m, cls) else m for m in mol
+            ]
         return cls(molecule=mol) if not isinstance(mol, cls) else mol
 
     def __repr__(self):
@@ -2658,44 +2681,6 @@ class CoordinateBlock:
                 return [1, 1, 1]
         else:
             return None
-
-
-class SDFFile(FileMixin):
-    """
-    SDF file object.
-    """
-
-    def __init__(self, filename):
-        self.filename = filename
-
-    @property
-    def molecule(self):
-        return self.get_molecule()
-
-    def get_molecule(self):
-        list_of_symbols = []
-        cart_coords = []
-        # sdf line pattern containing coordinates and element type
-        from chemsmart.utils.repattern import sdf_pattern
-
-        for line in self.contents:
-            match = re.match(sdf_pattern, line)
-            if match:
-                x = float(match.group(1))
-                y = float(match.group(2))
-                z = float(match.group(3))
-                atom_type = str(match.group(4))
-                list_of_symbols.append(atom_type)
-                cart_coords.append((x, y, z))
-
-        cart_coords = np.array(cart_coords)
-
-        if len(list_of_symbols) == 0 or len(cart_coords) == 0:
-            raise ValueError("No coordinates found in the SDF file!")
-
-        return Molecule.from_symbols_and_positions_and_pbc_conditions(
-            list_of_symbols=list_of_symbols, positions=cart_coords
-        )
 
 
 class QMMMMolecule(Molecule):
