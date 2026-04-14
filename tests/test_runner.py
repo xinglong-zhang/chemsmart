@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock, PropertyMock
 
+import pytest
+
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 
@@ -473,6 +475,45 @@ class TestGaussianPkaReferenceExecution:
             == settings.reference_charge - 1
         )
         assert run_spy.call_count == 2
+
+    def test_gaussian_pka_parallel_stops_before_sp_on_opt_failure(
+        self, tmp_path, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+
+        reference_file = tmp_path / "reference.xyz"
+        self._write_reference_xyz(reference_file)
+        settings = self._build_gaussian_pka_settings(reference_file)
+        target_molecule = Molecule(
+            symbols=["C", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.1]],
+            charge=0,
+            multiplicity=1,
+        )
+
+        gaussian_jobrunner_no_scratch.run_in_serial = False
+        job = GaussianpKaJob(
+            molecule=target_molecule,
+            settings=settings,
+            label="test_gaussian_pka_parallel_gate",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            parallel=True,
+        )
+
+        mocker.patch.object(
+            job, "_run_opt_worker", return_value={"success": True}
+        )
+        mocker.patch.object(
+            job,
+            "_collect_futures",
+            return_value=([], ["opt phase failure"]),
+        )
+        create_sp_spy = mocker.patch.object(job, "_create_sp_jobs")
+
+        with pytest.raises(RuntimeError, match="Optimization phase failed"):
+            job._run_parallel()
+
+        create_sp_spy.assert_not_called()
 
     def test_dias_job_uses_batch_parallel_per_stage(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
@@ -951,3 +992,53 @@ class TestOrcaPkaBatchExecution:
 
         assert job.ref_sp_jobs[0].label != job.sp_jobs[0].label
         assert job.ref_sp_jobs[1].label != job.sp_jobs[1].label
+
+    def test_orca_pka_parallel_stops_before_sp_on_opt_failure(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.orca.pka import ORCApKaJob
+        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+        mock_molecule = Molecule(
+            symbols=["H", "C"],
+            positions=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.1]],
+            charge=0,
+            multiplicity=1,
+        )
+        settings = ORCApKaJobSettings(
+            proton_index=1,
+            scheme="direct",
+            charge=0,
+            multiplicity=1,
+            functional="B3LYP",
+            basis="def2-SVP",
+        )
+
+        orca_jobrunner_no_scratch.run_in_serial = False
+        job = ORCApKaJob(
+            molecule=mock_molecule,
+            settings=settings,
+            label="test_orca_pka_parallel_gate",
+            jobrunner=orca_jobrunner_no_scratch,
+            parallel=True,
+        )
+
+        mocker.patch.object(
+            job, "_run_opt_worker", return_value={"success": True}
+        )
+        mocker.patch.object(
+            job,
+            "_collect_futures",
+            return_value=([], ["opt phase failure"]),
+        )
+        prepare_sp_spy = mocker.patch.object(
+            job,
+            "_prepare_sp_jobs",
+            return_value=(),
+        )
+
+        with pytest.raises(RuntimeError, match="Optimization phase failed"):
+            job._run_parallel()
+
+        prepare_sp_spy.assert_not_called()

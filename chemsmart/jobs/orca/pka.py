@@ -605,6 +605,14 @@ class ORCApKaJob(ORCAJob):
             all_successes.extend(successes)
             all_failures.extend(failures)
 
+        # Do not proceed to SP when any optimization worker failed.
+        if all_failures:
+            summary = (
+                f"Optimization phase failed in {len(all_failures)} parallel pKa worker(s):\n"
+                + "\n".join(f"  - {e}" for e in all_failures)
+            )
+            raise RuntimeError(summary)
+
         # ── Phase 2: SP jobs ────────────────────────────────────────────
         # Refresh SP jobs so they pick up optimised geometries
         self._sp_jobs = None

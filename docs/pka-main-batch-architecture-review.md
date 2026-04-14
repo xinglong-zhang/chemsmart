@@ -1,187 +1,141 @@
-# Architectural Review: `pka` Branch vs `main`
+# Architectural Integrity Review: pKa Refactor
 
-## Scope
+## Scope and review lens
 
-This review compares batch job processing architecture between `pka` and `main`, with focus on:
+This review evaluates the current refactor state for:
 
-- `run_in_serial` behavior
-- jobrunner propagation
-- DRY refactor opportunities in job orchestration
+- JobRunner lifecycle and copy safety
+- shared phase-runner behavior across pKa phases
+- consistency of `get_serial_mode(...)` as serial/parallel source of truth
+- batch scalability and submission behavior under large job arrays
+- containment of pKa-specific `fail_fast` semantics
 
-Per request, Gaussian-vs-ORCA chemistry behavior differences are not counted as duplication unless they duplicate engine-agnostic orchestration logic.
-
----
-
-## Executive Differences
-
-### 1) `run_in_serial` support changed from implicit to explicit (but is unevenly applied)
-
-In `main`, list execution was serial by default in `chemsmart/cli/run.py`, but there was no runner-level serial flag.
-
-In `pka`, `run_in_serial` is added and plumbed through:
+Code reviewed includes:
 
 - `chemsmart/cli/run.py`
-- `chemsmart/jobs/runner.py`
-- `chemsmart/cli/jobrunner.py`
-
-However, generic list execution in `chemsmart/cli/run.py` still executes lists serially in practice; the flag mostly changes logging there.
-
-### 2) Strong new abstraction: shared batch orchestrator
-
-`pka` introduces `chemsmart/jobs/batch.py`, which centralizes:
-
-- serial/parallel child submission
-- child-level fault tolerance
-- SLURM/PBS node discovery
-- multi-node chunking and dispatch
-- runner copy/propagation via `Job._propagate_runner`
-
-This is a major architectural improvement over `main`, where no shared batch layer exists.
-
-### 3) Runner propagation became centralized
-
-`pka` adds `Job._propagate_runner(...)` in `chemsmart/jobs/job.py`, creating one canonical copy-and-override mechanism.
-
-This is good DRY progress, but some pKa flows still repeat execution-policy patterns around this helper.
-
-### 4) pKa policy handling remains duplicated across layers
-
-Execution policy (`serial`/`parallel`/`fail-fast`) is currently split between:
-
-- CLI wrappers (`chemsmart/cli/gaussian/pka.py`, `chemsmart/cli/orca/pka.py`)
-- job classes (`chemsmart/jobs/gaussian/pka.py`, `chemsmart/jobs/orca/pka.py`)
-- batch infrastructure (`chemsmart/jobs/batch.py`)
-
-This causes drift and repeated logic.
-
----
-
-## DRY Refactor Targets (Specific Methods/Lines)
-
-### A. Generic run pipeline
-
-- `chemsmart/cli/run.py:111-136` (`process_pipeline` list branch)
-  - Currently iterates list serially regardless of effective policy.
-  - Should delegate list orchestration to a shared policy executor.
-
-### B. Gaussian pKa CLI hard-coded batch serial mode
-
 - `chemsmart/cli/gaussian/pka.py`
-  - Serial hardcoding appears at: `231-235`, `246-248`, `391-393`, `445-447`, `456-458`, `558-560`, `569-571`, `726-728`.
-  - Replace with centralized execution-policy resolver.
-
-### C. ORCA pKa CLI policy derivation duplicated in two places
-
-- `chemsmart/cli/orca/pka.py:151-153`, `242-244`
-  - `parallel = not jobrunner.run_in_serial` repeated.
-  - Move to shared helper used by both engines.
-
-### D. ORCA pKa serial stop rules duplicated per phase
-
-- `chemsmart/jobs/orca/pka.py`
-  - `_run_opt_jobs` (`380-390`)
-  - `_run_ref_opt_jobs` (`392-405`)
-  - `_run_sp_jobs` (`407-418`)
-  - `_run_ref_sp_jobs` (`420-434`)
-  - plus stage gating in `_run` (`684-712`)
-
-All repeat the same pattern: propagate runner, run, stop-on-incomplete if serial.
-
-### E. Gaussian pKa phase loops are structurally similar
-
+- `chemsmart/cli/orca/pka.py`
+- `chemsmart/jobs/runner.py`
+- `chemsmart/jobs/job.py`
+- `chemsmart/jobs/batch.py`
 - `chemsmart/jobs/gaussian/pka.py`
-  - `_run_opt_jobs` / `_run_ref_opt_jobs` / `_run_sp_jobs` / `_run_ref_sp_jobs`
-  - Similar loop+propagation orchestration can share one engine-agnostic phase executor.
+- `chemsmart/jobs/orca/pka.py`
 
 ---
 
-## Optimal Design (Unified Batch Runner)
+## Findings (ordered by severity)
 
-### Design goals
+### 1) High — Batch default policy now biases to serial unless caller explicitly overrides
 
-1. One orchestration primitive for all phase execution.
-2. One place to apply runner propagation and optional resource overrides.
-3. One policy model: `serial`, `parallel`, `fail_fast`.
-4. Keep engine-specific behavior only in job creation/settings and optional node command adaptation.
+- **Evidence:** `chemsmart/jobs/batch.py:53-69` (`BatchJob.__init__`)
+- **What changed logically:** `self.run_in_serial` is now `run_in_serial OR runner.run_in_serial` (via `get_serial_mode`).
+- **Risk:** because constructor default is `run_in_serial=True`, any call site that does not pass `run_in_serial` explicitly remains serial even when runner policy is parallel. This can silently suppress intended parallel behavior in batch subclasses that rely on defaults.
+- **Impact area:** scalability and policy consistency.
+- **Recommendation:** make precedence explicit and non-ambiguous:
+  - either change constructor default to `run_in_serial=None` and resolve from runner when `None`,
+  - or keep default but enforce explicit passing at all `BatchJob` call sites and document that requirement.
 
-### Example implementation sketch
+### 2) High — Parallel pKa path does not gate SP phase on optimization failures
 
-```python
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Sequence
+- **Evidence:**
+  - `chemsmart/jobs/gaussian/pka.py:530-573` (`GaussianpKaJob._run_parallel`)
+  - `chemsmart/jobs/orca/pka.py:608-651` (`ORCApKaJob._run_parallel`)
+- **What happens:** after collecting opt phase failures, code still proceeds to create and run SP jobs.
+- **Risk:** SP jobs may run on fallback/unoptimized geometries after failed opt jobs; this breaks phase safety expectation and can waste resources at scale.
+- **Recommendation:** gate SP phase with `if all_failures: raise` (or phase-level policy flag) before SP dispatch.
 
-from chemsmart.jobs.job import Job
+### 3) Medium — Error handling in batch parallel execution hides failures from callers
 
+- **Evidence:**
+  - `_submit_job` catches and logs exceptions internally (`chemsmart/jobs/batch.py:142-154`)
+  - `_run_jobs_in_parallel` also catches future exceptions, but futures usually do not fail because `_submit_job` swallows exceptions (`chemsmart/jobs/batch.py:120-135`)
+- **Risk:** parent workflow cannot reliably detect batch failure without polling output/state; this can produce false-positive orchestration success.
+- **Recommendation:** aggregate per-job failures and return/raise structured summary from `BatchJob.run` for upstream phase control.
 
-@dataclass(frozen=True)
-class PhaseSpec:
-    name: str
-    jobs: Sequence[Job]
-    parallel: bool
-    fail_fast: bool = True
-    refresh_before: Callable[[], None] | None = None
+### 4) Medium — `get_serial_mode` is mostly centralized, but not yet complete repo-wide
 
+- **Evidence:** direct boolean branch remains outside reviewed pKa paths in `chemsmart/cli/sub.py:241` (`not jobrunner.run_in_serial`).
+- **Risk:** policy drift if serial-mode semantics evolve (e.g., tri-state, environment overrides) and non-central callers remain.
+- **Recommendation:** migrate remaining direct checks to `get_serial_mode` or formally scope helper to pKa + run pipeline only.
 
-class UnifiedBatchExecutor:
-    """Engine-agnostic executor for pKa and other multi-phase workflows."""
+### 5) Medium — Potential oversubscription hotspots in large batches
 
-    def __init__(self, parent_runner, configure_runner_for_node=None):
-        self.parent_runner = parent_runner
-        self.configure_runner_for_node = configure_runner_for_node
+- **Evidence:**
+  - `chemsmart/cli/run.py:138` uses `ThreadPoolExecutor(max_workers=len(job))`
+  - `chemsmart/jobs/batch.py:120` uses `ThreadPoolExecutor()` default worker count
+- **Risk:** large batch lists can create too many concurrent submitters while each job itself may be multi-core; this can bottleneck scheduler APIs and local head nodes.
+- **Recommendation:** cap worker count using a policy-aware bound (`min(len(jobs), configured_max_submitters)`) and optionally tie to runner/server capabilities.
 
-    def _attach_runner(self, job: Job, *, num_cores=None, mem_gb=None, node=None):
-        runner = Job._propagate_runner(
-            self.parent_runner,
-            job,
-            num_cores=num_cores,
-            mem_gb=mem_gb,
-        )
-        if runner and node and self.configure_runner_for_node:
-            job.jobrunner = self.configure_runner_for_node(runner, node, job)
+### 6) Low — Phase-runner abstraction is centralized but parallel branch still bypasses it
 
-    def _run_one(self, job: Job):
-        self._attach_runner(job)
-        job.run()
-
-    def run_phase(self, spec: PhaseSpec) -> list[Exception]:
-        if spec.refresh_before:
-            spec.refresh_before()
-
-        errors: list[Exception] = []
-
-        if not spec.parallel:
-            for job in spec.jobs:
-                self._run_one(job)
-                if spec.fail_fast and not job.is_complete():
-                    break
-            return errors
-
-        max_workers = max(1, len(spec.jobs))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(self._run_one, job) for job in spec.jobs]
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as exc:
-                    errors.append(exc)
-
-        return errors
-```
+- **Evidence:**
+  - shared abstraction present in `run_phase_jobs` -> `Job._execute_phase_jobs` (`chemsmart/jobs/runner.py:45-66`, `chemsmart/jobs/job.py:127-167`)
+  - both engine `_run_parallel` implementations use custom loops (`chemsmart/jobs/gaussian/pka.py:458-591`, `chemsmart/jobs/orca/pka.py:556-670`)
+- **Risk:** behavior differences can reappear between serial and parallel paths (phase gating, reporting, stop semantics).
+- **Recommendation:** keep custom resource splitting, but move phase transition decisions (opt -> sp gating) through a shared phase contract.
 
 ---
 
-## Recommended Migration Sequence
+## JobRunner lifecycle trace (integrity check)
 
-1. Add a shared execution-policy resolver (single function) used by both Gaussian and ORCA pKa CLI.
-2. Introduce `run_phase(...)` in shared batch infrastructure (or adjacent orchestration module).
-3. Migrate `ORCApKaJob` phase loops first (highest repetition, cleanest payoff).
-4. Migrate `GaussianpKaJob` to same phase API.
-5. Update `process_pipeline` list handling to use unified collection execution behavior.
-6. Keep engine-specific node pinning in engine batch subclasses only.
+1. **Instantiation (CLI root):**
+   - `chemsmart/cli/run.py:65-74` creates base `JobRunner` with CLI flags.
+2. **Type specialization:**
+   - `process_pipeline` creates engine-specific runner via `from_job(...)` for each job (`chemsmart/cli/run.py:116-127`, `160-170`).
+3. **Batch propagation:**
+   - `BatchJob._build_jobrunner` uses `Job._propagate_runner(...)` copy semantics (`chemsmart/jobs/batch.py:155-173`).
+4. **Phase propagation:**
+   - `Job._execute_phase_jobs` copies runner per child (`chemsmart/jobs/job.py:152-156`).
+5. **Parallel worker propagation:**
+   - pKa parallel workers also call `_propagate_runner` per job (`chemsmart/jobs/gaussian/pka.py:399-425`, `chemsmart/jobs/orca/pka.py:497-523`).
+
+**Conclusion:** runner copy discipline is generally sound; no major shared-reference mutation risk found in the main pKa execution flow.
 
 ---
 
-## Net Outcome
+## `get_serial_mode` consistency check
 
-The `pka` branch already delivers the right foundation (`BatchJob`, `Job._propagate_runner`, runner serial flag). The remaining work is consolidation of policy decisions and phase-loop orchestration into one reusable execution layer so behavior is consistent, DRY, and easier to evolve.
+### In-scope paths (good)
+
+- CLI list execution: `chemsmart/cli/run.py:114-154`
+- Gaussian pKa CLI: `chemsmart/cli/gaussian/pka.py` (submit/batch/analyze/batch-analyze/thermo)
+- ORCA pKa CLI: `chemsmart/cli/orca/pka.py:151-153`, `241-243`
+- pKa job classes: `chemsmart/jobs/gaussian/pka.py`, `chemsmart/jobs/orca/pka.py`
+- BatchJob constructor integration: `chemsmart/jobs/batch.py:65-69`
+
+### Drift observed
+
+- Non-pKa path still performs local boolean math in `chemsmart/cli/sub.py:241`.
+
+---
+
+## Fail-fast encapsulation check
+
+- `get_serial_mode(...)` contains only serial-mode state (`chemsmart/jobs/runner.py:31-42`) and does **not** include fail-fast.
+- pKa-specific stop behavior remains phase-level (`stop_on_incomplete=True` in pKa phase calls, serial-gated in `Job._execute_phase_jobs`).
+
+**Conclusion:** fail-fast remains correctly encapsulated and has not leaked into shared serial-mode utility.
+
+---
+
+## Methods currently deviating from the intended pattern
+
+1. `chemsmart/jobs/gaussian/pka.py:458-591` — `_run_parallel` (custom phase transition path bypasses shared phase contract)
+2. `chemsmart/jobs/orca/pka.py:556-670` — `_run_parallel` (same deviation)
+3. `chemsmart/jobs/batch.py:142-154` — `_submit_job` (swallows exceptions; weak upstream failure propagation)
+4. `chemsmart/cli/sub.py:241` — local serial-mode boolean logic outside `get_serial_mode`
+
+---
+
+## Recommended next refactor slice
+
+1. Normalize `BatchJob` serial precedence (`None` sentinel or explicit-callsite contract).
+2. Add opt->SP gate in both pKa `_run_parallel` methods.
+3. Introduce batch failure aggregation (return/raise summary from batch run).
+4. Replace remaining direct `run_in_serial` branching with `get_serial_mode` where policy uniformity is required.
+
+---
+
+## Overall structural assessment
+
+The refactor has strong architectural direction: runner propagation is centralized and copy-safe, phase orchestration for serial path is shared, and serial-mode policy is mostly unified behind `get_serial_mode`. Remaining risks are concentrated in parallel phase gating and batch failure surfacing, not in core object lifecycle correctness.

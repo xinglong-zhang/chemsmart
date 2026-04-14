@@ -527,6 +527,14 @@ class GaussianpKaJob(GaussianJob):
             all_successes.extend(successes)
             all_failures.extend(failures)
 
+        # Do not proceed to SP when any optimization worker failed.
+        if all_failures:
+            summary = (
+                f"Optimization phase failed in {len(all_failures)} parallel pKa worker(s):\n"
+                + "\n".join(f"  - {e}" for e in all_failures)
+            )
+            raise RuntimeError(summary)
+
         # ── Phase 2: SP jobs (only if opt phase had no fatal errors) ────
         # Create SP jobs from optimised geometries
         self._create_sp_jobs()
