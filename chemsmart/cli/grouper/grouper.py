@@ -306,7 +306,7 @@ def grouper(
         chemsmart run grouper -d . -t log -T 0.5 irmsd
         chemsmart run grouper -f conformers.xyz -T 0.1 tfd --use-weights
         chemsmart run grouper -f conformers.xyz -N 10 tanimoto --fingerprint-type morgan
-        chemsmart run grouper -f conformers.xyz -o csv rmsd
+        chemsmart run grouper -f conformers.xyz -m csv rmsd
     """
     ctx.ensure_object(dict)
 

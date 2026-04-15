@@ -117,10 +117,10 @@ class ConnectivityGrouper(MoleculeGrouper):
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
-        Group molecules by connectivity using parallel isomorphism checks.
+        Group molecules by connectivity using isomorphism checks.
 
         Converts molecules to graph representations and performs pairwise
-        isomorphism checks in parallel. Uses connected components clustering
+        Uses connected components clustering
         to identify groups of structurally equivalent molecules.
 
         Returns:

@@ -30,7 +30,7 @@ CREST Options
       -  string
       -  Job type: opt, ts, modred, scan, sp (required)
 
-   -  -  ``-n, --num-confs-to-run``
+   -  -  ``-nc, --num-confs-to-run``
       -  int
       -  Number of conformers to process
 
@@ -70,7 +70,7 @@ Process 10 lowest-energy conformers:
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f crest_conformers.xyz -l structure_from_lowest -c 0 -m 1 crest -j opt -n 10
+   chemsmart sub gaussian -p project -f crest_conformers.xyz -l structure_from_lowest -c 0 -m 1 crest -j opt -nc 10
 
 Output files are named ``structure_from_lowest_opt_c1`` through ``structure_from_lowest_opt_c10``.
 
@@ -104,7 +104,7 @@ Trajectory Options
       -  string
       -  Job type: opt, ts, modred, scan, sp (required)
 
-   -  -  ``-n, --num-structures-to-run``
+   -  -  ``-nc, --num-structures-to-run``
       -  int
       -  Number of unique structures to process
 

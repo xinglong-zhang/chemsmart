@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 @click_grouper_common_options
 @click_crest_grouper_options
 @click.option(
-    "-n",
+    "-nc",
     "--num-confs-to-run",
     type=int,
     default=None,
