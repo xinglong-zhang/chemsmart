@@ -8,6 +8,7 @@ from chemsmart.utils.io import (
     _adjust_metal_above_rings,
     attach_eta_bonds_for_arene_rings,
     attach_eta_bonds_for_cp_rings,
+    remove_phantom_metal_carbons,
 )
 from chemsmart.utils.mixins import FileMixin
 
@@ -225,6 +226,15 @@ class CDXFile(FileMixin):
         rdkit_mol = normalize_metal_bonds(rdkit_mol)
 
         if has_metals:
+            # Remove phantom terminal carbon atoms introduced by ChemDraw's
+            # MultiAttachment nodes or drawing-artifact "leg" atoms.  RDKit
+            # reads these as CH₃ groups bonded to the metal, but they have no
+            # chemical meaning.  Must be done before ring-attachment so that
+            # the metal is free to be connected to the ring fragments.
+            logger.debug(f"Remove phantom metal carbons in {rdkit_mol}.")
+            rdkit_mol, metal_idxs = remove_phantom_metal_carbons(
+                rdkit_mol, metal_idxs
+            )
             # Add ONE bond from the metal to each isolated 5-membered Cp ring
             # and each isolated 6-membered arene ring.  This also dearomatizes
             # the Cp ring with alternating single/double bonds so every ring

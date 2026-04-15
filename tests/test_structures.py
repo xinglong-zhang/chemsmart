@@ -2299,21 +2299,34 @@ class TestCDXFile:
         assert isinstance(molecules, list)
         assert len(molecules) == 7
 
-        # Test molecule 0: Ti complex with Cp ligands
-        # Cp rings are dearomatized with alternating single/double bonds;
-        # each ring carbon is sp2 with one implicit H (correct η5 geometry).
+        # Test molecule 0: Ti(Cp)₂ - titanocene bis-cyclopentadienyl complex.
+        # Phantom atoms from ChemDraw MultiAttachment nodes are removed; the
+        # formula is the bare metallocene without extraneous CH₃ groups.
         mol = molecules[0]
         assert isinstance(mol, Molecule)
-        assert mol.chemical_formula == "C14H22Ti"
-        assert mol.num_atoms == 37
+        assert mol.chemical_formula == "C10H10Ti"
+        assert mol.num_atoms == 21
         assert mol.is_ring
 
-        # Test molecule 5: Fe complex with aromatic benzene ligands
+        # Test molecule 1: Ni(Cp)₂Cl₂ - nickel bis-Cp with two chloride ligands.
+        mol = molecules[1]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C10H10Cl2Ni"
+        assert mol.num_atoms == 23
+        assert mol.is_ring
+
+        # Test molecule 5: Fe complex with aromatic phosphine and benzene ligands
         mol = molecules[5]
         assert isinstance(mol, Molecule)
         assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
         assert mol.num_atoms == 75
         assert mol.is_aromatic
+
+        # Test molecule 6: Mn sugar complex (no Cp rings, should be unchanged)
+        mol = molecules[6]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H10MnO6"
+        assert mol.num_atoms == 23
 
 
 class TestInChIKey:

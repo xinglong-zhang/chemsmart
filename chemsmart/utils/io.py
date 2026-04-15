@@ -749,7 +749,76 @@ def normalize_metal_bonds(mol):
     return mol
 
 
-def fix_cyclopentadienyl_aromaticity(mol: Chem.Mol) -> Chem.Mol:
+def remove_phantom_metal_carbons(mol: Chem.Mol, metal_idxs: set[int]) -> tuple:
+    """
+    Remove spurious terminal carbon atoms that appear when RDKit reads
+    ChemDraw's ``MultiAttachment`` nodes or "phantom" drawing atoms.
+
+    ChemDraw represents η5/η6 hapticity with special ``MultiAttachment``
+    nodes connected to the metal via ``Display="Dash"`` bonds.  When RDKit
+    reads a CDXML file it turns each MultiAttachment node into a carbon atom
+    with a single bond to the metal — producing unwanted CH₃ groups.  Some
+    structures also include additional drawing-artifact carbons (e.g. the
+    "leg" atoms below the metal in 2D metallocene diagrams) that are similarly
+    connected to the metal and have no ring membership.
+
+    This function removes every carbon neighbour of a metal that satisfies
+    **all** of the following:
+
+    * atomic number 6 (carbon),
+    * degree 1 (only bond is to the metal),
+    * not a member of any ring.
+
+    After removal the atom indices in the returned molecule are renumbered.
+    The caller must use the returned ``new_metal_idxs`` rather than the
+    original ``metal_idxs``.
+
+    Args:
+        mol: RDKit molecule (may be unsanitized).
+        metal_idxs: Set of atom indices of metal atoms in *mol*.
+
+    Returns:
+        Tuple ``(new_mol, new_metal_idxs)`` where *new_mol* has the phantom
+        carbon atoms removed and *new_metal_idxs* reflects the updated
+        indices of the metal atoms.
+    """
+    ring_atoms: set[int] = {
+        a for ring in mol.GetRingInfo().AtomRings() for a in ring
+    }
+
+    atoms_to_remove: list[int] = []
+    for metal_idx in metal_idxs:
+        metal_atom = mol.GetAtomWithIdx(metal_idx)
+        for nbr in metal_atom.GetNeighbors():
+            if (
+                nbr.GetAtomicNum() == 6
+                and nbr.GetDegree() == 1
+                and nbr.GetIdx() not in ring_atoms
+            ):
+                atoms_to_remove.append(nbr.GetIdx())
+
+    if not atoms_to_remove:
+        return mol, metal_idxs
+
+    rw = Chem.RWMol(mol)
+    # Remove in reverse index order to keep earlier indices valid.
+    for idx in sorted(set(atoms_to_remove), reverse=True):
+        rw.RemoveAtom(idx)
+
+    new_mol = rw.GetMol()
+
+    # Recompute metal indices (indices shift down by the number of removed
+    # atoms with a lower index).
+    removed_sorted = sorted(set(atoms_to_remove))
+    new_metal_idxs: set[int] = set()
+    for metal_idx in metal_idxs:
+        shift = sum(1 for r in removed_sorted if r < metal_idx)
+        new_metal_idxs.add(metal_idx - shift)
+
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol, new_metal_idxs
+
+
     """
     RDKit cannot sanitize a neutral aromatic 5-member carbon ring (c1cccc1).
     ChemDraw often uses that for Cp. Convert each such ring into a Cp- by
