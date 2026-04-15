@@ -751,23 +751,25 @@ def create_grouper_job_from_context(
 
 
 def _find_matching_sp_file(source_filepath: str) -> str | None:
-    """Find a same-name SP output file by matching stem + 'sp'."""
+    """Find a same-name SP output file under a dedicated sp subfolder."""
     source = Path(source_filepath)
-    folder = source.parent
+    sp_folder = source.parent / "sp"
+    if not sp_folder.is_dir():
+        raise ValueError("Can't find SP output folder")
+
     stem = source.stem
     suffix = source.suffix
 
     candidates: list[Path] = []
     if suffix:
-        candidates.extend(sorted(folder.glob(f"{stem}*sp*{suffix}")))
-    candidates.extend(sorted(folder.glob(f"{stem}*sp*.log")))
-    candidates.extend(sorted(folder.glob(f"{stem}*sp*.out")))
+        candidates.extend(sorted(sp_folder.glob(f"{stem}*{suffix}")))
+    candidates.extend(sorted(sp_folder.glob(f"{stem}*.log")))
+    candidates.extend(sorted(sp_folder.glob(f"{stem}*.out")))
 
-    source_resolved = source.resolve()
     seen: set[str] = set()
     for candidate in candidates:
         resolved = str(candidate.resolve())
-        if resolved in seen or candidate.resolve() == source_resolved:
+        if resolved in seen:
             continue
         seen.add(resolved)
         return str(candidate)
