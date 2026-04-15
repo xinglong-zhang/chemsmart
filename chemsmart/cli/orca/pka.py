@@ -340,8 +340,10 @@ def batch(ctx, skip_completed, **kwargs):
                 "reference_conjugate_base_multiplicity"
             ],
             delta_G_proton=shared["delta_g_proton"],
-            conjugate_base_charge=None,
-            conjugate_base_multiplicity=None,
+            conjugate_base_charge=shared["conjugate_base_charge"],
+            conjugate_base_multiplicity=shared[
+                "conjugate_base_multiplicity"
+            ],
             solvent_model=solvent_model,
             solvent_id=solvent_id,
             temperature=shared["temperature"],
