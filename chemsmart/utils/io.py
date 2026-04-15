@@ -845,25 +845,31 @@ def attach_eta_bonds_for_cp_rings(
     ChemDraw stores organometallic Cp complexes with the cyclopentadienyl ring
     as a separate fragment from the metal centre.  This function finds every
     5-membered all-carbon ring that is in a different connected component from
-    the metal and adds a single bond from the nearest metal atom to one ring
-    carbon (the anchor).
+    the metal, dearomatizes it with alternating single/double bonds so that
+    every ring carbon has exactly one implicit H (correct sp2 geometry), and
+    adds one single σ-bond from the metal to the ring anchor carbon.
 
-    One bond per ring is sufficient for ETKDG to embed the molecule
-    successfully.  After embedding, :func:`_adjust_metal_above_rings`
-    re-positions the metal to the correct centroid above the ring so that the
-    final geometry reflects the true η5 coordination.
+    The bond pattern applied is (cycling from anchor C₀):
+    ``SINGLE, DOUBLE, SINGLE, DOUBLE, SINGLE``.  With anchor C₀ bearing the
+    metal bond (single), C₁–C₂ (double), C₂–C₃ (single), C₃–C₄ (double),
+    C₄–C₀ (single), every ring carbon has exactly three bonds and thus one
+    implicit hydrogen, which is the correct sp2 geometry.
 
-    The anchor atom is chosen as whichever ring carbon carries a formal charge
-    (set by :func:`fix_cyclopentadienyl_aromaticity`), if any, so that the
-    implicit-H count is not altered; otherwise the first ring atom is used.
-    This function handles both aromatic and dearomatized Cp rings.
+    The anchor is chosen as the ring atom with the smallest degree in the full
+    molecule (which for fused rings avoids picking a junction carbon with
+    external substituents), breaking ties by atom index.
+
+    After embedding, :func:`_adjust_metal_above_rings` re-positions the metal
+    to the correct centroid above the ring so that the final geometry reflects
+    the true η5 coordination.
 
     Args:
         mol: RDKit molecule that may contain disconnected fragments.
         metal_idxs: Set of atom indices for metal atoms in *mol*.
 
     Returns:
-        Updated molecule with one metal→Cp-ring bond per isolated Cp ring.
+        Updated molecule with correct sp2 Cp bond orders and one metal→ring
+        bond per isolated Cp ring.
     """
     if not metal_idxs:
         return mol
@@ -896,13 +902,46 @@ def attach_eta_bonds_for_cp_rings(
         if any(i in metal_frag for i in ring):
             continue
 
-        # Prefer the atom already carrying a formal charge (set by
-        # fix_cyclopentadienyl_aromaticity) so that the implicit-H count
-        # is unchanged; fall back to ring[0].
-        anchor = next(
-            (i for i in ring if rw.GetAtomWithIdx(i).GetFormalCharge() != 0),
-            ring[0],
-        )
+        # Walk ring in cyclic order starting from the lowest-degree atom so
+        # that for fused (indenyl-type) rings we avoid starting on a junction
+        # carbon (degree > 2) which would give the anchor C an incorrect
+        # implicit-H count.
+        anchor_start = min(ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree())
+        ordered = _order_ring_atoms_by_walk(rw, ring)
+        if ordered is None:
+            ordered = list(ring)
+        # Rotate so anchor_start is first.
+        if anchor_start in ordered:
+            idx = ordered.index(anchor_start)
+            ordered = ordered[idx:] + ordered[:idx]
+
+        # Set bond pattern: S(0)–D(1)–S(2)–D(3)–S(4) from anchor outward.
+        # This ensures every ring carbon ends up with exactly 3 bonds → 1H.
+        bond_types = [
+            Chem.BondType.SINGLE,
+            Chem.BondType.DOUBLE,
+            Chem.BondType.SINGLE,
+            Chem.BondType.DOUBLE,
+            Chem.BondType.SINGLE,
+        ]
+        for k, btype in enumerate(bond_types):
+            a_idx = ordered[k]
+            b_idx = ordered[(k + 1) % 5]
+            bond = rw.GetBondBetweenAtoms(a_idx, b_idx)
+            if bond is not None:
+                bond.SetBondType(btype)
+                bond.SetIsAromatic(False)
+
+        # Clear aromaticity, formal charges and explicit Hs on ring atoms so
+        # that RDKit computes the correct implicit-H count from bond orders.
+        for i in ordered:
+            a = rw.GetAtomWithIdx(i)
+            a.SetIsAromatic(False)
+            a.SetFormalCharge(0)
+            a.SetNumExplicitHs(0)
+            a.SetNoImplicit(False)
+
+        anchor = ordered[0]
         if not rw.GetBondBetweenAtoms(metal_idx, anchor):
             rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
 
@@ -1015,6 +1054,9 @@ def _adjust_metal_above_rings(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol:
     bonded_ring_data: list[tuple] = []
     for ring in ring_info.AtomRings():
         ring_set = set(ring)
+        # Only η5/η6-type rings: all-carbon ring directly bonded to metal.
+        if not all(mol.GetAtomWithIdx(i).GetSymbol() == "C" for i in ring):
+            continue
         if not any(n in ring_set for n in metal_neighbors):
             continue
         positions = np.array([list(conf.GetAtomPosition(i)) for i in ring])
