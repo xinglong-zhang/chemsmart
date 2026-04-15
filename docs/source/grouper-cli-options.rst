@@ -275,6 +275,11 @@ For ``sp_qhG``, the program will automatically search for a matching single-poin
 (containing "sp" in its name) to extract the energy in solvation or using better basis and compute the corrected free
 energy.
 
+.. warning::
+
+   Different choices of extracted energy types will lead to different energy grouper matrices and give different group.
+   For other grouper strategies, only the ordering within each group is affected.
+
 **************
  Output Files
 **************
