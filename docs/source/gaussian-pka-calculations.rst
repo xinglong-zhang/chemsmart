@@ -198,15 +198,18 @@ Example ``pka_input_table.csv``:
 For the proton exchange cycle, the reference acid options (``-r``, ``-rpi``, ``-rc``, ``-rm``) are still required on the
 ``pka`` group even in batch mode.
 
-Batch Submission with Parallel Execution
-----------------------------------------
+Batch Execution Policy (Serial vs Non-Serial)
+---------------------------------------------
 
-Add ``--parallel`` to run the opt→SP pipeline for each species concurrently:
+Batch execution policy is controlled by the top-level run/sub flag:
 
 .. code:: bash
 
-   chemsmart run gaussian -p my_project -f molecules.csv pka \
-       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch --parallel
+   chemsmart run --run-in-serial gaussian -p my_project -f molecules.csv pka \
+       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
+
+Use ``--run-in-serial`` to force one-by-one execution of table entries. Use the default ``--no-run-in-serial`` for
+non-serial execution.
 
 Computing pKa from Existing Output Files
 ========================================
@@ -262,10 +265,6 @@ Core Options
    -  -  ``-cm``
       -  ``--conjugate-base-multiplicity``
       -  Multiplicity of A⁻. Defaults to same as HA.
-
-   -  -  ``--parallel/--no-parallel``
-      -  N/A
-      -  Run per-species opt→SP pipelines in parallel (batch mode only).
 
 Reference Acid Options (Proton Exchange Cycle)
 ==============================================

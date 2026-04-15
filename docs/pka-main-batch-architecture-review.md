@@ -38,12 +38,12 @@ Code reviewed includes:
 
 ## Findings (ordered by severity)
 
-### 1) Medium - Multi-node coordinator exceptions are logged but not converted into explicit batch failures
-
-- **Evidence:** `BatchJob._run_multi_node` catches exceptions from node futures and logs them, but does not append a failure outcome (`chemsmart/jobs/batch.py`).
-- **What happens:** if a node-level coordination error occurs before chunk outcomes are returned, the error can be logged without becoming a structured failure entry.
-- **Risk:** edge-case false-positive completion if no failed outcomes are emitted for that node.
-- **Recommendation:** convert node-level future exceptions into synthetic failure outcomes (or re-raise as `BatchExecutionError`) so all failures are visible to upstream callers.
+### 1) Medium - Multi-node coordinator exceptions are now converted into explicit batch failures
+(FIXED)
+- **Evidence:** `BatchJob._run_multi_node` now appends a synthetic failed outcome when a node future raises (`chemsmart/jobs/batch.py`).
+- **What happens now:** node-level coordination errors become structured failure entries and are included in aggregate batch outcome handling.
+- **Impact:** upstream callers reliably see node-level failures through the same failure channel as job-level failures.
+- **Follow-up:** keep regression coverage for node-future exception paths to prevent drift.
 
 ### 2) Low - Parallel worker execution remains engine-specific even though phase transition policy is centralized
 
@@ -138,18 +138,16 @@ Code reviewed includes:
 
 1. `chemsmart/jobs/gaussian/pka.py` - `_run_parallel` keeps engine-local parallel dispatch loop (intentional for resource splitting).
 2. `chemsmart/jobs/orca/pka.py` - `_run_parallel` keeps engine-local parallel dispatch loop (same rationale).
-3. `chemsmart/jobs/batch.py` - `_run_multi_node` logs node-level future exceptions without structured failure conversion.
 
 ---
 
 ## Recommended next refactor slice
 
-1. Convert node-level multi-node executor exceptions into explicit failure outcomes or direct `BatchExecutionError` raising.
-2. Extract a shared parallel phase collector utility for both engines while retaining engine-specific resource partitioning.
-3. Add a short operator-facing doc note for `CHEMSMART_MAX_SUBMITTERS` and submitter-cap resolution order.
+1. Extract a shared parallel phase collector utility for both engines while retaining engine-specific resource partitioning.
+2. Add a short operator-facing doc note for `CHEMSMART_MAX_SUBMITTERS` and submitter-cap resolution order.
 
 ---
 
 ## Overall structural assessment
 
-The architecture is materially improved versus the earlier review baseline. Core lifecycle safety, serial-policy centralization, phase-transition gating, failure surfacing, and worker capping are now in place and test-backed. Remaining gaps are focused and low-to-medium risk, primarily around edge-case multi-node error conversion and optional further deduplication of parallel worker loops.
+The architecture is materially improved versus the earlier review baseline. Core lifecycle safety, serial-policy centralization, phase-transition gating, failure surfacing, and worker capping are now in place and test-backed. Remaining gaps are focused and low risk, primarily around optional further deduplication of parallel worker loops.

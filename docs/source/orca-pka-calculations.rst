@@ -108,15 +108,18 @@ Example ``pka_input_table.csv``:
 For the proton exchange cycle, the reference acid options (``-r``, ``-rpi``, ``-rc``, ``-rm``) are still required on the
 ``pka`` group even in batch mode.
 
-Batch Submission with Parallel Execution
-----------------------------------------
+Batch Execution Policy (Serial vs Non-Serial)
+---------------------------------------------
 
-Add ``--parallel`` to run the opt-SP pipeline for each species concurrently:
+Batch execution policy is controlled by the top-level run/sub flag:
 
 .. code:: bash
 
-   chemsmart run orca -p my_project -f molecules.csv pka \
-       -t "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch --parallel
+   chemsmart run --run-in-serial orca -p my_project -f molecules.csv pka \
+       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
+
+Use ``--run-in-serial`` to force one-by-one execution of table entries. Use the default ``--no-run-in-serial`` for
+non-serial execution.
 
 Computing pKa from Existing Output Files
 ========================================
@@ -226,10 +229,6 @@ The parameters for ORCA pKa calculations mirror those for Gaussian. The key diff
    -  -  ``-dG``
       -  ``--delta-g-proton``
       -  Absolute free energy of H+ in kcal/mol for direct cycle. Default: ``-265.9``.
-
-   -  -  ``--parallel/--no-parallel``
-      -  N/A
-      -  Run per-species opt-SP pipelines in parallel (batch mode only).
 
 **********
  Examples
