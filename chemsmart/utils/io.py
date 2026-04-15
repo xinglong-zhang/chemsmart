@@ -1036,23 +1036,41 @@ def attach_eta_bonds_for_arene_rings(
     ChemDraw sometimes stores η6-arene complexes (benzene, etc.) as a metal
     fragment separate from the ring fragment.  This function finds every
     6-membered all-carbon ring that is in a different connected component from
-    the metal and adds a single bond from the nearest metal atom to one ring
-    carbon (the anchor).
+    the metal, sets the ring bond orders so that the anchor carbon has two
+    flanking SINGLE bonds (thus preserving its 1H after the metal bond is
+    added), and adds a single bond from the metal to that anchor carbon.
 
-    One bond per ring is sufficient for the 3D embedding to succeed.  After
-    embedding, :func:`_adjust_metal_above_rings` re-positions the metal to
-    the correct centroid so that the final geometry reflects the true η6
+    **Bond-order strategy for 6-membered rings**
+
+    In any regular Kekulé pattern for benzene every carbon has exactly one
+    DOUBLE and one SINGLE ring bond.  If we add a metal bond to such a carbon
+    it would end up with bond order 4 and lose its H atom.  To prevent this
+    we rotate the alternating pattern so the *anchor* (position 0) is flanked
+    by two SINGLE bonds:
+
+    .. code-block:: text
+
+        0→1: S, 1→2: D, 2→3: S, 3→4: D, 4→5: S, 5→0: S
+
+    * Anchor (pos 0): S + S + metal-S = 3 bonds → 1H ✓
+    * Positions 1–4: one S + one D within ring = 3 bonds → 1H ✓
+    * Position 5: two S bonds from ring = 2 bonds → by default 2H, but we
+      explicitly set NumExplicitHs=1 to enforce the correct sp2 value.
+
+    After embedding, :func:`_adjust_metal_above_rings` re-positions the metal
+    to the correct centroid so that the final geometry reflects the true η6
     coordination.
 
     Rings already reachable from the metal via any bond path (e.g., phenyl
-    groups in PPh3 ligands bonded through P) are left untouched.
+    groups in PPh₃ ligands bonded through P) are left untouched.
 
     Args:
         mol: RDKit molecule that may contain disconnected fragments.
         metal_idxs: Set of atom indices for metal atoms in *mol*.
 
     Returns:
-        Updated molecule with one metal→arene-ring bond per isolated arene.
+        Updated molecule with correct sp2 arene bond orders and one
+        metal→arene-ring bond per isolated arene.
     """
     if not metal_idxs:
         return mol
@@ -1085,7 +1103,57 @@ def attach_eta_bonds_for_arene_rings(
         if any(i in metal_frag for i in ring):
             continue
 
-        anchor = ring[0]
+        # Walk ring in cyclic order starting from the lowest-degree atom.
+        anchor_start = min(ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree())
+        ordered = _order_ring_atoms_by_walk(rw, ring)
+        if ordered is None:
+            ordered = list(ring)
+        if anchor_start in ordered:
+            rot = ordered.index(anchor_start)
+            ordered = ordered[rot:] + ordered[:rot]
+
+        # Set bond orders so that the anchor carbon (position 0) has two
+        # flanking SINGLE bonds within the ring.  In a regular Kekulé benzene
+        # pattern every carbon has exactly one DOUBLE ring bond, so adding a
+        # metal bond to any carbon would give it 4 total bond order and 0H.
+        # To avoid this we apply a modified pattern:
+        #   0→1: S, 1→2: D, 2→3: S, 3→4: D, 4→5: S, 5→0: S
+        # Anchor (pos 0): S+S+metal = 3 bonds → 1H  ✓
+        # Pos 1–4:        S+D or D+S    = 3 bonds → 1H  ✓
+        # Pos 5:          S(4-5)+S(5-0) = 2 bonds → would be 2H by default;
+        #                 explicitly set to 1H below.
+        bond_types_6 = [
+            Chem.BondType.SINGLE,   # 0–1
+            Chem.BondType.DOUBLE,   # 1–2
+            Chem.BondType.SINGLE,   # 2–3
+            Chem.BondType.DOUBLE,   # 3–4
+            Chem.BondType.SINGLE,   # 4–5
+            Chem.BondType.SINGLE,   # 5–0  (keeps anchor flanked by two singles)
+        ]
+        for k, btype in enumerate(bond_types_6):
+            a_idx = ordered[k]
+            b_idx = ordered[(k + 1) % 6]
+            bond = rw.GetBondBetweenAtoms(a_idx, b_idx)
+            if bond is not None:
+                bond.SetBondType(btype)
+                bond.SetIsAromatic(False)
+
+        # Clear aromaticity flags so RDKit derives H counts from bond orders.
+        for i in ordered:
+            a = rw.GetAtomWithIdx(i)
+            a.SetIsAromatic(False)
+            a.SetFormalCharge(0)
+            a.SetNumExplicitHs(0)
+            a.SetNoImplicit(False)
+
+        # Position-5 carbon has two flanking SINGLE bonds but must have 1H
+        # (sp2-like, as in a free benzene ring).  Set it explicitly so that
+        # safe_sanitize (with skip_kekulize=True) cannot reset it.
+        c5_atom = rw.GetAtomWithIdx(ordered[5])
+        c5_atom.SetNumExplicitHs(1)
+        c5_atom.SetNoImplicit(True)
+
+        anchor = ordered[0]
         if not rw.GetBondBetweenAtoms(metal_idx, anchor):
             rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
 

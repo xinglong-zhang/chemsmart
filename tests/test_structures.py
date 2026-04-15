@@ -2315,6 +2315,21 @@ class TestCDXFile:
         assert mol.num_atoms == 23
         assert mol.is_ring
 
+        # Test molecule 3: Ir(η6-benzene)₂ - bis-benzene iridium complex.
+        # Each benzene ring contributes 6C and 6H; anchor C is sp2 with 1H.
+        mol = molecules[3]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Ir"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 4: Rh(η6-benzene)₂ - bis-benzene rhodium complex.
+        mol = molecules[4]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Rh"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
         # Test molecule 5: Fe complex with aromatic phosphine and benzene ligands
         mol = molecules[5]
         assert isinstance(mol, Molecule)
