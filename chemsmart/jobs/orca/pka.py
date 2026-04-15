@@ -19,7 +19,11 @@ from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
-from chemsmart.jobs.runner import get_serial_mode, run_phase_jobs
+from chemsmart.jobs.runner import (
+    decide_phase_transition,
+    get_serial_mode,
+    run_phase_jobs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -585,8 +589,9 @@ class ORCApKaJob(ORCAJob):
             f"({opt_cores_per_job} cores, {opt_mem_per_job}GB each)."
         )
 
-        successes = []
-        failures = []
+        all_successes = []
+        all_failures = []
+        phase_failures = []
 
         with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
             future_to_role = {}
@@ -601,17 +606,21 @@ class ORCApKaJob(ORCAJob):
                 )
                 future_to_role[fut] = role
 
-            successes, failures = self._collect_futures(future_to_role)
-            successes.extend(successes)
-            failures.extend(failures)
-
-        # Do not proceed to SP when any optimization worker failed.
-        if failures:
-            summary = (
-                f"Optimization phase failed in {len(failures)} parallel pKa worker(s):\n"
-                + "\n".join(f"  - {e}" for e in failures)
+            phase_successes, phase_failures = self._collect_futures(
+                future_to_role
             )
-            raise RuntimeError(summary)
+            all_successes.extend(phase_successes)
+            all_failures.extend(phase_failures)
+
+        opt_transition = decide_phase_transition(
+            phase_name="Optimization",
+            failures=phase_failures,
+        )
+        if not opt_transition.proceed:
+            if opt_transition.should_raise:
+                raise RuntimeError(opt_transition.message)
+            logger.info(opt_transition.message)
+            return
 
         # ── Phase 2: SP jobs ────────────────────────────────────────────
         # Refresh SP jobs so they pick up optimised geometries
@@ -654,26 +663,28 @@ class ORCApKaJob(ORCAJob):
                     )
                     future_to_role[fut] = role
 
-                successes, failures = self._collect_futures(future_to_role)
-                successes.extend(successes)
-                failures.extend(failures)
+                phase_successes, phase_failures = self._collect_futures(
+                    future_to_role
+                )
+                all_successes.extend(phase_successes)
+                all_failures.extend(phase_failures)
 
         # ── Final reporting ─────────────────────────────────────────────
-        total = len(successes) + len(failures)
+        total = len(all_successes) + len(all_failures)
         logger.info(
             f"Parallel pKa run complete: "
-            f"{len(successes)}/{total} succeeded, "
-            f"{len(failures)}/{total} failed."
+            f"{len(all_successes)}/{total} succeeded, "
+            f"{len(all_failures)}/{total} failed."
         )
-        for label in successes:
+        for label in all_successes:
             logger.info(f"  ✓ {label}")
-        for err in failures:
+        for err in all_failures:
             logger.error(f"  ✗ {err}")
 
-        if failures:
+        if all_failures:
             summary = (
-                f"{len(failures)} of {total} parallel pKa worker(s) failed:\n"
-                + "\n".join(f"  - {e}" for e in failures)
+                f"{len(all_failures)} of {total} parallel pKa worker(s) failed:\n"
+                + "\n".join(f"  - {e}" for e in all_failures)
             )
             raise RuntimeError(summary)
 
@@ -687,20 +698,26 @@ class ORCApKaJob(ORCAJob):
 
         self._run_opt_jobs()
 
-        if serial_mode.run_in_serial and not all(
-            j.is_complete() for j in self.opt_jobs
-        ):
-            logger.info("Opt jobs incomplete, halting serial execution.")
+        opt_transition = decide_phase_transition(
+            phase_name="Opt",
+            require_complete=serial_mode.run_in_serial,
+            is_complete=all(j.is_complete() for j in self.opt_jobs),
+            stop_message="Opt jobs incomplete, halting serial execution.",
+        )
+        if not opt_transition.proceed:
+            logger.info(opt_transition.message)
             return
 
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
-            if serial_mode.run_in_serial and not all(
-                j.is_complete() for j in self.ref_opt_jobs
-            ):
-                logger.info(
-                    "Ref Opt jobs incomplete, halting serial execution."
-                )
+            ref_opt_transition = decide_phase_transition(
+                phase_name="Ref Opt",
+                require_complete=serial_mode.run_in_serial,
+                is_complete=all(j.is_complete() for j in self.ref_opt_jobs),
+                stop_message="Ref Opt jobs incomplete, halting serial execution.",
+            )
+            if not ref_opt_transition.proceed:
+                logger.info(ref_opt_transition.message)
                 return
 
         self._run_sp_jobs()
@@ -709,10 +726,14 @@ class ORCApKaJob(ORCAJob):
             # Should have been created
             return
 
-        if serial_mode.run_in_serial and not all(
-            j.is_complete() for j in self.sp_jobs
-        ):
-            logger.info("SP jobs incomplete, halting serial execution.")
+        sp_transition = decide_phase_transition(
+            phase_name="SP",
+            require_complete=serial_mode.run_in_serial,
+            is_complete=all(j.is_complete() for j in self.sp_jobs),
+            stop_message="SP jobs incomplete, halting serial execution.",
+        )
+        if not sp_transition.proceed:
+            logger.info(sp_transition.message)
             return
 
         if self.has_reference_jobs:

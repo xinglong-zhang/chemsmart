@@ -21,7 +21,11 @@ from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import get_serial_mode, run_phase_jobs
+from chemsmart.jobs.runner import (
+    decide_phase_transition,
+    get_serial_mode,
+    run_phase_jobs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -508,7 +512,8 @@ class GaussianpKaJob(GaussianJob):
         )
 
         successes = []
-        failures = []
+        all_failures = []
+        phase_failures = []
 
         with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
             future_to_role = {}
@@ -523,17 +528,21 @@ class GaussianpKaJob(GaussianJob):
                 )
                 future_to_role[fut] = role
 
-            successes, failures = self._collect_futures(future_to_role)
-            successes.extend(successes)
-            failures.extend(failures)
-
-        # Do not proceed to SP when any optimization worker failed.
-        if failures:
-            summary = (
-                f"Optimization phase failed in {len(failures)} parallel pKa worker(s):\n"
-                + "\n".join(f"  - {e}" for e in failures)
+            phase_successes, phase_failures = self._collect_futures(
+                future_to_role
             )
-            raise RuntimeError(summary)
+            successes.extend(phase_successes)
+            all_failures.extend(phase_failures)
+
+        opt_transition = decide_phase_transition(
+            phase_name="Optimization",
+            failures=phase_failures,
+        )
+        if not opt_transition.proceed:
+            if opt_transition.should_raise:
+                raise RuntimeError(opt_transition.message)
+            logger.info(opt_transition.message)
+            return
 
         # ── Phase 2: SP jobs (only if opt phase had no fatal errors) ────
         # Create SP jobs from optimised geometries
@@ -575,26 +584,28 @@ class GaussianpKaJob(GaussianJob):
                     )
                     future_to_role[fut] = role
 
-                successes, failures = self._collect_futures(future_to_role)
-                successes.extend(successes)
-                failures.extend(failures)
+                phase_successes, phase_failures = self._collect_futures(
+                    future_to_role
+                )
+                successes.extend(phase_successes)
+                all_failures.extend(phase_failures)
 
         # ── Final reporting ─────────────────────────────────────────────
-        total = len(successes) + len(failures)
+        total = len(successes) + len(all_failures)
         logger.info(
             f"Parallel pKa run complete: "
             f"{len(successes)}/{total} succeeded, "
-            f"{len(failures)}/{total} failed."
+            f"{len(all_failures)}/{total} failed."
         )
         for label in successes:
             logger.info(f"  ✓ {label}")
-        for err in failures:
+        for err in all_failures:
             logger.error(f"  ✗ {err}")
 
-        if failures:
+        if all_failures:
             summary = (
-                f"{len(failures)} of {total} parallel pKa worker(s) failed:\n"
-                + "\n".join(f"  - {e}" for e in failures)
+                f"{len(all_failures)} of {total} parallel pKa worker(s) failed:\n"
+                + "\n".join(f"  - {e}" for e in all_failures)
             )
             raise RuntimeError(summary)
 
@@ -617,24 +628,40 @@ class GaussianpKaJob(GaussianJob):
         # Run gas phase optimization jobs for target acid (HA, A-)
         self._run_opt_jobs()
 
-        if not self._opt_jobs_are_complete():
-            logger.info("Opt jobs incomplete, halting serial execution.")
+        opt_transition = decide_phase_transition(
+            phase_name="Opt",
+            require_complete=True,
+            is_complete=self._opt_jobs_are_complete(),
+            stop_message="Opt jobs incomplete, halting serial execution.",
+        )
+        if not opt_transition.proceed:
+            logger.info(opt_transition.message)
             return
 
         # Run gas phase optimization jobs for reference acid (HB, B-) if provided
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
-            if not self._ref_opt_jobs_are_complete():
-                logger.info(
-                    "Ref Opt jobs incomplete, halting serial execution."
-                )
+            ref_opt_transition = decide_phase_transition(
+                phase_name="Ref Opt",
+                require_complete=True,
+                is_complete=self._ref_opt_jobs_are_complete(),
+                stop_message="Ref Opt jobs incomplete, halting serial execution.",
+            )
+            if not ref_opt_transition.proceed:
+                logger.info(ref_opt_transition.message)
                 return
 
         # Run solution phase SP jobs for target acid
         self._run_sp_jobs()
 
-        if not self._sp_jobs_are_complete():
-            logger.info("SP jobs incomplete, halting serial execution.")
+        sp_transition = decide_phase_transition(
+            phase_name="SP",
+            require_complete=True,
+            is_complete=self._sp_jobs_are_complete(),
+            stop_message="SP jobs incomplete, halting serial execution.",
+        )
+        if not sp_transition.proceed:
+            logger.info(sp_transition.message)
             return
 
         # Run solution phase SP jobs for reference acid if provided

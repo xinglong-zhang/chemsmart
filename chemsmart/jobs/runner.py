@@ -28,6 +28,15 @@ class SerialMode:
     no_run_in_serial: bool
 
 
+@dataclass(frozen=True)
+class PhaseTransitionDecision:
+    """Decision payload for moving from one workflow phase to the next."""
+
+    proceed: bool
+    should_raise: bool
+    message: Optional[str] = None
+
+
 def get_serial_mode(jobrunner) -> SerialMode:
     """Return serial-mode flags from a jobrunner.
 
@@ -126,6 +135,40 @@ def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
         return 1
     configured_max_submitters = get_configured_max_submitters(jobrunner)
     return max(1, min(num_jobs, configured_max_submitters))
+
+
+def decide_phase_transition(
+    *,
+    phase_name: str,
+    failures: Optional[Sequence[str]] = None,
+    require_complete: bool = False,
+    is_complete: Optional[bool] = None,
+    stop_message: Optional[str] = None,
+) -> PhaseTransitionDecision:
+    """Return a shared decision for whether a workflow should enter next phase."""
+    phase_failures = [f for f in (failures or []) if f]
+    if phase_failures:
+        summary = (
+            f"{phase_name} phase failed in {len(phase_failures)} worker(s):\n"
+            + "\n".join(f"  - {item}" for item in phase_failures)
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=True,
+            message=summary,
+        )
+
+    if require_complete and is_complete is False:
+        message = (
+            stop_message or f"{phase_name} jobs incomplete, halting execution."
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=False,
+            message=message,
+        )
+
+    return PhaseTransitionDecision(proceed=True, should_raise=False)
 
 
 class JobRunner(RegistryMixin):
