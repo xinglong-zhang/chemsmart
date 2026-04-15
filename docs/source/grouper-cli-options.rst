@@ -67,9 +67,53 @@ These options are shared across all grouping strategies and must be placed BEFOR
       -  flag
       -  Ignore hydrogen atoms in grouping calculations
 
-   -  -  ``-o, --output-format``
+   -  -  ``-m, --matrix-format``
       -  string
       -  Output format for group results (xlsx, csv, txt, default: xyz)
+
+   -  -  ``-E, --energy-type``
+      -  string
+      -  Energy type to extract (E, H, G, qhH, qhG, sp_qhG)
+
+   -  -  ``-csg, --cutoff-entropy-grimme``
+      -  float
+      -  Cutoff frequency for entropy (cm⁻¹) using Grimme's qRRHO method (Default: 100)
+
+   -  -  ``-cst, --cutoff-entropy-truhlar``
+      -  float
+      -  Cutoff frequency for entropy (cm⁻¹) using Truhlar's qRRHO method
+
+   -  -  ``-ch, --cutoff-enthalpy``
+      -  float
+      -  Cutoff frequency for enthalpy (cm⁻¹), Head-Gordon qRRHO method (Default: 100)
+
+   -  -  ``-c, --concentration``
+      -  float
+      -  Concentration in mol/L (Default: 1.0)
+
+   -  -  ``-P, --pressure``
+      -  float
+      -  Pressure in atm (Default: 1.0)
+
+   -  -  ``-temp, --temperature``
+      -  float
+      -  Temperature in Kelvin (Default: 298.15)
+
+   -  -  ``--alpha``
+      -  int
+      -  Interpolator exponent used in the qRRHO approximation (Default: 4)
+
+   -  -  ``--weighted/--no-weighted``
+      -  flag
+      -  Use natural abundance weighted masses vs most abundant masses (Default: weighted)
+
+   -  -  ``--energy-units``
+      -  string
+      -  Units of energetic values (hartree, eV, kcal/mol, kJ/mol. Default: hartree)
+
+   -  -  ``--check-imaginary-frequencies``
+      -  flag
+      -  Whether to check for imaginary frequencies (Default: True)
 
 **********************
  Available Strategies
@@ -209,10 +253,27 @@ be sorted alphabetically after the numbered conformers.
 
 **Energy extraction:**
 
-For Gaussian and ORCA output files, the program extracts Gibbs free energy directly from the output:
+For Gaussian and ORCA output files, the program can extract various types of energies directly from the output using the
+``-E`` or ``--energy-type`` option.
 
--  Gaussian: "Sum of electronic and thermal Free Energies"
--  ORCA: "Final Gibbs free energy"
+Supported energy types:
+
+-  ``E``: SCF energy (default)
+-  ``H``: Enthalpy
+-  ``G``: Gibbs free energy
+-  ``qhH``: Quasi-harmonic enthalpy (requires frequency calculation)
+-  ``qhG``: Quasi-harmonic Gibbs free energy (requires frequency calculation)
+-  ``sp_qhG``: Single-point corrected quasi-harmonic Gibbs free energy (qhG - Egas + Esolv)
+
+**Thermochemistry corrections:**
+
+When using ``qhH``, ``qhG``, or ``sp_qhG``, chemsmart leverages the internal thermochemistry module to compute corrected
+thermodynamic values. Additional thermochemistry CLI options (e.g., temperature, concentration, frequency cutoffs,
+entropy method) become available.
+
+For ``sp_qhG``, the program will automatically search for a matching single-point file in a subfolder named 'sp'
+(containing "sp" in its name) to extract the energy in solvation or using better basis and compute the corrected free
+energy.
 
 **************
  Output Files
