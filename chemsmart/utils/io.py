@@ -849,15 +849,19 @@ def attach_eta_bonds_for_cp_rings(
     every ring carbon has exactly one implicit H (correct sp2 geometry), and
     adds one single σ-bond from the metal to the ring anchor carbon.
 
-    The bond pattern applied is (cycling from anchor C₀):
-    ``SINGLE, DOUBLE, SINGLE, DOUBLE, SINGLE``.  With anchor C₀ bearing the
-    metal bond (single), C₁–C₂ (double), C₂–C₃ (single), C₃–C₄ (double),
-    C₄–C₀ (single), every ring carbon has exactly three bonds and thus one
-    implicit hydrogen, which is the correct sp2 geometry.
+    The ring bond pattern applied (cycling from anchor C₀) is:
+    C₀–C₁ (SINGLE), C₁=C₂ (DOUBLE), C₂–C₃ (SINGLE), C₃=C₄ (DOUBLE),
+    C₄–C₀ (SINGLE).  With the additional metal–C₀ bond (single), C₀ ends up
+    with three bonds (C₁, C₄, metal) → 1 implicit H; each remaining carbon
+    also has exactly three bonds (one single + one double within the ring)
+    → 1 implicit H.  This is the correct sp2 geometry.
 
-    The anchor is chosen as the ring atom with the smallest degree in the full
-    molecule (which for fused rings avoids picking a junction carbon with
-    external substituents), breaking ties by atom index.
+    The anchor (C₀) is the ring atom with the fewest bonds to atoms outside
+    the ring (i.e. lowest total degree).  For pure Cp rings all carbons have
+    degree 2 (only ring bonds), so any atom is suitable.  For fused systems
+    such as indenyl, junction carbons have degree > 2 (bonded to both rings
+    plus an external hydrogen or substituent), and choosing a non-junction
+    carbon keeps their implicit-H count intact.
 
     After embedding, :func:`_adjust_metal_above_rings` re-positions the metal
     to the correct centroid above the ring so that the final geometry reflects
@@ -902,10 +906,14 @@ def attach_eta_bonds_for_cp_rings(
         if any(i in metal_frag for i in ring):
             continue
 
-        # Walk ring in cyclic order starting from the lowest-degree atom so
-        # that for fused (indenyl-type) rings we avoid starting on a junction
-        # carbon (degree > 2) which would give the anchor C an incorrect
-        # implicit-H count.
+        # Walk ring in cyclic order starting from the lowest-degree atom.
+        # For pure Cp rings every carbon has degree 2 (only ring bonds), so any
+        # choice is equivalent.  For fused indenyl-type rings, junction carbons
+        # have degree > 2 (they are shared between two rings and may carry
+        # external substituents); starting from a non-junction carbon ensures
+        # the anchor receives the metal bond with two flanking single ring bonds
+        # (total 3 bonds → 1H), and the junction carbons keep their external
+        # bonds accounted for by the bond-order pattern.
         anchor_start = min(ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree())
         ordered = _order_ring_atoms_by_walk(rw, ring)
         if ordered is None:
