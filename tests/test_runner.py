@@ -5,7 +5,7 @@ from unittest.mock import Mock, PropertyMock
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.runner import JobRunner, get_submitter_worker_count
 
 
 class MockMolecule(Molecule):
@@ -42,6 +42,17 @@ class TestJobRunner:
         """Test that run_in_serial can be set to False."""
         runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
         assert runner.run_in_serial is False
+
+    def test_submitter_worker_count_uses_policy_cap(self, pbs_server):
+        runner = JobRunner(server=pbs_server, fake=True)
+        assert get_submitter_worker_count(runner, 1000) == runner.num_cores
+
+    def test_submitter_worker_count_honors_env_override(
+        self, pbs_server, monkeypatch
+    ):
+        monkeypatch.setenv("CHEMSMART_MAX_SUBMITTERS", "3")
+        runner = JobRunner(server=pbs_server, fake=True)
+        assert get_submitter_worker_count(runner, 1000) == 3
 
 
 class TestSerialExecution:

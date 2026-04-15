@@ -52,13 +52,13 @@ Code reviewed includes:
 - **Risk:** parent workflow cannot reliably detect batch failure without polling output/state; this can produce false-positive orchestration success.
 - **Recommendation:** aggregate per-job failures and return/raise structured summary from `BatchJob.run` for upstream phase control.
 
-### 4) Medium — `get_serial_mode` is mostly centralized, but not yet complete repo-wide
+### 4) Medium — `get_serial_mode` is mostly centralized, but not yet complete repo-wide (FIXED)
 
 - **Evidence:** direct boolean branch remains outside reviewed pKa paths in `chemsmart/cli/sub.py:241` (`not jobrunner.run_in_serial`).
 - **Risk:** policy drift if serial-mode semantics evolve (e.g., tri-state, environment overrides) and non-central callers remain.
 - **Recommendation:** migrate remaining direct checks to `get_serial_mode` or formally scope helper to pKa + run pipeline only.
 
-### 5) Medium — Potential oversubscription hotspots in large batches
+### 5) Medium — Potential oversubscription hotspots in large batches (FIXED)
 
 - **Evidence:**
   - `chemsmart/cli/run.py:138` uses `ThreadPoolExecutor(max_workers=len(job))`

@@ -25,7 +25,7 @@ from contextlib import suppress
 from typing import Any, Optional, Sequence
 
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import get_serial_mode
+from chemsmart.jobs.runner import get_serial_mode, get_submitter_worker_count
 from chemsmart.utils.mixins import RegistryMeta
 
 logger = logging.getLogger(__name__)
@@ -142,7 +142,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     ) -> list[dict[str, Any]]:
         """Submit child jobs concurrently using a thread pool."""
         outcomes: list[dict[str, Any]] = []
-        with ThreadPoolExecutor() as executor:
+        max_workers = get_submitter_worker_count(self.jobrunner, len(jobs))
+        logger.info(f"Using up to {max_workers} parallel submitter workers")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_job = {
                 executor.submit(self._submit_job, job, None, **kwargs): job
                 for job in jobs
@@ -265,7 +267,8 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         job_chunks = self._split_jobs_across_nodes(self.jobs, num_nodes)
 
         outcomes: list[dict[str, Any]] = []
-        with ThreadPoolExecutor(max_workers=num_nodes) as executor:
+        max_workers = get_submitter_worker_count(self.jobrunner, num_nodes)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for node, jobs_chunk in zip(nodes, job_chunks):
                 if jobs_chunk:

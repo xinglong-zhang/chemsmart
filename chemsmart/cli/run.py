@@ -9,7 +9,11 @@ from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner, get_serial_mode
+from chemsmart.jobs.runner import (
+    JobRunner,
+    get_serial_mode,
+    get_submitter_worker_count,
+)
 from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
@@ -135,7 +139,9 @@ def process_pipeline(ctx, *args, **kwargs):
             return None
 
         logger.info("Running jobs in parallel mode")
-        with ThreadPoolExecutor(max_workers=max(1, len(job))) as executor:
+        max_workers = get_submitter_worker_count(jobrunner, len(job))
+        logger.info(f"Using up to {max_workers} parallel submitter workers")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_job = {}
             for single_job in job:
                 single_job.jobrunner = _prepare_runner(single_job)

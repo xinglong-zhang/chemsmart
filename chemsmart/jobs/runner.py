@@ -66,6 +66,68 @@ def run_phase_jobs(
     )
 
 
+def _positive_int_or_none(value) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def get_configured_max_submitters(jobrunner=None) -> int:
+    """Return configured submitter concurrency limit.
+
+    Resolution order:
+    1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
+    2. ``jobrunner.max_submitters`` (if present)
+    3. ``jobrunner.server.max_submitters`` (if present)
+    4. ``jobrunner.num_cores``
+    5. ``jobrunner.server.num_cores``
+    6. ``os.cpu_count()``
+    """
+    env_value = _positive_int_or_none(
+        os.environ.get("CHEMSMART_MAX_SUBMITTERS")
+    )
+    if env_value is not None:
+        return env_value
+
+    runner_value = _positive_int_or_none(
+        getattr(jobrunner, "max_submitters", None)
+    )
+    if runner_value is not None:
+        return runner_value
+
+    server = getattr(jobrunner, "server", None)
+    server_value = _positive_int_or_none(
+        getattr(server, "max_submitters", None)
+    )
+    if server_value is not None:
+        return server_value
+
+    cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
+    if cores_value is not None:
+        return cores_value
+
+    server_cores_value = _positive_int_or_none(
+        getattr(server, "num_cores", None)
+    )
+    if server_cores_value is not None:
+        return server_cores_value
+
+    cpu_count = _positive_int_or_none(os.cpu_count())
+    return cpu_count if cpu_count is not None else 1
+
+
+def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
+    """Return bounded worker count for batch/list submitter threads."""
+    if num_jobs <= 0:
+        return 1
+    configured_max_submitters = get_configured_max_submitters(jobrunner)
+    return max(1, min(num_jobs, configured_max_submitters))
+
+
 class JobRunner(RegistryMixin):
     """Abstract base class for job runner for running a job on a server.
 
