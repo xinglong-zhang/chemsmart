@@ -783,12 +783,14 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --output={self.job.label}_array_%a.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}_array_%a.slurmerr\n")
 
-        # Array directive: 0 to num_jobs-1, optionally throttled so that at
+        # Array directive: 1 to num_jobs, optionally throttled so that at
         # most num_nodes tasks run concurrently (useful for resource limits).
+        # This matches the 1-based array runscript filenames
+        # (for example, chemsmart_run_array_1.py ... chemsmart_run_array_N.py).
         if num_nodes is not None:
-            f.write(f"#SBATCH --array=0-{num_jobs-1}%{num_nodes}\n")
+            f.write(f"#SBATCH --array=1-{num_jobs}%{num_nodes}\n")
         else:
-            f.write(f"#SBATCH --array=0-{num_jobs-1}\n")
+            f.write(f"#SBATCH --array=1-{num_jobs}\n")
 
         if self.server.num_gpus:
             f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
