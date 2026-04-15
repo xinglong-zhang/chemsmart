@@ -331,9 +331,10 @@ class Submitter(RegistryMixin):
                 ):
                     job_cli_args = cli_args[i]
 
-            # Create a run script for each job with a 1-based index so that
-            # the filenames align with typical 1-based scheduler array indices.
-            runscript_name = f"chemsmart_run_array_{i + 1}.py"
+            # Create a run script for each job using a 0-based index so the
+            # filenames align with scheduler array task IDs and task-based
+            # execution of chemsmart_run_array_${TASK_ID}.py.
+            runscript_name = f"chemsmart_run_array_{i}.py"
             runscript = RunScript(runscript_name, job_cli_args)
             logger.debug(f"Writing array run script {i}: {runscript_name}")
             runscript.write()
