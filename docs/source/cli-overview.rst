@@ -71,6 +71,10 @@ Execution Control Options
       -  bool
       -  Skip or rerun completed jobs (default: skip)
 
+   -  -  ``--run-in-serial/--no-run-in-serial``
+      -  bool
+      -  For list/batch workloads, run jobs one-by-one or allow non-serial execution (default: non-serial)
+
    -  -  ``--fake/--no-fake``
       -  bool
       -  Enable simulation mode with fake job runners (default: disabled)
@@ -82,6 +86,17 @@ Execution Control Options
 .. note::
 
    Use ``-R`` at the end of the command to rerun a completed job.
+
+.. note::
+
+   ``--run-in-serial`` is mainly for multi-job input (for example, a list or batch). It forces sequential execution of
+   each job. ``--no-run-in-serial`` (the default) lets Chemsmart use its standard non-serial path for those workloads.
+
+Examples:
+
+.. code:: bash
+
+   chemsmart sub --run-in-serial gaussian -f batch_input.csv pka batch
 
 Debugging and Logging Options
 =============================
