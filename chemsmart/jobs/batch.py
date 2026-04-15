@@ -269,23 +269,34 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         outcomes: list[dict[str, Any]] = []
         max_workers = get_submitter_worker_count(self.jobrunner, num_nodes)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
+            future_to_node_chunk: dict[Any, tuple[str, Sequence[Job]]] = {}
             for node, jobs_chunk in zip(nodes, job_chunks):
                 if jobs_chunk:
-                    futures.append(
-                        executor.submit(
-                            self._run_chunk_on_node,
-                            jobs_chunk,
-                            node,
-                            **kwargs,
-                        )
+                    future = executor.submit(
+                        self._run_chunk_on_node,
+                        jobs_chunk,
+                        node,
+                        **kwargs,
                     )
+                    future_to_node_chunk[future] = (node, jobs_chunk)
 
-            for future in as_completed(futures):
+            for future in as_completed(future_to_node_chunk):
+                node, jobs_chunk = future_to_node_chunk[future]
                 try:
                     outcomes.extend(future.result())
                 except Exception as e:
                     logger.error(f"Node execution failed: {e}", exc_info=True)
+                    first_job_label = (
+                        jobs_chunk[0].label if jobs_chunk else "unknown_chunk"
+                    )
+                    outcomes.append(
+                        {
+                            "label": f"node:{node}:{first_job_label}",
+                            "success": False,
+                            "error": str(e),
+                            "node": node,
+                        }
+                    )
         return outcomes
 
     def _run_chunk_on_node(

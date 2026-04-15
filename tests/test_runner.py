@@ -307,6 +307,52 @@ class TestBatchJobRefactor:
         with pytest.raises(BatchExecutionError, match="fail_job"):
             batch.run()
 
+    def test_batch_run_multi_node_records_node_future_exception(
+        self, pbs_server, mocker
+    ):
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
+
+        job1 = Mock()
+        job1.label = "job1"
+        job2 = Mock()
+        job2.label = "job2"
+
+        batch = dummy_batch_cls(
+            jobs=[job1, job2],
+            run_in_serial=False,
+            jobrunner=runner,
+            label="batch_node_future_failure",
+        )
+
+        def _chunk_side_effect(jobs_chunk, node, **kwargs):
+            if node == "n2":
+                raise RuntimeError("node future failure")
+            return [
+                {
+                    "label": jobs_chunk[0].label,
+                    "success": True,
+                    "error": "",
+                    "node": node,
+                }
+            ]
+
+        mocker.patch.object(
+            batch, "_run_chunk_on_node", side_effect=_chunk_side_effect
+        )
+
+        outcomes = batch._run_multi_node(nodes=["n1", "n2"])
+
+        assert any(item["success"] for item in outcomes)
+        node_failure = [
+            item
+            for item in outcomes
+            if (not item["success"]) and item["node"] == "n2"
+        ]
+        assert len(node_failure) == 1
+        assert node_failure[0]["label"].startswith("node:n2:")
+        assert "node future failure" in node_failure[0]["error"]
+
 
 class TestGaussianBatchDelegation:
     """Tests for Gaussian multi-subjob workflows using GaussianBatchJob."""

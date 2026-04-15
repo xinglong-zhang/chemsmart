@@ -1,4 +1,4 @@
-# Architectural Integrity Review: pKa Refactor
+# Architectural Integrity Review: pKa Refactor (Current State)
 
 ## Scope and review lens
 
@@ -8,11 +8,12 @@ This review evaluates the current refactor state for:
 - shared phase-runner behavior across pKa phases
 - consistency of `get_serial_mode(...)` as serial/parallel source of truth
 - batch scalability and submission behavior under large job arrays
-- containment of pKa-specific `fail_fast` semantics
+- containment of pKa-specific fail/stop semantics
 
 Code reviewed includes:
 
 - `chemsmart/cli/run.py`
+- `chemsmart/cli/sub.py`
 - `chemsmart/cli/gaussian/pka.py`
 - `chemsmart/cli/orca/pka.py`
 - `chemsmart/jobs/runner.py`
@@ -20,76 +21,90 @@ Code reviewed includes:
 - `chemsmart/jobs/batch.py`
 - `chemsmart/jobs/gaussian/pka.py`
 - `chemsmart/jobs/orca/pka.py`
+- `tests/test_runner.py`
+
+---
+
+## Status snapshot
+
+- Batch serial precedence fix: **FIXED**
+- Parallel Opt -> SP gating fix: **FIXED**
+- Batch failure surfacing to callers: **FIXED**
+- `get_serial_mode` centralization in reviewed paths: **FIXED**
+- Submitter oversubscription capping: **FIXED**
+- Shared phase transition contract for parallel/serial: **PARTIALLY FIXED** (transition contract shared; worker-dispatch loops still engine-local)
 
 ---
 
 ## Findings (ordered by severity)
 
-### 1) High — Batch default policy now biases to serial unless caller explicitly overrides(FIXED)
+### 1) Medium - Multi-node coordinator exceptions are logged but not converted into explicit batch failures
 
-- **Evidence:** `chemsmart/jobs/batch.py:53-69` (`BatchJob.__init__`)
-- **What changed logically:** `self.run_in_serial` is now `run_in_serial OR runner.run_in_serial` (via `get_serial_mode`).
-- **Risk:** because constructor default is `run_in_serial=True`, any call site that does not pass `run_in_serial` explicitly remains serial even when runner policy is parallel. This can silently suppress intended parallel behavior in batch subclasses that rely on defaults.
-- **Impact area:** scalability and policy consistency.
-- **Recommendation:** make precedence explicit and non-ambiguous:
-  - either change constructor default to `run_in_serial=None` and resolve from runner when `None`,
-  - or keep default but enforce explicit passing at all `BatchJob` call sites and document that requirement.
+- **Evidence:** `BatchJob._run_multi_node` catches exceptions from node futures and logs them, but does not append a failure outcome (`chemsmart/jobs/batch.py`).
+- **What happens:** if a node-level coordination error occurs before chunk outcomes are returned, the error can be logged without becoming a structured failure entry.
+- **Risk:** edge-case false-positive completion if no failed outcomes are emitted for that node.
+- **Recommendation:** convert node-level future exceptions into synthetic failure outcomes (or re-raise as `BatchExecutionError`) so all failures are visible to upstream callers.
 
-### 2) High — Parallel pKa path does not gate SP phase on optimization failures (FIXED)
+### 2) Low - Parallel worker execution remains engine-specific even though phase transition policy is centralized
 
-- **Evidence:**
-  - `chemsmart/jobs/gaussian/pka.py:530-573` (`GaussianpKaJob._run_parallel`)
-  - `chemsmart/jobs/orca/pka.py:608-651` (`ORCApKaJob._run_parallel`)
-- **What happens:** after collecting opt phase failures, code still proceeds to create and run SP jobs.
-- **Risk:** SP jobs may run on fallback/unoptimized geometries after failed opt jobs; this breaks phase safety expectation and can waste resources at scale.
-- **Recommendation:** gate SP phase with `if all_failures: raise` (or phase-level policy flag) before SP dispatch.
+- **Evidence:** both `GaussianpKaJob._run_parallel` and `ORCApKaJob._run_parallel` keep custom `ThreadPoolExecutor` loops and per-engine worker functions (`chemsmart/jobs/gaussian/pka.py`, `chemsmart/jobs/orca/pka.py`).
+- **What improved:** phase transition/gating is now shared through `decide_phase_transition(...)` in both serial and parallel paths.
+- **Residual risk:** behavior drift can reappear in future if one engine changes worker collection/reporting semantics and the other does not.
+- **Recommendation:** keep resource-splitting engine-local, but consider extracting a shared parallel phase collector helper (future map -> successes/failures -> transition decision).
 
-### 3) Medium — Error handling in batch parallel execution hides failures from callers (FIXED)
+---
 
-- **Evidence:**
-  - `_submit_job` catches and logs exceptions internally (`chemsmart/jobs/batch.py:142-154`)
-  - `_run_jobs_in_parallel` also catches future exceptions, but futures usually do not fail because `_submit_job` swallows exceptions (`chemsmart/jobs/batch.py:120-135`)
-- **Risk:** parent workflow cannot reliably detect batch failure without polling output/state; this can produce false-positive orchestration success.
-- **Recommendation:** aggregate per-job failures and return/raise structured summary from `BatchJob.run` for upstream phase control.
+## Previously flagged issues now resolved
 
-### 4) Medium — `get_serial_mode` is mostly centralized, but not yet complete repo-wide (FIXED)
+### 1) Batch default serial bias due to ambiguous constructor precedence - FIXED
 
-- **Evidence:** direct boolean branch remains outside reviewed pKa paths in `chemsmart/cli/sub.py:241` (`not jobrunner.run_in_serial`).
-- **Risk:** policy drift if serial-mode semantics evolve (e.g., tri-state, environment overrides) and non-central callers remain.
-- **Recommendation:** migrate remaining direct checks to `get_serial_mode` or formally scope helper to pKa + run pipeline only.
+- `BatchJob.__init__` now uses `run_in_serial: Optional[bool] = None`.
+- Resolution is explicit:
+  - `None` -> inherit from `get_serial_mode(jobrunner).run_in_serial`
+  - explicit `True`/`False` -> call-site override wins
+- Covered by tests in `tests/test_runner.py` (`test_batch_serial_mode_when_unset`, `test_batch_serial_mode_keeps_explicit_false`, `test_batch_serial_mode_keeps_explicit_true`).
 
-### 5) Medium — Potential oversubscription hotspots in large batches (FIXED)
+### 2) Parallel pKa Opt failure not gating SP dispatch - FIXED
 
-- **Evidence:**
-  - `chemsmart/cli/run.py:138` uses `ThreadPoolExecutor(max_workers=len(job))`
-  - `chemsmart/jobs/batch.py:120` uses `ThreadPoolExecutor()` default worker count
-- **Risk:** large batch lists can create too many concurrent submitters while each job itself may be multi-core; this can bottleneck scheduler APIs and local head nodes.
-- **Recommendation:** cap worker count using a policy-aware bound (`min(len(jobs), configured_max_submitters)`) and optionally tie to runner/server capabilities.
+- Both engines now gate via `decide_phase_transition(phase_name="Optimization", failures=phase_failures)` before SP job creation/dispatch.
+- If optimization failures exist, `_run_parallel` raises and does not proceed to SP.
+- Covered by tests:
+  - `test_gaussian_pka_parallel_stops_before_sp_on_opt_failure`
+  - `test_orca_pka_parallel_stops_before_sp_on_opt_failure`
 
-### 6) Low — Phase-runner abstraction is centralized but parallel branch still bypasses it
+### 3) Batch failures hidden from callers - FIXED
 
-- **Evidence:**
-  - shared abstraction present in `run_phase_jobs` -> `Job._execute_phase_jobs` (`chemsmart/jobs/runner.py:45-66`, `chemsmart/jobs/job.py:127-167`)
-  - both engine `_run_parallel` implementations use custom loops (`chemsmart/jobs/gaussian/pka.py:458-591`, `chemsmart/jobs/orca/pka.py:556-670`)
-- **Risk:** behavior differences can reappear between serial and parallel paths (phase gating, reporting, stop semantics).
-- **Recommendation:** keep custom resource splitting, but move phase transition decisions (opt -> sp gating) through a shared phase contract.
+- Batch execution now aggregates per-job outcomes and raises `BatchExecutionError` from `BatchJob._run` when any child reports failure.
+- Optional outcome logs are controlled by `write_outcome_logs` (default `False`), avoiding global side effects.
+- Covered by tests (`test_batch_writes_success_and_failed_logs`, `test_batch_run_raises_with_failed_job_summary`).
+
+### 4) `get_serial_mode` centralization incomplete - FIXED in reviewed paths
+
+- Reviewed run/sub/pKa paths now route serial-policy decisions through `get_serial_mode(...)`.
+- `chemsmart/cli/sub.py` no longer uses direct `not jobrunner.run_in_serial` logic.
+
+### 5) Oversubscription hotspots in list/batch dispatch - FIXED
+
+- `chemsmart/cli/run.py` and `chemsmart/jobs/batch.py` now cap workers through `get_submitter_worker_count(...)`.
+- Cap derives from policy in `get_configured_max_submitters(...)` (`CHEMSMART_MAX_SUBMITTERS`, runner/server caps, cores, CPU fallback).
+- Covered by tests in `tests/test_runner.py` for policy cap and env override.
 
 ---
 
 ## JobRunner lifecycle trace (integrity check)
 
 1. **Instantiation (CLI root):**
-   - `chemsmart/cli/run.py:65-74` creates base `JobRunner` with CLI flags.
+   - `run`/`sub` create base `JobRunner` using CLI options (`chemsmart/cli/run.py`, `chemsmart/cli/sub.py`).
 2. **Type specialization:**
-   - `process_pipeline` creates engine-specific runner via `from_job(...)` for each job (`chemsmart/cli/run.py:116-127`, `160-170`).
+   - pipeline resolves engine-specific runners via `from_job(...)` (`chemsmart/cli/run.py`).
 3. **Batch propagation:**
-   - `BatchJob._build_jobrunner` uses `Job._propagate_runner(...)` copy semantics (`chemsmart/jobs/batch.py:155-173`).
+   - `BatchJob._build_jobrunner` uses `Job._propagate_runner(...)` copy semantics (`chemsmart/jobs/batch.py`).
 4. **Phase propagation:**
-   - `Job._execute_phase_jobs` copies runner per child (`chemsmart/jobs/job.py:152-156`).
+   - `run_phase_jobs(...)` delegates to `Job._execute_phase_jobs(...)`, which copies runner per child (`chemsmart/jobs/runner.py`, `chemsmart/jobs/job.py`).
 5. **Parallel worker propagation:**
-   - pKa parallel workers also call `_propagate_runner` per job (`chemsmart/jobs/gaussian/pka.py:399-425`, `chemsmart/jobs/orca/pka.py:497-523`).
+   - pKa parallel workers also propagate patched runner copies per worker job (`chemsmart/jobs/gaussian/pka.py`, `chemsmart/jobs/orca/pka.py`).
 
-**Conclusion:** runner copy discipline is generally sound; no major shared-reference mutation risk found in the main pKa execution flow.
+**Conclusion:** runner copy discipline remains sound in the reviewed pKa and batch execution paths.
 
 ---
 
@@ -97,45 +112,44 @@ Code reviewed includes:
 
 ### In-scope paths (good)
 
-- CLI list execution: `chemsmart/cli/run.py:114-154`
-- Gaussian pKa CLI: `chemsmart/cli/gaussian/pka.py` (submit/batch/analyze/batch-analyze/thermo)
-- ORCA pKa CLI: `chemsmart/cli/orca/pka.py:151-153`, `241-243`
+- CLI list execution: `chemsmart/cli/run.py`
+- Submission path: `chemsmart/cli/sub.py`
+- Gaussian pKa CLI: `chemsmart/cli/gaussian/pka.py`
+- ORCA pKa CLI: `chemsmart/cli/orca/pka.py`
 - pKa job classes: `chemsmart/jobs/gaussian/pka.py`, `chemsmart/jobs/orca/pka.py`
-- BatchJob constructor integration: `chemsmart/jobs/batch.py:65-69`
+- Batch constructor precedence: `chemsmart/jobs/batch.py`
 
 ### Drift observed
 
-- Non-pKa path still performs local boolean math in `chemsmart/cli/sub.py:241`.
+- No direct drift found in reviewed run/sub/pKa paths.
 
 ---
 
-## Fail-fast encapsulation check
+## pKa-specific stop semantics encapsulation
 
-- `get_serial_mode(...)` contains only serial-mode state (`chemsmart/jobs/runner.py:31-42`) and does **not** include fail-fast.
-- pKa-specific stop behavior remains phase-level (`stop_on_incomplete=True` in pKa phase calls, serial-gated in `Job._execute_phase_jobs`).
+- `get_serial_mode(...)` remains intentionally limited to serial-mode state only (`chemsmart/jobs/runner.py`).
+- Phase gating and failure decisions remain in pKa orchestration via `decide_phase_transition(...)` and phase-specific completion checks.
 
-**Conclusion:** fail-fast remains correctly encapsulated and has not leaked into shared serial-mode utility.
+**Conclusion:** pKa-specific stop behavior is still encapsulated outside shared serial-mode utility.
 
 ---
 
-## Methods currently deviating from the intended pattern
+## Methods with residual deviation from full unification
 
-1. `chemsmart/jobs/gaussian/pka.py:458-591` — `_run_parallel` (custom phase transition path bypasses shared phase contract)
-2. `chemsmart/jobs/orca/pka.py:556-670` — `_run_parallel` (same deviation)
-3. `chemsmart/jobs/batch.py:142-154` — `_submit_job` (swallows exceptions; weak upstream failure propagation)
-4. `chemsmart/cli/sub.py:241` — local serial-mode boolean logic outside `get_serial_mode`
+1. `chemsmart/jobs/gaussian/pka.py` - `_run_parallel` keeps engine-local parallel dispatch loop (intentional for resource splitting).
+2. `chemsmart/jobs/orca/pka.py` - `_run_parallel` keeps engine-local parallel dispatch loop (same rationale).
+3. `chemsmart/jobs/batch.py` - `_run_multi_node` logs node-level future exceptions without structured failure conversion.
 
 ---
 
 ## Recommended next refactor slice
 
-1. Normalize `BatchJob` serial precedence (`None` sentinel or explicit-callsite contract).
-2. Add opt->SP gate in both pKa `_run_parallel` methods.
-3. Introduce batch failure aggregation (return/raise summary from batch run).
-4. Replace remaining direct `run_in_serial` branching with `get_serial_mode` where policy uniformity is required.
+1. Convert node-level multi-node executor exceptions into explicit failure outcomes or direct `BatchExecutionError` raising.
+2. Extract a shared parallel phase collector utility for both engines while retaining engine-specific resource partitioning.
+3. Add a short operator-facing doc note for `CHEMSMART_MAX_SUBMITTERS` and submitter-cap resolution order.
 
 ---
 
 ## Overall structural assessment
 
-The refactor has strong architectural direction: runner propagation is centralized and copy-safe, phase orchestration for serial path is shared, and serial-mode policy is mostly unified behind `get_serial_mode`. Remaining risks are concentrated in parallel phase gating and batch failure surfacing, not in core object lifecycle correctness.
+The architecture is materially improved versus the earlier review baseline. Core lifecycle safety, serial-policy centralization, phase-transition gating, failure surfacing, and worker capping are now in place and test-backed. Remaining gaps are focused and low-to-medium risk, primarily around edge-case multi-node error conversion and optional further deduplication of parallel worker loops.
