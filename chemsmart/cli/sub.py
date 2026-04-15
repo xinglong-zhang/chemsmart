@@ -12,7 +12,7 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.runner import JobRunner, get_serial_mode
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
 from chemsmart.utils.logger import create_logger
@@ -206,10 +206,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         # This fixes an issue where the flag might be lost during reconstruction,
         # ensuring that batch jobs submitted to the cluster run sequentially
         # instead of triggering simultaneous execution.
-        if (
-            ctx.obj["jobrunner"].run_in_serial
-            and "--run-in-serial" not in cli_args
-        ):
+        if serial_mode.run_in_serial and "--run-in-serial" not in cli_args:
             cli_args.insert(0, "--run-in-serial")
 
         if kwargs.get("print_command"):
@@ -227,6 +224,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
     num_nodes = ctx.obj.get("num_nodes")
     job = args[0]
 
@@ -238,7 +236,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         # the value. Even --num-nodes=1 is valid: submit as an array but run
         # only one task at a time. The old `> 1` guard silently fell through to
         # individual serial submission for --num-nodes=1, which was surprising.
-        if num_nodes is not None and not jobrunner.run_in_serial:
+        if num_nodes is not None and serial_mode.no_run_in_serial:
             logger.info(
                 f"Submitting {len(job)} jobs as array job "
                 f"(max {num_nodes} concurrent tasks)"
@@ -263,7 +261,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             )
         else:
             # Submit jobs individually (serial or when num_nodes not specified)
-            if jobrunner.run_in_serial:
+            if serial_mode.run_in_serial:
                 logger.info("Submitting jobs serially (one by one)")
             for single_job in job:
                 single_job.jobrunner = jobrunner

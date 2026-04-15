@@ -44,7 +44,7 @@ Code reviewed includes:
 - **Risk:** SP jobs may run on fallback/unoptimized geometries after failed opt jobs; this breaks phase safety expectation and can waste resources at scale.
 - **Recommendation:** gate SP phase with `if all_failures: raise` (or phase-level policy flag) before SP dispatch.
 
-### 3) Medium — Error handling in batch parallel execution hides failures from callers
+### 3) Medium — Error handling in batch parallel execution hides failures from callers (FIXED)
 
 - **Evidence:**
   - `_submit_job` catches and logs exceptions internally (`chemsmart/jobs/batch.py:142-154`)
