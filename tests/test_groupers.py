@@ -2091,3 +2091,100 @@ class TestConformerIdExtraction:
             "mol_opt",
             "structure_ts",
         ]
+
+
+@pytest.mark.usefixtures("temp_working_dir")
+class Test_energy_extraction_function:
+    """Framework tests for energy extraction by file type."""
+
+    def test_energy_extraction_gaussian(
+        self, gaussian_dppeFeCl2_link_opt_outputfile
+    ):
+        from chemsmart.analysis.thermochemistry import Thermochemistry
+        from chemsmart.cli.grouper.grouper import (
+            _extract_energy_based_on_energy_type,
+        )
+
+        thermo = Thermochemistry(
+            filename=gaussian_dppeFeCl2_link_opt_outputfile
+        )
+        extracted = _extract_energy_based_on_energy_type(thermo, "E")
+        assert np.isclose(extracted, -3869.01351827, rtol=1e-7)
+
+        thermo = Thermochemistry(
+            filename=gaussian_dppeFeCl2_link_opt_outputfile
+        )
+        extracted = _extract_energy_based_on_energy_type(thermo, "H")
+        assert np.isclose(extracted, -3868.552084, rtol=1e-7)
+
+        thermo = Thermochemistry(
+            filename=gaussian_dppeFeCl2_link_opt_outputfile
+        )
+        extracted = _extract_energy_based_on_energy_type(thermo, "G")
+        assert np.isclose(extracted, -3868.648944, rtol=1e-7)
+
+        thermo_qhh = Thermochemistry(
+            filename=gaussian_dppeFeCl2_link_opt_outputfile,
+            temperature=298.15,
+            concentration=1.0,
+            h_freq_cutoff=100.0,
+            s_freq_cutoff=100.0,
+            use_weighted_mass=True,
+            entropy_method="grimme",
+        )
+        extracted = _extract_energy_based_on_energy_type(thermo_qhh, "qhH")
+        assert np.isclose(extracted, -3868.558465, rtol=1e-7)
+
+        thermo_qhg = Thermochemistry(
+            filename=gaussian_dppeFeCl2_link_opt_outputfile,
+            temperature=298.15,
+            concentration=1.0,
+            h_freq_cutoff=100.0,
+            s_freq_cutoff=100.0,
+            use_weighted_mass=True,
+            entropy_method="grimme",
+        )
+        extracted = _extract_energy_based_on_energy_type(thermo_qhg, "qhG")
+        assert np.isclose(extracted, -3868.645329, rtol=1e-7)
+
+    def test_energy_extraction_orca(self, fe2_singlet_output):
+        from chemsmart.analysis.thermochemistry import Thermochemistry
+        from chemsmart.cli.grouper.grouper import (
+            _extract_energy_based_on_energy_type,
+        )
+
+        thermo = Thermochemistry(filename=fe2_singlet_output)
+        extracted = _extract_energy_based_on_energy_type(thermo, "E")
+        assert np.isclose(extracted, -1568.256171848101, rtol=1e-7)
+
+        thermo = Thermochemistry(filename=fe2_singlet_output)
+        extracted = _extract_energy_based_on_energy_type(thermo, "H")
+        assert np.isclose(extracted, -1568.14237774, rtol=1e-7)
+
+        thermo = Thermochemistry(filename=fe2_singlet_output)
+        extracted = _extract_energy_based_on_energy_type(thermo, "G")
+        assert np.isclose(extracted, -1568.18873516, rtol=1e-7)
+
+        thermo_qhh = Thermochemistry(
+            filename=fe2_singlet_output,
+            temperature=298.15,
+            concentration=1.0,
+            h_freq_cutoff=100.0,
+            s_freq_cutoff=100.0,
+            use_weighted_mass=True,
+            entropy_method="grimme",
+        )
+        extracted = _extract_energy_based_on_energy_type(thermo_qhh, "qhH")
+        assert np.isclose(extracted, -1568.143280, rtol=1e-7)
+
+        thermo_qhg = Thermochemistry(
+            filename=fe2_singlet_output,
+            temperature=298.15,
+            concentration=1.0,
+            h_freq_cutoff=100.0,
+            s_freq_cutoff=100.0,
+            use_weighted_mass=True,
+            entropy_method="grimme",
+        )
+        extracted = _extract_energy_based_on_energy_type(thermo_qhg, "qhG")
+        assert np.isclose(extracted, -1568.186619, rtol=1e-7)

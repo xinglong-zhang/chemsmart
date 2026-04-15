@@ -126,13 +126,11 @@ class GrouperJobRunner(JobRunner):
             kwargs["threshold"] = job.threshold
             kwargs["num_groups"] = job.num_groups
             kwargs["ignore_hydrogens"] = job.ignore_hydrogens
-        elif strategy in ["tanimoto", "isomorphism"]:
-            kwargs["threshold"] = (
-                job.threshold if strategy == "tanimoto" else None
-            )
-            kwargs["num_groups"] = (
-                job.num_groups if strategy == "tanimoto" else None
-            )
+        elif strategy == "tanimoto":
+            kwargs["threshold"] = job.threshold
+            kwargs["num_groups"] = job.num_groups
+            kwargs["ignore_hydrogens"] = job.ignore_hydrogens
+        elif strategy == "isomorphism":
             kwargs["ignore_hydrogens"] = job.ignore_hydrogens
         elif strategy == "energy":
             kwargs["threshold"] = job.threshold
