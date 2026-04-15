@@ -40,7 +40,8 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -55,14 +56,16 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                 issues. If errors occur, try setting this to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule.
-            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
             molecules,
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
         self.ignore_hydrogens = ignore_hydrogens
 
@@ -198,6 +201,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             ("", f"Isomorphism Grouping Results - {self.__class__.__name__}"),
             ("Total Molecules", n),
             ("Unique Isomorphism Classes", len(groups)),
+            ("Energy Type", self.energy_type),
             ("Ignore Hydrogens", self.ignore_hydrogens),
             ("Num Procs", self.num_procs),
         ]
@@ -206,6 +210,8 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             header_info.append(
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
+
+        self._append_thermo_header(header_info)
 
         # Use ResultsRecorder to save
         recorder = self._get_results_recorder()
@@ -237,7 +243,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=None,
             suffix=None,
-            startrow=7,
+            startrow=9,
         )
 
     def __repr__(self):

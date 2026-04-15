@@ -9,6 +9,7 @@ import functools
 import logging
 import os
 import re
+from pathlib import Path
 
 import click
 
@@ -19,9 +20,76 @@ from chemsmart.cli.job import (
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import clean_label
+from chemsmart.utils.constants import energy_conversion
+from chemsmart.utils.io import clean_label, get_program_type_from_file
 
 logger = logging.getLogger(__name__)
+
+
+THERMOCHEMISTRY_DEFAULT_KWARGS = {
+    "temperature": None,
+    "concentration": None,
+    "pressure": None,
+    "use_weighted_mass": True,
+    "alpha": None,
+    "s_freq_cutoff": None,
+    "entropy_method": None,
+    "h_freq_cutoff": None,
+    "energy_units": "hartree",
+    "check_imaginary_frequencies": True,
+}
+
+
+def build_thermochemistry_kwargs(
+    *,
+    cutoff_entropy_grimme=None,
+    cutoff_entropy_truhlar=None,
+    cutoff_enthalpy=None,
+    concentration=None,
+    pressure=None,
+    temperature=None,
+    alpha=None,
+    weighted=None,
+    energy_units=None,
+    check_imaginary_frequencies=None,
+) -> dict:
+    """Build Thermochemistry kwargs from defaults plus CLI overrides."""
+    if (
+        cutoff_entropy_grimme is not None
+        and cutoff_entropy_truhlar is not None
+    ):
+        raise ValueError(
+            "Cannot specify both --cutoff-entropy-grimme and "
+            "--cutoff-entropy-truhlar. Please choose one."
+        )
+
+    kwargs = dict(THERMOCHEMISTRY_DEFAULT_KWARGS)
+
+    if cutoff_entropy_grimme is not None:
+        kwargs["s_freq_cutoff"] = cutoff_entropy_grimme
+        kwargs["entropy_method"] = "grimme"
+    elif cutoff_entropy_truhlar is not None:
+        kwargs["s_freq_cutoff"] = cutoff_entropy_truhlar
+        kwargs["entropy_method"] = "truhlar"
+
+    overrides = {
+        "h_freq_cutoff": cutoff_enthalpy,
+        "concentration": concentration,
+        "pressure": pressure,
+        "temperature": temperature,
+        "alpha": alpha,
+        "use_weighted_mass": weighted,
+        "energy_units": energy_units,
+        "check_imaginary_frequencies": check_imaginary_frequencies,
+        "cutoff_entropy_grimme": cutoff_entropy_grimme,
+        "cutoff_entropy_truhlar": cutoff_entropy_truhlar,
+        "cutoff_enthalpy": cutoff_enthalpy,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            kwargs[key] = value
+
+    return kwargs
 
 
 def click_grouper_common_options(f):
@@ -59,11 +127,25 @@ def click_grouper_common_options(f):
         "finding to return approximately this many unique structures.",
     )
     @click.option(
-        "-o",
-        "--output-format",
+        "-m",
+        "--matrix-format",
         type=click.Choice(["xlsx", "csv", "txt"], case_sensitive=False),
         default="xlsx",
         help="Output file format for results. Default is xlsx.",
+    )
+    @click.option(
+        "-E",
+        "--energy-type",
+        type=click.Choice(
+            ["E", "H", "G", "qhH", "qhG", "sp_qhG"], case_sensitive=False
+        ),
+        default="E",
+        help="Energy type to use for every grouping. Options: E (SCF energy, default), H (enthalpy), "
+        "G (Gibbs free energy), qhH (quasi-harmonic enthalpy), qhG (quasi-harmonic Gibbs free energy), "
+        "sp_qhG (single-point corrected quasi-harmonic Gibbs free energy)."
+        "Note: not for xyz file. "
+        "When using qhH, qhG and sp_qhG, chemsmart will call thermochemistry for thermo correction, "
+        "Users can specify the thermo-correction parameter.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -72,10 +154,101 @@ def click_grouper_common_options(f):
     return wrapper_common_options
 
 
+def click_grouper_thermochemistry_options(f):
+    """Thermochemistry options for directory-based grouper energy extraction."""
+
+    @click.option(
+        "-csg",
+        "--cutoff-entropy-grimme",
+        default=100,
+        type=float,
+        show_default=True,
+        help="For-Thermo-Correction: Cutoff frequency for entropy in wavenumbers, using Grimme's "
+        "quasi-RRHO method (Default to 100).",
+    )
+    @click.option(
+        "-cst",
+        "--cutoff-entropy-truhlar",
+        default=None,
+        type=float,
+        show_default=True,
+        help="For-Thermo-Correction: Cutoff frequency for entropy in wavenumbers, using Truhlar's "
+        "quasi-RRHO method.",
+    )
+    @click.option(
+        "-ch",
+        "--cutoff-enthalpy",
+        default=100,
+        type=float,
+        show_default=True,
+        help="For-Thermo-Correction: Cutoff frequency for enthalpy (cm^-1), Head-Gordon qRRHO method (Default to 100).",
+    )
+    @click.option(
+        "-c",
+        "--concentration",
+        default=1.0,
+        type=float,
+        show_default=True,
+        help="For-Thermo-Correction: Concentration in mol/L (default to 1.0).",
+    )
+    @click.option(
+        "-P",
+        "--pressure",
+        default=1.0,
+        show_default=True,
+        type=float,
+        help="For-Thermo-Correction: Pressure in atm (default to 1.0).",
+    )
+    @click.option(
+        "-temp",
+        "--temperature",
+        default=298.15,
+        show_default=True,
+        type=float,
+        help="For-Thermo-Correction: Temperature in Kelvin (default to 298.15).",
+    )
+    @click.option(
+        "--alpha",
+        default=4,
+        show_default=True,
+        type=int,
+        help="For-Thermo-Correction: Interpolator exponent used in the quasi-RRHO approximation (default to 4).",
+    )
+    @click.option(
+        "--weighted/--no-weighted",
+        default=True,
+        show_default=True,
+        help="For-Thermo-Correction: Use natural abundance weighted masses (True) or use most abundant "
+        "masses (False, via --no-weighted).\nDefault to True, i.e., use natural "
+        "abundance weighted masses, which is the real world scenario.",
+    )
+    @click.option(
+        "--energy-units",
+        default="hartree",
+        show_default=True,
+        type=click.Choice(
+            ["hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
+        ),
+        help="For-Thermo-Correction: Units of energetic values.",
+    )
+    @click.option(
+        "--check-imaginary-frequencies/--no-check-imaginary-frequencies",
+        default=True,
+        show_default=True,
+        help="For-Thermo-Correction: Whether to check for imaginary frequencies.",
+    )
+    @functools.wraps(f)
+    def wrapper_thermochemistry_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_thermochemistry_options
+
+
 @click.group(name="grouper", cls=MyGroup)
 @click_filenames_options
 @click_file_label_and_index_options
 @click_grouper_common_options
+@click_grouper_thermochemistry_options
 @click_folder_options
 @click.pass_context
 def grouper(
@@ -87,10 +260,21 @@ def grouper(
     num_procs,
     threshold,
     num_groups,
-    output_format,
+    matrix_format,
     directory,
     filetype,
     program,
+    energy_type,
+    cutoff_entropy_grimme,
+    cutoff_entropy_truhlar,
+    cutoff_enthalpy,
+    concentration,
+    pressure,
+    temperature,
+    alpha,
+    weighted,
+    energy_units,
+    check_imaginary_frequencies,
     **kwargs,
 ):
     """
@@ -131,8 +315,27 @@ def grouper(
     ctx.obj["num_procs"] = num_procs
     ctx.obj["threshold"] = threshold
     ctx.obj["num_groups"] = num_groups
-    ctx.obj["output_format"] = output_format
+    ctx.obj["matrix_format"] = matrix_format
     ctx.obj["conformer_ids"] = None  # Will be set only in directory mode
+    ctx.obj["energy_type"] = energy_type
+
+    try:
+        thermo_kwargs = build_thermochemistry_kwargs(
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_entropy_truhlar=cutoff_entropy_truhlar,
+            cutoff_enthalpy=cutoff_enthalpy,
+            concentration=concentration,
+            pressure=pressure,
+            temperature=temperature,
+            alpha=alpha,
+            weighted=weighted,
+            energy_units=energy_units,
+            check_imaginary_frequencies=check_imaginary_frequencies,
+        )
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
+
+    ctx.obj["thermo_kwargs"] = thermo_kwargs
 
     # Validate input
     if filenames and directory:
@@ -148,7 +351,11 @@ def grouper(
     # Mode 1: Directory of output files (-d . -p gaussian)
     if directory is not None:
         molecules, conformer_ids, auto_label = _load_molecules_from_directory(
-            directory, program, filetype
+            directory=directory,
+            program=program,
+            filetype=filetype,
+            energy_type=energy_type,
+            thermo_kwargs=thermo_kwargs,
         )
         grouper_label = _get_label(label, append_label, auto_label)
         ctx.obj["conformer_ids"] = conformer_ids
@@ -163,7 +370,10 @@ def grouper(
                 "Currently only single file input is supported for grouper. "
                 "Please provide one file with multiple structures."
             )
-
+        if energy_type != "E":
+            raise click.BadParameter(
+                "Only energy(default) is supported for xyz files."
+            )
         filename = filenames[0]
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
@@ -211,8 +421,89 @@ def _extract_conformer_id(filename: str) -> str | None:
     return f"c{match.group(1)}" if match else None
 
 
+def _extract_energy_based_on_energy_type(
+    thermo, energy_type: str
+) -> float | None:
+    """Extract the requested energy value."""
+    output = thermo.file_object
+    key = energy_type.upper()
+
+    if key == "E":
+        if output.energies:
+            return output.energies[-1]
+        return None
+
+    if key == "H":
+        try:
+            enthalpy = output.enthalpy
+        except AttributeError:
+            return None
+        return enthalpy
+
+    if key == "G":
+        try:
+            gibbs = output.gibbs_free_energy
+        except AttributeError:
+            return None
+        return gibbs
+
+    if key == "QHH":
+        try:
+            qh_enthalpy = thermo.qrrho_enthalpy
+        except AttributeError:
+            return _extract_energy_based_on_energy_type(thermo, "H")
+        if qh_enthalpy is None:
+            return _extract_energy_based_on_energy_type(thermo, "H")
+        return energy_conversion("j/mol", "hartree", qh_enthalpy)
+
+    if key == "QHG":
+        try:
+            qh_gibbs = thermo.qrrho_gibbs_free_energy
+        except AttributeError:
+            return _extract_energy_based_on_energy_type(thermo, "G")
+        if qh_gibbs is None:
+            return _extract_energy_based_on_energy_type(thermo, "G")
+        return energy_conversion("j/mol", "hartree", qh_gibbs)
+
+    if key == "SP_QHG":
+        # SP-corrected quasi-harmonic Gibbs free energy:
+        # qhG - Egas + Esolv
+        qh_gibbs = _extract_energy_based_on_energy_type(thermo, "QHG")
+        egas = _extract_energy_based_on_energy_type(thermo, "E")
+
+        try:
+            source_filepath = thermo.filename
+        except AttributeError:
+            return qh_gibbs
+
+        sp_filepath = _find_matching_sp_file(source_filepath)
+        if sp_filepath is None:
+            raise click.ClickException(
+                f"Could not find matching SP file for '{source_filepath}'"
+            )
+
+        esolv = _extract_last_energy_from_output_file(sp_filepath)
+
+        sp_qh_gibbs = None
+        if qh_gibbs is not None and egas is not None and esolv is not None:
+            sp_qh_gibbs = qh_gibbs - egas + esolv
+
+        if sp_qh_gibbs is None:
+            raise click.ClickException(
+                f"Could not obtain final sp_qh_gibbs for '{source_filepath}'"
+            )
+
+        return sp_qh_gibbs
+
+    raise click.ClickException(f"Unsupported energy type: {energy_type}")
+
+
 def _load_molecules_from_directory(
-    directory: str, program: str, filetype: str
+    directory: str,
+    program: str,
+    filetype: str,
+    energy_type: str = "E",
+    thermo_kwargs: dict | None = None,
 ) -> tuple:
     """
     Load molecules from output files in a directory, extracting last structure from each.
@@ -243,8 +534,6 @@ def _load_molecules_from_directory(
     directory = os.path.expanduser(directory)
     directory = os.path.abspath(directory)
     folder = BaseFolder(directory)
-    print(folder.__dict__)
-    print(folder)
 
     if program and not filetype:
         output_files = (
@@ -267,11 +556,9 @@ def _load_molecules_from_directory(
             "Must specify either -p/--program or -t/--filetype when using -d/--directory."
         )
 
-    print(output_files)
-
     if not output_files:
         raise click.BadParameter(
-            f"No {filetype} output files found in directory: {directory}"
+            f"No matching output files found in directory: {directory}"
         )
 
     # Extract conformer info and sort
@@ -310,6 +597,11 @@ def _load_molecules_from_directory(
 
     molecules = []
     conformer_ids = []
+    thermo_init_kwargs = dict(THERMOCHEMISTRY_DEFAULT_KWARGS)
+    if thermo_kwargs:
+        thermo_init_kwargs.update(
+            {k: v for k, v in thermo_kwargs.items() if v is not None}
+        )
 
     for filepath, conf_id, _, _ in file_info:
         try:
@@ -318,34 +610,36 @@ def _load_molecules_from_directory(
             # - imaginary frequencies (via cleaned_frequencies in __init__)
             thermo = Thermochemistry(
                 filename=filepath,
-                temperature=298.15,  # Required by Thermochemistry but not used for energy
-                check_imaginary_frequencies=True,
+                **thermo_init_kwargs,
             )
 
-            # Get molecule and set Gibbs energy
             mol = thermo.molecule
             if mol is not None:
                 mol.name = conf_id
 
-                # Extract Gibbs free energy from file_object
-                # Both Gaussian16Output and ORCAOutput have gibbs_free_energy property
-                gibbs_energy = thermo.file_object.gibbs_free_energy
+                energy_value = _extract_energy_based_on_energy_type(
+                    thermo, energy_type
+                )
+                if energy_value is None:
+                    raise click.ClickException(
+                        f"Failed to extract requested energy_type '{energy_type}' for {conf_id} in {filepath}. Stopping."
+                    )
 
-                if gibbs_energy is not None:
-                    mol._energy = gibbs_energy
-                    logger.debug(
-                        f"Loaded {conf_id} with Gibbs energy: {gibbs_energy:.6f} Hartree"
-                    )
-                else:
-                    logger.debug(
-                        f"Loaded {conf_id} with SCF energy: {mol.energy}"
-                    )
+                mol._energy = energy_value
+                logger.debug(
+                    "Loaded %s with %s energy: %.8f Hartree",
+                    conf_id,
+                    energy_type,
+                    energy_value,
+                )
 
                 molecules.append(mol)
                 conformer_ids.append(conf_id)
             else:
                 logger.warning(f"Could not load molecule from {filepath}")
 
+        except click.ClickException:
+            raise
         except ValueError as e:
             # Thermochemistry raises ValueError for validation failures
             logger.warning(f"Skipping {conf_id}: {e}")
@@ -354,7 +648,7 @@ def _load_molecules_from_directory(
 
     if not molecules:
         raise click.BadParameter(
-            "No valid molecules could be loaded from log files"
+            "No valid molecules could be loaded from output files with the requested energy_type"
         )
 
     # Extract common label from first filename (remove _cXX_ part)
@@ -367,7 +661,10 @@ def _load_molecules_from_directory(
     )
 
     logger.info(
-        f"Loaded {len(molecules)} valid molecules from {len(file_info)} log files"
+        "Loaded %d valid molecules from %d output files using energy_type=%s",
+        len(molecules),
+        len(file_info),
+        energy_type,
     )
 
     return molecules, conformer_ids, common_label
@@ -399,6 +696,7 @@ def create_grouper_job_from_context(
     Args:
         ctx: Click context object
         strategy: Grouping strategy name (e.g., 'irmsd', 'rmsd', 'tanimoto')
+        energy_type: Optional energy type
         **extra_kwargs: Strategy-specific arguments (e.g., inversion, fingerprint_type)
 
     Returns:
@@ -415,10 +713,26 @@ def create_grouper_job_from_context(
     label = ctx.obj["grouper_label"]
     num_groups = ctx.obj["num_groups"]
     conformer_ids = ctx.obj.get("conformer_ids")
+    energy_type = ctx.obj["energy_type"]
+    thermo_kwargs = ctx.obj.get("thermo_kwargs")
+
+    thermo_parameters = None
+    if (
+        energy_type
+        and energy_type.upper() in {"QHH", "QHG", "SP_QHG"}
+        and thermo_kwargs
+    ):
+        thermo_items = [
+            f"{key}={value}"
+            for key, value in thermo_kwargs.items()
+            if value is not None
+        ]
+        if thermo_items:
+            thermo_parameters = ", ".join(thermo_items)
 
     # Use threshold from parent command (None if not specified)
     threshold = ctx.obj["threshold"]
-    output_format = ctx.obj.get("output_format", "xlsx")
+    matrix_format = ctx.obj.get("matrix_format", "xlsx")
 
     return GrouperJob(
         molecules=molecules,
@@ -429,6 +743,54 @@ def create_grouper_job_from_context(
         num_procs=num_procs,
         label=f"{label}_{strategy}",
         conformer_ids=conformer_ids,
-        output_format=output_format,
+        matrix_format=matrix_format,
+        energy_type=energy_type,
+        thermo_parameters=thermo_parameters,
         **extra_kwargs,
     )
+
+
+def _find_matching_sp_file(source_filepath: str) -> str | None:
+    """Find a same-name SP output file by matching stem + 'sp'."""
+    source = Path(source_filepath)
+    folder = source.parent
+    stem = source.stem
+    suffix = source.suffix
+
+    candidates: list[Path] = []
+    if suffix:
+        candidates.extend(sorted(folder.glob(f"{stem}*sp*{suffix}")))
+    candidates.extend(sorted(folder.glob(f"{stem}*sp*.log")))
+    candidates.extend(sorted(folder.glob(f"{stem}*sp*.out")))
+
+    source_resolved = source.resolve()
+    seen: set[str] = set()
+    for candidate in candidates:
+        resolved = str(candidate.resolve())
+        if resolved in seen or candidate.resolve() == source_resolved:
+            continue
+        seen.add(resolved)
+        return str(candidate)
+
+    return None
+
+
+def _extract_last_energy_from_output_file(filepath: str) -> float | None:
+    """Extract the last electronic energy from a Gaussian/ORCA output file."""
+    program = get_program_type_from_file(filepath)
+    if program == "gaussian":
+        from chemsmart.io.gaussian.output import Gaussian16Output
+
+        output = Gaussian16Output(filepath)
+    elif program == "orca":
+        from chemsmart.io.orca.output import ORCAOutput
+
+        output = ORCAOutput(filepath)
+    else:
+        return None
+
+    if not output.normal_termination:
+        return None
+    if not output.energies:
+        return None
+    return output.energies[-1]

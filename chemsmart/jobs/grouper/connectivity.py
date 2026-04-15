@@ -43,7 +43,8 @@ class ConnectivityGrouper(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -58,14 +59,17 @@ class ConnectivityGrouper(MoleculeGrouper):
                 graph comparison. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
-            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            energy_type (str): Energy type for base class. Defaults to 'E'.
         """
         super().__init__(
             molecules,
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
         self.adjust_H = adjust_H
         self.ignore_hydrogens = ignore_hydrogens
@@ -229,6 +233,7 @@ class ConnectivityGrouper(MoleculeGrouper):
             ("", f"Connectivity Grouping Results - {self.__class__.__name__}"),
             ("Total Molecules", n),
             ("adjust H", self.adjust_H),
+            ("Energy Type", self.energy_type),
             ("Ignore Hydrogens", self.ignore_hydrogens),
             ("Num Procs", self.num_procs),
         ]
@@ -237,6 +242,8 @@ class ConnectivityGrouper(MoleculeGrouper):
             header_info.append(
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
+
+        self._append_thermo_header(header_info)
 
         # Use ResultsRecorder to save
         recorder = self._get_results_recorder()
@@ -266,7 +273,7 @@ class ConnectivityGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=None,
             suffix=None,
-            startrow=7,
+            startrow=9,
         )
 
     def __repr__(self):

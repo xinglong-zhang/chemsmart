@@ -33,7 +33,7 @@ class ResultsRecorder:
     Attributes:
         output_dir (str): Directory for output files.
         label (str): Label prefix for output filenames.
-        output_format (str): Output format ('xlsx', 'csv', 'txt').
+        matrix_format (str): Output format ('xlsx', 'csv', 'txt').
         conformer_ids (list[str]): Custom IDs for labeling molecules.
     """
 
@@ -43,7 +43,7 @@ class ResultsRecorder:
         self,
         output_dir: str,
         label: str = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
         conformer_ids: List[str] = None,
     ):
         """
@@ -52,18 +52,18 @@ class ResultsRecorder:
         Args:
             output_dir (str): Directory for output files.
             label (str): Label prefix for output filenames.
-            output_format (str): Output format. Defaults to 'xlsx'.
+            matrix_format (str): Output format. Defaults to 'xlsx'.
                 Supported: 'xlsx', 'csv', 'txt'.
             conformer_ids (list[str]): Custom IDs for labeling molecules.
         """
         self.output_dir = output_dir
         self.label = label
-        self.output_format = output_format.lower().lstrip(".")
+        self.matrix_format = matrix_format.lower().lstrip(".")
         self.conformer_ids = conformer_ids
 
-        if self.output_format not in self.SUPPORTED_FORMATS:
+        if self.matrix_format not in self.SUPPORTED_FORMATS:
             raise ValueError(
-                f"Unsupported output format: '{output_format}'. "
+                f"Unsupported output format: '{matrix_format}'. "
                 f"Supported formats: {self.SUPPORTED_FORMATS}"
             )
 
@@ -133,7 +133,7 @@ class ResultsRecorder:
         label_prefix = f"{self.label}_" if self.label else ""
         suffix_part = f"_{suffix}" if suffix else ""
         filename = (
-            f"{label_prefix}{grouper_name}{suffix_part}.{self.output_format}"
+            f"{label_prefix}{grouper_name}{suffix_part}.{self.matrix_format}"
         )
         return os.path.join(self.output_dir, filename)
 
@@ -165,7 +165,7 @@ class ResultsRecorder:
         """
         filename = self.get_filename(grouper_name, suffix)
 
-        if self.output_format == "xlsx":
+        if self.matrix_format == "xlsx":
             self._write_xlsx(
                 filename,
                 header_info,
@@ -174,13 +174,13 @@ class ResultsRecorder:
                 startrow,
                 float_format,
             )
-        elif self.output_format == "csv":
+        elif self.matrix_format == "csv":
             self._write_csv(filename, header_info, sheets_data, matrix_data)
-        elif self.output_format == "txt":
+        elif self.matrix_format == "txt":
             self._write_txt(filename, header_info, sheets_data, matrix_data)
         else:
             raise ValueError(
-                f"Unsupported output format: '{self.output_format}'"
+                f"Unsupported output format: '{self.matrix_format}'"
             )
 
         logger.info(f"Results saved to {filename}")
@@ -418,7 +418,7 @@ class MoleculeGrouper(ABC):
         num_procs (int): Number of processes for parallel computation.
         label (str): Label/name for this grouping task (used in output filenames).
         conformer_ids (list[str]): Optional custom IDs for each molecule (e.g., ['c1', 'c2']).
-        output_format (str): Output format for results ('xlsx', 'csv', 'txt').
+        matrix_format (str): Output format for results ('xlsx', 'csv', 'txt').
         output_dir (str): Base directory for output files.
     """
 
@@ -428,8 +428,10 @@ class MoleculeGrouper(ABC):
         num_procs: int = 1,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
         output_dir: str = None,
+        energy_type: str = "E",
+        thermo_parameters: str = None,
     ):
         """
         Initialize the molecular grouper.
@@ -442,17 +444,21 @@ class MoleculeGrouper(ABC):
                 and file names. Defaults to None.
             conformer_ids (list[str]): Optional custom IDs for each molecule (e.g., ['c1', 'c2']).
                 If provided, these are used as labels in matrix output instead of numeric indices.
-            output_format (str): Output format for results ('xlsx', 'csv', 'txt').
+            matrix_format (str): Output format for results ('xlsx', 'csv', 'txt').
                 Defaults to 'xlsx'.
             output_dir (str): Base directory for output files. If None, uses current
                 working directory. Defaults to None.
+            energy_type (str): Energy type label propagated from CLI/job.
+            thermo_parameters (str): Thermochemistry parameters from CLI.
         """
         self.molecules = molecules
         self.num_procs = int(max(1, num_procs))
         self.label = label
         self.conformer_ids = conformer_ids
-        self.output_format = output_format
+        self.matrix_format = matrix_format
         self.output_dir = output_dir
+        self.energy_type = energy_type
+        self.thermo_parameters = thermo_parameters
 
         # Cache for avoiding repeated grouping calculations
         self._cached_groups = None
@@ -476,7 +482,7 @@ class MoleculeGrouper(ABC):
         return ResultsRecorder(
             output_dir=self._get_output_dir(),
             label=self.label,
-            output_format=self.output_format,
+            matrix_format=self.matrix_format,
             conformer_ids=self.conformer_ids,
         )
 
@@ -508,6 +514,20 @@ class MoleculeGrouper(ABC):
                 - List of index groups (corresponding indices for each group)
         """
         pass
+
+    def _append_thermo_header(
+        self, header_info: List[Tuple[str, Any]]
+    ) -> None:
+        """Helper to append thermochemistry parameters to header info."""
+        thermo_energy_types = {"QHH", "QHG", "SP_QHG"}
+        if (
+            self.thermo_parameters
+            and self.energy_type
+            and self.energy_type.upper() in thermo_energy_types
+        ):
+            header_info.append(
+                ("Thermochemistry Parameters", self.thermo_parameters)
+            )
 
     def unique(
         self, output_dir: str = None, prefix: str = "group"
@@ -616,9 +636,9 @@ class MoleculeGrouper(ABC):
 
                     # Create comment line with energy info and original molecule index
                     if mol.energy is not None:
-                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_label} Energy(Hartree): {mol.energy:.8f}"
+                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_label} {self.energy_type}(Hartree): {mol.energy:.8f}"
                     else:
-                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_label} Energy: N/A"
+                        comment = f"Group {i+1} Member {j+1} Original_Index: {original_label} {self.energy_type}: N/A"
 
                     f.write(f"{comment}\n")
 

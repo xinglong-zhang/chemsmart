@@ -52,7 +52,9 @@ class GrouperJob(Job):
         num_procs: int = 1,
         skip_completed: bool = True,
         conformer_ids: Optional[List[str]] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
+        thermo_parameters: Optional[dict] = None,
         **kwargs,
     ):
         """
@@ -70,7 +72,9 @@ class GrouperJob(Job):
             skip_completed (bool): If True, skip completed jobs.
             conformer_ids (list[str], optional): Custom IDs for each molecule (e.g., ['c1', 'c2', 'c3']).
                 If provided, these are used instead of numeric indices for matrix labels and output.
-            output_format (str): Output file format ('xlsx', 'csv', 'txt'). Default is 'xlsx'.
+            matrix_format (str): Output file format ('xlsx', 'csv', 'txt'). Default is 'xlsx'.
+            energy_type (str): Energy type from CLI context (default: 'E').
+            thermo_parameters (dict, optional): Thermochemistry parameters from CLI.
             **kwargs: Additional strategy-specific arguments.
         """
         if not isinstance(molecules, list) or len(molecules) < 2:
@@ -93,7 +97,9 @@ class GrouperJob(Job):
         self.ignore_hydrogens = ignore_hydrogens
         self.num_procs = num_procs
         self.conformer_ids = conformer_ids
-        self.output_format = output_format
+        self.matrix_format = matrix_format
+        self.energy_type = energy_type
+        self.thermo_parameters = thermo_parameters
         self.grouper_kwargs = kwargs
 
         # Results storage (populated after grouping)

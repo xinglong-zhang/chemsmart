@@ -753,6 +753,25 @@ class Gaussian16Output(GaussianFileMixin):
         return len(self.vibrational_frequencies)
 
     @property
+    def enthalpy(self):
+        """
+        Extract enthalpy from Gaussian output.
+
+        This is the "Sum of electronic and thermal Enthalpies" value
+        printed in the thermochemistry section of the output file.
+
+        Returns:
+            float: enthalpy in Hartree, or None if not found.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Enthalpies=" in line:
+                try:
+                    return float(line.split()[-1])
+                except (ValueError, IndexError):
+                    pass
+        return None
+
+    @property
     def gibbs_free_energy(self):
         """
         Extract Gibbs free energy from Gaussian output.

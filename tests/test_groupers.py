@@ -1430,9 +1430,9 @@ class Test_conformer_ids_functionality:
             excel_file
         ), f"Excel file not found: {excel_file}"
 
-        # Matrix data starts at row 8 (0-indexed: skiprows=8), first column is index
+        # Matrix data starts at row 8 (0-indexed: skiprows=10), first column is index
         df = pd.read_excel(
-            excel_file, sheet_name="RMSD_Matrix", skiprows=8, index_col=0
+            excel_file, sheet_name="RMSD_Matrix", skiprows=10, index_col=0
         )
         # Check that conformer IDs are used as labels
         assert "c1" in str(df.columns[0]) or "c1" in str(df.index[0])
@@ -1490,7 +1490,7 @@ class Test_output_file_generation:
 
         # Check for expected information in comments
         assert "Original_Index:" in content
-        assert "Energy" in content
+        assert "E" in content
 
     def test_group_xyz_files_sorted_by_energy(
         self, multiple_molecules_xyz_file, temp_working_dir
@@ -1530,7 +1530,7 @@ class Test_output_file_generation:
                 num_atoms = int(lines[i].strip())
                 comment_line = lines[i + 1]
                 energy_match = re.search(
-                    r"Energy\(Hartree\):\s*([-\d.]+)", comment_line
+                    r"E\(Hartree\):\s*([-\d.]+)", comment_line
                 )
                 if energy_match:
                     energies.append(float(energy_match.group(1)))
@@ -1607,7 +1607,7 @@ class Test_output_file_generation:
             content = f.read()
 
         # Verify energy values in the output
-        assert "Energy(Hartree):" in content
+        assert "E(Hartree):" in content
 
         # Parse and verify each energy value
         lines = content.strip().split("\n")
@@ -1622,7 +1622,7 @@ class Test_output_file_generation:
 
             # Extract energy from comment
             energy_match = re.search(
-                r"Energy\(Hartree\):\s*([-\d.]+)", comment_line
+                r"E\(Hartree\):\s*([-\d.]+)", comment_line
             )
             if energy_match:
                 extracted_energy = float(energy_match.group(1))

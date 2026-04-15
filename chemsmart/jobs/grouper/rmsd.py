@@ -62,7 +62,8 @@ class RMSDGrouper(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -81,7 +82,8 @@ class RMSDGrouper(MoleculeGrouper):
                 RMSD calculation. Defaults to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
-            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            energy_type (str): Energy type for output files. Defaults to 'E'.
 
         Note:
             Uses complete linkage clustering: a structure joins a group only if
@@ -94,7 +96,9 @@ class RMSDGrouper(MoleculeGrouper):
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
 
         # Validate that threshold and num_groups are mutually exclusive
@@ -524,6 +528,7 @@ class RMSDGrouper(MoleculeGrouper):
             header_info.append(("Threshold", f"{self.threshold} Å"))
 
         header_info.append(("Align Molecules", self.align_molecules))
+        header_info.append(("Energy Type", self.energy_type))
         header_info.append(("Ignore Hydrogens", self.ignore_hydrogens))
 
         # IRMSDGrouper specific parameters
@@ -540,6 +545,8 @@ class RMSDGrouper(MoleculeGrouper):
             header_info.append(
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
+
+        self._append_thermo_header(header_info)
 
         # Build sheets data
         sheets_data = {}
@@ -561,7 +568,7 @@ class RMSDGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("RMSD_Matrix", rmsd_matrix, labels),
             suffix=suffix,
-            startrow=8,
+            startrow=10,
         )
 
 
@@ -619,7 +626,8 @@ class HungarianRMSDGrouper(RMSDGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         super().__init__(
@@ -631,7 +639,9 @@ class HungarianRMSDGrouper(RMSDGrouper):
             ignore_hydrogens,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
 
     def _calculate_rmsd(self, idx_pair):
@@ -708,7 +718,8 @@ class SpyRMSDGrouper(RMSDGrouper):
         cache: bool = True,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -724,7 +735,7 @@ class SpyRMSDGrouper(RMSDGrouper):
             cache: Whether to cache graph isomorphisms.
             label: Label for output files.
             conformer_ids: Custom IDs for each molecule.
-            output_format: Output format ('xlsx', 'csv', 'txt').
+            matrix_format: Output format ('xlsx', 'csv', 'txt').
         """
         super().__init__(
             molecules,
@@ -735,7 +746,9 @@ class SpyRMSDGrouper(RMSDGrouper):
             ignore_hydrogens,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
         self.cache = cache
         self.minimize = align_molecules  # spyrmsd uses 'minimize' parameter
@@ -904,7 +917,8 @@ class IRMSDGrouper(RMSDGrouper):
         inversion: str = "auto",
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -920,7 +934,7 @@ class IRMSDGrouper(RMSDGrouper):
             inversion: Inversion check mode: 'on', 'off', or 'auto' (default).
             label: Label for output files.
             conformer_ids: Custom IDs for each molecule.
-            output_format: Output format ('xlsx', 'csv', 'txt').
+            matrix_format: Output format ('xlsx', 'csv', 'txt').
         """
         if threshold is None and num_groups is None:
             threshold = 0.125
@@ -933,7 +947,9 @@ class IRMSDGrouper(RMSDGrouper):
             ignore_hydrogens,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
         self.inversion = (
             inversion.lower() if isinstance(inversion, str) else "auto"
@@ -1086,7 +1102,8 @@ class PymolRMSDGrouper(RMSDGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         # PyMOL only supports single-threaded operation
@@ -1105,7 +1122,8 @@ class PymolRMSDGrouper(RMSDGrouper):
             ignore_hydrogens=ignore_hydrogens,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
             **kwargs,
         )
         self._temp_dir = None
@@ -1217,7 +1235,8 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         super().__init__(
@@ -1225,7 +1244,9 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
         self.threshold = threshold
         self.align_molecules = align_molecules

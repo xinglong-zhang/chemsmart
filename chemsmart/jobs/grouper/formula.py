@@ -37,7 +37,8 @@ class FormulaGrouper(MoleculeGrouper):
         num_procs: int = 1,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -49,14 +50,16 @@ class FormulaGrouper(MoleculeGrouper):
                 consistency).
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule.
-            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
             molecules,
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
@@ -120,6 +123,7 @@ class FormulaGrouper(MoleculeGrouper):
             ("", f"Formula Grouping Results - {self.__class__.__name__}"),
             ("Total Molecules", n),
             ("Unique Formulas", len(formulas)),
+            ("Energy Type", self.energy_type),
             ("Num Procs", self.num_procs),
         ]
 
@@ -127,6 +131,8 @@ class FormulaGrouper(MoleculeGrouper):
             header_info.append(
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
+
+        self._append_thermo_header(header_info)
 
         # Use ResultsRecorder to save
         recorder = self._get_results_recorder()
@@ -161,7 +167,7 @@ class FormulaGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=None,
             suffix=None,
-            startrow=6,
+            startrow=8,
         )
 
     def __repr__(self):

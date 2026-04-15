@@ -48,7 +48,8 @@ class EnergyGrouper(MoleculeGrouper):
         num_procs: int = 1,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -65,7 +66,7 @@ class EnergyGrouper(MoleculeGrouper):
                 but kept for API consistency). Defaults to 1.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
-            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
 
         Note:
             Uses complete linkage clustering: a structure joins a group only if
@@ -76,7 +77,9 @@ class EnergyGrouper(MoleculeGrouper):
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
 
         # Validate that threshold and num_groups are mutually exclusive
@@ -496,13 +499,15 @@ class EnergyGrouper(MoleculeGrouper):
                     f"{self.threshold:.4f} kcal/mol ({self.threshold_hartree:.10f} Hartree)",
                 )
             )
-
+        header_info.append(("Energy Type", self.energy_type))
         header_info.append(("Num Procs", self.num_procs))
 
         if grouping_time is not None:
             header_info.append(
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
+
+        self._append_thermo_header(header_info)
 
         # Build sheets data using recorder's method
         sheets_data = {}
@@ -524,7 +529,7 @@ class EnergyGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("Energy_Matrix", energy_matrix_kcal, labels),
             suffix=suffix,
-            startrow=8,
+            startrow=10,
             float_format="%.4f",
         )
 

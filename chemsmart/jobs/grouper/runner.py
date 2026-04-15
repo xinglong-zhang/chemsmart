@@ -112,7 +112,9 @@ class GrouperJobRunner(JobRunner):
             "num_procs": job.num_procs,
             "label": job.label,
             "conformer_ids": job.conformer_ids,  # Pass custom conformer IDs
-            "output_format": job.output_format,  # Pass output format
+            "matrix_format": job.matrix_format,  # Pass output format
+            "energy_type": job.energy_type,
+            "thermo_parameters": job.thermo_parameters,
         }
 
         # Strategy-specific kwargs
@@ -203,7 +205,7 @@ class GrouperJobRunner(JobRunner):
 
                     # Create comment line with energy info and original molecule index
                     if mol.energy is not None:
-                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_label} Energy(Hartree): {mol.energy:.8f}"
+                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_label} {job.energy_type}(Hartree): {mol.energy:.8f}"
                     else:
                         comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_label} Energy: N/A"
 

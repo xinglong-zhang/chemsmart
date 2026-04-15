@@ -48,7 +48,8 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         label: str = None,  # Label for output files
         ignore_hydrogens: bool = False,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -70,14 +71,16 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 molecules, removing hydrogens may cause kekulization
                 issues. If errors occur, try setting this to False.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
-            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
             molecules,
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
 
         self.ignore_hydrogens = ignore_hydrogens
@@ -486,6 +489,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 )
             )
 
+        header_info.append(("Energy Type", self.energy_type))
         header_info.append(("Ignore Hydrogens", self.ignore_hydrogens))
         header_info.append(("Num Procs", self.num_procs))
 
@@ -493,6 +497,8 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             header_info.append(
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
+
+        self._append_thermo_header(header_info)
 
         # Build sheets data using recorder's method
         sheets_data = {}
@@ -513,7 +519,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("Tanimoto_Matrix", full_matrix, labels),
             suffix=suffix,
-            startrow=8,
+            startrow=10,
         )
 
     def __repr__(self):

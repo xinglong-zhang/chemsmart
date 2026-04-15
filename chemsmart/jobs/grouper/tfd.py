@@ -50,7 +50,8 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         ignore_hydrogens: bool = False,
         label: str = None,
         conformer_ids: List[str] = None,
-        output_format: str = "xlsx",
+        matrix_format: str = "xlsx",
+        energy_type: str = "E",
         **kwargs,
     ):
         """
@@ -81,14 +82,16 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 issues. If errors occur, try setting this to False.
             label (str): Label/name for output files. Defaults to None.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
-            output_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
+            matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
         super().__init__(
             molecules,
             num_procs,
             label=label,
             conformer_ids=conformer_ids,
-            output_format=output_format,
+            matrix_format=matrix_format,
+            energy_type=energy_type,
+            **kwargs,
         )
 
         # Validate that threshold and num_groups are mutually exclusive
@@ -498,6 +501,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 ("Max Deviation", self.max_dev),
                 ("Symmetry Radius", self.symm_radius),
                 ("Ignore Colinear Bonds", self.ignore_colinear_bonds),
+                ("Energy Type", self.energy_type),
                 ("Ignore Hydrogens", self.ignore_hydrogens),
                 ("Num Procs", self.num_procs),
             ]
@@ -507,6 +511,8 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             header_info.append(
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
+
+        self._append_thermo_header(header_info)
 
         # Build sheets data using recorder's method
         sheets_data = {}
@@ -527,7 +533,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("TFD_Matrix", tfd_matrix, labels),
             suffix=suffix,
-            startrow=12,  # Match original TFD output format
+            startrow=14,  # Match original TFD output format
         )
 
     def __repr__(self):
