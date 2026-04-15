@@ -380,16 +380,20 @@ class Submitter(RegistryMixin):
         Args:
             f: File handle.
         """
-        # Default implementation - use task array index
+        # Default implementation - map scheduler task ids to the
+        # 1-based array runscript filenames.
         f.write("# Array job execution\n")
-        f.write("if [ $SLURM_ARRAY_TASK_ID ]; then\n")
-        f.write("  TASK_ID=$SLURM_ARRAY_TASK_ID\n")
-        f.write("elif [ $PBS_ARRAYID ]; then\n")
+        f.write('if [ -n "$SLURM_ARRAY_TASK_ID" ]; then\n')
+        f.write("  TASK_ID=$((SLURM_ARRAY_TASK_ID + 1))\n")
+        f.write('elif [ -n "$PBS_ARRAYID" ]; then\n')
         f.write("  TASK_ID=$PBS_ARRAYID\n")
-        f.write("elif [ $LSB_JOBINDEX ]; then\n")
+        f.write('elif [ -n "$LSB_JOBINDEX" ]; then\n')
         f.write("  TASK_ID=$LSB_JOBINDEX\n")
         f.write("else\n")
-        f.write("  TASK_ID=0\n")
+        f.write(
+            '  echo "Error: no supported array task environment variable found." >&2\n'
+        )
+        f.write("  exit 1\n")
         f.write("fi\n\n")
         f.write("python chemsmart_run_array_${TASK_ID}.py\n")
 
