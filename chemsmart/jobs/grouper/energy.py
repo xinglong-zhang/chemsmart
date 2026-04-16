@@ -107,26 +107,38 @@ class EnergyGrouper(MoleculeGrouper):
 
     def _validate_energies(self) -> None:
         """
-        Validate that all molecules have energy information.
+        Validate that all molecules have usable energy information.
 
         Raises:
-            ValueError: If any molecule is missing energy information.
+            ValueError: If any molecule is missing or has invalid energy information.
         """
         missing_energy = []
         for i, mol in enumerate(self.molecules):
-            if mol.energy is None:
+            energy = mol.energy
+            if energy is None:
+                missing_energy.append(i + 1)
+                continue
+
+            try:
+                energy_value = float(energy)
+            except (TypeError, ValueError):
+                missing_energy.append(i + 1)
+                continue
+
+            # Reject NaN/inf so downstream matrix/grouping math is always valid.
+            if not np.isfinite(energy_value):
                 missing_energy.append(i + 1)
 
         if missing_energy:
             if len(missing_energy) <= 5:
                 raise ValueError(
-                    f"Molecules at indices {missing_energy} are missing energy information. "
-                    "Energy grouping requires all molecules to have energy values."
+                    f"Molecules at indices {missing_energy} are missing energy information or have invalid values. "
+                    "Energy grouping requires all molecules to have finite energy values."
                 )
             else:
                 raise ValueError(
-                    f"Found {len(missing_energy)} molecules without energy information. "
-                    "Energy grouping requires all molecules to have energy values."
+                    f"Found {len(missing_energy)} molecules with missing energy information or invalid values. "
+                    "Energy grouping requires all molecules to have finite energy values."
                 )
 
     def _calculate_energy_diff(
@@ -211,8 +223,8 @@ class EnergyGrouper(MoleculeGrouper):
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
-        # Save energy difference matrix using ResultsRecorder
-        self._save_energy_matrix(energy_matrix, grouping_time)
+        # Save energy difference matrix through unified record entrypoint
+        self.record(energy_matrix=energy_matrix, grouping_time=grouping_time)
 
         return groups, index_groups
 
@@ -451,12 +463,12 @@ class EnergyGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _save_energy_matrix(
+    def _record_results(
         self,
         energy_matrix: np.ndarray,
         grouping_time: float = None,
     ):
-        """Save energy difference matrix to file using ResultsRecorder (in kcal/mol units)."""
+        """Strategy-specific result writer for energy grouping."""
         n = energy_matrix.shape[0]
 
         # Use ResultsRecorder to save
@@ -507,6 +519,7 @@ class EnergyGrouper(MoleculeGrouper):
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
+        self._append_input_usage_header(header_info)
         self._append_thermo_header(header_info)
 
         # Build sheets data using recorder's method
@@ -529,7 +542,7 @@ class EnergyGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("Energy_Matrix", energy_matrix_kcal, labels),
             suffix=suffix,
-            startrow=10,
+            startrow=len(header_info) + 2,
             float_format="%.4f",
         )
 

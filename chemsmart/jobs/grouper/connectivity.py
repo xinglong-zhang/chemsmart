@@ -206,8 +206,12 @@ class ConnectivityGrouper(MoleculeGrouper):
 
         grouping_time = time.time() - grouping_start_time
 
-        # Save results to Excel
-        self._save_connectivity_results(groups, index_groups, grouping_time)
+        # Save results through unified record entrypoint
+        self.record(
+            groups=groups,
+            index_groups=index_groups,
+            grouping_time=grouping_time,
+        )
 
         # Cache results
         self._cached_groups = groups
@@ -219,13 +223,13 @@ class ConnectivityGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _save_connectivity_results(
+    def _record_results(
         self,
         groups: List[List[Molecule]],
         index_groups: List[List[int]],
         grouping_time: float = None,
     ):
-        """Save connectivity grouping results to file using ResultsRecorder."""
+        """Strategy-specific result writer for connectivity grouping."""
         n = sum(len(g) for g in groups)
 
         # Build header info
@@ -243,6 +247,7 @@ class ConnectivityGrouper(MoleculeGrouper):
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
+        self._append_input_usage_header(header_info)
         self._append_thermo_header(header_info)
 
         # Use ResultsRecorder to save
@@ -265,15 +270,13 @@ class ConnectivityGrouper(MoleculeGrouper):
             "Groups": recorder.build_groups_dataframe(index_groups, n),
         }
 
-        # For connectivity, we write summary_df with header info
-        # Need custom handling since it's not a matrix
         recorder.record_results(
             grouper_name=self.__class__.__name__,
             header_info=header_info,
             sheets_data=sheets_data,
             matrix_data=None,
             suffix=None,
-            startrow=9,
+            startrow=len(header_info) + 2,
         )
 
     def __repr__(self):

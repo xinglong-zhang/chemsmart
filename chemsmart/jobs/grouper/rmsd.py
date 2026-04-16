@@ -208,8 +208,8 @@ class RMSDGrouper(MoleculeGrouper):
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
-        # Save full matrix using ResultsRecorder
-        self._save_rmsd_matrix(rmsd_matrix, grouping_time=grouping_time)
+        # Save full matrix using unified record entrypoint
+        self.record(rmsd_matrix=rmsd_matrix, grouping_time=grouping_time)
 
         return groups, index_groups
 
@@ -493,17 +493,16 @@ class RMSDGrouper(MoleculeGrouper):
                 ),
                 exist_ok=True,
             )
-            self._save_rmsd_matrix(rmsd_matrix, output_file)
+            self.record(rmsd_matrix=rmsd_matrix)
 
         return rmsd_matrix
 
-    def _save_rmsd_matrix(
+    def _record_results(
         self,
         rmsd_matrix: np.ndarray,
-        filename: str = None,
         grouping_time: float = None,
     ):
-        """Save RMSD matrix to file using ResultsRecorder."""
+        """Strategy-specific result writer for RMSD grouping."""
         n = rmsd_matrix.shape[0]
 
         # Use ResultsRecorder to save
@@ -546,6 +545,7 @@ class RMSDGrouper(MoleculeGrouper):
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
+        self._append_input_usage_header(header_info)
         self._append_thermo_header(header_info)
 
         # Build sheets data
@@ -568,7 +568,7 @@ class RMSDGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("RMSD_Matrix", rmsd_matrix, labels),
             suffix=suffix,
-            startrow=10,
+            startrow=len(header_info) + 2,
         )
 
 

@@ -266,13 +266,13 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         self._cached_groups = groups
         self._cached_group_indices = index_groups
 
-        # Save full matrix using ResultsRecorder
-        self._save_tanimoto_matrix(
-            similarity_matrix,
-            valid_indices,
-            grouping_time,
-            groups,
-            index_groups,
+        # Save full matrix through unified record entrypoint
+        self.record(
+            tanimoto_matrix=similarity_matrix,
+            valid_indices=valid_indices,
+            grouping_time=grouping_time,
+            groups=groups,
+            index_groups=index_groups,
         )
 
         return groups, index_groups
@@ -442,7 +442,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             index_groups.pop(min_idx)
         return groups, index_groups
 
-    def _save_tanimoto_matrix(
+    def _record_results(
         self,
         tanimoto_matrix: np.ndarray,
         valid_indices: List[int],
@@ -450,7 +450,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         groups: List[List[Molecule]] = None,
         index_groups: List[List[int]] = None,
     ):
-        """Save Tanimoto similarity matrix to file using ResultsRecorder."""
+        """Strategy-specific result writer for Tanimoto grouping."""
         n = len(self.molecules)
 
         # Create full matrix with invalid molecules marked as NaN
@@ -498,6 +498,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
+        self._append_input_usage_header(header_info)
         self._append_thermo_header(header_info)
 
         # Build sheets data using recorder's method
@@ -519,7 +520,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("Tanimoto_Matrix", full_matrix, labels),
             suffix=suffix,
-            startrow=10,
+            startrow=len(header_info) + 2,
         )
 
     def __repr__(self):

@@ -350,15 +350,18 @@ def grouper(
 
     # Mode 1: Directory of output files (-d . -p gaussian)
     if directory is not None:
-        molecules, conformer_ids, auto_label = _load_molecules_from_directory(
-            directory=directory,
-            program=program,
-            filetype=filetype,
-            energy_type=energy_type,
-            thermo_kwargs=thermo_kwargs,
+        molecules, conformer_ids, skipped_ids, auto_label = (
+            _load_molecules_from_directory(
+                directory=directory,
+                program=program,
+                filetype=filetype,
+                energy_type=energy_type,
+                thermo_kwargs=thermo_kwargs,
+            )
         )
         grouper_label = _get_label(label, append_label, auto_label)
         ctx.obj["conformer_ids"] = conformer_ids
+        ctx.obj["skipped_ids"] = skipped_ids
         logger.info(
             f"Loaded {len(molecules)} molecules from directory with conformer IDs: {conformer_ids}"
         )
@@ -597,6 +600,7 @@ def _load_molecules_from_directory(
 
     molecules = []
     conformer_ids = []
+    skipped_ids = []
     thermo_init_kwargs = dict(THERMOCHEMISTRY_DEFAULT_KWARGS)
     if thermo_kwargs:
         thermo_init_kwargs.update(
@@ -608,6 +612,8 @@ def _load_molecules_from_directory(
             # Thermochemistry validates:
             # - normal_termination (via file_object)
             # - imaginary frequencies (via cleaned_frequencies in __init__)
+            from chemsmart.analysis.thermochemistry import Thermochemistry
+
             thermo = Thermochemistry(
                 filename=filepath,
                 **thermo_init_kwargs,
@@ -621,11 +627,13 @@ def _load_molecules_from_directory(
                     thermo, energy_type
                 )
                 if energy_value is None:
-                    raise click.ClickException(
-                        f"Failed to extract requested energy_type '{energy_type}' for {conf_id} in {filepath}. Stopping."
+                    skipped_ids.append(conf_id)
+                    logger.warning(
+                        f"Failed to extract requested energy_type '{energy_type}' for {conf_id} in {filepath}. Skipping."
                     )
+                    continue
 
-                mol._energy = energy_value
+                mol.energy = energy_value  # using setter
                 logger.debug(
                     "Loaded %s with %s energy: %.8f Hartree",
                     conf_id,
@@ -636,15 +644,12 @@ def _load_molecules_from_directory(
                 molecules.append(mol)
                 conformer_ids.append(conf_id)
             else:
+                skipped_ids.append(conf_id)
                 logger.warning(f"Could not load molecule from {filepath}")
 
-        except click.ClickException:
-            raise
-        except ValueError as e:
-            # Thermochemistry raises ValueError for validation failures
-            logger.warning(f"Skipping {conf_id}: {e}")
         except Exception as e:
-            logger.warning(f"Error loading {filepath}: {e}")
+            skipped_ids.append(conf_id)
+            logger.warning(f"Skipping {conf_id} due to error: {e}")
 
     if not molecules:
         raise click.BadParameter(
@@ -661,13 +666,14 @@ def _load_molecules_from_directory(
     )
 
     logger.info(
-        "Loaded %d valid molecules from %d output files using energy_type=%s",
+        "Loaded %d valid molecules from %d output files using energy_type=%s (%d skipped)",
         len(molecules),
         len(file_info),
         energy_type,
+        len(skipped_ids),
     )
 
-    return molecules, conformer_ids, common_label
+    return molecules, conformer_ids, skipped_ids, common_label
 
 
 def _get_label(label, append_label, base_label):
@@ -713,6 +719,7 @@ def create_grouper_job_from_context(
     label = ctx.obj["grouper_label"]
     num_groups = ctx.obj["num_groups"]
     conformer_ids = ctx.obj.get("conformer_ids")
+    skipped_ids = ctx.obj.get("skipped_ids")
     energy_type = ctx.obj["energy_type"]
     thermo_kwargs = ctx.obj.get("thermo_kwargs")
 
@@ -743,6 +750,7 @@ def create_grouper_job_from_context(
         num_procs=num_procs,
         label=f"{label}_{strategy}",
         conformer_ids=conformer_ids,
+        skipped_ids=skipped_ids,
         matrix_format=matrix_format,
         energy_type=energy_type,
         thermo_parameters=thermo_parameters,

@@ -428,6 +428,7 @@ class MoleculeGrouper(ABC):
         num_procs: int = 1,
         label: str = None,
         conformer_ids: List[str] = None,
+        skipped_ids: List[str] = None,
         matrix_format: str = "xlsx",
         output_dir: str = None,
         energy_type: str = "E",
@@ -444,6 +445,7 @@ class MoleculeGrouper(ABC):
                 and file names. Defaults to None.
             conformer_ids (list[str]): Optional custom IDs for each molecule (e.g., ['c1', 'c2']).
                 If provided, these are used as labels in matrix output instead of numeric indices.
+            skipped_ids (list[str]): Optional list of IDs that were skipped before grouping.
             matrix_format (str): Output format for results ('xlsx', 'csv', 'txt').
                 Defaults to 'xlsx'.
             output_dir (str): Base directory for output files. If None, uses current
@@ -455,6 +457,7 @@ class MoleculeGrouper(ABC):
         self.num_procs = int(max(1, num_procs))
         self.label = label
         self.conformer_ids = conformer_ids
+        self.skipped_ids = skipped_ids if skipped_ids is not None else []
         self.matrix_format = matrix_format
         self.output_dir = output_dir
         self.energy_type = energy_type
@@ -515,6 +518,16 @@ class MoleculeGrouper(ABC):
         """
         pass
 
+    def record(self, **kwargs):
+        """Public output entrypoint that delegates to strategy-specific recorder."""
+        return self._record_results(**kwargs)
+
+    def _record_results(self, **kwargs):
+        """Strategy-specific result writer; implemented by concrete groupers."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _record_results()"
+        )
+
     def _append_thermo_header(
         self, header_info: List[Tuple[str, Any]]
     ) -> None:
@@ -528,6 +541,21 @@ class MoleculeGrouper(ABC):
             header_info.append(
                 ("Thermochemistry Parameters", self.thermo_parameters)
             )
+
+    def _append_input_usage_header(
+        self, header_info: List[Tuple[str, Any]]
+    ) -> None:
+        """Append molecule usage statistics (used/skipped) to header info."""
+        skipped_ids_text = (
+            ", ".join(self.skipped_ids) if self.skipped_ids else "None"
+        )
+        header_info.extend(
+            [
+                ("Used Molecules", len(self.molecules)),
+                ("Skipped Molecules", len(self.skipped_ids)),
+                ("Skipped IDs", skipped_ids_text),
+            ]
+        )
 
     def unique(
         self, output_dir: str = None, prefix: str = "group"

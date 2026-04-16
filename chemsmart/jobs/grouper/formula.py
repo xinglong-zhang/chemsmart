@@ -93,9 +93,12 @@ class FormulaGrouper(MoleculeGrouper):
 
         grouping_time = time.time() - grouping_start_time
 
-        # Save results to Excel
-        self._save_formula_results(
-            formulas, groups, index_groups, grouping_time
+        # Save results through unified record entrypoint
+        self.record(
+            formulas=formulas,
+            groups=groups,
+            index_groups=index_groups,
+            grouping_time=grouping_time,
         )
 
         # Cache results
@@ -108,14 +111,14 @@ class FormulaGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _save_formula_results(
+    def _record_results(
         self,
         formulas: List[str],
         groups: List[List[Molecule]],
         index_groups: List[List[int]],
         grouping_time: float = None,
     ):
-        """Save formula grouping results to file using ResultsRecorder."""
+        """Strategy-specific result writer for formula grouping."""
         n = len(list(self.molecules))
 
         # Build header info
@@ -132,6 +135,7 @@ class FormulaGrouper(MoleculeGrouper):
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
+        self._append_input_usage_header(header_info)
         self._append_thermo_header(header_info)
 
         # Use ResultsRecorder to save
@@ -167,7 +171,7 @@ class FormulaGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=None,
             suffix=None,
-            startrow=8,
+            startrow=len(header_info) + 2,
         )
 
     def __repr__(self):

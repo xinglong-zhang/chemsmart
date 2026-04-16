@@ -173,9 +173,12 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
         grouping_time = time.time() - grouping_start_time
 
-        # Save results to Excel
-        self._save_isomorphism_results(
-            hashes, groups, index_groups, grouping_time
+        # Save results through unified record entrypoint
+        self.record(
+            hashes=hashes,
+            groups=groups,
+            index_groups=index_groups,
+            grouping_time=grouping_time,
         )
 
         # Cache results
@@ -186,14 +189,14 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _save_isomorphism_results(
+    def _record_results(
         self,
         hashes: List[str],
         groups: List[List[Molecule]],
         index_groups: List[List[int]],
         grouping_time: float = None,
     ):
-        """Save isomorphism grouping results to file using ResultsRecorder."""
+        """Strategy-specific result writer for isomorphism grouping."""
         n = sum(len(g) for g in groups)
 
         # Build header info
@@ -211,6 +214,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
+        self._append_input_usage_header(header_info)
         self._append_thermo_header(header_info)
 
         # Use ResultsRecorder to save
@@ -243,7 +247,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=None,
             suffix=None,
-            startrow=9,
+            startrow=len(header_info) + 2,
         )
 
     def __repr__(self):

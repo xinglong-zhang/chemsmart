@@ -112,6 +112,7 @@ class GrouperJobRunner(JobRunner):
             "num_procs": job.num_procs,
             "label": job.label,
             "conformer_ids": job.conformer_ids,  # Pass custom conformer IDs
+            "skipped_ids": job.skipped_ids,  # Pass skipped IDs
             "matrix_format": job.matrix_format,  # Pass output format
             "energy_type": job.energy_type,
             "thermo_parameters": job.thermo_parameters,

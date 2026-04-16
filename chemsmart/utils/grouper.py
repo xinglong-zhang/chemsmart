@@ -226,6 +226,16 @@ class StructureGrouperFactory:
                 f"ignored for '{strategy}'."
             )
 
+        # Remove strategy-specific options when strategy does not support them.
+        filtered_kwargs = dict(kwargs)
+        if strategy != "irmsd":
+            filtered_kwargs.pop("inversion", None)
+        if strategy != "tanimoto":
+            filtered_kwargs.pop("fingerprint_type", None)
+        if strategy != "torsion":
+            filtered_kwargs.pop("use_weights", None)
+            filtered_kwargs.pop("max_dev", None)
+
         # Build kwargs for the grouper
         grouper_kwargs = {
             "molecules": structures,
@@ -244,6 +254,6 @@ class StructureGrouperFactory:
             grouper_kwargs["ignore_hydrogens"] = ignore_hydrogens
 
         # Add any additional kwargs
-        grouper_kwargs.update(kwargs)
+        grouper_kwargs.update(filtered_kwargs)
 
         return grouper_cls(**grouper_kwargs)

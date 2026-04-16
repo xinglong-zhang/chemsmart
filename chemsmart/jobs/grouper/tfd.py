@@ -305,8 +305,13 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         grouping_time = time.time() - grouping_start_time
 
-        # Save TFD matrix using ResultsRecorder
-        self._save_tfd_matrix(tfd_matrix, grouping_time, groups, index_groups)
+        # Save TFD matrix through unified record entrypoint
+        self.record(
+            tfd_matrix=tfd_matrix,
+            grouping_time=grouping_time,
+            groups=groups,
+            index_groups=index_groups,
+        )
 
         # Cache results
         self._cached_groups = groups
@@ -458,14 +463,14 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             index_groups.pop(min_idx)
         return groups, index_groups
 
-    def _save_tfd_matrix(
+    def _record_results(
         self,
         tfd_matrix: np.ndarray,
         grouping_time: float = None,
         groups: List[List[Molecule]] = None,
         index_groups: List[List[int]] = None,
     ):
-        """Save TFD matrix to file using ResultsRecorder."""
+        """Strategy-specific result writer for TFD grouping."""
         n = tfd_matrix.shape[0]
 
         # Use ResultsRecorder to save
@@ -512,6 +517,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 ("Grouping Time", f"{grouping_time:.2f} seconds")
             )
 
+        self._append_input_usage_header(header_info)
         self._append_thermo_header(header_info)
 
         # Build sheets data using recorder's method
@@ -533,7 +539,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             sheets_data=sheets_data,
             matrix_data=("TFD_Matrix", tfd_matrix, labels),
             suffix=suffix,
-            startrow=14,  # Match original TFD output format
+            startrow=len(header_info) + 2,
         )
 
     def __repr__(self):
