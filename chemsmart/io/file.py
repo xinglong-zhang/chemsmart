@@ -119,8 +119,10 @@ class CDXFile(FileMixin):
                 logger.debug(
                     f"Preprocessing CDXML to remove MultiAttachment nodes: {self.filename}"
                 )
-                cleaned_cdxml = CDXFile._preprocess_cdxml_remove_multi_attachments(
-                    self.filename
+                cleaned_cdxml = (
+                    CDXFile._preprocess_cdxml_remove_multi_attachments(
+                        self.filename
+                    )
                 )
                 rdkit_mols = list(
                     Chem.MolsFromCDXML(
@@ -466,8 +468,7 @@ class CDXFile(FileMixin):
                 for child in list(frag)
                 if child.tag == "b"
                 and (
-                    child.get("B") in multi_ids
-                    or child.get("E") in multi_ids
+                    child.get("B") in multi_ids or child.get("E") in multi_ids
                 )
             ]
 

@@ -818,7 +818,6 @@ def remove_phantom_metal_carbons(mol: Chem.Mol, metal_idxs: set[int]) -> tuple:
     new_mol.UpdatePropertyCache(strict=False)
     return new_mol, new_metal_idxs
 
-
     """
     RDKit cannot sanitize a neutral aromatic 5-member carbon ring (c1cccc1).
     ChemDraw often uses that for Cp. Convert each such ring into a Cp- by
@@ -983,7 +982,9 @@ def attach_eta_bonds_for_cp_rings(
         # the anchor receives the metal bond with two flanking single ring bonds
         # (total 3 bonds → 1H), and the junction carbons keep their external
         # bonds accounted for by the bond-order pattern.
-        anchor_start = min(ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree())
+        anchor_start = min(
+            ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree()
+        )
         ordered = _order_ring_atoms_by_walk(rw, ring)
         if ordered is None:
             ordered = list(ring)
@@ -1104,7 +1105,9 @@ def attach_eta_bonds_for_arene_rings(
             continue
 
         # Walk ring in cyclic order starting from the lowest-degree atom.
-        anchor_start = min(ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree())
+        anchor_start = min(
+            ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree()
+        )
         ordered = _order_ring_atoms_by_walk(rw, ring)
         if ordered is None:
             ordered = list(ring)
@@ -1123,12 +1126,12 @@ def attach_eta_bonds_for_arene_rings(
         # Pos 5:          S(4-5)+S(5-0) = 2 bonds → would be 2H by default;
         #                 explicitly set to 1H below.
         bond_types_6 = [
-            Chem.BondType.SINGLE,   # 0–1
-            Chem.BondType.DOUBLE,   # 1–2
-            Chem.BondType.SINGLE,   # 2–3
-            Chem.BondType.DOUBLE,   # 3–4
-            Chem.BondType.SINGLE,   # 4–5
-            Chem.BondType.SINGLE,   # 5–0  (keeps anchor flanked by two singles)
+            Chem.BondType.SINGLE,  # 0–1
+            Chem.BondType.DOUBLE,  # 1–2
+            Chem.BondType.SINGLE,  # 2–3
+            Chem.BondType.DOUBLE,  # 3–4
+            Chem.BondType.SINGLE,  # 4–5
+            Chem.BondType.SINGLE,  # 5–0  (keeps anchor flanked by two singles)
         ]
         for k, btype in enumerate(bond_types_6):
             a_idx = ordered[k]
@@ -1217,7 +1220,9 @@ def _rotation_matrix_between_vectors(
     return np.eye(3) + K * cross_norm + K @ K * (1.0 - dot)
 
 
-def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol:
+def _reposition_rings_and_metal(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
     """
     Achieve proper η5/η6 sandwich or half-sandwich geometry after 3D embedding.
 
@@ -1315,7 +1320,9 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         v2 = positions[2] - positions[0]
         normal = np.cross(v1, v2)
         norm_len = np.linalg.norm(normal)
-        normal = normal / norm_len if norm_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        normal = (
+            normal / norm_len if norm_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        )
         metal_pos_old = np.array(list(conf.GetAtomPosition(metal_idx)))
         if np.dot(metal_pos_old - centroid, normal) < 0:
             normal = -normal
@@ -1328,7 +1335,9 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
     if n == 2:
         axis = centroids[1] - centroids[0]
         axis_len = np.linalg.norm(axis)
-        axis = axis / axis_len if axis_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        axis = (
+            axis / axis_len if axis_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        )
     else:
         # Generic: principal component of centroid cloud.
         c_arr = np.array(centroids)
@@ -1377,7 +1386,9 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
                     continue
                 if nb_idx not in all_mol_ring_atom_idxs:
                     continue
-                if nb.GetAtomicNum() != 6:  # only expand through carbon ring atoms
+                if (
+                    nb.GetAtomicNum() != 6
+                ):  # only expand through carbon ring atoms
                     continue
                 expanded.add(nb_idx)
                 frontier.append(nb_idx)
@@ -1407,10 +1418,14 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         current_normal = np.cross(v1, v2)
         cn_len = np.linalg.norm(current_normal)
         current_normal = (
-            current_normal / cn_len if cn_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+            current_normal / cn_len
+            if cn_len > 1e-6
+            else np.array([0.0, 0.0, 1.0])
         )
 
-        target_normal = signs[i] * axis  # ring normal aligns with stacking axis direction
+        target_normal = (
+            signs[i] * axis
+        )  # ring normal aligns with stacking axis direction
 
         rot = _rotation_matrix_between_vectors(current_normal, target_normal)
 
