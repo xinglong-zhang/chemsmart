@@ -8,7 +8,7 @@ from chemsmart.utils.utils import two_files_have_similar_contents
 
 
 class TestGaussianGenGenECP:
-    def test_genecp_from_bse_api_fallback_when_basis_missing(self):
+    def test_genecp_fallback_when_basis_missing_from_bse(self):
         genecp_section = GenGenECPSection.from_bse_api(
             light_elements=["H", "C", "N", "O", "P", "Cl"],
             light_elements_basis="6-31G*",

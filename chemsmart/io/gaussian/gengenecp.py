@@ -172,7 +172,9 @@ class GenGenECPSection:
         return cls(genecp_string)
 
     @staticmethod
-    def _fallback_heavy_basis_section(heavy_elements, heavy_elements_basis):
+    def _fallback_genecp_heavy_basis_section(
+        heavy_elements, heavy_elements_basis
+    ):
         return " ".join(heavy_elements) + " 0\n" + f"{heavy_elements_basis}\n"
 
     @classmethod
@@ -253,7 +255,7 @@ class GenGenECPSection:
                 f"This is not in BSE available bases. Falling back to "
                 f"Gaussian basis keyword section format."
             )
-            genecp_string += cls._fallback_heavy_basis_section(
+            genecp_string += cls._fallback_genecp_heavy_basis_section(
                 heavy_elements=heavy_elements,
                 heavy_elements_basis=heavy_elements_basis_input,
             )
@@ -267,13 +269,14 @@ class GenGenECPSection:
                 fmt="gaussian94",
                 header=True,
             )
-        except (KeyError, ValueError, RuntimeError) as e:
+        except (KeyError, ValueError) as e:
             logger.warning(
                 f"Failed to obtain basis set {heavy_elements_basis} for "
-                f"{heavy_elements} from BSE API ({e}). Falling back to "
+                f"{heavy_elements} from BSE API "
+                f"({type(e).__name__}: {e}). Falling back to "
                 f"Gaussian basis keyword section format."
             )
-            genecp_string += cls._fallback_heavy_basis_section(
+            genecp_string += cls._fallback_genecp_heavy_basis_section(
                 heavy_elements=heavy_elements,
                 heavy_elements_basis=heavy_elements_basis_input,
             )
