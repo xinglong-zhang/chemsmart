@@ -209,6 +209,7 @@ class GenGenECPSection:
         heavy_elements = pt.sorted_periodic_table_list(
             list_of_elements=heavy_elements
         )
+        heavy_elements_basis_input = heavy_elements_basis
         heavy_elements_basis = heavy_elements_basis.lower()
 
         genecp_string = ""
@@ -230,6 +231,10 @@ class GenGenECPSection:
             # separate light atoms basis from
             # beginning of heavy atoms gen/genecp basis
             genecp_string += "****\n"
+
+        if len(heavy_elements) == 0:
+            return cls(string=genecp_string)
+
         # Generate heavy atom basis set content from BSE API
         # Handle def2 basis set naming convention
         if "def2" in heavy_elements_basis and "-" not in heavy_elements_basis:
@@ -237,19 +242,38 @@ class GenGenECPSection:
                 "def2", "def2-"
             )
 
-        assert heavy_elements_basis in bse_all_bases, (
-            f"BSE basis for {heavy_elements} given is "
-            f"{heavy_elements_basis}.\n"
-            f"This is not in BSE available bases: {bse_all_bases}."
-        )
+        if heavy_elements_basis not in bse_all_bases:
+            logger.warning(
+                f"BSE basis for {heavy_elements} given is "
+                f"{heavy_elements_basis}.\n"
+                f"This is not in BSE available bases. Falling back to "
+                f"Gaussian basis keyword section format."
+            )
+            genecp_string += (
+                " ".join(heavy_elements) + " 0\n"
+                f"{heavy_elements_basis_input}\n"
+            )
+            return cls(string=genecp_string)
 
         # Retrieve basis set data from BSE in Gaussian format
-        heavy_atoms_gengenecp_basis = bse.get_basis(
-            name=heavy_elements_basis,
-            elements=heavy_elements,
-            fmt="gaussian94",
-            header=True,
-        )
+        try:
+            heavy_atoms_gengenecp_basis = bse.get_basis(
+                name=heavy_elements_basis,
+                elements=heavy_elements,
+                fmt="gaussian94",
+                header=True,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to obtain basis set {heavy_elements_basis} for "
+                f"{heavy_elements} from BSE API ({e}). Falling back to "
+                f"Gaussian basis keyword section format."
+            )
+            genecp_string += (
+                " ".join(heavy_elements) + " 0\n"
+                f"{heavy_elements_basis_input}\n"
+            )
+            return cls(string=genecp_string)
 
         # Parse the basis set data into blocks
         heavy_atoms_gengenecp_basis_list = heavy_atoms_gengenecp_basis.split(

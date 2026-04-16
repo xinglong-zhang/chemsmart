@@ -8,6 +8,20 @@ from chemsmart.utils.utils import two_files_have_similar_contents
 
 
 class TestGaussianGenGenECP:
+    def test_genecp_from_bse_api_fallback_when_basis_missing(self):
+        genecp_section = GenGenECPSection.from_bse_api(
+            light_elements=["H", "C", "N", "O", "P", "Cl"],
+            light_elements_basis="6-31G*",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="nonexistent-basis-for-test",
+        )
+
+        assert genecp_section.string_list[0] == "H C N O P Cl 0"
+        assert genecp_section.string_list[1] == "6-31g*"
+        assert genecp_section.string_list[2] == "****"
+        assert genecp_section.string_list[3] == "Pd 0"
+        assert genecp_section.string_list[4] == "nonexistent-basis-for-test"
+
     def test_genecp_from_base_api(
         self, tmpdir, reference_genecp_txt_file_from_api
     ):
