@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from chemsmart.io.xyz.xyzfile import XYZFile
+from chemsmart.jobs.grouper.base import MoleculeGrouper
 from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
 from chemsmart.jobs.grouper.energy import EnergyGrouper
 from chemsmart.jobs.grouper.formula import FormulaGrouper
@@ -862,6 +863,102 @@ class Test_TorsionFingerprint_grouper:
 class Test_other_groupers:
     NUM_PROCS = 4
 
+    def test_base_record_template_method(self, methanol_molecules):
+        class DummyGrouper(MoleculeGrouper):
+            def group(self):
+                return [], []
+
+            def _record_results(self, **kwargs):
+                return kwargs
+
+        grouper = DummyGrouper(methanol_molecules)
+        payload = grouper.record(example_key="example_value")
+        assert payload["example_key"] == "example_value"
+
+    def test_record_writes_rmsd_matrix_with_headers(
+        self, methanol_molecules, temp_working_dir
+    ):
+        """Detailed record test: verify matrix file and key header lines are written."""
+        from openpyxl import load_workbook
+
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+            label="record_detail",
+            energy_type="E",
+        )
+
+        # Populate cache first so Groups sheet can be generated.
+        groups, group_indices = grouper.group()
+        assert len(groups) >= 1
+        assert len(group_indices) >= 1
+
+        # Call unified record() explicitly to validate template-method path.
+        rmsd_matrix = np.zeros((len(molecules), len(molecules)))
+        grouper.record(rmsd_matrix=rmsd_matrix, grouping_time=0.01)
+
+        xlsx_file = os.path.join(
+            temp_working_dir,
+            "record_detail_group_result",
+            "record_detail_BasicRMSDGrouper_T0.5.xlsx",
+        )
+        assert os.path.exists(xlsx_file)
+
+        wb = load_workbook(xlsx_file, data_only=True)
+        assert "RMSD_Matrix" in wb.sheetnames
+        assert "Groups" in wb.sheetnames
+
+        ws = wb["RMSD_Matrix"]
+        header_lines = [str(ws[f"A{i}"].value) for i in range(1, 25)]
+
+        assert any("Energy Type: E" in line for line in header_lines if line)
+        assert any(
+            "Used Molecules: 2" in line for line in header_lines if line
+        )
+        assert any(
+            "Skipped Molecules: 0" in line for line in header_lines if line
+        )
+        assert any("Grouping Time:" in line for line in header_lines if line)
+
+    def test_record_writes_formula_outputs_with_headers(
+        self, methanol_and_ethanol, temp_working_dir
+    ):
+        """Detailed record test: verify non-matrix output sheet and header lines."""
+        from openpyxl import load_workbook
+
+        grouper = FormulaGrouper(
+            methanol_and_ethanol,
+            num_procs=1,
+            label="formula_record_detail",
+            energy_type="E",
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 2
+        assert len(group_indices) == 2
+
+        xlsx_file = os.path.join(
+            temp_working_dir,
+            "formula_record_detail_group_result",
+            "formula_record_detail_FormulaGrouper.xlsx",
+        )
+        assert os.path.exists(xlsx_file)
+
+        wb = load_workbook(xlsx_file, data_only=True)
+        assert "Formulas" in wb.sheetnames
+        assert "Groups" in wb.sheetnames
+
+        ws = wb["Formulas"]
+        header_lines = [str(ws[f"A{i}"].value) for i in range(1, 25)]
+        assert any(
+            "Total Molecules: 2" in line for line in header_lines if line
+        )
+        assert any(
+            "Unique Formulas: 2" in line for line in header_lines if line
+        )
+        assert any("Energy Type: E" in line for line in header_lines if line)
+
     def test_formula_grouper(
         self,
         methanol_molecules,
@@ -1430,9 +1527,9 @@ class Test_conformer_ids_functionality:
             excel_file
         ), f"Excel file not found: {excel_file}"
 
-        # Matrix data starts at row 8 (0-indexed: skiprows=10), first column is index
+        # Matrix data starts at row 8 (0-indexed: skiprows=13), first column is index
         df = pd.read_excel(
-            excel_file, sheet_name="RMSD_Matrix", skiprows=10, index_col=0
+            excel_file, sheet_name="RMSD_Matrix", skiprows=12, index_col=0
         )
         # Check that conformer IDs are used as labels
         assert "c1" in str(df.columns[0]) or "c1" in str(df.index[0])

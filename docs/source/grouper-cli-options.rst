@@ -256,6 +256,11 @@ be sorted alphabetically after the numbered conformers.
 For Gaussian and ORCA output files, the program can extract various types of energies directly from the output using the
 ``-E`` or ``--energy-type`` option.
 
+.. note::
+
+   For Gaussian or ORCA output files, if the energy cannot be extracted correctly, ChemSmart will skip that molecule.
+   The XYZ file will still be saved, but it cannot be used with the energy grouper strategy.
+
 Supported energy types:
 
 -  ``E``: SCF energy (default)
@@ -274,6 +279,9 @@ entropy method) become available.
 For ``sp_qhG``, the program will automatically search for a matching single-point file in a subfolder named 'sp'
 (containing "sp" in its name) to extract the energy in solvation or using better basis and compute the corrected free
 energy.
+
+Default thermochemistry parameter: ``temperature=298.15, concentration=1.0, pressure=1.0, use_weighted_mass=True,
+alpha=4, entropy_method=grimme, cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0``
 
 .. warning::
 
