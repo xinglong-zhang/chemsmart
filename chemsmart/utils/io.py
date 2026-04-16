@@ -1241,8 +1241,9 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
        * **One ring (half-sandwich):** axis = current ring-plane normal
          pointing away from the metal.
 
-    3. For each ring, rotate all its atoms as a rigid body so the ring normal
-       aligns with the stacking axis, then translate the ring centroid to:
+    3. For each ring, rotate all its atoms *and the H atoms bonded to them*
+       as a rigid body so the ring normal aligns with the stacking axis, then
+       translate the ring centroid to:
 
        .. code-block:: text
 
@@ -1258,6 +1259,9 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
 
     4. Move the metal atom to *new_metal_pos*.
 
+    H atoms bonded to ring carbons are moved as part of the ring rigid body so
+    that C–H bond lengths and orientations are preserved.
+
     Non-ring ligands (e.g., Cl, CO, phosphine) are not touched.
 
     Args:
@@ -1265,8 +1269,8 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         metal_idxs: Set of atom indices for metal atoms in *mol*.
 
     Returns:
-        The same molecule with atom positions updated in-place for the metal
-        and all η5/η6 ring atoms.
+        The same molecule with atom positions updated in-place for the metal,
+        all η5/η6 ring heavy atoms, and all H atoms bonded to those ring carbons.
     """
     import numpy as np
 
@@ -1348,7 +1352,7 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
     if n == 2 and signs[0] == signs[1]:
         signs[1] = -signs[0]
 
-    # Reposition each ring as a rigid body.
+    # Reposition each ring as a rigid body (heavy atoms + their H atoms).
     for i, (ring_atoms, positions) in enumerate(bonded_rings):
         dist = ideal_dist(len(ring_atoms))
         target_centroid = new_metal_pos + signs[i] * axis * dist
@@ -1366,11 +1370,21 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         target_normal = signs[i] * axis  # ring normal aligns with stacking axis direction
 
         rot = _rotation_matrix_between_vectors(current_normal, target_normal)
-        centered = positions - current_centroid
-        new_positions = (rot @ centered.T).T + target_centroid
 
-        for idx, pos in zip(ring_atoms, new_positions):
-            conf.SetAtomPosition(idx, pos.tolist())
+        # Collect all atoms to move: ring heavy atoms + H atoms bonded to them.
+        ring_set = set(ring_atoms)
+        all_atoms_to_move: list[int] = list(ring_atoms)
+        for c_idx in ring_atoms:
+            for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
+                nb_idx = nb.GetIdx()
+                if nb_idx not in ring_set and nb.GetAtomicNum() == 1:
+                    all_atoms_to_move.append(nb_idx)
+
+        # Apply the same rigid-body transform to all collected atoms.
+        for idx in all_atoms_to_move:
+            pos = np.array(list(conf.GetAtomPosition(idx)))
+            new_pos = rot @ (pos - current_centroid) + target_centroid
+            conf.SetAtomPosition(idx, new_pos.tolist())
 
     conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
     return mol
