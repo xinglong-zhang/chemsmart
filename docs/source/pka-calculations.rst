@@ -1,0 +1,331 @@
+.. _pka-calculations:
+
+##################
+ pKa Calculations
+##################
+
+This module provides tools for computing acid dissociation constants (pKa) using quantum chemistry calculations with
+proper thermodynamic cycles. Both Gaussian and ORCA are supported.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: pKa Calculations
+
+   gaussian-pka-calculations
+   orca-pka-calculations
+
+.. contents:: Table of Contents
+   :local:
+   :depth: 2
+
+********
+ Theory
+********
+
+The pKa of an acid HA in aqueous solution is defined by the equilibrium:
+
+.. math::
+
+   \text{HA}_{(\text{aq})} \rightleftharpoons \text{A}^{-}_{(\text{aq})} + \text{H}^{+}_{(\text{aq})}
+
+The pKa is related to the standard Gibbs free energy change by:
+
+.. math::
+
+   \text{p}K_{\text{a}} = \frac{\Delta G^{\circ}_{\text{aq}}}{2.303 \cdot R \cdot T}
+
+where :math:`R` is the gas constant and :math:`T` is the temperature.
+
+Thermodynamic Cycles
+====================
+
+CHEMSMART supports two thermodynamic cycles for pKa calculations:
+
+**1. Proton Exchange (Isodesmic) Cycle** (Default, Recommended)
+
+Uses a reference acid HRef with known experimental pKa to cancel systematic errors:
+
+.. math::
+
+   \text{HA} + \text{Ref}^{-} \rightarrow \text{A}^{-} + \text{HRef}
+
+The pKa is computed as:
+
+.. math::
+
+   \text{p}K_{\text{a}}(\text{HA}) = \text{p}K_{\text{a}}(\text{HRef}) + \frac{\Delta G_{\text{soln}}}{2.303 \cdot R \cdot T}
+
+where:
+
+.. math::
+
+   \Delta G_{\text{soln}} = \left[ G(\text{A}^{-})_{\text{soln}} + G(\text{HRef})_{\text{soln}} \right] - \left[ G(\text{HA})_{\text{soln}} + G(\text{Ref}^{-})_{\text{soln}} \right]
+
+**2. Direct Cycle**
+
+Uses the absolute free energy of a proton in water:
+
+.. math::
+
+   \text{p}K_{\text{a}} = \frac{G(\text{A}^{-})_{\text{aq}} - G(\text{HA})_{\text{aq}} + \Delta G^{\circ}(\text{H}^{+})_{\text{aq}}}{2.303 \cdot R \cdot T}
+
+Default value: :math:`\Delta G^{\circ}(\text{H}^{+})_{\text{aq}} = -265.9` kcal/mol (Tissandier et al., 1998).
+
+Dual-Level Approach
+===================
+
+CHEMSMART implements a dual-level approach for accurate solvation free energies:
+
+#. **Thermal corrections** (:math:`G_{\text{corr}}`) from gas-phase frequency calculations using quasi-harmonic Gibbs
+   free energy:
+
+   .. math::
+
+      G_{\text{corr}} = G_{\text{qh}}(T) - E_{\text{gas}}
+
+#. **Solvent energies** (:math:`E_{\text{solv}}`) from high-level single-point calculations in implicit solvent (e.g.,
+   SMD or CPCM).
+
+#. **Total free energy in solution**:
+
+   .. math::
+
+      G_{\text{soln}} = E_{\text{solv}} + G_{\text{corr}}
+
+.. note::
+
+   All internal energies are stored in Hartree (au). Only :math:`\Delta G_{\text{soln}}` is converted to kcal/mol for
+   the pKa formula (1 Hartree = 627.5094740631 kcal/mol).
+
+**********************************
+ Batch Processing of Output Files
+**********************************
+
+You can parse a table of pre-computed output files to calculate pKa values in batch.
+
+.. code:: bash
+
+   chemsmart run pka batch-analyze \
+       -o pka_output_table.csv \
+       -O computed_pka.csv
+
+The output table (e.g., ``pka_output_table.csv``) must contain at least a ``basename`` column. Other file paths are
+auto-discovered if omitted.
+
+**Required Column:**
+
+-  ``basename``: A unique identifier for each acid. Used for file auto-discovery.
+
+**Optional File Columns (Auto-Discovered):**
+
+If these columns are omitted, CHEMSMART automatically looks for files named ``<basename>_suffix.<ext>`` (where ``<ext>``
+is ``.log`` or ``.out``).
+
+-  ``ha_gas``: HA gas-phase optimization output. Auto-discovery suffix: ``_pka``
+-  ``a_gas``: A⁻ gas-phase optimization output. Auto-discovery suffix: ``_pka_cb``
+-  ``ha_sp``: HA solvent single-point output. Auto-discovery suffix: ``_pka_sp``
+-  ``a_sp``: A⁻ solvent single-point output. Auto-discovery suffix: ``_pka_cb_sp``
+
+**Reference Acid Columns (Optional):**
+
+-  ``href_gas``: Path to the gas-phase optimization output for the reference acid HRef.
+-  ``ref_gas`` (optional): Path to the gas-phase optimization output for Ref⁻.
+-  ``href_sp`` (optional): Path to the solvent single-point output for HRef.
+-  ``ref_sp`` (optional): Path to the solvent single-point output for Ref⁻.
+-  ``pka_ref`` (optional): The pKa of the reference acid.
+
+.. note::
+
+   If reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values from the most
+   recently defined reference acid in a previous row will be used. The ``pka_ref`` can also be provided via the ``-rp``
+   command-line option.
+
+The results, including the computed pKa for each entry, will be saved to the file specified by ``--output-results``.
+
+*********************************
+ Computing pKa from Output Files
+*********************************
+
+If you have already completed output files for a single acid, you can compute the pKa directly without resubmitting
+jobs. This is the recommended way to get the pKa value after your calculations are done.
+
+.. code:: bash
+
+   chemsmart run pka analyze \
+       -ha acid_opt.log \
+       -a conjugate_base_opt.log \
+       -hr reference_acid_opt.log \
+       -r reference_base_opt.log \
+       -has acid_sp_smd.log \
+       -as conjugate_base_sp_smd.log \
+       -hrs reference_acid_sp_smd.log \
+       -rs reference_base_sp_smd.log \
+       -rp 6.75 \
+       -T 298.15
+
+The program will automatically detect whether the output files are from Gaussian or ORCA.
+
+.. note::
+
+   Only ``-ha`` and ``-hr`` are strictly required. The remaining six companion files are auto-discovered from the naming
+   convention:
+
+   -  ``<basename>_cb.<ext>`` — conjugate base
+   -  ``<basename>_sp.<ext>`` — solvent single-point
+   -  ``<basename>_cb_sp.<ext>`` — conjugate base solvent SP
+
+   Override any auto-discovered path with the corresponding flag.
+
+Output File Options
+===================
+
+**Gas-Phase Optimization + Frequency Files:**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 70
+
+   -  -  Short
+      -  Long
+      -  Description
+
+   -  -  ``-ha``
+      -  ``--ha``
+      -  HA (protonated acid) gas-phase opt+freq output.
+
+   -  -  ``-a``
+      -  ``--a``
+      -  A⁻ (conjugate base) gas-phase opt+freq output.
+
+   -  -  ``-hr``
+      -  ``--href``
+      -  HRef (reference acid) gas-phase opt+freq output.
+
+   -  -  ``-r``
+      -  ``--ref``
+      -  Ref⁻ (reference conjugate base) gas-phase opt+freq output.
+
+**Solvent Single-Point Files:**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 70
+
+   -  -  Short
+      -  Long
+      -  Description
+
+   -  -  ``-has``
+      -  ``--ha-solv``
+      -  HA solvent single-point output.
+
+   -  -  ``-as``
+      -  ``--a-solv``
+      -  A⁻ solvent single-point output.
+
+   -  -  ``-hrs``
+      -  ``--href-solv``
+      -  HRef solvent single-point output.
+
+   -  -  ``-rs``
+      -  ``--ref-solv``
+      -  Ref⁻ solvent single-point output.
+
+Thermochemistry Options
+=======================
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 70
+
+   -  -  Short
+      -  Long
+      -  Description
+
+   -  -  ``-T``
+      -  ``--temperature``
+      -  Temperature in Kelvin. Default: ``298.15`` K.
+
+   -  -  ``-conc``
+      -  ``--concentration``
+      -  Concentration in mol/L. Default: ``1.0`` mol/L.
+
+   -  -  ``-csg``
+      -  ``--cutoff-entropy-grimme``
+      -  Cutoff frequency (cm⁻¹) for entropy using Grimme's quasi-RRHO. Default: ``100.0``.
+
+   -  -  ``-ch``
+      -  ``--cutoff-enthalpy``
+      -  Cutoff frequency (cm⁻¹) for enthalpy using Head-Gordon's method. Default: ``100.0``.
+
+   -  -  ``-rp``
+      -  ``--reference-pka``
+      -  Experimental pKa of HRef. Required for output file parsing mode.
+
+***************
+ Output Format
+***************
+
+When computing pKa from output files, CHEMSMART prints a detailed summary:
+
+.. code:: text
+
+   ==============================================================================
+   pKa Calculation - Dual-level Proton Exchange Scheme
+   ==============================================================================
+   Reaction: HA + Ref- -> A- + HRef
+   Temperature: 373.15 K
+
+   Method:
+     G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)
+     G_soln = E_solv + G_corr  (solution free energy)
+     DG_soln = [G(A-)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref-)_soln]
+     pKa = pKa_ref + DG_soln / (RT * ln10)
+   ------------------------------------------------------------------------------
+
+   Gas-Phase Electronic Energies (E_gas, au):
+     HA:    -345.7419436500
+     A-:    -344.9153986020
+     HRef:  -365.8436493070
+     Ref-:  -365.4561783660
+
+   Thermal Corrections (G_corr = qh-G - E_gas, au):
+     HA:    0.0931931305
+     A-:    0.0758935969
+     HRef:  0.1404528844
+     Ref-:  0.1267467582
+
+   Solvent Single-Point Energies (E_solv, au):
+     HA:    -346.4882221850
+     A-:    -345.8989956310
+     HRef:  -366.5974351550
+     Ref-:  -366.1368369100
+
+   Solution Free Energies (G_soln = E_solv + G_corr, au):
+     HA:    -346.3950290545
+     A-:    -345.8231020341
+     HRef:  -366.4569822706
+     Ref-:  -366.0100901518
+   ------------------------------------------------------------------------------
+
+   pKa Calculation:
+     DG_soln = 0.1250349015 au
+             = 78.4606 kcal/mol
+     pKa(HRef)_ref = 6.75
+
+     *** Computed pKa(HA) = 52.70 ***
+   ==============================================================================
+
+************
+ References
+************
+
+#. Tissandier, M. D. et al. (1998). *J. Phys. Chem. A*, 102, 7787. (Absolute proton solvation energy)
+#. Grimme, S. (2012). *Chem. Eur. J.*, 18, 9955. (Quasi-RRHO method)
+#. Marenich, A. V.; Cramer, C. J.; Truhlar, D. G. (2009). *J. Phys. Chem. B*, 113, 6378. (SMD solvation model)
+
+**********
+ See Also
+**********
+
+-  :doc:`thermochemistry-analysis`

@@ -300,18 +300,51 @@ def irc(
     # validate charge and multiplicity consistency
     check_charge_and_multiplicity(irc_settings)
 
-    # get molecule from context (use the last molecule if multiple)
-    molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]  # get last molecule from list of molecules
-    logger.info(f"Running IRC calculation on molecule: {molecule}")
-
     # get label for the job output files
     label = ctx.obj["label"]
     logger.debug(f"Job label: {label}")
 
     logger.info(f"Final IRC job settings: {irc_settings.__dict__}")
 
+    # Normalize to list for batch-friendly handling while preserving
+    # single-molecule backwards compatibility.
+    molecules = ctx.obj["molecules"]
+    if not isinstance(molecules, list):
+        molecules = [molecules]
+
+    molecule_indices = ctx.obj.get("molecule_indices")
+    if molecule_indices is None:
+        molecule_indices = list(range(1, len(molecules) + 1))
+
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.irc import ORCAIRCJob
+
+    if len(molecules) > 1:
+        logger.info(f"Creating {len(molecules)} ORCA IRC jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running IRC for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+            jobs.append(
+                ORCAIRCJob(
+                    molecule=molecule,
+                    settings=irc_settings,
+                    label=molecule_label,
+                    skip_completed=skip_completed,
+                    **kwargs,
+                )
+            )
+
+        return ORCABatchJob(
+            jobs=jobs,
+            run_in_serial=ctx.obj["jobrunner"].run_in_serial,
+            label=f"{label}_batch",
+        )
+
+    molecule = molecules[0]
+    logger.info(f"Running IRC calculation on molecule: {molecule}")
 
     job = ORCAIRCJob(
         molecule=molecule,

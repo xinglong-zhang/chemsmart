@@ -12,7 +12,7 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.runner import JobRunner, get_serial_mode
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
 from chemsmart.utils.logger import create_logger
@@ -24,6 +24,16 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
+@click.option(
+    "-N",
+    "--num-nodes",
+    type=int,
+    default=None,
+    help="Maximum number of array tasks that may run simultaneously. "
+    "When specified with a list of jobs, submits them as a SLURM array job "
+    "throttled to at most N concurrent tasks (%%N on --array). "
+    "Omit to allow all tasks to run at the same time.",
+)
 @click.option(
     "-t",
     "--time-hours",
@@ -58,8 +68,10 @@ def sub(
     fake,
     scratch,
     delete_scratch,
+    run_in_serial,
     debug,
     stream,
+    num_nodes,
     time_hours,
     queue,
     verbose,
@@ -93,6 +105,7 @@ def sub(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
+        run_in_serial=run_in_serial,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
@@ -104,6 +117,7 @@ def sub(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
+    ctx.obj["num_nodes"] = num_nodes  # concurrency throttle for array jobs
 
 
 @sub.result_callback(replace=True)
@@ -117,9 +131,9 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     scheduler system.
     """
 
-    def _clean_command(ctx):
+    def _clean_command_list(commands):
         """
-        Remove keywords used in sub.py but not in run.py.
+        Remove keywords used in sub.py but not in run.py from a command list.
 
         Specifically: Some keywords/options (like queue, verbose, etc.)
         are only relevant to sub.py and not applicable to run.py.
@@ -128,27 +142,34 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         command = next(
             (
                 subcommand
-                for subcommand in ctx.obj["subcommand"]
+                for subcommand in commands
                 if subcommand["name"] == "sub"
             ),
             None,
         )
-        if not command:
-            raise ValueError("No 'sub' command found in context.")
 
-        # Find the keywords that are valid in sub.py
-        # but should not be passed to run.py and remove those
-        keywords_not_in_run = [
-            "time_hours",
-            "queue",
-            "verbose",
-            "test",
-            "print_command",
-        ]
+        if command:
+            # Find the keywords that are valid in sub.py
+            # but should not be passed to run.py and remove those
+            keywords_not_in_run = [
+                "time_hours",
+                "queue",
+                "verbose",
+                "test",
+                "print_command",
+                "num_nodes",
+            ]
 
-        for keyword in keywords_not_in_run:
-            # Remove keyword if it exists
-            command["kwargs"].pop(keyword, None)
+            for keyword in keywords_not_in_run:
+                # Remove keyword if it exists
+                command["kwargs"].pop(keyword, None)
+
+    def _clean_command(ctx):
+        """
+        Remove keywords used in sub.py but not in run.py.
+        """
+        if "subcommand" in ctx.obj:
+            _clean_command_list(ctx.obj["subcommand"])
         return ctx
 
     def _reconstruct_cli_args(ctx, job):
@@ -156,14 +177,38 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         Get cli args that reconstruct the command line.
 
         Rebuilds the command-line arguments from the context object
-        for job submission purposes.
+        for job submission purposes.  When a job carries a
+        ``_batch_subcommands_override`` (set by batch commands),
+        those per-entry subcommands are used instead of the global
+        context, so each submitted script processes only its own entry.
         """
-        commands = ctx.obj["subcommand"]
+        use_override = (
+            hasattr(job, "_batch_subcommands_override")
+            and job._batch_subcommands_override is not None
+        )
+
+        commands = (
+            job._batch_subcommands_override
+            if use_override
+            else ctx.obj["subcommand"]
+        )
+
+        # Ensure override commands are also cleaned (ctx.obj['subcommand'] is cleaned by _clean_command)
+        if use_override:
+            _clean_command_list(commands)
 
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
+
+        # Ensure --run-in-serial is propagated if enabled in jobrunner.
+        # This fixes an issue where the flag might be lost during reconstruction,
+        # ensuring that batch jobs submitted to the cluster run sequentially
+        # instead of triggering simultaneous execution.
+        if serial_mode.run_in_serial and "--run-in-serial" not in cli_args:
+            cli_args.insert(0, "--run-in-serial")
+
         if kwargs.get("print_command"):
             print(cli_args)
         return cli_args
@@ -179,14 +224,48 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
+    serial_mode = get_serial_mode(jobrunner)
+    num_nodes = ctx.obj.get("num_nodes")
     job = args[0]
 
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
-        for single_job in job:
-            single_job.jobrunner = jobrunner
-            _process_single_job(job=single_job)
+
+        # Use array job submission whenever --num-nodes is given, regardless of
+        # the value. Even --num-nodes=1 is valid: submit as an array but run
+        # only one task at a time. The old `> 1` guard silently fell through to
+        # individual serial submission for --num-nodes=1, which was surprising.
+        if num_nodes is not None and serial_mode.no_run_in_serial:
+            logger.info(
+                f"Submitting {len(job)} jobs as array job "
+                f"(max {num_nodes} concurrent tasks)"
+            )
+
+            # Attach jobrunner to all jobs
+            for single_job in job:
+                single_job.jobrunner = jobrunner
+
+            # Submit as array job using per-job reconstructed CLI args so
+            # entry-specific overrides (for example batch pKa entries) are
+            # preserved in each generated array run script.
+            cli_args = [
+                _reconstruct_cli_args(ctx, single_job) for single_job in job
+            ]
+            server = Server.from_servername(kwargs.get("server"))
+            server.submit_array_job(
+                jobs=job,
+                num_nodes=num_nodes,
+                test=kwargs.get("test"),
+                cli_args=cli_args,
+            )
+        else:
+            # Submit jobs individually (serial or when num_nodes not specified)
+            if serial_mode.run_in_serial:
+                logger.info("Submitting jobs serially (one by one)")
+            for single_job in job:
+                single_job.jobrunner = jobrunner
+                _process_single_job(job=single_job)
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)

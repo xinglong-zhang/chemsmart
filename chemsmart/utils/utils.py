@@ -525,7 +525,7 @@ def convert_string_index_from_1_based_to_0_based(
                                 0-based indexing.
 
     Raises:
-        ValueError: If index is 0 (invalid for 1-based indexing).
+        ValueError: If index is 0 or has invalid format.
     """
     # If already an int or slice, handle directly
     if isinstance(index, int):
@@ -1911,3 +1911,1049 @@ def deduplicate_string_keywords(route_string, keywords):
         new_tokens.append(token)
 
     return " ".join(new_tokens)
+
+
+# ---------------------------------------------------------------------------
+# pKa Table Parsing Utilities
+# ---------------------------------------------------------------------------
+
+
+class TabularDataset:
+    """Generic DataFrame-backed dataset for high-throughput workflows."""
+
+    def __init__(self, dataframe, source_path=None):
+        self.dataframe = dataframe.reset_index(drop=True)
+        self.source_path = source_path
+
+    @property
+    def columns(self):
+        return list(self.dataframe.columns)
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    @staticmethod
+    def normalize_header(header):
+        header = str(header).strip().lower()
+        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
+        header = re.sub(r"_+", "_", header).strip("_")
+        return header
+
+    @classmethod
+    def parse_table(cls, table_path, delimiter=None, comment="#"):
+        """Parse .txt/.csv into a generic TabularDataset."""
+        import pandas as pd
+
+        if not os.path.exists(table_path):
+            raise FileNotFoundError(f"Table file not found: {table_path}")
+
+        sep = delimiter
+        if sep is None:
+            sep = "," if str(table_path).lower().endswith(".csv") else r"\s+"
+
+        try:
+            df = pd.read_csv(
+                table_path,
+                sep=sep,
+                engine="python",
+                comment=comment,
+                skip_blank_lines=True,
+            )
+        except pd.errors.EmptyDataError:
+            raise ValueError(f"No valid entries found in table: {table_path}")
+
+        if df.empty:
+            raise ValueError(f"No valid entries found in table: {table_path}")
+
+        df = df.rename(
+            columns={c: cls.normalize_header(c) for c in df.columns}
+        )
+        return cls(df, source_path=table_path)
+
+    @classmethod
+    def resolve_column(cls, columns, candidates, required=True):
+        normalized = {cls.normalize_header(c): c for c in columns}
+        for candidate in candidates:
+            key = cls.normalize_header(candidate)
+            if key in normalized:
+                return normalized[key]
+        if required:
+            raise ValueError(
+                "Could not resolve required column. Tried: "
+                + ", ".join(candidates)
+            )
+        return None
+
+    def to_entries(self, entry_cls, row_offset=2):
+        return [
+            entry_cls(row.to_dict(), row_number=idx + row_offset)
+            for idx, row in self.dataframe.iterrows()
+        ]
+
+    def validate(
+        self,
+        required_columns=None,
+        integer_columns=None,
+        positive_integer_columns=None,
+        path_columns=None,
+        check_file_exists=True,
+    ):
+        """Generic dataset-level validation without job-specific logic."""
+        required_columns = required_columns or []
+        integer_columns = integer_columns or []
+        positive_integer_columns = positive_integer_columns or []
+        path_columns = path_columns or []
+
+        missing = [col for col in required_columns if col not in self.columns]
+        if missing:
+            raise ValueError(
+                "Missing required table columns: " + ", ".join(missing)
+            )
+
+        errors = []
+        for idx, row in self.dataframe.iterrows():
+            row_no = idx + 2
+
+            for col in integer_columns:
+                value = row[col]
+                if value is None:
+                    errors.append(f"Missing {col} (row {row_no})")
+                    continue
+                try:
+                    int(value)
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Invalid integer for {col} at row {row_no}: {value!r}"
+                    )
+
+            for col in positive_integer_columns:
+                value = row[col]
+                if value is None:
+                    errors.append(f"Missing {col} (row {row_no})")
+                    continue
+                try:
+                    parsed = int(value)
+                    if parsed < 1:
+                        errors.append(
+                            f"{col} must be >= 1 at row {row_no}, got {parsed}"
+                        )
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Invalid integer for {col} at row {row_no}: {value!r}"
+                    )
+
+            if check_file_exists:
+                for col in path_columns:
+                    value = row[col]
+                    if not value:
+                        errors.append(f"Missing {col} (row {row_no})")
+                        continue
+                    if not os.path.exists(str(value)):
+                        errors.append(
+                            f"File not found for {col} at row {row_no}: {value}"
+                        )
+
+        if errors:
+            raise ValueError("Table validation failed:\n" + "\n".join(errors))
+        return self
+
+
+class PKaTableEntry:
+    """Generic table-row abstraction for pKa job-submission tables.
+
+    This refactor keeps backward compatibility for dict-like access while
+    avoiding dynamic attribute lookup.
+    """
+
+    _ALIASES = {
+        "filepath": ["filepath", "file_path", "path", "ha_file"],
+        "proton_index": ["proton_index", "pi"],
+        "charge": ["charge", "q"],
+        "multiplicity": ["multiplicity", "mult", "m"],
+    }
+
+    def __init__(self, *args, row_number: int = None, **kwargs):
+        # Explicitly initialized attributes
+        self.row_number = row_number
+        self.filepath = None
+        self.proton_index = None
+        self.charge = None
+        self.multiplicity = None
+
+        # Canonical + non-canonical storage (no dynamic attrs on self)
+        self._data = {}
+        self._extra_data = {}
+
+        data = {}
+        if len(args) == 4:
+            data.update(
+                {
+                    "filepath": args[0],
+                    "proton_index": args[1],
+                    "charge": args[2],
+                    "multiplicity": args[3],
+                }
+            )
+        elif len(args) == 1 and isinstance(args[0], dict):
+            data.update(args[0])
+        elif len(args) != 0:
+            raise TypeError(
+                "PKaTableEntry accepts either (filepath, proton_index, charge, multiplicity), "
+                "or a single dict, plus keyword fields."
+            )
+
+        data.update(kwargs)
+        for key, value in data.items():
+            if key == "row_number":
+                continue
+            self._set_field(key, value)
+
+    @staticmethod
+    def normalize_header(header):
+        """Normalize a table header into snake_case."""
+        header = str(header).strip().lower()
+        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
+        header = re.sub(r"_+", "_", header).strip("_")
+        return header
+
+    @classmethod
+    def resolve_column(cls, columns, candidates, required=True):
+        """Resolve a physical column name from logical candidates."""
+        normalized = {cls.normalize_header(c): c for c in columns}
+        for candidate in candidates:
+            key = cls.normalize_header(candidate)
+            if key in normalized:
+                return normalized[key]
+        if required:
+            raise ValueError(
+                "Could not resolve required column. Tried: "
+                + ", ".join(candidates)
+            )
+        return None
+
+    @classmethod
+    def parse_table(cls, table_path, delimiter=None, comment="#"):
+        """Backward-compatible shim for generic table parsing."""
+        return TabularDataset.parse_table(
+            table_path=table_path,
+            delimiter=delimiter,
+            comment=comment,
+        )
+
+    @classmethod
+    def from_headers_and_row(cls, headers, row, row_number: int = None):
+        if len(headers) != len(row):
+            raise ValueError(
+                f"Header/value length mismatch: {len(headers)} headers vs {len(row)} values"
+            )
+        row_dict = {
+            str(h).strip(): v for h, v in zip(headers, row, strict=False)
+        }
+        return cls(row_dict, row_number=row_number)
+
+    def _canonical_key(self, key):
+        k = str(key)
+        nk = self.normalize_header(k)
+        for canonical, aliases in self._ALIASES.items():
+            if nk == self.normalize_header(canonical):
+                return canonical
+            for alias in aliases:
+                if nk == self.normalize_header(alias):
+                    return canonical
+        return None
+
+    def _set_field(self, key, value):
+        canonical = self._canonical_key(key)
+        if canonical == "filepath":
+            self.filepath = value
+            self._data["filepath"] = value
+        elif canonical == "proton_index":
+            self.proton_index = value
+            self._data["proton_index"] = value
+        elif canonical == "charge":
+            self.charge = value
+            self._data["charge"] = value
+        elif canonical == "multiplicity":
+            self.multiplicity = value
+            self._data["multiplicity"] = value
+        else:
+            key_str = str(key)
+            self._extra_data[key_str] = value
+            self._data[key_str] = value
+
+    def __repr__(self):
+        return (
+            f"PKaTableEntry(row_number={self.row_number}, data={self._data!r})"
+        )
+
+    def __getitem__(self, key):
+        if key in self._data:
+            return self._data[key]
+        canonical = self._canonical_key(key)
+        if canonical is not None and canonical in self._data:
+            return self._data[canonical]
+        raise KeyError(key)
+
+    def __setitem__(self, key, value):
+        self._set_field(key, value)
+
+    def __contains__(self, key):
+        if key in self._data:
+            return True
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return False
+        return canonical in self._data
+
+    def get(self, key, default=None):
+        if key in self._data:
+            return self._data.get(key, default)
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return default
+        return self._data.get(canonical, default)
+
+    def get_canonical(self, canonical, default=None):
+        if canonical == "filepath":
+            return self.filepath if self.filepath is not None else default
+        if canonical == "proton_index":
+            return (
+                self.proton_index if self.proton_index is not None else default
+            )
+        if canonical == "charge":
+            return self.charge if self.charge is not None else default
+        if canonical == "multiplicity":
+            return (
+                self.multiplicity if self.multiplicity is not None else default
+            )
+        return self.get(canonical, default)
+
+    def keys(self):
+        return self._data.keys()
+
+    def items(self):
+        return self._data.items()
+
+    def values(self):
+        return self._data.values()
+
+    def to_dict(self):
+        out = dict(self._extra_data)
+        out["filepath"] = self.filepath
+        out["proton_index"] = self.proton_index
+        out["charge"] = self.charge
+        out["multiplicity"] = self.multiplicity
+        return out
+
+    def to_kwargs(self, rename_map=None, drop_none=False):
+        out = self.to_dict()
+        if rename_map:
+            out = {rename_map.get(k, k): v for k, v in out.items()}
+        if drop_none:
+            out = {k: v for k, v in out.items() if v is not None}
+        return out
+
+    def validate(self):
+        errors = []
+        row_info = f" (row {self.row_number})" if self.row_number else ""
+
+        filepath = self.filepath
+        proton_index = self.proton_index
+        charge = self.charge
+        multiplicity = self.multiplicity
+
+        if not filepath:
+            errors.append(f"Empty filepath{row_info}")
+        elif not os.path.exists(str(filepath)):
+            errors.append(f"File not found: {filepath}{row_info}")
+
+        if proton_index is None:
+            errors.append(f"Missing proton_index{row_info}")
+        else:
+            try:
+                proton_index = int(proton_index)
+                if proton_index < 1:
+                    errors.append(
+                        f"proton_index must be >= 1, got {proton_index}{row_info}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(
+                    f"Invalid proton_index: {proton_index!r}{row_info}"
+                )
+
+        if charge is None:
+            errors.append(f"Missing charge{row_info}")
+        else:
+            try:
+                int(charge)
+            except (TypeError, ValueError):
+                errors.append(f"Invalid charge: {charge!r}{row_info}")
+
+        if multiplicity is None:
+            errors.append(f"Missing multiplicity{row_info}")
+        else:
+            try:
+                multiplicity = int(multiplicity)
+                if multiplicity < 1:
+                    errors.append(
+                        f"multiplicity must be >= 1, got {multiplicity}{row_info}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(
+                    f"Invalid multiplicity: {multiplicity!r}{row_info}"
+                )
+
+        if errors:
+            raise ValueError("; ".join(errors))
+
+
+def parse_pka_table(
+    table_path: str,
+    delimiter: str = None,
+    skip_header: bool = True,
+) -> list:
+    """Thin pKa adapter on top of the generic tabular parser layer."""
+    dataset = TabularDataset.parse_table(
+        table_path=table_path,
+        delimiter=delimiter,
+        comment="#",
+    )
+
+    try:
+        file_col = TabularDataset.resolve_column(
+            dataset.columns,
+            PKaTableEntry._ALIASES["filepath"],
+        )
+        proton_col = TabularDataset.resolve_column(
+            dataset.columns,
+            PKaTableEntry._ALIASES["proton_index"],
+        )
+        charge_col = TabularDataset.resolve_column(
+            dataset.columns,
+            PKaTableEntry._ALIASES["charge"],
+        )
+        mult_col = TabularDataset.resolve_column(
+            dataset.columns,
+            PKaTableEntry._ALIASES["multiplicity"],
+        )
+    except ValueError:
+        raise ValueError(
+            "Invalid table format: expected 4 columns "
+            "(filepath, proton_index, charge, multiplicity)."
+        )
+
+    # Canonicalize selected columns for generic validation/entry materialization.
+    canonical_df = dataset.dataframe.rename(
+        columns={
+            file_col: "filepath",
+            proton_col: "proton_index",
+            charge_col: "charge",
+            mult_col: "multiplicity",
+        }
+    )[["filepath", "proton_index", "charge", "multiplicity"]]
+
+    canonical_dataset = TabularDataset(canonical_df, source_path=table_path)
+    canonical_dataset.validate(
+        required_columns=[
+            "filepath",
+            "proton_index",
+            "charge",
+            "multiplicity",
+        ],
+        integer_columns=[],
+        positive_integer_columns=[],
+        path_columns=[],
+        check_file_exists=False,
+    )
+
+    entries = canonical_dataset.to_entries(
+        entry_cls=PKaTableEntry, row_offset=2
+    )
+
+    # Coerce numeric fields to preserve historical parse_pka_table behavior.
+    for entry in entries:
+        line_num = entry.row_number if entry.row_number is not None else 0
+
+        try:
+            entry["proton_index"] = int(entry["proton_index"])
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid proton_index at line {line_num}: "
+                f"{entry['proton_index']!r} is not an integer"
+            )
+
+        try:
+            entry["charge"] = int(entry["charge"])
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid charge at line {line_num}: "
+                f"{entry['charge']!r} is not an integer"
+            )
+
+        try:
+            entry["multiplicity"] = int(entry["multiplicity"])
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid multiplicity at line {line_num}: "
+                f"{entry['multiplicity']!r} is not an integer"
+            )
+
+    if skip_header and len(entries) >= 0:
+        pass
+
+    if not entries:
+        raise ValueError(f"No valid entries found in pKa table: {table_path}")
+
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# pKa Output Table Parsing Utilities (--output-table)
+# ---------------------------------------------------------------------------
+
+
+class PKaOutputTableEntry:
+    """Row abstraction for a pKa output table.
+
+    Uses explicit attributes (initialized to None) instead of dynamic
+    attribute lookup.
+    """
+
+    _ALIASES = {
+        "basename": ["basename", "name", "label", "system"],
+        "ha_gas": [
+            "ha_gas",
+            "ha_opt",
+            "ha_gas_file",
+            "ha_optimization_output",
+        ],
+        "a_gas": ["a_gas", "a_opt", "a_gas_file", "a_optimization_output"],
+        "href_gas": [
+            "href_gas",
+            "href_opt",
+            "href_gas_file",
+            "href_optimization_output",
+        ],
+        "ref_gas": [
+            "ref_gas",
+            "ref_opt",
+            "ref_gas_file",
+            "ref_optimization_output",
+        ],
+        "ha_sp": [
+            "ha_sp",
+            "ha_solv",
+            "ha_solv_file",
+            "ha_single_point_output",
+        ],
+        "a_sp": ["a_sp", "a_solv", "a_solv_file", "a_single_point_output"],
+        "href_sp": [
+            "href_sp",
+            "href_solv",
+            "href_solv_file",
+            "href_single_point_output",
+        ],
+        "ref_sp": [
+            "ref_sp",
+            "ref_solv",
+            "ref_solv_file",
+            "ref_single_point_output",
+        ],
+        "pka_ref": ["pka_ref", "pka_reference", "reference_pka", "ref_pka"],
+    }
+
+    _REFERENCE_COLUMNS = (
+        "href_gas",
+        "ref_gas",
+        "href_sp",
+        "ref_sp",
+        "pka_ref",
+    )
+
+    def __init__(self, data: dict, row_number: int = None):
+        # Explicitly initialized attributes
+        self.row_number = row_number
+        self.basename = None
+        self.ha_gas = None
+        self.a_gas = None
+        self.href_gas = None
+        self.ref_gas = None
+        self.ha_sp = None
+        self.a_sp = None
+        self.href_sp = None
+        self.ref_sp = None
+        self.pka_ref = None
+
+        # Explicit helper attributes requested for pKa workflow clarity
+        self.ha_basename = None
+        self.hb_basename = None
+        self.ha_conjugated_base_label = None
+        self.hb_conjugated_base_label = None
+        self.opt_path = None
+        self.sp_path = None
+
+        self._data = {}
+        self._extra_data = {}
+
+        for key, value in data.items():
+            if key == "row_number":
+                continue
+            self._set_field(key, value)
+
+        self._derive_helper_fields()
+
+    @staticmethod
+    def _normalize_header(header):
+        header = str(header).strip().lower()
+        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
+        header = re.sub(r"_+", "_", header).strip("_")
+        return header
+
+    def _canonical_key(self, key):
+        nk = self._normalize_header(key)
+        for canonical, aliases in self._ALIASES.items():
+            if nk == self._normalize_header(canonical):
+                return canonical
+            for alias in aliases:
+                if nk == self._normalize_header(alias):
+                    return canonical
+        return None
+
+    def _set_field(self, key, value):
+        canonical = self._canonical_key(key)
+        if canonical == "basename":
+            self.basename = value
+            self._data["basename"] = value
+        elif canonical == "ha_gas":
+            self.ha_gas = value
+            self._data["ha_gas"] = value
+        elif canonical == "a_gas":
+            self.a_gas = value
+            self._data["a_gas"] = value
+        elif canonical == "href_gas":
+            self.href_gas = value
+            self._data["href_gas"] = value
+        elif canonical == "ref_gas":
+            self.ref_gas = value
+            self._data["ref_gas"] = value
+        elif canonical == "ha_sp":
+            self.ha_sp = value
+            self._data["ha_sp"] = value
+        elif canonical == "a_sp":
+            self.a_sp = value
+            self._data["a_sp"] = value
+        elif canonical == "href_sp":
+            self.href_sp = value
+            self._data["href_sp"] = value
+        elif canonical == "ref_sp":
+            self.ref_sp = value
+            self._data["ref_sp"] = value
+        elif canonical == "pka_ref":
+            self.pka_ref = value
+            self._data["pka_ref"] = value
+        else:
+            key_str = str(key)
+            self._extra_data[key_str] = value
+            self._data[key_str] = value
+
+    def _derive_helper_fields(self):
+        # HA basename defaults to basename column
+        if self.basename is not None:
+            self.ha_basename = str(self.basename)
+
+        # HB basename derived from href_gas file stem when available
+        if self.href_gas is not None:
+            href_name = os.path.basename(str(self.href_gas))
+            self.hb_basename = os.path.splitext(href_name)[0]
+
+        # Conjugated base labels are made explicit
+        if self.ha_basename is not None:
+            self.ha_conjugated_base_label = (
+                f"{self.ha_basename}_conjugated_base"
+            )
+        if self.hb_basename is not None:
+            self.hb_conjugated_base_label = (
+                f"{self.hb_basename}_conjugated_base"
+            )
+
+        # Convenience paths for target acid outputs
+        self.opt_path = self.ha_gas
+        self.sp_path = self.ha_sp
+
+    def __getitem__(self, key):
+        if key in self._data:
+            return self._data[key]
+        canonical = self._canonical_key(key)
+        if canonical is not None and canonical in self._data:
+            return self._data[canonical]
+        raise KeyError(key)
+
+    def __setitem__(self, key, value):
+        self._set_field(key, value)
+        self._derive_helper_fields()
+
+    def __contains__(self, key):
+        if key in self._data:
+            return True
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return False
+        return canonical in self._data
+
+    def __repr__(self):
+        return (
+            f"PKaOutputTableEntry(row={self.row_number}, "
+            f"basename={self.basename if self.basename is not None else '?'})"
+        )
+
+    def _resolve_filenames(self):
+        """Auto-discover output files based on basename if not explicitly provided."""
+        suffixes = {
+            "ha_gas": "_pka",
+            "a_gas": "_pka_cb",
+            "ha_sp": "_pka_sp",
+            "a_sp": "_pka_cb_sp",
+        }
+        extensions = [".log", ".out"]
+
+        for field, suffix in suffixes.items():
+            current_val = getattr(self, field)
+            if current_val is not None and not (
+                isinstance(current_val, float) and np.isnan(current_val)
+            ):
+                continue
+
+            # Try to find file with supported extensions
+            found = False
+            for ext in extensions:
+                candidate = f"{self.basename}{suffix}{ext}"
+                if os.path.exists(candidate):
+                    setattr(self, field, candidate)
+                    found = True
+                    break
+
+            # If not found, fail soft (leave as None) or set default?
+            # Setting default helps validation error be more specific ("File not found" vs "Missing")
+            if not found:
+                # Default to .log for error reporting purposes checking implicit path
+                setattr(self, field, f"{self.basename}{suffix}.log")
+
+    def get(self, key, default=None):
+        if key in self._data:
+            return self._data.get(key, default)
+        canonical = self._canonical_key(key)
+        if canonical is None:
+            return default
+        return self._data.get(canonical, default)
+
+    def keys(self):
+        return self._data.keys()
+
+    def items(self):
+        return self._data.items()
+
+    def to_dict(self):
+        out = dict(self._extra_data)
+        out.update(
+            {
+                "basename": self.basename,
+                "ha_gas": self.ha_gas,
+                "a_gas": self.a_gas,
+                "href_gas": self.href_gas,
+                "ref_gas": self.ref_gas,
+                "ha_sp": self.ha_sp,
+                "a_sp": self.a_sp,
+                "href_sp": self.href_sp,
+                "ref_sp": self.ref_sp,
+                "pka_ref": self.pka_ref,
+            }
+        )
+        return out
+
+    def validate(self, check_file_exists=True):
+        """Validate that all required file paths are present and non-empty."""
+        errors = []
+        row_info = f" (row {self.row_number})" if self.row_number else ""
+
+        if self.basename is None or self.basename.strip() == "":
+            errors.append(f"Missing basename{row_info}")
+
+        # Auto-discover missing files if basename is present
+        if self.basename:
+            self._resolve_filenames()
+
+        required_files = [
+            ("ha_gas", self.ha_gas),
+            ("a_gas", self.a_gas),
+            ("href_gas", self.href_gas),
+            ("ref_gas", self.ref_gas),
+            ("ha_sp", self.ha_sp),
+            ("a_sp", self.a_sp),
+            ("href_sp", self.href_sp),
+            ("ref_sp", self.ref_sp),
+        ]
+        for col, val in required_files:
+            if val is None or (isinstance(val, float) and np.isnan(val)):
+                errors.append(f"Missing {col}{row_info}")
+            elif check_file_exists and not os.path.exists(str(val)):
+                errors.append(f"File not found for {col}: {val}{row_info}")
+
+        if self.pka_ref is None or (
+            isinstance(self.pka_ref, float) and np.isnan(self.pka_ref)
+        ):
+            errors.append(f"Missing pka_ref{row_info}")
+        else:
+            try:
+                float(self.pka_ref)
+            except (TypeError, ValueError):
+                errors.append(f"Invalid pka_ref: {self.pka_ref!r}{row_info}")
+
+        if errors:
+            raise ValueError("; ".join(errors))
+
+
+def parse_pka_output_table(table_path: str, delimiter: str = None) -> list:
+    """Parse an output-table file into a list of :class:`PKaOutputTableEntry`.
+
+    The table must contain a header row. Columns are resolved by
+    normalised aliases. At minimum, the ``basename`` column is required.
+    Output file columns (``ha_gas``, ``a_gas``, ``ha_sp``, ``a_sp``) are
+    optional; if omitted, they are auto-discovered by appending standard
+    suffixes (``_pka``, ``_pka_cb``, ``_pka_sp``, ``_pka_cb_sp``) to the
+    basename.
+
+    Args:
+        table_path: Path to the ``.txt`` / ``.csv`` table file.
+        delimiter: Explicit delimiter (auto-detected if *None*).
+
+    Returns:
+        list[PKaOutputTableEntry]: One entry per data row, with column
+        names canonicalised to the first alias in each alias list.
+
+    Raises:
+        FileNotFoundError: If *table_path* does not exist.
+        ValueError: If the table is empty or required columns are missing.
+    """
+    import pandas as pd
+
+    dataset = TabularDataset.parse_table(
+        table_path=table_path,
+        delimiter=delimiter,
+        comment="#",
+    )
+
+    # Resolve physical→canonical column mapping.
+    rename_map = {}
+    for canonical, aliases in PKaOutputTableEntry._ALIASES.items():
+        resolved = TabularDataset.resolve_column(
+            dataset.columns,
+            aliases,
+            required=False,
+        )
+        if resolved is not None:
+            rename_map[resolved] = canonical
+
+    # Ensure at least ``basename`` is present.
+    # Other file columns are optional and will be auto-discovered if missing.
+    if "basename" not in rename_map.values():
+        raise ValueError(
+            "Output table is missing required column: basename. "
+            f"Accepted aliases: {PKaOutputTableEntry._ALIASES['basename']}"
+        )
+
+    canonical_df = dataset.dataframe.rename(columns=rename_map)
+
+    # Keep only canonical columns that were found.
+    canonical_cols = [
+        c for c in PKaOutputTableEntry._ALIASES if c in canonical_df.columns
+    ]
+    canonical_df = canonical_df[canonical_cols]
+
+    # Replace NaN with None for cleaner downstream handling.
+    canonical_df = canonical_df.where(pd.notnull(canonical_df), None)
+
+    canonical_dataset = TabularDataset(canonical_df, source_path=table_path)
+    entries = canonical_dataset.to_entries(
+        entry_cls=PKaOutputTableEntry,
+        row_offset=2,
+    )
+
+    if not entries:
+        raise ValueError(
+            f"No valid entries found in pKa output table: {table_path}"
+        )
+
+    return entries
+
+
+def resolve_pka_output_references(entries: list) -> list:
+    """Fill blank reference-acid columns by carrying forward from earlier rows.
+
+    For each row, if any of the reference-acid columns
+    (``hb_gas``, ``b_gas``, ``hb_sp``, ``b_sp``, ``pka_ref``) are blank
+    (*None*), the value from the most recently defined non-blank row is
+    used.  This allows users to specify the reference acid only once when
+    the same reference is shared across multiple target species.
+
+    Args:
+        entries: List of :class:`PKaOutputTableEntry` (mutated in place).
+
+    Returns:
+        list[PKaOutputTableEntry]: The same list, for chaining.
+
+    Raises:
+        ValueError: If the first row contains blank reference columns
+            (nothing to carry forward from).
+    """
+    ref_cols = PKaOutputTableEntry._REFERENCE_COLUMNS
+    last_ref = {}
+
+    for entry in entries:
+        for col in ref_cols:
+            val = entry.get(col)
+            if val is not None and not (
+                isinstance(val, float) and np.isnan(val)
+            ):
+                # Current row has a value → remember it.
+                last_ref[col] = val
+            else:
+                # Blank → carry forward.
+                if col not in last_ref:
+                    raise ValueError(
+                        f"Reference column '{col}' is blank in row "
+                        f"{entry.row_number} and no previous value exists "
+                        f"to carry forward."
+                    )
+                entry[col] = last_ref[col]
+
+    return entries
+
+
+def compute_pka_from_output_table(
+    entries: list,
+    output_cls,
+    temperature: float = 298.15,
+    concentration: float = 1.0,
+    cutoff_entropy_grimme: float = 100.0,
+    cutoff_enthalpy: float = 100.0,
+) -> list:
+    """Compute pKa for every row in a parsed output table.
+
+    This is a thin orchestration layer that calls
+    ``output_cls.compute_pka()`` (either ``Gaussian16pKaOutput`` or
+    ``ORCApKaOutput``) for each :class:`PKaOutputTableEntry`.
+
+    Args:
+        entries: Validated & reference-resolved output-table entries.
+        output_cls: The pKa output class with a ``compute_pka`` classmethod
+            (e.g. ``Gaussian16pKaOutput`` or ``ORCApKaOutput``).
+        temperature: Temperature in Kelvin.
+        concentration: Concentration in mol/L.
+        cutoff_entropy_grimme: Grimme quasi-RRHO entropy cutoff (cm⁻¹).
+        cutoff_enthalpy: Head-Gordon enthalpy cutoff (cm⁻¹).
+
+    Returns:
+        list[dict]: One result dict per entry, each containing the
+        ``compute_pka()`` output plus the ``basename`` key.
+    """
+    results = []
+    for entry in entries:
+        pka_result = output_cls.compute_pka(
+            ha_gas_file=entry["ha_gas"],
+            a_gas_file=entry["a_gas"],
+            href_gas_file=entry["href_gas"],
+            ref_gas_file=entry["ref_gas"],
+            ha_solv_file=entry["ha_sp"],
+            a_solv_file=entry["a_sp"],
+            href_solv_file=entry["href_sp"],
+            ref_solv_file=entry["ref_sp"],
+            pka_reference=float(entry["pka_ref"]),
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+        )
+        pka_result["basename"] = entry["basename"]
+        results.append(pka_result)
+    return results
+
+
+def export_pka_results_table(
+    entries: list,
+    results: list,
+    output_path: str,
+) -> None:
+    """Export a table with original columns plus computed pKa values.
+
+    Writes a CSV or whitespace-delimited file (inferred from extension)
+    that appends ``pka`` and ``delta_G_soln_kcal_mol`` columns to the
+    original entry data.
+
+    Args:
+        entries: The parsed output-table entries.
+        results: The list of result dicts from
+            :func:`compute_pka_from_output_table`.
+        output_path: Destination file path (``.csv`` → comma-delimited,
+            otherwise whitespace-delimited).
+    """
+    import pandas as pd
+
+    rows = []
+    for entry, result in zip(entries, results):
+        row = entry.to_dict()
+        row["pka"] = result["pKa"]
+        row["delta_G_soln_kcal_mol"] = result["delta_G_soln_kcal_mol"]
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    if str(output_path).lower().endswith(".csv"):
+        df.to_csv(output_path, index=False)
+    else:
+        df.to_csv(output_path, index=False, sep="\t")
+
+    logger.info(f"pKa results table written to {output_path}")
+
+
+def validate_pka_table_entries(
+    entries: list,
+    check_file_exists: bool = True,
+) -> list:
+    """Validate a list of PKaTableEntry objects.
+
+    Args:
+        entries: List of PKaTableEntry to validate.
+        check_file_exists: If True, verify that each filepath exists.
+
+    Returns:
+        list[PKaTableEntry]: The validated entries (same list, for chaining).
+
+    Raises:
+        ValueError: If any entry fails validation.
+    """
+    all_errors = []
+
+    for entry in entries:
+        try:
+            if check_file_exists:
+                entry.validate()
+            else:
+                # Validate without file existence check
+                if entry.proton_index is None or entry.proton_index < 1:
+                    raise ValueError(
+                        f"Invalid proton_index: {entry.proton_index}"
+                    )
+                if entry.charge is None:
+                    raise ValueError("Missing charge")
+                if entry.multiplicity is None or entry.multiplicity < 1:
+                    raise ValueError(
+                        f"Invalid multiplicity: {entry.multiplicity}"
+                    )
+        except ValueError as e:
+            all_errors.append(str(e))
+
+    if all_errors:
+        raise ValueError(
+            "pKa table validation failed:\n" + "\n".join(all_errors)
+        )
+
+    return entries

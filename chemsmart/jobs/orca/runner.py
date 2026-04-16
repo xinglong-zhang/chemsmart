@@ -67,6 +67,7 @@ class ORCAJobRunner(JobRunner):
         "orcairc",
         "orcaqmmm",
         "orcaneb",
+        "orcapka",  # add pKa job support
     ]
 
     PROGRAM = "orca"

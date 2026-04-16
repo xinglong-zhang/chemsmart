@@ -85,6 +85,7 @@ def modred(
     label = ctx.obj["label"]
     logger.debug(f"Job label: {label}")
 
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.modred import ORCAModredJob
 
     # Get the original molecule indices from context
@@ -111,7 +112,13 @@ def modred(
             )
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA modred jobs")
-        return jobs
+
+        run_in_serial = ctx.obj["jobrunner"].run_in_serial
+        return ORCABatchJob(
+            jobs=jobs,
+            run_in_serial=run_in_serial,
+            label=f"{label}_batch",
+        )
     else:
         # Single molecule case
         molecule = molecules[-1]
