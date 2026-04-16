@@ -1364,10 +1364,12 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         is the seed and both the Cp and benzene atoms are returned.  For a bare
         Cp ring (no fusion) the result is just the seed atoms.
         """
+        from collections import deque
+
         expanded: set[int] = set(seed_atoms)
-        frontier: list[int] = list(seed_atoms)
+        frontier: deque[int] = deque(seed_atoms)
         while frontier:
-            idx = frontier.pop(0)
+            idx = frontier.popleft()
             atom = mol.GetAtomWithIdx(idx)
             for nb in atom.GetNeighbors():
                 nb_idx = nb.GetIdx()
@@ -1391,11 +1393,6 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
     for expanded in expanded_ring_systems:
         all_ring_atom_idxs.update(expanded)
 
-    # ring_transforms: kept for potential future use but not needed for bridge
-    # atom repositioning any more (we now use the ring atoms' current positions
-    # after repositioning instead of transform-averaging).
-    ring_transforms: list[tuple["np.ndarray", "np.ndarray", "np.ndarray"]] = []
-
     # Reposition each ring as a rigid body.
     # The ENTIRE fused ring system (e.g., full indenyl = Cp + benzene) is moved
     # as one piece so that fused rings stay geometrically connected.
@@ -1416,7 +1413,6 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         target_normal = signs[i] * axis  # ring normal aligns with stacking axis direction
 
         rot = _rotation_matrix_between_vectors(current_normal, target_normal)
-        ring_transforms.append((rot, current_centroid, target_centroid))
 
         # Collect ALL atoms of the full fused ring system (e.g., all 9 C of
         # indenyl rather than just the 5 Cp carbons), plus their H atoms.
@@ -1472,7 +1468,7 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
             # True bridge atom: bonded to ring atoms from ≥2 different ring
             # systems.  Place at the centroid of those ring atoms' new
             # positions.  This gives a geometrically reasonable starting point
-            # for subsequent MMFF optimisation (e.g., for an ansa-O bridge the
+            # for subsequent MMFF optimization (e.g., for an ansa-O bridge the
             # C-O-C angle and C-O bond length will be refined by MMFF).
             avg_pos = np.mean(neighbor_positions, axis=0)
             conf.SetAtomPosition(nb_idx, avg_pos.tolist())
