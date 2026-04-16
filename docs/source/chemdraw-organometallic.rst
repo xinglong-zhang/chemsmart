@@ -33,20 +33,26 @@ suitable for quantum chemistry calculations with Gaussian or ORCA.
 Organometallic complexes present several challenges when read from ChemDraw files:
 
 -  RDKit raises ``Can't kekulize mol`` errors for aromatic ligands coordinated to a metal centre.
+
 -  RDKit raises ``UFFTYPER: Unrecognized atom type`` errors for transition metals.
+
 -  ChemDraw stores η5/η6 hapticity using ``NodeType="MultiAttachment"`` phantom atoms connected to the metal via
-   ``Display="Dash"`` bonds. RDKit reads each such node as a real carbon atom, producing spurious CH₃ groups attached
-   to the metal.
+   ``Display="Dash"`` bonds. RDKit reads each such node as a real carbon atom, producing spurious CH₃ groups attached to
+   the metal.
+
 -  ChemDraw can store aromatic ligands (e.g. Cp, benzene) as **separate fragments** that need to be combined with the
    metal fragment before 3D coordinates can be generated.
 
-Chemsmart handles all of these cases automatically. However, as much as our codes try to generate the right structures, some complicated organometallic complexes with unusal ligands may not be interpreted perfectly based on chemdraw drawings.
+Chemsmart handles all of these cases automatically. However, as much as our codes try to generate the right structures,
+some complicated organometallic complexes with unusal ligands may not be interpreted perfectly based on chemdraw
+drawings.
 
 *********************************
  Supported Organometallic Inputs
 *********************************
 
-The following types of organometallic complexes drawn in ChemDraw are supported (other types may be supported but have not been rigorously tested):
+The following types of organometallic complexes drawn in ChemDraw are supported (other types may be supported but have
+not been rigorously tested):
 
 -  Transition-metal complexes with **η5-cyclopentadienyl (Cp)** ligands, including **Cp\***
    (pentamethylcyclopentadienyl)
@@ -118,8 +124,8 @@ Chemsmart applies the following pipeline when reading ChemDraw files containing 
 
 #. **Add η5 coordination bonds for Cp-type rings** – For each 5-membered all-carbon ring that is not yet bonded to the
    metal, one single bond is added from the metal to an anchor ring carbon. The ring is simultaneously de-aromatized to
-   an alternating single/double bond pattern (SINGLE–DOUBLE–SINGLE–DOUBLE–SINGLE) so that every ring carbon is sp2
-   with exactly one hydrogen. This applies to both pure Cp rings and fused rings (e.g. indenyl).
+   an alternating single/double bond pattern (SINGLE–DOUBLE–SINGLE–DOUBLE–SINGLE) so that every ring carbon is sp2 with
+   exactly one hydrogen. This applies to both pure Cp rings and fused rings (e.g. indenyl).
 
 #. **Add η6 coordination bonds for arene rings** – For each 6-membered all-carbon benzene ring not yet bonded to the
    metal, one single bond is added from the metal to an anchor ring carbon. The bond pattern around the anchor is set so
@@ -131,36 +137,40 @@ Chemsmart applies the following pipeline when reading ChemDraw files containing 
 #. **Add hydrogens and generate initial 3D coordinates** – Explicit hydrogens are added with ``AddHs``, then 3D
    coordinates are generated with ``EmbedMolecule`` (ETKDG).
 
-#. **Rigid-body ring repositioning** – After ETKDG embedding, each η5/η6 ring system is moved as a **rigid body** to
-   the correct haptocentric geometry:
+#. **Rigid-body ring repositioning** – After ETKDG embedding, each η5/η6 ring system is moved as a **rigid body** to the
+   correct haptocentric geometry:
 
-   a. For fused ring systems (e.g. indenyl = Cp fused to benzene), all atoms of the fused system are collected by BFS
+   #. For fused ring systems (e.g. indenyl = Cp fused to benzene), all atoms of the fused system are collected by BFS
       expansion and moved together.
-   b. A stacking axis is computed from the centroids of the two ring systems (sandwich) or from the ETKDG metal
-      position (half-sandwich/mono-hapto cases).
-   c. Each ring is rotated so its plane is **perpendicular to the stacking axis** (Rodrigues rotation).
-   d. Each ring centroid is translated to ``metal_position ± ideal_distance × axis``:
+
+   #. A stacking axis is computed from the centroids of the two ring systems (sandwich) or from the ETKDG metal position
+      (half-sandwich/mono-hapto cases).
+
+   #. Each ring is rotated so its plane is **perpendicular to the stacking axis** (Rodrigues rotation).
+
+   #. Each ring centroid is translated to ``metal_position ± ideal_distance × axis``:
 
       -  η5-Cp ring: ideal metal–centroid distance = **2.0 Å**
       -  η6-arene ring: ideal metal–centroid distance = **1.75 Å**
 
-   e. The metal atom is placed at the midpoint between the repositioned ring centroids.
-   f. Bridge atoms (e.g. the O atom in ansa complexes) are placed at the midpoint of their bonded ring atoms' new
+   #. The metal atom is placed at the midpoint between the repositioned ring centroids.
+
+   #. Bridge atoms (e.g. the O atom in ansa complexes) are placed at the midpoint of their bonded ring atoms' new
       positions.
 
 #. **MMFF geometry refinement** – MMFF94 force-field optimisation is attempted to refine bond lengths, angles, and
    hydrogen positions. MMFF does not have parameters for most transition metals, so optimisation may fail silently; in
    that case the rigid-body geometry is kept.
 
-*************************************
+***********************************
  Extracting Ring-Ligand Structures
-*************************************
+***********************************
 
-The sections below show concrete examples of how to extract and use 3D structures from ChemDraw files that contain
-ring ligands. These are the structures that we have used for testing our codes.
+The sections below show concrete examples of how to extract and use 3D structures from ChemDraw files that contain ring
+ligands. These are the structures that we have used for testing our codes.
 
 Titanocene Dimethyl (TiCp₂Me₂)
-================================
+==============================
 
 A ChemDraw file containing TiCp₂Me₂ (two Cp rings and two methyl groups on Ti) can be processed directly:
 
@@ -171,14 +181,14 @@ A ChemDraw file containing TiCp₂Me₂ (two Cp rings and two methyl groups on T
 
 Chemsmart will:
 
-1. Strip the MultiAttachment phantom atoms ChemDraw uses to draw the Cp–Ti hapticity lines.
-2. Reconnect each Cp ring to Ti via a single η5 anchor bond with alternating Cp ring bond orders.
-3. Add the two real Ti–CH₃ methyl groups (which survive stripping because they use ordinary bonds).
-4. Reposition the two Cp rings above and below Ti at the correct 2.0 Å centroid distance.
-5. Embed and refine with MMFF.
+#. Strip the MultiAttachment phantom atoms ChemDraw uses to draw the Cp–Ti hapticity lines.
+#. Reconnect each Cp ring to Ti via a single η5 anchor bond with alternating Cp ring bond orders.
+#. Add the two real Ti–CH₃ methyl groups (which survive stripping because they use ordinary bonds).
+#. Reposition the two Cp rings above and below Ti at the correct 2.0 Å centroid distance.
+#. Embed and refine with MMFF.
 
 Ferrocene / Nickelocene (Sandwich Cp₂M)
-=========================================
+=======================================
 
 For sandwich complexes with two Cp rings and no other ligands:
 
@@ -189,7 +199,7 @@ For sandwich complexes with two Cp rings and no other ligands:
 The two Cp rings are placed above and below the metal with D5h-like symmetry (eclipsed, as a starting point).
 
 Bis-Benzene Iridium / Rhodium Complexes
-=========================================
+=======================================
 
 For η6-arene complexes (two benzene ligands above and below the metal):
 
@@ -201,7 +211,7 @@ Chemsmart combines the benzene ring fragments with the metal stub, sets alternat
 carbon retains one hydrogen, and repositions the rings at 1.75 Å from the metal centroid.
 
 Ansa-Bisindenyl Iron Complex (O-Bridged)
-==========================================
+========================================
 
 For ansa complexes where two indenyl ligands are connected by a bridging atom:
 
@@ -243,9 +253,9 @@ Coordinate Accuracy for Ring Ligands
    A **DFT geometry optimisation** must always be performed before using the structure for energy analysis.
 
 Fused Ring Systems (Indenyl, Fluorenyl)
-   Fused ring systems (e.g. indenyl = Cp fused to benzene, fluorenyl = Cp fused to two benzene rings) are moved as
-   rigid bodies. The internal geometry of the fused system is from ETKDG and is generally correct, but the O–C bond
-   lengths in ansa bridges are approximate (~1.4 Å after MMFF) and may require further DFT refinement.
+   Fused ring systems (e.g. indenyl = Cp fused to benzene, fluorenyl = Cp fused to two benzene rings) are moved as rigid
+   bodies. The internal geometry of the fused system is from ETKDG and is generally correct, but the O–C bond lengths in
+   ansa bridges are approximate (~1.4 Å after MMFF) and may require further DFT refinement.
 
 η5 Coordination Representation
    Cp and Cp\* η5 coordination is represented with a **single metal–carbon σ-bond** to one anchor ring carbon. The
@@ -254,8 +264,8 @@ Fused Ring Systems (Indenyl, Fluorenyl)
 
 η6 Arene Coordination
    η6 metal–arene coordination is represented with a single metal–carbon anchor bond, with the remaining ring carbons
-   having no explicit bond to the metal. The 3D positioning (metal above ring centroid) is geometrically correct, but
-   no formal M–C bonds exist for the other five carbons.
+   having no explicit bond to the metal. The 3D positioning (metal above ring centroid) is geometrically correct, but no
+   formal M–C bonds exist for the other five carbons.
 
 Multi-Hapto Ligands Beyond Cp/Benzene
    Higher-order hapticity ligands (η7-cycloheptatrienyl, η8-cyclooctatetraene, etc.) and non-carbon η-donors are not
@@ -287,8 +297,8 @@ Multi-Metal and Unusual ChemDraw Layouts
    -  multi-metal (e.g. dinuclear) systems
    -  complexes where the metal and ring ligands are widely separated in the ChemDraw page
 
-   If the extracted structure is clearly wrong (e.g. disconnected fragments, wrong atom count), re-draw the complex
-   in ChemDraw with a more standard layout and try again.
+   If the extracted structure is clearly wrong (e.g. disconnected fragments, wrong atom count), re-draw the complex in
+   ChemDraw with a more standard layout and try again.
 
 **********
  Examples
