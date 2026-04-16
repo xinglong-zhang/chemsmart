@@ -2,7 +2,7 @@ import logging
 
 import click
 
-from chemsmart.cli.gaussian.crest import click_crest_grouper_options
+from chemsmart.cli.gaussian.crest import click_grouper_sub_options
 from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_jobtype_options,
     gaussian,
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_gaussian_jobtype_options
 @click_grouper_common_options
-@click_crest_grouper_options
+@click_grouper_sub_options
 @click.option(
     "-nc",
     "--num-confs-to-run",

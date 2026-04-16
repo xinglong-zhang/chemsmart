@@ -18,7 +18,7 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
-def click_crest_grouper_options(f):
+def click_grouper_sub_options(f):
     """Grouper options specific to crest command (strategy selection and strategy-specific options)."""
 
     @click.option(
@@ -92,7 +92,7 @@ def click_crest_grouper_options(f):
 @click_job_options
 @click_gaussian_jobtype_options
 @click_grouper_common_options
-@click_crest_grouper_options
+@click_grouper_sub_options
 @click.option(
     "-nc",
     "--num-confs-to-run",

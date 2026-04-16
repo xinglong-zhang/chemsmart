@@ -1887,6 +1887,15 @@ class TestGaussian16Output:
             g16_pm6.semiempirical == "PM6"
         )  # changed to upper case in route_object.semiempirical
 
+    def test_energy_extraction_from_gaussian_output_file(
+        self, gaussian_quintet_opt_outfile
+    ):
+        g16_out = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        h_from_file = g16_out.enthalpy
+        assert h_from_file == -7521.416016
+        g_from_file = g16_out.gibbs_free_energy
+        assert g_from_file == -7521.548653
+
 
 class TestGaussianWBIOutput:
     def test_normal_termination_with_forces_and_frequencies(
