@@ -932,9 +932,9 @@ def attach_eta_bonds_for_cp_rings(
     plus an external hydrogen or substituent), and choosing a non-junction
     carbon keeps their implicit-H count intact.
 
-    After embedding, :func:`_adjust_metal_above_rings` re-positions the metal
-    to the correct centroid above the ring so that the final geometry reflects
-    the true η5 coordination.
+    After embedding, :func:`_reposition_rings_and_metal` rotates and
+    translates all ring atoms and repositions the metal to achieve the correct
+    η5 sandwich/half-sandwich coordination geometry.
 
     Args:
         mol: RDKit molecule that may contain disconnected fragments.
@@ -1057,9 +1057,9 @@ def attach_eta_bonds_for_arene_rings(
     * Position 5: two S bonds from ring = 2 bonds → by default 2H, but we
       explicitly set NumExplicitHs=1 to enforce the correct sp2 value.
 
-    After embedding, :func:`_adjust_metal_above_rings` re-positions the metal
-    to the correct centroid so that the final geometry reflects the true η6
-    coordination.
+    After embedding, :func:`_reposition_rings_and_metal` rotates and
+    translates all ring atoms and repositions the metal to achieve the correct
+    η6 sandwich/half-sandwich coordination geometry.
 
     Rings already reachable from the metal via any bond path (e.g., phenyl
     groups in PPh₃ ligands bonded through P) are left untouched.
@@ -1162,25 +1162,111 @@ def attach_eta_bonds_for_arene_rings(
     return new_mol
 
 
-def _adjust_metal_above_rings(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol:
-    """
-    Re-position the metal atom to the correct location above/between its
-    coordinated ring ligands after 3D embedding.
+def _rotation_matrix_between_vectors(
+    v1: "np.ndarray", v2: "np.ndarray"
+) -> "np.ndarray":
+    """Return a 3×3 rotation matrix that rotates unit vector *v1* onto *v2*.
 
-    After ETKDG embedding with a single anchor bond per ring the metal sits at
-    the end of that anchor bond rather than above the ring centre.  This
-    function calculates the centroid of every ring that is directly bonded to
-    the metal and moves the metal to:
-
-    * the midpoint of all ring centroids (sandwich / multi-ring complexes);
-    * ``centroid + ring_normal × 2.0 Å`` for a single coordinated ring.
+    Uses the Rodrigues rotation formula.  If the two vectors are anti-parallel
+    a 180° rotation around an arbitrary perpendicular axis is returned.
 
     Args:
-        mol: RDKit molecule with an existing 3D conformer.
+        v1: Source unit vector (will be normalised internally).
+        v2: Target unit vector (will be normalised internally).
+
+    Returns:
+        3×3 NumPy rotation matrix **R** such that ``R @ v1 ≈ v2``.
+    """
+    import numpy as np
+
+    v1 = np.asarray(v1, dtype=float)
+    v2 = np.asarray(v2, dtype=float)
+    n1 = np.linalg.norm(v1)
+    n2 = np.linalg.norm(v2)
+    if n1 < 1e-10 or n2 < 1e-10:
+        return np.eye(3)
+    v1 = v1 / n1
+    v2 = v2 / n2
+
+    cross = np.cross(v1, v2)
+    dot = float(np.clip(np.dot(v1, v2), -1.0, 1.0))
+    cross_norm = np.linalg.norm(cross)
+
+    if cross_norm < 1e-10:
+        if dot > 0:
+            return np.eye(3)
+        # 180-degree rotation around an arbitrary perpendicular axis.
+        perp = (
+            np.array([1.0, 0.0, 0.0])
+            if abs(v1[0]) < 0.9
+            else np.array([0.0, 1.0, 0.0])
+        )
+        perp = perp - np.dot(perp, v1) * v1
+        perp /= np.linalg.norm(perp)
+        return 2.0 * np.outer(perp, perp) - np.eye(3)
+
+    # Rodrigues' formula: R = I + K + K²·(1 − dot)/(cross_norm²)
+    axis = cross / cross_norm
+    K = np.array(
+        [
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ]
+    )
+    return np.eye(3) + K * cross_norm + K @ K * (1.0 - dot)
+
+
+def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol:
+    """
+    Achieve proper η5/η6 sandwich or half-sandwich geometry after 3D embedding.
+
+    After ETKDG embedding with a single anchor bond per ring the metal and
+    all ring atoms end up **coplanar** because the embedding engine treats the
+    metal–carbon bond as an ordinary σ-bond and optimises bond angles
+    accordingly.  Simply moving the metal to the ring centroid (the previous
+    :func:`_adjust_metal_above_rings` approach) does not fix this because the
+    ring plane still contains the metal.
+
+    This function corrects the geometry by treating each η5/η6 ring as a
+    **rigid body** and performing:
+
+    1. Compute the ring centroid and current ring-plane normal from the
+       embedded atom positions.
+    2. Choose a *stacking axis* — the direction along which the rings should
+       stack above/below the metal:
+
+       * **Two rings (sandwich):** axis = normalised vector from ring-1
+         centroid to ring-2 centroid.
+       * **One ring (half-sandwich):** axis = current ring-plane normal
+         pointing away from the metal.
+
+    3. For each ring, rotate all its atoms as a rigid body so the ring normal
+       aligns with the stacking axis, then translate the ring centroid to:
+
+       .. code-block:: text
+
+           new_centroid = new_metal_pos ± ideal_dist × stacking_axis
+
+       where:
+
+       * *ideal_dist* is 2.0 Å for 5-membered (η5-Cp) rings and 1.75 Å for
+         6-membered (η6-arene) rings.
+       * *new_metal_pos* is the midpoint of all target ring centroids
+         (sandwich) or ``old_centroid + stacking_axis × ideal_dist``
+         (half-sandwich).
+
+    4. Move the metal atom to *new_metal_pos*.
+
+    Non-ring ligands (e.g., Cl, CO, phosphine) are not touched.
+
+    Args:
+        mol: RDKit molecule with at least one 3D conformer.
         metal_idxs: Set of atom indices for metal atoms in *mol*.
 
     Returns:
-        The same molecule with the metal atom position updated in-place.
+        The same molecule with atom positions updated in-place for the metal
+        and all η5/η6 ring atoms.
     """
     import numpy as np
 
@@ -1189,43 +1275,102 @@ def _adjust_metal_above_rings(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol:
 
     conf = mol.GetConformer()
     metal_idx = min(metal_idxs)
-    metal_pos = np.array(list(conf.GetAtomPosition(metal_idx)))
 
     metal_neighbors = {
         nb.GetIdx() for nb in mol.GetAtomWithIdx(metal_idx).GetNeighbors()
     }
     ring_info = mol.GetRingInfo()
 
-    bonded_ring_data: list[tuple] = []
+    # Gather all bonded all-carbon rings (η5 or η6 only).
+    bonded_rings: list[tuple[list[int], "np.ndarray"]] = []
     for ring in ring_info.AtomRings():
         ring_set = set(ring)
-        # Only η5/η6-type rings: all-carbon ring directly bonded to metal.
         if not all(mol.GetAtomWithIdx(i).GetSymbol() == "C" for i in ring):
+            continue
+        if len(ring) not in (5, 6):
             continue
         if not any(n in ring_set for n in metal_neighbors):
             continue
         positions = np.array([list(conf.GetAtomPosition(i)) for i in ring])
-        centroid = positions.mean(axis=0)
-        if len(ring) >= 3:
-            v1 = positions[1] - positions[0]
-            v2 = positions[2] - positions[0]
-            normal = np.cross(v1, v2)
-            norm_len = np.linalg.norm(normal)
-            normal = normal / norm_len if norm_len > 1e-6 else np.array([0.0, 0.0, 1.0])
-        else:
-            normal = np.array([0.0, 0.0, 1.0])
-        bonded_ring_data.append((centroid, normal))
+        bonded_rings.append((list(ring), positions))
 
-    if not bonded_ring_data:
+    if not bonded_rings:
         return mol
 
-    if len(bonded_ring_data) >= 2:
-        new_metal_pos = np.mean([c for c, _ in bonded_ring_data], axis=0)
-    else:
-        centroid, normal = bonded_ring_data[0]
-        if np.dot(metal_pos - centroid, normal) < 0:
+    def ideal_dist(ring_size: int) -> float:
+        """Typical metal – ring-centroid distance in Å."""
+        return 2.0 if ring_size == 5 else 1.75
+
+    n = len(bonded_rings)
+
+    if n == 1:
+        # Half-sandwich: keep the ring where it is; move metal above it.
+        ring_atoms, positions = bonded_rings[0]
+        centroid = positions.mean(axis=0)
+        v1 = positions[1] - positions[0]
+        v2 = positions[2] - positions[0]
+        normal = np.cross(v1, v2)
+        norm_len = np.linalg.norm(normal)
+        normal = normal / norm_len if norm_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        metal_pos_old = np.array(list(conf.GetAtomPosition(metal_idx)))
+        if np.dot(metal_pos_old - centroid, normal) < 0:
             normal = -normal
-        new_metal_pos = centroid + normal * 2.0  # 2.0 Å M-ring centroid dist
+        new_metal_pos = centroid + normal * ideal_dist(len(ring_atoms))
+        conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
+        return mol
+
+    # Sandwich (n ≥ 2): determine stacking axis from ring centroids.
+    centroids = [pos.mean(axis=0) for _, pos in bonded_rings]
+    if n == 2:
+        axis = centroids[1] - centroids[0]
+        axis_len = np.linalg.norm(axis)
+        axis = axis / axis_len if axis_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+    else:
+        # Generic: principal component of centroid cloud.
+        c_arr = np.array(centroids)
+        centered = c_arr - c_arr.mean(axis=0)
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+        axis = vh[0]  # direction of maximum variance
+
+    # New metal position: midpoint of all target ring centroids.
+    #   target_centroid_i = new_metal_pos ± ideal_dist_i * axis
+    # For equal ring sizes: new_metal_pos = mean(centroids) projected to axis.
+    new_metal_pos = np.mean(centroids, axis=0)
+
+    # Assign signs: ring whose current centroid has a positive dot product with
+    # axis gets +sign (and vice versa), preserving existing ordering.
+    signs: list[float] = []
+    for centroid in centroids:
+        d = float(np.dot(centroid - new_metal_pos, axis))
+        signs.append(1.0 if d >= 0 else -1.0)
+
+    # For exactly two rings the signs must be opposite; enforce this.
+    if n == 2 and signs[0] == signs[1]:
+        signs[1] = -signs[0]
+
+    # Reposition each ring as a rigid body.
+    for i, (ring_atoms, positions) in enumerate(bonded_rings):
+        dist = ideal_dist(len(ring_atoms))
+        target_centroid = new_metal_pos + signs[i] * axis * dist
+
+        # Ring-plane normal of the embedded ring.
+        current_centroid = positions.mean(axis=0)
+        v1 = positions[1] - positions[0]
+        v2 = positions[2] - positions[0]
+        current_normal = np.cross(v1, v2)
+        cn_len = np.linalg.norm(current_normal)
+        current_normal = (
+            current_normal / cn_len if cn_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        )
+
+        target_normal = signs[i] * axis  # ring normal should point toward metal
+
+        rot = _rotation_matrix_between_vectors(current_normal, target_normal)
+        centered = positions - current_centroid
+        new_positions = (rot @ centered.T).T + target_centroid
+
+        for idx, pos in zip(ring_atoms, new_positions):
+            conf.SetAtomPosition(idx, pos.tolist())
 
     conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
     return mol

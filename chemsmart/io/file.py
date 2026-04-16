@@ -5,7 +5,7 @@ import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.io import (
-    _adjust_metal_above_rings,
+    _reposition_rings_and_metal,
     attach_eta_bonds_for_arene_rings,
     attach_eta_bonds_for_cp_rings,
     remove_phantom_metal_carbons,
@@ -271,12 +271,13 @@ class CDXFile(FileMixin):
                     "Could not generate 3D coordinates for molecule"
                 )
 
-        # For organometallic complexes, ETKDG places the metal at the end of
-        # the single anchor bond.  Move it to the centroid of all bonded rings
-        # to give the correct η5/η6 geometry.
+        # For organometallic complexes, ETKDG places the metal and all ring
+        # atoms in the same plane (coplanar with the single anchor bond).
+        # Reposition ring atoms as rigid bodies and then move the metal to
+        # achieve proper η5/η6 sandwich/half-sandwich coordination geometry.
         if has_metals:
-            logger.debug(f"Adjust metal above rings in {rdkit_mol}.")
-            rdkit_mol = _adjust_metal_above_rings(rdkit_mol, metal_idxs)
+            logger.debug(f"Reposition rings and metal above rings in {rdkit_mol}.")
+            rdkit_mol = _reposition_rings_and_metal(rdkit_mol, metal_idxs)
 
         # Optimize the geometry (may fail for exotic atom types)
         try:
