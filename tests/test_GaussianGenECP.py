@@ -29,7 +29,9 @@ class TestGaussianGenGenECP:
             caplog.messages
         )
 
-    def test_gen_fallback_when_heavy_element_does_not_require_ecp(self, caplog):
+    def test_gen_fallback_when_heavy_element_does_not_require_ecp(
+        self, caplog
+    ):
         genecp_section = GenGenECPSection.from_bse_api(
             light_elements=["H", "C", "N", "O"],
             light_elements_basis="6-311+G**",
