@@ -159,6 +159,8 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
         assert isinstance(mol, QMMMMolecule)
         assert type(mol).__name__ == "QMMMMolecule"
 
+
+class TestStructures:
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):
@@ -2284,6 +2286,64 @@ class TestCDXFile:
         assert mol.chemical_formula == "C32H31N5O5"
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
+
+    def test_read_metal_ligand_molecules_cdxml_file_(
+        self, metal_ligand_molecules_cdxml_file
+    ):
+        """Test reading multiple organometallic molecules from a CDXML file with Cp and aromatic ligands."""
+        assert os.path.exists(metal_ligand_molecules_cdxml_file)
+        assert os.path.isfile(metal_ligand_molecules_cdxml_file)
+        cdx_file = CDXFile(filename=metal_ligand_molecules_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 7
+
+        # Test molecule 0: Ti(Cp)₂Me₂ - titanocene dimethyl complex.
+        # The two methyl groups bonded to Ti are now correctly preserved.
+        # MultiAttachment phantom atoms (ChemDraw η5-hapticity stubs) are
+        # removed at the XML level before RDKit parsing, so the real Ti–Me
+        # bonds remain intact.
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H16Ti"
+        assert mol.num_atoms == 29
+        assert mol.is_ring
+
+        # Test molecule 1: Ni(Cp)₂Cl₂ - nickel bis-Cp with two chloride ligands.
+        mol = molecules[1]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C10H10Cl2Ni"
+        assert mol.num_atoms == 23
+        assert mol.is_ring
+
+        # Test molecule 3: Ir(η6-benzene)₂ - bis-benzene iridium complex.
+        # Each benzene ring contributes 6C and 6H; anchor C is sp2 with 1H.
+        mol = molecules[3]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Ir"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 4: Rh(η6-benzene)₂ - bis-benzene rhodium complex.
+        mol = molecules[4]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Rh"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 5: Fe complex with aromatic phosphine and benzene ligands
+        mol = molecules[5]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
+        assert mol.num_atoms == 75
+        assert mol.is_aromatic
+
+        # Test molecule 6: Mn sugar complex (no Cp rings, should be unchanged)
+        mol = molecules[6]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H10MnO6"
+        assert mol.num_atoms == 23
 
 
 class TestInChIKey:

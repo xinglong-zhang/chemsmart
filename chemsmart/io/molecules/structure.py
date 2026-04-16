@@ -18,7 +18,6 @@ from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.utils.geometry import is_collinear
-from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
 
@@ -2318,7 +2317,6 @@ class CoordinateBlock:
                     logger.error(
                         f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
                     )
-
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
@@ -2348,9 +2346,14 @@ class CoordinateBlock:
             try:
                 atomic_number = int(line_elements[0])
             except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
+                # sanitize token similar to _get_symbols to handle annotated tokens
+                token = str(line_elements[0])
+                m = re.match(r"^([A-Za-z][a-z]?)", token)
+                if m:
+                    atomic_symbol = p.to_element(m.group(1))
+                else:
+                    atomic_symbol = p.to_element(str(line_elements[0]))
+                atomic_number = p.to_atomic_number(atomic_symbol)
             atomic_numbers.append(atomic_number)
 
             # Decide how to interpret the second
@@ -2539,44 +2542,6 @@ class CoordinateBlock:
                 return [1, 1, 1]
         else:
             return None
-
-
-class SDFFile(FileMixin):
-    """
-    SDF file object.
-    """
-
-    def __init__(self, filename):
-        self.filename = filename
-
-    @property
-    def molecule(self):
-        return self.get_molecule()
-
-    def get_molecule(self):
-        list_of_symbols = []
-        cart_coords = []
-        # sdf line pattern containing coordinates and element type
-        from chemsmart.utils.repattern import sdf_pattern
-
-        for line in self.contents:
-            match = re.match(sdf_pattern, line)
-            if match:
-                x = float(match.group(1))
-                y = float(match.group(2))
-                z = float(match.group(3))
-                atom_type = str(match.group(4))
-                list_of_symbols.append(atom_type)
-                cart_coords.append((x, y, z))
-
-        cart_coords = np.array(cart_coords)
-
-        if len(list_of_symbols) == 0 or len(cart_coords) == 0:
-            raise ValueError("No coordinates found in the SDF file!")
-
-        return Molecule.from_symbols_and_positions_and_pbc_conditions(
-            list_of_symbols=list_of_symbols, positions=cart_coords
-        )
 
 
 class QMMMMolecule(Molecule):

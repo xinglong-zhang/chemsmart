@@ -142,16 +142,16 @@ ChemDraw Files
 ChemDraw XML (.cdxml) and Binary (.cdx) Files
 ---------------------------------------------
 
-**NEW**: Chemsmart now supports reading molecular structures directly from ChemDraw files! This enables seamless
-integration with chemical drawing tools.
+Chemsmart supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
+with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 .. code:: bash
 
-   # Basic usage with ChemDraw file
+   # Organic molecule
    chemsmart sub -s server gaussian -p project -f molecule.cdxml -c 0 -m 1 opt
 
-   # Complete single-command workflow
-   chemsmart sub -s server gaussian -p project -f benzene.cdxml -c 0 -m 1 opt
+   # Organometallic complex (charge and multiplicity must be specified explicitly)
+   chemsmart sub -s server gaussian -p project -f ferrocene.cdxml -c 0 -m 1 opt
 
 .. tip::
 
@@ -170,10 +170,14 @@ integration with chemical drawing tools.
 
 .. note::
 
-   -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported
-   -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates
-   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule
-   -  3D coordinates are automatically generated from 2D structures
+   -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported.
+   -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates.
+   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule.
+   -  3D coordinates are automatically generated from 2D structures.
+   -  Reading binary ``.cdx`` files requires Open Babel (``obabel``) to be installed. If Open Babel is not available,
+      save the file as ``.cdxml`` instead.
+   -  Charge and multiplicity of organometallic complexes are **not** inferred from the ChemDraw file – always specify
+      ``-c`` and ``-m`` explicitly.
 
 **Example: Multi-molecule ChemDraw file**
 
@@ -181,6 +185,8 @@ integration with chemical drawing tools.
 
    # Select the 2nd molecule from a ChemDraw file with multiple structures
    chemsmart sub -s server gaussian -p project -f molecules.cdxml -i 2 -c 0 -m 1 opt
+
+For full details on organometallic complex support and its restrictions, see :doc:`chemdraw-organometallic`.
 
 *********************
  Molecular Databases

@@ -37,6 +37,7 @@ chemistry software.
 
    cli-overview
    molecule-input-formats
+   chemdraw-organometallic
 
 .. toctree::
    :maxdepth: 2
