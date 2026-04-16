@@ -179,7 +179,20 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         try:
             self._build_jobrunner(job, node=node)
             job.run(**kwargs)
-            self._job_is_complete_cached(job, force_refresh=True)
+            is_complete = self._job_is_complete_cached(
+                job,
+                force_refresh=True,
+            )
+            if not is_complete:
+                location = f" on node {node}" if node else ""
+                msg = "job incomplete after execution"
+                logger.error(f"Job {job.label}{location}: {msg}")
+                return {
+                    "label": job.label,
+                    "success": False,
+                    "error": msg,
+                    "node": node,
+                }
             return {
                 "label": job.label,
                 "success": True,

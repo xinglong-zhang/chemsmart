@@ -148,7 +148,7 @@ class TestSerialExecution:
     def test_qrc_job_default_behavior_runs_all(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
-        """Test that GaussianQRCJob runs all jobs when run_in_serial is False."""
+        """Test that default mode runs both jobs and raises on incomplete outcome."""
         from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
@@ -1170,3 +1170,25 @@ class TestOrcaPkaBatchExecution:
             job._run_parallel()
 
         prepare_sp_spy.assert_not_called()
+
+    def test_submit_job_marks_incomplete_run_as_failure(self, pbs_server):
+        dummy_batch_cls = TestBatchJobRefactor._dummy_batch_cls()
+        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
+
+        incomplete_job = Mock()
+        incomplete_job.label = "incomplete_job"
+        incomplete_job.run.return_value = None
+        incomplete_job.is_complete.return_value = False
+
+        batch = dummy_batch_cls(
+            jobs=[incomplete_job],
+            run_in_serial=True,
+            jobrunner=runner,
+            label="batch_incomplete_submit",
+        )
+
+        outcome = batch._submit_job(incomplete_job)
+
+        assert outcome["success"] is False
+        assert outcome["label"] == "incomplete_job"
+        assert outcome["error"] == "job incomplete after execution"
