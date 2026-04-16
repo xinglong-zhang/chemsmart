@@ -1363,7 +1363,7 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
             current_normal / cn_len if cn_len > 1e-6 else np.array([0.0, 0.0, 1.0])
         )
 
-        target_normal = signs[i] * axis  # ring normal should point toward metal
+        target_normal = signs[i] * axis  # ring normal aligns with stacking axis direction
 
         rot = _rotation_matrix_between_vectors(current_normal, target_normal)
         centered = positions - current_centroid

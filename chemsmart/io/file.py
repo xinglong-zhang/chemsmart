@@ -276,7 +276,7 @@ class CDXFile(FileMixin):
         # Reposition ring atoms as rigid bodies and then move the metal to
         # achieve proper η5/η6 sandwich/half-sandwich coordination geometry.
         if has_metals:
-            logger.debug(f"Reposition rings and metal above rings in {rdkit_mol}.")
+            logger.debug(f"Reposition rings and metal in {rdkit_mol}.")
             rdkit_mol = _reposition_rings_and_metal(rdkit_mol, metal_idxs)
 
         # Optimize the geometry (may fail for exotic atom types)
