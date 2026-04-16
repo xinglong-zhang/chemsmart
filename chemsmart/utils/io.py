@@ -1352,6 +1352,15 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
     if n == 2 and signs[0] == signs[1]:
         signs[1] = -signs[0]
 
+    # Collect all ring atom indices and store per-ring transforms for later use
+    # when repositioning bridge atoms (e.g., an O atom that bridges two rings).
+    all_ring_atom_idxs: set[int] = set()
+    for ring_atoms, _ in bonded_rings:
+        all_ring_atom_idxs.update(ring_atoms)
+
+    # ring_transforms[i] = (rot, current_centroid, target_centroid) for ring i.
+    ring_transforms: list[tuple["np.ndarray", "np.ndarray", "np.ndarray"]] = []
+
     # Reposition each ring as a rigid body (heavy atoms + their H atoms).
     for i, (ring_atoms, positions) in enumerate(bonded_rings):
         dist = ideal_dist(len(ring_atoms))
@@ -1370,6 +1379,7 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         target_normal = signs[i] * axis  # ring normal aligns with stacking axis direction
 
         rot = _rotation_matrix_between_vectors(current_normal, target_normal)
+        ring_transforms.append((rot, current_centroid, target_centroid))
 
         # Collect all atoms to move: ring heavy atoms + H atoms bonded to them.
         ring_set = set(ring_atoms)
@@ -1385,6 +1395,37 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
             pos = np.array(list(conf.GetAtomPosition(idx)))
             new_pos = rot @ (pos - current_centroid) + target_centroid
             conf.SetAtomPosition(idx, new_pos.tolist())
+
+    # Reposition bridge atoms: non-ring, non-H atoms bonded to ring atoms that
+    # were moved (e.g., an O bridging two indenyl rings in an Fe complex).
+    # For each such atom, apply the rigid-body transform of each ring it touches
+    # and average the resulting positions.
+    bridge_new_positions: dict[int, list["np.ndarray"]] = {}
+    for i, (ring_atoms, old_positions) in enumerate(bonded_rings):
+        rot, current_centroid, target_centroid = ring_transforms[i]
+        for c_idx in ring_atoms:
+            for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
+                nb_idx = nb.GetIdx()
+                if nb_idx in all_ring_atom_idxs:
+                    continue
+                if nb.GetAtomicNum() == 1:
+                    continue
+                if nb_idx == metal_idx:
+                    continue
+                # Bridge/pendant heavy atom: compute its position under this ring's transform.
+                pos_old = np.array(list(conf.GetAtomPosition(nb_idx)))
+                pos_new = rot @ (pos_old - current_centroid) + target_centroid
+                bridge_new_positions.setdefault(nb_idx, []).append(pos_new)
+
+    for nb_idx, new_positions in bridge_new_positions.items():
+        if len(new_positions) > 1:
+            # Only move atoms bonded to atoms from multiple rings (true bridges,
+            # e.g., an O atom bridging two indenyl η5-ring systems).  Atoms
+            # adjacent to only one ring are left at their ETKDG positions to
+            # avoid disconnecting fused-ring fragments (e.g., the benzene part
+            # of an indenyl ligand) from their own ring system.
+            avg_pos = np.mean(new_positions, axis=0)
+            conf.SetAtomPosition(nb_idx, avg_pos.tolist())
 
     conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
     return mol
