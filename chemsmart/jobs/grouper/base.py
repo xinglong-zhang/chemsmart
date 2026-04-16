@@ -451,7 +451,7 @@ class MoleculeGrouper(ABC):
             energy_type (str): Energy type label propagated from CLI/job.
             thermo_parameters (str): Thermochemistry parameters from CLI.
         """
-        self.molecules = molecules
+        self.molecules = list(molecules)
         self.num_procs = int(max(1, num_procs))
         self.label = label
         self.conformer_ids = conformer_ids

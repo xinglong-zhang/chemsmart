@@ -123,11 +123,11 @@ def crest(
 ):
     """CLI subcommand for running Gaussian CREST jobs."""
 
-    # Validate mutual exclusivity of -g and -n
+    # Validate mutual exclusivity of -g and -nc
     if grouping_strategy is not None and num_confs_to_run is not None:
         raise click.UsageError(
-            "Options -g/--grouping-strategy and -n/--num-confs-to-run are mutually exclusive. "
-            "Use -g to group conformers, or -n to select lowest-energy conformers, but not both."
+            "Options -g/--grouping-strategy and -nc/--num-confs-to-run are mutually exclusive. "
+            "Use -g to group conformers, or -nc to select lowest-energy conformers, but not both."
         )
 
     # get jobrunner for running Gaussian crest jobs
