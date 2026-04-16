@@ -1352,21 +1352,58 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
     if n == 2 and signs[0] == signs[1]:
         signs[1] = -signs[0]
 
-    # Collect all ring atom indices and store per-ring transforms for later use
-    # when repositioning bridge atoms (e.g., an O atom that bridges two rings).
-    all_ring_atom_idxs: set[int] = set()
-    for ring_atoms, _ in bonded_rings:
-        all_ring_atom_idxs.update(ring_atoms)
+    # Pre-compute the set of ALL ring atom indices in the molecule (for BFS expansion).
+    all_mol_ring_atom_idxs: set[int] = set()
+    for ring in ring_info.AtomRings():
+        all_mol_ring_atom_idxs.update(ring)
 
-    # ring_transforms[i] = (rot, current_centroid, target_centroid) for ring i.
+    def _expand_to_fused_ring_system(seed_atoms: list[int]) -> set[int]:
+        """BFS from seed_atoms through all-carbon ring bonds to collect fused rings.
+
+        For an η5-Cp ring fused to a benzene ring (indenyl ligand), the Cp ring
+        is the seed and both the Cp and benzene atoms are returned.  For a bare
+        Cp ring (no fusion) the result is just the seed atoms.
+        """
+        expanded: set[int] = set(seed_atoms)
+        frontier: list[int] = list(seed_atoms)
+        while frontier:
+            idx = frontier.pop(0)
+            atom = mol.GetAtomWithIdx(idx)
+            for nb in atom.GetNeighbors():
+                nb_idx = nb.GetIdx()
+                if nb_idx in expanded:
+                    continue
+                if nb_idx not in all_mol_ring_atom_idxs:
+                    continue
+                if nb.GetAtomicNum() != 6:  # only expand through carbon ring atoms
+                    continue
+                expanded.add(nb_idx)
+                frontier.append(nb_idx)
+        return expanded
+
+    # Compute the expanded (full fused) ring atom sets for each bonded η5/η6 ring.
+    expanded_ring_systems: list[set[int]] = []
+    for ring_atoms, _ in bonded_rings:
+        expanded_ring_systems.append(_expand_to_fused_ring_system(ring_atoms))
+
+    # Collect all ring atom indices (expanded) for bridge-atom detection.
+    all_ring_atom_idxs: set[int] = set()
+    for expanded in expanded_ring_systems:
+        all_ring_atom_idxs.update(expanded)
+
+    # ring_transforms: kept for potential future use but not needed for bridge
+    # atom repositioning any more (we now use the ring atoms' current positions
+    # after repositioning instead of transform-averaging).
     ring_transforms: list[tuple["np.ndarray", "np.ndarray", "np.ndarray"]] = []
 
-    # Reposition each ring as a rigid body (heavy atoms + their H atoms).
+    # Reposition each ring as a rigid body.
+    # The ENTIRE fused ring system (e.g., full indenyl = Cp + benzene) is moved
+    # as one piece so that fused rings stay geometrically connected.
     for i, (ring_atoms, positions) in enumerate(bonded_rings):
         dist = ideal_dist(len(ring_atoms))
         target_centroid = new_metal_pos + signs[i] * axis * dist
 
-        # Ring-plane normal of the embedded ring.
+        # Ring-plane normal computed from the η5/η6 coordinating ring only.
         current_centroid = positions.mean(axis=0)
         v1 = positions[1] - positions[0]
         v2 = positions[2] - positions[0]
@@ -1381,13 +1418,14 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
         rot = _rotation_matrix_between_vectors(current_normal, target_normal)
         ring_transforms.append((rot, current_centroid, target_centroid))
 
-        # Collect all atoms to move: ring heavy atoms + H atoms bonded to them.
-        ring_set = set(ring_atoms)
-        all_atoms_to_move: list[int] = list(ring_atoms)
-        for c_idx in ring_atoms:
+        # Collect ALL atoms of the full fused ring system (e.g., all 9 C of
+        # indenyl rather than just the 5 Cp carbons), plus their H atoms.
+        expanded_atoms = expanded_ring_systems[i]
+        all_atoms_to_move: list[int] = list(expanded_atoms)
+        for c_idx in expanded_atoms:
             for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
                 nb_idx = nb.GetIdx()
-                if nb_idx not in ring_set and nb.GetAtomicNum() == 1:
+                if nb_idx not in expanded_atoms and nb.GetAtomicNum() == 1:
                     all_atoms_to_move.append(nb_idx)
 
         # Apply the same rigid-body transform to all collected atoms.
@@ -1396,14 +1434,24 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
             new_pos = rot @ (pos - current_centroid) + target_centroid
             conf.SetAtomPosition(idx, new_pos.tolist())
 
-    # Reposition bridge atoms: non-ring, non-H atoms bonded to ring atoms that
-    # were moved (e.g., an O bridging two indenyl rings in an Fe complex).
-    # For each such atom, apply the rigid-body transform of each ring it touches
-    # and average the resulting positions.
-    bridge_new_positions: dict[int, list["np.ndarray"]] = {}
-    for i, (ring_atoms, old_positions) in enumerate(bonded_rings):
-        rot, current_centroid, target_centroid = ring_transforms[i]
-        for c_idx in ring_atoms:
+    # Reposition bridge atoms: non-ring, non-H atoms bonded to atoms in
+    # multiple repositioned ring systems (e.g., an O bridging two indenyl
+    # ligands in an ansa-bis-indenyl complex).
+    #
+    # Strategy: after the ring systems have been moved as rigid bodies, the
+    # ring atoms are already at their *new* positions.  For a bridge atom (O)
+    # bonded to ring atom C1 (now at C1_new) and ring atom C8 (now at
+    # C8_new), the most geometrically sensible placement is the midpoint of
+    # C1_new and C8_new.  This is preferable to transform-averaging of the
+    # ETKDG position because the ETKDG position of O is unrelated to the
+    # repositioned ring geometry.
+    #
+    # We iterate over the FULL expanded ring systems (not just the 5/6-membered
+    # coordinating rings) because bridge atoms may be bonded to non-junction
+    # ring carbons in fused ring systems.
+    bridge_neighbor_positions: dict[int, list["np.ndarray"]] = {}
+    for expanded_atoms in expanded_ring_systems:
+        for c_idx in expanded_atoms:
             for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
                 nb_idx = nb.GetIdx()
                 if nb_idx in all_ring_atom_idxs:
@@ -1412,19 +1460,21 @@ def _reposition_rings_and_metal(mol: Chem.Mol, metal_idxs: set[int]) -> Chem.Mol
                     continue
                 if nb_idx == metal_idx:
                     continue
-                # Bridge/pendant heavy atom: compute its position under this ring's transform.
-                pos_old = np.array(list(conf.GetAtomPosition(nb_idx)))
-                pos_new = rot @ (pos_old - current_centroid) + target_centroid
-                bridge_new_positions.setdefault(nb_idx, []).append(pos_new)
+                # Record the CURRENT (already repositioned) position of the
+                # ring atom bonded to this bridge/pendant atom.
+                c_pos_new = np.array(list(conf.GetAtomPosition(c_idx)))
+                bridge_neighbor_positions.setdefault(nb_idx, []).append(
+                    c_pos_new
+                )
 
-    for nb_idx, new_positions in bridge_new_positions.items():
-        if len(new_positions) > 1:
-            # Only move atoms bonded to atoms from multiple rings (true bridges,
-            # e.g., an O atom bridging two indenyl η5-ring systems).  Atoms
-            # adjacent to only one ring are left at their ETKDG positions to
-            # avoid disconnecting fused-ring fragments (e.g., the benzene part
-            # of an indenyl ligand) from their own ring system.
-            avg_pos = np.mean(new_positions, axis=0)
+    for nb_idx, neighbor_positions in bridge_neighbor_positions.items():
+        if len(neighbor_positions) > 1:
+            # True bridge atom: bonded to ring atoms from ≥2 different ring
+            # systems.  Place at the centroid of those ring atoms' new
+            # positions.  This gives a geometrically reasonable starting point
+            # for subsequent MMFF optimisation (e.g., for an ansa-O bridge the
+            # C-O-C angle and C-O bond length will be refined by MMFF).
+            avg_pos = np.mean(neighbor_positions, axis=0)
             conf.SetAtomPosition(nb_idx, avg_pos.tolist())
 
     conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
