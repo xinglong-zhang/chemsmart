@@ -2299,13 +2299,15 @@ class TestCDXFile:
         assert isinstance(molecules, list)
         assert len(molecules) == 7
 
-        # Test molecule 0: Ti(Cp)₂ - titanocene bis-cyclopentadienyl complex.
-        # Phantom atoms from ChemDraw MultiAttachment nodes are removed; the
-        # formula is the bare metallocene without extraneous CH₃ groups.
+        # Test molecule 0: Ti(Cp)₂Me₂ - titanocene dimethyl complex.
+        # The two methyl groups bonded to Ti are now correctly preserved.
+        # MultiAttachment phantom atoms (ChemDraw η5-hapticity stubs) are
+        # removed at the XML level before RDKit parsing, so the real Ti–Me
+        # bonds remain intact.
         mol = molecules[0]
         assert isinstance(mol, Molecule)
-        assert mol.chemical_formula == "C10H10Ti"
-        assert mol.num_atoms == 21
+        assert mol.chemical_formula == "C12H16Ti"
+        assert mol.num_atoms == 29
         assert mol.is_ring
 
         # Test molecule 1: Ni(Cp)₂Cl₂ - nickel bis-Cp with two chloride ligands.

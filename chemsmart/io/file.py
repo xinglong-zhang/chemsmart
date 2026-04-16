@@ -8,7 +8,6 @@ from chemsmart.utils.io import (
     _reposition_rings_and_metal,
     attach_eta_bonds_for_arene_rings,
     attach_eta_bonds_for_cp_rings,
-    remove_phantom_metal_carbons,
 )
 from chemsmart.utils.mixins import FileMixin
 
@@ -109,11 +108,31 @@ class CDXFile(FileMixin):
             logger.debug(
                 f"Generating rdkit mols from {self.filename} using RDKit"
             )
-            rdkit_mols = list(
-                Chem.MolsFromCDXMLFile(
-                    self.filename, sanitize=False, removeHs=False
+            if suffix == ".cdxml":
+                # Preprocess CDXML to remove MultiAttachment phantom atoms
+                # BEFORE RDKit reads the file.  ChemDraw represents η5/η6
+                # hapticity with NodeType="MultiAttachment" nodes connected to
+                # the metal via Display="Dash" bonds.  RDKit turns each such
+                # node into a regular carbon atom, producing spurious CH₃
+                # groups and masking real substituents (e.g. Ti–Me groups).
+                # Removing them at the XML level keeps genuine ligands intact.
+                logger.debug(
+                    f"Preprocessing CDXML to remove MultiAttachment nodes: {self.filename}"
                 )
-            )
+                cleaned_cdxml = CDXFile._preprocess_cdxml_remove_multi_attachments(
+                    self.filename
+                )
+                rdkit_mols = list(
+                    Chem.MolsFromCDXML(
+                        cleaned_cdxml, sanitize=False, removeHs=False
+                    )
+                )
+            else:
+                rdkit_mols = list(
+                    Chem.MolsFromCDXMLFile(
+                        self.filename, sanitize=False, removeHs=False
+                    )
+                )
         except Exception as e:
             logger.debug(
                 f"RDKit MolsFromCDXMLFile failed for {self.filename}: {e}"
@@ -226,15 +245,6 @@ class CDXFile(FileMixin):
         rdkit_mol = normalize_metal_bonds(rdkit_mol)
 
         if has_metals:
-            # Remove phantom terminal carbon atoms introduced by ChemDraw's
-            # MultiAttachment nodes or drawing-artifact "leg" atoms.  RDKit
-            # reads these as CH₃ groups bonded to the metal, but they have no
-            # chemical meaning.  Must be done before ring-attachment so that
-            # the metal is free to be connected to the ring fragments.
-            logger.debug(f"Remove phantom metal carbons in {rdkit_mol}.")
-            rdkit_mol, metal_idxs = remove_phantom_metal_carbons(
-                rdkit_mol, metal_idxs
-            )
             # Add ONE bond from the metal to each isolated 5-membered Cp ring
             # and each isolated 6-membered arene ring.  This also dearomatizes
             # the Cp ring with alternating single/double bonds so every ring
@@ -361,6 +371,28 @@ class CDXFile(FileMixin):
                     logger.debug(
                         f"Combining metal fragment {i} with {len(ligands)} ligand(s)"
                     )
+                    # Remove degree-1 carbon stub atoms from the small metal
+                    # fragment before combining.  ChemDraw sometimes draws
+                    # η5/η6 complexes as a small metal fragment (M + 2 C stubs)
+                    # plus separate ring fragments.  The C stubs are drawing
+                    # artefacts representing the bond direction to the ring
+                    # centroid; they are not real atoms and must be removed so
+                    # that attach_eta_bonds_for_{cp,arene}_rings can later
+                    # attach the metal directly to the ring atoms.
+                    stub_idxs = [
+                        nbr.GetIdx()
+                        for a in mol.GetAtoms()
+                        if a.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+                        for nbr in a.GetNeighbors()
+                        if nbr.GetAtomicNum() == 6 and nbr.GetDegree() == 1
+                    ]
+                    if stub_idxs:
+                        rw = Chem.RWMol(mol)
+                        for idx in sorted(set(stub_idxs), reverse=True):
+                            rw.RemoveAtom(idx)
+                        mol = rw.GetMol()
+                        mol.UpdatePropertyCache(strict=False)
+
                     combined = Chem.CombineMols(mol, ligands[0])
                     for k in range(1, len(ligands)):
                         combined = Chem.CombineMols(combined, ligands[k])
@@ -378,6 +410,75 @@ class CDXFile(FileMixin):
                 i += 1
 
         return combined_mols
+
+    @staticmethod
+    def _preprocess_cdxml_remove_multi_attachments(filepath):
+        """
+        Read a CDXML file and return the XML content with all
+        ``NodeType="MultiAttachment"`` atoms and their connecting bonds removed.
+
+        ChemDraw uses ``MultiAttachment`` nodes to represent η5/η6 hapticity
+        in structures like metallocenes.  These phantom atoms are connected to
+        the metal via ``Display="Dash"`` bonds and carry no chemical meaning.
+        When RDKit reads them as regular carbon atoms it produces spurious CH₃
+        groups *and* masks real substituents bonded to the metal (e.g. the two
+        Ti–Me groups in TiCp₂Me₂).
+
+        Removing the phantom atoms at the XML level—before any RDKit
+        processing—preserves every genuine ligand while leaving the ring atoms
+        as isolated (disconnected) components inside the same CDXML fragment.
+        ``attach_eta_bonds_for_cp_rings`` / ``attach_eta_bonds_for_arene_rings``
+        then reconnect the metal to the rings in the correct η5/η6 fashion.
+
+        Args:
+            filepath (str): Path to the CDXML file.
+
+        Returns:
+            str: Modified CDXML content as a string (DOCTYPE declaration
+            stripped, which is acceptable for ``Chem.MolsFromCDXML``).
+        """
+        import io
+        import xml.etree.ElementTree as ET
+
+        tree = ET.parse(filepath)
+        root = tree.getroot()
+
+        for frag in root.iter("fragment"):
+            # Collect IDs of MultiAttachment atoms in this fragment.
+            multi_ids: set[str] = set()
+            nodes_to_remove = []
+            for child in list(frag):
+                if (
+                    child.tag == "n"
+                    and child.get("NodeType") == "MultiAttachment"
+                ):
+                    node_id = child.get("id")
+                    if node_id:
+                        multi_ids.add(node_id)
+                    nodes_to_remove.append(child)
+
+            if not multi_ids:
+                continue
+
+            # Collect bonds that reference any MultiAttachment atom.
+            bonds_to_remove = [
+                child
+                for child in list(frag)
+                if child.tag == "b"
+                and (
+                    child.get("B") in multi_ids
+                    or child.get("E") in multi_ids
+                )
+            ]
+
+            for node in nodes_to_remove:
+                frag.remove(node)
+            for bond in bonds_to_remove:
+                frag.remove(bond)
+
+        buf = io.StringIO()
+        tree.write(buf, encoding="unicode", xml_declaration=False)
+        return buf.getvalue()
 
     def get_molecules(self, index="-1", return_list=False):
         """
