@@ -263,6 +263,32 @@ From RDKit Mol
    # Convert to Chemsmart Molecule
    molecule = Molecule.from_rdkit_mol(rdkit_mol)
 
+Aromaticity Detection (``is_aromatic``)
+---------------------------------------
+
+The ``is_aromatic`` property detects aromaticity by converting the molecule to an RDKit representation and checking
+whether any atom both carries the aromatic flag **and** belongs to a ring. This guards against false positives in
+acyclic molecules (e.g. H₂O, MgI₂) that can arise when the geometry-based bond-order heuristic assigns a bond order of
+1.5 to short single bonds.
+
+.. note::
+
+   **Known limitations of aromaticity detection:**
+
+   -  Bond orders are inferred purely from 3D geometry (interatomic distances), not from an electronic structure
+      calculation. This means the detection is **model-dependent** and may not match formal aromaticity criteria in all
+      cases.
+
+   -  **Edge cases** such as the cyclopropenyl cation (aromatic) versus the cyclopropenyl radical (non-aromatic) may not
+      be distinguished correctly, because the outcome depends on how bond orders and electron counts are assigned from
+      the geometry alone.
+
+   -  For borderline or unusual systems (strained rings, metal-organic frameworks, non-Kekulé structures, etc.) the
+      result should be treated as a heuristic estimate rather than a definitive answer.
+
+   -  If precise aromaticity information is required, consider constructing the RDKit molecule directly from a SMILES
+      string or from an output file that encodes explicit bond orders.
+
 From Pymatgen
 =============
 
