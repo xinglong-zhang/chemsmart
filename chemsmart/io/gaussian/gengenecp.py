@@ -173,8 +173,8 @@ class GenGenECPSection:
 
     @staticmethod
     def _fallback_genecp_heavy_basis_section(
-        heavy_elements, heavy_elements_basis
-    ):
+        heavy_elements: list[str], heavy_elements_basis: str
+    ) -> str:
         return " ".join(heavy_elements) + " 0\n" + f"{heavy_elements_basis}\n"
 
     @classmethod

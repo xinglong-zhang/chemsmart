@@ -8,7 +8,7 @@ from chemsmart.utils.utils import two_files_have_similar_contents
 
 
 class TestGaussianGenGenECP:
-    def test_genecp_fallback_when_basis_missing_from_bse(self):
+    def test_genecp_fallback_when_basis_missing_from_bse(self, caplog):
         genecp_section = GenGenECPSection.from_bse_api(
             light_elements=["H", "C", "N", "O", "P", "Cl"],
             light_elements_basis="6-31G*",
@@ -21,6 +21,9 @@ class TestGaussianGenGenECP:
         assert genecp_section.string_list[2] == "****"
         assert genecp_section.string_list[3] == "Pd 0"
         assert genecp_section.string_list[4] == "nonexistent-basis-for-test"
+        assert "Falling back to Gaussian basis keyword section format" in str(
+            caplog.messages
+        )
 
     def test_genecp_from_base_api(
         self, tmpdir, reference_genecp_txt_file_from_api
