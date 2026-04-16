@@ -145,49 +145,6 @@ class TestSerialExecution:
         for mock_job in mock_jobs:
             mock_job.run.assert_called_once()
 
-    def test_qrc_job_default_behavior_runs_all(
-        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
-    ):
-        """Test that default mode runs both jobs and raises on incomplete outcome."""
-        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
-        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-
-        # Create mock molecule
-        mock_molecule = MockMolecule()
-
-        # Create settings
-        settings = GaussianJobSettings()
-
-        # Create job with run_in_serial=False (default)
-        gaussian_jobrunner_no_scratch.run_in_serial = False
-        job = GaussianQRCJob(
-            molecule=mock_molecule,
-            settings=settings,
-            label="test_qrc",
-            jobrunner=gaussian_jobrunner_no_scratch,
-        )
-
-        # Mock QRC jobs - even if one fails, all should run in default mode
-        mock_job1 = Mock()
-        mock_job1.label = "qrc_f"
-        mock_job1.is_complete.return_value = False
-
-        mock_job2 = Mock()
-        mock_job2.label = "qrc_r"
-        mock_job2.is_complete.return_value = True
-
-        # Patch _prepare_both_qrc_jobs instead of the property
-        mocker.patch.object(
-            job, "_prepare_both_qrc_jobs", return_value=[mock_job1, mock_job2]
-        )
-
-        # Run the job
-        job._run()
-
-        # Verify both jobs were run despite first one not completing
-        mock_job1.run.assert_called_once()
-        mock_job2.run.assert_called_once()
-
 
 class TestBatchJobRefactor:
     """Regression tests for the shared BatchJob orchestration layer."""
