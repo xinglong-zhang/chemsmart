@@ -175,7 +175,26 @@ class GenGenECPSection:
     def _fallback_genecp_heavy_basis_section(
         heavy_elements: list[str], heavy_elements_basis: str
     ) -> str:
-        return " ".join(heavy_elements) + " 0\n" + f"{heavy_elements_basis}\n"
+        heavy_basis_section = (
+            " ".join(heavy_elements)
+            + " 0\n"
+            + f"{heavy_elements_basis}\n"
+            + "****\n"
+        )
+
+        ecp_elements = [
+            element for element in heavy_elements if pt.requires_ecp(element)
+        ]
+        if not ecp_elements:
+            return heavy_basis_section
+
+        return (
+            heavy_basis_section
+            + "\n"
+            + " ".join(ecp_elements)
+            + " 0\n"
+            + f"{heavy_elements_basis}\n"
+        )
 
     @classmethod
     def from_bse_api(
