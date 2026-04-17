@@ -24,6 +24,14 @@ CHEMICAL_ABBREVIATIONS = {
     "Ms": "S(=O)(=O)C",  # Mesyl
     "Tf": "S(=O)(=O)C(F)(F)F",  # Triflyl
     "Cy": "C1CCCCC1",  # Cyclohexyl
+    "OMe": "OC",  # Methoxy
+    "OEt": "OCC",  # Ethoxy
+    "NMe2": "N(C)C",  # Dimethylamino
+    "CF3": "C(F)(F)F",  # Trifluoromethyl
+    "NO2": "N(=O)=O",  # Nitro
+    "Boc": "C(=O)OC(C)(C)C",  # tert-Butoxycarbonyl
+    "Cbz": "C(=O)OCc1ccccc1",  # Benzyloxycarbonyl
+    "Fmoc": "C(=O)OCC1c2ccccc2-c2ccccc21",  # Fluorenylmethyloxycarbonyl
 }
 
 # Dash characters commonly used in chemical drawings

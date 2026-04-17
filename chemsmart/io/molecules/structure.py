@@ -1090,6 +1090,7 @@ class Molecule:
         # Detect abbreviations using OCR if available
         detected_abbrevs = {}
         detected_text = ""
+        normalized_detected_text = ""
         if has_ocr:
             try:
                 # Use OCR to detect text in the image
@@ -1099,10 +1100,25 @@ class Molecule:
                 )
                 logger.debug(f"OCR detected text: {detected_text}")
 
+                normalized_detected_text = re.sub(r"\s+", "", detected_text)
+                for dash in DASH_CHARACTERS[1:]:
+                    normalized_detected_text = normalized_detected_text.replace(
+                        dash, DASH_CHARACTERS[0]
+                    )
+                normalized_detected_text_upper = normalized_detected_text.upper()
+
                 # Check for known abbreviations in the detected text
                 for abbrev, smiles in CHEMICAL_ABBREVIATIONS.items():
-                    # Case-sensitive match for chemical abbreviations
-                    if abbrev in detected_text:
+                    # OCR can alter case or add spacing (e.g. "A d—SH")
+                    # so check both original and compact normalized text.
+                    abbrev_pattern = re.compile(
+                        rf"(?<![A-Za-z0-9]){re.escape(abbrev)}(?![A-Za-z0-9])",
+                        re.IGNORECASE,
+                    )
+                    if (
+                        abbrev_pattern.search(detected_text)
+                        or abbrev.upper() in normalized_detected_text_upper
+                    ):
                         detected_abbrevs[abbrev] = smiles
                         logger.info(
                             f"Detected abbreviation '{abbrev}' in image"
@@ -1137,9 +1153,16 @@ class Molecule:
         # If DECIMER fails or returns suspicious results when abbreviations are detected
         # (DECIMER typically fails with abbreviations), try to construct SMILES manually
         decimer_failed = smiles is None or not smiles.strip()
+        has_explicit_ad_sh = bool(
+            normalized_detected_text
+            and re.search(
+                r"AD-?SH", normalized_detected_text.upper()
+            )
+        )
         should_use_abbrev = detected_abbrevs and (
             decimer_failed
             or (smiles and len(smiles) < MIN_VALID_SMILES_LENGTH)
+            or has_explicit_ad_sh
         )
 
         if should_use_abbrev:
@@ -1155,7 +1178,11 @@ class Molecule:
             # For simple cases like "Ad-SH", we can combine parts
             if detected_text:
                 # Simple heuristic: if we detected abbreviations, try common patterns
-                text_upper = detected_text.upper()
+                text_upper = (
+                    normalized_detected_text.upper()
+                    if normalized_detected_text
+                    else detected_text.upper()
+                )
 
                 # Pattern: Ad-SH (adamantyl thiol)
                 # Note: The dash might be a hyphen (-), en-dash (–), or em-dash (—)

@@ -1,4 +1,6 @@
 import os
+import sys
+import types
 from filecmp import cmp
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.file import CDXFile
 from chemsmart.io.gaussian.input import Gaussian16Input
+from chemsmart.io.molecules import CHEMICAL_ABBREVIATIONS
 from chemsmart.io.molecules.structure import (
     CoordinateBlock,
     Molecule,
@@ -2689,6 +2692,50 @@ class TestCXSMILES:
 
 
 class TestStructuresFromImage:
+    def test_read_molecule_from_image_with_spaced_uppercase_abbreviation(
+        self, tmp_path, monkeypatch
+    ):
+        image_path = tmp_path / "ad_sh.png"
+        image_path.write_bytes(b"placeholder")
+
+        fake_cv2 = types.SimpleNamespace(
+            IMREAD_GRAYSCALE=0,
+            INTER_CUBIC=0,
+            THRESH_BINARY=0,
+            THRESH_OTSU=0,
+            imread=lambda *_args, **_kwargs: np.ones((8, 8), dtype=np.uint8),
+            resize=lambda img, *_args, **_kwargs: img,
+            threshold=lambda img, *_args, **_kwargs: (0, img),
+            imwrite=lambda path, *_args, **_kwargs: Path(path).write_bytes(b"x")
+            or True,
+        )
+        monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+        monkeypatch.setitem(
+            sys.modules,
+            "DECIMER",
+            types.SimpleNamespace(predict_SMILES=lambda *_args, **_kwargs: "CCCC"),
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "pytesseract",
+            types.SimpleNamespace(
+                image_to_string=lambda *_args, **_kwargs: "A d—SH"
+            ),
+        )
+        monkeypatch.setattr(
+            Molecule,
+            "from_smiles",
+            classmethod(lambda _cls, smiles: smiles),
+        )
+
+        result = Molecule._read_image_file(str(image_path))
+
+        assert result == CHEMICAL_ABBREVIATIONS["Ad"] + "S"
+
+    def test_chemical_abbreviations_include_common_groups(self):
+        for abbreviation in ("OMe", "OEt", "NMe2", "CF3", "NO2", "Boc", "Cbz", "Fmoc"):
+            assert abbreviation in CHEMICAL_ABBREVIATIONS
+
     def test_read_molecule_from_image_file1(self, thiol1_image):
         """Test reading a molecule from an image file thiol1."""
         # Read molecule from image
