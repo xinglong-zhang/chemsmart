@@ -23,7 +23,7 @@ dependencies = [
     "filelock",
     "joblib==1.4.2",
     "networkx==3.4.2",
-    "numpy~=1.26.4",  # rdkit works with numpy 1.x not 2.x
+    "numpy~=1.26.4",  # rdkit and pymol require numpy 1.x
     "pytest==8.3.4",
     "pyyaml",
     "pymatgen==2025.10.7",
@@ -38,6 +38,7 @@ dependencies = [
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
     "pytest_mock>=3.14.0",
+    "spyrmsd>=0.8.0",
     "lockfile>=0.12.2",
     "contextlib2>=21.6.0",
     "pillow>=12.1.1",
