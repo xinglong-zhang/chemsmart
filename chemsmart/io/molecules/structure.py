@@ -16,7 +16,13 @@ from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
-from chemsmart.io.molecules import get_bond_cutoff
+from chemsmart.io.molecules import (
+    CHEMICAL_ABBREVIATIONS,
+    DASH_CHARACTERS,
+    MIN_VALID_SMILES_LENGTH,
+    SUBSTITUENT_MAPPING,
+    get_bond_cutoff,
+)
 from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
@@ -24,42 +30,6 @@ from chemsmart.utils.utils import file_cache, string2index_1based
 p = pt()
 
 logger = logging.getLogger(__name__)
-
-# Common chemical abbreviations and their SMILES representations
-# Used for expanding abbreviations in chemical structure images
-_CHEMICAL_ABBREVIATIONS = {
-    "Ad": "C1C2CC3CC1CC(C2)C3",  # Adamantyl (1-adamantyl)
-    "Ph": "c1ccccc1",  # Phenyl
-    "Me": "C",  # Methyl
-    "Et": "CC",  # Ethyl
-    "nPr": "CCC",  # n-Propyl
-    "iPr": "C(C)C",  # Isopropyl
-    "Bu": "CCCC",  # Butyl
-    "iBu": "CC(C)C",  # Isobutyl
-    "sBu": "C(C)CC",  # sec-Butyl
-    "tBu": "C(C)(C)C",  # tert-Butyl
-    "Bn": "Cc1ccccc1",  # Benzyl
-    "Ac": "C(=O)C",  # Acetyl
-    "Bz": "C(=O)c1ccccc1",  # Benzoyl
-    "Ts": "S(=O)(=O)c1ccc(C)cc1",  # Tosyl
-    "Ms": "S(=O)(=O)C",  # Mesyl
-    "Tf": "S(=O)(=O)C(F)(F)F",  # Triflyl
-    "Cy": "C1CCCCC1",  # Cyclohexyl
-}
-
-# Dash characters commonly used in chemical drawings
-_DASH_CHARACTERS = ["-", "–", "—"]  # hyphen, en-dash, em-dash
-
-# Minimum length for a valid SMILES string
-_MIN_VALID_SMILES_LENGTH = 3
-
-# Mapping of functional group text to SMILES atom
-_SUBSTITUENT_MAPPING = {
-    "SH": "S",  # Thiol
-    "OH": "O",  # Hydroxyl
-    "NH2": "N",  # Amine
-    "NH₂": "N",  # Amine (with subscript)
-}
 
 
 class Molecule:
@@ -1130,7 +1100,7 @@ class Molecule:
                 logger.debug(f"OCR detected text: {detected_text}")
 
                 # Check for known abbreviations in the detected text
-                for abbrev, smiles in _CHEMICAL_ABBREVIATIONS.items():
+                for abbrev, smiles in CHEMICAL_ABBREVIATIONS.items():
                     # Case-sensitive match for chemical abbreviations
                     if abbrev in detected_text:
                         detected_abbrevs[abbrev] = smiles
@@ -1169,7 +1139,7 @@ class Molecule:
         decimer_failed = smiles is None or not smiles.strip()
         should_use_abbrev = detected_abbrevs and (
             decimer_failed
-            or (smiles and len(smiles) < _MIN_VALID_SMILES_LENGTH)
+            or (smiles and len(smiles) < MIN_VALID_SMILES_LENGTH)
         )
 
         if should_use_abbrev:
@@ -1196,12 +1166,12 @@ class Molecule:
                     )
                 # Pattern: Ph-X (phenyl with substituent)
                 elif "Ph" in detected_abbrevs and any(
-                    sep in detected_text for sep in _DASH_CHARACTERS
+                    sep in detected_text for sep in DASH_CHARACTERS
                 ):
                     # Try to get the substituent by splitting on the first dash found
                     # Note: We only handle simple cases with one dash
                     parts = []
-                    for sep in _DASH_CHARACTERS:
+                    for sep in DASH_CHARACTERS:
                         if sep in detected_text:
                             parts = detected_text.split(
                                 sep, 1
@@ -1210,10 +1180,10 @@ class Molecule:
                     if len(parts) == 2:
                         substituent = parts[1].strip().upper()
                         # Map common substituents using the predefined mapping
-                        if substituent in _SUBSTITUENT_MAPPING:
+                        if substituent in SUBSTITUENT_MAPPING:
                             constructed_smiles = (
                                 detected_abbrevs["Ph"]
-                                + _SUBSTITUENT_MAPPING[substituent]
+                                + SUBSTITUENT_MAPPING[substituent]
                             )
                 # If we have an abbreviation but couldn't construct, use it as-is
                 elif len(detected_abbrevs) == 1:
