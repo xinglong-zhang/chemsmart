@@ -31,6 +31,18 @@ p = pt()
 
 logger = logging.getLogger(__name__)
 
+ABBREVIATION_PATTERNS = {
+    abbrev: re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(abbrev)}(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    for abbrev in CHEMICAL_ABBREVIATIONS
+}
+
+EXPLICIT_ABBREVIATION_PATTERNS = (
+    re.compile(r"AD-?SH"),
+)
+
 
 class Molecule:
     """Class to represent a molcular structure.
@@ -1101,22 +1113,22 @@ class Molecule:
                 logger.debug(f"OCR detected text: {detected_text}")
 
                 normalized_detected_text = re.sub(r"\s+", "", detected_text)
-                for dash in DASH_CHARACTERS[1:]:
-                    normalized_detected_text = normalized_detected_text.replace(
-                        dash, DASH_CHARACTERS[0]
-                    )
+                canonical_dash = DASH_CHARACTERS[0]
+                normalized_detected_text = re.sub(
+                    r"["
+                    + re.escape("".join(DASH_CHARACTERS[1:]))
+                    + r"]",
+                    canonical_dash,
+                    normalized_detected_text,
+                )
                 normalized_detected_text_upper = normalized_detected_text.upper()
 
                 # Check for known abbreviations in the detected text
                 for abbrev, smiles in CHEMICAL_ABBREVIATIONS.items():
                     # OCR can alter case or add spacing (e.g. "A d—SH")
                     # so check both original and compact normalized text.
-                    abbrev_pattern = re.compile(
-                        rf"(?<![A-Za-z0-9]){re.escape(abbrev)}(?![A-Za-z0-9])",
-                        re.IGNORECASE,
-                    )
                     if (
-                        abbrev_pattern.search(detected_text)
+                        ABBREVIATION_PATTERNS[abbrev].search(detected_text)
                         or abbrev.upper() in normalized_detected_text_upper
                     ):
                         detected_abbrevs[abbrev] = smiles
@@ -1155,8 +1167,10 @@ class Molecule:
         decimer_failed = smiles is None or not smiles.strip()
         has_explicit_ad_sh = bool(
             normalized_detected_text
-            and re.search(
-                r"AD-?SH", normalized_detected_text.upper()
+            and any(
+                # OCR sometimes drops the dash entirely, so support AD-SH and ADSH.
+                pattern.search(normalized_detected_text.upper())
+                for pattern in EXPLICIT_ABBREVIATION_PATTERNS
             )
         )
         should_use_abbrev = detected_abbrevs and (
@@ -1179,10 +1193,10 @@ class Molecule:
             if detected_text:
                 # Simple heuristic: if we detected abbreviations, try common patterns
                 text_upper = (
-                    normalized_detected_text.upper()
+                    normalized_detected_text
                     if normalized_detected_text
-                    else detected_text.upper()
-                )
+                    else detected_text
+                ).upper()
 
                 # Pattern: Ad-SH (adamantyl thiol)
                 # Note: The dash might be a hyphen (-), en-dash (–), or em-dash (—)

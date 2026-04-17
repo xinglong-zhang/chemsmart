@@ -2698,7 +2698,7 @@ class TestStructuresFromImage:
         image_path = tmp_path / "ad_sh.png"
         image_path.write_bytes(b"placeholder")
 
-        fake_cv2 = types.SimpleNamespace(
+        mock_cv2 = types.SimpleNamespace(
             IMREAD_GRAYSCALE=0,
             INTER_CUBIC=0,
             THRESH_BINARY=0,
@@ -2709,7 +2709,7 @@ class TestStructuresFromImage:
             imwrite=lambda path, *_args, **_kwargs: Path(path).write_bytes(b"x")
             or True,
         )
-        monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+        monkeypatch.setitem(sys.modules, "cv2", mock_cv2)
         monkeypatch.setitem(
             sys.modules,
             "DECIMER",
@@ -2733,8 +2733,18 @@ class TestStructuresFromImage:
         assert result == CHEMICAL_ABBREVIATIONS["Ad"] + "S"
 
     def test_chemical_abbreviations_include_common_groups(self):
-        for abbreviation in ("OMe", "OEt", "NMe2", "CF3", "NO2", "Boc", "Cbz", "Fmoc"):
-            assert abbreviation in CHEMICAL_ABBREVIATIONS
+        expected_abbreviations = {
+            "OMe": "OC",
+            "OEt": "OCC",
+            "NMe2": "N(C)C",
+            "CF3": "C(F)(F)F",
+            "NO2": "N(=O)=O",
+            "Boc": "C(=O)OC(C)(C)C",
+            "Cbz": "C(=O)OCc1ccccc1",
+            "Fmoc": "C(=O)OCC1c2ccccc2-c2ccccc21",
+        }
+        for abbreviation, smiles in expected_abbreviations.items():
+            assert CHEMICAL_ABBREVIATIONS[abbreviation] == smiles
 
     def test_read_molecule_from_image_file1(self, thiol1_image):
         """Test reading a molecule from an image file thiol1."""
