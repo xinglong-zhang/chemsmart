@@ -104,9 +104,9 @@ Trajectory Options
       -  string
       -  Job type: opt, ts, modred, scan, sp (required)
 
-   -  -  ``-nc, --num-structures-to-run``
+   -  -  ``-ns, --num-structures-to-run``
       -  int
-      -  Number of unique structures to process
+      -  Number of structures from the end of trajectory to process
 
    -  -  ``-x, --proportion-structures-to-use``
       -  float

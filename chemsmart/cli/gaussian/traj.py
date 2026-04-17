@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 @click_grouper_common_options
 @click_grouper_sub_options
 @click.option(
-    "-nc",
-    "--num-confs-to-run",
+    "-ns",
+    "--num-structures-to-run",
     type=int,
     default=None,
-    help="Number of lowest-energy conformers to submit for calculation. "
-    "If not specified, all conformers will be submitted.",
+    help="Number of structures from the end of trajectory to submit "
+    "for calculation. If not specified, all conformers will be submitted.",
 )
 @click.option(
     "-x",
@@ -58,16 +58,16 @@ def traj(
     fingerprint_type,
     use_weights,
     max_dev,
-    num_confs_to_run,
+    num_structures_to_run,
     proportion_structures_to_use,
     **kwargs,
 ):
     """CLI subcommand for running Gaussian set jobs."""
 
     # Validate mutual exclusivity of -g and -nc
-    if grouping_strategy is not None and num_confs_to_run is not None:
+    if grouping_strategy is not None and num_structures_to_run is not None:
         raise click.UsageError(
-            "Options -g/--grouping-strategy and -nc/--num-confs-to-run are mutually exclusive. "
+            "Options -g/--grouping-strategy and -ns/--num-structures-to-run are mutually exclusive. "
             "Use -g to group conformers, or -nc to select lowest-energy conformers, but not both."
         )
 
@@ -114,7 +114,7 @@ def traj(
         jobrunner=jobrunner,
         grouping_strategy=grouping_strategy,
         num_procs=num_procs,
-        num_structures_to_run=num_confs_to_run,
+        num_structures_to_run=num_structures_to_run,
         proportion_structures_to_use=proportion_structures_to_use,
         num_groups=num_groups,
         ignore_hydrogens=ignore_hydrogens,
