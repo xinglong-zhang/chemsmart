@@ -150,7 +150,7 @@ class GrouperJobRunner(JobRunner):
         Write grouping results following the same logic as utils/grouper.py unique() method.
 
         - Creates per-group xyz files with molecules sorted by energy
-        - Appends Groups summary to existing RMSD matrix excel file
+        - Collects representative molecules for downstream job state/output use
         """
         unique_molecules = []
         conformer_ids = (

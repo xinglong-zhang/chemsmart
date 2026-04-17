@@ -64,11 +64,11 @@ def traj(
 ):
     """CLI subcommand for running Gaussian set jobs."""
 
-    # Validate mutual exclusivity of -g and -nc
+    # Validate mutual exclusivity of -g and -ns
     if grouping_strategy is not None and num_structures_to_run is not None:
         raise click.UsageError(
             "Options -g/--grouping-strategy and -ns/--num-structures-to-run are mutually exclusive. "
-            "Use -g to group conformers, or -nc to select lowest-energy conformers, but not both."
+            "Use -g to group structures, or -ns to select number of structures, but not both."
         )
 
     # get jobrunner for running Gaussian set jobs
