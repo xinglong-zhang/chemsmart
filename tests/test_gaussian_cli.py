@@ -696,6 +696,72 @@ class TestGaussianCLIScanCommand:
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
 
+    def test_scan_multiple_coords_single_step_size_and_num_steps(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Multiple scan coordinates with a single step_size and num_steps broadcasts them."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2],[2,3]]",
+                "-s",
+                "-0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.modred["step_size"] == [-0.1, -0.1]
+        assert settings.modred["num_steps"] == [10, 10]
+
+    def test_scan_multiple_coords_explicit_step_size_and_num_steps(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Multiple scan coordinates with explicit per-coordinate step_size and num_steps."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2],[2,3]]",
+                "-s",
+                "[-0.1,-0.2]",
+                "-n",
+                "[10,15]",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.modred["step_size"] == [-0.1, -0.2]
+        assert settings.modred["num_steps"] == [10, 15]
+
 
 class TestGaussianCLICrestCommand:
     """CLI tests for the ``crest`` (conformer search) subcommand."""

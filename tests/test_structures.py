@@ -17,6 +17,7 @@ from chemsmart.io.molecules.structure import (
     Molecule,
     QMMMMolecule,
 )
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
@@ -493,6 +494,61 @@ class TestMoleculeAdvanced:
         assert rdkit_mol.GetNumConformers() == 1
         assert rdkit_mol.GetConformer().GetPositions().shape == (3, 3)
 
+    def test_is_aromatic_non_aromatic_molecules(self):
+        """Regression test: non-aromatic molecules must not be reported as aromatic.
+
+        Bond-order heuristics can assign order 1.5 to bonds like O-H or Mg-I,
+        which previously caused ``is_aromatic`` to return ``True`` for H2O and
+        MgI2.  The property must use ring membership to validate aromaticity.
+        """
+        # H2O – no rings at all
+        mol_h2o = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.119],
+                    [0.0, 0.757, -0.476],
+                    [0.0, -0.757, -0.476],
+                ]
+            ),
+        )
+        assert not mol_h2o.is_aromatic, "H2O must not be aromatic"
+
+        # MgI2 – linear, no rings
+        mol_mgi2 = Molecule(
+            symbols=["Mg", "I", "I"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]
+            ),
+        )
+        assert not mol_mgi2.is_aromatic, "MgI2 must not be aromatic"
+
+        # Benzene – should still be aromatic
+        import math
+
+        r_c, r_h = 1.39, 2.46
+        pos_c = [
+            [
+                r_c * math.cos(2 * math.pi * i / 6),
+                r_c * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        pos_h = [
+            [
+                r_h * math.cos(2 * math.pi * i / 6),
+                r_h * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        mol_benz = Molecule(
+            symbols=["C"] * 6 + ["H"] * 6,
+            positions=np.array(pos_c + pos_h),
+        )
+        assert mol_benz.is_aromatic, "Benzene must be aromatic"
+
     def test_molecule_graph_generation(self):
         """Test molecular graph creation with bond detection."""
         mol = Molecule(
@@ -552,6 +608,91 @@ class TestMoleculeAdvanced:
 
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
+
+    def test_to_ase_energy_unit_conversion(self):
+        """Test that to_ase() converts energy from Hartree to eV."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+
+    def test_to_ase_forces_unit_conversion(self):
+        """Test that to_ase() converts forces from Hartree/Bohr to eV/Å."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(
+            ase_atoms.forces,
+            expected_forces_ev_per_angstrom,
+            rtol=1e-5,
+        )
+
+    def test_to_ase_none_energy_and_forces(self):
+        """Test that to_ase() preserves None for energy and forces."""
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        assert ase_atoms.forces is None
+
+    def test_to_ase_none_energy_with_forces(self):
+        """Test that to_ase() converts forces when energy is None."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(ase_atoms.forces, expected_forces_ev_per_angstrom)
+
+    def test_to_ase_energy_with_none_forces(self):
+        """Test that to_ase() converts energy when forces are None."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+        assert ase_atoms.forces is None
 
     def test_convert_ase_atoms_with_constraints_to_molecule(
         self, constrained_atoms
@@ -915,6 +1056,261 @@ class TestMoleculeAdvanced:
 
         assert len(distances) == 1
         assert np.isclose(distances[0], 1.0)
+
+    def test_to_pdb_conversion(self, single_molecule_xyz_file):
+        """Test conversion of Molecule to PDB format."""
+        # Load a molecule from XYZ file
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test to_pdb() method
+        pdb_string = mol.to_pdb()
+        assert isinstance(pdb_string, str)
+        assert len(pdb_string) > 0
+
+        # Check that PDB format contains expected elements
+        assert "HETATM" in pdb_string or "ATOM" in pdb_string
+        assert "END" in pdb_string
+
+        # Check that all atoms are represented in the PDB
+        lines = pdb_string.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_file(self, single_molecule_xyz_file, tmpdir):
+        """Test writing Molecule to PDB file."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write_pdb method
+        pdb_file = os.path.join(tmpdir, "test_molecule.pdb")
+        mol.write_pdb(pdb_file)
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+            assert "END" in content
+
+    def test_write_generic_method_with_pdb_format(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test generic write() method with PDB format."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write method with format='pdb'
+        pdb_file = os.path.join(tmpdir, "test_generic.pdb")
+        mol.write(pdb_file, format="pdb")
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+
+    def test_pdb_with_different_flavors(self, single_molecule_xyz_file):
+        """Test PDB conversion with different flavor options."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test with default flavor (with CONECT records)
+        pdb_default = mol.to_pdb(flavor=0)
+
+        # Test with flavor=2 (no CONECT records)
+        pdb_no_conect = mol.to_pdb(flavor=2)
+
+        # Both should contain atom records
+        assert "HETATM" in pdb_default or "ATOM" in pdb_default
+        assert "HETATM" in pdb_no_conect or "ATOM" in pdb_no_conect
+
+        # flavor=0 should have CONECT records (unless bonds fail), flavor=2 should not
+        # Note: CONECT might not be present if bonds fail and fallback is used
+        # So we just verify the PDB is valid
+        assert len(pdb_default) > 0
+        assert len(pdb_no_conect) > 0
+
+    def test_pdb_with_no_bonds(self, single_molecule_xyz_file):
+        """Test PDB conversion without bond detection."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test without bonds
+        pdb_no_bonds = mol.to_pdb(add_bonds=False)
+
+        assert isinstance(pdb_no_bonds, str)
+        assert len(pdb_no_bonds) > 0
+        assert "HETATM" in pdb_no_bonds or "ATOM" in pdb_no_bonds
+
+        # When bonds are not added, CONECT records will be empty
+        # We verify the PDB is valid without expecting specific CONECT content
+        lines = pdb_no_bonds.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_rejects_unexpected_keyword_argument(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test write_pdb rejects unexpected kwargs instead of ignoring them."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+        pdb_file = os.path.join(tmpdir, "unexpected_kwarg.pdb")
+
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            mol.write_pdb(pdb_file, unexpected_option=True)
+
+    def test_to_pdb_strict_columns_and_final_end_record(self):
+        """Test strict PDB 3.3 atom-column formatting and final END line."""
+        mol = Molecule(
+            symbols=["C", "Cl"],
+            positions=np.array([[0.0, 1.234, -2.5], [3.0, -4.0, 5.0]]),
+            info={
+                "record_type": ["HETATM", "ATOM"],
+                "atom_name": ["C1", "CL1"],
+                "residue_name": ["LIG", "SOL"],
+                "residue_number": [1, 2],
+                "chain_id": ["A", "B"],
+            },
+        )
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        lines = pdb_string.splitlines()
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 2
+        assert lines[-1] == "END"
+
+        first, second = atom_lines
+        assert first.startswith("HETATM")
+        assert second.startswith("ATOM  ")
+
+        # PDB v3.3 fixed columns (1-based): chainID=22, resSeq=23-26, element=77-78
+        assert first[21] == "A"
+        assert second[21] == "B"
+        assert first[22:26] == "   1"
+        assert second[22:26] == "   2"
+        assert first[76:78] == " C"
+        assert second[76:78] == "Cl"
+
+        # Ensure standard atom-record width is preserved.
+        assert len(first) >= 78
+        assert len(second) >= 78
+
+    def test_to_pdb_uses_molecule_attributes_for_chain_and_residue_metadata(
+        self,
+    ):
+        """Test chain/residue metadata taken directly from Molecule attributes."""
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+        )
+        mol.chain_ids = ["A", "A", "A"]
+        mol.residue_numbers = [7, 7, 7]
+        mol.residue_names = ["HOH", "HOH", "HOH"]
+        mol.atom_names = ["O", "H1", "H2"]
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        atom_lines = [
+            line
+            for line in pdb_string.splitlines()
+            if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 3
+        for line, element in zip(atom_lines, ["O", "H", "H"]):
+            assert line[17:20] == "HOH"
+            assert line[21] == "A"
+            assert line[22:26] == "   7"
+            assert line[76:78] == f"{element:>2}"
+
+    def test_from_pdb_file_preserves_atom_and_residue_metadata(self, tmpdir):
+        """Test native PDB import preserves atom names and residue metadata."""
+        pdb_content = (
+            "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+            "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+            "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "water.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert mol.symbols == ["O", "H", "H"]
+        assert mol.atom_names == ["O", "H1", "H2"]
+        assert mol.residue_names == ["HOH", "HOH", "HOH"]
+        assert mol.residue_numbers == [7, 7, 7]
+        assert mol.chain_ids == ["A", "A", "A"]
+        assert np.allclose(
+            mol.positions,
+            np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        )
+
+    def test_infer_pdb_element_from_uppercase_atom_names(self):
+        """Test uppercase PDB atom names can still infer two-letter elements."""
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+        assert PDBFile._infer_element_from_atom_name("ZN") == "Zn"
+        assert PDBFile._infer_element_from_atom_name("CL") == "Cl"
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
+
+    def test_from_pdb_file_infers_uppercase_two_letter_elements_when_blank(
+        self, tmpdir
+    ):
+        """Test blank PDB element columns fall back to uppercase atom-name inference."""
+        pdb_content = (
+            "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+            "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "blank_elements.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert list(mol.symbols) == ["Fe", "Zn", "Cl", "C"]
+        assert mol.atom_names == ["FE", "ZN", "CL", "CA"]
+        assert mol.residue_names == ["HEM", "ZN", "CL", "ALA"]
+
+    def test_from_pdb_file_supports_model_index_selection(self, tmpdir):
+        """Test PDB MODEL/ENDMDL parsing and index selection."""
+        pdb_content = (
+            "MODEL        1\n"
+            "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "MODEL        2\n"
+            "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "models.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        models = Molecule.from_filepath(pdb_file, index=":", return_list=True)
+        assert len(models) == 2
+        assert models[0].chain_ids == ["A"]
+        assert models[1].chain_ids == ["B"]
+
+        last_model = Molecule.from_filepath(pdb_file, index="-1")
+        assert np.allclose(last_model.positions, np.array([[1.5, 2.5, 3.5]]))
+        assert last_model.residue_numbers == [2]
 
 
 class TestCoordinateBlockAdvanced:
@@ -1537,6 +1933,40 @@ class TestQMMMinMolecule:
         if os.path.exists("tmp.xyz"):
             os.remove("tmp.xyz")
 
+    def test_qmmm_partition_overlap_raises(self):
+        """Creating a QMMMMolecule with overlapping
+        partitions should raise a ValueError."""
+        # Create a small dummy molecule
+        symbols = ["C"] * 5
+        positions = np.zeros((5, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # High and medium overlap (atom index 2 appears in both)
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1, 2],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "Overlap" in str(exc.value)
+
+    def test_qmmm_partition_out_of_range_raises(self):
+        """Specifying out-of-range atom indices should raise a ValueError."""
+        symbols = ["C"] * 4
+        positions = np.zeros((4, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # index 10 out of range
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[10],
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "out of range" in str(exc.value)
+
 
 class TestSDFFile:
     def test_converts_sdf_string_to_molecule_object(self, tmpdir):
@@ -1912,41 +2342,63 @@ class TestCDXFile:
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
 
+    def test_read_metal_ligand_molecules_cdxml_file_(
+        self, metal_ligand_molecules_cdxml_file
+    ):
+        """Test reading multiple organometallic molecules from a CDXML file with Cp and aromatic ligands."""
+        assert os.path.exists(metal_ligand_molecules_cdxml_file)
+        assert os.path.isfile(metal_ligand_molecules_cdxml_file)
+        cdx_file = CDXFile(filename=metal_ligand_molecules_cdxml_file)
+        molecules = cdx_file.molecules
 
-def test_qmmm_partition_overlap_raises():
-    """Creating a QMMMMolecule with overlapping
-    partitions should raise a ValueError."""
-    # Create a small dummy molecule
-    symbols = ["C"] * 5
-    positions = np.zeros((5, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # High and medium overlap (atom index 2 appears in both)
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1, 2],
-        medium_level_atoms=[2, 3],
-        low_level_atoms=None,
-    )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "Overlap" in str(exc.value)
+        assert isinstance(molecules, list)
+        assert len(molecules) == 7
 
+        # Test molecule 0: Ti(Cp)₂Me₂ - titanocene dimethyl complex.
+        # The two methyl groups bonded to Ti are now correctly preserved.
+        # MultiAttachment phantom atoms (ChemDraw η5-hapticity stubs) are
+        # removed at the XML level before RDKit parsing, so the real Ti–Me
+        # bonds remain intact.
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H16Ti"
+        assert mol.num_atoms == 29
+        assert mol.is_ring
 
-def test_qmmm_partition_out_of_range_raises():
-    """Specifying out-of-range atom indices should raise a ValueError."""
-    symbols = ["C"] * 4
-    positions = np.zeros((4, 3))
-    m = Molecule(symbols=symbols, positions=positions)
-    # index 10 out of range
-    q = QMMMMolecule(
-        molecule=m,
-        high_level_atoms=[1],
-        medium_level_atoms=[2],
-        low_level_atoms=[10],
-    )
-    with pytest.raises(ValueError) as exc:
-        q._get_partition_levels()
-    assert "out of range" in str(exc.value)
+        # Test molecule 1: Ni(Cp)₂Cl₂ - nickel bis-Cp with two chloride ligands.
+        mol = molecules[1]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C10H10Cl2Ni"
+        assert mol.num_atoms == 23
+        assert mol.is_ring
+
+        # Test molecule 3: Ir(η6-benzene)₂ - bis-benzene iridium complex.
+        # Each benzene ring contributes 6C and 6H; anchor C is sp2 with 1H.
+        mol = molecules[3]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Ir"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 4: Rh(η6-benzene)₂ - bis-benzene rhodium complex.
+        mol = molecules[4]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Rh"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 5: Fe complex with aromatic phosphine and benzene ligands
+        mol = molecules[5]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
+        assert mol.num_atoms == 75
+        assert mol.is_aromatic
+
+        # Test molecule 6: Mn sugar complex (no Cp rings, should be unchanged)
+        mol = molecules[6]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H10MnO6"
+        assert mol.num_atoms == 23
 
 
 class TestInChIKey:

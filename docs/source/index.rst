@@ -16,8 +16,9 @@ chemistry software.
 
    introduction
    installation-linux-macos
-   installation-windows-gitbash
    installation-windows-wsl
+   installation-windows-gitbash
+   installation-windows-powershell
    installation-hpc-cluster
 
 .. toctree::
@@ -36,6 +37,7 @@ chemistry software.
 
    cli-overview
    molecule-input-formats
+   chemdraw-organometallic
 
 .. toctree::
    :maxdepth: 2
@@ -60,11 +62,21 @@ chemistry software.
    orca-direct-input
    orca-multiscale-calculations
 
-.. toctree::
+..
+   .. toctree::
+
+..
    :maxdepth: 2
+
+..
    :caption: ITERATE
 
+..
+
+..
    iterate-cli-options
+
+..
    iterate-structure-generation
 
 .. toctree::
@@ -82,6 +94,26 @@ chemistry software.
    pymol-reaction-analysis
    pymol-electronic-structure
    pymol-interaction-analysis
+
+..
+   .. toctree::
+
+..
+   :maxdepth: 2
+
+..
+   :caption: Grouper Tool
+
+..
+
+..
+   grouper-cli-options
+
+..
+   grouper-strategies
+
+..
+   grouper-crest-or-traj-workflow
 
 .. toctree::
    :maxdepth: 2

@@ -30,7 +30,7 @@ def create_qmmm_subcommand(parent_command):
 
     @parent_command.command("qmmm", cls=MyCommand)
     @click.option(
-        "-hf",
+        "-hx",
         "--high-level-functional",
         type=str,
         default=None,
@@ -51,7 +51,7 @@ def create_qmmm_subcommand(parent_command):
         help="Force field for high-level region.",
     )
     @click.option(
-        "-mf",
+        "-mx",
         "--medium-level-functional",
         type=str,
         default=None,
@@ -72,7 +72,7 @@ def create_qmmm_subcommand(parent_command):
         help="Force field for medium-level region.",
     )
     @click.option(
-        "-lf",
+        "-lx",
         "--low-level-functional",
         type=str,
         default=None,
@@ -259,6 +259,7 @@ def create_qmmm_subcommand(parent_command):
                 "custom_solvent",  # From parent settings or -A option
                 "append_additional_info",  # From parent settings or -A option
                 "additional_route_parameters",  # From parent settings or -r option
+                "additional_opt_options_in_route",  # From parent settings or -o option
             ]
             qmmm_settings = qmmm_settings.merge(
                 parent_settings, keywords=always_inherit_from_parent
@@ -349,6 +350,7 @@ def create_qmmm_subcommand(parent_command):
                 "custom_solvent",
                 "append_additional_info",
                 "additional_route_parameters",
+                "additional_opt_options_in_route",
             ]
             try:
                 qmmm_settings = qmmm_settings.merge(

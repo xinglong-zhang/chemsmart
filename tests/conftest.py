@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import click
 import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
@@ -14,6 +15,7 @@ from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
@@ -34,6 +36,8 @@ thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
 )
 
+mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
+
 
 ############ CLI Fixtures ##################
 @pytest.fixture()
@@ -44,6 +48,47 @@ def make_cli_ctx_obj():
         return {"jobrunner": jobrunner}
 
     return _make
+
+
+@pytest.fixture()
+def invoke_config_server():
+    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_config_server):
+            result = invoke_config_server()
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.config import config
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
+
+
+@pytest.fixture()
+def invoke_folder_command():
+    """Fixture that returns a callable to invoke a folder command with options."""
+
+    @click.command()
+    @click_folder_options
+    @click.pass_context
+    def _folder_cmd(ctx, directory, filetype, program):
+        """Minimal command used only to inspect registered options."""
+        ctx.ensure_object(dict)
+        ctx.obj["directory"] = directory
+        ctx.obj["filetype"] = filetype
+        ctx.obj["program"] = program
+
+    def _invoke(args=None):
+        runner = CliRunner()
+        result = runner.invoke(_folder_cmd, args or [])
+        return result
+
+    return _invoke
 
 
 @pytest.fixture()
@@ -84,6 +129,64 @@ def run_thermochemistry_and_capture_settings():
         return result, captured_settings
 
     return _run
+
+
+@pytest.fixture()
+def run_thermochemistry_with_directory():
+    """Fixture to invoke thermochemistry CLI with directory options and mocked folder.
+
+    Patches ``BaseFolder`` so that
+    ``get_all_output_files_in_current_folder_by_program``,
+    ``get_all_files_in_current_folder_by_suffix``, and
+    ``get_all_files_in_current_folder_by_program_and_suffix`` all return
+    the caller-supplied ``mock_files`` list.  Also patches
+    ``ThermochemistryJob.from_filename`` to avoid real job execution.
+
+    Usage::
+
+        def test_something(run_thermochemistry_with_directory, tmp_path):
+            result, mock_from_filename = run_thermochemistry_with_directory(
+                ["-d", str(tmp_path), "-p", "gaussian", "-T", "298.15"],
+                mock_files=["/fake/a.log", "/fake/b.log"],
+            )
+            assert result.exit_code == 0
+            assert mock_from_filename.call_count == 2
+    """
+
+    def _invoke(extra_args, mock_files=None):
+        if mock_files is None:
+            mock_files = ["/fake/dir/mol1.log"]
+
+        runner = CliRunner()
+        mock_job = MagicMock()
+        mock_job.label = "mol1"
+
+        with (
+            patch.object(
+                thermochemistry_cli_module, "BaseFolder"
+            ) as mock_folder_cls,
+            patch.object(
+                thermochemistry_cli_module.ThermochemistryJob, "from_filename"
+            ) as mock_from_filename,
+        ):
+            mock_folder = MagicMock()
+            # Configure every discovery method to return the caller-supplied list
+            mock_folder.get_all_output_files_in_current_folder_by_program.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_files_in_current_folder_by_suffix.return_value = (
+                mock_files
+            )
+            mock_folder.get_all_files_in_current_folder_by_program_and_suffix.return_value = (
+                mock_files
+            )
+            mock_folder_cls.return_value = mock_folder
+            mock_from_filename.return_value = mock_job
+
+            result = runner.invoke(thermochemistry, extra_args)
+            return result, mock_from_filename
+
+    return _invoke
 
 
 @pytest.fixture()
@@ -135,6 +238,58 @@ def run_orca_and_capture_settings():
         return result, captured_settings
 
     return _run
+
+
+@pytest.fixture
+def invoke_mol_with_visualize():
+    """Invoke ``mol … visualize`` with all PyMOL job execution mocked out."""
+    from chemsmart.cli.mol.mol import mol as mol_group
+
+    def _invoke(cli_args, ctx_obj=None):
+        runner = CliRunner()
+        if ctx_obj is None:
+            ctx_obj = {}
+
+        @mol_group.command("_test_noop")
+        @click.pass_context
+        def _noop(ctx):
+            pass
+
+        try:
+            with (
+                patch.object(
+                    mol_cli_module,
+                    "Molecule",
+                    MagicMock(),
+                ) as mock_molecule_cls,
+                patch.object(
+                    mol_cli_module,
+                    "BaseFolder",
+                    MagicMock(),
+                ) as mock_folder_cls,
+            ):
+                # Setup folder mock to return mock files
+                mock_folder_instance = MagicMock()
+                mock_folder_instance.get_all_output_files_in_current_folder_by_program.return_value = [
+                    "/fake/dir/mol.log"
+                ]
+                mock_folder_cls.return_value = mock_folder_instance
+
+                # Setup molecule mock
+                mock_molecule_cls.from_filepath.return_value = MagicMock()
+
+                result = runner.invoke(
+                    mol_group,
+                    cli_args + ["_test_noop"],
+                    obj=ctx_obj,
+                    catch_exceptions=False,
+                )
+        finally:
+            mol_group.commands.pop("_test_noop", None)
+
+        return result
+
+    return _invoke
 
 
 @pytest.fixture()
@@ -1347,6 +1502,12 @@ def xyz_directory(structure_test_directory):
 
 
 @pytest.fixture()
+def ts_conformers_log_directory(structure_test_directory):
+    """Directory containing TS conformer log files (ch_1c_para_c1.log to c5.log)."""
+    return os.path.join(structure_test_directory, "conformers", "log")
+
+
+@pytest.fixture()
 def single_molecule_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_best.xyz")
 
@@ -1354,6 +1515,11 @@ def single_molecule_xyz_file(xyz_directory):
 @pytest.fixture()
 def multiple_molecules_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_conformers.xyz")
+
+
+@pytest.fixture()
+def two_rotated_molecules_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "two_rotated_molecules.xyz")
 
 
 @pytest.fixture()
@@ -1404,6 +1570,66 @@ def single_molecule_cdx_file_imidazole(chemdraw_directory):
 @pytest.fixture()
 def complex_molecule_cdxml_file(chemdraw_directory):
     return os.path.join(chemdraw_directory, "complex_molecule.cdxml")
+
+
+@pytest.fixture()
+def chemdraw_expected_directory(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "expected")
+
+
+@pytest.fixture()
+def expected_methane_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "methane.xyz")
+
+
+@pytest.fixture()
+def expected_benzene_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "benzene.xyz")
+
+
+@pytest.fixture()
+def expected_imidazole_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "imidazole.xyz")
+
+
+@pytest.fixture()
+def expected_two_molecules_1_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_1.xyz")
+
+
+@pytest.fixture()
+def expected_two_molecules_2_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_2.xyz")
+
+
+@pytest.fixture()
+def expected_benzene_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "benzene.com")
+
+
+@pytest.fixture()
+def expected_methane_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "methane.com")
+
+
+@pytest.fixture()
+def expected_two_molecules_1_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_1.com")
+
+
+@pytest.fixture()
+def expected_two_molecules_2_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_2.com")
+
+
+@pytest.fixture()
+def expected_complex_molecule_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "complex_molecule.com")
+
+
+@pytest.fixture()
+def metal_ligand_molecules_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "metal_ligands.cdxml")
 
 
 @pytest.fixture()
@@ -2053,3 +2279,214 @@ def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
         "large_molecule_testing",
         "expected_cxsmiles_c3.txt",
     )
+
+
+############ Molecule Fixtures for RDKit / PDB conversion tests ##################
+
+
+@pytest.fixture()
+def water_molecule():
+    """H₂O with realistic geometry."""
+    return Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.1173],
+                [0.0000, 0.7572, -0.4692],
+                [0.0000, -0.7572, -0.4692],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def methane_molecule():
+    """CH₄ tetrahedral."""
+    return Molecule(
+        symbols=["C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.0000],
+                [0.6276, 0.6276, 0.6276],
+                [0.6276, -0.6276, -0.6276],
+                [-0.6276, 0.6276, -0.6276],
+                [-0.6276, -0.6276, 0.6276],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def ethylene_molecule():
+    """C₂H₄ – contains a C=C double bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6695],
+                [0.0000, 0.0000, -0.6695],
+                [0.0000, 0.9289, 1.2321],
+                [0.0000, -0.9289, 1.2321],
+                [0.0000, 0.9289, -1.2321],
+                [0.0000, -0.9289, -1.2321],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def acetylene_molecule():
+    """C₂H₂ – contains a C≡C triple bond."""
+    return Molecule(
+        symbols=["C", "C", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.6013],
+                [0.0000, 0.0000, -0.6013],
+                [0.0000, 0.0000, 1.6644],
+                [0.0000, 0.0000, -1.6644],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def hydrogen_molecule():
+    """H₂ – minimal molecule with H-H bond."""
+    return Molecule(
+        symbols=["H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.74, 0.0, 0.0],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def co2_molecule():
+    """CO₂ – linear molecule with two C=O double bonds."""
+    return Molecule(
+        symbols=["C", "O", "O"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.16],
+                [0.0, 0.0, -1.16],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def single_atom_molecule():
+    """Single argon atom – edge case for bond detection."""
+    return Molecule(
+        symbols=["Ar"],
+        positions=np.array([[0.0, 0.0, 0.0]]),
+    )
+
+
+@pytest.fixture()
+def water_with_metadata_molecule():
+    """Water molecule with PDB residue metadata."""
+    mol = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ]
+        ),
+        info={
+            "record_type": ["HETATM", "HETATM", "HETATM"],
+            "atom_name": ["O", "H1", "H2"],
+            "residue_name": ["HOH", "HOH", "HOH"],
+            "residue_number": [1, 1, 1],
+            "chain_id": ["A", "A", "A"],
+        },
+    )
+    mol.atom_names = ["O", "H1", "H2"]
+    mol.residue_names = ["HOH", "HOH", "HOH"]
+    mol.residue_numbers = [1, 1, 1]
+    mol.chain_ids = ["A", "A", "A"]
+    return mol
+
+
+@pytest.fixture()
+def chiral_molecule():
+    """Molecule with a chiral center (C with 4 different substituents)."""
+    return Molecule(
+        symbols=["C", "Cl", "F", "Br", "I"],
+        positions=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.2, 0.0, -0.5],
+                [-0.6, 1.0, 0.5],
+                [-0.6, -1.0, 0.5],
+                [0.0, 0.0, 1.3],
+            ]
+        ),
+    )
+
+
+@pytest.fixture()
+def single_model_pdb_file(tmpdir):
+    """PDB file with one implicit model (no MODEL/ENDMDL records)."""
+    pdb_content = (
+        "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+        "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+        "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "water.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def multi_model_pdb_file(tmpdir):
+    """PDB file with two explicit MODEL/ENDMDL blocks."""
+    pdb_content = (
+        "MODEL        1\n"
+        "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH A   1       0.960   0.000   0.000  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "MODEL        2\n"
+        "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+        "ATOM      2  H1  HOH B   2       2.460   2.500   3.500  1.00  0.00           H\n"
+        "ENDMDL\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "multi_model.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def blank_element_pdb_file(tmpdir):
+    """PDB file where element columns (77-78) are blank, requiring inference."""
+    pdb_content = (
+        "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+        "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+        "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+        "END\n"
+    )
+    filepath = os.path.join(str(tmpdir), "blank_elements.pdb")
+    with open(filepath, "w") as f:
+        f.write(pdb_content)
+    return filepath
+
+
+@pytest.fixture()
+def empty_pdb_file(tmpdir):
+    """PDB file with no ATOM/HETATM records."""
+    filepath = os.path.join(str(tmpdir), "empty.pdb")
+    with open(filepath, "w") as f:
+        f.write("REMARK  This PDB has no atoms.\nEND\n")
+    return filepath

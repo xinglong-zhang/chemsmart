@@ -30,7 +30,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-t",
     "--filetype",
     default=None,
-    help="Type of file to be converted, if directory is specified.",
+    help=(
+        "Type of file to be converted, if directory is specified "
+        "(log, com, gjf, out, inp, xyz, sdf, pdb)."
+    ),
 )
 @click.option(
     "-p",

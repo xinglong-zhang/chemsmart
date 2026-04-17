@@ -11,6 +11,8 @@ Key functionality includes:
 - Text processing for chemical file formats
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import re
@@ -18,10 +20,6 @@ import shutil
 import string
 import subprocess
 from io import BytesIO
-
-# from rdkit import Chem
-#
-# import tempfile
 from pathlib import Path
 from typing import List
 
@@ -328,7 +326,8 @@ def get_program_type_from_file(filepath):
                     continue
                 if program := match_outfile_pattern(stripped):
                     logger.debug(
-                        f"Detected output format for '{os.path.basename(filepath)}': {program}."
+                        f"Detected output format for "
+                        f"'{os.path.basename(filepath)}': {program}."
                     )
                     return program
     except Exception as e:
@@ -339,6 +338,16 @@ def get_program_type_from_file(filepath):
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
     return "unknown"
+
+
+def check_program_availability_in_chemsmart(program_name):
+    """Utility function to check if user-supplied program type is
+    supported in CHEMMART."""
+    if program_name.lower() not in {"gaussian", "orca"}:
+        raise ValueError(
+            f"Unsupported program '{program_name}' for thermochemistry.\n"
+            f"Please choose one of ['gaussian', 'orca']."
+        )
 
 
 def load_molecules_from_paths(
@@ -635,8 +644,11 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
         )
 
     # Feed stdout bytes directly into RDKit's ForwardSDMolSupplier
+    # Use sanitize=False to avoid kekulization errors for organometallic complexes
     sdf_stream = BytesIO(result.stdout)
-    suppl = Chem.ForwardSDMolSupplier(sdf_stream, removeHs=False)
+    suppl = Chem.ForwardSDMolSupplier(
+        sdf_stream, sanitize=False, removeHs=False
+    )
 
     mols = [mol for mol in suppl if mol is not None]
 
@@ -646,3 +658,1129 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
         )
 
     return mols
+
+
+def safe_sanitize(mol, skip_kekulize=False):
+    """
+    Safely sanitize an RDKit molecule, handling organometallic complexes.
+
+    For organometallic/aromatic-metal complexes, RDKit's kekulization often
+    fails because aromatic rings coordinated to metals cannot be properly
+    kekulized. This function can skip kekulization for such molecules.
+
+    Args:
+        mol (rdkit.Chem.Mol): RDKit molecule to sanitize.
+        skip_kekulize (bool): If True, skip kekulization step. Default False.
+
+    Returns:
+        rdkit.Chem.Mol: Sanitized molecule.
+
+    Raises:
+        Exception: If sanitization fails.
+    """
+    if skip_kekulize:
+        # Skip kekulization for organometallic complexes
+        ops = (
+            Chem.SanitizeFlags.SANITIZE_ALL
+            ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE
+        )
+        Chem.SanitizeMol(mol, sanitizeOps=ops)
+        return mol
+
+    try:
+        Chem.SanitizeMol(mol)
+        return mol
+    except Exception as e:
+        # Common for organometallic/aromatic-metal complexes:
+        # keep most sanitation but skip kekulization
+        logger.debug(
+            f"Standard sanitization failed ({e}), retrying without kekulization "
+            "(common for organometallic complexes)."
+        )
+        ops = (
+            Chem.SanitizeFlags.SANITIZE_ALL
+            ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE
+        )
+        Chem.SanitizeMol(mol, sanitizeOps=ops)
+        return mol
+
+
+def normalize_metal_bonds(mol):
+    """
+    Remove aromatic flags from bonds involving metal atoms.
+
+    RDKit does not support aromatic bonds to metal atoms. This function
+    identifies bonds to metals and converts any aromatic bonds to single
+    bonds, which prevents kekulization and sanitization errors.
+
+    Args:
+        mol (rdkit.Chem.Mol): RDKit molecule to normalize.
+
+    Returns:
+        rdkit.Chem.Mol: Molecule with normalized metal bonds.
+
+    Notes:
+        - Identifies metals using a comprehensive classification based on
+          the periodic table (excludes non-metals and metalloids).
+        - Converts aromatic bonds to metals to single bonds.
+        - Uses element classifications from chemsmart.utils.periodictable.
+    """
+    from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
+
+    # Identify metal atom indices
+    # Metals are elements that are neither non-metals nor metalloids
+    metal_idxs = {
+        a.GetIdx()
+        for a in mol.GetAtoms()
+        if a.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+    }
+
+    # Clear aromatic flags from bonds to metals
+    for bond in mol.GetBonds():
+        begin_idx = bond.GetBeginAtomIdx()
+        end_idx = bond.GetEndAtomIdx()
+
+        if begin_idx in metal_idxs or end_idx in metal_idxs:
+            if bond.GetIsAromatic():
+                bond.SetIsAromatic(False)
+            if bond.GetBondType() == Chem.BondType.AROMATIC:
+                bond.SetBondType(Chem.BondType.SINGLE)
+
+    return mol
+
+
+def remove_phantom_metal_carbons(mol: Chem.Mol, metal_idxs: set[int]) -> tuple:
+    """
+    Remove spurious terminal carbon atoms that appear when RDKit reads
+    ChemDraw's ``MultiAttachment`` nodes or "phantom" drawing atoms.
+
+    ChemDraw represents η5/η6 hapticity with special ``MultiAttachment``
+    nodes connected to the metal via ``Display="Dash"`` bonds.  When RDKit
+    reads a CDXML file it turns each MultiAttachment node into a carbon atom
+    with a single bond to the metal — producing unwanted CH₃ groups.  Some
+    structures also include additional drawing-artifact carbons (e.g. the
+    "leg" atoms below the metal in 2D metallocene diagrams) that are similarly
+    connected to the metal and have no ring membership.
+
+    This function removes every carbon neighbour of a metal that satisfies
+    **all** of the following:
+
+    * atomic number 6 (carbon),
+    * degree 1 (only bond is to the metal),
+    * not a member of any ring.
+
+    After removal the atom indices in the returned molecule are renumbered.
+    The caller must use the returned ``new_metal_idxs`` rather than the
+    original ``metal_idxs``.
+
+    Args:
+        mol: RDKit molecule (may be unsanitized).
+        metal_idxs: Set of atom indices of metal atoms in *mol*.
+
+    Returns:
+        Tuple ``(new_mol, new_metal_idxs)`` where *new_mol* has the phantom
+        carbon atoms removed and *new_metal_idxs* reflects the updated
+        indices of the metal atoms.
+    """
+    ring_atoms: set[int] = {
+        a for ring in mol.GetRingInfo().AtomRings() for a in ring
+    }
+
+    atoms_to_remove: list[int] = []
+    for metal_idx in metal_idxs:
+        metal_atom = mol.GetAtomWithIdx(metal_idx)
+        for nbr in metal_atom.GetNeighbors():
+            if (
+                nbr.GetAtomicNum() == 6
+                and nbr.GetDegree() == 1
+                and nbr.GetIdx() not in ring_atoms
+            ):
+                atoms_to_remove.append(nbr.GetIdx())
+
+    if not atoms_to_remove:
+        return mol, metal_idxs
+
+    rw = Chem.RWMol(mol)
+    # Remove in reverse index order to keep earlier indices valid.
+    for idx in sorted(set(atoms_to_remove), reverse=True):
+        rw.RemoveAtom(idx)
+
+    new_mol = rw.GetMol()
+
+    # Recompute metal indices (indices shift down by the number of removed
+    # atoms with a lower index).
+    removed_sorted = sorted(set(atoms_to_remove))
+    new_metal_idxs: set[int] = set()
+    for metal_idx in metal_idxs:
+        shift = sum(1 for r in removed_sorted if r < metal_idx)
+        new_metal_idxs.add(metal_idx - shift)
+
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol, new_metal_idxs
+
+    """
+    RDKit cannot sanitize a neutral aromatic 5-member carbon ring (c1cccc1).
+    ChemDraw often uses that for Cp. Convert each such ring into a Cp- by
+    making one atom [cH-] (formal charge -1 + explicit H).
+
+    Also de-aromatizes the ring to prevent further processing by attach_one_bond_per_cp_ring.
+    """
+    rw = Chem.RWMol(mol)
+    ri = mol.GetRingInfo()
+
+    for ring in ri.AtomRings():
+        if len(ring) != 5:
+            continue
+        atoms = [mol.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" and a.GetIsAromatic() for a in atoms):
+            continue
+        # "Cp as aromatic": 5 aromatic C, each degree 2, each has 1 H, all charges 0
+        if not all(
+            a.GetDegree() == 2
+            and a.GetTotalNumHs() == 1
+            and a.GetFormalCharge() == 0
+            for a in atoms
+        ):
+            continue
+
+        i0 = ring[0]
+        a0 = rw.GetAtomWithIdx(i0)
+        a0.SetFormalCharge(-1)
+        a0.SetNumExplicitHs(1)  # important: keep it as [cH-], not [c-]
+        a0.SetNoImplicit(True)  # prevent RDKit from dropping that H
+
+        # De-aromatize the ring atoms and bonds to prevent attach_one_bond_per_cp_ring
+        # from processing this ring again
+        for idx in ring:
+            rw.GetAtomWithIdx(idx).SetIsAromatic(False)
+
+        # De-aromatize the ring bonds
+        for i in range(len(ring)):
+            a = ring[i]
+            b = ring[(i + 1) % len(ring)]
+            bond = rw.GetBondBetweenAtoms(a, b)
+            if bond:
+                bond.SetIsAromatic(False)
+                bond.SetBondType(Chem.BondType.SINGLE)
+
+    return rw.GetMol()
+
+
+def _order_ring_atoms_by_walk(
+    m: Chem.Mol, ring: tuple[int, ...]
+) -> list[int] | None:
+    """Return ring atoms in cyclic order by walking ring neighbors."""
+    ring_set = set(ring)
+    start = ring[0]
+    # ring neighbors within ring
+    nbrs0 = [
+        n.GetIdx()
+        for n in m.GetAtomWithIdx(start).GetNeighbors()
+        if n.GetIdx() in ring_set
+    ]
+    if len(nbrs0) != 2:
+        return None
+
+    order = [start, nbrs0[0]]
+    prev, cur = start, nbrs0[0]
+    while True:
+        nbrs = [
+            n.GetIdx()
+            for n in m.GetAtomWithIdx(cur).GetNeighbors()
+            if n.GetIdx() in ring_set
+        ]
+        if len(nbrs) != 2:
+            return None
+        nxt = nbrs[0] if nbrs[1] == prev else nbrs[1]
+        if nxt == start:
+            break
+        if nxt in order:
+            return None
+        order.append(nxt)
+        prev, cur = cur, nxt
+
+    if len(order) != len(ring):
+        return None
+    return order
+
+
+def attach_eta_bonds_for_cp_rings(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
+    """
+    Connect isolated 5-membered all-carbon rings (Cp ligands) to the metal.
+
+    ChemDraw stores organometallic Cp complexes with the cyclopentadienyl ring
+    as a separate fragment from the metal centre.  This function finds every
+    5-membered all-carbon ring that is in a different connected component from
+    the metal, dearomatizes it with alternating single/double bonds so that
+    every ring carbon has exactly one implicit H (correct sp2 geometry), and
+    adds one single σ-bond from the metal to the ring anchor carbon.
+
+    The ring bond pattern applied (cycling from anchor C₀) is:
+    C₀–C₁ (SINGLE), C₁=C₂ (DOUBLE), C₂–C₃ (SINGLE), C₃=C₄ (DOUBLE),
+    C₄–C₀ (SINGLE).  With the additional metal–C₀ bond (single), C₀ ends up
+    with three bonds (C₁, C₄, metal) → 1 implicit H; each remaining carbon
+    also has exactly three bonds (one single + one double within the ring)
+    → 1 implicit H.  This is the correct sp2 geometry.
+
+    The anchor (C₀) is the ring atom with the fewest bonds to atoms outside
+    the ring (i.e. lowest total degree).  For pure Cp rings all carbons have
+    degree 2 (only ring bonds), so any atom is suitable.  For fused systems
+    such as indenyl, junction carbons have degree > 2 (bonded to both rings
+    plus an external hydrogen or substituent), and choosing a non-junction
+    carbon keeps their implicit-H count intact.
+
+    After embedding, :func:`_reposition_rings_and_metal` rotates and
+    translates all ring atoms and repositions the metal to achieve the correct
+    η5 sandwich/half-sandwich coordination geometry.
+
+    Args:
+        mol: RDKit molecule that may contain disconnected fragments.
+        metal_idxs: Set of atom indices for metal atoms in *mol*.
+
+    Returns:
+        Updated molecule with correct sp2 Cp bond orders and one metal→ring
+        bond per isolated Cp ring.
+    """
+    if not metal_idxs:
+        return mol
+
+    from rdkit.Chem import rdmolops
+
+    rw = Chem.RWMol(mol)
+    Chem.GetSymmSSSR(rw)
+
+    metal_idx = min(metal_idxs)
+
+    # Identify which atoms are in the same connected component as the metal.
+    frags = rdmolops.GetMolFrags(rw)
+    metal_frag: set[int] = set()
+    for frag in frags:
+        if any(idx in metal_idxs for idx in frag):
+            metal_frag = set(frag)
+            break
+
+    ring_info = rw.GetRingInfo()
+    for ring in ring_info.AtomRings():
+        if len(ring) != 5:
+            continue
+
+        atoms = [rw.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" for a in atoms):
+            continue
+
+        # Only process rings that are disconnected from the metal.
+        if any(i in metal_frag for i in ring):
+            continue
+
+        # Walk ring in cyclic order starting from the lowest-degree atom.
+        # For pure Cp rings every carbon has degree 2 (only ring bonds), so any
+        # choice is equivalent.  For fused indenyl-type rings, junction carbons
+        # have degree > 2 (they are shared between two rings and may carry
+        # external substituents); starting from a non-junction carbon ensures
+        # the anchor receives the metal bond with two flanking single ring bonds
+        # (total 3 bonds → 1H), and the junction carbons keep their external
+        # bonds accounted for by the bond-order pattern.
+        anchor_start = min(
+            ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree()
+        )
+        ordered = _order_ring_atoms_by_walk(rw, ring)
+        if ordered is None:
+            ordered = list(ring)
+        # Rotate so anchor_start is first.
+        if anchor_start in ordered:
+            idx = ordered.index(anchor_start)
+            ordered = ordered[idx:] + ordered[:idx]
+
+        # Set bond pattern: S(0)–D(1)–S(2)–D(3)–S(4) from anchor outward.
+        # This ensures every ring carbon ends up with exactly 3 bonds → 1H.
+        bond_types = [
+            Chem.BondType.SINGLE,
+            Chem.BondType.DOUBLE,
+            Chem.BondType.SINGLE,
+            Chem.BondType.DOUBLE,
+            Chem.BondType.SINGLE,
+        ]
+        for k, btype in enumerate(bond_types):
+            a_idx = ordered[k]
+            b_idx = ordered[(k + 1) % 5]
+            bond = rw.GetBondBetweenAtoms(a_idx, b_idx)
+            if bond is not None:
+                bond.SetBondType(btype)
+                bond.SetIsAromatic(False)
+
+        # Clear aromaticity, formal charges and explicit Hs on ring atoms so
+        # that RDKit computes the correct implicit-H count from bond orders.
+        for i in ordered:
+            a = rw.GetAtomWithIdx(i)
+            a.SetIsAromatic(False)
+            a.SetFormalCharge(0)
+            a.SetNumExplicitHs(0)
+            a.SetNoImplicit(False)
+
+        anchor = ordered[0]
+        if not rw.GetBondBetweenAtoms(metal_idx, anchor):
+            rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
+
+    new_mol = rw.GetMol()
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol
+
+
+def attach_eta_bonds_for_arene_rings(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
+    """
+    Connect isolated 6-membered all-carbon rings (arene ligands) to the metal.
+
+    ChemDraw sometimes stores η6-arene complexes (benzene, etc.) as a metal
+    fragment separate from the ring fragment.  This function finds every
+    6-membered all-carbon ring that is in a different connected component from
+    the metal, sets the ring bond orders so that the anchor carbon has two
+    flanking SINGLE bonds (thus preserving its 1H after the metal bond is
+    added), and adds a single bond from the metal to that anchor carbon.
+
+    **Bond-order strategy for 6-membered rings**
+
+    In any regular Kekulé pattern for benzene every carbon has exactly one
+    DOUBLE and one SINGLE ring bond.  If we add a metal bond to such a carbon
+    it would end up with bond order 4 and lose its H atom.  To prevent this
+    we rotate the alternating pattern so the *anchor* (position 0) is flanked
+    by two SINGLE bonds:
+
+    .. code-block:: text
+
+        0→1: S, 1→2: D, 2→3: S, 3→4: D, 4→5: S, 5→0: S
+
+    * Anchor (pos 0): S + S + metal-S = 3 bonds → 1H ✓
+    * Positions 1–4: one S + one D within ring = 3 bonds → 1H ✓
+    * Position 5: two S bonds from ring = 2 bonds → by default 2H, but we
+      explicitly set NumExplicitHs=1 to enforce the correct sp2 value.
+
+    After embedding, :func:`_reposition_rings_and_metal` rotates and
+    translates all ring atoms and repositions the metal to achieve the correct
+    η6 sandwich/half-sandwich coordination geometry.
+
+    Rings already reachable from the metal via any bond path (e.g., phenyl
+    groups in PPh₃ ligands bonded through P) are left untouched.
+
+    Args:
+        mol: RDKit molecule that may contain disconnected fragments.
+        metal_idxs: Set of atom indices for metal atoms in *mol*.
+
+    Returns:
+        Updated molecule with correct sp2 arene bond orders and one
+        metal→arene-ring bond per isolated arene.
+    """
+    if not metal_idxs:
+        return mol
+
+    from rdkit.Chem import rdmolops
+
+    rw = Chem.RWMol(mol)
+    Chem.GetSymmSSSR(rw)
+
+    metal_idx = min(metal_idxs)
+
+    # Re-compute fragment membership after potential η5 bonds were added.
+    frags = rdmolops.GetMolFrags(rw)
+    metal_frag: set[int] = set()
+    for frag in frags:
+        if any(idx in metal_idxs for idx in frag):
+            metal_frag = set(frag)
+            break
+
+    ring_info = rw.GetRingInfo()
+    for ring in ring_info.AtomRings():
+        if len(ring) != 6:
+            continue
+
+        atoms = [rw.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" for a in atoms):
+            continue
+
+        # Only process rings disconnected from the metal.
+        if any(i in metal_frag for i in ring):
+            continue
+
+        # Walk ring in cyclic order starting from the lowest-degree atom.
+        anchor_start = min(
+            ring, key=lambda i: rw.GetAtomWithIdx(i).GetDegree()
+        )
+        ordered = _order_ring_atoms_by_walk(rw, ring)
+        if ordered is None:
+            ordered = list(ring)
+        if anchor_start in ordered:
+            rot = ordered.index(anchor_start)
+            ordered = ordered[rot:] + ordered[:rot]
+
+        # Set bond orders so that the anchor carbon (position 0) has two
+        # flanking SINGLE bonds within the ring.  In a regular Kekulé benzene
+        # pattern every carbon has exactly one DOUBLE ring bond, so adding a
+        # metal bond to any carbon would give it 4 total bond order and 0H.
+        # To avoid this we apply a modified pattern:
+        #   0→1: S, 1→2: D, 2→3: S, 3→4: D, 4→5: S, 5→0: S
+        # Anchor (pos 0): S+S+metal = 3 bonds → 1H  ✓
+        # Pos 1–4:        S+D or D+S    = 3 bonds → 1H  ✓
+        # Pos 5:          S(4-5)+S(5-0) = 2 bonds → would be 2H by default;
+        #                 explicitly set to 1H below.
+        bond_types_6 = [
+            Chem.BondType.SINGLE,  # 0–1
+            Chem.BondType.DOUBLE,  # 1–2
+            Chem.BondType.SINGLE,  # 2–3
+            Chem.BondType.DOUBLE,  # 3–4
+            Chem.BondType.SINGLE,  # 4–5
+            Chem.BondType.SINGLE,  # 5–0  (keeps anchor flanked by two singles)
+        ]
+        for k, btype in enumerate(bond_types_6):
+            a_idx = ordered[k]
+            b_idx = ordered[(k + 1) % 6]
+            bond = rw.GetBondBetweenAtoms(a_idx, b_idx)
+            if bond is not None:
+                bond.SetBondType(btype)
+                bond.SetIsAromatic(False)
+
+        # Clear aromaticity flags so RDKit derives H counts from bond orders.
+        for i in ordered:
+            a = rw.GetAtomWithIdx(i)
+            a.SetIsAromatic(False)
+            a.SetFormalCharge(0)
+            a.SetNumExplicitHs(0)
+            a.SetNoImplicit(False)
+
+        # Position-5 carbon has two flanking SINGLE bonds but must have 1H
+        # (sp2-like, as in a free benzene ring).  Set it explicitly so that
+        # safe_sanitize (with skip_kekulize=True) cannot reset it.
+        c5_atom = rw.GetAtomWithIdx(ordered[5])
+        c5_atom.SetNumExplicitHs(1)
+        c5_atom.SetNoImplicit(True)
+
+        anchor = ordered[0]
+        if not rw.GetBondBetweenAtoms(metal_idx, anchor):
+            rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
+
+    new_mol = rw.GetMol()
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol
+
+
+def _rotation_matrix_between_vectors(
+    v1: "np.ndarray", v2: "np.ndarray"
+) -> "np.ndarray":
+    """Return a 3×3 rotation matrix that rotates unit vector *v1* onto *v2*.
+
+    Uses the Rodrigues rotation formula.  If the two vectors are anti-parallel
+    a 180° rotation around an arbitrary perpendicular axis is returned.
+
+    Args:
+        v1: Source unit vector (will be normalised internally).
+        v2: Target unit vector (will be normalised internally).
+
+    Returns:
+        3×3 NumPy rotation matrix **R** such that ``R @ v1 ≈ v2``.
+    """
+    import numpy as np
+
+    v1 = np.asarray(v1, dtype=float)
+    v2 = np.asarray(v2, dtype=float)
+    n1 = np.linalg.norm(v1)
+    n2 = np.linalg.norm(v2)
+    if n1 < 1e-10 or n2 < 1e-10:
+        return np.eye(3)
+    v1 = v1 / n1
+    v2 = v2 / n2
+
+    cross = np.cross(v1, v2)
+    dot = float(np.clip(np.dot(v1, v2), -1.0, 1.0))
+    cross_norm = np.linalg.norm(cross)
+
+    if cross_norm < 1e-10:
+        if dot > 0:
+            return np.eye(3)
+        # 180-degree rotation around an arbitrary perpendicular axis.
+        perp = (
+            np.array([1.0, 0.0, 0.0])
+            if abs(v1[0]) < 0.9
+            else np.array([0.0, 1.0, 0.0])
+        )
+        perp = perp - np.dot(perp, v1) * v1
+        perp /= np.linalg.norm(perp)
+        return 2.0 * np.outer(perp, perp) - np.eye(3)
+
+    # Rodrigues' formula: R = I + K + K²·(1 − dot)/(cross_norm²)
+    axis = cross / cross_norm
+    K = np.array(
+        [
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ]
+    )
+    return np.eye(3) + K * cross_norm + K @ K * (1.0 - dot)
+
+
+def _reposition_rings_and_metal(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
+    """
+    Achieve proper η5/η6 sandwich or half-sandwich geometry after 3D embedding.
+
+    After ETKDG embedding with a single anchor bond per ring the metal and
+    all ring atoms end up **coplanar** because the embedding engine treats the
+    metal–carbon bond as an ordinary σ-bond and optimises bond angles
+    accordingly.  Simply moving the metal to the ring centroid (the previous
+    :func:`_adjust_metal_above_rings` approach) does not fix this because the
+    ring plane still contains the metal.
+
+    This function corrects the geometry by treating each η5/η6 ring as a
+    **rigid body** and performing:
+
+    1. Compute the ring centroid and current ring-plane normal from the
+       embedded atom positions.
+    2. Choose a *stacking axis* — the direction along which the rings should
+       stack above/below the metal:
+
+       * **Two rings (sandwich):** axis = normalised vector from ring-1
+         centroid to ring-2 centroid.
+       * **One ring (half-sandwich):** axis = current ring-plane normal
+         pointing away from the metal.
+
+    3. For each ring, rotate all its atoms *and the H atoms bonded to them*
+       as a rigid body so the ring normal aligns with the stacking axis, then
+       translate the ring centroid to:
+
+       .. code-block:: text
+
+           new_centroid = new_metal_pos ± ideal_dist × stacking_axis
+
+       where:
+
+       * *ideal_dist* is 2.0 Å for 5-membered (η5-Cp) rings and 1.75 Å for
+         6-membered (η6-arene) rings.
+       * *new_metal_pos* is the midpoint of all target ring centroids
+         (sandwich) or ``old_centroid + stacking_axis × ideal_dist``
+         (half-sandwich).
+
+    4. Move the metal atom to *new_metal_pos*.
+
+    H atoms bonded to ring carbons are moved as part of the ring rigid body so
+    that C–H bond lengths and orientations are preserved.
+
+    Non-ring ligands (e.g., Cl, CO, phosphine) are not touched.
+
+    Args:
+        mol: RDKit molecule with at least one 3D conformer.
+        metal_idxs: Set of atom indices for metal atoms in *mol*.
+
+    Returns:
+        The same molecule with atom positions updated in-place for the metal,
+        all η5/η6 ring heavy atoms, and all H atoms bonded to those ring carbons.
+    """
+    import numpy as np
+
+    if not mol.GetNumConformers() or not metal_idxs:
+        return mol
+
+    conf = mol.GetConformer()
+    metal_idx = min(metal_idxs)
+
+    metal_neighbors = {
+        nb.GetIdx() for nb in mol.GetAtomWithIdx(metal_idx).GetNeighbors()
+    }
+    ring_info = mol.GetRingInfo()
+
+    # Gather all bonded all-carbon rings (η5 or η6 only).
+    bonded_rings: list[tuple[list[int], "np.ndarray"]] = []
+    for ring in ring_info.AtomRings():
+        ring_set = set(ring)
+        if not all(mol.GetAtomWithIdx(i).GetSymbol() == "C" for i in ring):
+            continue
+        if len(ring) not in (5, 6):
+            continue
+        if not any(n in ring_set for n in metal_neighbors):
+            continue
+        positions = np.array([list(conf.GetAtomPosition(i)) for i in ring])
+        bonded_rings.append((list(ring), positions))
+
+    if not bonded_rings:
+        return mol
+
+    def ideal_dist(ring_size: int) -> float:
+        """Typical metal – ring-centroid distance in Å."""
+        return 2.0 if ring_size == 5 else 1.75
+
+    n = len(bonded_rings)
+
+    if n == 1:
+        # Half-sandwich: keep the ring where it is; move metal above it.
+        ring_atoms, positions = bonded_rings[0]
+        centroid = positions.mean(axis=0)
+        v1 = positions[1] - positions[0]
+        v2 = positions[2] - positions[0]
+        normal = np.cross(v1, v2)
+        norm_len = np.linalg.norm(normal)
+        normal = (
+            normal / norm_len if norm_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        )
+        metal_pos_old = np.array(list(conf.GetAtomPosition(metal_idx)))
+        if np.dot(metal_pos_old - centroid, normal) < 0:
+            normal = -normal
+        new_metal_pos = centroid + normal * ideal_dist(len(ring_atoms))
+        conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
+        return mol
+
+    # Sandwich (n ≥ 2): determine stacking axis from ring centroids.
+    centroids = [pos.mean(axis=0) for _, pos in bonded_rings]
+    if n == 2:
+        axis = centroids[1] - centroids[0]
+        axis_len = np.linalg.norm(axis)
+        axis = (
+            axis / axis_len if axis_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+        )
+    else:
+        # Generic: principal component of centroid cloud.
+        c_arr = np.array(centroids)
+        centered = c_arr - c_arr.mean(axis=0)
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+        axis = vh[0]  # direction of maximum variance
+
+    # New metal position: midpoint of all target ring centroids.
+    #   target_centroid_i = new_metal_pos ± ideal_dist_i * axis
+    # For equal ring sizes: new_metal_pos = mean(centroids) projected to axis.
+    new_metal_pos = np.mean(centroids, axis=0)
+
+    # Assign signs: ring whose current centroid has a positive dot product with
+    # axis gets +sign (and vice versa), preserving existing ordering.
+    signs: list[float] = []
+    for centroid in centroids:
+        d = float(np.dot(centroid - new_metal_pos, axis))
+        signs.append(1.0 if d >= 0 else -1.0)
+
+    # For exactly two rings the signs must be opposite; enforce this.
+    if n == 2 and signs[0] == signs[1]:
+        signs[1] = -signs[0]
+
+    # Pre-compute the set of ALL ring atom indices in the molecule (for BFS expansion).
+    all_mol_ring_atom_idxs: set[int] = set()
+    for ring in ring_info.AtomRings():
+        all_mol_ring_atom_idxs.update(ring)
+
+    def _expand_to_fused_ring_system(seed_atoms: list[int]) -> set[int]:
+        """BFS from seed_atoms through all-carbon ring bonds to collect fused rings.
+
+        For an η5-Cp ring fused to a benzene ring (indenyl ligand), the Cp ring
+        is the seed and both the Cp and benzene atoms are returned.  For a bare
+        Cp ring (no fusion) the result is just the seed atoms.
+        """
+        from collections import deque
+
+        expanded: set[int] = set(seed_atoms)
+        frontier: deque[int] = deque(seed_atoms)
+        while frontier:
+            idx = frontier.popleft()
+            atom = mol.GetAtomWithIdx(idx)
+            for nb in atom.GetNeighbors():
+                nb_idx = nb.GetIdx()
+                if nb_idx in expanded:
+                    continue
+                if nb_idx not in all_mol_ring_atom_idxs:
+                    continue
+                if (
+                    nb.GetAtomicNum() != 6
+                ):  # only expand through carbon ring atoms
+                    continue
+                expanded.add(nb_idx)
+                frontier.append(nb_idx)
+        return expanded
+
+    # Compute the expanded (full fused) ring atom sets for each bonded η5/η6 ring.
+    expanded_ring_systems: list[set[int]] = []
+    for ring_atoms, _ in bonded_rings:
+        expanded_ring_systems.append(_expand_to_fused_ring_system(ring_atoms))
+
+    # Collect all ring atom indices (expanded) for bridge-atom detection.
+    all_ring_atom_idxs: set[int] = set()
+    for expanded in expanded_ring_systems:
+        all_ring_atom_idxs.update(expanded)
+
+    # Reposition each ring as a rigid body.
+    # The ENTIRE fused ring system (e.g., full indenyl = Cp + benzene) is moved
+    # as one piece so that fused rings stay geometrically connected.
+    for i, (ring_atoms, positions) in enumerate(bonded_rings):
+        dist = ideal_dist(len(ring_atoms))
+        target_centroid = new_metal_pos + signs[i] * axis * dist
+
+        # Ring-plane normal computed from the η5/η6 coordinating ring only.
+        current_centroid = positions.mean(axis=0)
+        v1 = positions[1] - positions[0]
+        v2 = positions[2] - positions[0]
+        current_normal = np.cross(v1, v2)
+        cn_len = np.linalg.norm(current_normal)
+        current_normal = (
+            current_normal / cn_len
+            if cn_len > 1e-6
+            else np.array([0.0, 0.0, 1.0])
+        )
+
+        target_normal = (
+            signs[i] * axis
+        )  # ring normal aligns with stacking axis direction
+
+        rot = _rotation_matrix_between_vectors(current_normal, target_normal)
+
+        # Collect ALL atoms of the full fused ring system (e.g., all 9 C of
+        # indenyl rather than just the 5 Cp carbons), plus their H atoms.
+        expanded_atoms = expanded_ring_systems[i]
+        all_atoms_to_move: list[int] = list(expanded_atoms)
+        for c_idx in expanded_atoms:
+            for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
+                nb_idx = nb.GetIdx()
+                if nb_idx not in expanded_atoms and nb.GetAtomicNum() == 1:
+                    all_atoms_to_move.append(nb_idx)
+
+        # Apply the same rigid-body transform to all collected atoms.
+        for idx in all_atoms_to_move:
+            pos = np.array(list(conf.GetAtomPosition(idx)))
+            new_pos = rot @ (pos - current_centroid) + target_centroid
+            conf.SetAtomPosition(idx, new_pos.tolist())
+
+    # Reposition bridge atoms: non-ring, non-H atoms bonded to atoms in
+    # multiple repositioned ring systems (e.g., an O bridging two indenyl
+    # ligands in an ansa-bis-indenyl complex).
+    #
+    # Strategy: after the ring systems have been moved as rigid bodies, the
+    # ring atoms are already at their *new* positions.  For a bridge atom (O)
+    # bonded to ring atom C1 (now at C1_new) and ring atom C8 (now at
+    # C8_new), the most geometrically sensible placement is the midpoint of
+    # C1_new and C8_new.  This is preferable to transform-averaging of the
+    # ETKDG position because the ETKDG position of O is unrelated to the
+    # repositioned ring geometry.
+    #
+    # We iterate over the FULL expanded ring systems (not just the 5/6-membered
+    # coordinating rings) because bridge atoms may be bonded to non-junction
+    # ring carbons in fused ring systems.
+    bridge_neighbor_positions: dict[int, list["np.ndarray"]] = {}
+    for expanded_atoms in expanded_ring_systems:
+        for c_idx in expanded_atoms:
+            for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
+                nb_idx = nb.GetIdx()
+                if nb_idx in all_ring_atom_idxs:
+                    continue
+                if nb.GetAtomicNum() == 1:
+                    continue
+                if nb_idx == metal_idx:
+                    continue
+                # Record the CURRENT (already repositioned) position of the
+                # ring atom bonded to this bridge/pendant atom.
+                c_pos_new = np.array(list(conf.GetAtomPosition(c_idx)))
+                bridge_neighbor_positions.setdefault(nb_idx, []).append(
+                    c_pos_new
+                )
+
+    for nb_idx, neighbor_positions in bridge_neighbor_positions.items():
+        if len(neighbor_positions) > 1:
+            # True bridge atom: bonded to ring atoms from ≥2 different ring
+            # systems.  Place at the centroid of those ring atoms' new
+            # positions.  This gives a geometrically reasonable starting point
+            # for subsequent MMFF optimization (e.g., for an ansa-O bridge the
+            # C-O-C angle and C-O bond length will be refined by MMFF).
+            avg_pos = np.mean(neighbor_positions, axis=0)
+            conf.SetAtomPosition(nb_idx, avg_pos.tolist())
+
+    conf.SetAtomPosition(metal_idx, new_metal_pos.tolist())
+    return mol
+
+
+def attach_one_bond_per_cp_ring(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
+    """
+    Approximate η5 Cp coordination by:
+      - finding aromatic 5-member all-carbon rings (Cp drawn aromatic)
+      - de-aromatizing ring to alternating single/double bonds (kekulizable)
+      - adding ONE single bond from a metal to an anchor carbon in each ring (if none exists)
+
+    .. deprecated::
+        Use :func:`attach_eta_bonds_for_cp_rings` instead, which adds bonds to
+        all ring carbons for correct η5 geometry.
+    """
+    if not metal_idxs:
+        return mol
+
+    rw = Chem.RWMol(mol)
+    Chem.GetSymmSSSR(rw)  # ensure rings are perceived
+
+    metal_idx = min(metal_idxs)  # heuristic
+
+    ring_info = rw.GetRingInfo()
+    for ring in ring_info.AtomRings():
+        if len(ring) != 5:
+            continue
+
+        atoms = [rw.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" and a.GetIsAromatic() for a in atoms):
+            continue
+
+        # reconstruct cyclic order robustly
+        ordered = _order_ring_atoms_by_walk(rw, ring)
+        if ordered is None:
+            continue
+
+        # already connected to any metal?
+        already_connected = any(
+            nb.GetIdx() in metal_idxs
+            for i in ordered
+            for nb in rw.GetAtomWithIdx(i).GetNeighbors()
+        )
+
+        # de-aromatize ring atoms
+        for i in ordered:
+            rw.GetAtomWithIdx(i).SetIsAromatic(False)
+
+        # de-aromatize ring bonds and set alternating pattern
+        cycle_bonds = []
+        for i in range(5):
+            a = ordered[i]
+            b = ordered[(i + 1) % 5]
+            bond = rw.GetBondBetweenAtoms(a, b)
+            if bond is None:
+                cycle_bonds = []
+                break
+            bond.SetIsAromatic(False)
+            bond.SetBondType(Chem.BondType.SINGLE)
+            cycle_bonds.append(bond)
+
+        if not cycle_bonds:
+            continue
+
+        # set 2 double bonds (cyclopentadiene-like)
+        cycle_bonds[0].SetBondType(Chem.BondType.DOUBLE)
+        cycle_bonds[2].SetBondType(Chem.BondType.DOUBLE)
+
+        # add one metal-anchor bond if needed
+        if not already_connected:
+            anchor = None
+            for i in ordered:
+                if rw.GetAtomWithIdx(i).GetTotalNumHs() > 0:
+                    anchor = i
+                    break
+            if anchor is None:
+                anchor = ordered[0]
+            rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
+
+    new_mol = rw.GetMol()
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol
+
+
+def update_shell_config(shell_file: Path, env_vars: list) -> None:
+    """
+    Append chemsmart ``export`` lines to *shell_file* (idempotent).
+
+    This is the POSIX equivalent of writing ``$env:PATH`` lines to a
+    PowerShell profile or updating the Windows registry.  The update is
+    idempotent: if the marker comment ``# Added by chemsmart installer`` is
+    already present the file is not modified again.
+
+    Creates the file if it does not yet exist.
+
+    Args:
+        shell_file: Path to the shell startup file (e.g. ``~/.bashrc``).
+        env_vars: List of ``export VAR=...`` lines to append.
+    """
+    if not shell_file.exists():
+        shell_file.touch()
+
+    with shell_file.open("r+", encoding="utf-8") as f:
+        lines = f.readlines()
+        if not any("Added by chemsmart installer" in line for line in lines):
+            f.write("\n# Added by chemsmart installer\n")
+            for var in env_vars:
+                f.write(f"{var}\n")
+            f.write("\n")
+            logger.info(f"Updated shell config: {shell_file}")
+        else:
+            logger.info(f"Shell config already updated: {shell_file}")
+
+    logger.info(f"Please restart your terminal or run 'source {shell_file}'.")
+
+
+_PS_BLOCK_START = "# >>> chemsmart initialize >>>"
+_PS_BLOCK_END = "# <<< chemsmart initialize <<<"
+# Legacy marker written by earlier versions of the installer.
+_PS_BLOCK_LEGACY = "# Added by chemsmart installer"
+
+
+def update_powershell_profiles(profiles: list, ps_env_vars: list) -> None:
+    """
+    Write chemsmart initialisation lines to each PowerShell profile,
+    replacing any previously written block.  Creates profile directories
+    and files as needed.
+
+    The block is delimited by ``# >>> chemsmart initialize >>>`` /
+    ``# <<< chemsmart initialize <<<`` markers.  If an older block using
+    the legacy marker ``# Added by chemsmart installer`` is found it is
+    removed and replaced with the current block so that users who ran
+    ``make configure`` with an earlier version are migrated automatically.
+
+    Args:
+        profiles: List of :class:`~pathlib.Path` objects pointing to the PS
+            profile files to update.
+        ps_env_vars: List of PowerShell assignment / alias lines to write
+            inside the block.
+    """
+    new_block = (
+        f"\n{_PS_BLOCK_START}\n"
+        + "\n".join(ps_env_vars)
+        + f"\n{_PS_BLOCK_END}\n"
+    )
+
+    for ps_profile in profiles:
+        ps_profile.parent.mkdir(parents=True, exist_ok=True)
+        if not ps_profile.exists():
+            ps_profile.write_text(new_block, encoding="utf-8")
+            logger.info(f"Created PowerShell profile: {ps_profile}")
+            continue
+
+        content = ps_profile.read_text(encoding="utf-8")
+
+        # ── Remove existing chemsmart block (new-style markers) ──────────
+        if _PS_BLOCK_START in content:
+            start = content.find(_PS_BLOCK_START)
+            end = content.find(_PS_BLOCK_END, start)
+            if end != -1:
+                content = content[:start] + content[end + len(_PS_BLOCK_END) :]
+            else:
+                # Malformed block — remove from start marker to end of file
+                content = content[:start]
+
+        # ── Remove legacy block ("# Added by chemsmart installer") ───────
+        if _PS_BLOCK_LEGACY in content:
+            lines = content.splitlines(keepends=True)
+            filtered = []
+            in_legacy = False
+            for line in lines:
+                if _PS_BLOCK_LEGACY in line:
+                    in_legacy = True
+                    continue
+                if in_legacy and line.strip() == "":
+                    in_legacy = False
+                    continue
+                if not in_legacy:
+                    filtered.append(line)
+            content = "".join(filtered)
+
+        # Ensure exactly one blank line separates existing content from the
+        # new block (strip trailing newlines, then add exactly one).
+        ps_profile.write_text(
+            content.rstrip("\n") + "\n" + new_block, encoding="utf-8"
+        )
+        logger.info(f"Updated PowerShell profile: {ps_profile}")
+
+    logger.info(
+        "PowerShell profiles updated.\n"
+        "To apply changes in the current PowerShell session, run:\n"
+        "  . $PROFILE"
+    )
+
+
+def update_windows_env(paths_to_add: list, pythonpath_entry: str) -> None:
+    """
+    Add directories to the Windows user PATH and PYTHONPATH via the registry.
+
+    This is the Windows equivalent of appending ``export PATH=...`` lines to
+    ``~/.bashrc``.  Changes take effect in **new** terminal sessions; users
+    must restart their terminal or execute the PowerShell one-liner below to
+    refresh the current session::
+
+        $env:PATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' +
+                    [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+
+    Args:
+        paths_to_add: List of directory paths to append to the user PATH (only
+            entries that are not already present will be added).
+        pythonpath_entry: Single directory to append to the user PYTHONPATH (no-op
+            if already present).
+    """
+    try:
+        import winreg  # noqa: PLC0415 — Windows-only stdlib module
+    except ImportError:
+        logger.warning("winreg not available; skipping Windows PATH update.")
+        return
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            "Environment",
+            0,
+            winreg.KEY_READ | winreg.KEY_WRITE,
+        ) as key:
+            # ---- PATH ----
+            try:
+                current_path, _ = winreg.QueryValueEx(key, "PATH")
+            except FileNotFoundError:
+                current_path = ""
+
+            path_parts = [p for p in current_path.split(";") if p.strip()]
+            new_paths = [p for p in paths_to_add if p not in path_parts]
+            if new_paths:
+                winreg.SetValueEx(
+                    key,
+                    "PATH",
+                    0,
+                    winreg.REG_EXPAND_SZ,
+                    ";".join(path_parts + new_paths),
+                )
+                logger.info(f"Added to Windows user PATH: {new_paths}")
+            else:
+                logger.info(
+                    "Windows user PATH already contains all required paths."
+                )
+
+            # ---- PYTHONPATH ----
+            try:
+                current_pypath, _ = winreg.QueryValueEx(key, "PYTHONPATH")
+            except FileNotFoundError:
+                current_pypath = ""
+
+            pypath_parts = [p for p in current_pypath.split(";") if p.strip()]
+            if pythonpath_entry not in pypath_parts:
+                winreg.SetValueEx(
+                    key,
+                    "PYTHONPATH",
+                    0,
+                    winreg.REG_SZ,
+                    ";".join(pypath_parts + [pythonpath_entry]),
+                )
+                logger.info(
+                    f"Updated Windows PYTHONPATH to include: {pythonpath_entry}"
+                )
+            else:
+                logger.info(
+                    "Windows PYTHONPATH already contains the required path."
+                )
+
+        # Notify running applications about the environment change so
+        # that new terminal windows inherit the updated PATH immediately.
+        import ctypes
+
+        ctypes.windll.user32.SendMessageTimeoutW(
+            0xFFFF,  # HWND_BROADCAST
+            0x001A,  # WM_SETTINGCHANGE
+            0,
+            "Environment",
+            0x0002,  # SMTO_ABORTIFHUNG
+            5000,
+            None,
+        )
+        logger.info("Broadcasted environment change to Windows.")
+
+    except PermissionError:
+        logger.warning(
+            "Permission denied accessing Windows registry. "
+            "Run as administrator or add these paths to PATH manually:\n"
+            + "\n".join(f"  {p}" for p in paths_to_add)
+        )
+    except Exception as e:
+        logger.warning(f"Could not update Windows environment: {e}")

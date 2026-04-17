@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "0.4.3"
+version = "0.6.0"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -23,7 +23,7 @@ dependencies = [
     "filelock",
     "joblib==1.4.2",
     "networkx==3.4.2",
-    "numpy~=1.26.4",  # rdkit works with numpy 1.x not 2.x
+    "numpy~=1.26.4",  # rdkit and pymol require numpy 1.x
     "pytest==8.3.4",
     "pyyaml",
     "pymatgen==2025.10.7",
@@ -38,6 +38,12 @@ dependencies = [
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
     "pytest_mock>=3.14.0",
+    "spyrmsd>=0.8.0",
+    "lockfile>=0.12.2",
+    "contextlib2>=21.6.0",
+    "pillow>=12.1.1",
+    "ipython>=8.12.3",
+    "image>=1.5.33",
     "Pillow>=10.0.0",  # For image handling
     "decimer>=2.3.0",  # For image-to-molecule conversion
 ]
@@ -77,11 +83,18 @@ docs = [
 homepage = "https://github.com/xinglong-zhang/chemsmart/"
 "Source" = "https://github.com/xinglong-zhang/chemsmart/"
 
+[project.scripts]
+chemsmart = "chemsmart.cli.main:main"
+
 [tool.setuptools.packages.find]
 exclude = [".github"]
 
 [tool.setuptools.package-data]
-"chemsmart" = ["VERSION"]
+"chemsmart" = [
+    "VERSION",
+    "settings/templates/**",
+    "settings/templates/.chemsmart/**",
+]
 
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]
@@ -111,4 +124,3 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["chemsmart"]
-
