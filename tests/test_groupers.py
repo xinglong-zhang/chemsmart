@@ -833,6 +833,27 @@ class Test_TorsionFingerprint_grouper:
         tfd = grouper._calculate_tfd((0, 7))
         assert np.isclose(tfd, 0.07727, rtol=1e-3)
 
+    def test_count_groups_matches_complete_linkage_iteration_order(
+        self, methanol_molecules
+    ):
+        grouper = TorsionFingerprintGrouper(
+            methanol_molecules[:4],
+            threshold=0.1,
+            num_procs=1,
+            ignore_hydrogens=False,
+        )
+
+        adj_matrix = np.zeros((4, 4), dtype=bool)
+        adj_matrix[0, 1] = adj_matrix[1, 0] = True
+        adj_matrix[0, 3] = adj_matrix[3, 0] = True
+        adj_matrix[1, 2] = adj_matrix[2, 1] = True
+
+        _, index_groups = grouper._complete_linkage_grouping(adj_matrix, 4)
+        num_groups = grouper._count_groups(adj_matrix, 4)
+
+        assert len(index_groups) == 2
+        assert num_groups == len(index_groups)
+
     def test_use_maxdev_parameter(
         self, multiple_molecules_xyz_file, temp_working_dir
     ):

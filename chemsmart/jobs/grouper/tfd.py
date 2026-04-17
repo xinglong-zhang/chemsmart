@@ -431,15 +431,19 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         return best_threshold
 
     def _count_groups(self, adj_matrix, n):
-        """Count number of groups using complete linkage."""
+        """Count number of groups using complete linkage.
+
+        Uses the same iteration order as _complete_linkage_grouping (last to first)
+        so threshold binary search reflects actual grouping behavior.
+        """
         assigned = [False] * n
         num_groups = 0
-        for i in range(n):
+        for i in range(n - 1, -1, -1):
             if assigned[i]:
                 continue
             current_group = [i]
             assigned[i] = True
-            for j in range(i + 1, n):
+            for j in range(i - 1, -1, -1):
                 if assigned[j]:
                     continue
                 can_join = all(adj_matrix[j, m] for m in current_group)
