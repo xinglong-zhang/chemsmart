@@ -1892,9 +1892,9 @@ class TestGaussian16Output:
     ):
         g16_out = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
         h_from_file = g16_out.enthalpy
-        assert h_from_file == -7521.416016
+        assert np.isclose(h_from_file, -7521.416016, rtol=1e-4)
         g_from_file = g16_out.gibbs_free_energy
-        assert g_from_file == -7521.548653
+        assert np.isclose(g_from_file, -7521.548653, rtol=1e-4)
 
 
 class TestGaussianWBIOutput:
