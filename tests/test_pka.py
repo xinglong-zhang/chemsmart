@@ -255,3 +255,62 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
     assert second_args[second_args.index("--multiplicity") + 1] == "2"
     assert "--proton-index" in second_args
     assert second_args[second_args.index("--proton-index") + 1] == "2"
+
+
+def test_run_gaussian_pka_help_is_submission_only():
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        [
+            "--no-scratch",
+            "--fake",
+            "gaussian",
+            "-p",
+            "test",
+            "-f",
+            "tests/data/StructuresTests/xyz/crest_best.xyz",
+            "pka",
+            "--help",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "\n  submit" in result.output
+    assert "\n  batch" in result.output
+    assert "\n  analyze" not in result.output
+    assert "\n  thermo" not in result.output
+    assert "\n  batch-analyze" not in result.output
+
+
+def test_run_orca_pka_help_is_submission_only():
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        [
+            "--no-scratch",
+            "--fake",
+            "orca",
+            "-p",
+            "test",
+            "-f",
+            "tests/data/StructuresTests/xyz/crest_best.xyz",
+            "pka",
+            "--help",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "\n  submit" in result.output
+    assert "\n  batch" in result.output
+    assert "\n  analyze" not in result.output
+    assert "\n  thermo" not in result.output
+    assert "\n  batch-analyze" not in result.output
+
+
+def test_run_pka_help_keeps_output_analysis_commands():
+    runner = CliRunner()
+    result = runner.invoke(run, ["--no-scratch", "--fake", "pka", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "analyze" in result.output
+    assert "batch-analyze" in result.output
