@@ -1183,6 +1183,11 @@ class Molecule:
 
             text_for_parsing = normalized_detected_text or detected_text
             text_for_parsing = text_for_parsing.strip()
+            text_for_parsing = re.sub(
+                r"[" + re.escape("".join(DASH_CHARACTERS[1:])) + r"]",
+                DASH_CHARACTERS[0],
+                text_for_parsing,
+            )
             has_dash_separator = DASH_CHARACTERS[0] in text_for_parsing
 
             if has_dash_separator:
