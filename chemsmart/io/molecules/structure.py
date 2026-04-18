@@ -39,10 +39,6 @@ ABBREVIATION_PATTERNS = {
     for abbrev in CHEMICAL_ABBREVIATIONS
 }
 
-EXPLICIT_ABBREVIATION_PATTERNS = (
-    re.compile(r"AD-?SH"),
-)
-
 
 class Molecule:
     """Class to represent a molcular structure.
@@ -1165,74 +1161,58 @@ class Molecule:
         # If DECIMER fails or returns suspicious results when abbreviations are detected
         # (DECIMER typically fails with abbreviations), try to construct SMILES manually
         decimer_failed = smiles is None or not smiles.strip()
-        has_explicit_ad_sh = bool(
-            normalized_detected_text
-            and any(
-                # OCR sometimes drops the dash entirely, so support AD-SH and ADSH.
-                pattern.search(normalized_detected_text.upper())
-                for pattern in EXPLICIT_ABBREVIATION_PATTERNS
-            )
-        )
+        constructed_smiles = None
+
+        if detected_text:
+            abbreviation_upper_to_smiles = {
+                abbrev.upper(): abbrev_smiles
+                for abbrev, abbrev_smiles in CHEMICAL_ABBREVIATIONS.items()
+            }
+            substituent_upper_to_smiles = {
+                substituent.upper(): substituent_smiles
+                for substituent, substituent_smiles in SUBSTITUENT_MAPPING.items()
+            }
+
+            def _token_to_smiles(token):
+                token = token.strip().upper()
+                if not token:
+                    return None
+                if token in abbreviation_upper_to_smiles:
+                    return abbreviation_upper_to_smiles[token]
+                return substituent_upper_to_smiles.get(token)
+
+            text_for_parsing = normalized_detected_text or detected_text
+            text_for_parsing = text_for_parsing.strip()
+            has_dash_separator = DASH_CHARACTERS[0] in text_for_parsing
+
+            if has_dash_separator:
+                # Handle common shorthand like "Abbrev-Substituent".
+                left_token, right_token = text_for_parsing.split(
+                    DASH_CHARACTERS[0], 1
+                )
+                left_smiles = _token_to_smiles(left_token)
+                right_smiles = _token_to_smiles(right_token)
+                if left_smiles and right_smiles:
+                    constructed_smiles = left_smiles + right_smiles
+            elif len(detected_abbrevs) == 1:
+                # If we have exactly one abbreviation label, use it directly.
+                constructed_smiles = next(iter(detected_abbrevs.values()))
+
         should_use_abbrev = detected_abbrevs and (
             decimer_failed
             or (smiles and len(smiles) < MIN_VALID_SMILES_LENGTH)
-            or has_explicit_ad_sh
+            or (
+                constructed_smiles is not None
+                and bool(normalized_detected_text)
+                and DASH_CHARACTERS[0] in normalized_detected_text
+            )
         )
-
-        if should_use_abbrev:
+        if should_use_abbrev and constructed_smiles:
             logger.warning(
                 f"DECIMER returned incomplete/null SMILES: {smiles}. "
                 f"Attempting to construct from detected abbreviations: {list(detected_abbrevs.keys())}"
             )
-
-            # Store the original smiles (may be None)
-            constructed_smiles = None
-
-            # Try to construct molecule from abbreviations
-            # For simple cases like "Ad-SH", we can combine parts
-            if detected_text:
-                # Simple heuristic: if we detected abbreviations, try common patterns
-                text_upper = (
-                    normalized_detected_text
-                    if normalized_detected_text
-                    else detected_text
-                ).upper()
-
-                # Pattern: Ad-SH (adamantyl thiol)
-                # Note: The dash might be a hyphen (-), en-dash (–), or em-dash (—)
-                if "Ad" in detected_abbrevs and "SH" in text_upper:
-                    constructed_smiles = detected_abbrevs["Ad"] + "S"
-                    logger.info(
-                        f"Constructed SMILES from Ad-SH pattern: {constructed_smiles}"
-                    )
-                # Pattern: Ph-X (phenyl with substituent)
-                elif "Ph" in detected_abbrevs and any(
-                    sep in detected_text for sep in DASH_CHARACTERS
-                ):
-                    # Try to get the substituent by splitting on the first dash found
-                    # Note: We only handle simple cases with one dash
-                    parts = []
-                    for sep in DASH_CHARACTERS:
-                        if sep in detected_text:
-                            parts = detected_text.split(
-                                sep, 1
-                            )  # Split only on first occurrence
-                            break
-                    if len(parts) == 2:
-                        substituent = parts[1].strip().upper()
-                        # Map common substituents using the predefined mapping
-                        if substituent in SUBSTITUENT_MAPPING:
-                            constructed_smiles = (
-                                detected_abbrevs["Ph"]
-                                + SUBSTITUENT_MAPPING[substituent]
-                            )
-                # If we have an abbreviation but couldn't construct, use it as-is
-                elif len(detected_abbrevs) == 1:
-                    constructed_smiles = next(iter(detected_abbrevs.values()))
-
-            # Use constructed SMILES if we managed to construct one
-            if constructed_smiles:
-                smiles = constructed_smiles
+            smiles = constructed_smiles
 
         if smiles is None:
             raise ValueError(

@@ -14,9 +14,12 @@ CHEMICAL_ABBREVIATIONS = {
     "nPr": "CCC",  # n-Propyl
     "iPr": "C(C)C",  # Isopropyl
     "Bu": "CCCC",  # Butyl
+    "nBu": "CCCC",  # n-Butyl
     "iBu": "CC(C)C",  # Isobutyl
     "sBu": "C(C)CC",  # sec-Butyl
     "tBu": "C(C)(C)C",  # tert-Butyl
+    "nPent": "CCCCC",  # n-Pentyl
+    "nHex": "CCCCCC",  # n-Hexyl
     "Bn": "Cc1ccccc1",  # Benzyl
     "Ac": "C(=O)C",  # Acetyl
     "Bz": "C(=O)c1ccccc1",  # Benzoyl
@@ -29,9 +32,28 @@ CHEMICAL_ABBREVIATIONS = {
     "NMe2": "N(C)C",  # Dimethylamino
     "CF3": "C(F)(F)F",  # Trifluoromethyl
     "NO2": "N(=O)=O",  # Nitro
+    "CHO": "C=O",  # Formyl
+    "CO2H": "C(=O)O",  # Carboxylic acid
+    "CO2Me": "C(=O)OC",  # Methyl ester
+    "CO2Et": "C(=O)OCC",  # Ethyl ester
+    "CN": "C#N",  # Cyano
+    "N3": "[N-]=[N+]=N",  # Azido
+    "Vinyl": "C=C",  # Vinyl
+    "Allyl": "CC=C",  # Allyl
+    "Propargyl": "CC#C",  # Propargyl
+    "Piv": "C(=O)C(C)(C)C",  # Pivaloyl
+    "OMs": "OS(=O)(=O)C",  # Mesylate
+    "OTs": "OS(=O)(=O)c1ccc(C)cc1",  # Tosylate
+    "OTf": "OS(=O)(=O)C(F)(F)F",  # Triflate
     "Boc": "C(=O)OC(C)(C)C",  # tert-Butoxycarbonyl
     "Cbz": "C(=O)OCc1ccccc1",  # Benzyloxycarbonyl
+    "Alloc": "C(=O)OCC=C",  # Allyloxycarbonyl
     "Fmoc": "C(=O)OCC1c2ccccc2-c2ccccc21",  # Fluorenylmethyloxycarbonyl
+    "MOM": "COC",  # Methoxymethyl
+    "TMS": "[Si](C)(C)C",  # Trimethylsilyl
+    "TBDMS": "[Si](C)(C)C(C)(C)C",  # tert-Butyldimethylsilyl
+    "TBDPS": "[Si](c1ccccc1)(c1ccccc1)C(C)(C)C",  # tert-Butyldiphenylsilyl
+    "Trt": "C(c1ccccc1)(c1ccccc1)c1ccccc1",  # Trityl
 }
 
 # Dash characters commonly used in chemical drawings

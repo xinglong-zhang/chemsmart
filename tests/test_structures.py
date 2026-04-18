@@ -2732,16 +2732,78 @@ class TestStructuresFromImage:
 
         assert result == CHEMICAL_ABBREVIATIONS["Ad"] + "S"
 
+    def test_read_molecule_from_image_with_general_abbreviation_pattern(
+        self, tmp_path, monkeypatch
+    ):
+        image_path = tmp_path / "ph_oh.png"
+        image_path.write_bytes(b"placeholder")
+
+        mock_cv2 = types.SimpleNamespace(
+            IMREAD_GRAYSCALE=0,
+            INTER_CUBIC=0,
+            THRESH_BINARY=0,
+            THRESH_OTSU=0,
+            imread=lambda *_args, **_kwargs: np.ones((8, 8), dtype=np.uint8),
+            resize=lambda img, *_args, **_kwargs: img,
+            threshold=lambda img, *_args, **_kwargs: (0, img),
+            imwrite=lambda path, *_args, **_kwargs: Path(path).write_bytes(b"x")
+            or True,
+        )
+        monkeypatch.setitem(sys.modules, "cv2", mock_cv2)
+        monkeypatch.setitem(
+            sys.modules,
+            "DECIMER",
+            types.SimpleNamespace(predict_SMILES=lambda *_args, **_kwargs: "CCCC"),
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "pytesseract",
+            types.SimpleNamespace(
+                image_to_string=lambda *_args, **_kwargs: "Ph—OH"
+            ),
+        )
+        monkeypatch.setattr(
+            Molecule,
+            "from_smiles",
+            classmethod(lambda _cls, smiles: smiles),
+        )
+
+        result = Molecule._read_image_file(str(image_path))
+
+        assert result == CHEMICAL_ABBREVIATIONS["Ph"] + "O"
+
     def test_chemical_abbreviations_include_common_groups(self):
         expected_abbreviations = {
+            "nBu": "CCCC",
+            "nPent": "CCCCC",
+            "nHex": "CCCCCC",
             "OMe": "OC",
             "OEt": "OCC",
             "NMe2": "N(C)C",
             "CF3": "C(F)(F)F",
             "NO2": "N(=O)=O",
+            "CHO": "C=O",
+            "CO2H": "C(=O)O",
+            "CO2Me": "C(=O)OC",
+            "CO2Et": "C(=O)OCC",
+            "CN": "C#N",
+            "N3": "[N-]=[N+]=N",
+            "Vinyl": "C=C",
+            "Allyl": "CC=C",
+            "Propargyl": "CC#C",
+            "Piv": "C(=O)C(C)(C)C",
+            "OMs": "OS(=O)(=O)C",
+            "OTs": "OS(=O)(=O)c1ccc(C)cc1",
+            "OTf": "OS(=O)(=O)C(F)(F)F",
             "Boc": "C(=O)OC(C)(C)C",
             "Cbz": "C(=O)OCc1ccccc1",
+            "Alloc": "C(=O)OCC=C",
             "Fmoc": "C(=O)OCC1c2ccccc2-c2ccccc21",
+            "MOM": "COC",
+            "TMS": "[Si](C)(C)C",
+            "TBDMS": "[Si](C)(C)C(C)(C)C",
+            "TBDPS": "[Si](c1ccccc1)(c1ccccc1)C(C)(C)C",
+            "Trt": "C(c1ccccc1)(c1ccccc1)c1ccccc1",
         }
         for abbreviation, smiles in expected_abbreviations.items():
             assert CHEMICAL_ABBREVIATIONS[abbreviation] == smiles
