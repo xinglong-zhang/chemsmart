@@ -188,6 +188,90 @@ with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 For full details on organometallic complex support and its restrictions, see :doc:`chemdraw-organometallic`.
 
+Image Files
+===========
+
+Image Files (.png, .jpg, .jpeg, .tif, .tiff)
+---------------------------------------------
+
+Chemsmart can read 2D molecular drawings from image files and convert them to a
+``Molecule`` object.
+
+.. code:: bash
+
+   chemsmart sub -s server gaussian -p project -f molecule.png -c 0 -m 1 opt
+
+Processing pipeline
+~~~~~~~~~~~~~~~~~~~
+
+When ``Molecule.from_filepath()`` receives an image path, chemsmart:
+
+#. Loads the image in grayscale and applies preprocessing (resize + Otsu threshold).
+#. Runs DECIMER to predict a SMILES string from the structure drawing.
+#. Optionally runs OCR (``pytesseract``) to detect text abbreviations in the image.
+#. If DECIMER output is missing/too short and recognized abbreviations are detected,
+   uses abbreviation-based fallback assembly for simple dash-separated labels.
+#. Converts the final SMILES to a chemsmart ``Molecule``.
+
+Python dependencies
+~~~~~~~~~~~~~~~~~~~
+
+Required for image parsing:
+
+- ``decimer``
+- ``opencv-python``
+- ``Pillow`` (PIL backend)
+
+Optional but recommended for abbreviation detection:
+
+- ``pytesseract`` (Python wrapper)
+
+Install commands:
+
+.. code:: bash
+
+   # Core image parsing stack
+   pip install decimer opencv-python Pillow
+
+   # Optional OCR support for abbreviation expansion
+   pip install chemsmart[image]
+   # or
+   pip install pytesseract
+
+.. note::
+
+   ``pytesseract`` also requires the Tesseract OCR binary to be available on the
+   system PATH.
+
+Recognized abbreviations
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The image parser currently recognizes these built-in abbreviations from
+``chemsmart.io.molecules.CHEMICAL_ABBREVIATIONS``:
+
+- ``Ad, Ph, Me, Et, nPr, iPr, Bu, nBu, iBu, sBu, tBu, nPent, nHex, Bn, Ac, Bz``
+- ``Ts, Ms, Tf, Cy, OMe, OEt, NMe2, CF3, NO2, CHO, CO2H, CO2Me, CO2Et, CN, N3``
+- ``Vinyl, Allyl, Propargyl, Piv, OMs, OTs, OTf``
+- ``Boc, Cbz, Alloc, Fmoc, MOM, TMS, TBDMS, TBDPS, Trt``
+
+For dash-separated shorthand, the fallback parser also recognizes these terminal
+substituent labels from ``SUBSTITUENT_MAPPING`` (both ``NH2`` and Unicode
+``NH₂`` are supported):
+
+- ``SH, OH, NH2, NH₂``
+
+Limitations
+~~~~~~~~~~~
+
+- Image input currently supports only a **single** molecule per file.
+- For image files, ``index`` and ``return_list`` arguments are ignored.
+- Abbreviation fallback is heuristic and limited to currently defined labels.
+- OCR quality and image quality (resolution, contrast, font clarity) strongly
+  affect recognition accuracy.
+- Without ``pytesseract``, abbreviation-aware fallback is disabled.
+- Incorrect DECIMER/OCR interpretations can still produce wrong structures and
+  should be manually verified for critical workflows.
+
 *********************
  Molecular Databases
 *********************
