@@ -226,22 +226,21 @@ Optional but recommended for abbreviation detection:
 
 - ``pytesseract`` (Python wrapper)
 
-Install commands:
+Installation behavior:
 
-.. code:: bash
-
-   # Core image parsing stack
-   pip install decimer opencv-python Pillow
-
-   # Optional OCR support for abbreviation expansion
-   pip install chemsmart[image]
-   # or
-   pip install pytesseract
+- Core image dependencies (``decimer``, ``opencv-python``, ``Pillow``) are
+  included in chemsmart's package dependencies and are installed with
+  ``pip install chemsmart``.
+- OCR support is optional; install it with ``pip install chemsmart[image]``
+  (or install ``pytesseract`` directly).
 
 .. note::
 
-   ``pytesseract`` also requires the Tesseract OCR binary to be available on the
-   system PATH.
+   ``pytesseract`` is a Python wrapper. If the Tesseract OCR binary is already
+   installed and available on ``PATH``, no additional Python-side configuration
+   is needed. If not, install the Tesseract binary for your OS and then ensure
+   it is discoverable (either via ``PATH`` or by setting
+   ``pytesseract.pytesseract.tesseract_cmd``).
 
 Recognized abbreviations
 ~~~~~~~~~~~~~~~~~~~~~~~~
