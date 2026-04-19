@@ -3,6 +3,7 @@ from shutil import copy, copytree, rmtree
 
 import numpy as np
 import pytest
+from click.testing import CliRunner
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import (
@@ -426,6 +427,104 @@ class TestConverter:
         assert mol.num_atoms == 483
         assert mol.chemical_formula == "C155H180CuN53O82P12"
         assert mol.energy == -5300.535128
+
+    # ------------------------------------------------------------------
+    # convert_file() - generic conversion via Molecule object
+    # ------------------------------------------------------------------
+
+    def test_convert_file_pdb_to_xyz(self, tmpdir, single_model_pdb_file):
+        output_path = os.path.join(str(tmpdir), "water.xyz")
+        FileConverter().convert_file(single_model_pdb_file, output_path)
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 3
+        assert list(mol.symbols) == ["O", "H", "H"]
+
+    def test_convert_file_xyz_to_com(self, tmpdir, single_molecule_xyz_file):
+        output_path = os.path.join(str(tmpdir), "molecule.com")
+        FileConverter().convert_file(single_molecule_xyz_file, output_path)
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+
+    def test_convert_file_xyz_to_pdb(self, tmpdir, single_molecule_xyz_file):
+        output_path = os.path.join(str(tmpdir), "molecule.pdb")
+        FileConverter().convert_file(single_molecule_xyz_file, output_path)
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+
+    def test_convert_file_uses_output_filepath_init_param(
+        self, tmpdir, single_model_pdb_file
+    ):
+        output_path = os.path.join(str(tmpdir), "water.xyz")
+        fc = FileConverter(
+            filename=single_model_pdb_file, output_filepath=output_path
+        )
+        fc.convert_files()
+
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 3
+
+    def test_convert_file_raises_on_missing_input(self, tmpdir):
+        fc = FileConverter()
+        with pytest.raises(FileNotFoundError):
+            fc.convert_file(
+                os.path.join(str(tmpdir), "nonexistent.pdb"),
+                os.path.join(str(tmpdir), "out.xyz"),
+            )
+
+    # ------------------------------------------------------------------
+    # CLI: chemsmart run convert
+    # ------------------------------------------------------------------
+
+    def test_cli_convert_pdb_to_xyz(self, tmpdir, single_model_pdb_file):
+        from chemsmart.cli.convert import convert
+
+        output_path = os.path.join(str(tmpdir), "water.xyz")
+        runner = CliRunner()
+        result = runner.invoke(
+            convert,
+            ["--input", single_model_pdb_file, "--output", output_path],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+        mol = Molecule.from_filepath(output_path)
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 3
+
+    def test_cli_convert_xyz_to_com(self, tmpdir, single_molecule_xyz_file):
+        from chemsmart.cli.convert import convert
+
+        output_path = os.path.join(str(tmpdir), "molecule.com")
+        runner = CliRunner()
+        result = runner.invoke(
+            convert,
+            ["--input", single_molecule_xyz_file, "--output", output_path],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+
+    def test_cli_convert_short_options(self, tmpdir, single_model_pdb_file):
+        from chemsmart.cli.convert import convert
+
+        output_path = os.path.join(str(tmpdir), "water.xyz")
+        runner = CliRunner()
+        result = runner.invoke(
+            convert,
+            ["-i", single_model_pdb_file, "-o", output_path],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
 
 
 class TestPDBFile:
