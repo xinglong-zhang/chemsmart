@@ -192,84 +192,78 @@ Image Files
 ===========
 
 Image Files (.png, .jpg, .jpeg, .tif, .tiff)
----------------------------------------------
+--------------------------------------------
 
-Chemsmart can read 2D molecular drawings from image files and convert them to a
-``Molecule`` object.
+Chemsmart can read 2D molecular drawings from image files and convert them to a ``Molecule`` object.
 
 .. code:: bash
 
    chemsmart sub -s server gaussian -p project -f molecule.png -c 0 -m 1 opt
 
 Processing pipeline
-~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^
 
 When ``Molecule.from_filepath()`` receives an image path, chemsmart:
 
 #. Loads the image in grayscale and applies preprocessing (resize + Otsu threshold).
 #. Runs DECIMER to predict a SMILES string from the structure drawing.
 #. Optionally runs OCR (``pytesseract``) to detect text abbreviations in the image.
-#. If DECIMER output is missing/too short and recognized abbreviations are detected,
-   uses abbreviation-based fallback assembly for simple dash-separated labels.
+#. If DECIMER output is missing/too short and recognized abbreviations are detected, uses abbreviation-based fallback
+   assembly for simple dash-separated labels.
 #. Converts the final SMILES to a chemsmart ``Molecule``.
 
 Python dependencies
-~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^
 
 Required for image parsing:
 
-- ``decimer``
-- ``opencv-python``
-- ``Pillow`` (PIL backend)
+-  ``decimer``
+-  ``opencv-python``
+-  ``Pillow`` (PIL backend)
 
 Optional but recommended for abbreviation detection:
 
-- ``pytesseract`` (Python wrapper)
+-  ``pytesseract`` (Python wrapper)
 
 Installation behavior:
 
-- Core image dependencies (``decimer``, ``opencv-python``, ``Pillow``) are
-  included in chemsmart's package dependencies and are installed with
-  ``pip install chemsmart``.
-- OCR support is optional; install it with ``pip install chemsmart[image]``
-  (or install ``pytesseract`` directly).
+-  Core image dependencies (``decimer``, ``opencv-python``, ``Pillow``) are included in chemsmart's package dependencies
+   and are installed with ``pip install chemsmart``.
+-  OCR support is optional; install it with ``pip install chemsmart[image]`` (or install ``pytesseract`` directly).
 
 .. note::
 
-   ``pytesseract`` is a Python wrapper. If the Tesseract OCR binary is already
-   installed and available on ``PATH``, no additional Python-side configuration
-   is needed. If not, install the Tesseract binary for your OS and then ensure
-   it is discoverable (either via ``PATH`` or by setting
-   ``pytesseract.pytesseract.tesseract_cmd``).
+   ``pytesseract`` is a Python wrapper. If the Tesseract OCR binary is already installed and available on ``PATH``, no
+   additional Python-side configuration is needed. If not, install the Tesseract binary for your OS and then ensure it
+   is discoverable (either via ``PATH`` or by setting ``pytesseract.pytesseract.tesseract_cmd``). ``pytesseract`` also
+   requires the Tesseract OCR binary to be available on the system PATH.
 
 Recognized abbreviations
-~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 The image parser currently recognizes these built-in abbreviations from
 ``chemsmart.io.molecules.CHEMICAL_ABBREVIATIONS``:
 
-- ``Ad, Ph, Me, Et, nPr, iPr, Bu, nBu, iBu, sBu, tBu, nPent, nHex, Bn, Ac, Bz``
-- ``Ts, Ms, Tf, Cy, OMe, OEt, NMe2, CF3, NO2, CHO, CO2H, CO2Me, CO2Et, CN, N3``
-- ``Vinyl, Allyl, Propargyl, Piv, OMs, OTs, OTf``
-- ``Boc, Cbz, Alloc, Fmoc, MOM, TMS, TBDMS, TBDPS, Trt``
+-  ``Ad, Ph, Me, Et, nPr, iPr, Bu, nBu, iBu, sBu, tBu, nPent, nHex, Bn, Ac, Bz``
+-  ``Ts, Ms, Tf, Cy, OMe, OEt, NMe2, CF3, NO2, CHO, CO2H, CO2Me, CO2Et, CN, N3``
+-  ``Vinyl, Allyl, Propargyl, Piv, OMs, OTs, OTf``
+-  ``Boc, Cbz, Alloc, Fmoc, MOM, TMS, TBDMS, TBDPS, Trt``
 
-For dash-separated shorthand, the fallback parser also recognizes these terminal
-substituent labels from ``SUBSTITUENT_MAPPING`` (both ``NH2`` and Unicode
-``NH₂`` are supported):
+For dash-separated shorthand, the fallback parser also recognizes these terminal substituent labels from
+``SUBSTITUENT_MAPPING`` (both ``NH2`` and Unicode ``NH₂`` are supported):
 
-- ``SH, OH, NH2, NH₂``
+-  ``SH, OH, NH2, NH₂``
 
 Limitations
-~~~~~~~~~~~
+^^^^^^^^^^^
 
-- Image input currently supports only a **single** molecule per file.
-- For image files, ``index`` and ``return_list`` arguments are ignored.
-- Abbreviation fallback is heuristic and limited to currently defined labels.
-- OCR quality and image quality (resolution, contrast, font clarity) strongly
-  affect recognition accuracy.
-- Without ``pytesseract``, abbreviation-aware fallback is disabled.
-- Incorrect DECIMER/OCR interpretations can still produce wrong structures and
-  should be manually verified for critical workflows.
+-  Image input currently supports only a **single** molecule per file.
+-  For image files, ``index`` and ``return_list`` arguments are ignored.
+-  Abbreviation fallback is heuristic and limited to currently defined labels.
+-  OCR quality and image quality (resolution, contrast, font clarity) strongly affect recognition accuracy.
+-  Without ``pytesseract``, abbreviation-aware fallback is disabled.
+-  Incorrect DECIMER/OCR interpretations can still produce wrong structures and should be manually verified for critical
+   workflows.
 
 *********************
  Molecular Databases

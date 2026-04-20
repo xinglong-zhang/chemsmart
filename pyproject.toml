@@ -43,13 +43,13 @@ dependencies = [
     "contextlib2>=21.6.0",
     "pillow>=12.1.1",
     "ipython>=8.12.3",
-    "image>=1.5.33",
-    "Pillow>=10.0.0",  # For image handling
-    "decimer>=2.3.0",  # For image-to-molecule conversion
 ]
 
 [project.optional-dependencies]
 image = [
+    "image>=1.5.33",
+    "Pillow>=10.0.0",  # For image handling
+    "decimer>=2.3.0",  # For image-to-molecule conversion
     "pytesseract>=0.3.10",  # For OCR-based abbreviation detection in images
 ]
 test = [

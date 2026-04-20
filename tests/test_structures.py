@@ -2706,14 +2706,18 @@ class TestStructuresFromImage:
             imread=lambda *_args, **_kwargs: np.ones((8, 8), dtype=np.uint8),
             resize=lambda img, *_args, **_kwargs: img,
             threshold=lambda img, *_args, **_kwargs: (0, img),
-            imwrite=lambda path, *_args, **_kwargs: Path(path).write_bytes(b"x")
+            imwrite=lambda path, *_args, **_kwargs: Path(path).write_bytes(
+                b"x"
+            )
             or True,
         )
         monkeypatch.setitem(sys.modules, "cv2", mock_cv2)
         monkeypatch.setitem(
             sys.modules,
             "DECIMER",
-            types.SimpleNamespace(predict_SMILES=lambda *_args, **_kwargs: "CCCC"),
+            types.SimpleNamespace(
+                predict_SMILES=lambda *_args, **_kwargs: "CCCC"
+            ),
         )
         monkeypatch.setitem(
             sys.modules,
@@ -2746,14 +2750,18 @@ class TestStructuresFromImage:
             imread=lambda *_args, **_kwargs: np.ones((8, 8), dtype=np.uint8),
             resize=lambda img, *_args, **_kwargs: img,
             threshold=lambda img, *_args, **_kwargs: (0, img),
-            imwrite=lambda path, *_args, **_kwargs: Path(path).write_bytes(b"x")
+            imwrite=lambda path, *_args, **_kwargs: Path(path).write_bytes(
+                b"x"
+            )
             or True,
         )
         monkeypatch.setitem(sys.modules, "cv2", mock_cv2)
         monkeypatch.setitem(
             sys.modules,
             "DECIMER",
-            types.SimpleNamespace(predict_SMILES=lambda *_args, **_kwargs: "CCCC"),
+            types.SimpleNamespace(
+                predict_SMILES=lambda *_args, **_kwargs: "CCCC"
+            ),
         )
         monkeypatch.setitem(
             sys.modules,

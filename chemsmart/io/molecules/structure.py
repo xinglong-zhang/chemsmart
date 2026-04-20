@@ -1111,13 +1111,13 @@ class Molecule:
                 normalized_detected_text = re.sub(r"\s+", "", detected_text)
                 canonical_dash = DASH_CHARACTERS[0]
                 normalized_detected_text = re.sub(
-                    r"["
-                    + re.escape("".join(DASH_CHARACTERS[1:]))
-                    + r"]",
+                    r"[" + re.escape("".join(DASH_CHARACTERS[1:])) + r"]",
                     canonical_dash,
                     normalized_detected_text,
                 )
-                normalized_detected_text_upper = normalized_detected_text.upper()
+                normalized_detected_text_upper = (
+                    normalized_detected_text.upper()
+                )
 
                 # Check for known abbreviations in the detected text
                 for abbrev, smiles in CHEMICAL_ABBREVIATIONS.items():
