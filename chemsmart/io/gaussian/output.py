@@ -1270,12 +1270,16 @@ class Gaussian16Output(GaussianFileMixin):
             logger.debug(
                 "closed-shell system, contribution is 2x the square of contribution coefficient"
             )
-            contribution_percentage = 2 * contribution_percentage
+            contribution_percentage = [
+                [round(value * 2, 1) for value in percentage]
+                for percentage in contribution_percentage
+            ]
         elif self.spin == "unrestricted":
-            logger.debug(
+            logger.info(
                 "unrestricted system, contribution is the contribution coefficient"
             )
-            contribution_percentage = contribution_percentage
+        else:
+            raise ValueError(f"Unknown spin type: {self.spin!r}")
         return contribution_percentage
 
     @cached_property
