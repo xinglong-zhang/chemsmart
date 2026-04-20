@@ -1249,38 +1249,36 @@ class Gaussian16Output(GaussianFileMixin):
         to an excited state.
 
         The base value for each contribution coefficient is calculated as
-        ``round((coef**2) * 100, 1)``.
+        ``(coef**2) * 100``.
 
         The returned values then depend on ``self.spin``:
 
-        - ``"restricted"``: the base percentages are doubled, matching the
-          current implementation for closed-shell systems.
-        - ``"unrestricted"``: the base percentages are returned unchanged.
-        - ``None`` (or any other unrecognized value): no additional factor is
-          applied, so the base percentages are returned unchanged.
+        - ``"restricted"``: the base percentages are doubled.
+        - ``"unrestricted"``: the base percentages are unchanged.
+        - any other value: a ``ValueError`` is raised.
         """
-        contribution_percentage = []
-        for cc in self.contribution_coefficients:
-            percentage = [round((coef**2) * 100, 1) for coef in cc]
-            contribution_percentage.append(percentage)
+        contribution_percentage = [
+            [(coef**2) * 100 for coef in cc]
+            for cc in self.contribution_coefficients
+        ]
+
         if self.spin == "restricted":
-            logger.info(
-                "closed-shell system, contribution is 2x the square of contribution coefficient"
-            )
             logger.debug(
-                "closed-shell system, contribution is 2x the square of contribution coefficient"
+                "Closed-shell system: contribution percentage is doubled."
             )
-            contribution_percentage = [
-                [round(value * 2, 1) for value in percentage]
-                for percentage in contribution_percentage
-            ]
+            factor = 2
         elif self.spin == "unrestricted":
-            logger.info(
-                "unrestricted system, contribution is the contribution coefficient"
+            logger.debug(
+                "Unrestricted system: contribution percentage uses base values."
             )
+            factor = 1
         else:
             raise ValueError(f"Unknown spin type: {self.spin!r}")
-        return contribution_percentage
+
+        return [
+            [round(value * factor, 1) for value in percentage]
+            for percentage in contribution_percentage
+        ]
 
     @cached_property
     def alpha_occ_eigenvalues(self):
