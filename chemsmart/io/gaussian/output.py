@@ -1243,6 +1243,29 @@ class Gaussian16Output(GaussianFileMixin):
         return transitions, contribution_coefficients
 
     @cached_property
+    def contribution_percentage(self):
+        """
+        Percentage contribution of a specific molecular orbital excitation
+        to an excited state is commonly calculated as the square of the CI
+        coefficient (or transition amplitude), multiplied by 100.
+        """
+        contribution_percentage = []
+        for cc in self.contribution_coefficients:
+            percentage = [round((coef**2) * 100, 1) for coef in cc]
+            contribution_percentage.append(percentage)
+        if self.spin == "restricted":
+            logger.info(
+                "closed-shell system, contribution is 2x the square of contribution coefficient"
+            )
+            contribution_percentage = 2 * contribution_percentage
+        elif self.spin == "unrestricted":
+            logger.info(
+                "unrestricted system, contribution is the contribution coefficient"
+            )
+            contribution_percentage = contribution_percentage
+        return contribution_percentage
+
+    @cached_property
     def alpha_occ_eigenvalues(self):
         """
         Obtain all eigenenergies of the alpha
