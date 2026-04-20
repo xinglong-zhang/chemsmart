@@ -1257,12 +1257,12 @@ class Gaussian16Output(GaussianFileMixin):
             logger.info(
                 "closed-shell system, contribution is 2x the square of contribution coefficient"
             )
-            contribution_percentage = [
-                [2 * percentage for percentage in percentages]
-                for percentages in contribution_percentage
-            ]
+            logger.debug(
+                "closed-shell system, contribution is 2x the square of contribution coefficient"
+            )
+            contribution_percentage = 2 * contribution_percentage
         elif self.spin == "unrestricted":
-            logger.info(
+            logger.debug(
                 "unrestricted system, contribution is the contribution coefficient"
             )
             contribution_percentage = contribution_percentage
