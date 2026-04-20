@@ -16,7 +16,13 @@ from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
-from chemsmart.io.molecules import get_bond_cutoff
+from chemsmart.io.molecules import (
+    CHEMICAL_ABBREVIATIONS,
+    DASH_CHARACTERS,
+    MIN_VALID_SMILES_LENGTH,
+    SUBSTITUENT_MAPPING,
+    get_bond_cutoff,
+)
 from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
@@ -24,6 +30,14 @@ from chemsmart.utils.utils import file_cache, string2index_1based
 p = pt()
 
 logger = logging.getLogger(__name__)
+
+ABBREVIATION_PATTERNS = {
+    abbrev: re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(abbrev)}(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    for abbrev in CHEMICAL_ABBREVIATIONS
+}
 
 
 class Molecule:
@@ -878,6 +892,9 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff")):
+            return cls._read_image_file(filepath)
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -1026,6 +1043,189 @@ class Molecule:
         pdb_file = PDBFile(filename=filepath)
         return pdb_file.get_molecules(index=index, return_list=return_list)
 
+    @classmethod
+    def _read_image_file(cls, filepath):
+        """
+        Read molecular structure from an image file using DECIMER.
+
+        Converts chemical structure images (PNG, JPG, JPEG, TIF, TIFF) to
+        molecular structures by first extracting SMILES representation using
+        DECIMER, then converting to a Molecule object via RDKit.
+
+        Handles common chemical abbreviations (e.g., Ad for adamantyl, Ph for phenyl)
+        by using OCR to detect text and expanding abbreviations to full structures.
+        Abbreviation expansion requires pytesseract (optional dependency).
+
+        Args:
+            filepath (str): Path to the image file containing chemical structure
+
+        Returns:
+            Molecule: Molecule object created from the image
+
+        Raises:
+            ImportError: If DECIMER or opencv-python is not installed
+            ValueError: If the image cannot be processed or converted
+
+        Note:
+            For better abbreviation support, install pytesseract:
+            ``pip install chemsmart[image]`` or ``pip install pytesseract``
+        """
+        try:
+            import cv2
+            from DECIMER import predict_SMILES
+        except ImportError as e:
+            raise ImportError(
+                "DECIMER and opencv-python are required to read image files. "
+                "Install them with: `pip install decimer opencv-python`"
+            ) from e
+
+        # Try to import pytesseract for OCR (optional)
+        try:
+            import pytesseract
+
+            has_ocr = True
+        except ImportError:
+            has_ocr = False
+            logger.debug(
+                "pytesseract not available, abbreviation expansion disabled"
+            )
+
+        # Load the image
+        img_orig = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+        if img_orig is None:
+            raise FileNotFoundError(filepath)
+
+        # Detect abbreviations using OCR if available
+        detected_abbrevs = {}
+        detected_text = ""
+        normalized_detected_text = ""
+        if has_ocr:
+            try:
+                # Use OCR to detect text in the image
+                # PSM 6: Assume a single uniform block of text (good for chemical labels)
+                detected_text = pytesseract.image_to_string(
+                    img_orig, config="--psm 6"
+                )
+                logger.debug(f"OCR detected text: {detected_text}")
+
+                normalized_detected_text = re.sub(r"\s+", "", detected_text)
+                canonical_dash = DASH_CHARACTERS[0]
+                normalized_detected_text = re.sub(
+                    r"[" + re.escape("".join(DASH_CHARACTERS[1:])) + r"]",
+                    canonical_dash,
+                    normalized_detected_text,
+                )
+                normalized_detected_text_upper = (
+                    normalized_detected_text.upper()
+                )
+
+                # Check for known abbreviations in the detected text
+                for abbrev, smiles in CHEMICAL_ABBREVIATIONS.items():
+                    # OCR can alter case or add spacing (e.g. "A d—SH")
+                    # so check both original and compact normalized text.
+                    if (
+                        ABBREVIATION_PATTERNS[abbrev].search(detected_text)
+                        or abbrev.upper() in normalized_detected_text_upper
+                    ):
+                        detected_abbrevs[abbrev] = smiles
+                        logger.info(
+                            f"Detected abbreviation '{abbrev}' in image"
+                        )
+            except Exception as e:
+                logger.debug(f"OCR failed: {e}")
+
+        # Pre-process image for DECIMER (binarize + resize)
+        img = cv2.resize(
+            img_orig, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC
+        )
+        _, img = cv2.threshold(
+            img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+
+        # Write a temp preprocessed image (DECIMER takes a path)
+        tmp = filepath + ".pre.png"
+        try:
+            cv2.imwrite(tmp, img)
+
+            # Get SMILES from DECIMER
+            smiles = predict_SMILES(tmp)  # DECIMER returns SMILES
+        finally:
+            # Clean up temporary file
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                    logger.debug(f"Removed temporary file: {tmp}")
+            except Exception as e:
+                logger.warning(f"Failed to remove temporary file {tmp}: {e}")
+
+        # If DECIMER fails or returns suspicious results when abbreviations are detected
+        # (DECIMER typically fails with abbreviations), try to construct SMILES manually
+        decimer_failed = smiles is None or not smiles.strip()
+        constructed_smiles = None
+
+        if detected_text:
+            abbreviation_upper_to_smiles = {
+                abbrev.upper(): abbrev_smiles
+                for abbrev, abbrev_smiles in CHEMICAL_ABBREVIATIONS.items()
+            }
+            substituent_upper_to_smiles = {
+                substituent.upper(): substituent_smiles
+                for substituent, substituent_smiles in SUBSTITUENT_MAPPING.items()
+            }
+
+            def _token_to_smiles(token):
+                token = token.strip().upper()
+                if not token:
+                    return None
+                if token in abbreviation_upper_to_smiles:
+                    return abbreviation_upper_to_smiles[token]
+                return substituent_upper_to_smiles.get(token)
+
+            text_for_parsing = normalized_detected_text or detected_text
+            text_for_parsing = text_for_parsing.strip()
+            text_for_parsing = re.sub(
+                r"[" + re.escape("".join(DASH_CHARACTERS[1:])) + r"]",
+                DASH_CHARACTERS[0],
+                text_for_parsing,
+            )
+            has_dash_separator = DASH_CHARACTERS[0] in text_for_parsing
+
+            if has_dash_separator:
+                # Handle common shorthand like "Abbrev-Substituent".
+                left_token, right_token = text_for_parsing.split(
+                    DASH_CHARACTERS[0], 1
+                )
+                left_smiles = _token_to_smiles(left_token)
+                right_smiles = _token_to_smiles(right_token)
+                if left_smiles and right_smiles:
+                    constructed_smiles = left_smiles + right_smiles
+            elif len(detected_abbrevs) == 1:
+                # If we have exactly one abbreviation label, use it directly.
+                constructed_smiles = next(iter(detected_abbrevs.values()))
+
+        should_use_abbrev = detected_abbrevs and (
+            decimer_failed
+            or (smiles and len(smiles) < MIN_VALID_SMILES_LENGTH)
+            or (
+                constructed_smiles is not None
+                and bool(normalized_detected_text)
+                and DASH_CHARACTERS[0] in normalized_detected_text
+            )
+        )
+        if should_use_abbrev and constructed_smiles:
+            logger.warning(
+                f"DECIMER returned incomplete/null SMILES: {smiles}. "
+                f"Attempting to construct from detected abbreviations: {list(detected_abbrevs.keys())}"
+            )
+            smiles = constructed_smiles
+
+        if smiles is None:
+            raise ValueError(
+                f"Image {filepath} cannot be converted to SMILES."
+            )
+
+        return cls.from_smiles(smiles)
+
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
@@ -1167,6 +1367,31 @@ class Molecule:
         rdkit_mol.num_atoms = rdMol.GetNumAtoms()
 
         return rdkit_mol
+
+    @classmethod
+    def from_smiles(cls, smiles):
+        # Convert SMILES to RDKit molecule
+        rdkit_mol = Chem.MolFromSmiles(smiles)
+        if rdkit_mol is None:
+            raise ValueError(
+                f"Failed to create valid molecule from SMILES: {smiles}"
+            )
+
+        # Generate 3D coordinates
+        from rdkit.Chem import AllChem
+
+        rdkit_mol = Chem.AddHs(rdkit_mol)
+        AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+        AllChem.MMFFOptimizeMolecule(rdkit_mol)
+
+        # Convert RDKit molecule to Molecule object using the classmethod
+        molecule = cls.from_rdkit_mol(rdkit_mol)
+
+        logger.info(
+            f"Successfully created molecule from image with formula: "
+            f"{molecule.chemical_formula}"
+        )
+        return molecule
 
     def write_coordinates(self, f, program=None):
         """
