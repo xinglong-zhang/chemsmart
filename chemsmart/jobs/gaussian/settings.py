@@ -952,6 +952,103 @@ class GaussianJobSettings(MolecularJobSettings):
             )
 
 
+class GaussianExternalJobSettings(GaussianJobSettings):
+    """
+    Settings for Gaussian jobs using the External keyword for ML potentials.
+
+    Replaces the QM level of theory with an external calculator script,
+    enabling ASE-based ML potentials (MACE, NequIP, etc.) to drive
+    Gaussian geometry optimisations and other calculations.
+
+    Attributes:
+        external_script (str): Name or path of the external script passed
+            to the External= keyword.
+        extra_args (str, optional): Additional arguments prepended to the
+            External= value (e.g. "Amber" in External="RunTink Amber").
+    """
+
+    def __init__(
+        self,
+        external_script,
+        extra_args=None,
+        **kwargs,
+    ):
+        """
+        Initialise External calculator settings.
+
+        Args:
+            external_script (str): Script name/path for the External= keyword.
+            extra_args (str, optional): Extra arguments prepended to the
+                External= spec (e.g. "Amber" for "RunTink Amber").
+            **kwargs: Additional arguments forwarded to GaussianJobSettings.
+                functional, basis, and semiempirical default to None.
+                freq and forces default to False.
+        """
+        kwargs.setdefault("freq", False)
+        kwargs.setdefault("forces", False)
+        kwargs.setdefault("functional", None)
+        kwargs.setdefault("basis", None)
+        kwargs.setdefault("semiempirical", None)
+        super().__init__(**kwargs)
+        self.external_script = external_script
+        self.extra_args = extra_args
+
+    @property
+    def _external_spec(self):
+        """
+        Format the External= value with quoting when spaces are present.
+
+        The Gaussian convention is ``External="<script> <extra_args>"``, so
+        the script name comes first followed by any additional arguments
+        (e.g. ``External="RunTink Amber"`` calls
+        ``RunTink Amber layer InputFile ...``).
+
+        Returns:
+            str: The External= argument, quoted if it contains spaces.
+        """
+        if self.extra_args:
+            spec = f"{self.external_script} {self.extra_args}"
+        else:
+            spec = self.external_script
+        return f'"{spec}"' if " " in spec else spec
+
+    def _get_level_of_theory_string(self):
+        """
+        Build External=<spec> route fragment in place of a QM method.
+
+        Returns:
+            str: Route section fragment containing the External= keyword
+                and any additional route parameters.
+        """
+        route_string = f" External={self._external_spec}"
+        if self.additional_route_parameters is not None:
+            route_string += f" {self.additional_route_parameters}"
+        return route_string
+
+    @classmethod
+    def default(cls):
+        """
+        Create default External calculator settings.
+
+        Returns:
+            GaussianExternalJobSettings: Default settings instance.
+        """
+        return cls(
+            external_script="ase_calculator",
+            extra_args=None,
+            charge=None,
+            multiplicity=None,
+            chk=True,
+            jobtype=None,
+            title="Gaussian External ML potential job",
+            freq=False,
+            numfreq=False,
+            dieze_tag=None,
+            forces=False,
+            input_string=None,
+        )
+
+
 class GaussianIRCJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian IRC (Intrinsic Reaction Coordinate) jobs.
