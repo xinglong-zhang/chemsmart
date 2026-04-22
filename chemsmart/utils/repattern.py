@@ -159,7 +159,7 @@ element_non_alpha_pattern = r"[^A-Za-z]"
 multiple_spaces_pattern = r"\s+"
 
 # Gaussian TDDFT output
-gaussian_TD_transitions = r"^\s*(\d+[AB]?)\s*(->|<-)\s*(\d+[AB]?)\s+([-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?)\s*$"
+gaussian_tddft_transition_pattern = r"^\s*(\d+[AB]?)\s*(->|<-)\s*(\d+[AB]?)\s+([-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?)\s*$"
 
 
 # PyMOL strings

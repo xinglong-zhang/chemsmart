@@ -1213,10 +1213,11 @@ class Gaussian16Output(GaussianFileMixin):
         return cc
 
     def _read_transitions_and_contribution_coefficients(self):
-        from chemsmart.utils.repattern import gaussian_TD_transitions
+        from chemsmart.utils.repattern import gaussian_tddft_transition_pattern
 
         transitions = []
         contribution_coefficients = []
+        td_transition_pattern = re.compile(gaussian_tddft_transition_pattern)
 
         i = 0
         n = len(self.contents)
@@ -1235,7 +1236,7 @@ class Gaussian16Output(GaussianFileMixin):
                     if not current.strip():
                         break
 
-                    match = re.compile(gaussian_TD_transitions).match(current)
+                    match = td_transition_pattern.match(current)
                     if match:
                         from_mo, arrow, to_mo, coeff = match.groups()
                         each_state_transitions.append(
