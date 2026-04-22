@@ -1262,27 +1262,6 @@ class Gaussian16Output(GaussianFileMixin):
             else:
                 i += 1
         return transitions, contribution_coefficients
-        #         # parse the lines that follow until
-        #         # an empty line is encountered
-        #         j = 1
-        #         while len(self.contents[i + j]) != 0:
-        #             line_element = self.contents[i + j].split()
-        #             if len(line_element) <= 4:
-        #                 mo_transition = " ".join(
-        #                     list(islice(line_element, len(line_element) - 1))
-        #                 )
-        #                 contribution_coefficient = float(line_element[-1])
-        #                 each_state_transitions.append(mo_transition)
-        #                 each_state_contribution_coefficients.append(
-        #                     contribution_coefficient
-        #                 )
-        #             j += 1
-        #         transitions.append(each_state_transitions)
-        #         contribution_coefficients.append(
-        #             each_state_contribution_coefficients
-        #         )
-        #
-        # return transitions, contribution_coefficients
 
     @cached_property
     def contribution_percentage(self):
