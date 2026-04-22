@@ -514,12 +514,12 @@ class TestGaussian16Output:
         assert len(g16_output.contribution_coefficients) == 50
         assert len(g16_output.contribution_percentage) == 50
         assert g16_output.transitions[0] == [
-            "104A ->108A",
-            "105A ->107A",
-            "106A ->107A",
-            "106A ->108A",
-            "105B ->106B",
-            "106A <-107A",
+            "104A -> 108A",
+            "105A -> 107A",
+            "106A -> 107A",
+            "106A -> 108A",
+            "105B -> 106B",
+            "106A <- 107A",
         ]
         assert g16_output.contribution_coefficients[0] == [
             0.15573,
