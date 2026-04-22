@@ -1264,9 +1264,9 @@ class Gaussian16Output(GaussianFileMixin):
         return transitions, contribution_coefficients
 
     @cached_property
-    def contribution_percentage(self):
+    def contributions(self):
         """
-        Return the percentage contribution of each molecular orbital excitation
+        Return the contributions of each molecular orbital excitation
         to an excited state.
 
         The base value for each contribution coefficient is calculated as
