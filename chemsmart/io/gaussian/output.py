@@ -1,7 +1,6 @@
 import logging
 import re
 from functools import cached_property
-from itertools import islice
 
 import numpy as np
 from ase import units
@@ -1214,33 +1213,94 @@ class Gaussian16Output(GaussianFileMixin):
         return cc
 
     def _read_transitions_and_contribution_coefficients(self):
+        from chemsmart.utils.repattern import gaussian_tddft_transition_pattern
+
         transitions = []
         contribution_coefficients = []
-        for i, line in enumerate(self.contents):
-            if line.startswith("Excited State"):
+        td_transition_pattern = re.compile(gaussian_tddft_transition_pattern)
+
+        i = 0
+        n = len(self.contents)
+
+        while i < n:
+            line = self.contents[i]
+            if line.lstrip().startswith("Excited State"):
                 each_state_transitions = []
                 each_state_contribution_coefficients = []
-                # parse the lines that follow until
-                # an empty line is encountered
-                j = 1
-                while len(self.contents[i + j]) != 0:
-                    line_element = self.contents[i + j].split()
-                    if len(line_element) <= 4:
-                        mo_transition = " ".join(
-                            list(islice(line_element, len(line_element) - 1))
+
+                j = i + 1
+                while j < n:
+                    current = self.contents[j]
+
+                    # stop on truly blank line
+                    if not current.strip():
+                        break
+
+                    match = td_transition_pattern.match(current)
+                    if match:
+                        from_mo, arrow, to_mo, coeff = match.groups()
+                        each_state_transitions.append(
+                            f"{from_mo} {arrow} {to_mo}"
                         )
-                        contribution_coefficient = float(line_element[-1])
-                        each_state_transitions.append(mo_transition)
                         each_state_contribution_coefficients.append(
-                            contribution_coefficient
+                            float(coeff)
                         )
+                        j += 1
+                        continue
+
+                    # once transition lines have started, stop at first non-transition line
+                    if each_state_transitions:
+                        break
+
                     j += 1
+
                 transitions.append(each_state_transitions)
                 contribution_coefficients.append(
                     each_state_contribution_coefficients
                 )
 
+                i = j
+            else:
+                i += 1
         return transitions, contribution_coefficients
+
+    @cached_property
+    def contributions(self):
+        """
+        Return the contributions of each molecular orbital excitation
+        to an excited state.
+
+        The base value for each contribution coefficient is calculated as
+        ``(coef**2) * 100``.
+
+        The returned values then depend on ``self.spin``:
+
+        - ``"restricted"``: the base percentages are doubled.
+        - ``"unrestricted"``: the base percentages are unchanged.
+        - any other value: a ``ValueError`` is raised.
+        """
+        contribution_percentage = [
+            [(coef**2) * 100 for coef in cc]
+            for cc in self.contribution_coefficients
+        ]
+
+        if self.spin == "restricted":
+            logger.debug(
+                "Closed-shell system: contribution percentage is doubled."
+            )
+            factor = 2
+        elif self.spin == "unrestricted":
+            logger.debug(
+                "Unrestricted system: contribution percentage uses base values."
+            )
+            factor = 1
+        else:
+            raise ValueError(f"Unknown spin type: {self.spin!r}")
+
+        return [
+            [round(value * factor, 1) for value in percentage]
+            for percentage in contribution_percentage
+        ]
 
     @cached_property
     def alpha_occ_eigenvalues(self):

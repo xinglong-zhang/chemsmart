@@ -1,6 +1,7 @@
 import os.path
 
 import numpy as np
+import pytest
 from ase import units
 from ase.symbols import Symbols
 
@@ -511,13 +512,14 @@ class TestGaussian16Output:
         assert len(g16_output.excitation_energies_eV) == 50
         assert len(g16_output.transitions) == 50
         assert len(g16_output.contribution_coefficients) == 50
+        assert len(g16_output.contributions) == 50
         assert g16_output.transitions[0] == [
-            "104A ->108A",
-            "105A ->107A",
-            "106A ->107A",
-            "106A ->108A",
-            "105B ->106B",
-            "106A <-107A",
+            "104A -> 108A",
+            "105A -> 107A",
+            "106A -> 107A",
+            "106A -> 108A",
+            "105B -> 106B",
+            "106A <- 107A",
         ]
         assert g16_output.contribution_coefficients[0] == [
             0.15573,
@@ -535,6 +537,22 @@ class TestGaussian16Output:
             0.79088,
             0.17825,
         ]
+        assert g16_output.contributions[0] == [
+            2.4,
+            1.5,
+            87.5,
+            1.1,
+            6.8,
+            1.5,
+        ]
+        assert g16_output.contributions[-1] == [
+            3.0,
+            2.2,
+            1.9,
+            9.7,
+            62.5,
+            3.2,
+        ]
 
         assert (
             g16_output.total_core_hours
@@ -544,6 +562,20 @@ class TestGaussian16Output:
         assert g16_output.total_elapsed_walltime == 6.4
         mol = g16_output.molecule
         assert not mol.has_vibrations
+
+    def test_contribution_percentage_spin_scaling(self):
+        output = type("Output", (), {})()
+        output.contribution_coefficients = [[0.5, -0.3]]
+
+        output.spin = "restricted"
+        assert Gaussian16Output.contributions.func(output) == [[50.0, 18.0]]
+
+        output.spin = "unrestricted"
+        assert Gaussian16Output.contributions.func(output) == [[25.0, 9.0]]
+
+        output.spin = None
+        with pytest.raises(ValueError, match="Unknown spin type"):
+            Gaussian16Output.contributions.func(output)
 
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
