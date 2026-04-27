@@ -67,6 +67,13 @@ class GaussianMECPJob(GaussianJob):
     def trajectory_file(self):
         return os.path.join(self.folder, f"{self.label}_traj.xyz")
 
+    def _job_is_complete(self):
+        """Check MECP completion by looking for a 'Converged' marker in the report file."""
+        if not os.path.isfile(self.report_file):
+            return False
+        with open(self.report_file, encoding="utf-8") as f:
+            return any("Converged" in line for line in f)
+
     def _state_settings(self, charge, multiplicity, title):
         state_settings = self.settings.copy()
         state_settings.jobtype = "sp"
