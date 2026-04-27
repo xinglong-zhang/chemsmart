@@ -53,56 +53,48 @@ logger = logging.getLogger(__name__)
     "--max-steps",
     type=int,
     default=None,
-    show_default=True,
     help="Maximum number of MECP optimization steps.",
 )
 @click.option(
     "--step-size",
     type=float,
     default=None,
-    show_default=True,
-    help="Step size (Bohr/Hartree) for internal MECP optimization.",
+    help="Step size (Bohr^2/Hartree) for internal MECP optimization.",
 )
 @click.option(
     "--trust-radius",
     type=float,
     default=None,
-    show_default=True,
     help="Maximum Cartesian displacement per atom (Bohr) per step.",
 )
 @click.option(
     "--energy-diff-tol",
     type=float,
     default=None,
-    show_default=True,
     help="Convergence threshold for |E(A)-E(B)| in Hartree.",
 )
 @click.option(
     "--force-max-tol",
     type=float,
     default=None,
-    show_default=True,
     help="Convergence threshold for max effective gradient (Hartree/Bohr).",
 )
 @click.option(
     "--force-rms-tol",
     type=float,
     default=None,
-    show_default=True,
     help="Convergence threshold for RMS effective gradient (Hartree/Bohr).",
 )
 @click.option(
     "--disp-max-tol",
     type=float,
     default=None,
-    show_default=True,
     help="Convergence threshold for max displacement (Bohr).",
 )
 @click.option(
     "--disp-rms-tol",
     type=float,
     default=None,
-    show_default=True,
     help="Convergence threshold for RMS displacement (Bohr).",
 )
 @click.pass_context
@@ -162,7 +154,7 @@ def mecp(
         mecp_settings.multiplicity_a = multiplicity_a
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
-            "State A charge is not set. "
+            "State A multiplicity is not set. "
             "Use gaussian -m/--multiplicity or mecp --multiplicity-a."
         )
 

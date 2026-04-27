@@ -26,7 +26,7 @@ class GaussianMECPJob(GaussianJob):
     for a molecular species.
 
     Attributes:
-        TYPE (str): Job type identifier ('g16opt').
+        TYPE (str): Job type identifier ('g16mecp').
         molecule (Molecule): Molecular structure to optimize.
         settings (GaussianJobSettings): Calculation configuration options.
         label (str): Job identifier used for file naming.
@@ -139,7 +139,7 @@ class GaussianMECPJob(GaussianJob):
             raise RuntimeError(
                 "Difference gradient is too small; cannot continue MECP step."
             )
-        f_component = energy_diff * diff_grad
+        f_component = (energy_diff / diff_norm_sq) * diff_grad
         proj = np.sum(grad_a * diff_grad) / diff_norm_sq
         g_component = grad_a - proj * diff_grad
         return f_component + g_component
