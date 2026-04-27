@@ -1111,7 +1111,7 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         title_a="First",
         title_b="Second",
         max_steps=500,
-        step_size=20,
+        step_size=0.1,
         trust_radius=0.3,
         energy_diff_tol=1.0e-3,
         force_max_tol=4.5e-4,
