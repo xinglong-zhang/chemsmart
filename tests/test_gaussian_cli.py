@@ -971,3 +971,99 @@ class TestGaussianCLIQrcCommand:
         )
         assert result.exit_code == 0, result.output
         assert settings.basis == "def2svp"
+
+
+class TestGaussianCLIMecpCommand:
+    """CLI tests for the ``mecp`` subcommand."""
+
+    def test_mecp_defaults_state_b_to_plus_two_multiplicity(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Default ``multiplicity-b`` is inferred as ``multiplicity-a + 2``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 1
+        assert settings.multiplicity_b == 3
+        assert settings.charge_a == 0
+        assert settings.charge_b == 0
+
+    def test_mecp_custom_spin_and_charge_options_are_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """MECP CLI options are forwarded to the GaussianMECPJob constructor."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "1",
+                "-m",
+                "2",
+                "mecp",
+                "--multiplicity-a",
+                "2",
+                "--multiplicity-b",
+                "4",
+                "--charge-a",
+                "1",
+                "--charge-b",
+                "1",
+                "--max-steps",
+                "120",
+                "--step-size",
+                "0.08",
+                "--trust-radius",
+                "0.12",
+                "--energy-diff-tol",
+                "2e-4",
+                "--force-max-tol",
+                "8e-4",
+                "--force-rms-tol",
+                "6e-4",
+                "--disp-max-tol",
+                "2.0e-3",
+                "--disp-rms-tol",
+                "1.5e-3",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 2
+        assert settings.multiplicity_b == 4
+        assert settings.charge_a == 1
+        assert settings.charge_b == 1
+        assert settings.max_steps == 120
+        assert settings.step_size == 0.08
+        assert settings.trust_radius == 0.12
+        assert settings.energy_diff_tol == 2e-4
+        assert settings.force_max_tol == 8e-4
+        assert settings.force_rms_tol == 6e-4
+        assert settings.disp_max_tol == 2e-3
+        assert settings.disp_rms_tol == 1.5e-3

@@ -1099,6 +1099,53 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         return route_string
 
 
+class GaussianMECPJobSettings(GaussianJobSettings):
+    """Specialized settings for Gaussian MECP jobs."""
+
+    def __init__(
+        self,
+        multiplicity_a=1,
+        multiplicity_b=3,
+        charge_a=0,
+        charge_b=0,
+        title_a="First",
+        title_b="Second",
+        max_steps=50,
+        step_size=0.05,
+        trust_radius=0.1,
+        energy_diff_tol=1.0e-4,
+        force_max_tol=7.0e-4,
+        force_rms_tol=5.0e-4,
+        disp_max_tol=1.8e-3,
+        disp_rms_tol=1.2e-3,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.multiplicity_a = multiplicity_a
+        self.multiplicity_b = multiplicity_b
+        self.charge_a = charge_a
+        self.charge_b = charge_b
+        self.title_a = title_a
+        self.title_b = title_b
+        self.max_steps = max_steps
+        self.step_size = step_size
+        self.trust_radius = trust_radius
+        self.energy_diff_tol = energy_diff_tol
+        self.force_max_tol = force_max_tol
+        self.force_rms_tol = force_rms_tol
+        self.disp_max_tol = disp_max_tol
+        self.disp_rms_tol = disp_rms_tol
+
+    @classmethod
+    def from_settings(cls, settings):
+        """Create MECP settings from generic Gaussian settings."""
+        if settings is None:
+            return cls()
+        if isinstance(settings, cls):
+            return settings.copy()
+        return cls(**settings.__dict__.copy())
+
+
 class GaussianLinkJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian multi-step link calculations.

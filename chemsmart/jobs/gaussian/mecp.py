@@ -7,10 +7,12 @@ Minimum Energy Cross Point calculations using Gaussian.
 
 import logging
 import os
+from typing import Type
 
 import numpy as np
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 
 logger = logging.getLogger(__name__)
 
@@ -36,28 +38,19 @@ class GaussianMECPJob(GaussianJob):
     BOHR_TO_ANGSTROM = 0.529177210903
     MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
 
+    @classmethod
+    def settings_class(cls) -> Type[GaussianMECPJobSettings]:
+        return GaussianMECPJobSettings
+
     def __init__(
         self,
         molecule,
         settings,
         label,
         jobrunner=None,
-        state_a_multiplicity=1,
-        state_b_multiplicity=3,
-        state_a_charge=0,
-        state_b_charge=0,
-        state_a_title="First",
-        state_b_title="Second",
-        max_steps=50,
-        step_size=0.05,
-        trust_radius=0.1,
-        energy_diff_tol=1.0e-4,
-        force_max_tol=7.0e-4,
-        force_rms_tol=5.0e-4,
-        disp_max_tol=1.8e-3,
-        disp_rms_tol=1.2e-3,
         **kwargs,
     ):
+        settings = GaussianMECPJobSettings.from_settings(settings)
         super().__init__(
             molecule=molecule,
             settings=settings,
@@ -65,20 +58,6 @@ class GaussianMECPJob(GaussianJob):
             jobrunner=jobrunner,
             **kwargs,
         )
-        self.state_a_multiplicity = state_a_multiplicity
-        self.state_b_multiplicity = state_b_multiplicity
-        self.state_a_charge = state_a_charge
-        self.state_b_charge = state_b_charge
-        self.state_a_title = state_a_title
-        self.state_b_title = state_b_title
-        self.max_steps = max_steps
-        self.step_size = step_size
-        self.trust_radius = trust_radius
-        self.energy_diff_tol = energy_diff_tol
-        self.force_max_tol = force_max_tol
-        self.force_rms_tol = force_rms_tol
-        self.disp_max_tol = disp_max_tol
-        self.disp_rms_tol = disp_rms_tol
 
     @property
     def report_file(self):
@@ -101,13 +80,13 @@ class GaussianMECPJob(GaussianJob):
 
     def _run_state(self, positions_bohr, step_idx, state):
         if state == "A":
-            charge = self.state_a_charge
-            multiplicity = self.state_a_multiplicity
-            title = self.state_a_title
+            charge = self.settings.charge_a
+            multiplicity = self.settings.multiplicity_a
+            title = self.settings.title_a
         else:
-            charge = self.state_b_charge
-            multiplicity = self.state_b_multiplicity
-            title = self.state_b_title
+            charge = self.settings.charge_b
+            multiplicity = self.settings.multiplicity_b
+            title = self.settings.title_b
 
         mol = self.molecule.copy()
         mol.positions = positions_bohr * self.BOHR_TO_ANGSTROM
@@ -168,9 +147,9 @@ class GaussianMECPJob(GaussianJob):
     def _apply_trust_radius(self, displacement):
         step = np.array(displacement, dtype=float)
         norms = np.linalg.norm(step, axis=1)
-        exceed = norms > self.trust_radius
+        exceed = norms > self.settings.trust_radius
         if np.any(exceed):
-            scale = self.trust_radius / norms[exceed]
+            scale = self.settings.trust_radius / norms[exceed]
             step[exceed] = step[exceed] * scale[:, None]
         return step
 
@@ -180,11 +159,11 @@ class GaussianMECPJob(GaussianJob):
         disp_max = float(np.max(np.abs(displacement)))
         disp_rms = self._rms(displacement)
         return (
-            abs(energy_diff) <= self.energy_diff_tol
-            and grad_max <= self.force_max_tol
-            and grad_rms <= self.force_rms_tol
-            and disp_max <= self.disp_max_tol
-            and disp_rms <= self.disp_rms_tol
+            abs(energy_diff) <= self.settings.energy_diff_tol
+            and grad_max <= self.settings.force_max_tol
+            and grad_rms <= self.settings.force_rms_tol
+            and disp_max <= self.settings.disp_max_tol
+            and disp_rms <= self.settings.disp_rms_tol
         )
 
     def _log_step(self, f, step_idx, ea, eb, eff_grad, displacement):
@@ -205,14 +184,18 @@ class GaussianMECPJob(GaussianJob):
             / self.BOHR_TO_ANGSTROM
         )
         displacement = np.zeros_like(positions_bohr)
+        logger.info(
+            f"Starting MECP optimization for {self.label} at position: "
+            f"{positions_bohr} Bohr and displacement: {displacement}\n"
+        )
 
         with open(self.report_file, "w") as report:
             report.write("CHEMSMART self-contained MECP optimization\n")
             report.write(
-                f"max_steps={self.max_steps} step_size={self.step_size} "
-                f"trust_radius={self.trust_radius}\n"
+                f"max_steps={self.settings.max_steps} step_size={self.settings.step_size} "
+                f"trust_radius={self.settings.trust_radius}\n"
             )
-            for step_idx in range(self.max_steps):
+            for step_idx in range(self.settings.max_steps):
                 self._write_trajectory_frame(positions_bohr, step_idx)
                 ea, grad_a = self._run_state(positions_bohr, step_idx, "A")
                 eb, grad_b = self._run_state(positions_bohr, step_idx, "B")
@@ -220,7 +203,7 @@ class GaussianMECPJob(GaussianJob):
                 eff_grad = self._effective_gradient(
                     energy_diff=energy_diff, grad_a=grad_a, grad_b=grad_b
                 )
-                displacement = -self.step_size * eff_grad
+                displacement = -self.settings.step_size * eff_grad
                 displacement = self._apply_trust_radius(displacement)
                 self._log_step(
                     report, step_idx, ea, eb, eff_grad, displacement
