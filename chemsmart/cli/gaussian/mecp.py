@@ -52,56 +52,56 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--max-steps",
     type=int,
-    default=50,
+    default=None,
     show_default=True,
     help="Maximum number of MECP optimization steps.",
 )
 @click.option(
     "--step-size",
     type=float,
-    default=0.05,
+    default=None,
     show_default=True,
     help="Step size (Bohr/Hartree) for internal MECP optimization.",
 )
 @click.option(
     "--trust-radius",
     type=float,
-    default=0.1,
+    default=None,
     show_default=True,
     help="Maximum Cartesian displacement per atom (Bohr) per step.",
 )
 @click.option(
     "--energy-diff-tol",
     type=float,
-    default=1.0e-4,
+    default=None,
     show_default=True,
     help="Convergence threshold for |E(A)-E(B)| in Hartree.",
 )
 @click.option(
     "--force-max-tol",
     type=float,
-    default=7.0e-4,
+    default=None,
     show_default=True,
     help="Convergence threshold for max effective gradient (Hartree/Bohr).",
 )
 @click.option(
     "--force-rms-tol",
     type=float,
-    default=5.0e-4,
+    default=None,
     show_default=True,
     help="Convergence threshold for RMS effective gradient (Hartree/Bohr).",
 )
 @click.option(
     "--disp-max-tol",
     type=float,
-    default=1.8e-3,
+    default=None,
     show_default=True,
     help="Convergence threshold for max displacement (Bohr).",
 )
 @click.option(
     "--disp-rms-tol",
     type=float,
-    default=1.2e-3,
+    default=None,
     show_default=True,
     help="Convergence threshold for RMS displacement (Bohr).",
 )
