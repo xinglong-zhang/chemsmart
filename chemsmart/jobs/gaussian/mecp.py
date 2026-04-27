@@ -38,10 +38,6 @@ class GaussianMECPJob(GaussianJob):
     BOHR_TO_ANGSTROM = 0.529177210903
     MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
 
-    @classmethod
-    def settings_class(cls) -> Type[GaussianMECPJobSettings]:
-        return GaussianMECPJobSettings
-
     def __init__(
         self,
         molecule,
@@ -58,6 +54,10 @@ class GaussianMECPJob(GaussianJob):
             jobrunner=jobrunner,
             **kwargs,
         )
+
+    @classmethod
+    def settings_class(cls) -> Type[GaussianMECPJobSettings]:
+        return GaussianMECPJobSettings
 
     @property
     def report_file(self):
