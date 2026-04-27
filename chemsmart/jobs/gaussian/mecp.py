@@ -61,11 +61,11 @@ class GaussianMECPJob(GaussianJob):
 
     @property
     def report_file(self):
-        return os.path.join(self.folder, f"{self.label}_mecp_report.log")
+        return os.path.join(self.folder, f"{self.label}_report.log")
 
     @property
     def trajectory_file(self):
-        return os.path.join(self.folder, f"{self.label}_mecp_traj.xyz")
+        return os.path.join(self.folder, f"{self.label}_traj.xyz")
 
     def _state_settings(self, charge, multiplicity, title):
         state_settings = self.settings.copy()
@@ -95,7 +95,7 @@ class GaussianMECPJob(GaussianJob):
             multiplicity=multiplicity,
             title=f"{title} step {step_idx}",
         )
-        state_label = f"{self.label}_mecp_step{step_idx:03d}_{state}"
+        state_label = f"{self.label}_step{step_idx:03d}_{state}"
         job = GaussianGeneralJob(
             molecule=mol,
             settings=settings,
