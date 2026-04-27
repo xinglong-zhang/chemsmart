@@ -5,6 +5,35 @@
 This page covers additional Gaussian job types including multi-step link jobs, custom user-defined calculations, and
 direct input file execution.
 
+****************************************
+ Minimum Energy Cross Point (MECP) Jobs
+****************************************
+
+Run MECP searches with Gaussian using CHEMSMART interface with Gaussian.
+
+.. code:: bash
+
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] mecp [SUBCMD_OPTIONS]
+
+Basic Usage
+===========
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp
+
+Set spin states explicitly:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity-a 1 --multiplicity-b 3
+
+Additional controls:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --max-steps 100 --step-size 0.05 --trust-radius 0.1
+
 ***********
  Link Jobs
 ***********
