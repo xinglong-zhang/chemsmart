@@ -124,6 +124,11 @@ class GaussianMECPJob(GaussianJob):
         return energy, gradient
 
     def _write_trajectory_frame(self, positions_bohr, step_idx):
+        if os.path.exists(self.trajectory_file):
+            logger.warning(
+                f"Trajectory file {self.trajectory_file} already exists. Overwriting."
+            )
+            os.remove(self.trajectory_file)
         positions = positions_bohr * self.BOHR_TO_ANGSTROM
         mode = "a" if os.path.exists(self.trajectory_file) else "w"
         with open(self.trajectory_file, mode) as f:
@@ -139,25 +144,36 @@ class GaussianMECPJob(GaussianJob):
     def _rms(array):
         return float(np.sqrt(np.mean(np.square(array))))
 
-    def _effective_gradient(self, energy_diff, grad_a, grad_b):
+    def _mecp_displacement(self, energy_diff, grad_a, grad_b):
         diff_grad = grad_a - grad_b
         diff_norm_sq = float(np.sum(diff_grad * diff_grad))
+
         if diff_norm_sq < self.MIN_DIFF_GRAD_NORM_SQ:
             raise RuntimeError(
                 "Difference gradient is too small; cannot continue MECP step."
             )
-        f_component = (energy_diff / diff_norm_sq) * diff_grad
+
+        # Move toward the linearized crossing seam.
+        seam_correction = -(energy_diff / diff_norm_sq) * diff_grad
+
+        # Minimize state A projected onto the crossing seam.
         proj = np.sum(grad_a * diff_grad) / diff_norm_sq
-        g_component = grad_a - proj * diff_grad
-        return f_component + g_component
+        projected_grad = grad_a - proj * diff_grad
+
+        # Downhill step along the seam.
+        downhill_step = -self.settings.step_size * projected_grad
+
+        displacement = seam_correction + downhill_step
+
+        return displacement, projected_grad
 
     def _apply_trust_radius(self, displacement):
         step = np.array(displacement, dtype=float)
-        norms = np.linalg.norm(step, axis=1)
-        exceed = norms > self.settings.trust_radius
-        if np.any(exceed):
-            scale = self.settings.trust_radius / norms[exceed]
-            step[exceed] = step[exceed] * scale[:, None]
+        step_norm = np.linalg.norm(step, axis=1)
+
+        if step_norm > self.settings.trust_radius:
+            step *= self.settings.trust_radius / step_norm
+
         return step
 
     def _is_converged(self, energy_diff, eff_grad, displacement):
@@ -206,18 +222,24 @@ class GaussianMECPJob(GaussianJob):
                 self._write_trajectory_frame(positions_bohr, step_idx)
                 ea, grad_a = self._run_state(positions_bohr, step_idx, "A")
                 eb, grad_b = self._run_state(positions_bohr, step_idx, "B")
+
                 energy_diff = ea - eb
-                eff_grad = self._effective_gradient(
-                    energy_diff=energy_diff, grad_a=grad_a, grad_b=grad_b
+
+                displacement, projected_grad = self._mecp_displacement(
+                    energy_diff=energy_diff,
+                    grad_a=grad_a,
+                    grad_b=grad_b,
                 )
-                displacement = -self.settings.step_size * eff_grad
+
                 displacement = self._apply_trust_radius(displacement)
+
                 self._log_step(
-                    report, step_idx, ea, eb, eff_grad, displacement
+                    report, step_idx, ea, eb, projected_grad, displacement
                 )
+
                 if self._is_converged(
                     energy_diff=energy_diff,
-                    eff_grad=eff_grad,
+                    eff_grad=projected_grad,
                     displacement=displacement,
                 ):
                     report.write(f"Converged at step {step_idx}.\n")
