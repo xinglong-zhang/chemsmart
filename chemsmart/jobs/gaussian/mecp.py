@@ -120,7 +120,13 @@ class GaussianMECPJob(GaussianJob):
                 "MECP requires `force` calculations."
             )
         energy = output.energies[-1]
-        gradient = -np.array(output.forces[-1], dtype=float)
+        forces = np.array(output.forces[-1], dtype=float)
+        if forces.shape != np.array(mol.positions).shape:
+            raise RuntimeError(
+                f"Parsed force shape {forces.shape} does not match "
+                f"coordinate shape {np.array(mol.positions).shape}."
+            )
+        gradient = -forces
         return energy, gradient
 
     def _write_trajectory_frame(self, positions_bohr, step_idx):
