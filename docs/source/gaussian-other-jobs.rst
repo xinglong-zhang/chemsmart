@@ -9,30 +9,223 @@ direct input file execution.
  Minimum Energy Cross Point (MECP) Jobs
 ****************************************
 
-Run MECP searches with Gaussian using CHEMSMART interface with Gaussian.
+A Minimum Energy Crossing Point (MECP) is a geometry where two potential energy surfaces of different spin
+multiplicity are degenerate. It is the spin-forbidden analogue of a transition state and is relevant to intersystem
+crossing, spin-state reactivity, and organometallic reaction mechanisms.
+
+ChemSmart provides a **self-contained MECP optimizer** that drives the search entirely in Python, calling Gaussian
+only for single-point energies and Cartesian forces at each step. No external MECP code (e.g. MECP2, Harvey's code)
+is required.
 
 .. code:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] mecp [SUBCMD_OPTIONS]
 
+Algorithm
+=========
+
+At each optimization step the following operations are performed:
+
+1. **State A SP+forces** — Gaussian single-point energy and Cartesian forces for spin state A at the current geometry.
+2. **State B SP+forces** — Same for spin state B.
+3. **Effective displacement** — The displacement vector is computed using the penalty-function / projected-gradient
+   approach:
+
+   - Let :math:`\Delta E = E_A - E_B` and :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B`.
+   - **Seam correction** (drives geometry toward the crossing seam):
+     :math:`\mathbf{d}_\text{seam} = -\frac{\Delta E}{\|\mathbf{g}_\Delta\|^2}\,\mathbf{g}_\Delta`
+   - **Seam-tangent gradient** (component of :math:`\nabla E_A` perpendicular to :math:`\mathbf{g}_\Delta`):
+     :math:`\mathbf{g}_\perp = \nabla E_A -
+     \frac{\nabla E_A \cdot \mathbf{g}_\Delta}{\|\mathbf{g}_\Delta\|^2}\,\mathbf{g}_\Delta`
+   - **Downhill step** (minimizes energy along the seam):
+     :math:`\mathbf{d}_\text{seam\text{-}min} = -\alpha\,\mathbf{g}_\perp`
+     where :math:`\alpha` is ``step_size`` (Bohr²/Hartree).
+   - **Total displacement**: :math:`\mathbf{d} = \mathbf{d}_\text{seam} + \mathbf{d}_\text{seam\text{-}min}`
+
+4. **Trust radius** — Each atom's displacement vector is independently scaled so that its Cartesian norm does not
+   exceed ``trust_radius`` (Bohr).
+5. **Convergence check** — See the convergence criteria table below.
+6. **Geometry update** — :math:`\mathbf{r}_{n+1} = \mathbf{r}_n + \mathbf{d}`.
+
+MECP Options
+============
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 10 20 40
+
+   -  -  Option
+      -  Type
+      -  Default
+      -  Description
+
+   -  -  ``--multiplicity-a``
+      -  int
+      -  1 (singlet)
+      -  Spin multiplicity of state A. Falls back to ``-m`` if not set.
+
+   -  -  ``--multiplicity-b``
+      -  int
+      -  multiplicity-a + 2
+      -  Spin multiplicity of state B.
+
+   -  -  ``--charge-a``
+      -  int
+      -  0
+      -  Charge of state A. Falls back to ``-c`` if not set.
+
+   -  -  ``--charge-b``
+      -  int
+      -  charge-a
+      -  Charge of state B.
+
+   -  -  ``--title-a``
+      -  string
+      -  ``"First"``
+      -  Title prefix for state A Gaussian jobs.
+
+   -  -  ``--title-b``
+      -  string
+      -  ``"Second"``
+      -  Title prefix for state B Gaussian jobs.
+
+   -  -  ``--max-steps``
+      -  int
+      -  500
+      -  Maximum number of MECP optimization steps.
+
+   -  -  ``--step-size``
+      -  float
+      -  0.1 Bohr²/Hartree
+      -  Scaling factor :math:`\alpha` for the seam-tangent gradient step.
+
+   -  -  ``--trust-radius``
+      -  float
+      -  0.3 Bohr
+      -  Maximum per-atom Cartesian displacement magnitude (Bohr) per step.
+
+   -  -  ``--energy-diff-tol``
+      -  float
+      -  5.0×10⁻⁵ Hartree
+      -  Convergence threshold for :math:`|E_A - E_B|`.
+
+   -  -  ``--force-max-tol``
+      -  float
+      -  1.5×10⁻⁵ Hartree/Bohr
+      -  Convergence threshold for the maximum element of :math:`|\mathbf{g}_\perp|`.
+
+   -  -  ``--force-rms-tol``
+      -  float
+      -  5.0×10⁻⁴ Hartree/Bohr
+      -  Convergence threshold for the RMS of :math:`\mathbf{g}_\perp`.
+
+   -  -  ``--disp-max-tol``
+      -  float
+      -  1.2×10⁻⁴ Bohr
+      -  Convergence threshold for the maximum element of :math:`|\mathbf{d}|`.
+
+   -  -  ``--disp-rms-tol``
+      -  float
+      -  3.8×10⁻³ Bohr
+      -  Convergence threshold for the RMS of :math:`\mathbf{d}`.
+
+Convergence Criteria
+====================
+
+Convergence is declared when **all** five criteria are simultaneously satisfied:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 20 15 30
+
+   -  -  Quantity
+      -  Symbol
+      -  Default
+      -  Unit
+
+   -  -  Energy difference
+      -  :math:`|E_A - E_B|`
+      -  5.0×10⁻⁵
+      -  Hartree
+
+   -  -  Maximum seam-tangent gradient
+      -  :math:`\max|\mathbf{g}_\perp|`
+      -  1.5×10⁻⁵
+      -  Hartree/Bohr
+
+   -  -  RMS seam-tangent gradient
+      -  :math:`\text{RMS}(\mathbf{g}_\perp)`
+      -  5.0×10⁻⁴
+      -  Hartree/Bohr
+
+   -  -  Maximum displacement
+      -  :math:`\max|\mathbf{d}|`
+      -  1.2×10⁻⁴
+      -  Bohr
+
+   -  -  RMS displacement
+      -  :math:`\text{RMS}(\mathbf{d})`
+      -  3.8×10⁻³
+      -  Bohr
+
+Output Files
+============
+
+Two output files are produced alongside the Gaussian sub-job input/output files:
+
+``<label>_report.log``
+   Step-by-step optimization log.  The file header records the run settings; each subsequent line reports::
+
+      step=NNN E_A=<Hartree> E_B=<Hartree> dE=<Hartree>
+      grad_max=<H/Bohr> grad_rms=<H/Bohr> disp_max=<Bohr> disp_rms=<Bohr>
+
+   The final line reads ``Converged at step NNN.`` on successful convergence.
+   The presence of this ``Converged`` marker is used by ``skip_completed`` to avoid re-running a finished job.
+
+``<label>_traj.xyz``
+   Multi-frame XYZ trajectory of the MECP geometry at every optimization step (coordinates in Ångström).
+
 Basic Usage
 ===========
 
+Singlet/triplet MECP from a Gaussian output structure (charge and multiplicity inferred from file):
+
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp
+   chemsmart sub gaussian -p project -f structure.log mecp
 
-Set spin states explicitly:
+Set spin states explicitly (singlet ↔ triplet):
 
 .. code:: bash
 
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity-a 1 --multiplicity-b 3
 
-Additional controls:
+Doublet/quartet MECP for an open-shell cation:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity-a 2 --multiplicity-b 4
+
+Tighten convergence and limit the number of steps:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
+       --max-steps 200 --step-size 0.05 --trust-radius 0.1 \
+       --energy-diff-tol 1.0e-5
+
+Adjust optimization step parameters only:
 
 .. code:: bash
 
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --max-steps 100 --step-size 0.05 --trust-radius 0.1
+
+.. note::
+
+   Each MECP step generates two Gaussian sub-jobs named
+   ``<label>_step<NNN>_A`` and ``<label>_step<NNN>_B`` (single-point energy + forces).
+   These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP
+   job itself honours ``skip_completed`` via the ``Converged`` marker in the report file.
 
 ***********
  Link Jobs
