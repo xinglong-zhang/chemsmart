@@ -261,6 +261,14 @@ class Thermochemistry:
         else:
             freq_cutoff = 100.0
 
+        # check against non-positive cutoff value
+        # before using it to replace imaginary frequencies
+        if freq_cutoff <= 0.0:
+            raise ValueError(
+                f"Imaginary-frequency replacement cutoff must be positive. "
+                f"Got {freq_cutoff} cm^-1."
+            )
+
         if self.jobtype == "ts":
             # Valid TS: exactly one imaginary frequency.
             # Remove it from thermochemistry.
