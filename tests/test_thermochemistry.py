@@ -1,6 +1,5 @@
 import os.path
 from shutil import copyfile
-from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -3362,6 +3361,7 @@ class TestThermochemistryBatchMode:
         assert f"{gibbs_free_energy4:.6f}" in data_lines4[0]
 
 
+
 class TestCleanedFrequencies:
     """Unit tests for Thermochemistry.cleaned_frequencies.
 
@@ -3370,36 +3370,22 @@ class TestCleanedFrequencies:
     single vs multiple imaginary frequencies, and cutoff value validation.
     """
 
-    def _make_mock(
-        self,
-        vibrational_frequencies,
-        jobtype="opt",
-        check_imaginary_frequencies=True,
-        s_freq_cutoff_cm=None,
-        h_freq_cutoff_cm=None,
-    ):
-        """Return a mock with the attributes accessed by cleaned_frequencies."""
-        mock = MagicMock(spec=Thermochemistry)
-        mock.vibrational_frequencies = vibrational_frequencies
-        mock.jobtype = jobtype
-        mock.check_imaginary_frequencies = check_imaginary_frequencies
-        mock.s_freq_cutoff_cm = s_freq_cutoff_cm
-        mock.h_freq_cutoff_cm = h_freq_cutoff_cm
-        mock.filename = "dummy.log"
-        return mock
-
     # ------------------------------------------------------------------
     # Shared: None / no imaginary
     # ------------------------------------------------------------------
 
-    def test_none_vibrational_frequencies_returns_none(self):
-        mock = self._make_mock(vibrational_frequencies=None)
+    def test_none_vibrational_frequencies_returns_none(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(vibrational_frequencies=None)
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result is None
 
-    def test_no_imaginary_frequencies_returns_unchanged(self):
+    def test_no_imaginary_frequencies_returns_unchanged(
+        self, make_thermochemistry_mock
+    ):
         freqs = [100.0, 200.0, 300.0]
-        mock = self._make_mock(vibrational_frequencies=freqs)
+        mock = make_thermochemistry_mock(vibrational_frequencies=freqs)
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == freqs
 
@@ -3407,8 +3393,10 @@ class TestCleanedFrequencies:
     # Non-TS strict mode
     # ------------------------------------------------------------------
 
-    def test_non_ts_strict_raises_on_imaginary(self):
-        mock = self._make_mock(
+    def test_non_ts_strict_raises_on_imaginary(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0, 200.0],
             jobtype="opt",
             check_imaginary_frequencies=True,
@@ -3421,9 +3409,9 @@ class TestCleanedFrequencies:
     # ------------------------------------------------------------------
 
     def test_non_ts_permissive_replaces_single_imaginary_with_default_cutoff(
-        self,
+        self, make_thermochemistry_mock
     ):
-        mock = self._make_mock(
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0, 200.0],
             jobtype="opt",
             check_imaginary_frequencies=False,
@@ -3432,9 +3420,9 @@ class TestCleanedFrequencies:
         assert result == [100.0, 100.0, 200.0]
 
     def test_non_ts_permissive_replaces_multiple_imaginary_with_default_cutoff(
-        self,
+        self, make_thermochemistry_mock
     ):
-        mock = self._make_mock(
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-80.0, 100.0, -30.0, 200.0],
             jobtype="opt",
             check_imaginary_frequencies=False,
@@ -3442,8 +3430,10 @@ class TestCleanedFrequencies:
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == [100.0, 100.0, 100.0, 200.0]
 
-    def test_non_ts_permissive_uses_s_freq_cutoff(self):
-        mock = self._make_mock(
+    def test_non_ts_permissive_uses_s_freq_cutoff(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-80.0, 100.0, 200.0],
             jobtype="opt",
             check_imaginary_frequencies=False,
@@ -3452,8 +3442,10 @@ class TestCleanedFrequencies:
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == [50.0, 100.0, 200.0]
 
-    def test_non_ts_permissive_uses_h_freq_cutoff_when_no_s_cutoff(self):
-        mock = self._make_mock(
+    def test_non_ts_permissive_uses_h_freq_cutoff_when_no_s_cutoff(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-80.0, 100.0, 200.0],
             jobtype="opt",
             check_imaginary_frequencies=False,
@@ -3467,8 +3459,10 @@ class TestCleanedFrequencies:
     # TS strict mode
     # ------------------------------------------------------------------
 
-    def test_ts_single_imaginary_strict_removes_it(self):
-        mock = self._make_mock(
+    def test_ts_single_imaginary_strict_removes_it(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, 100.0, 200.0],
             jobtype="ts",
             check_imaginary_frequencies=True,
@@ -3476,8 +3470,10 @@ class TestCleanedFrequencies:
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == [100.0, 200.0]
 
-    def test_ts_multiple_imaginary_strict_raises(self):
-        mock = self._make_mock(
+    def test_ts_multiple_imaginary_strict_raises(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, -50.0, 100.0, 200.0],
             jobtype="ts",
             check_imaginary_frequencies=True,
@@ -3489,8 +3485,10 @@ class TestCleanedFrequencies:
     # TS permissive mode
     # ------------------------------------------------------------------
 
-    def test_ts_single_imaginary_permissive_removes_it(self):
-        mock = self._make_mock(
+    def test_ts_single_imaginary_permissive_removes_it(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, 100.0, 200.0],
             jobtype="ts",
             check_imaginary_frequencies=False,
@@ -3499,9 +3497,9 @@ class TestCleanedFrequencies:
         assert result == [100.0, 200.0]
 
     def test_ts_multiple_imaginary_permissive_removes_first_replaces_rest(
-        self,
+        self, make_thermochemistry_mock
     ):
-        mock = self._make_mock(
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, -50.0, 100.0, 200.0],
             jobtype="ts",
             check_imaginary_frequencies=False,
@@ -3510,8 +3508,10 @@ class TestCleanedFrequencies:
         # -300.0 removed as reaction coordinate; -50.0 replaced by 100.0
         assert result == [100.0, 100.0, 200.0]
 
-    def test_ts_multiple_imaginary_permissive_uses_custom_cutoff(self):
-        mock = self._make_mock(
+    def test_ts_multiple_imaginary_permissive_uses_custom_cutoff(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, -50.0, -20.0, 100.0],
             jobtype="ts",
             check_imaginary_frequencies=False,
@@ -3525,8 +3525,8 @@ class TestCleanedFrequencies:
     # Cutoff validation
     # ------------------------------------------------------------------
 
-    def test_zero_cutoff_raises_value_error(self):
-        mock = self._make_mock(
+    def test_zero_cutoff_raises_value_error(self, make_thermochemistry_mock):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0],
             jobtype="opt",
             check_imaginary_frequencies=False,
@@ -3535,8 +3535,10 @@ class TestCleanedFrequencies:
         with pytest.raises(ValueError, match="must be positive"):
             Thermochemistry.cleaned_frequencies.fget(mock)
 
-    def test_negative_cutoff_raises_value_error(self):
-        mock = self._make_mock(
+    def test_negative_cutoff_raises_value_error(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0],
             jobtype="opt",
             check_imaginary_frequencies=False,
