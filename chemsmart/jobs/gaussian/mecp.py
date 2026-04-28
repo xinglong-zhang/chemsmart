@@ -124,13 +124,8 @@ class GaussianMECPJob(GaussianJob):
         return energy, gradient
 
     def _write_trajectory_frame(self, positions_bohr, step_idx):
-        if os.path.exists(self.trajectory_file):
-            logger.warning(
-                f"Trajectory file {self.trajectory_file} already exists. Overwriting."
-            )
-            os.remove(self.trajectory_file)
         positions = positions_bohr * self.BOHR_TO_ANGSTROM
-        mode = "a" if os.path.exists(self.trajectory_file) else "w"
+        mode = "w" if step_idx == 0 else "a"
         with open(self.trajectory_file, mode) as f:
             f.write(f"{len(self.molecule.symbols)}\n")
             f.write(f"MECP step {step_idx}\n")
@@ -169,7 +164,7 @@ class GaussianMECPJob(GaussianJob):
 
     def _apply_trust_radius(self, displacement):
         step = np.array(displacement, dtype=float)
-        step_norm = np.linalg.norm(step, axis=1)
+        step_norm = np.linalg.norm(step)
 
         if step_norm > self.settings.trust_radius:
             step *= self.settings.trust_radius / step_norm
