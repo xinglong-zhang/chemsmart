@@ -71,6 +71,11 @@ class Thermochemistry:
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
+        self.energy_units = energy_units
+        self.check_imaginary_frequencies = check_imaginary_frequencies
+        # Keep original cm^-1 values for replacing imaginary frequencies
+        self.s_freq_cutoff_cm = s_freq_cutoff
+        self.h_freq_cutoff_cm = h_freq_cutoff
         self.temperature = temperature
         self.pressure = pressure
         self.use_weighted_mass = use_weighted_mass
@@ -115,11 +120,12 @@ class Thermochemistry:
             else None
         )
 
-        # convert the unit of vibrational frequencies
-        # from cm^-1 to Hz
+        # convert the unit of vibrational frequencies from cm^-1 to Hz
+        # avoid calling self.cleaned_frequencies twice
+        cleaned_frequencies = self.cleaned_frequencies
         self.v = (
-            [k * units._c * 1e2 for k in self.cleaned_frequencies]
-            if self.cleaned_frequencies is not None
+            [k * units._c * 1e2 for k in cleaned_frequencies]
+            if cleaned_frequencies is not None
             else None
         )
 
@@ -130,9 +136,6 @@ class Thermochemistry:
             if self.v is not None
             else None
         )
-
-        self.energy_units = energy_units
-        self.check_imaginary_frequencies = check_imaginary_frequencies
 
     @cached_property
     def file_object(self):
@@ -220,37 +223,87 @@ class Thermochemistry:
     def cleaned_frequencies(self):
         """Clean up vibrational frequencies for thermochemical calculations.
 
-        For transition states (jobtype == "ts"), the first imaginary
-        frequency is assumed to correspond to the reaction coordinate and is
-        excluded from thermochemical calculation.
-        For optimization, only geometries without imaginary frequencies are
-        parsed for thermochemical calculations.
+        Frequencies returned by this property remain in cm^-1.
+
+        If self.check_imaginary_frequencies is True:
+            - TS jobs must have exactly one imaginary frequency.
+            - Non-TS jobs must have no imaginary frequencies.
+
+        If self.check_imaginary_frequencies is False:
+            - TS jobs remove the first imaginary frequency as the reaction coordinate.
+            - Extra imaginary frequencies are replaced by a positive cutoff.
+            - Non-TS jobs replace all imaginary frequencies by a positive cutoff.
+
+        The replacement cutoff is:
+            - s_freq_cutoff if provided
+            - otherwise h_freq_cutoff if provided
+            - otherwise 100.0 cm^-1
         """
         if self.vibrational_frequencies is None:
             return None
-        if self.imaginary_frequencies:
-            if self.jobtype == "ts":
-                if (
-                    len(self.imaginary_frequencies) == 1
-                    and self.vibrational_frequencies[0] < 0.0
-                ):
-                    return self.vibrational_frequencies[1:]
-                else:
-                    raise ValueError(
-                        f"!! ERROR: Detected multiple imaginary frequencies in "
-                        f"TS calculation for {self.filename}. Only one "
-                        f"imaginary frequency is allowed for a valid TS. "
-                        f"Please re-optimize the geometry to locate a true TS."
-                    )
-            else:
+
+        frequencies = list(self.vibrational_frequencies)
+        imaginary_indices = [
+            i for i, freq in enumerate(frequencies) if freq < 0.0
+        ]
+
+        if not imaginary_indices:
+            return frequencies
+
+        # IMPORTANT:
+        # cleaned_frequencies is still in cm^-1.
+        # Do not use self.s_freq_cutoff/self.h_freq_cutoff here because those
+        # have already been converted to Hz.
+        if self.s_freq_cutoff_cm is not None:
+            freq_cutoff = self.s_freq_cutoff_cm
+        elif self.h_freq_cutoff_cm is not None:
+            freq_cutoff = self.h_freq_cutoff_cm
+        else:
+            freq_cutoff = 100.0
+
+        if self.jobtype == "ts":
+            # Valid TS: exactly one imaginary frequency.
+            # Remove it from thermochemistry.
+            if len(imaginary_indices) == 1:
+                reaction_coordinate_index = imaginary_indices[0]
+                return [
+                    freq
+                    for i, freq in enumerate(frequencies)
+                    if i != reaction_coordinate_index
+                ]
+
+            # Invalid TS: more than one imaginary frequency.
+            if self.check_imaginary_frequencies:
                 raise ValueError(
-                    f"!! ERROR: Detected imaginary frequencies in geometry "
-                    f"optimization for {self.filename}. A valid optimized "
-                    f"geometry should not contain imaginary frequencies. "
-                    f"Please re-optimize the geometry to locate a true "
-                    f"minimum."
+                    f"!! ERROR: Detected multiple imaginary frequencies in "
+                    f"TS calculation for {self.filename}. Only one "
+                    f"imaginary frequency is allowed for a valid TS. "
+                    f"Please re-optimize the geometry to locate a true TS."
                 )
-        return self.vibrational_frequencies
+
+            # Permissive mode:
+            # remove first imaginary frequency as reaction coordinate;
+            # replace all remaining imaginary frequencies by cutoff.
+            reaction_coordinate_index = imaginary_indices[0]
+
+            return [
+                freq_cutoff if freq < 0.0 else freq
+                for i, freq in enumerate(frequencies)
+                if i != reaction_coordinate_index
+            ]
+
+        # Non-TS jobs: any imaginary frequency is invalid in strict mode.
+        if self.check_imaginary_frequencies:
+            raise ValueError(
+                f"!! ERROR: Detected imaginary frequencies in geometry "
+                f"optimization for {self.filename}. A valid optimized "
+                f"geometry should not contain imaginary frequencies. "
+                f"Please re-optimize the geometry to locate a true minimum."
+            )
+
+        # Permissive mode:
+        # replace all imaginary frequencies by cutoff.
+        return [freq_cutoff if freq < 0.0 else freq for freq in frequencies]
 
     @property
     def electronic_energy(self):
