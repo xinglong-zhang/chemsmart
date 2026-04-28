@@ -1111,13 +1111,13 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         title_a="First",
         title_b="Second",
         max_steps=500,
-        step_size=0.1,
-        trust_radius=0.3,
-        energy_diff_tol=1.0e-3,
-        force_max_tol=4.5e-4,
-        force_rms_tol=3.0e-4,
-        disp_max_tol=1.8e-3,
-        disp_rms_tol=1.2e-3,
+        step_size=0.1,  # Bohr^2/Hartree
+        trust_radius=0.3,  # Bohr
+        energy_diff_tol=5.0e-5,
+        force_max_tol=1.5e-5,  # Hartree/Bohr
+        force_rms_tol=5.0e-4,  # Hartree/Bohr
+        disp_max_tol=1.2e-4,  # Bohr
+        disp_rms_tol=3.8e-3,  # Bohr
         **kwargs,
     ):
         super().__init__(**kwargs)

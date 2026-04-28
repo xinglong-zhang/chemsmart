@@ -10,6 +10,7 @@ import os
 from typing import Type
 
 import numpy as np
+from ase import units
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
@@ -35,7 +36,6 @@ class GaussianMECPJob(GaussianJob):
     """
 
     TYPE = "g16mecp"
-    BOHR_TO_ANGSTROM = 0.529177210903
     MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
 
     def __init__(
@@ -72,7 +72,7 @@ class GaussianMECPJob(GaussianJob):
         if not os.path.isfile(self.report_file):
             return False
         with open(self.report_file, encoding="utf-8") as f:
-            return any("Converged" in line for line in f)
+            return any(line.startswith("Converged at step") for line in f)
 
     def _state_settings(self, charge, multiplicity, title):
         state_settings = self.settings.copy()
@@ -96,7 +96,7 @@ class GaussianMECPJob(GaussianJob):
             title = self.settings.title_b
 
         mol = self.molecule.copy()
-        mol.positions = positions_bohr * self.BOHR_TO_ANGSTROM
+        mol.positions = positions_bohr * units.Bohr
         settings = self._state_settings(
             charge=charge,
             multiplicity=multiplicity,
@@ -130,7 +130,7 @@ class GaussianMECPJob(GaussianJob):
         return energy, gradient
 
     def _write_trajectory_frame(self, positions_bohr, step_idx):
-        positions = positions_bohr * self.BOHR_TO_ANGSTROM
+        positions = positions_bohr * units.Bohr
         mode = "w" if step_idx == 0 else "a"
         with open(self.trajectory_file, mode) as f:
             f.write(f"{len(self.molecule.symbols)}\n")
@@ -169,11 +169,20 @@ class GaussianMECPJob(GaussianJob):
         return displacement, projected_grad
 
     def _apply_trust_radius(self, displacement):
-        step = np.array(displacement, dtype=float)
-        step_norm = np.linalg.norm(step)
+        """
+        Apply a per-atom Cartesian trust radius.
 
-        if step_norm > self.settings.trust_radius:
-            step *= self.settings.trust_radius / step_norm
+        The trust radius is interpreted as the maximum allowed
+        Cartesian displacement norm for each atom, in Bohr, per step.
+        """
+        step = np.array(displacement, dtype=float)
+
+        atom_step_norms = np.linalg.norm(step, axis=1)
+        exceed = atom_step_norms > self.settings.trust_radius
+
+        if np.any(exceed):
+            scale = self.settings.trust_radius / atom_step_norms[exceed]
+            step[exceed] *= scale[:, None]
 
         return step
 
@@ -204,8 +213,7 @@ class GaussianMECPJob(GaussianJob):
 
     def _run(self, **kwargs):
         positions_bohr = (
-            np.array(self.molecule.positions, dtype=float)
-            / self.BOHR_TO_ANGSTROM
+            np.array(self.molecule.positions, dtype=float) / units.Bohr
         )
         displacement = np.zeros_like(positions_bohr)
         logger.info(
@@ -251,4 +259,4 @@ class GaussianMECPJob(GaussianJob):
                     "MECP optimization did not converge within max_steps."
                 )
 
-        self.molecule.positions = positions_bohr * self.BOHR_TO_ANGSTROM
+        self.molecule.positions = positions_bohr * units.Bohr
