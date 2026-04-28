@@ -1113,7 +1113,7 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         max_steps=500,
         step_size=0.1,  # Bohr^2/Hartree
         trust_radius=0.3,  # Bohr
-        energy_diff_tol=5.0e-5,
+        energy_diff_tol=5.0e-5,  # Hartree
         force_max_tol=1.5e-5,  # Hartree/Bohr
         force_rms_tol=5.0e-4,  # Hartree/Bohr
         disp_max_tol=1.2e-4,  # Bohr
