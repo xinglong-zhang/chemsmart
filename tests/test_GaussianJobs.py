@@ -391,6 +391,56 @@ class TestGaussianlinkIRCJobs:
         assert "ircr" in jobtypes
 
 
+class TestGaussianIRCJobs:
+    def test_gaussian_irc_job_flat_naming(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Test correct naming of IRC sub-job labels with flat_irc option.
+
+        For a flat IRC job with no direction specified (both forward and
+        reverse), the sub-job labels should be ``{label}f_flat`` and
+        ``{label}r_flat``, not ``{label}_flatf_flat`` / ``{label}_flatr_flat``.
+        """
+        from chemsmart.jobs.gaussian.irc import GaussianIRCJob
+
+        # set scratch directory for jobrunner
+        gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
+
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.irc_settings()
+        settings.charge = -2
+        settings.multiplicity = 1
+        settings.jobtype = "irc"
+        settings.flat_irc = True
+
+        # create main IRC job with flat IRC option and no direction
+        # (simulates what happens when `gaussian irc --flat` is run on
+        # job_label_irc.xyz, which sets label="job_label_irc")
+        job = GaussianIRCJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="job_label_irc",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        # test forward IRC sub-job naming with flat
+        ircf_job = job._ircf_job()
+        expected_ircf_label = "job_label_ircf_flat"
+        assert ircf_job.label == expected_ircf_label
+
+        # test reverse IRC sub-job naming with flat
+        ircr_job = job._ircr_job()
+        expected_ircr_label = "job_label_ircr_flat"
+        assert ircr_job.label == expected_ircr_label
+
+
 class TestGaussianCrestJobs:
     def test_crest_job_creates_jobs_for_all_conformers(
         self,
