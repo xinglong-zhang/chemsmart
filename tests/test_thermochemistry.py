@@ -3361,7 +3361,6 @@ class TestThermochemistryBatchMode:
         assert f"{gibbs_free_energy4:.6f}" in data_lines4[0]
 
 
-
 class TestCleanedFrequencies:
     """Unit tests for Thermochemistry.cleaned_frequencies.
 
