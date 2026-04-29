@@ -9,13 +9,13 @@ direct input file execution.
  Minimum Energy Cross Point (MECP) Jobs
 ****************************************
 
-A Minimum Energy Crossing Point (MECP) is a geometry where two potential energy surfaces of different spin
-multiplicity are degenerate. It is the spin-forbidden analogue of a transition state and is relevant to intersystem
-crossing, spin-state reactivity, and organometallic reaction mechanisms.
+A Minimum Energy Crossing Point (MECP) is a geometry where two potential energy surfaces of different spin multiplicity
+are degenerate. It is the spin-forbidden analogue of a transition state and is relevant to intersystem crossing,
+spin-state reactivity, and organometallic reaction mechanisms.
 
-ChemSmart provides a **self-contained MECP optimizer** that drives the search entirely in Python, calling Gaussian
-only for single-point energies and Cartesian forces at each step. No external MECP code (e.g. MECP2, Harvey's code)
-is required.
+ChemSmart provides a **self-contained MECP optimizer** that drives the search entirely in Python, calling Gaussian only
+for single-point energies and Cartesian forces at each step. No external MECP code (e.g. MECP2, Harvey's code) is
+required.
 
 .. code:: bash
 
@@ -26,26 +26,33 @@ Algorithm
 
 At each optimization step the following operations are performed:
 
-1. **State A SP+forces** — Gaussian single-point energy and Cartesian forces for spin state A at the current geometry.
-2. **State B SP+forces** — Same for spin state B.
-3. **Effective displacement** — The displacement vector is computed using the penalty-function / projected-gradient
+#. **State A SP+forces** — Gaussian single-point energy and Cartesian forces for spin state A at the current geometry.
+
+#. **State B SP+forces** — Same for spin state B.
+
+#. **Effective displacement** — The displacement vector is computed using the penalty-function / projected-gradient
    approach:
 
-   - Let :math:`\Delta E = E_A - E_B` and :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B`.
-   - **Seam correction** (drives geometry toward the crossing seam):
-     :math:`\mathbf{d}_\text{seam} = -\frac{\Delta E}{\|\mathbf{g}_\Delta\|^2}\,\mathbf{g}_\Delta`
-   - **Seam-tangent gradient** (component of :math:`\nabla E_A` perpendicular to :math:`\mathbf{g}_\Delta`):
-     :math:`\mathbf{g}_\perp = \nabla E_A -
-     \frac{\nabla E_A \cdot \mathbf{g}_\Delta}{\|\mathbf{g}_\Delta\|^2}\,\mathbf{g}_\Delta`
-   - **Downhill step** (minimizes energy along the seam):
-     :math:`\mathbf{d}_\text{seam\text{-}min} = -\alpha\,\mathbf{g}_\perp`
-     where :math:`\alpha` is ``step_size`` (Bohr²/Hartree).
-   - **Total displacement**: :math:`\mathbf{d} = \mathbf{d}_\text{seam} + \mathbf{d}_\text{seam\text{-}min}`
+   -  Let :math:`\Delta E = E_A - E_B` and :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B`.
 
-4. **Trust radius** — Each atom's displacement vector is independently scaled so that its Cartesian norm does not
-   exceed ``trust_radius`` (Bohr).
-5. **Convergence check** — See the convergence criteria table below.
-6. **Geometry update** — :math:`\mathbf{r}_{n+1} = \mathbf{r}_n + \mathbf{d}`.
+   -  **Seam correction** (drives geometry toward the crossing seam): :math:`\mathbf{d}_\text{seam} = -\frac{\Delta
+      E}{\|\mathbf{g}_\Delta\|^2}\,\mathbf{g}_\Delta`
+
+   -  **Seam-tangent gradient** (component of :math:`\nabla E_A` perpendicular to :math:`\mathbf{g}_\Delta`):
+      :math:`\mathbf{g}_\perp = \nabla E_A - \frac{\nabla E_A \cdot
+      \mathbf{g}_\Delta}{\|\mathbf{g}_\Delta\|^2}\,\mathbf{g}_\Delta`
+
+   -  **Downhill step** (minimizes energy along the seam): :math:`\mathbf{d}_\text{seam\text{-}min} =
+      -\alpha\,\mathbf{g}_\perp` where :math:`\alpha` is ``step_size`` (Bohr²/Hartree).
+
+   -  **Total displacement**: :math:`\mathbf{d} = \mathbf{d}_\text{seam} + \mathbf{d}_\text{seam\text{-}min}`
+
+#. **Trust radius** — Each atom's displacement vector is independently scaled so that its Cartesian norm does not exceed
+   ``trust_radius`` (Bohr).
+
+#. **Convergence check** — See the convergence criteria table below.
+
+#. **Geometry update** — :math:`\mathbf{r}_{n+1} = \mathbf{r}_n + \mathbf{d}`.
 
 MECP Options
 ============
@@ -174,13 +181,15 @@ Output Files
 Two output files are produced alongside the Gaussian sub-job input/output files:
 
 ``<label>_report.log``
-   Step-by-step optimization log.  The file header records the run settings; each subsequent line reports::
+   Step-by-step optimization log. The file header records the run settings; each subsequent line reports:
+
+   .. code::
 
       step=NNN E_A=<Hartree> E_B=<Hartree> dE=<Hartree>
       grad_max=<H/Bohr> grad_rms=<H/Bohr> disp_max=<Bohr> disp_rms=<Bohr>
 
-   The final line reads ``Converged at step NNN.`` on successful convergence.
-   The presence of this ``Converged`` marker is used by ``skip_completed`` to avoid re-running a finished job.
+   The final line reads ``Converged at step NNN.`` on successful convergence. The presence of this ``Converged`` marker
+   is used by ``skip_completed`` to avoid re-running a finished job.
 
 ``<label>_traj.xyz``
    Multi-frame XYZ trajectory of the MECP geometry at every optimization step (coordinates in Ångström).
@@ -222,10 +231,9 @@ Adjust optimization step parameters only:
 
 .. note::
 
-   Each MECP step generates two Gaussian sub-jobs named
-   ``<label>_step<NNN>_A`` and ``<label>_step<NNN>_B`` (single-point energy + forces).
-   These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP
-   job itself honours ``skip_completed`` via the ``Converged`` marker in the report file.
+   Each MECP step generates two Gaussian sub-jobs named ``<label>_step<NNN>_A`` and ``<label>_step<NNN>_B``
+   (single-point energy + forces). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job
+   itself honours ``skip_completed`` via the ``Converged`` marker in the report file.
 
 ***********
  Link Jobs
