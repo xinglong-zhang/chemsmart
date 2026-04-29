@@ -1,0 +1,3 @@
+"""
+GROMACS input writer.
+"""
