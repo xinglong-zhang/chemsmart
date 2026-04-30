@@ -149,13 +149,13 @@ MECP Options
 
    -  -  ``--step-size-grow``
       -  float
-      -  1.1 (dimensionless)
+      -  1.2 (dimensionless)
       -  Grow factor for the ``grow_shrink`` method.
 
    -  -  ``--step-size-shrink``
       -  float
-      -  0.5 (dimensionless)
-      -  Shrink factor for the ``grow_shrink`` method.
+      -  0.833 ≈ 1/1.2 (dimensionless)
+      -  Shrink factor for the ``grow_shrink`` method; symmetric with the grow factor.
 
    -  -  ``--step-size-min``
       -  float

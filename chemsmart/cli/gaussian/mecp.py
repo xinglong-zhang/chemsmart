@@ -116,13 +116,13 @@ logger = logging.getLogger(__name__)
     "--step-size-grow",
     type=float,
     default=None,
-    help="Factor to grow step size when making progress (default: 1.1).",
+    help="Factor to grow step size when making progress (default: 1.2).",
 )
 @click.option(
     "--step-size-shrink",
     type=float,
     default=None,
-    help="Factor to shrink step size on overshoot/oscillation (default: 0.5).",
+    help="Factor to shrink step size on overshoot/oscillation (default: 0.833 ≈ 1/1.2).",
 )
 @click.option(
     "--step-size-min",
