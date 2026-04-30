@@ -136,6 +136,56 @@ MECP Options
       -  3.8×10⁻³ Bohr
       -  Convergence threshold for the RMS of :math:`\mathbf{d}`.
 
+   -  -  ``--adaptive-step-size / --no-adaptive-step-size``
+      -  bool
+      -  True
+      -  Enable automatic step size adaptation each iteration (default: enabled).
+
+   -  -  ``--step-size-grow``
+      -  float
+      -  1.1
+      -  Factor by which the step size is multiplied when progress is detected.
+
+   -  -  ``--step-size-shrink``
+      -  float
+      -  0.5
+      -  Factor by which the step size is multiplied on overshoot or oscillation.
+
+   -  -  ``--step-size-min``
+      -  float
+      -  1.0×10⁻⁴ Bohr²/Hartree
+      -  Floor for the adaptive step size.
+
+   -  -  ``--step-size-max``
+      -  float
+      -  1.0 Bohr²/Hartree
+      -  Ceiling for the adaptive step size.
+
+Adaptive Step Size
+==================
+
+When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated automatically at the
+end of each iteration using a simple merit-based rule.
+
+**Merit function** (dimensionless):
+
+.. math::
+
+   M_n = \frac{|\Delta E_n|}{\epsilon_{\Delta E}} + \frac{\text{RMS}(\mathbf{g}_{\perp,n})}{\epsilon_{\text{rms}}}
+
+where :math:`\epsilon_{\Delta E}` is ``energy_diff_tol`` and :math:`\epsilon_{\text{rms}}` is ``force_rms_tol``.
+
+**Update rule** (applied before each geometry update):
+
+-  If :math:`M_n < M_{n-1}` (progress): :math:`\alpha_{n+1} = \min(\alpha_n \times \texttt{step\_size\_grow},\,
+   \texttt{step\_size\_max})`
+-  If :math:`M_n \geq M_{n-1}` (stall or overshoot): :math:`\alpha_{n+1} = \max(\alpha_n \times
+   \texttt{step\_size\_shrink},\, \texttt{step\_size\_min})`
+
+The combination of a mild grow factor (1.1) and an aggressive shrink factor (0.5) prevents overshooting while still
+accelerating convergence when the geometry is moving efficiently toward the MECP. The current step size is recorded in
+each line of ``<label>_report.log``.
+
 Convergence Criteria
 ====================
 
@@ -186,7 +236,7 @@ Two output files are produced alongside the Gaussian sub-job input/output files:
    .. code::
 
       step=NNN E_A=<Hartree> E_B=<Hartree> dE=<Hartree>
-      grad_max=<H/Bohr> grad_rms=<H/Bohr> disp_max=<Bohr> disp_rms=<Bohr>
+      grad_max=<H/Bohr> grad_rms=<H/Bohr> disp_max=<Bohr> disp_rms=<Bohr> step_size=<Bohr²/Hartree>
 
    The final line reads ``Converged at step NNN.`` on successful convergence. The presence of this ``Converged`` marker
    is used by ``skip_completed`` to avoid re-running a finished job.
@@ -223,11 +273,20 @@ Tighten convergence and limit the number of steps:
        --max-steps 200 --step-size 0.05 --trust-radius 0.1 \
        --energy-diff-tol 1.0e-5
 
-Adjust optimization step parameters only:
+Use a fixed step size (disable adaptive scaling):
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --max-steps 100 --step-size 0.05 --trust-radius 0.1
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
+       --no-adaptive-step-size --step-size 0.05
+
+Tune the adaptive step size parameters explicitly:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
+       --step-size-grow 1.2 --step-size-shrink 0.6 \
+       --step-size-min 1e-3 --step-size-max 0.5
 
 .. note::
 

@@ -145,7 +145,7 @@ class GaussianMECPJob(GaussianJob):
     def _rms(array):
         return float(np.sqrt(np.mean(np.square(array))))
 
-    def _mecp_displacement(self, energy_diff, grad_a, grad_b):
+    def _mecp_displacement(self, energy_diff, grad_a, grad_b, step_size):
         diff_grad = grad_a - grad_b
         diff_norm_sq = float(np.sum(diff_grad * diff_grad))
 
@@ -162,11 +162,28 @@ class GaussianMECPJob(GaussianJob):
         projected_grad = grad_a - proj * diff_grad
 
         # Downhill step along the seam.
-        downhill_step = -self.settings.step_size * projected_grad
+        downhill_step = -step_size * projected_grad
 
         displacement = seam_correction + downhill_step
 
         return displacement, projected_grad
+
+    def _adapt_step_size(self, current_step_size, prev_merit, current_merit):
+        """
+        Return an updated step size based on the merit function progress.
+
+        The merit is dimensionless: ``|ΔE|/energy_diff_tol + RMS(g_perp)/force_rms_tol``.
+        If merit decreased (progress), the step size is grown by ``step_size_grow``.
+        If merit increased (overshoot/oscillation), it is shrunk by ``step_size_shrink``.
+        The result is clamped to ``[step_size_min, step_size_max]``.
+        """
+        if current_merit < prev_merit:
+            new_step = current_step_size * self.settings.step_size_grow
+        else:
+            new_step = current_step_size * self.settings.step_size_shrink
+        return float(
+            np.clip(new_step, self.settings.step_size_min, self.settings.step_size_max)
+        )
 
     def _apply_trust_radius(self, displacement):
         """
@@ -199,7 +216,7 @@ class GaussianMECPJob(GaussianJob):
             and disp_rms <= self.settings.disp_rms_tol
         )
 
-    def _log_step(self, f, step_idx, ea, eb, eff_grad, displacement):
+    def _log_step(self, f, step_idx, ea, eb, eff_grad, displacement, step_size):
         grad_max = float(np.max(np.abs(eff_grad)))
         grad_rms = self._rms(eff_grad)
         disp_max = float(np.max(np.abs(displacement)))
@@ -208,7 +225,7 @@ class GaussianMECPJob(GaussianJob):
             f"step={step_idx:03d} E_A={ea:.10f} E_B={eb:.10f} "
             f"dE={ea - eb:+.10e} grad_max={grad_max:.3e} "
             f"grad_rms={grad_rms:.3e} disp_max={disp_max:.3e} "
-            f"disp_rms={disp_rms:.3e}\n"
+            f"disp_rms={disp_rms:.3e} step_size={step_size:.4e}\n"
         )
 
     def _run(self, **kwargs):
@@ -221,11 +238,16 @@ class GaussianMECPJob(GaussianJob):
             f"{positions_bohr} Bohr and displacement: {displacement}\n"
         )
 
+        current_step_size = self.settings.step_size
+        prev_merit = None
+
         with open(self.report_file, "w") as report:
             report.write("CHEMSMART self-contained MECP optimization\n")
             report.write(
-                f"max_steps={self.settings.max_steps} step_size={self.settings.step_size} "
-                f"trust_radius={self.settings.trust_radius}\n"
+                f"max_steps={self.settings.max_steps} "
+                f"step_size={self.settings.step_size} "
+                f"trust_radius={self.settings.trust_radius} "
+                f"adaptive_step_size={self.settings.adaptive_step_size}\n"
             )
             for step_idx in range(self.settings.max_steps):
                 self._write_trajectory_frame(positions_bohr, step_idx)
@@ -238,12 +260,14 @@ class GaussianMECPJob(GaussianJob):
                     energy_diff=energy_diff,
                     grad_a=grad_a,
                     grad_b=grad_b,
+                    step_size=current_step_size,
                 )
 
                 displacement = self._apply_trust_radius(displacement)
 
                 self._log_step(
-                    report, step_idx, ea, eb, projected_grad, displacement
+                    report, step_idx, ea, eb, projected_grad, displacement,
+                    current_step_size,
                 )
 
                 if self._is_converged(
@@ -253,6 +277,18 @@ class GaussianMECPJob(GaussianJob):
                 ):
                     report.write(f"Converged at step {step_idx}.\n")
                     break
+
+                if self.settings.adaptive_step_size:
+                    current_merit = (
+                        abs(energy_diff) / self.settings.energy_diff_tol
+                        + self._rms(projected_grad) / self.settings.force_rms_tol
+                    )
+                    if prev_merit is not None:
+                        current_step_size = self._adapt_step_size(
+                            current_step_size, prev_merit, current_merit
+                        )
+                    prev_merit = current_merit
+
                 positions_bohr = positions_bohr + displacement
             else:
                 raise RuntimeError(

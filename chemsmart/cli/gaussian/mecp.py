@@ -97,6 +97,35 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Convergence threshold for RMS displacement (Bohr).",
 )
+@click.option(
+    "--adaptive-step-size/--no-adaptive-step-size",
+    default=None,
+    help="Enable adaptive step size scaling (default: enabled).",
+)
+@click.option(
+    "--step-size-grow",
+    type=float,
+    default=None,
+    help="Factor to grow step size when making progress (default: 1.1).",
+)
+@click.option(
+    "--step-size-shrink",
+    type=float,
+    default=None,
+    help="Factor to shrink step size on overshoot/oscillation (default: 0.5).",
+)
+@click.option(
+    "--step-size-min",
+    type=float,
+    default=None,
+    help="Minimum allowed adaptive step size in Bohr^2/Hartree (default: 1e-4).",
+)
+@click.option(
+    "--step-size-max",
+    type=float,
+    default=None,
+    help="Maximum allowed adaptive step size in Bohr^2/Hartree (default: 1.0).",
+)
 @click.pass_context
 def mecp(
     ctx,
@@ -114,6 +143,11 @@ def mecp(
     force_rms_tol,
     disp_max_tol,
     disp_rms_tol,
+    adaptive_step_size,
+    step_size_grow,
+    step_size_shrink,
+    step_size_min,
+    step_size_max,
     skip_completed,
     **kwargs,
 ):
@@ -200,6 +234,16 @@ def mecp(
         mecp_settings.disp_max_tol = disp_max_tol
     if disp_rms_tol is not None:
         mecp_settings.disp_rms_tol = disp_rms_tol
+    if adaptive_step_size is not None:
+        mecp_settings.adaptive_step_size = adaptive_step_size
+    if step_size_grow is not None:
+        mecp_settings.step_size_grow = step_size_grow
+    if step_size_shrink is not None:
+        mecp_settings.step_size_shrink = step_size_shrink
+    if step_size_min is not None:
+        mecp_settings.step_size_min = step_size_min
+    if step_size_max is not None:
+        mecp_settings.step_size_max = step_size_max
 
     # get molecule
     molecules = ctx.obj[

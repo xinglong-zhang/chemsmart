@@ -1067,3 +1067,74 @@ class TestGaussianCLIMecpCommand:
         assert settings.force_rms_tol == 6e-4
         assert settings.disp_max_tol == 2e-3
         assert settings.disp_rms_tol == 1.5e-3
+
+    def test_mecp_adaptive_step_size_options_are_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Adaptive step size CLI options are forwarded to GaussianMECPJob settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--no-adaptive-step-size",
+                "--step-size-grow",
+                "1.2",
+                "--step-size-shrink",
+                "0.6",
+                "--step-size-min",
+                "1e-3",
+                "--step-size-max",
+                "0.5",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.adaptive_step_size is False
+        assert settings.step_size_grow == 1.2
+        assert settings.step_size_shrink == 0.6
+        assert settings.step_size_min == 1e-3
+        assert settings.step_size_max == 0.5
+
+    def test_mecp_adaptive_step_size_enabled_by_default(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Adaptive step size is enabled by default."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.adaptive_step_size is True
+        assert settings.step_size_grow == 1.1
+        assert settings.step_size_shrink == 0.5
+        assert settings.step_size_min == 1e-4
+        assert settings.step_size_max == 1.0
