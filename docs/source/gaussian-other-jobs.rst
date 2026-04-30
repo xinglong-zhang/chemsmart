@@ -144,8 +144,8 @@ MECP Options
    -  -  ``--step-size-method``
       -  string
       -  ``"bb"``
-      -  Step size adaptation algorithm: ``"bb"`` (Barzilai-Borwein, default) or
-         ``"grow_shrink"`` (merit-based grow/shrink).
+      -  Step size adaptation algorithm: ``"bb"`` (Barzilai-Borwein, default) or ``"grow_shrink"`` (merit-based
+         grow/shrink).
 
    -  -  ``--step-size-grow``
       -  float
@@ -155,8 +155,8 @@ MECP Options
    -  -  ``--step-size-shrink``
       -  float
       -  0.7 (dimensionless)
-      -  Shrink factor for the ``grow_shrink`` method. Together with grow=1.2, the product
-         0.84 per oscillation cycle provides mild damping to stabilise convergence.
+      -  Shrink factor for the ``grow_shrink`` method. Together with grow=1.2, the product 0.84 per oscillation cycle
+         provides mild damping to stabilise convergence.
 
    -  -  ``--step-size-min``
       -  float
@@ -175,7 +175,7 @@ When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\al
 iteration. Two algorithms are available via ``--step-size-method``.
 
 Barzilai-Borwein (``"bb"``, default)
---------------------------------------
+------------------------------------
 
 The BB2 step size is derived from the secant condition and provides near-quadratic convergence near the MECP:
 
@@ -183,15 +183,15 @@ The BB2 step size is derived from the secant condition and provides near-quadrat
 
    \alpha_{n+1} = \frac{\|\Delta\mathbf{r}\|^2}{\Delta\mathbf{r} \cdot \Delta\mathbf{g}_\perp}
 
-where :math:`\Delta\mathbf{r} = \mathbf{r}_n - \mathbf{r}_{n-1}` and
-:math:`\Delta\mathbf{g}_\perp = \mathbf{g}_{\perp,n} - \mathbf{g}_{\perp,n-1}`.
+where :math:`\Delta\mathbf{r} = \mathbf{r}_n - \mathbf{r}_{n-1}` and :math:`\Delta\mathbf{g}_\perp =
+\mathbf{g}_{\perp,n} - \mathbf{g}_{\perp,n-1}`.
 
 The denominator is the inner product of the position change and the seam-tangent gradient change; it approximates the
-local curvature. If the curvature is non-positive (negative-curvature region or first step), the algorithm falls back
-to the initial ``step_size``. The result is clamped to ``[step_size_min, step_size_max]``.
+local curvature. If the curvature is non-positive (negative-curvature region or first step), the algorithm falls back to
+the initial ``step_size``. The result is clamped to ``[step_size_min, step_size_max]``.
 
 Grow-Shrink (``"grow_shrink"``)
----------------------------------
+-------------------------------
 
 A dimensionless merit function tracks progress:
 

@@ -182,10 +182,16 @@ class GaussianMECPJob(GaussianJob):
         else:
             new_step = current_step_size * self.settings.step_size_shrink
         return float(
-            np.clip(new_step, self.settings.step_size_min, self.settings.step_size_max)
+            np.clip(
+                new_step,
+                self.settings.step_size_min,
+                self.settings.step_size_max,
+            )
         )
 
-    def _bb_step_size(self, prev_positions, curr_positions, prev_proj_grad, curr_proj_grad):
+    def _bb_step_size(
+        self, prev_positions, curr_positions, prev_proj_grad, curr_proj_grad
+    ):
         """
         Compute a Barzilai-Borwein (BB2) step size from the secant condition.
 
@@ -213,7 +219,11 @@ class GaussianMECPJob(GaussianJob):
 
         bb_step = r_dot_r / r_dot_g
         return float(
-            np.clip(bb_step, self.settings.step_size_min, self.settings.step_size_max)
+            np.clip(
+                bb_step,
+                self.settings.step_size_min,
+                self.settings.step_size_max,
+            )
         )
 
     def _apply_trust_radius(self, displacement):
@@ -247,7 +257,9 @@ class GaussianMECPJob(GaussianJob):
             and disp_rms <= self.settings.disp_rms_tol
         )
 
-    def _log_step(self, f, step_idx, ea, eb, eff_grad, displacement, step_size):
+    def _log_step(
+        self, f, step_idx, ea, eb, eff_grad, displacement, step_size
+    ):
         grad_max = float(np.max(np.abs(eff_grad)))
         grad_rms = self._rms(eff_grad)
         disp_max = float(np.max(np.abs(displacement)))
@@ -300,7 +312,12 @@ class GaussianMECPJob(GaussianJob):
                 displacement = self._apply_trust_radius(displacement)
 
                 self._log_step(
-                    report, step_idx, ea, eb, projected_grad, displacement,
+                    report,
+                    step_idx,
+                    ea,
+                    eb,
+                    projected_grad,
+                    displacement,
                     current_step_size,
                 )
 
@@ -326,7 +343,8 @@ class GaussianMECPJob(GaussianJob):
                     else:  # "grow_shrink"
                         current_merit = (
                             abs(energy_diff) / self.settings.energy_diff_tol
-                            + self._rms(projected_grad) / self.settings.force_rms_tol
+                            + self._rms(projected_grad)
+                            / self.settings.force_rms_tol
                         )
                         if prev_merit is not None:
                             current_step_size = self._adapt_step_size(
