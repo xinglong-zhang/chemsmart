@@ -430,6 +430,61 @@ class Molecule:
             coords=self.positions, radii=self.vdw_radii_list
         )
 
+    def generate_force_field_from_rdkit(self):
+        """Generate a force field for the molecule using RDKit's MMFF94.
+
+        This method assigns MMFF94 atom types and parameters to the molecule,
+        creating a force field representation that can be used for energy
+        calculations, geometry optimizations, and molecular dynamics simulations.
+
+        Returns
+        -------
+        rdkit.Chem.rdForceFieldHelpers.MMFFGetMoleculeProperties
+            An object containing the assigned MMFF94 properties for the molecule.
+
+        Raises
+        ------
+        ValueError
+            If the molecule cannot be processed by RDKit or if MMFF94 parameters
+            cannot be assigned to all atoms.
+        """
+        from rdkit.Chem import AllChem
+
+        rdkit_mol = self.to_rdkit()
+        mmff_props = AllChem.MMFFGetMoleculeProperties(rdkit_mol)
+        if mmff_props is None:
+            raise ValueError(
+                "MMFF94 parameters could not be assigned to all atoms in the molecule."
+            )
+        return mmff_props
+
+    def generate_force_field_from_ffld(self):
+        """Generate a force field for the molecule using FFLD.
+
+        This method assigns FFLD atom types and parameters to the molecule,
+        creating a force field representation that can be used for energy
+        calculations, geometry optimizations, and molecular dynamics simulations.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the assigned FFLD properties for the molecule.
+
+        Raises
+        ------
+        ValueError
+            If the molecule cannot be processed by FFLD or if parameters
+            cannot be assigned to all atoms.
+        """
+        from chemsmart.utils.ffld import assign_ffld_parameters
+
+        ffld_params = assign_ffld_parameters(self)
+        if ffld_params is None:
+            raise ValueError(
+                "FFLD parameters could not be assigned to all atoms in the molecule."
+            )
+        return ffld_params
+
     @property
     def grid_vdw_volume(self):
         """Calculate the VDW volume using grid-based numerical integration.
