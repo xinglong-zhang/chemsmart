@@ -52,6 +52,7 @@ class GaussianCrestJob(GaussianJob):
         jobrunner=None,
         num_confs_to_run=None,
         grouping_strategy=None,
+        num_groups=None,
         skip_completed=True,
         **kwargs,
     ):
@@ -70,6 +71,9 @@ class GaussianCrestJob(GaussianJob):
             jobrunner (JobRunner, optional): Job execution handler.
             num_confs_to_run (int, optional): Number of conformers to
                 optimize. Defaults to all conformers.
+            grouping_strategy (str, optional): Grouping strategy for molecules.
+            num_groups (int, optional): Number of groups to create when grouping
+                is enabled. Takes precedence over threshold-based grouping.
             **kwargs: Additional keyword arguments for parent class.
 
         Raises:
@@ -96,11 +100,21 @@ class GaussianCrestJob(GaussianJob):
         # and carry out the grouping before running the group of molecules
         if grouping_strategy is not None:
             logger.info(f"Using grouping strategy: {grouping_strategy}")
+
+            if num_groups is not None:
+                logger.info(
+                    f"Using num_groups mode: {num_groups} groups requested"
+                )
+
             from chemsmart.utils.grouper import StructureGrouperFactory
 
             logger.info(f"Total structures to group: {len(molecules)}")
             grouper = StructureGrouperFactory.create(
-                molecules, strategy=grouping_strategy, **kwargs
+                molecules,
+                strategy=grouping_strategy,
+                num_groups=num_groups,
+                label=label,
+                **kwargs,
             )
             grouper.group()
             unique_molecules = grouper.unique()

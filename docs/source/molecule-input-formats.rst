@@ -142,16 +142,16 @@ ChemDraw Files
 ChemDraw XML (.cdxml) and Binary (.cdx) Files
 ---------------------------------------------
 
-**NEW**: Chemsmart now supports reading molecular structures directly from ChemDraw files! This enables seamless
-integration with chemical drawing tools.
+Chemsmart supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
+with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 .. code:: bash
 
-   # Basic usage with ChemDraw file
+   # Organic molecule
    chemsmart sub -s server gaussian -p project -f molecule.cdxml -c 0 -m 1 opt
 
-   # Complete single-command workflow
-   chemsmart sub -s server gaussian -p project -f benzene.cdxml -c 0 -m 1 opt
+   # Organometallic complex (charge and multiplicity must be specified explicitly)
+   chemsmart sub -s server gaussian -p project -f ferrocene.cdxml -c 0 -m 1 opt
 
 .. tip::
 
@@ -170,10 +170,14 @@ integration with chemical drawing tools.
 
 .. note::
 
-   -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported
-   -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates
-   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule
-   -  3D coordinates are automatically generated from 2D structures
+   -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported.
+   -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates.
+   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule.
+   -  3D coordinates are automatically generated from 2D structures.
+   -  Reading binary ``.cdx`` files requires Open Babel (``obabel``) to be installed. If Open Babel is not available,
+      save the file as ``.cdxml`` instead.
+   -  Charge and multiplicity of organometallic complexes are **not** inferred from the ChemDraw file – always specify
+      ``-c`` and ``-m`` explicitly.
 
 **Example: Multi-molecule ChemDraw file**
 
@@ -181,6 +185,8 @@ integration with chemical drawing tools.
 
    # Select the 2nd molecule from a ChemDraw file with multiple structures
    chemsmart sub -s server gaussian -p project -f molecules.cdxml -i 2 -c 0 -m 1 opt
+
+For full details on organometallic complex support and its restrictions, see :doc:`chemdraw-organometallic`.
 
 *********************
  Molecular Databases
@@ -256,6 +262,32 @@ From RDKit Mol
 
    # Convert to Chemsmart Molecule
    molecule = Molecule.from_rdkit_mol(rdkit_mol)
+
+Aromaticity Detection (``is_aromatic``)
+---------------------------------------
+
+The ``is_aromatic`` property detects aromaticity by converting the molecule to an RDKit representation and checking
+whether any atom both carries the aromatic flag **and** belongs to a ring. This guards against false positives in
+acyclic molecules (e.g. H₂O, MgI₂) that can arise when the geometry-based bond-order heuristic assigns a bond order of
+1.5 to short single bonds.
+
+.. note::
+
+   **Known limitations of aromaticity detection:**
+
+   -  Bond orders are inferred purely from 3D geometry (interatomic distances), not from an electronic structure
+      calculation. This means the detection is **model-dependent** and may not match formal aromaticity criteria in all
+      cases.
+
+   -  **Edge cases** such as the cyclopropenyl cation (aromatic) versus the cyclopropenyl radical (non-aromatic) may not
+      be distinguished correctly, because the outcome depends on how bond orders and electron counts are assigned from
+      the geometry alone.
+
+   -  For borderline or unusual systems (strained rings, metal-organic frameworks, non-Kekulé structures, etc.) the
+      result should be treated as a heuristic estimate rather than a definitive answer.
+
+   -  If precise aromaticity information is required, consider constructing the RDKit molecule directly from a SMILES
+      string or from an output file that encodes explicit bond orders.
 
 From Pymatgen
 =============

@@ -39,6 +39,47 @@ thermochemistry_cli_module = importlib.import_module(
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
 
 
+############ Thermochemistry Mock Fixtures ##################
+@pytest.fixture()
+def make_thermochemistry_mock():
+    """Factory fixture that creates a MagicMock mimicking a Thermochemistry instance.
+
+    Returns a callable that accepts the attributes accessed by
+    ``Thermochemistry.cleaned_frequencies`` and returns a properly configured
+    mock, so test methods stay free of direct ``MagicMock`` construction.
+
+    Usage::
+
+        def test_something(make_thermochemistry_mock):
+            mock = make_thermochemistry_mock(
+                vibrational_frequencies=[-50.0, 100.0],
+                jobtype="opt",
+                check_imaginary_frequencies=False,
+            )
+            result = Thermochemistry.cleaned_frequencies.fget(mock)
+            assert result == [100.0, 100.0]
+    """
+    from chemsmart.analysis.thermochemistry import Thermochemistry
+
+    def _factory(
+        vibrational_frequencies,
+        jobtype="opt",
+        check_imaginary_frequencies=True,
+        s_freq_cutoff_cm=None,
+        h_freq_cutoff_cm=None,
+    ):
+        mock = MagicMock(spec=Thermochemistry)
+        mock.vibrational_frequencies = vibrational_frequencies
+        mock.jobtype = jobtype
+        mock.check_imaginary_frequencies = check_imaginary_frequencies
+        mock.s_freq_cutoff_cm = s_freq_cutoff_cm
+        mock.h_freq_cutoff_cm = h_freq_cutoff_cm
+        mock.filename = "dummy.log"
+        return mock
+
+    return _factory
+
+
 ############ CLI Fixtures ##################
 @pytest.fixture()
 def make_cli_ctx_obj():
@@ -1569,6 +1610,12 @@ def xyz_directory(structure_test_directory):
 
 
 @pytest.fixture()
+def ts_conformers_log_directory(structure_test_directory):
+    """Directory containing TS conformer log files (ch_1c_para_c1.log to c5.log)."""
+    return os.path.join(structure_test_directory, "conformers", "log")
+
+
+@pytest.fixture()
 def single_molecule_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_best.xyz")
 
@@ -1576,6 +1623,11 @@ def single_molecule_xyz_file(xyz_directory):
 @pytest.fixture()
 def multiple_molecules_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_conformers.xyz")
+
+
+@pytest.fixture()
+def two_rotated_molecules_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "two_rotated_molecules.xyz")
 
 
 @pytest.fixture()
@@ -1626,6 +1678,66 @@ def single_molecule_cdx_file_imidazole(chemdraw_directory):
 @pytest.fixture()
 def complex_molecule_cdxml_file(chemdraw_directory):
     return os.path.join(chemdraw_directory, "complex_molecule.cdxml")
+
+
+@pytest.fixture()
+def chemdraw_expected_directory(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "expected")
+
+
+@pytest.fixture()
+def expected_methane_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "methane.xyz")
+
+
+@pytest.fixture()
+def expected_benzene_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "benzene.xyz")
+
+
+@pytest.fixture()
+def expected_imidazole_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "imidazole.xyz")
+
+
+@pytest.fixture()
+def expected_two_molecules_1_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_1.xyz")
+
+
+@pytest.fixture()
+def expected_two_molecules_2_xyz(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_2.xyz")
+
+
+@pytest.fixture()
+def expected_benzene_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "benzene.com")
+
+
+@pytest.fixture()
+def expected_methane_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "methane.com")
+
+
+@pytest.fixture()
+def expected_two_molecules_1_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_1.com")
+
+
+@pytest.fixture()
+def expected_two_molecules_2_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "two_molecules_2.com")
+
+
+@pytest.fixture()
+def expected_complex_molecule_com(chemdraw_expected_directory):
+    return os.path.join(chemdraw_expected_directory, "complex_molecule.com")
+
+
+@pytest.fixture()
+def metal_ligand_molecules_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "metal_ligands.cdxml")
 
 
 @pytest.fixture()

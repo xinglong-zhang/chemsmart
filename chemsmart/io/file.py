@@ -6,6 +6,11 @@ from collections import Counter
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.io import (
+    _reposition_rings_and_metal,
+    attach_eta_bonds_for_arene_rings,
+    attach_eta_bonds_for_cp_rings,
+)
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import string2index_1based
 
@@ -115,18 +120,45 @@ class CDXFile(FileMixin):
         from pathlib import Path
 
         from rdkit import Chem
-        from rdkit.Chem import AllChem
 
         suffix = Path(self.filename).suffix.lower()
 
         rdkit_mols = []
         try:
             # NOTE: RDKit's MolsFromCDXMLFile always supports CDXML.
-            # CDX files are only supported if RDKit was built with
-            # ChemDraw CDX support.
-            rdkit_mols = list(
-                Chem.MolsFromCDXMLFile(self.filename, removeHs=False)
+            # CDX files are only supported if RDKit was built with ChemDraw CDX support.
+            # Use sanitize=False to avoid kekulization errors during parsing
+            # of organometallic complexes. We'll handle sanitization later.
+            logger.debug(
+                f"Generating rdkit mols from {self.filename} using RDKit"
             )
+            if suffix == ".cdxml":
+                # Preprocess CDXML to remove MultiAttachment phantom atoms
+                # BEFORE RDKit reads the file.  ChemDraw represents η5/η6
+                # hapticity with NodeType="MultiAttachment" nodes connected to
+                # the metal via Display="Dash" bonds.  RDKit turns each such
+                # node into a regular carbon atom, producing spurious CH₃
+                # groups and masking real substituents (e.g. Ti–Me groups).
+                # Removing them at the XML level keeps genuine ligands intact.
+                logger.debug(
+                    f"Preprocessing CDXML to remove MultiAttachment nodes: {self.filename}"
+                )
+                cleaned_cdxml = (
+                    CDXFile._preprocess_cdxml_remove_multi_attachments(
+                        self.filename
+                    )
+                )
+                rdkit_mols = list(
+                    Chem.MolsFromCDXML(
+                        cleaned_cdxml, sanitize=False, removeHs=False
+                    )
+                )
+            else:
+                rdkit_mols = list(
+                    Chem.MolsFromCDXMLFile(
+                        self.filename, sanitize=False, removeHs=False
+                    )
+                )
         except Exception as e:
             logger.debug(
                 f"RDKit MolsFromCDXMLFile failed for {self.filename}: {e}"
@@ -141,6 +173,9 @@ class CDXFile(FileMixin):
             try:
                 from chemsmart.utils.io import obtain_mols_from_cdx_via_obabel
 
+                logger.debug(
+                    f"Generating rdkit mols from {self.filename} using obabel"
+                )
                 rdkit_mols = obtain_mols_from_cdx_via_obabel(self.filename)
             except Exception as e:
                 logger.debug(
@@ -152,43 +187,31 @@ class CDXFile(FileMixin):
                 f"No molecules could be read from ChemDraw file: {self.filename}"
             )
 
+        # Update property cache for all molecules read from CDXML
+        # This is necessary to avoid "Pre-condition Violation" errors
+        # when checking atom properties like GetTotalNumHs()
+        for mol in rdkit_mols:
+            if mol is not None:
+                mol.UpdatePropertyCache(strict=False)
+
+        # Combine metal fragments with their aromatic ligands
+        # ChemDraw sometimes draws metal complexes as separate fragments
+        logger.debug("Combining metal fragments with ligands")
+        rdkit_mols = self._combine_metal_and_ligand_fragments(rdkit_mols)
+
         molecules = []
         for rdkit_mol in rdkit_mols:
             if rdkit_mol is None:
                 continue
 
-            # Add explicit hydrogens for proper structure
-            rdkit_mol = Chem.AddHs(rdkit_mol)
-
-            # Generate 3D coordinates
+            # Process molecule (handle organometallic complexes, add H, generate 3D coords)
             try:
-                # Try to embed the molecule to get 3D coordinates
-                result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
-                if result == -1:
-                    # Embedding failed, try with random coordinates
-                    result = AllChem.EmbedMolecule(
-                        rdkit_mol,
-                        useRandomCoords=True,
-                        randomSeed=42,
-                    )
-                    if result == -1:
-                        logger.warning(
-                            f"Could not generate 3D coordinates for a molecule "
-                            f"in {self.filename}. Skipping this molecule."
-                        )
-                        continue
-
-                # Optimize the geometry (may fail for exotic atom types)
-                try:
-                    AllChem.MMFFOptimizeMolecule(rdkit_mol)
-                except Exception as e:
-                    logger.debug(
-                        f"MMFF optimization failed for a molecule in {self.filename}: {e}"
-                    )
-
+                logger.debug(f"Processing rdkit mol: {rdkit_mol}")
+                rdkit_mol = self._process_cdx_molecule(rdkit_mol)
             except Exception as e:
                 logger.warning(
-                    f"Error generating 3D coordinates for molecule in {self.filename}: {e}"
+                    f"Error processing molecule in {self.filename}: {e}. "
+                    f"Skipping this molecule."
                 )
                 continue
 
@@ -203,6 +226,284 @@ class CDXFile(FileMixin):
             )
 
         return molecules
+
+    def _process_cdx_molecule(self, rdkit_mol):
+        """
+        Process a molecule from ChemDraw file, handling organometallic complexes.
+
+        This method normalizes metal bonds and sanitizes the molecule appropriately
+        for both organic and organometallic structures. It then adds hydrogens and
+        generates 3D coordinates.
+
+        Args:
+            rdkit_mol (rdkit.Chem.Mol): RDKit molecule to process.
+
+        Returns:
+            rdkit.Chem.Mol: Processed molecule with hydrogens and 3D coordinates.
+
+        Raises:
+            Exception: If molecule processing fails.
+        """
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        from chemsmart.utils.io import normalize_metal_bonds, safe_sanitize
+        from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
+
+        # Check if molecule contains metals
+        has_metals = any(
+            atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+            for atom in rdkit_mol.GetAtoms()
+        )
+        logger.debug(
+            f"The molecule: {rdkit_mol} has {has_metals} metal atoms."
+        )
+
+        logger.debug(f"Building metal indices for {rdkit_mol}.")
+        metal_idxs = {
+            a.GetIdx()
+            for a in rdkit_mol.GetAtoms()
+            if a.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+        }
+
+        # Normalize metal bonds first (removes aromatic flags from metal bonds)
+        logger.debug(f"Normalize metal bonds in {rdkit_mol}.")
+        rdkit_mol = normalize_metal_bonds(rdkit_mol)
+
+        if has_metals:
+            # Add ONE bond from the metal to each isolated 5-membered Cp ring
+            # and each isolated 6-membered arene ring.  This also dearomatizes
+            # the Cp ring with alternating single/double bonds so every ring
+            # carbon is sp2 with exactly one implicit H.  One bond per ring is
+            # enough for ETKDG to embed the molecule; the metal is repositioned
+            # after embedding.
+            logger.debug(f"Attach η5 bonds for Cp rings in {rdkit_mol}.")
+            rdkit_mol = attach_eta_bonds_for_cp_rings(rdkit_mol, metal_idxs)
+            logger.debug(f"Attach η6 bonds for arene rings in {rdkit_mol}.")
+            rdkit_mol = attach_eta_bonds_for_arene_rings(rdkit_mol, metal_idxs)
+
+        # Sanitize with or without kekulization based on metal presence
+        logger.debug(f"Sanitize metal bonds in {rdkit_mol}.")
+        rdkit_mol = safe_sanitize(rdkit_mol, skip_kekulize=has_metals)
+
+        # Add explicit hydrogens for proper structure
+        logger.debug(f"Adding explicit hydrogens in {rdkit_mol}.")
+        rdkit_mol = Chem.AddHs(rdkit_mol)
+
+        # Generate 3D coordinates
+        # Try to embed the molecule to get 3D coordinates
+        logger.debug(f"Embed molecule in {rdkit_mol}.")
+        result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+        if result == -1:
+            # Embedding failed, try with random coordinates
+            logger.debug(f"Failed to embed molecule in {rdkit_mol}.")
+            result = AllChem.EmbedMolecule(
+                rdkit_mol,
+                useRandomCoords=True,
+                randomSeed=42,
+            )
+            if result == -1:
+                raise ValueError(
+                    "Could not generate 3D coordinates for molecule"
+                )
+
+        # For organometallic complexes, ETKDG places the metal and all ring
+        # atoms in the same plane (coplanar with the single anchor bond).
+        # Reposition ring atoms as rigid bodies and then move the metal to
+        # achieve proper η5/η6 sandwich/half-sandwich coordination geometry.
+        if has_metals:
+            logger.debug(f"Reposition rings and metal in {rdkit_mol}.")
+            rdkit_mol = _reposition_rings_and_metal(rdkit_mol, metal_idxs)
+
+        # Optimize the geometry (may fail for exotic atom types)
+        try:
+            logger.debug(f"Optimize molecule {rdkit_mol} using MMFF.")
+            AllChem.MMFFOptimizeMolecule(rdkit_mol)
+        except Exception as e:
+            logger.debug(
+                f"MMFF optimization failed for a molecule in {self.filename}: {e}"
+            )
+
+        return rdkit_mol
+
+    def _combine_metal_and_ligand_fragments(self, rdkit_mols):
+        """
+        Combine metal fragments with their aromatic ligand fragments.
+
+        ChemDraw sometimes draws organometallic complexes as separate fragments
+        (e.g., a metal center with coordinated aromatic rings as separate fragments).
+        This method detects such cases and combines them into single molecules.
+
+        The heuristic used:
+        - A small metal-containing fragment (< 10 atoms) followed by aromatic ring
+          fragments (6-atom benzene rings) are combined.
+
+        Args:
+            rdkit_mols (list[rdkit.Chem.Mol]): List of RDKit molecules (fragments).
+
+        Returns:
+            list[rdkit.Chem.Mol]: List of combined molecules.
+        """
+        from rdkit import Chem
+
+        from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
+
+        def has_metal(mol):
+            """Check if molecule contains metal atoms."""
+            if mol is None:
+                return False
+            return any(
+                atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+                for atom in mol.GetAtoms()
+            )
+
+        def is_small_ligand_ring(mol):
+            """Check if molecule is a small aromatic ring (e.g., benzene, Cp)."""
+            if mol is None:
+                return False
+            # Check for aromatic 5-member carbon ring (Cp) or 6-member carbon ring (benzene)
+            ri = mol.GetRingInfo()
+            if ri.NumRings() != 1:
+                return False
+            for ring in ri.AtomRings():
+                if len(ring) in (5, 6):
+                    ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
+                    if all(a.GetSymbol() == "C" for a in ring_atoms):
+                        return True
+            return False
+
+        combined_mols = []
+        i = 0
+        while i < len(rdkit_mols):
+            mol = rdkit_mols[i]
+
+            if mol is None:
+                i += 1
+                continue
+
+            # Check if this is a small metal-containing fragment
+            if has_metal(mol) and mol.GetNumAtoms() < 10:
+                # Look ahead for aromatic ligand fragments
+                ligands = []
+                j = i + 1
+                while j < len(rdkit_mols) and is_small_ligand_ring(
+                    rdkit_mols[j]
+                ):
+                    ligands.append(rdkit_mols[j])
+                    j += 1
+
+                # If we found ligands, combine them with the metal fragment
+                if ligands:
+                    logger.debug(
+                        f"Combining metal fragment {i} with {len(ligands)} ligand(s)"
+                    )
+                    # Remove degree-1 carbon stub atoms from the small metal
+                    # fragment before combining.  ChemDraw sometimes draws
+                    # η5/η6 complexes as a small metal fragment (M + 2 C stubs)
+                    # plus separate ring fragments.  The C stubs are drawing
+                    # artefacts representing the bond direction to the ring
+                    # centroid; they are not real atoms and must be removed so
+                    # that attach_eta_bonds_for_{cp,arene}_rings can later
+                    # attach the metal directly to the ring atoms.
+                    stub_idxs = [
+                        nbr.GetIdx()
+                        for a in mol.GetAtoms()
+                        if a.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+                        for nbr in a.GetNeighbors()
+                        if nbr.GetAtomicNum() == 6 and nbr.GetDegree() == 1
+                    ]
+                    if stub_idxs:
+                        rw = Chem.RWMol(mol)
+                        for idx in sorted(set(stub_idxs), reverse=True):
+                            rw.RemoveAtom(idx)
+                        mol = rw.GetMol()
+                        mol.UpdatePropertyCache(strict=False)
+
+                    combined = Chem.CombineMols(mol, ligands[0])
+                    for k in range(1, len(ligands)):
+                        combined = Chem.CombineMols(combined, ligands[k])
+
+                    # Update property cache after combining molecules
+                    # This is critical to avoid "Pre-condition Violation" errors
+                    combined.UpdatePropertyCache(strict=False)
+                    combined_mols.append(combined)
+                    i = j  # Skip the ligands we just combined
+                else:
+                    combined_mols.append(mol)
+                    i += 1
+            else:
+                combined_mols.append(mol)
+                i += 1
+
+        return combined_mols
+
+    @staticmethod
+    def _preprocess_cdxml_remove_multi_attachments(filepath):
+        """
+        Read a CDXML file and return the XML content with all
+        ``NodeType="MultiAttachment"`` atoms and their connecting bonds removed.
+
+        ChemDraw uses ``MultiAttachment`` nodes to represent η5/η6 hapticity
+        in structures like metallocenes.  These phantom atoms are connected to
+        the metal via ``Display="Dash"`` bonds and carry no chemical meaning.
+        When RDKit reads them as regular carbon atoms it produces spurious CH₃
+        groups *and* masks real substituents bonded to the metal (e.g. the two
+        Ti–Me groups in TiCp₂Me₂).
+
+        Removing the phantom atoms at the XML level—before any RDKit
+        processing—preserves every genuine ligand while leaving the ring atoms
+        as isolated (disconnected) components inside the same CDXML fragment.
+        ``attach_eta_bonds_for_cp_rings`` / ``attach_eta_bonds_for_arene_rings``
+        then reconnect the metal to the rings in the correct η5/η6 fashion.
+
+        Args:
+            filepath (str): Path to the CDXML file.
+
+        Returns:
+            str: Modified CDXML content as a string (DOCTYPE declaration
+            stripped, which is acceptable for ``Chem.MolsFromCDXML``).
+        """
+        import io
+        import xml.etree.ElementTree as ET
+
+        tree = ET.parse(filepath)
+        root = tree.getroot()
+
+        for frag in root.iter("fragment"):
+            # Collect IDs of MultiAttachment atoms in this fragment.
+            multi_ids: set[str] = set()
+            nodes_to_remove = []
+            for child in list(frag):
+                if (
+                    child.tag == "n"
+                    and child.get("NodeType") == "MultiAttachment"
+                ):
+                    node_id = child.get("id")
+                    if node_id:
+                        multi_ids.add(node_id)
+                    nodes_to_remove.append(child)
+
+            if not multi_ids:
+                continue
+
+            # Collect bonds that reference any MultiAttachment atom.
+            bonds_to_remove = [
+                child
+                for child in list(frag)
+                if child.tag == "b"
+                and (
+                    child.get("B") in multi_ids or child.get("E") in multi_ids
+                )
+            ]
+
+            for node in nodes_to_remove:
+                frag.remove(node)
+            for bond in bonds_to_remove:
+                frag.remove(bond)
+
+        buf = io.StringIO()
+        tree.write(buf, encoding="unicode", xml_declaration=False)
+        return buf.getvalue()
 
     # ------------------------------------------------------------------
     # CDXML atom-colour helpers

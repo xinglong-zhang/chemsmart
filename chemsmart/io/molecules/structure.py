@@ -502,9 +502,29 @@ class Molecule:
     def is_aromatic(self):
         """
         Check if molecule is aromatic or not.
+
+        Uses ring membership to validate aromaticity so that bond-order
+        heuristics (which may assign 1.5 to non-ring bonds such as O-H)
+        do not produce false positives.  An atom is only considered
+        aromatic when it both carries the aromatic flag *and* belongs to
+        at least one ring.
+
+        .. note::
+            **Limitations:** Bond orders are inferred from 3D geometry, not
+            from an electronic structure calculation, so this check is
+            model-dependent.  Edge cases such as the cyclopropenyl cation
+            versus the cyclopropenyl radical may not be distinguished
+            correctly.  For borderline or unusual systems the result should
+            be treated as a heuristic estimate.
         """
         mol = self.to_rdkit()
-        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
+        Chem.FastFindRings(mol)
+        ring_info = mol.GetRingInfo()
+        ring_atoms = {idx for ring in ring_info.AtomRings() for idx in ring}
+        return any(
+            atom.GetIsAromatic() and atom.GetIdx() in ring_atoms
+            for atom in mol.GetAtoms()
+        )
 
     @property
     def is_ring(self):
@@ -2436,7 +2456,6 @@ class CoordinateBlock:
                     logger.error(
                         f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
                     )
-
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
@@ -2466,9 +2485,14 @@ class CoordinateBlock:
             try:
                 atomic_number = int(line_elements[0])
             except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
+                # sanitize token similar to _get_symbols to handle annotated tokens
+                token = str(line_elements[0])
+                m = re.match(r"^([A-Za-z][a-z]?)", token)
+                if m:
+                    atomic_symbol = p.to_element(m.group(1))
+                else:
+                    atomic_symbol = p.to_element(str(line_elements[0]))
+                atomic_number = p.to_atomic_number(atomic_symbol)
             atomic_numbers.append(atomic_number)
 
             # Decide how to interpret the second

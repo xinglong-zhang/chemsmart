@@ -159,6 +159,7 @@ These options are only available with ``chemsmart sub``:
 -  ``orca``: Run or submit ORCA jobs
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
+-  ``grouper``: Run structure grouping jobs
 
 ************
  Next Steps
@@ -170,6 +171,7 @@ For specific job types, see the detailed tutorials:
 -  :doc:`orca-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
+-  :doc:`grouper-cli-options`
 
 .. note::
 

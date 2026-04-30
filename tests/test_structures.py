@@ -160,6 +160,8 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
         assert isinstance(mol, QMMMMolecule)
         assert type(mol).__name__ == "QMMMMolecule"
 
+
+class TestStructures:
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):
@@ -492,6 +494,61 @@ class TestMoleculeAdvanced:
         assert rdkit_mol.GetNumAtoms() == 3
         assert rdkit_mol.GetNumConformers() == 1
         assert rdkit_mol.GetConformer().GetPositions().shape == (3, 3)
+
+    def test_is_aromatic_non_aromatic_molecules(self):
+        """Regression test: non-aromatic molecules must not be reported as aromatic.
+
+        Bond-order heuristics can assign order 1.5 to bonds like O-H or Mg-I,
+        which previously caused ``is_aromatic`` to return ``True`` for H2O and
+        MgI2.  The property must use ring membership to validate aromaticity.
+        """
+        # H2O – no rings at all
+        mol_h2o = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.119],
+                    [0.0, 0.757, -0.476],
+                    [0.0, -0.757, -0.476],
+                ]
+            ),
+        )
+        assert not mol_h2o.is_aromatic, "H2O must not be aromatic"
+
+        # MgI2 – linear, no rings
+        mol_mgi2 = Molecule(
+            symbols=["Mg", "I", "I"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]
+            ),
+        )
+        assert not mol_mgi2.is_aromatic, "MgI2 must not be aromatic"
+
+        # Benzene – should still be aromatic
+        import math
+
+        r_c, r_h = 1.39, 2.46
+        pos_c = [
+            [
+                r_c * math.cos(2 * math.pi * i / 6),
+                r_c * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        pos_h = [
+            [
+                r_h * math.cos(2 * math.pi * i / 6),
+                r_h * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        mol_benz = Molecule(
+            symbols=["C"] * 6 + ["H"] * 6,
+            positions=np.array(pos_c + pos_h),
+        )
+        assert mol_benz.is_aromatic, "Benzene must be aromatic"
 
     def test_molecule_graph_generation(self):
         """Test molecular graph creation with bond detection."""
@@ -2285,6 +2342,64 @@ class TestCDXFile:
         assert mol.chemical_formula == "C32H31N5O5"
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
+
+    def test_read_metal_ligand_molecules_cdxml_file_(
+        self, metal_ligand_molecules_cdxml_file
+    ):
+        """Test reading multiple organometallic molecules from a CDXML file with Cp and aromatic ligands."""
+        assert os.path.exists(metal_ligand_molecules_cdxml_file)
+        assert os.path.isfile(metal_ligand_molecules_cdxml_file)
+        cdx_file = CDXFile(filename=metal_ligand_molecules_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 7
+
+        # Test molecule 0: Ti(Cp)₂Me₂ - titanocene dimethyl complex.
+        # The two methyl groups bonded to Ti are now correctly preserved.
+        # MultiAttachment phantom atoms (ChemDraw η5-hapticity stubs) are
+        # removed at the XML level before RDKit parsing, so the real Ti–Me
+        # bonds remain intact.
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H16Ti"
+        assert mol.num_atoms == 29
+        assert mol.is_ring
+
+        # Test molecule 1: Ni(Cp)₂Cl₂ - nickel bis-Cp with two chloride ligands.
+        mol = molecules[1]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C10H10Cl2Ni"
+        assert mol.num_atoms == 23
+        assert mol.is_ring
+
+        # Test molecule 3: Ir(η6-benzene)₂ - bis-benzene iridium complex.
+        # Each benzene ring contributes 6C and 6H; anchor C is sp2 with 1H.
+        mol = molecules[3]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Ir"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 4: Rh(η6-benzene)₂ - bis-benzene rhodium complex.
+        mol = molecules[4]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Rh"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 5: Fe complex with aromatic phosphine and benzene ligands
+        mol = molecules[5]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
+        assert mol.num_atoms == 75
+        assert mol.is_aromatic
+
+        # Test molecule 6: Mn sugar complex (no Cp rings, should be unchanged)
+        mol = molecules[6]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H10MnO6"
+        assert mol.num_atoms == 23
 
 
 class TestpKaCDXFile:
