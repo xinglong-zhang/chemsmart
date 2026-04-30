@@ -402,8 +402,13 @@ class TestGaussianIRCJobs:
         """Test correct naming of IRC sub-job labels with flat_irc option.
 
         For a flat IRC job with no direction specified (both forward and
-        reverse), the sub-job labels should be ``{label}f_flat`` and
-        ``{label}r_flat``, not ``{label}_flatf_flat`` / ``{label}_flatr_flat``.
+        reverse), the sub-job labels should be ``{label}_ircf_flat`` and
+        ``{label}_ircr_flat``.
+
+        - Auto-generated label (``file_irc``, already ends with ``_irc``):
+          sub-jobs become ``file_ircf_flat`` / ``file_ircr_flat``.
+        - Custom label via ``-l label`` (no ``_irc`` suffix):
+          sub-jobs become ``label_ircf_flat`` / ``label_ircr_flat``.
         """
         from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 
@@ -420,25 +425,28 @@ class TestGaussianIRCJobs:
         settings.jobtype = "irc"
         settings.flat_irc = True
 
-        # create main IRC job with flat IRC option and no direction
-        # (simulates what happens when `gaussian irc --flat` is run on
-        # job_label_irc.xyz, which sets label="job_label_irc")
-        job = GaussianIRCJob.from_filename(
+        # --- auto-generated label case (label ends with _irc) ---
+        # simulates `gaussian -f file.xyz irc --flat`
+        # where the gaussian group sets label="file_irc"
+        job_auto = GaussianIRCJob.from_filename(
             filename=single_molecule_xyz_file,
             settings=settings,
             label="job_label_irc",
             jobrunner=gaussian_jobrunner_no_scratch,
         )
+        assert job_auto._ircf_job().label == "job_label_ircf_flat"
+        assert job_auto._ircr_job().label == "job_label_ircr_flat"
 
-        # test forward IRC sub-job naming with flat
-        ircf_job = job._ircf_job()
-        expected_ircf_label = "job_label_ircf_flat"
-        assert ircf_job.label == expected_ircf_label
-
-        # test reverse IRC sub-job naming with flat
-        ircr_job = job._ircr_job()
-        expected_ircr_label = "job_label_ircr_flat"
-        assert ircr_job.label == expected_ircr_label
+        # --- custom label case (label does NOT end with _irc) ---
+        # simulates `gaussian -l label irc --flat`
+        job_custom = GaussianIRCJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="label",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert job_custom._ircf_job().label == "label_ircf_flat"
+        assert job_custom._ircr_job().label == "label_ircr_flat"
 
 
 class TestGaussianCrestJobs:
