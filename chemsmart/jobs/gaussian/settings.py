@@ -1119,8 +1119,9 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         disp_max_tol=1.2e-4,  # Bohr
         disp_rms_tol=3.8e-3,  # Bohr
         adaptive_step_size=True,
-        step_size_grow=1.1,
-        step_size_shrink=0.5,
+        step_size_method="bb",  # algorithm: "bb" (Barzilai-Borwein) or "grow_shrink"
+        step_size_grow=1.1,  # dimensionless multiplier
+        step_size_shrink=0.5,  # dimensionless multiplier
         step_size_min=1.0e-4,  # Bohr^2/Hartree
         step_size_max=1.0,  # Bohr^2/Hartree
         **kwargs,
@@ -1141,6 +1142,7 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.disp_max_tol = disp_max_tol
         self.disp_rms_tol = disp_rms_tol
         self.adaptive_step_size = adaptive_step_size
+        self.step_size_method = step_size_method
         self.step_size_grow = step_size_grow
         self.step_size_shrink = step_size_shrink
         self.step_size_min = step_size_min

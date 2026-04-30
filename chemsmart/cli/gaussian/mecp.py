@@ -103,6 +103,16 @@ logger = logging.getLogger(__name__)
     help="Enable adaptive step size scaling (default: enabled).",
 )
 @click.option(
+    "--step-size-method",
+    type=click.Choice(["bb", "grow_shrink"], case_sensitive=False),
+    default=None,
+    help=(
+        "Step size adaptation algorithm when adaptive is enabled. "
+        "'bb' uses the Barzilai-Borwein secant rule (default, faster). "
+        "'grow_shrink' uses a merit-based grow/shrink rule."
+    ),
+)
+@click.option(
     "--step-size-grow",
     type=float,
     default=None,
@@ -144,6 +154,7 @@ def mecp(
     disp_max_tol,
     disp_rms_tol,
     adaptive_step_size,
+    step_size_method,
     step_size_grow,
     step_size_shrink,
     step_size_min,
@@ -236,6 +247,8 @@ def mecp(
         mecp_settings.disp_rms_tol = disp_rms_tol
     if adaptive_step_size is not None:
         mecp_settings.adaptive_step_size = adaptive_step_size
+    if step_size_method is not None:
+        mecp_settings.step_size_method = step_size_method
     if step_size_grow is not None:
         mecp_settings.step_size_grow = step_size_grow
     if step_size_shrink is not None:

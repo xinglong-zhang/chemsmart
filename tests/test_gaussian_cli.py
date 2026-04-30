@@ -1115,7 +1115,7 @@ class TestGaussianCLIMecpCommand:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
-        """Adaptive step size is enabled by default."""
+        """Adaptive step size is enabled by default with Barzilai-Borwein method."""
         result, settings = run_gaussian_and_capture_settings(
             "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
             [
@@ -1134,7 +1134,37 @@ class TestGaussianCLIMecpCommand:
 
         assert result.exit_code == 0, result.output
         assert settings.adaptive_step_size is True
+        assert settings.step_size_method == "bb"
         assert settings.step_size_grow == 1.1
         assert settings.step_size_shrink == 0.5
         assert settings.step_size_min == 1e-4
         assert settings.step_size_max == 1.0
+
+    def test_mecp_step_size_method_option_is_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--step-size-method`` CLI option is forwarded to GaussianMECPJob settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "grow_shrink",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.step_size_method == "grow_shrink"

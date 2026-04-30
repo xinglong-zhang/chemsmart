@@ -185,6 +185,37 @@ class GaussianMECPJob(GaussianJob):
             np.clip(new_step, self.settings.step_size_min, self.settings.step_size_max)
         )
 
+    def _bb_step_size(self, prev_positions, curr_positions, prev_proj_grad, curr_proj_grad):
+        """
+        Compute a Barzilai-Borwein (BB2) step size from the secant condition.
+
+        Uses the formula ``α = ||Δr||² / (Δr · Δg_⊥)`` where
+        ``Δr = r_n − r_{n−1}`` and ``Δg_⊥ = g_⊥,n − g_⊥,n−1``.
+
+        Falls back to the initial ``step_size`` when the denominator is
+        non-positive (negative curvature or numerically zero step).
+        The result is clamped to ``[step_size_min, step_size_max]``.
+        """
+        delta_r = (curr_positions - prev_positions).ravel()
+        delta_g = (curr_proj_grad - prev_proj_grad).ravel()
+
+        r_dot_r = float(np.dot(delta_r, delta_r))
+        r_dot_g = float(np.dot(delta_r, delta_g))
+
+        if r_dot_r < 1e-30 or r_dot_g <= 0.0:
+            return float(
+                np.clip(
+                    self.settings.step_size,
+                    self.settings.step_size_min,
+                    self.settings.step_size_max,
+                )
+            )
+
+        bb_step = r_dot_r / r_dot_g
+        return float(
+            np.clip(bb_step, self.settings.step_size_min, self.settings.step_size_max)
+        )
+
     def _apply_trust_radius(self, displacement):
         """
         Apply a per-atom Cartesian trust radius.
@@ -240,6 +271,8 @@ class GaussianMECPJob(GaussianJob):
 
         current_step_size = self.settings.step_size
         prev_merit = None
+        prev_positions = None
+        prev_proj_grad = None
 
         with open(self.report_file, "w") as report:
             report.write("CHEMSMART self-contained MECP optimization\n")
@@ -247,7 +280,8 @@ class GaussianMECPJob(GaussianJob):
                 f"max_steps={self.settings.max_steps} "
                 f"step_size={self.settings.step_size} "
                 f"trust_radius={self.settings.trust_radius} "
-                f"adaptive_step_size={self.settings.adaptive_step_size}\n"
+                f"adaptive_step_size={self.settings.adaptive_step_size} "
+                f"step_size_method={self.settings.step_size_method}\n"
             )
             for step_idx in range(self.settings.max_steps):
                 self._write_trajectory_frame(positions_bohr, step_idx)
@@ -279,15 +313,26 @@ class GaussianMECPJob(GaussianJob):
                     break
 
                 if self.settings.adaptive_step_size:
-                    current_merit = (
-                        abs(energy_diff) / self.settings.energy_diff_tol
-                        + self._rms(projected_grad) / self.settings.force_rms_tol
-                    )
-                    if prev_merit is not None:
-                        current_step_size = self._adapt_step_size(
-                            current_step_size, prev_merit, current_merit
+                    if self.settings.step_size_method == "bb":
+                        if prev_positions is not None:
+                            current_step_size = self._bb_step_size(
+                                prev_positions,
+                                positions_bohr,
+                                prev_proj_grad,
+                                projected_grad,
+                            )
+                        prev_positions = positions_bohr.copy()
+                        prev_proj_grad = projected_grad.copy()
+                    else:  # "grow_shrink"
+                        current_merit = (
+                            abs(energy_diff) / self.settings.energy_diff_tol
+                            + self._rms(projected_grad) / self.settings.force_rms_tol
                         )
-                    prev_merit = current_merit
+                        if prev_merit is not None:
+                            current_step_size = self._adapt_step_size(
+                                current_step_size, prev_merit, current_merit
+                            )
+                        prev_merit = current_merit
 
                 positions_bohr = positions_bohr + displacement
             else:

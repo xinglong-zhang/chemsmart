@@ -141,50 +141,69 @@ MECP Options
       -  True
       -  Enable automatic step size adaptation each iteration (default: enabled).
 
+   -  -  ``--step-size-method``
+      -  string
+      -  ``"bb"``
+      -  Step size adaptation algorithm: ``"bb"`` (Barzilai-Borwein, default) or
+         ``"grow_shrink"`` (merit-based grow/shrink).
+
    -  -  ``--step-size-grow``
       -  float
-      -  1.1
-      -  Factor by which the step size is multiplied when progress is detected.
+      -  1.1 (dimensionless)
+      -  Grow factor for the ``grow_shrink`` method.
 
    -  -  ``--step-size-shrink``
       -  float
-      -  0.5
-      -  Factor by which the step size is multiplied on overshoot or oscillation.
+      -  0.5 (dimensionless)
+      -  Shrink factor for the ``grow_shrink`` method.
 
    -  -  ``--step-size-min``
       -  float
       -  1.0×10⁻⁴ Bohr²/Hartree
-      -  Floor for the adaptive step size.
+      -  Floor for the adaptive step size (both methods).
 
    -  -  ``--step-size-max``
       -  float
       -  1.0 Bohr²/Hartree
-      -  Ceiling for the adaptive step size.
+      -  Ceiling for the adaptive step size (both methods).
 
 Adaptive Step Size
 ==================
 
-When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated automatically at the
-end of each iteration using a simple merit-based rule.
+When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated at the end of each
+iteration. Two algorithms are available via ``--step-size-method``.
 
-**Merit function** (dimensionless):
+Barzilai-Borwein (``"bb"``, default)
+--------------------------------------
+
+The BB2 step size is derived from the secant condition and provides near-quadratic convergence near the MECP:
+
+.. math::
+
+   \alpha_{n+1} = \frac{\|\Delta\mathbf{r}\|^2}{\Delta\mathbf{r} \cdot \Delta\mathbf{g}_\perp}
+
+where :math:`\Delta\mathbf{r} = \mathbf{r}_n - \mathbf{r}_{n-1}` and
+:math:`\Delta\mathbf{g}_\perp = \mathbf{g}_{\perp,n} - \mathbf{g}_{\perp,n-1}`.
+
+The denominator is the inner product of the position change and the seam-tangent gradient change; it approximates the
+local curvature. If the curvature is non-positive (negative-curvature region or first step), the algorithm falls back
+to the initial ``step_size``. The result is clamped to ``[step_size_min, step_size_max]``.
+
+Grow-Shrink (``"grow_shrink"``)
+---------------------------------
+
+A dimensionless merit function tracks progress:
 
 .. math::
 
    M_n = \frac{|\Delta E_n|}{\epsilon_{\Delta E}} + \frac{\text{RMS}(\mathbf{g}_{\perp,n})}{\epsilon_{\text{rms}}}
 
-where :math:`\epsilon_{\Delta E}` is ``energy_diff_tol`` and :math:`\epsilon_{\text{rms}}` is ``force_rms_tol``.
-
-**Update rule** (applied before each geometry update):
-
 -  If :math:`M_n < M_{n-1}` (progress): :math:`\alpha_{n+1} = \min(\alpha_n \times \texttt{step\_size\_grow},\,
    \texttt{step\_size\_max})`
--  If :math:`M_n \geq M_{n-1}` (stall or overshoot): :math:`\alpha_{n+1} = \max(\alpha_n \times
+-  If :math:`M_n \geq M_{n-1}` (stall/overshoot): :math:`\alpha_{n+1} = \max(\alpha_n \times
    \texttt{step\_size\_shrink},\, \texttt{step\_size\_min})`
 
-The combination of a mild grow factor (1.1) and an aggressive shrink factor (0.5) prevents overshooting while still
-accelerating convergence when the geometry is moving efficiently toward the MECP. The current step size is recorded in
-each line of ``<label>_report.log``.
+The current step size is recorded on every line of ``<label>_report.log``.
 
 Convergence Criteria
 ====================
@@ -280,13 +299,12 @@ Use a fixed step size (disable adaptive scaling):
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
        --no-adaptive-step-size --step-size 0.05
 
-Tune the adaptive step size parameters explicitly:
+Use the grow/shrink adaptive method instead of the default Barzilai-Borwein:
 
 .. code:: bash
 
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
-       --step-size-grow 1.2 --step-size-shrink 0.6 \
-       --step-size-min 1e-3 --step-size-max 0.5
+       --step-size-method grow_shrink --step-size-grow 1.2 --step-size-shrink 0.6
 
 .. note::
 
