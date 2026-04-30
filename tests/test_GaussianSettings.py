@@ -249,6 +249,208 @@ class TestGaussianQMMMJobSettings:
             == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
         )
 
+    def test_qmmm_additional_route_parameters(self):
+        """Regression test: -r/additional_route_parameters must appear in the
+        QMMM route string.  Previously _get_route_string_from_jobtype() in
+        GaussianQMMMJobSettings never appended this field, so keywords like
+        'scf=xqc' were silently dropped."""
+
+        # Plain opt+freq QMMM job with extra route keyword
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="genecp",
+            low_level_force_field="PM6",
+            charge_total=0,
+            mult_total=2,
+            charge_high=2,
+            mult_high=2,
+            high_level_atoms=list(range(1, 66)),
+            parent_jobtype="opt",
+            freq=True,
+            additional_route_parameters="scf=xqc",
+        )
+        assert settings.route_string == (
+            "# opt freq oniom(mn15/genecp:PM6) scf=xqc"
+        ), (
+            "additional_route_parameters were not appended to the QMMM "
+            "route string"
+        )
+
+        # Verify it also works without solvation on a plain sp job
+        settings_sp = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="PM6",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="sp",
+            additional_route_parameters="scf=xqc opt",
+        )
+        assert settings_sp.route_string == (
+            "# oniom(mn15/def2svp:PM6) scf=xqc opt"
+        )
+
+        # Verify it works alongside solvation
+        settings_solv = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+            freq=True,
+            solvent_model="smd",
+            solvent_id="water",
+            additional_route_parameters="scf=xqc",
+        )
+        assert settings_solv.route_string == (
+            "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) "
+            "scrf=(smd,solvent=water) scf=xqc"
+        )
+
+        # Duplicate guard: if the parameter is already in the string
+        # it should not appear twice
+        settings_dup = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+            additional_route_parameters="opt",  # 'opt' is already in string
+        )
+        route = settings_dup.route_string
+        assert (
+            route.count("opt") == 1
+        ), "Duplicate opt keyword should not be appended when already present"
+
+    def test_qmmm_additional_opt_options_in_route(self):
+        """Regression test: -o/additional_opt_options_in_route must be merged
+        into the opt/ts/modred keyword in the QMMM route string.
+        Previously this field was silently ignored."""
+
+        # opt parent with extra opt option
+        s_opt = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="genecp",
+            low_level_force_field="PM6",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+            additional_opt_options_in_route="maxstep=8",
+        )
+        assert s_opt.route_string == "# opt=(maxstep=8) oniom(mn15/genecp:PM6)"
+
+        # ts parent with extra opt option (no calcall)
+        s_ts = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            additional_opt_options_in_route="maxstep=5",
+        )
+        assert s_ts.route_string == (
+            "# opt=(ts,calcfc,noeigentest,maxstep=5) oniom(mn15/def2svp:UFF)"
+        )
+
+        # ts parent with calcall replaces calcfc
+        s_ts_calcall = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            additional_opt_options_in_route="calcall",
+        )
+        assert s_ts_calcall.route_string == (
+            "# opt=(ts,noeigentest,calcall) oniom(mn15/def2svp:UFF)"
+        ), "calcall should replace calcfc in ts QMMM route"
+
+        # modred parent with extra opt option
+        s_modred = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="modred",
+            additional_opt_options_in_route="maxstep=10",
+        )
+        assert s_modred.route_string == (
+            "# opt=(modredundant,maxstep=10) oniom(b3lyp/6-31g(d):UFF)"
+        )
+
+        # without additional_opt_options_in_route, opt keyword is plain
+        s_plain = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="PM6",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="opt",
+        )
+        assert s_plain.route_string == "# opt oniom(mn15/def2svp:PM6)"
+
+        # empty string and whitespace-only must not produce opt=() or opt=(  )
+        for blank in ("", "   ", "\t"):
+            s_blank = GaussianQMMMJobSettings(
+                high_level_functional="mn15",
+                high_level_basis="def2svp",
+                low_level_force_field="PM6",
+                charge_total=0,
+                mult_total=1,
+                high_level_atoms=[1, 2, 3],
+                parent_jobtype="opt",
+                additional_opt_options_in_route=blank,
+            )
+            assert s_blank.route_string == "# opt oniom(mn15/def2svp:PM6)", (
+                f"blank opt option {blank!r} should produce plain 'opt', "
+                f"got: {s_blank.route_string}"
+            )
+
+        # same guard for ts parent
+        s_ts_blank = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="ts",
+            additional_opt_options_in_route="  ",
+        )
+        assert s_ts_blank.route_string == (
+            "# opt=(ts,calcfc,noeigentest) oniom(mn15/def2svp:UFF)"
+        ), "whitespace-only opt option for ts should fall back to plain ts keyword"
+
+        # same guard for modred parent
+        s_modred_blank = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="UFF",
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms=[1, 2, 3],
+            parent_jobtype="modred",
+            additional_opt_options_in_route="",
+        )
+        assert s_modred_blank.route_string == (
+            "# opt=modredundant oniom(b3lyp/6-31g(d):UFF)"
+        ), "empty opt option for modred should fall back to plain opt=modredundant"
+
     def test_qmmm_settings_for_atoms(
         self,
         gaussian_inputs_test_directory,
