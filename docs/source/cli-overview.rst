@@ -71,7 +71,7 @@ Execution Control Options
       -  bool
       -  Skip or rerun completed jobs (default: skip)
 
-   -  -  ``--run-in-serial/--no-run-in-serial``
+   -  -  ``--run-in-serial/--run-in-parallel``
       -  bool
       -  For list/batch workloads, run jobs one-by-one or allow non-serial execution (default: non-serial)
 
@@ -90,7 +90,7 @@ Execution Control Options
 .. note::
 
    ``--run-in-serial`` is mainly for multi-job input (for example, a list or batch). It forces sequential execution of
-   each job. ``--no-run-in-serial`` (the default) lets Chemsmart use its standard non-serial path for those workloads.
+   each job. ``--run-in-parallel`` (the default) lets Chemsmart use its standard non-serial path for those workloads.
 
 Examples:
 

@@ -118,7 +118,7 @@ Batch execution policy is controlled by the top-level run/sub flag:
    chemsmart run --run-in-serial orca -p my_project -f molecules.csv pka \
        -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
 
-Use ``--run-in-serial`` to force one-by-one execution of table entries. Use the default ``--no-run-in-serial`` for
+Use ``--run-in-serial`` to force one-by-one execution of table entries. Use the default ``--run-in-parallel`` for
 non-serial execution.
 
 Computing pKa from Existing Output Files
