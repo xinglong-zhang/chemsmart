@@ -1136,7 +1136,7 @@ class TestGaussianCLIMecpCommand:
         assert settings.adaptive_step_size is True
         assert settings.step_size_method == "bb"
         assert settings.step_size_grow == 1.2
-        assert settings.step_size_shrink == 0.833
+        assert settings.step_size_shrink == 0.7
         assert settings.step_size_min == 1e-4
         assert settings.step_size_max == 1.0
 

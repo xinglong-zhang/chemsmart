@@ -154,8 +154,9 @@ MECP Options
 
    -  -  ``--step-size-shrink``
       -  float
-      -  0.833 ≈ 1/1.2 (dimensionless)
-      -  Shrink factor for the ``grow_shrink`` method; symmetric with the grow factor.
+      -  0.7 (dimensionless)
+      -  Shrink factor for the ``grow_shrink`` method. Together with grow=1.2, the product
+         0.84 per oscillation cycle provides mild damping to stabilise convergence.
 
    -  -  ``--step-size-min``
       -  float

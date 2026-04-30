@@ -1120,8 +1120,8 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         disp_rms_tol=3.8e-3,  # Bohr
         adaptive_step_size=True,
         step_size_method="bb",  # algorithm: "bb" (Barzilai-Borwein) or "grow_shrink"
-        step_size_grow=1.2,  # dimensionless multiplier; symmetric pair: shrink = 1/grow
-        step_size_shrink=0.833,  # dimensionless multiplier; ≈ 1/1.2 for symmetry with grow
+        step_size_grow=1.2,  # dimensionless multiplier; grow × shrink = 0.84 (mild damping per cycle)
+        step_size_shrink=0.7,  # dimensionless multiplier; stronger than 1/grow to damp oscillations
         step_size_min=1.0e-4,  # Bohr^2/Hartree
         step_size_max=1.0,  # Bohr^2/Hartree
         **kwargs,

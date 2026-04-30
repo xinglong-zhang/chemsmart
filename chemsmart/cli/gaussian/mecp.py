@@ -122,7 +122,7 @@ logger = logging.getLogger(__name__)
     "--step-size-shrink",
     type=float,
     default=None,
-    help="Factor to shrink step size on overshoot/oscillation (default: 0.833 ≈ 1/1.2).",
+    help="Factor to shrink step size on overshoot/oscillation (default: 0.7; grow×shrink=0.84 for mild damping).",
 )
 @click.option(
     "--step-size-min",
