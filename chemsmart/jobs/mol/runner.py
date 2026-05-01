@@ -294,7 +294,7 @@ class PyMOLJobRunner(JobRunner):
         chk_file_path = os.path.join(job.folder, f"{job.label}.chk")
         fchk_file_path = os.path.join(job.folder, f"{job.label}.fchk")
         if not os.path.exists(chk_file_path) and not os.path.exists(
-            chk_file_path
+            fchk_file_path
         ):
             raise FileNotFoundError(
                 f".chk or .fchk file is required but not found at {chk_file_path} or {fchk_file_path}!"
