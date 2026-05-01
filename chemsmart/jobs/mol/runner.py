@@ -293,7 +293,7 @@ class PyMOLJobRunner(JobRunner):
         """
         chk_file_path = os.path.join(job.folder, f"{job.label}.chk")
         fchk_file_path = os.path.join(job.folder, f"{job.label}.fchk")
-        if not os.path.exists(chk_file_path) and not os.path.isfile(
+        if not os.path.exists(chk_file_path) and not os.path.exists(
             chk_file_path
         ):
             raise FileNotFoundError(
