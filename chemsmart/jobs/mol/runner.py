@@ -292,13 +292,16 @@ class PyMOLJobRunner(JobRunner):
             FileNotFoundError: If the required .chk file is not found.
         """
         chk_file_path = os.path.join(job.folder, f"{job.label}.chk")
-        if not os.path.exists(chk_file_path):
+        fchk_file_path = os.path.join(job.folder, f"{job.label}.fchk")
+        if not os.path.exists(chk_file_path) and not os.path.exists(
+            fchk_file_path
+        ):
             raise FileNotFoundError(
-                f".chk file is required but not found at {chk_file_path}!"
+                f".chk or .fchk file is required but not found at {chk_file_path} or {fchk_file_path}!"
             )
 
         gaussian_exe = self._get_gaussian_executable(job)
-        if os.path.exists(os.path.join(job.folder, f"{job.label}.fchk")):
+        if os.path.exists(fchk_file_path):
             logger.info(
                 f".fchk file {job.label}.fchk already exists.\n"
                 f"Skipping generation of .fchk file."
