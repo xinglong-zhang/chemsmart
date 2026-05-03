@@ -38,6 +38,40 @@ class GaussianMECPJob(GaussianJob):
     TYPE = "g16mecp"
     MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
 
+    # MECP-specific attribute names that must be stripped when building
+    # a GaussianLinkJobSettings for each sub-job (broken-symmetry mode).
+    _MECP_ONLY_KEYS = frozenset(
+        {
+            "multiplicity_a",
+            "multiplicity_b",
+            "charge_a",
+            "charge_b",
+            "title_a",
+            "title_b",
+            "max_steps",
+            "step_size",
+            "trust_radius",
+            "energy_diff_tol",
+            "force_max_tol",
+            "force_rms_tol",
+            "disp_max_tol",
+            "disp_rms_tol",
+            "adaptive_step_size",
+            "step_size_method",
+            "step_size_grow",
+            "step_size_shrink",
+            "step_size_min",
+            "step_size_max",
+            "use_link",
+            "num_alpha_a",
+            "num_beta_a",
+            "num_alpha_b",
+            "num_beta_b",
+            # 'stable' and 'guess' are kept: they are valid GaussianLinkJobSettings
+            # params and will be overridden with state-specific values anyway.
+        }
+    )
+
     def __init__(
         self,
         molecule,
@@ -74,7 +108,93 @@ class GaussianMECPJob(GaussianJob):
         with open(self.report_file, encoding="utf-8") as f:
             return any(line.startswith("Converged at step") for line in f)
 
-    def _state_settings(self, charge, multiplicity, title):
+    def _build_guess_string(self, state):
+        """
+        Build the Gaussian ``guess=`` parameter for a given state.
+
+        For plain MECP sub-jobs (``use_link=False``) this is not called.
+        For broken-symmetry link sub-jobs the base guess (e.g. ``"mix"``)
+        is extended with ``nalpha``/``nbeta`` specifiers when the
+        corresponding ``num_alpha_*`` / ``num_beta_*`` settings are set:
+
+        * No nalpha/nbeta → ``"mix"``
+        * With nalpha/nbeta → ``"(mix,nalpha=N,nbeta=M)"``
+
+        Args:
+            state (str): ``"A"`` or ``"B"``.
+
+        Returns:
+            str: The guess string for the Gaussian route section.
+        """
+        base = self.settings.guess  # e.g. "mix"
+        if state == "A":
+            nalpha = self.settings.num_alpha_a
+            nbeta = self.settings.num_beta_a
+        else:
+            nalpha = self.settings.num_alpha_b
+            nbeta = self.settings.num_beta_b
+
+        if nalpha is None and nbeta is None:
+            return base
+
+        parts = [base] if base else []
+        if nalpha is not None:
+            parts.append(f"nalpha={nalpha}")
+        if nbeta is not None:
+            parts.append(f"nbeta={nbeta}")
+        return "(" + ",".join(parts) + ")"
+
+    def _state_settings(self, charge, multiplicity, title, state="A"):
+        """
+        Build per-state calculation settings.
+
+        In plain mode (``use_link=False``) returns a ``GaussianJobSettings``
+        copy configured for a SP+forces run.
+
+        In broken-symmetry link mode (``use_link=True``) returns a
+        ``GaussianLinkJobSettings`` that writes a two-section Gaussian input:
+
+        * **Section 1** – ``stable=opt`` with ``guess=(mix[,nalpha=N,nbeta=M])``
+          to converge to the broken-symmetry wavefunction.
+        * **Section 2** – SP + ``force`` with ``geom=check guess=read`` to
+          compute the energy and gradients on the stable BS solution.
+
+        Args:
+            charge (int): Formal charge for this state.
+            multiplicity (int): Spin multiplicity for this state.
+            title (str): Title string for the calculation.
+            state (str): ``"A"`` or ``"B"`` (used for nalpha/nbeta lookup).
+
+        Returns:
+            GaussianJobSettings | GaussianLinkJobSettings: State settings.
+        """
+        if self.settings.use_link:
+            from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+
+            # Start from the MECP settings dict, strip private attrs and
+            # MECP-only keys that GaussianLinkJobSettings does not expect.
+            link_kwargs = {
+                k: v
+                for k, v in self.settings.__dict__.items()
+                if not k.startswith("_") and k not in self._MECP_ONLY_KEYS
+            }
+            # Override with state-specific and link-specific values.
+            link_kwargs.update(
+                {
+                    "jobtype": "sp",
+                    "freq": False,
+                    "numfreq": False,
+                    "forces": True,
+                    "charge": charge,
+                    "multiplicity": multiplicity,
+                    "title": title,
+                    "stable": self.settings.stable,
+                    "guess": self._build_guess_string(state),
+                    "link": True,
+                }
+            )
+            return GaussianLinkJobSettings(**link_kwargs)
+
         state_settings = self.settings.copy()
         state_settings.jobtype = "sp"
         state_settings.freq = False
@@ -101,15 +221,28 @@ class GaussianMECPJob(GaussianJob):
             charge=charge,
             multiplicity=multiplicity,
             title=f"{title} step {step_idx}",
+            state=state,
         )
         state_label = f"{self.label}_step{step_idx:03d}_{state}"
-        job = GaussianGeneralJob(
-            molecule=mol,
-            settings=settings,
-            label=state_label,
-            jobrunner=self.jobrunner,
-            skip_completed=False,
-        )
+
+        if self.settings.use_link:
+            from chemsmart.jobs.gaussian.link import GaussianLinkJob
+
+            job = GaussianLinkJob(
+                molecule=mol,
+                settings=settings,
+                label=state_label,
+                jobrunner=self.jobrunner,
+                skip_completed=False,
+            )
+        else:
+            job = GaussianGeneralJob(
+                molecule=mol,
+                settings=settings,
+                label=state_label,
+                jobrunner=self.jobrunner,
+                skip_completed=False,
+            )
         job.run()
         output = job._output()
         if output is None or output.energies is None or not output.energies:

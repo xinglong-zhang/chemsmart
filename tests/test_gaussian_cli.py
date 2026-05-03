@@ -1168,3 +1168,188 @@ class TestGaussianCLIMecpCommand:
 
         assert result.exit_code == 0, result.output
         assert settings.step_size_method == "grow_shrink"
+
+
+class TestGaussianCLILinkMecpCommand:
+    """CLI tests for ``link -j mecp`` (broken-symmetry MECP via link sub-jobs)."""
+
+    def test_link_mecp_dispatches_to_gaussian_mecp_job(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``link -j mecp`` dispatches to ``GaussianMECPJob`` (not GaussianLinkJob)."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity-a",
+                "1",
+                "--multiplicity-b",
+                "3",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 1
+        assert settings.multiplicity_b == 3
+        assert settings.use_link is True
+
+    def test_link_mecp_broken_symmetry_options_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--num-alpha-*`` / ``--num-beta-*`` options are forwarded to MECP settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity-a",
+                "1",
+                "--num-alpha-a",
+                "1",
+                "--num-beta-a",
+                "1",
+                "--multiplicity-b",
+                "3",
+                "--num-alpha-b",
+                "3",
+                "--num-beta-b",
+                "1",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 1
+        assert settings.multiplicity_b == 3
+        assert settings.num_alpha_a == 1
+        assert settings.num_beta_a == 1
+        assert settings.num_alpha_b == 3
+        assert settings.num_beta_b == 1
+        assert settings.use_link is True
+
+    def test_link_mecp_defaults_multiplicity_b_to_plus_two(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Without ``--multiplicity-b``, state B defaults to state A + 2."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity-a",
+                "1",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 1
+        assert settings.multiplicity_b == 3
+
+    def test_link_mecp_stable_and_guess_are_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--stable`` and ``--guess`` are forwarded to the MECP link settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity-a",
+                "1",
+                "--stable",
+                "qrhf",
+                "--guess",
+                "read",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.stable == "qrhf"
+        assert settings.guess == "read"
+
+    def test_link_mecp_functional_prefixed_with_u(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Functional is prefixed with 'u' for unrestricted broken-symmetry DFT."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity-a",
+                "1",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.functional.lower().startswith("u")

@@ -1124,6 +1124,14 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         step_size_shrink=0.7,  # dimensionless multiplier; stronger than 1/grow to damp oscillations
         step_size_min=1.0e-4,  # Bohr^2/Hartree
         step_size_max=1.0,  # Bohr^2/Hartree
+        # broken-symmetry link-job mode
+        use_link=False,
+        stable="opt",  # stability analysis for link mode
+        guess="mix",  # initial guess for link mode
+        num_alpha_a=None,  # nalpha for state A (broken-symmetry spin polarisation)
+        num_beta_a=None,  # nbeta for state A
+        num_alpha_b=None,  # nalpha for state B
+        num_beta_b=None,  # nbeta for state B
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1147,6 +1155,13 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.step_size_shrink = step_size_shrink
         self.step_size_min = step_size_min
         self.step_size_max = step_size_max
+        self.use_link = use_link
+        self.stable = stable
+        self.guess = guess
+        self.num_alpha_a = num_alpha_a
+        self.num_beta_a = num_beta_a
+        self.num_alpha_b = num_alpha_b
+        self.num_beta_b = num_beta_b
 
     @classmethod
     def from_settings(cls, settings):
@@ -1264,8 +1279,8 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         Generate route string for the initial stability analysis step.
 
         Creates the first route string in a link job by removing
-        optimization and frequency keywords and adding stability
-        analysis and guess method specifications.
+        optimization, frequency, and force keywords, then adding
+        stability analysis and guess method specifications.
 
         Returns:
             str: Route string for stability analysis step.
@@ -1281,6 +1296,15 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         # Remove freq keywords
         route_string_final = re.sub(
             gaussian_freq_keywords_pattern,
+            " ",
+            route_string_final,
+            flags=re.IGNORECASE,
+        )
+        # Remove force keyword: force calculations belong in the link (second)
+        # step where the stable wavefunction is read via guess=read, not in
+        # the initial stable=opt step.
+        route_string_final = re.sub(
+            r"\bforce\b\s*",
             " ",
             route_string_final,
             flags=re.IGNORECASE,
