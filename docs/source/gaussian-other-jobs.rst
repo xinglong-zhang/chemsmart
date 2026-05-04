@@ -70,7 +70,7 @@ This creates a multi-step workflow:
 
 .. code:: text
 
-   # um062x def2svp stable=opt guess=(mix)
+   # um062x def2svp stable=opt guess=mix
    ...
    # opt freq um062x def2svp geom=check guess=read
    ...
