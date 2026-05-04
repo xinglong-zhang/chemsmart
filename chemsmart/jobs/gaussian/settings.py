@@ -1236,7 +1236,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             route_string_final += f" stable={self.stable}"
         if self.guess:
             logger.debug(f"Guess: {self.guess}")
-            route_string_final += f" guess={self.guess}"
+            route_string_final += f" guess=({self.guess})"
 
         return route_string_final
 
