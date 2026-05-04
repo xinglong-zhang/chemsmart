@@ -863,7 +863,9 @@ class TestGaussianPBCJob:
 class TestGaussianLinkJobSettingsGuess:
     """Tests for guess= formatting in GaussianLinkJobSettings route strings."""
 
-    _COMMON = dict(functional="um062x", basis="def2svp", charge=0, multiplicity=1)
+    _COMMON = dict(
+        functional="um062x", basis="def2svp", charge=0, multiplicity=1
+    )
 
     def _route(self, guess):
         s = GaussianLinkJobSettings(guess=guess, **self._COMMON)

@@ -1240,9 +1240,8 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             # that user input like '(mix,always)' is treated the same as
             # 'mix,always' and never produces double parentheses.
             guess_normalized = self.guess.strip()
-            if (
-                guess_normalized.startswith("(")
-                and guess_normalized.endswith(")")
+            if guess_normalized.startswith("(") and guess_normalized.endswith(
+                ")"
             ):
                 guess_normalized = guess_normalized[1:-1].strip()
             if "," in guess_normalized:
