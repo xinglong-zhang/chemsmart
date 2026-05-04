@@ -63,10 +63,6 @@ class GaussianMECPJob(GaussianJob):
             "step_size_min",
             "step_size_max",
             "use_link",
-            "num_alpha_a",
-            "num_beta_a",
-            "num_alpha_b",
-            "num_beta_b",
             # 'stable' and 'guess' are kept: they are valid GaussianLinkJobSettings
             # params and will be overridden with state-specific values anyway.
         }
@@ -108,42 +104,6 @@ class GaussianMECPJob(GaussianJob):
         with open(self.report_file, encoding="utf-8") as f:
             return any(line.startswith("Converged at step") for line in f)
 
-    def _build_guess_string(self, state):
-        """
-        Build the Gaussian ``guess=`` parameter for a given state.
-
-        For plain MECP sub-jobs (``use_link=False``) this is not called.
-        For broken-symmetry link sub-jobs the base guess (e.g. ``"mix"``)
-        is extended with ``nalpha``/``nbeta`` specifiers when the
-        corresponding ``num_alpha_*`` / ``num_beta_*`` settings are set:
-
-        * No nalpha/nbeta → ``"mix"``
-        * With nalpha/nbeta → ``"(mix,nalpha=N,nbeta=M)"``
-
-        Args:
-            state (str): ``"A"`` or ``"B"``.
-
-        Returns:
-            str: The guess string for the Gaussian route section.
-        """
-        base = self.settings.guess  # e.g. "mix"
-        if state == "A":
-            nalpha = self.settings.num_alpha_a
-            nbeta = self.settings.num_beta_a
-        else:
-            nalpha = self.settings.num_alpha_b
-            nbeta = self.settings.num_beta_b
-
-        if nalpha is None and nbeta is None:
-            return base
-
-        parts = [base] if base else []
-        if nalpha is not None:
-            parts.append(f"nalpha={nalpha}")
-        if nbeta is not None:
-            parts.append(f"nbeta={nbeta}")
-        return "(" + ",".join(parts) + ")"
-
     def _state_settings(self, charge, multiplicity, title, state="A"):
         """
         Build per-state calculation settings.
@@ -154,8 +114,10 @@ class GaussianMECPJob(GaussianJob):
         In broken-symmetry link mode (``use_link=True``) returns a
         ``GaussianLinkJobSettings`` that writes a two-section Gaussian input:
 
-        * **Section 1** – ``stable=opt`` with ``guess=(mix[,nalpha=N,nbeta=M])``
-          to converge to the broken-symmetry wavefunction.
+        * **Section 1** – ``stable=opt`` with ``guess=mix`` (or the value of
+          ``settings.guess``) to converge to the broken-symmetry wavefunction.
+          The number of α/β electrons is determined by the charge/multiplicity
+          line, not by Guess options.
         * **Section 2** – SP + ``force`` with ``geom=check guess=read`` to
           compute the energy and gradients on the stable BS solution.
 
@@ -163,7 +125,8 @@ class GaussianMECPJob(GaussianJob):
             charge (int): Formal charge for this state.
             multiplicity (int): Spin multiplicity for this state.
             title (str): Title string for the calculation.
-            state (str): ``"A"`` or ``"B"`` (used for nalpha/nbeta lookup).
+            state (str): ``"A"`` or ``"B"`` (unused in base implementation,
+                retained for API compatibility with subclasses).
 
         Returns:
             GaussianJobSettings | GaussianLinkJobSettings: State settings.
@@ -189,7 +152,7 @@ class GaussianMECPJob(GaussianJob):
                     "multiplicity": multiplicity,
                     "title": title,
                     "stable": self.settings.stable,
-                    "guess": self._build_guess_string(state),
+                    "guess": self.settings.guess,
                     "link": True,
                 }
             )

@@ -1208,53 +1208,6 @@ class TestGaussianCLILinkMecpCommand:
         assert settings.multiplicity_b == 3
         assert settings.use_link is True
 
-    def test_link_mecp_broken_symmetry_options_forwarded(
-        self,
-        single_molecule_xyz_file,
-        gaussian_jobrunner_no_scratch,
-        make_cli_ctx_obj,
-        run_gaussian_and_capture_settings,
-    ):
-        """``--num-alpha-*`` / ``--num-beta-*`` options are forwarded to MECP settings."""
-        result, settings = run_gaussian_and_capture_settings(
-            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
-            [
-                "-p",
-                "gas_solv",
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "link",
-                "-j",
-                "mecp",
-                "--multiplicity-a",
-                "1",
-                "--num-alpha-a",
-                "1",
-                "--num-beta-a",
-                "1",
-                "--multiplicity-b",
-                "3",
-                "--num-alpha-b",
-                "3",
-                "--num-beta-b",
-                "1",
-            ],
-            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-        )
-
-        assert result.exit_code == 0, result.output
-        assert settings.multiplicity_a == 1
-        assert settings.multiplicity_b == 3
-        assert settings.num_alpha_a == 1
-        assert settings.num_beta_a == 1
-        assert settings.num_alpha_b == 3
-        assert settings.num_beta_b == 1
-        assert settings.use_link is True
-
     def test_link_mecp_defaults_multiplicity_b_to_plus_two(
         self,
         single_molecule_xyz_file,

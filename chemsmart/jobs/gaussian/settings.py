@@ -1127,11 +1127,7 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         # broken-symmetry link-job mode
         use_link=False,
         stable="opt",  # stability analysis for link mode
-        guess="mix",  # initial guess for link mode
-        num_alpha_a=None,  # nalpha for state A (broken-symmetry spin polarisation)
-        num_beta_a=None,  # nbeta for state A
-        num_alpha_b=None,  # nalpha for state B
-        num_beta_b=None,  # nbeta for state B
+        guess="mix",  # initial guess for link mode (e.g. "mix" to break α/β symmetry)
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1158,10 +1154,6 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.use_link = use_link
         self.stable = stable
         self.guess = guess
-        self.num_alpha_a = num_alpha_a
-        self.num_beta_a = num_beta_a
-        self.num_alpha_b = num_alpha_b
-        self.num_beta_b = num_beta_b
 
     @classmethod
     def from_settings(cls, settings):

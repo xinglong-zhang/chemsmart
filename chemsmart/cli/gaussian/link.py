@@ -69,34 +69,6 @@ logger = logging.getLogger(__name__)
     help="[MECP] Charge for state B. Defaults to charge-a.",
 )
 @click.option(
-    "--num-alpha-a",
-    type=int,
-    default=None,
-    help="[MECP] Number of alpha electrons for state A (broken-symmetry; "
-    "sets nalpha in Gaussian guess).",
-)
-@click.option(
-    "--num-beta-a",
-    type=int,
-    default=None,
-    help="[MECP] Number of beta electrons for state A (broken-symmetry; "
-    "sets nbeta in Gaussian guess).",
-)
-@click.option(
-    "--num-alpha-b",
-    type=int,
-    default=None,
-    help="[MECP] Number of alpha electrons for state B (broken-symmetry; "
-    "sets nalpha in Gaussian guess).",
-)
-@click.option(
-    "--num-beta-b",
-    type=int,
-    default=None,
-    help="[MECP] Number of beta electrons for state B (broken-symmetry; "
-    "sets nbeta in Gaussian guess).",
-)
-@click.option(
     "--max-steps",
     type=int,
     default=None,
@@ -210,10 +182,6 @@ def link(
     multiplicity_b,
     charge_a,
     charge_b,
-    num_alpha_a,
-    num_beta_a,
-    num_alpha_b,
-    num_beta_b,
     max_steps,
     energy_diff_tol,
     force_max_tol,
@@ -244,10 +212,6 @@ def link(
             multiplicity_b=multiplicity_b,
             charge_a=charge_a,
             charge_b=charge_b,
-            num_alpha_a=num_alpha_a,
-            num_beta_a=num_beta_a,
-            num_alpha_b=num_alpha_b,
-            num_beta_b=num_beta_b,
             max_steps=max_steps,
             step_size=step_size,
             energy_diff_tol=energy_diff_tol,
@@ -374,10 +338,6 @@ def _link_mecp(
     multiplicity_b,
     charge_a,
     charge_b,
-    num_alpha_a,
-    num_beta_a,
-    num_alpha_b,
-    num_beta_b,
     max_steps,
     step_size,
     energy_diff_tol,
@@ -399,6 +359,11 @@ def _link_mecp(
     Each MECP iteration step runs two ``GaussianLinkJob`` sub-jobs (one per
     spin state) that use ``stable=opt`` to converge the broken-symmetry
     wavefunction and then compute forces on the stable solution.
+
+    The number of α and β electrons is determined by the charge/multiplicity
+    line, not by Guess options.  Use ``guess=mix`` (the default) to break
+    α/β spatial symmetry and ``stable=opt`` to verify/optimise the
+    wavefunction stability.
     """
     from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
     from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
@@ -452,15 +417,6 @@ def _link_mecp(
     mecp_settings.use_link = True
     mecp_settings.stable = stable
     mecp_settings.guess = guess
-
-    if num_alpha_a is not None:
-        mecp_settings.num_alpha_a = num_alpha_a
-    if num_beta_a is not None:
-        mecp_settings.num_beta_a = num_beta_a
-    if num_alpha_b is not None:
-        mecp_settings.num_alpha_b = num_alpha_b
-    if num_beta_b is not None:
-        mecp_settings.num_beta_b = num_beta_b
 
     # --- solvent ---
     if remove_solvent:
