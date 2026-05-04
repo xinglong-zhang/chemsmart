@@ -60,4 +60,3 @@ def gromacs_process_pipeline(ctx, *args, **kwargs):
         f"Pipeline completed for subcommand: {ctx.invoked_subcommand}"
     )
     return args[0] if args else None
-from chemsmart.cli.gromacs.em import em
