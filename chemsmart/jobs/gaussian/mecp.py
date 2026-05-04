@@ -26,6 +26,12 @@ class GaussianMECPJob(GaussianJob):
     the minimum energy cross point between two spin multiplicities
     for a molecular species.
 
+    At each iteration (step 1, 2, …, max_steps) two Gaussian sub-jobs are
+    executed, labelled ``<label>_step<NNNNNN>_A`` and
+    ``<label>_step<NNNNNN>_B`` where ``<NNNNNN>`` is the **1-indexed**
+    six-digit zero-padded step number (e.g. ``000001`` for the first step),
+    supporting up to 999 999 steps.
+
     Attributes:
         TYPE (str): Job type identifier ('g16mecp').
         molecule (Molecule): Molecular structure to optimize.
@@ -183,7 +189,7 @@ class GaussianMECPJob(GaussianJob):
         settings = self._state_settings(
             charge=charge,
             multiplicity=multiplicity,
-            title=f"{title} step {step_idx}",
+            title=f"{title} step {step_idx:06d}",
             state=state,
         )
         state_label = f"{self.label}_step{step_idx:06d}_{state}"
@@ -227,7 +233,7 @@ class GaussianMECPJob(GaussianJob):
 
     def _write_trajectory_frame(self, positions_bohr, step_idx):
         positions = positions_bohr * units.Bohr
-        mode = "w" if step_idx == 0 else "a"
+        mode = "w" if step_idx == 1 else "a"
         with open(self.trajectory_file, mode) as f:
             f.write(f"{len(self.molecule.symbols)}\n")
             f.write(f"MECP step {step_idx}\n")
@@ -391,7 +397,7 @@ class GaussianMECPJob(GaussianJob):
                 f"adaptive_step_size={self.settings.adaptive_step_size} "
                 f"step_size_method={self.settings.step_size_method}\n"
             )
-            for step_idx in range(self.settings.max_steps):
+            for step_idx in range(1, self.settings.max_steps + 1):
                 self._write_trajectory_frame(positions_bohr, step_idx)
                 ea, grad_a = self._run_state(positions_bohr, step_idx, "A")
                 eb, grad_b = self._run_state(positions_bohr, step_idx, "B")

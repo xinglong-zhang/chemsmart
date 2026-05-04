@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
     "--max-steps",
     type=int,
     default=None,
-    help="Maximum number of MECP optimization steps.",
+    help="Maximum number of MECP optimization steps (steps are 1-indexed; labels use 6-digit zero-padding).",
 )
 @click.option(
     "--step-size",
