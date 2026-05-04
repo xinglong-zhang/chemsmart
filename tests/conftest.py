@@ -39,6 +39,47 @@ thermochemistry_cli_module = importlib.import_module(
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
 
 
+############ Thermochemistry Mock Fixtures ##################
+@pytest.fixture()
+def make_thermochemistry_mock():
+    """Factory fixture that creates a MagicMock mimicking a Thermochemistry instance.
+
+    Returns a callable that accepts the attributes accessed by
+    ``Thermochemistry.cleaned_frequencies`` and returns a properly configured
+    mock, so test methods stay free of direct ``MagicMock`` construction.
+
+    Usage::
+
+        def test_something(make_thermochemistry_mock):
+            mock = make_thermochemistry_mock(
+                vibrational_frequencies=[-50.0, 100.0],
+                jobtype="opt",
+                check_imaginary_frequencies=False,
+            )
+            result = Thermochemistry.cleaned_frequencies.fget(mock)
+            assert result == [100.0, 100.0]
+    """
+    from chemsmart.analysis.thermochemistry import Thermochemistry
+
+    def _factory(
+        vibrational_frequencies,
+        jobtype="opt",
+        check_imaginary_frequencies=True,
+        s_freq_cutoff_cm=None,
+        h_freq_cutoff_cm=None,
+    ):
+        mock = MagicMock(spec=Thermochemistry)
+        mock.vibrational_frequencies = vibrational_frequencies
+        mock.jobtype = jobtype
+        mock.check_imaginary_frequencies = check_imaginary_frequencies
+        mock.s_freq_cutoff_cm = s_freq_cutoff_cm
+        mock.h_freq_cutoff_cm = h_freq_cutoff_cm
+        mock.filename = "dummy.log"
+        return mock
+
+    return _factory
+
+
 ############ CLI Fixtures ##################
 @pytest.fixture()
 def make_cli_ctx_obj():
