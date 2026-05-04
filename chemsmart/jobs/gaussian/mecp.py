@@ -186,7 +186,7 @@ class GaussianMECPJob(GaussianJob):
             title=f"{title} step {step_idx}",
             state=state,
         )
-        state_label = f"{self.label}_step{step_idx:03d}_{state}"
+        state_label = f"{self.label}_step{step_idx:06d}_{state}"
 
         if self.settings.use_link:
             from chemsmart.jobs.gaussian.link import GaussianLinkJob
@@ -361,7 +361,7 @@ class GaussianMECPJob(GaussianJob):
         disp_max = float(np.max(np.abs(displacement)))
         disp_rms = self._rms(displacement)
         f.write(
-            f"step={step_idx:03d} E_A={ea:.10f} E_B={eb:.10f} "
+            f"step={step_idx:06d} E_A={ea:.10f} E_B={eb:.10f} "
             f"dE={ea - eb:+.10e} grad_max={grad_max:.3e} "
             f"grad_rms={grad_rms:.3e} disp_max={disp_max:.3e} "
             f"disp_rms={disp_rms:.3e} step_size={step_size:.4e}\n"
