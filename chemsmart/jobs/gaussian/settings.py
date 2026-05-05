@@ -1099,6 +1099,72 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         return route_string
 
 
+class GaussianMECPJobSettings(GaussianJobSettings):
+    """Specialized settings for Gaussian MECP jobs."""
+
+    def __init__(
+        self,
+        multiplicity_a=1,
+        multiplicity_b=3,
+        charge_a=0,
+        charge_b=0,
+        title_a="First",
+        title_b="Second",
+        max_steps=500,
+        step_size=0.1,  # Bohr^2/Hartree
+        trust_radius=0.3,  # Bohr
+        energy_diff_tol=5.0e-5,  # Hartree
+        force_max_tol=1.5e-5,  # Hartree/Bohr
+        force_rms_tol=5.0e-4,  # Hartree/Bohr
+        disp_max_tol=1.2e-4,  # Bohr
+        disp_rms_tol=3.8e-3,  # Bohr
+        adaptive_step_size=True,
+        step_size_method="bb",  # algorithm: "bb" (Barzilai-Borwein) or "grow_shrink"
+        step_size_grow=1.2,  # dimensionless multiplier; grow × shrink = 0.84 (mild damping per cycle)
+        step_size_shrink=0.7,  # dimensionless multiplier; stronger than 1/grow to damp oscillations
+        step_size_min=1.0e-4,  # Bohr^2/Hartree
+        step_size_max=1.0,  # Bohr^2/Hartree
+        # broken-symmetry link-job mode
+        use_link=False,
+        stable="opt",  # stability analysis for link mode
+        guess="mix",  # initial guess for link mode (e.g. "mix" to break α/β symmetry)
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.multiplicity_a = multiplicity_a
+        self.multiplicity_b = multiplicity_b
+        self.charge_a = charge_a
+        self.charge_b = charge_b
+        self.title_a = title_a
+        self.title_b = title_b
+        self.max_steps = max_steps
+        self.step_size = step_size
+        self.trust_radius = trust_radius
+        self.energy_diff_tol = energy_diff_tol
+        self.force_max_tol = force_max_tol
+        self.force_rms_tol = force_rms_tol
+        self.disp_max_tol = disp_max_tol
+        self.disp_rms_tol = disp_rms_tol
+        self.adaptive_step_size = adaptive_step_size
+        self.step_size_method = step_size_method
+        self.step_size_grow = step_size_grow
+        self.step_size_shrink = step_size_shrink
+        self.step_size_min = step_size_min
+        self.step_size_max = step_size_max
+        self.use_link = use_link
+        self.stable = stable
+        self.guess = guess
+
+    @classmethod
+    def from_settings(cls, settings):
+        """Create MECP settings from generic Gaussian settings."""
+        if settings is None:
+            return cls()
+        if isinstance(settings, cls):
+            return settings.copy()
+        return cls(**settings.__dict__.copy())
+
+
 class GaussianLinkJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian multi-step link calculations.
@@ -1205,8 +1271,8 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         Generate route string for the initial stability analysis step.
 
         Creates the first route string in a link job by removing
-        optimization and frequency keywords and adding stability
-        analysis and guess method specifications.
+        optimization, frequency, and force keywords, then adding
+        stability analysis and guess method specifications.
 
         Returns:
             str: Route string for stability analysis step.
@@ -1222,6 +1288,15 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         # Remove freq keywords
         route_string_final = re.sub(
             gaussian_freq_keywords_pattern,
+            " ",
+            route_string_final,
+            flags=re.IGNORECASE,
+        )
+        # Remove force keyword: force calculations belong in the link (second)
+        # step where the stable wavefunction is read via guess=read, not in
+        # the initial stable=opt step.
+        route_string_final = re.sub(
+            r"\bforce\b\s*",
             " ",
             route_string_final,
             flags=re.IGNORECASE,
