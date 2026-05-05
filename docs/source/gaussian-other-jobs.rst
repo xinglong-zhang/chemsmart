@@ -251,16 +251,16 @@ Output Files
 Two output files are produced alongside the Gaussian sub-job input/output files:
 
 ``<label>_report.log``
-   Step-by-step optimization log. The file header records the run settings; each subsequent line reports
-   one step, using a **1-indexed** six-digit zero-padded step counter (``000001`` = first step):
+   Step-by-step optimization log. The file header records the run settings; each subsequent line reports one step, using
+   a **1-indexed** six-digit zero-padded step counter (``000001`` = first step):
 
    .. code::
 
       step=NNNNNN E_A=<Hartree> E_B=<Hartree> dE=<Hartree>
       grad_max=<H/Bohr> grad_rms=<H/Bohr> disp_max=<Bohr> disp_rms=<Bohr> step_size=<Bohr²/Hartree>
 
-   The final line reads ``Converged at step NNNNNN.`` on successful convergence. The presence of this ``Converged`` marker
-   is used by ``skip_completed`` to avoid re-running a finished job.
+   The final line reads ``Converged at step NNNNNN.`` on successful convergence. The presence of this ``Converged``
+   marker is used by ``skip_completed`` to avoid re-running a finished job.
 
 ``<label>_traj.xyz``
    Multi-frame XYZ trajectory of the MECP geometry at every optimization step (coordinates in Ångström).
@@ -311,10 +311,10 @@ Use the grow/shrink adaptive method instead of the default Barzilai-Borwein:
 .. note::
 
    Each MECP step generates two Gaussian sub-jobs named ``<label>_step<NNNNNN>_A`` and ``<label>_step<NNNNNN>_B``
-   (single-point energy + forces), where ``<NNNNNN>`` is the **1-indexed** six-digit zero-padded step number
-   (e.g. ``000001`` for the first step, ``000010`` for the tenth). Steps are numbered starting from 1 up to
-   ``max_steps`` (up to 999 999). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job
-   itself honours ``skip_completed`` via the ``Converged`` marker in the report file.
+   (single-point energy + forces), where ``<NNNNNN>`` is the **1-indexed** six-digit zero-padded step number (e.g.
+   ``000001`` for the first step, ``000010`` for the tenth). Steps are numbered starting from 1 up to ``max_steps`` (up
+   to 999 999). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job itself honours
+   ``skip_completed`` via the ``Converged`` marker in the report file.
 
 ***********
  Link Jobs

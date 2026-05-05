@@ -380,7 +380,9 @@ def _link_mecp(
     )
     check_charge_and_multiplicity(mecp_project_settings)
 
-    mecp_settings = GaussianMECPJobSettings.from_settings(mecp_project_settings)
+    mecp_settings = GaussianMECPJobSettings.from_settings(
+        mecp_project_settings
+    )
 
     # --- state A charge / multiplicity ---
     if multiplicity_a is None:

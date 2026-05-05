@@ -138,7 +138,9 @@ class GaussianMECPJob(GaussianJob):
             GaussianJobSettings | GaussianLinkJobSettings: State settings.
         """
         if self.settings.use_link:
-            from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+            from chemsmart.jobs.gaussian.settings import (
+                GaussianLinkJobSettings,
+            )
 
             # Start from the MECP settings dict, strip private attrs and
             # MECP-only keys that GaussianLinkJobSettings does not expect.
