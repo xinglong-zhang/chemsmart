@@ -430,33 +430,86 @@ class Molecule:
             coords=self.positions, radii=self.vdw_radii_list
         )
 
-    def generate_force_field_from_rdkit(self):
-        """Generate a force field for the molecule using RDKit's MMFF94.
+    def generate_force_field_from_rdkit(
+        self,
+        rdkit_mol=None,
+        force_field="MMFF94",
+    ):
+        """Generate an RDKit force field (MMFF94 or UFF) in-memory.
 
-        This method assigns MMFF94 atom types and parameters to the molecule,
-        creating a force field representation that can be used for energy
-        calculations, geometry optimizations, and molecular dynamics simulations.
+        Args:
+        ----
+        rdkit_mol : rdkit.Chem.Mol, optional
+            If provided, use this RDKit molecule directly.
+        force_field : str, optional
+            "MMFF94" (default), "MMFF94S", or "UFF".
 
         Returns
         -------
-        rdkit.Chem.rdForceFieldHelpers.MMFFGetMoleculeProperties
-            An object containing the assigned MMFF94 properties for the molecule.
+        rdkit.ForceField.ForceField
+            RDKit force field object for energy/geometry evaluation.
 
         Raises
         ------
+        TypeError
+            If rdkit_mol is not an rdkit.Chem.Mol instance.
         ValueError
-            If the molecule cannot be processed by RDKit or if MMFF94 parameters
-            cannot be assigned to all atoms.
+            If the molecule has no 3D conformer, lacks parameters, or
+            cannot be sanitized for MMFF/UFF typing.
         """
+        from rdkit import Chem
         from rdkit.Chem import AllChem
 
-        rdkit_mol = self.to_rdkit()
-        mmff_props = AllChem.MMFFGetMoleculeProperties(rdkit_mol)
-        if mmff_props is None:
-            raise ValueError(
-                "MMFF94 parameters could not be assigned to all atoms in the molecule."
+        mol = rdkit_mol if rdkit_mol is not None else self.to_rdkit()
+        if not isinstance(mol, Chem.Mol):
+            raise TypeError("rdkit_mol must be an rdkit.Chem.Mol instance")
+
+        # Validate presence of a 3D conformer before parameterization.
+        if mol.GetNumConformers() == 0 or not mol.GetConformer().Is3D():
+            raise ValueError("RDKit molecule must have a 3D conformer")
+
+        # Ensure sanitization (formal charges, valence) and explicit Hs.
+        try:
+            Chem.SanitizeMol(mol)
+        except Exception as exc:
+            raise ValueError(f"RDKit sanitization failed: {exc}")
+
+        mol = Chem.AddHs(mol, addCoords=True)
+        if mol.GetNumConformers() == 0 or not mol.GetConformer().Is3D():
+            raise ValueError("RDKit molecule must have a 3D conformer")
+
+        ff_key = str(force_field or "").upper()
+        if ff_key in ("MMFF94", "MMFF", "MMFF94S", "MMFFS"):
+            variant = "MMFF94S" if ff_key in ("MMFF94S", "MMFFS") else "MMFF94"
+            if not AllChem.MMFFHasAllMoleculeParams(mol, mmffVariant=variant):
+                raise ValueError(
+                    f"MMFF parameters could not be assigned to all atoms (variant={variant})."
+                )
+            mmff_props = AllChem.MMFFGetMoleculeProperties(
+                mol, mmffVariant=variant
             )
-        return mmff_props
+            if mmff_props is None:
+                raise ValueError(
+                    "MMFF parameters could not be assigned to all atoms in the molecule."
+                )
+            ff = AllChem.MMFFGetMoleculeForceField(mol, mmff_props)
+            if ff is None:
+                raise ValueError("Failed to construct MMFF force field")
+            return ff
+
+        if ff_key == "UFF":
+            if not AllChem.UFFHasAllMoleculeParams(mol):
+                raise ValueError(
+                    "UFF parameters could not be assigned to all atoms in the molecule."
+                )
+            ff = AllChem.UFFGetMoleculeForceField(mol)
+            if ff is None:
+                raise ValueError("Failed to construct UFF force field")
+            return ff
+
+        raise ValueError(
+            "force_field must be one of: 'MMFF94', 'MMFF94S', or 'UFF'"
+        )
 
     def generate_force_field_from_ffld(self):
         """Generate a force field for the molecule using FFLD.
@@ -1821,60 +1874,7 @@ class Molecule:
                     rdkit_mol.AddBond(i, j, bond_type)
         return rdkit_mol
 
-    def _add_bonds_to_rdkit_mol_vectorized(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
-    ):
-        """
-        Add bonds to the RDKit molecule using a
-        vectorized approach to compute bond orders.
-        """
-        num_atoms = len(self.symbols)
-
-        # 1. Build an NxN cutoff matrix
-        cutoff_matrix = np.zeros((num_atoms, num_atoms))
-        for i in range(num_atoms):
-            for j in range(i + 1, num_atoms):
-                # Decide on a pair-specific buffer
-                if adjust_H:
-                    if self.symbols[i] == "H" and self.symbols[j] == "H":
-                        # bond length of H-H is ~0.74 Å
-                        cutoff_buffer_ij = 0.2
-                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
-                        # bond length to H is ~1.0–1.1 Å
-                        cutoff_buffer_ij = 0.1
-                    else:
-                        cutoff_buffer_ij = bond_cutoff_buffer
-                else:
-                    cutoff_buffer_ij = 0.3  # some default if not adjusting H
-
-                cutoff_ij = get_bond_cutoff(
-                    self.symbols[i], self.symbols[j], cutoff_buffer_ij
-                )
-                cutoff_matrix[i, j] = cutoff_ij
-                cutoff_matrix[j, i] = cutoff_ij
-
-        # 2. Vectorized bond order calculation
-        bond_orders = self.determine_bond_order(
-            bond_length=self.distance_matrix,  # NxN distances
-            bond_cutoff=cutoff_matrix,  # NxN cutoffs
-        )
-
-        # 3. Add edges (bonds) for non-zero bond orders
-        bond_type_map = {
-            1.0: Chem.BondType.SINGLE,
-            1.5: Chem.BondType.AROMATIC,
-            2.0: Chem.BondType.DOUBLE,
-            3.0: Chem.BondType.TRIPLE,
-        }
-
-        for i in range(num_atoms):
-            for j in range(i + 1, num_atoms):
-                bo = bond_orders[i, j]
-                if bo > 0:
-                    bond_type = bond_type_map.get(bo, Chem.BondType.SINGLE)
-                    rdkit_mol.AddBond(i, j, bond_type)
-
-        return rdkit_mol
+    _add_bonds_to_rdkit_mol_vectorized = _add_bonds_to_rdkit_mol
 
     @cached_property
     def rdkit_fingerprints(self):

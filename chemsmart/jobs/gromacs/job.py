@@ -2,6 +2,7 @@ from pathlib import Path
 
 from chemsmart.jobs.job import Job
 
+
 class GromacsJob(Job):
     PROGRAM = "gromacs"
     TYPE = "gromacs"
@@ -29,7 +30,11 @@ class GromacsJob(Job):
         self.mdp_file = Path(mdp_file) if mdp_file else None
         self.structure_file = Path(structure_file) if structure_file else None
         self.top_file = Path(top_file) if top_file else None
-        self.tpr_file = Path(tpr_file) if tpr_file else Path(self.folder) / f"{self.label}.tpr"
+        self.tpr_file = (
+            Path(tpr_file)
+            if tpr_file
+            else Path(self.folder) / f"{self.label}.tpr"
+        )
         self.index_file = Path(index_file) if index_file else None
         self.itp_files = [Path(f) for f in itp_files] if itp_files else []
 
@@ -41,6 +46,8 @@ class GromacsJob(Job):
 
     def has_topology(self):
         return self.top_file is not None and self.top_file.exists()
+
+
 class GromacsEMJob(GromacsJob):
     """
     Energy minimization job for GROMACS.
