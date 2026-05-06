@@ -481,13 +481,22 @@ class Molecule:
         ff_key = str(force_field or "").upper()
         if ff_key in ("MMFF94", "MMFF", "MMFF94S", "MMFFS"):
             variant = "MMFF94S" if ff_key in ("MMFF94S", "MMFFS") else "MMFF94"
-            if not AllChem.MMFFHasAllMoleculeParams(mol, mmffVariant=variant):
+            try:
+                has_params = AllChem.MMFFHasAllMoleculeParams(
+                    mol, mmffVariant=variant
+                )
+            except Exception:
+                has_params = AllChem.MMFFHasAllMoleculeParams(mol)
+            if not has_params:
                 raise ValueError(
                     f"MMFF parameters could not be assigned to all atoms (variant={variant})."
                 )
-            mmff_props = AllChem.MMFFGetMoleculeProperties(
-                mol, mmffVariant=variant
-            )
+            try:
+                mmff_props = AllChem.MMFFGetMoleculeProperties(
+                    mol, mmffVariant=variant
+                )
+            except Exception:
+                mmff_props = AllChem.MMFFGetMoleculeProperties(mol)
             if mmff_props is None:
                 raise ValueError(
                     "MMFF parameters could not be assigned to all atoms in the molecule."
