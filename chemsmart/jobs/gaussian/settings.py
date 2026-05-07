@@ -976,9 +976,9 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         recorrect=None,
         recalc_step=6,
         direction=None,
-        maxpoints=512,
+        maxpoints=20,
         maxcycles=128,
-        stepsize=20,
+        stepsize=10,
         flat_irc=False,
         **kwargs,
     ):
@@ -1056,22 +1056,47 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             self.direction = "reverse"
             logger.debug("Set IRC direction to reverse")
 
+        irc_options = []
         if self.predictor is not None and self.recorrect is not None:
-            route_string += (
-                f" irc({self.predictor},calcfc,recorrect={self.recorrect},"
-                f"recalc={self.recalc_step},"
-                f"stepsize={self.stepsize},{self.direction},"
-                f"maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
+            irc_options.extend(
+                [
+                    self.predictor,
+                    "calcfc",
+                    f"recorrect={self.recorrect}",
+                    f"recalc={self.recalc_step}",
+                    f"stepsize={self.stepsize}",
+                ]
             )
+            if self.direction is not None:
+                irc_options.append(self.direction)
+            irc_options.extend(
+                [
+                    f"maxpoints={self.maxpoints}",
+                    f"maxcycle={self.maxcycles}",
+                ]
+            )
+            route_string += f" irc=({','.join(irc_options)})"
             logger.debug(
                 f"Added IRC route with predictor {self.predictor} and "
                 f"recorrect {self.recorrect}"
             )
         elif self.predictor is None and self.recorrect is None:
-            route_string += (
-                f" irc(calcfc,recalc={self.recalc_step},{self.direction},"
-                f"maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
+            irc_options.extend(
+                [
+                    "calcfc",
+                    f"stepsize={self.stepsize}",
+                    f"maxpoints={self.maxpoints}",
+                ]
             )
+            if self.direction is not None:
+                irc_options.append(self.direction)
+                irc_options.extend(
+                    [
+                        f"recalc={self.recalc_step}",
+                        f"maxcycle={self.maxcycles}",
+                    ]
+                )
+            route_string += f" irc=({','.join(irc_options)})"
             logger.debug("Added basic IRC route without predictor/recorrect")
         else:
             logger.error(

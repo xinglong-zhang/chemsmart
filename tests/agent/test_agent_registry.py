@@ -26,6 +26,11 @@ def test_registry_round_trips_build_gaussian_settings_call():
         for tool_def in tool_defs
         if tool_def["function"]["name"] == "build_job"
     )
+    gaussian_settings_def = next(
+        tool_def
+        for tool_def in tool_defs
+        if tool_def["function"]["name"] == "build_gaussian_settings"
+    )
     assert build_job_def["function"]["parameters"]["properties"]["kind"] == {
         "type": "string",
         "enum": [
@@ -43,6 +48,11 @@ def test_registry_round_trips_build_gaussian_settings_call():
             "orca.scan",
         ],
     }
+    gaussian_settings_props = gaussian_settings_def["function"]["parameters"][
+        "properties"
+    ]
+    assert "additional_route_parameters" in gaussian_settings_props
+    assert "title" in gaussian_settings_props
 
 
 def test_registry_unknown_tool_name_raises_clearly():

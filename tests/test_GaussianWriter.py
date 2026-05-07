@@ -130,6 +130,37 @@ class TestGaussianInputWriter:
             g16_file, gaussian_written_opt_file_with_route, shallow=False
         )
 
+    def test_write_opt_job_uses_label_when_title_is_none(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.title = None
+        job = GaussianOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="gaussian_title_fallback",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        g16_writer = GaussianInputWriter(job=job)
+        g16_writer.write(target_directory=tmpdir)
+
+        g16_file = os.path.join(tmpdir, "gaussian_title_fallback.com")
+        with open(g16_file) as handle:
+            content = handle.read()
+
+        assert "\nNone\n" not in content
+        assert "\ngaussian_title_fallback\n\n0 1\n" in content
+
     def test_write_modred_job(
         self,
         tmpdir,

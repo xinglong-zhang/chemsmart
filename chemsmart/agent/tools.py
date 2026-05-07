@@ -163,6 +163,9 @@ def build_gaussian_settings(
     solvent_id=None,
     heavy_elements=None,
     heavy_elements_basis=None,
+    title=None,
+    additional_opt_options_in_route=None,
+    additional_route_parameters=None,
     **extras,
 ) -> GaussianJobSettings:
     return GaussianJobSettings(
@@ -174,6 +177,9 @@ def build_gaussian_settings(
         solvent_id=solvent_id,
         heavy_elements=heavy_elements,
         heavy_elements_basis=heavy_elements_basis,
+        title=title,
+        additional_opt_options_in_route=additional_opt_options_in_route,
+        additional_route_parameters=additional_route_parameters,
         **extras,
     )
 
@@ -277,6 +283,9 @@ def build_job(
         )
 
     job_settings = settings.copy()
+    expected_settings_class = job_class.settings_class()
+    if not isinstance(job_settings, expected_settings_class):
+        job_settings = expected_settings_class(**job_settings.__dict__)
     kind_suffix = normalized_kind.split(".", maxsplit=1)[1]
     job_settings.jobtype = _JOBTYPE_BY_KIND_SUFFIX[kind_suffix]
     if (
