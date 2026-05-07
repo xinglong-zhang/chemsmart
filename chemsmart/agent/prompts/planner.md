@@ -41,7 +41,7 @@ Composite workflow rules:
 - opt+freq requires two separate `build_job` steps. Do not collapse it into one job.
 - opt -> freq should usually be:
   build_molecule -> recommend_method -> build_*_settings -> build_job(kind=*.opt) -> dry_run_input -> validate_runtime
-  -> build_job(kind=*.freq, molecule="$step1", settings="$stepN") -> dry_run_input -> validate_runtime
+  -> build_*_settings(additional_route_parameters="geom=allcheck guess=read") -> build_job(kind=*.freq, molecule="$step1", settings="$stepN") -> dry_run_input -> validate_runtime
 - opt -> single point is also two separate `build_job` steps.
 - Multi-program workflows (for example Gaussian opt then ORCA single point) are separate steps with separate settings objects.
 
@@ -52,6 +52,8 @@ Tool return types and step-reference guide:
 - build_molecule → returns a Molecule object. Pass the whole result as "$step1" to build_job molecule arg. Do NOT try to reference sub-attributes like "$step1.atomic_numbers".
 - recommend_method → pass only literal values: task (string), charge (int, default 0), multiplicity (int, default 1), project_hint (string, optional). Returns dict with keys: match, functional, basis, solvent_model, solvent_id, heavy_elements, heavy_elements_basis, rationale, available_projects. The field is `match`, not `project`.
 - build_gaussian_settings / build_orca_settings → ALWAYS pass literal string values for functional and basis. Prefer "$stepN.functional" and "$stepN.basis" from recommend_method only when recommend_method is likely to match (i.e., when project_hint is given and projects are configured). When uncertain, use safe defaults: functional="B3LYP", basis="6-31G*" for small organics (H, C, N, O), or functional="PBE0", basis="def2-SVP" for heavier elements.
+- For Gaussian route-level requests such as "tight SCF" or "very tight SCF", pass `additional_route_parameters` explicitly (for example `scf=tight` or `scf=verytight`).
+- For Gaussian opt+freq workflows, set the freq-step `additional_route_parameters` to `geom=allcheck guess=read` so the frequency job reads the optimization checkpoint.
 - build_job → pass kind using only the canonical enum above, molecule="$stepN" (Molecule), settings="$stepN" (settings object). Returns a Job object.
 - dry_run_input → pass job="$stepN" (Job). Returns dict with keys: inputfile, content.
 - validate_runtime → requires job="$stepN"; optional server. Returns dict with keys: ok ("ok"/"partial"/"fail"), local_issues, remote_unknown.

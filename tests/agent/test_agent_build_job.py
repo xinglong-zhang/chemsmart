@@ -8,8 +8,12 @@ from chemsmart.agent.tools import (
     build_molecule,
     build_orca_settings,
 )
+from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.gaussian.settings import (
+    GaussianIRCJobSettings,
+    GaussianJobSettings,
+)
 
 
 class TestBuildSettingsAndJob:
@@ -19,6 +23,15 @@ class TestBuildSettingsAndJob:
         assert isinstance(settings, GaussianJobSettings)
         assert settings.functional == "B3LYP"
         assert settings.basis == "6-31G*"
+
+    def test_build_gaussian_settings_passes_route_parameters(self):
+        settings = build_gaussian_settings(
+            "B3LYP",
+            "6-311+G**",
+            additional_route_parameters="scf=tight",
+        )
+
+        assert settings.additional_route_parameters == "scf=tight"
 
     def test_build_gaussian_opt_job(
         self,
@@ -69,3 +82,19 @@ class TestBuildSettingsAndJob:
         assert job.settings.functional == "B3LYP"
         assert job.settings.basis == "def2-SVP"
         assert job.settings.jobtype == "opt"
+
+    def test_build_gaussian_irc_job_promotes_irc_settings(
+        self,
+        single_molecule_xyz_file,
+    ):
+        molecule = build_molecule(single_molecule_xyz_file)
+        settings = build_gaussian_settings("B3LYP", "6-31G*")
+
+        job = build_job("gaussian.irc", molecule=molecule, settings=settings)
+
+        assert isinstance(job, GaussianIRCJob)
+        assert isinstance(job.settings, GaussianIRCJobSettings)
+        assert job.settings.jobtype == "irc"
+        assert "irc=(" in job.settings.route_string
+        assert "stepsize=10" in job.settings.route_string
+        assert "maxpoints=20" in job.settings.route_string
