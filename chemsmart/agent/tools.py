@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from chemsmart.agent.transport import LocalDryRunTransport, SubmitTransport
+from chemsmart.cli.sub import sub as sub_cli
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
@@ -32,7 +34,9 @@ from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 from chemsmart.jobs.orca.ts import ORCATSJob
 from chemsmart.jobs.orca.writer import ORCAInputWriter
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.cli import CtxObjArguments
 from chemsmart.utils.periodictable import PeriodicTable
 
 _TASK_PROJECT_MAP = {
@@ -96,6 +100,7 @@ _JOB_CLASS_BY_KIND = {
     "orca.scan": ORCAScanJob,
 }
 _SUPPORTED_JOB_KINDS = tuple(_JOB_CLASS_BY_KIND)
+_SUPPORTED_SUBMIT_JOBTYPES = {"opt", "ts", "sp", "singlepoint", "irc", "scan"}
 _REMOTE_UNKNOWN_SERVER_FIELDS = [
     "server.queue required",
     "server.account required",
@@ -409,6 +414,60 @@ def run_local(job: Job) -> dict[str, Any]:
     }
 
 
+def submit_hpc(
+    job: Job,
+    server,
+    transport: SubmitTransport | None = None,
+    execute: bool = False,
+) -> dict[str, Any]:
+    selected_transport = _select_submit_transport(
+        transport=transport,
+        execute=execute,
+    )
+    duplicate_check = _check_duplicate_submission(job)
+    if duplicate_check["duplicate"]:
+        return {
+            "transport": selected_transport.__class__.__name__,
+            "script_path": None,
+            "script_bytes": None,
+            "command_executed": None,
+            "job_id": None,
+            "duplicate_check": duplicate_check,
+        }
+
+    server_obj = _coerce_server(server)
+    job_folder = os.path.abspath(job.folder)
+    os.makedirs(job_folder, exist_ok=True)
+    job.set_folder(job_folder)
+
+    dry_run_input(job)
+    cli_args = _reconstruct_submit_cli_args(job, server_obj)
+
+    with _pushd(job_folder):
+        server_obj.submit(job=job, test=True, cli_args=cli_args)
+
+    submitter = server_obj.get_submitter(job)
+    script_path = os.path.abspath(
+        os.path.join(job_folder, submitter.submit_script)
+    )
+    with open(script_path, "rb") as file:
+        script_bytes = file.read()
+
+    submit_result = selected_transport.submit(
+        script_path=script_path,
+        working_dir=job_folder,
+        server=server_obj,
+    )
+    return {
+        "transport": selected_transport.__class__.__name__,
+        "script_path": script_path,
+        "script_bytes": script_bytes,
+        "command_executed": submit_result["command_executed"],
+        "job_id": submit_result["job_id"],
+        "duplicate_check": duplicate_check,
+    }
+
+
 def recommend_method(
     task: str,
     charge: int = 0,
@@ -712,3 +771,164 @@ def _summarize_local_output(job: Job) -> dict[str, Any]:
         }
     except Exception:
         return {}
+
+
+def _select_submit_transport(
+    transport: SubmitTransport | None,
+    execute: bool,
+) -> SubmitTransport:
+    if not execute:
+        return LocalDryRunTransport()
+    if transport is None:
+        return LocalDryRunTransport()
+    return transport
+
+
+def _check_duplicate_submission(job: Job) -> dict[str, Any]:
+    try:
+        Server._check_running_jobs(job)
+    except SystemExit as exc:
+        return {
+            "duplicate": True,
+            "message": str(exc),
+        }
+
+    return {
+        "duplicate": False,
+        "message": None,
+    }
+
+
+def _coerce_server(server) -> Server:
+    if isinstance(server, Server):
+        return server
+    if isinstance(server, str):
+        return Server.from_servername(server)
+    raise TypeError("server must be a chemsmart.settings.server.Server or str")
+
+
+def _reconstruct_submit_cli_args(job: Job, server: Server) -> list[str]:
+    program_command = _program_submit_command(job)
+    jobtype_command = _jobtype_submit_command(job, program_command)
+    subcommands = [
+        _click_command_to_ctx_obj(
+            sub_cli,
+            {
+                "server": _server_cli_name(server),
+                "num_cores": (
+                    getattr(job.jobrunner, "num_cores", None)
+                    if getattr(job, "jobrunner", None) is not None
+                    else None
+                ),
+                "num_gpus": (
+                    getattr(job.jobrunner, "num_gpus", None)
+                    if getattr(job, "jobrunner", None) is not None
+                    else None
+                ),
+                "mem_gb": (
+                    getattr(job.jobrunner, "mem_gb", None)
+                    if getattr(job, "jobrunner", None) is not None
+                    else None
+                ),
+                "time_hours": None,
+                "queue": None,
+                "verbose": None,
+                "test": None,
+                "print_command": None,
+            },
+            parent=None,
+        ),
+        _click_command_to_ctx_obj(
+            program_command,
+            {
+                "filename": os.path.abspath(job.inputfile),
+                "label": job.label,
+            },
+            parent="sub",
+        ),
+        _click_command_to_ctx_obj(
+            jobtype_command,
+            {},
+            parent=program_command.name,
+        ),
+    ]
+    return CtxObjArguments(
+        subcommands,
+        entry_point="sub",
+    ).reconstruct_command_line()[1:]
+
+
+def _program_submit_command(job: Job):
+    program_name = getattr(job, "PROGRAM", None)
+    if not isinstance(program_name, str):
+        raise ValueError(f"Job {job!r} does not define PROGRAM.")
+    try:
+        return sub_cli.commands[program_name.lower()]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unsupported submit program for {job!r}: {program_name!r}"
+        ) from exc
+
+
+def _jobtype_submit_command(job: Job, program_command):
+    jobtype = _jobtype_name(job)
+    try:
+        return program_command.commands[jobtype]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unsupported submit jobtype {jobtype!r} for {job!r}"
+        ) from exc
+
+
+def _jobtype_name(job: Job) -> str:
+    job_settings = getattr(job, "settings", None)
+    jobtype = getattr(job_settings, "jobtype", None)
+    if not isinstance(jobtype, str):
+        raise ValueError(f"Job {job!r} is missing settings.jobtype.")
+    jobtype = jobtype.lower()
+    if jobtype == "singlepoint":
+        return "sp"
+    if jobtype not in _SUPPORTED_SUBMIT_JOBTYPES:
+        supported = ", ".join(sorted(_SUPPORTED_SUBMIT_JOBTYPES))
+        raise ValueError(
+            f"Unsupported submit jobtype {jobtype!r}. Supported: {supported}"
+        )
+    return jobtype
+
+
+def _click_command_to_ctx_obj(command, overrides: dict[str, Any], parent):
+    kwargs = {}
+    for param in command.params:
+        kwargs[param.name] = {
+            "value": overrides.get(param.name, param.default),
+            "nargs": param.nargs,
+            "is_multiple": param.multiple,
+            "type": param.type,
+            "is_flag": param.is_flag,
+            "secondary_opts": param.secondary_opts,
+        }
+    return {
+        "name": command.name,
+        "kwargs": kwargs,
+        "parent": parent,
+    }
+
+
+def _server_cli_name(server: Server) -> str | None:
+    server_name = getattr(server, "name", None)
+    if not isinstance(server_name, str):
+        return None
+    basename = os.path.basename(server_name)
+    if basename.endswith(".yaml"):
+        return basename.removesuffix(".yaml")
+    return basename
+
+
+@contextlib.contextmanager
+def _pushd(path: str):
+    cwd = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(cwd)

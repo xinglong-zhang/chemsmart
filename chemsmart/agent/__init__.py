@@ -13,7 +13,14 @@ from chemsmart.agent.tools import (
     dry_run_input,
     recommend_method,
     run_local,
+    submit_hpc,
     validate_runtime,
+)
+from chemsmart.agent.transport import (
+    LocalDryRunTransport,
+    MockTransport,
+    SshQsubTransport,
+    SubmitTransport,
 )
 
 
@@ -37,4 +44,9 @@ __all__ = [
     "recommend_method",
     "validate_runtime",
     "run_local",
+    "submit_hpc",
+    "SubmitTransport",
+    "LocalDryRunTransport",
+    "SshQsubTransport",
+    "MockTransport",
 ]
