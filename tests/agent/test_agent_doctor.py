@@ -7,12 +7,16 @@ import pytest
 from click.testing import CliRunner
 
 from chemsmart.agent.cli import agent
+from chemsmart.agent.registry import ToolRegistry
 
 _PING_RESULT = {
     "ok": True,
     "resolved_model": "gpt-5.4-2026-03-05",
     "latency_ms": 42,
 }
+_REGISTERED_TOOLS_LINE = (
+    f"tools registered: {len(ToolRegistry.default().list_tools())}"
+)
 
 
 @pytest.fixture
@@ -49,7 +53,7 @@ def test_doctor_valid_anthropic(monkeypatch, api_env_file):
     assert "ping: ok (model=gpt-5.4-2026-03-05, latency=42ms)" in (
         result.output
     )
-    assert "tools registered: 9" in result.output
+    assert _REGISTERED_TOOLS_LINE in result.output
     assert "WARN: this gateway tenant may not have Anthropic access" in (
         result.output
     )
@@ -81,7 +85,7 @@ def test_doctor_valid_openai(monkeypatch, api_env_file):
     assert "ping: ok (model=gpt-5.4-2026-03-05, latency=42ms)" in (
         result.output
     )
-    assert "tools registered: 9" in result.output
+    assert _REGISTERED_TOOLS_LINE in result.output
 
 
 def test_doctor_no_ping_reports_skip(monkeypatch, api_env_file):
@@ -107,7 +111,7 @@ def test_doctor_no_ping_reports_skip(monkeypatch, api_env_file):
 
     assert result.exit_code == 0, result.output
     assert "ping: skipped (--no-ping)" in result.output
-    assert "tools registered: 9" in result.output
+    assert _REGISTERED_TOOLS_LINE in result.output
 
 
 def test_doctor_missing_ai_provider(monkeypatch, api_env_file):

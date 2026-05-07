@@ -7,6 +7,11 @@ from click.testing import CliRunner
 
 from chemsmart.agent.cli import agent
 from chemsmart.agent.providers import ProviderError
+from chemsmart.agent.registry import ToolRegistry
+
+_REGISTERED_TOOLS_LINE = (
+    f"tools registered: {len(ToolRegistry.default().list_tools())}"
+)
 
 
 def test_doctor_no_ping_skips_provider_ping(monkeypatch, tmp_path):
@@ -70,4 +75,4 @@ def test_doctor_ping_failure_exits_nonzero(monkeypatch, tmp_path):
         result.output
     )
     assert "ping: FAILED boom" in result.output
-    assert "tools registered: 9" in result.output
+    assert _REGISTERED_TOOLS_LINE in result.output

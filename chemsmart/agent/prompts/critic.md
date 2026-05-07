@@ -19,6 +19,7 @@ Kind-task consistency checks (hard rules: reject when violated):
 
 Additional warning rule:
 - If a `*.freq` step appears without any prior `*.opt` step in the plan, warn unless the user explicitly asked for frequency only.
+- If a multi-program single-point step (`orca.sp` or `gaussian.sp`) uses the original `build_molecule` result as its `molecule` argument instead of an `extract_optimized_geometry` result from a prior optimization, warn with: `geometry handoff missing`.
 
 Confidence guidance:
 - 1.0 = clearly correct and internally consistent
