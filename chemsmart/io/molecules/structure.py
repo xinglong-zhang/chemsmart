@@ -438,19 +438,16 @@ class Molecule:
         """Generate an RDKit force field (MMFF94 or UFF) in-memory.
 
         Args:
-        ----
         rdkit_mol : rdkit.Chem.Mol, optional
             If provided, use this RDKit molecule directly.
         force_field : str, optional
             "MMFF94" (default), "MMFF94S", or "UFF".
 
-        Returns
-        -------
+        Returns:
         rdkit.ForceField.ForceField
             RDKit force field object for energy/geometry evaluation.
 
-        Raises
-        ------
+        Raises:
         TypeError
             If rdkit_mol is not an rdkit.Chem.Mol instance.
         ValueError
