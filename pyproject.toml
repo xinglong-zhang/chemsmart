@@ -44,6 +44,9 @@ dependencies = [
     "pillow>=12.1.1",
     "ipython>=8.12.3",
     "image>=1.5.33",
+    "anthropic>=0.40",
+    "python-dotenv>=1",
+    "pydantic>=2",
 ]
 
 [project.optional-dependencies]

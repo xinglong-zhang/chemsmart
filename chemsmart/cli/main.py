@@ -9,6 +9,7 @@ banner display.
 import click
 
 from chemsmart import __version__
+from chemsmart.agent.cli import agent
 from chemsmart.utils.cli import MyGroup
 
 from .config import config
@@ -69,6 +70,7 @@ entry_point.add_command(run)
 entry_point.add_command(sub)
 entry_point.add_command(config)
 entry_point.add_command(update)
+entry_point.add_command(agent)
 
 
 def main():  # pragma: no cover
