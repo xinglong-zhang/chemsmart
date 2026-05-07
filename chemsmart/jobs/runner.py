@@ -95,7 +95,7 @@ class JobRunner(RegistryMixin):
     def scratch_dir(self, value):
         """Allow explicit setting of scratch_dir."""
         if value is not None:
-            value = os.path.expanduser(value)  # Expand '~' to absolute path
+            value = self._normalize_path_string(value)
             if not os.path.exists(value):
                 raise FileNotFoundError(
                     f"Specified scratch dir does not exist: {value}"
@@ -103,10 +103,10 @@ class JobRunner(RegistryMixin):
         self._scratch_dir = value
 
     @lru_cache(maxsize=12)
-    def _set_scratch(self):
-        """Determine the scratch directory, considering multiple sources."""
+    def _resolve_scratch_dir_candidate(self):
+        """Return the scratch-dir candidate using production precedence."""
         if self._scratch_dir is not None:
-            return self._scratch_dir  # Use explicitly set directory
+            return self._scratch_dir
 
         scratch_dir = None
         if self.executable is not None:
@@ -132,13 +132,27 @@ class JobRunner(RegistryMixin):
                 f"Could not determine scratch dir for {self}. Not using scratch."
             )
             self.scratch = False
-        else:
-            # check that the scratch folder exists
-            scratch_dir = os.path.expanduser(scratch_dir)
-            if not os.path.exists(scratch_dir):
-                raise FileNotFoundError(
-                    f"Specified scratch dir does not exist: {scratch_dir}"
-                )
+        return scratch_dir
+
+    @staticmethod
+    def _normalize_path_string(path):
+        """Expand user and environment variables in a path string."""
+        if path is None:
+            return None
+        return os.path.expanduser(os.path.expandvars(path))
+
+    @lru_cache(maxsize=12)
+    def _set_scratch(self):
+        """Determine the scratch directory, considering multiple sources."""
+        scratch_dir = self._resolve_scratch_dir_candidate()
+        if scratch_dir is None:
+            return scratch_dir
+
+        scratch_dir = self._normalize_path_string(scratch_dir)
+        if not os.path.exists(scratch_dir):
+            raise FileNotFoundError(
+                f"Specified scratch dir does not exist: {scratch_dir}"
+            )
         return scratch_dir
 
     def __repr__(self):

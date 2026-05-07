@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import contextlib
 import importlib
 import os
+import re
+import shutil
+import traceback
 from types import SimpleNamespace
 from typing import Any
 
 import yaml
 
+from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
@@ -25,6 +31,7 @@ from chemsmart.jobs.orca.settings import ORCAJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 from chemsmart.jobs.orca.ts import ORCATSJob
 from chemsmart.jobs.orca.writer import ORCAInputWriter
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -89,6 +96,20 @@ _JOB_CLASS_BY_KIND = {
     "orca.scan": ORCAScanJob,
 }
 _SUPPORTED_JOB_KINDS = tuple(_JOB_CLASS_BY_KIND)
+_REMOTE_UNKNOWN_SERVER_FIELDS = [
+    "server.queue required",
+    "server.account required",
+    "server.scratch_dir required",
+    "server.modules_or_executable_path required",
+]
+_REMOTE_UNKNOWN_SCRATCH = "scratch_dir writable on HPC"
+_REMOTE_UNKNOWN_MODULES = "module load succeeds on HPC"
+_REMOTE_UNKNOWN_QUEUE = "queue accepts jobs"
+_REMOTE_UNKNOWN_ACCOUNT = "account has remaining hours"
+_REMOTE_UNKNOWN_SSH = "ssh login reachable"
+_UNRESOLVED_ENVVAR_PATTERN = re.compile(
+    r"(\$(?:\{)?[A-Za-z_][A-Za-z0-9_]*(?:\})?)|(%[^%]+%)"
+)
 
 
 def build_molecule(filepath: str, index: str = "-1") -> Molecule:
@@ -259,6 +280,133 @@ def dry_run_input(job: Job) -> dict[str, str]:
     with open(inputfile) as file:
         content = file.read()
     return {"inputfile": inputfile, "content": content}
+
+
+def validate_runtime(
+    job: Job,
+    server=None,
+) -> dict[str, Any]:
+    local_issues = _validate_job_fields(job)
+    remote_unknown = []
+
+    if server is None:
+        remote_unknown.extend(_REMOTE_UNKNOWN_SERVER_FIELDS)
+        return _runtime_validation_result(local_issues, remote_unknown)
+
+    server_config = getattr(server, "config", None)
+    if not isinstance(server_config, dict):
+        local_issues.append("server.config invalid")
+        return _runtime_validation_result(local_issues, remote_unknown)
+
+    queue_name = _get_server_queue_name(server_config)
+    account_name = _get_server_account_name(server_config)
+    scratch_value = server_config.get("SCRATCH_DIR")
+
+    if not _is_non_empty_string(queue_name):
+        local_issues.append("server.queue missing")
+    if not _is_non_empty_string(account_name):
+        local_issues.append("server.account missing")
+    if scratch_value is None:
+        local_issues.append("server.scratch_dir missing")
+    elif not isinstance(scratch_value, str):
+        local_issues.append("server.scratch_dir invalid")
+
+    runner = None
+    try:
+        runner = JobRunner.from_job(job=job, server=server, scratch=False)
+    except Exception:
+        local_issues.append("jobrunner unavailable")
+
+    executable_path = None
+    modules = None
+    resolved_scratch_dir = None
+
+    if runner is not None:
+        try:
+            resolved_scratch_dir = runner._resolve_scratch_dir_candidate()
+            if resolved_scratch_dir is not None:
+                resolved_scratch_dir = runner._normalize_path_string(
+                    resolved_scratch_dir
+                )
+        except Exception:
+            local_issues.append("server.scratch_dir invalid")
+
+        try:
+            executable = runner.executable
+            executable_path = executable.get_executable()
+            modules = executable.modules
+        except Exception:
+            executable = None
+    else:
+        executable = None
+
+    if resolved_scratch_dir is not None and _has_unresolved_envvars(
+        resolved_scratch_dir
+    ):
+        local_issues.append("server.scratch_dir unresolved")
+
+    if modules is not None and not isinstance(modules, str):
+        local_issues.append("server.modules invalid")
+    if executable_path is not None and not isinstance(executable_path, str):
+        local_issues.append("server.executable_path invalid")
+
+    has_modules = _is_non_empty_string(modules)
+    has_executable_path = _is_non_empty_string(executable_path)
+    if not has_modules and not has_executable_path:
+        local_issues.append("server.modules_or_executable_path missing")
+
+    if has_executable_path and shutil.which(executable_path) is None:
+        local_issues.append("server.executable_path missing")
+
+    if _is_non_empty_string(resolved_scratch_dir):
+        remote_unknown.append(_REMOTE_UNKNOWN_SCRATCH)
+    if has_modules:
+        remote_unknown.append(_REMOTE_UNKNOWN_MODULES)
+    if _is_non_empty_string(queue_name):
+        remote_unknown.append(_REMOTE_UNKNOWN_QUEUE)
+    if _is_non_empty_string(account_name):
+        remote_unknown.append(_REMOTE_UNKNOWN_ACCOUNT)
+    remote_unknown.append(_REMOTE_UNKNOWN_SSH)
+
+    return _runtime_validation_result(local_issues, remote_unknown)
+
+
+def run_local(job: Job) -> dict[str, Any]:
+    job_folder = os.path.abspath(job.folder)
+    os.makedirs(job_folder, exist_ok=True)
+    job.set_folder(job_folder)
+
+    stdout_path = os.path.join(job_folder, f"{job.label}.stdout")
+    stderr_path = os.path.join(job_folder, f"{job.label}.stderr")
+
+    job.local = True
+    returncode = 0
+
+    with (
+        open(stdout_path, "w") as stdout_handle,
+        open(stderr_path, "w") as stderr_handle,
+    ):
+        try:
+            with (
+                contextlib.redirect_stdout(stdout_handle),
+                contextlib.redirect_stderr(stderr_handle),
+            ):
+                job.run()
+        except Exception as exc:
+            traceback.print_exc(file=stderr_handle)
+            returncode = int(getattr(exc, "returncode", 1) or 1)
+
+    output_summary = {}
+    if returncode == 0:
+        output_summary = _summarize_local_output(job)
+
+    return {
+        "ok": returncode == 0,
+        "returncode": returncode,
+        "stdout_path": stdout_path,
+        "stderr_path": stderr_path,
+        "output_summary": output_summary,
+    }
 
 
 def recommend_method(
@@ -470,3 +618,97 @@ def _normalize_heavy_elements(
 def _load_yaml(filepath: str) -> dict[str, Any]:
     with open(filepath) as file:
         return yaml.safe_load(file) or {}
+
+
+def _validate_job_fields(job: Job) -> list[str]:
+    issues = []
+    if getattr(job, "molecule", None) is None:
+        issues.append("job.molecule missing")
+    if getattr(job, "settings", None) is None:
+        issues.append("job.settings missing")
+
+    label = getattr(job, "label", None)
+    if not _is_non_empty_string(label):
+        issues.append("job.label missing")
+    return issues
+
+
+def _runtime_validation_result(
+    local_issues: list[str],
+    remote_unknown: list[str],
+) -> dict[str, Any]:
+    if local_issues:
+        status = "fail"
+    elif remote_unknown:
+        status = "partial"
+    else:
+        status = "ok"
+
+    return {
+        "ok": status,
+        "local_ok": not local_issues,
+        "local_issues": local_issues,
+        "remote_unknown": remote_unknown,
+    }
+
+
+def _get_server_queue_name(server_config: dict[str, Any]) -> Any:
+    return server_config.get("QUEUE_NAME")
+
+
+def _get_server_account_name(server_config: dict[str, Any]) -> Any:
+    return server_config.get("ACCOUNT", server_config.get("PROJECT"))
+
+
+def _is_non_empty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _has_unresolved_envvars(path: str) -> bool:
+    return bool(_UNRESOLVED_ENVVAR_PATTERN.search(path))
+
+
+def _summarize_local_output(job: Job) -> dict[str, Any]:
+    parser_cls = None
+    output_path = None
+
+    if isinstance(job, GaussianJob):
+        parser_cls = Gaussian16Output
+        output_path = job.outputfile
+    elif isinstance(job, ORCAJob):
+        parser_cls = ORCAOutput
+        output_path = job.outputfile
+    else:
+        return {}
+
+    if output_path is None or not os.path.exists(output_path):
+        return {}
+
+    try:
+        parser = parser_cls(output_path)
+        energies = list(getattr(parser, "energies", []) or [])
+        energy = energies[-1] if energies else None
+        converged = bool(getattr(parser, "normal_termination", False))
+        frequencies = list(
+            getattr(parser, "vibrational_frequencies", []) or []
+        )
+        imag_freqs = [freq for freq in frequencies if freq < 0]
+        all_structures = list(getattr(parser, "all_structures", []) or [])
+        optimized_geometry_count = len(all_structures)
+
+        if (
+            energy is None
+            and not converged
+            and not imag_freqs
+            and optimized_geometry_count == 0
+        ):
+            return {}
+
+        return {
+            "energy": energy,
+            "converged": converged,
+            "imag_freqs": imag_freqs,
+            "optimized_geometry_count": optimized_geometry_count,
+        }
+    except Exception:
+        return {}

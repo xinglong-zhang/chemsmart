@@ -12,6 +12,8 @@ from chemsmart.agent.tools import (
     build_orca_settings,
     dry_run_input,
     recommend_method,
+    run_local,
+    validate_runtime,
 )
 
 
@@ -33,4 +35,6 @@ __all__ = [
     "build_job",
     "dry_run_input",
     "recommend_method",
+    "validate_runtime",
+    "run_local",
 ]
