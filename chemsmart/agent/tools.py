@@ -1,11 +1,30 @@
 from __future__ import annotations
 
+import importlib
 import os
+from types import SimpleNamespace
 from typing import Any
 
 import yaml
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.gaussian.irc import GaussianIRCJob
+from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.scan import GaussianScanJob
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
+from chemsmart.jobs.gaussian.ts import GaussianTSJob
+from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.irc import ORCAIRCJob
+from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
+from chemsmart.jobs.orca.opt import ORCAOptJob
+from chemsmart.jobs.orca.scan import ORCAScanJob
+from chemsmart.jobs.orca.settings import ORCAJobSettings
+from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
+from chemsmart.jobs.orca.ts import ORCATSJob
+from chemsmart.jobs.orca.writer import ORCAInputWriter
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -22,12 +41,224 @@ _TASK_JOBTYPE_MAP = {
 _PERIODIC_TABLE = PeriodicTable()
 
 
+def _resolve_optional_job_class(
+    module_path: str,
+    class_name: str,
+    fallback,
+):
+    try:
+        module = importlib.import_module(module_path)
+        return getattr(module, class_name)
+    except (ImportError, AttributeError):
+        return fallback
+
+
+_GAUSSIAN_FREQ_JOB_CLASS = _resolve_optional_job_class(
+    "chemsmart.jobs.gaussian.freq",
+    "GaussianFreqJob",
+    GaussianGeneralJob,
+)
+_ORCA_FREQ_JOB_CLASS = _resolve_optional_job_class(
+    "chemsmart.jobs.orca.freq",
+    "ORCAFreqJob",
+    ORCAGeneralJob,
+)
+_JOBTYPE_BY_KIND_SUFFIX = {
+    "opt": "opt",
+    "ts": "ts",
+    "freq": "freq",
+    "sp": "sp",
+    "singlepoint": "sp",
+    "irc": "irc",
+    "scan": "scan",
+}
+_JOB_CLASS_BY_KIND = {
+    "gaussian.opt": GaussianOptJob,
+    "gaussian.ts": GaussianTSJob,
+    "gaussian.freq": _GAUSSIAN_FREQ_JOB_CLASS,
+    "gaussian.sp": GaussianSinglePointJob,
+    "gaussian.singlepoint": GaussianSinglePointJob,
+    "gaussian.irc": GaussianIRCJob,
+    "gaussian.scan": GaussianScanJob,
+    "orca.opt": ORCAOptJob,
+    "orca.ts": ORCATSJob,
+    "orca.freq": _ORCA_FREQ_JOB_CLASS,
+    "orca.sp": ORCASinglePointJob,
+    "orca.singlepoint": ORCASinglePointJob,
+    "orca.irc": ORCAIRCJob,
+    "orca.scan": ORCAScanJob,
+}
+_SUPPORTED_JOB_KINDS = tuple(_JOB_CLASS_BY_KIND)
+
+
 def build_molecule(filepath: str, index: str = "-1") -> Molecule:
     return Molecule.from_filepath(
         filepath=filepath,
         index=index,
         return_list=False,
     )
+
+
+def build_gaussian_settings(
+    functional,
+    basis,
+    charge=0,
+    multiplicity=1,
+    solvent_model=None,
+    solvent_id=None,
+    heavy_elements=None,
+    heavy_elements_basis=None,
+    **extras,
+) -> GaussianJobSettings:
+    return GaussianJobSettings(
+        functional=functional,
+        basis=basis,
+        charge=charge,
+        multiplicity=multiplicity,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
+        heavy_elements=heavy_elements,
+        heavy_elements_basis=heavy_elements_basis,
+        **extras,
+    )
+
+
+def build_orca_settings(
+    functional,
+    basis,
+    charge=0,
+    multiplicity=1,
+    solvent_model=None,
+    solvent_id=None,
+    heavy_elements=None,
+    heavy_elements_basis=None,
+    ab_initio=None,
+    dispersion=None,
+    aux_basis=None,
+    extrapolation_basis=None,
+    defgrid=None,
+    scf_tol=None,
+    scf_algorithm=None,
+    scf_maxiter=None,
+    scf_convergence=None,
+    gbw=True,
+    freq=False,
+    numfreq=False,
+    dipole=False,
+    quadrupole=False,
+    mdci_cutoff=None,
+    mdci_density=None,
+    jobtype=None,
+    title=None,
+    additional_solvent_options=None,
+    solventfilename=None,
+    additional_route_parameters=None,
+    route_to_be_written=None,
+    modred=None,
+    gen_genecp_file=None,
+    light_elements_basis=None,
+    custom_solvent=None,
+    forces=False,
+    input_string=None,
+    invert_constraints=False,
+    **extras,
+) -> ORCAJobSettings:
+    return ORCAJobSettings(
+        ab_initio=ab_initio,
+        functional=functional,
+        dispersion=dispersion,
+        basis=basis,
+        aux_basis=aux_basis,
+        extrapolation_basis=extrapolation_basis,
+        defgrid=defgrid,
+        scf_tol=scf_tol,
+        scf_algorithm=scf_algorithm,
+        scf_maxiter=scf_maxiter,
+        scf_convergence=scf_convergence,
+        charge=charge,
+        multiplicity=multiplicity,
+        gbw=gbw,
+        freq=freq,
+        numfreq=numfreq,
+        dipole=dipole,
+        quadrupole=quadrupole,
+        mdci_cutoff=mdci_cutoff,
+        mdci_density=mdci_density,
+        jobtype=jobtype,
+        title=title,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
+        additional_solvent_options=additional_solvent_options,
+        solventfilename=solventfilename,
+        additional_route_parameters=additional_route_parameters,
+        route_to_be_written=route_to_be_written,
+        modred=modred,
+        gen_genecp_file=gen_genecp_file,
+        heavy_elements=heavy_elements,
+        heavy_elements_basis=heavy_elements_basis,
+        light_elements_basis=light_elements_basis,
+        custom_solvent=custom_solvent,
+        forces=forces,
+        input_string=input_string,
+        invert_constraints=invert_constraints,
+        **extras,
+    )
+
+
+def build_job(
+    kind: str,
+    molecule: Molecule,
+    settings,
+    label: str | None = None,
+    jobrunner=None,
+) -> Job:
+    normalized_kind = (kind or "").strip().lower()
+    job_class = _JOB_CLASS_BY_KIND.get(normalized_kind)
+    if job_class is None:
+        supported_kinds = ", ".join(_SUPPORTED_JOB_KINDS)
+        raise ValueError(
+            f"Unknown job kind {kind!r}. Supported kinds: {supported_kinds}"
+        )
+
+    job_settings = settings.copy()
+    kind_suffix = normalized_kind.split(".", maxsplit=1)[1]
+    job_settings.jobtype = _JOBTYPE_BY_KIND_SUFFIX[kind_suffix]
+    if (
+        kind_suffix == "freq"
+        and not job_settings.freq
+        and not job_settings.numfreq
+    ):
+        job_settings.freq = True
+
+    return job_class(
+        molecule=molecule,
+        settings=job_settings,
+        label=label,
+        jobrunner=jobrunner,
+    )
+
+
+def dry_run_input(job: Job) -> dict[str, str]:
+    target_directory = os.path.abspath(job.folder)
+    job.set_folder(target_directory)
+    if job.jobrunner is None:
+        job.jobrunner = SimpleNamespace(num_cores=12, mem_gb=16)
+
+    if isinstance(job, GaussianJob):
+        input_writer = GaussianInputWriter(job=job)
+    elif isinstance(job, ORCAJob):
+        input_writer = ORCAInputWriter(job=job)
+    else:
+        raise ValueError(
+            "dry_run_input only supports GaussianJob and ORCAJob instances"
+        )
+
+    input_writer.write(target_directory=target_directory)
+
+    inputfile = os.path.abspath(job.inputfile)
+    with open(inputfile) as file:
+        content = file.read()
+    return {"inputfile": inputfile, "content": content}
 
 
 def recommend_method(
