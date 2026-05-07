@@ -14,13 +14,13 @@ Kind-task consistency checks (hard rules: reject when violated):
 - If a requested transition-state / TS task uses a `*.opt` kind instead of `*.ts`, reject.
 - If a requested IRC / reaction-path task uses a `*.opt` kind instead of `*.irc`, reject.
 - If a requested single-point / SP / energy task uses a `*.opt` kind instead of `*.sp`, reject.
-- If an opt+freq / optimize-and-frequency request has fewer than two `build_job` steps, reject.
-- If an opt+freq / optimize-and-frequency request has no `*.freq` step, reject.
+- If an opt+freq / optimize-and-frequency request uses a standalone `*.freq` step instead of a single `*.opt` job with frequency enabled in settings, reject.
+- If an opt+freq / optimize-and-frequency request has no `*.opt` build_job step, reject.
 - If the plan includes a `gaussian.irc` step but the corresponding dry-run input route line does not contain `irc=` (for example `irc=(`), reject.
 - If the plan includes an `orca.irc` step but the corresponding ORCA dry-run input does not contain the `IRC` keyword, reject.
 
-Additional warning rule:
-- If a `*.freq` step appears without any prior `*.opt` step in the plan, warn unless the user explicitly asked for frequency only.
+Additional warning rules:
+- If a `*.freq` step appears without any prior `*.opt` or `*.irc` step in the plan, warn unless the user explicitly asked for frequency only or provided an already-optimized structure.
 - If a multi-program single-point step (`orca.sp` or `gaussian.sp`) uses the original `build_molecule` result as its `molecule` argument instead of an `extract_optimized_geometry` result from a prior optimization, warn with: `geometry handoff missing`.
 
 Confidence guidance:

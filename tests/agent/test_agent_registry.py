@@ -51,8 +51,11 @@ def test_registry_round_trips_build_gaussian_settings_call():
     gaussian_settings_props = gaussian_settings_def["function"]["parameters"][
         "properties"
     ]
-    assert "additional_route_parameters" in gaussian_settings_props
     assert "title" in gaussian_settings_props
+    assert "freq" in gaussian_settings_props
+    assert "numfreq" in gaussian_settings_props
+    assert "additional_opt_options_in_route" in gaussian_settings_props
+    assert "additional_route_parameters" in gaussian_settings_props
 
 
 def test_registry_unknown_tool_name_raises_clearly():
