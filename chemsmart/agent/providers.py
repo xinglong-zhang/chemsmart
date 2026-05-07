@@ -5,13 +5,32 @@ Reads api.env via python-dotenv (key: ai_api_key).
 Dispatches on AI_PROVIDER env var; v1 supports Anthropic and OpenAI.
 """
 
+from __future__ import annotations
+
 import os
-from typing import Optional
+import time
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 
 _API_ENV_PATH = "/Users/hongjiseung/developer/chemsmart/api.env"
-_SUPPORTED = frozenset({"anthropic", "openai"})
+_GATEWAY_URL_OPENAI = "https://factchat-cloud.mindlogic.ai/v1/gateway"
+_GATEWAY_URL_ANTHROPIC = (
+    "https://factchat-cloud.mindlogic.ai/v1/gateway/claude"
+)
+_AVAILABLE_MODELS = {
+    "openai": [
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
+        "gemini-3.1-pro-preview",
+        "grok-4",
+        "sonar-pro",
+    ],
+    "anthropic": ["claude-sonnet-4-6"],
+}
+_SUPPORTED = frozenset(_AVAILABLE_MODELS)
+_PING_MESSAGES = [{"role": "user", "content": "ping"}]
 
 
 class ProviderError(Exception):
@@ -20,19 +39,24 @@ class ProviderError(Exception):
 
 class AnthropicProvider:
     name = "anthropic"
+    default_model = "claude-sonnet-4-6"
+    gateway_url = _GATEWAY_URL_ANTHROPIC
 
     def __init__(self, api_key: str) -> None:
         import anthropic
 
-        self._client = anthropic.Anthropic(api_key=api_key)
+        self._client = anthropic.Anthropic(
+            api_key=api_key,
+            base_url=self.gateway_url,
+        )
 
     def chat(
         self,
         messages: list,
         tools: Optional[list] = None,
     ) -> dict:
-        kwargs: dict = {
-            "model": "claude-opus-4-5",
+        kwargs: dict[str, Any] = {
+            "model": self.default_model,
             "max_tokens": 4096,
             "messages": messages,
         }
@@ -41,28 +65,67 @@ class AnthropicProvider:
         response = self._client.messages.create(**kwargs)
         return response.model_dump()
 
+    def ping(self) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            response = self._client.messages.create(
+                model=self.default_model,
+                max_tokens=5,
+                messages=_PING_MESSAGES,
+            )
+        except Exception as exc:
+            raise ProviderError(f"ping failed: {exc}") from exc
+
+        return {
+            "ok": True,
+            "resolved_model": _resolve_model(response, self.default_model),
+            "latency_ms": _latency_ms(started),
+        }
+
 
 class OpenAIProvider:
     name = "openai"
+    default_model = "gpt-5.4"
+    gateway_url = _GATEWAY_URL_OPENAI
 
     def __init__(self, api_key: str) -> None:
         import openai
 
-        self._client = openai.OpenAI(api_key=api_key)
+        self._client = openai.OpenAI(
+            api_key=api_key,
+            base_url=self.gateway_url,
+        )
 
     def chat(
         self,
         messages: list,
         tools: Optional[list] = None,
     ) -> dict:
-        kwargs: dict = {
-            "model": "gpt-4o-mini",
+        kwargs: dict[str, Any] = {
+            "model": self.default_model,
             "messages": messages,
         }
         if tools:
             kwargs["tools"] = tools
         response = self._client.chat.completions.create(**kwargs)
         return response.model_dump()
+
+    def ping(self) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            response = self._client.chat.completions.create(
+                model=self.default_model,
+                messages=_PING_MESSAGES,
+                max_tokens=5,
+            )
+        except Exception as exc:
+            raise ProviderError(f"ping failed: {exc}") from exc
+
+        return {
+            "ok": True,
+            "resolved_model": _resolve_model(response, self.default_model),
+            "latency_ms": _latency_ms(started),
+        }
 
 
 def get_provider(
@@ -97,3 +160,21 @@ def get_provider(
         return OpenAIProvider(api_key)
 
     raise ProviderError(f"AI_PROVIDER={provider_name!r} is not supported")
+
+
+def _resolve_model(response: Any, fallback: str) -> str:
+    model = getattr(response, "model", None)
+    if isinstance(model, str) and model.strip():
+        return model
+
+    if hasattr(response, "model_dump"):
+        payload = response.model_dump()
+        dumped_model = payload.get("model")
+        if isinstance(dumped_model, str) and dumped_model.strip():
+            return dumped_model
+
+    return fallback
+
+
+def _latency_ms(started: float) -> int:
+    return max(0, int((time.perf_counter() - started) * 1000))
