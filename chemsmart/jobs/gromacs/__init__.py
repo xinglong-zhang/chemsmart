@@ -1,8 +1,5 @@
-from chemsmart.jobs.gromacs import (
-    GromacsEMJob,
-    GromacsJob,
-    GromacsJobRunner,
-)
+from .job import GromacsEMJob, GromacsJob
+from .runner import GromacsJobRunner
 
 __all__ = [
     "GromacsJob",
