@@ -125,7 +125,7 @@ def agent_run(
     if verdict.issues:
         for issue in verdict.issues:
             click.echo(f"- {issue}")
-    dry_run_result = result.get("dry_run_result")
+    dry_run_result = _first_dry_run_result(result)
     if dry_run_result:
         click.echo(f"inputfile: {dry_run_result['inputfile']}")
     click.echo(f"decision log: {result['session_dir']}/decision_log.jsonl")
@@ -168,6 +168,9 @@ def resume(
     click.echo(f"session: {result['session_id']}")
     click.echo(render_plan(result["plan"]))
     click.echo(f"critic verdict: {result['critic_verdict'].verdict}")
+    dry_run_result = _first_dry_run_result(result)
+    if dry_run_result:
+        click.echo(f"inputfile: {dry_run_result['inputfile']}")
     if result.get("blocked"):
         raise click.ClickException("critic gating blocked execution")
 
@@ -185,3 +188,10 @@ def _get_gateway_url(providers_module, provider_name: str) -> str:
     if provider_name == "anthropic":
         return providers_module._GATEWAY_URL_ANTHROPIC
     return providers_module._GATEWAY_URL_OPENAI
+
+
+def _first_dry_run_result(result: dict) -> dict | None:
+    dry_run_results = result.get("dry_run_results") or []
+    if dry_run_results:
+        return dry_run_results[0]
+    return result.get("dry_run_result")
