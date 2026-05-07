@@ -122,6 +122,7 @@ def build_gromacs_topology(
     rdkit_mol = molecule.to_rdkit(add_bonds=True)
     if add_hs:
         rdkit_mol = Chem.AddHs(rdkit_mol, addCoords=True)
+        molecule = Molecule.from_rdkit_mol(rdkit_mol)
     graph = molecule.to_graph()
 
     if charges is None:
