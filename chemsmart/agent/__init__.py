@@ -5,6 +5,8 @@ AgentSession and run_agent are placeholders; full implementation
 arrives in subsequent waves (see bin/plan.md).
 """
 
+from chemsmart.agent.tools import build_molecule, recommend_method
+
 
 class AgentSession:
     def __init__(self, *args, **kwargs):
@@ -15,4 +17,9 @@ def run_agent(*args, **kwargs):
     raise NotImplementedError
 
 
-__all__ = ["AgentSession", "run_agent"]
+__all__ = [
+    "AgentSession",
+    "run_agent",
+    "build_molecule",
+    "recommend_method",
+]
