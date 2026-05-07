@@ -220,7 +220,7 @@ class AgentSession:
 
         plan = self.state.plan
         results = list(completed_results)
-        dry_run_result = self._find_prior_result(results, "dry_run_input")
+        dry_run_results = self._collect_prior_results(results, "dry_run_input")
         runtime_result = self._find_prior_result(results, "validate_runtime")
         verdict: CriticVerdict | None = self._get_logged_verdict()
         blocked = False
@@ -242,7 +242,7 @@ class AgentSession:
                 self.state.current_step_index = step_index + 1
                 self._save_state()
                 if step.tool == "dry_run_input":
-                    dry_run_result = result
+                    dry_run_results.append(result)
                 elif step.tool == "validate_runtime":
                     runtime_result = result
 
@@ -258,12 +258,13 @@ class AgentSession:
 
             verdict = verdict or self._critic_call(
                 plan=plan,
-                dry_run_result=dry_run_result,
+                dry_run_results=dry_run_results,
             )
             verdict = self._apply_deterministic_gates(
+                plan=plan,
                 verdict=verdict,
                 runtime_result=runtime_result,
-                dry_run_result=dry_run_result,
+                dry_run_results=dry_run_results,
                 preview_submit=preview_submit,
             )
             self.decision_log.write(
@@ -287,7 +288,8 @@ class AgentSession:
                     "critic_verdict": verdict,
                     "completed_steps": self.state.current_step_index,
                     "blocked": True,
-                    "dry_run_result": dry_run_result,
+                    "dry_run_result": _primary_dry_run_result(dry_run_results),
+                    "dry_run_results": dry_run_results,
                     "runtime_result": runtime_result,
                     "preview_submit": preview_submit,
                 }
@@ -327,7 +329,8 @@ class AgentSession:
                 "critic_verdict": verdict,
                 "completed_steps": self.state.current_step_index,
                 "blocked": False,
-                "dry_run_result": dry_run_result,
+                "dry_run_result": _primary_dry_run_result(dry_run_results),
+                "dry_run_results": dry_run_results,
                 "runtime_result": runtime_result,
                 "preview_submit": preview_submit,
                 "results": results,
@@ -340,7 +343,7 @@ class AgentSession:
                 verdict=verdict,
                 blocked=blocked,
                 block_reason=block_reason,
-                dry_run_result=dry_run_result,
+                dry_run_results=dry_run_results,
                 run_error=run_error,
             )
 
@@ -373,7 +376,7 @@ class AgentSession:
     def _critic_call(
         self,
         plan: Plan,
-        dry_run_result: dict[str, Any] | None,
+        dry_run_results: list[dict[str, Any]],
     ) -> CriticVerdict:
         provider = self._provider_instance()
         prompt = _load_prompt("critic.md")
@@ -385,7 +388,7 @@ class AgentSession:
                     "content": json.dumps(
                         {
                             "plan": plan.model_dump(),
-                            "dry_run_input": dry_run_result,
+                            "dry_run_inputs": dry_run_results,
                         }
                     ),
                 },
@@ -509,7 +512,7 @@ class AgentSession:
         verdict: CriticVerdict | None,
         blocked: bool,
         block_reason: str | None,
-        dry_run_result: dict[str, Any] | None,
+        dry_run_results: list[dict[str, Any]],
         run_error: Exception | None = None,
     ) -> None:
         assert self.state is not None
@@ -543,6 +546,7 @@ class AgentSession:
         }
         self.decision_log.write("session_summary", summary)
 
+        primary_dry_run_result = _primary_dry_run_result(dry_run_results)
         metadata = {
             "session_id": self.state.session_id,
             "request": self.state.request,
@@ -551,10 +555,16 @@ class AgentSession:
             "plan_steps": self.state.total_steps_planned,
             "executed_steps": self.state.current_step_index,
             "input_file": (
-                str(dry_run_result.get("inputfile"))
-                if dry_run_result and dry_run_result.get("inputfile")
+                str(primary_dry_run_result.get("inputfile"))
+                if primary_dry_run_result
+                and primary_dry_run_result.get("inputfile")
                 else None
             ),
+            "input_files": [
+                str(result.get("inputfile"))
+                for result in dry_run_results
+                if result.get("inputfile")
+            ],
             "critic_verdict": (
                 verdict.verdict if verdict is not None else None
             ),
@@ -617,6 +627,19 @@ class AgentSession:
         assert self.state is not None
         self.state.save(self.session_dir / "session.json")
 
+    def _collect_prior_results(
+        self,
+        results: list[Any],
+        tool_name: str,
+    ) -> list[Any]:
+        assert self.state is not None
+        assert self.state.plan is not None
+        return [
+            result
+            for step, result in zip(self.state.plan.steps, results)
+            if step.tool == tool_name
+        ]
+
     def _find_prior_result(self, results: list[Any], tool_name: str) -> Any:
         assert self.state is not None
         assert self.state.plan is not None
@@ -642,9 +665,10 @@ class AgentSession:
 
     def _apply_deterministic_gates(
         self,
+        plan: Plan,
         verdict: CriticVerdict,
         runtime_result: dict[str, Any] | None,
-        dry_run_result: dict[str, Any] | None,
+        dry_run_results: list[dict[str, Any]],
         preview_submit: dict[str, Any] | None,
     ) -> CriticVerdict:
         issues = list(verdict.issues)
@@ -664,12 +688,28 @@ class AgentSession:
                 issues.extend(runtime_result.get("remote_unknown", []))
                 rationale_parts.append("validate_runtime returned partial")
 
-        malformed_issue = _malformed_input_issue(dry_run_result)
-        if malformed_issue is not None and final_verdict != "reject":
-            final_verdict = "warn"
-            issues.append(malformed_issue)
+        malformed_issues = [
+            issue
+            for result in dry_run_results
+            if (issue := _malformed_input_issue(result)) is not None
+        ]
+        if malformed_issues:
+            if final_verdict != "reject":
+                final_verdict = "warn"
+            issues.extend(malformed_issues)
             rationale_parts.append(
                 "dry-run input route line failed basic validation"
+            )
+
+        irc_keyword_issues = _missing_irc_keyword_issues(
+            plan=plan,
+            dry_run_results=dry_run_results,
+        )
+        if irc_keyword_issues:
+            final_verdict = "reject"
+            issues.extend(irc_keyword_issues)
+            rationale_parts.append(
+                "IRC input route line missing required keyword"
             )
 
         if preview_submit is not None:
@@ -1026,6 +1066,12 @@ def _is_tool_error(result: Any) -> bool:
     )
 
 
+def _primary_dry_run_result(
+    dry_run_results: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    return dry_run_results[0] if dry_run_results else None
+
+
 def _malformed_input_issue(
     dry_run_result: dict[str, Any] | None,
 ) -> str | None:
@@ -1042,6 +1088,68 @@ def _malformed_input_issue(
     if _GAUSSIAN_ROUTE_RE.search(content) is None:
         return "Gaussian route line missing or malformed"
     return None
+
+
+def _missing_irc_keyword_issues(
+    plan: Plan,
+    dry_run_results: list[dict[str, Any]],
+) -> list[str]:
+    issues: list[str] = []
+    dry_run_steps = [
+        step for step in plan.steps if step.tool == "dry_run_input"
+    ]
+    for step, result in zip(dry_run_steps, dry_run_results):
+        kind = _dry_run_job_kind(plan, step)
+        if kind == "gaussian.irc":
+            route_text = _route_text(result)
+            if (
+                route_text is None
+                or re.search(r"\birc\s*=", route_text, re.IGNORECASE) is None
+            ):
+                issues.append("Gaussian IRC input missing irc= keyword")
+        elif kind == "orca.irc":
+            route_text = _route_text(result)
+            if (
+                route_text is None
+                or re.search(r"\birc\b", route_text, re.IGNORECASE) is None
+            ):
+                issues.append("ORCA IRC input missing IRC keyword")
+    return issues
+
+
+def _dry_run_job_kind(plan: Plan, dry_run_step: Step) -> str | None:
+    job_ref = dry_run_step.args.get("job")
+    if not isinstance(job_ref, str):
+        return None
+    match = _REFERENCE_RE.match(job_ref)
+    if match is None:
+        return None
+    job_index = int(match.group("index")) - 1
+    if job_index < 0 or job_index >= len(plan.steps):
+        return None
+    job_step = plan.steps[job_index]
+    if job_step.tool != "build_job":
+        return None
+    kind = job_step.args.get("kind")
+    if not isinstance(kind, str):
+        return None
+    return kind.strip().lower()
+
+
+def _route_text(dry_run_result: dict[str, Any] | None) -> str | None:
+    if not dry_run_result:
+        return None
+    content = dry_run_result.get("content")
+    inputfile = str(dry_run_result.get("inputfile", "")).lower()
+    if not isinstance(content, str):
+        return None
+    if inputfile.endswith(".inp"):
+        matches = re.findall(r"^\s*!\s*(.+)$", content, re.MULTILINE)
+    else:
+        matches = re.findall(r"^\s*#.*$", content, re.MULTILINE)
+    if not matches:
+        return None
+    return " ".join(match.strip() for match in matches)
 
 
 def _dedupe_strings(values: list[str]) -> list[str]:
