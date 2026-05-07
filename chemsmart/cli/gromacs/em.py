@@ -51,7 +51,7 @@ def em(
     top_file,
     itp_files,
     index_file,
-    **kwargs
+    **kwargs,
 ):
     """CLI subcommand for running GROMACS energy minimization."""
 
@@ -63,7 +63,6 @@ def em(
     label = "gromacs_em"
     if structure_file is not None:
         label = os.path.splitext(os.path.basename(structure_file))[0] + "_em"
-
 
     logger.info(f"GROMACS EM project: {project}")
     logger.info(f"GROMACS EM structure file: {structure_file}")
@@ -84,4 +83,4 @@ def em(
             index_file=index_file,
             skip_completed=skip_completed,
             **kwargs,
-         )
+        )

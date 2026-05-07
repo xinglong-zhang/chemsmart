@@ -8,6 +8,7 @@ import pytest
 from ase import Atoms
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.file import CDXFile
@@ -494,6 +495,28 @@ class TestMoleculeAdvanced:
         assert rdkit_mol.GetNumConformers() == 1
         assert rdkit_mol.GetConformer().GetPositions().shape == (3, 3)
 
+    def test_rdkit_force_field_generation(self):
+        """Test MMFF/UFF force-field generation from an RDKit 3D conformer."""
+        rdkit_mol = Chem.MolFromSmiles("CCO")
+        rdkit_mol = Chem.AddHs(rdkit_mol)
+        embed_status = AllChem.EmbedMolecule(rdkit_mol, randomSeed=7)
+        assert embed_status == 0
+        assert rdkit_mol.GetNumConformers() == 1
+        assert rdkit_mol.GetConformer().Is3D()
+
+        molecule = Molecule.from_rdkit_mol(rdkit_mol)
+        mmff = molecule.generate_force_field_from_rdkit(
+            rdkit_mol=rdkit_mol, force_field="MMFF94"
+        )
+        uff = molecule.generate_force_field_from_rdkit(
+            rdkit_mol=rdkit_mol, force_field="UFF"
+        )
+
+        assert mmff is not None
+        assert uff is not None
+        assert callable(getattr(mmff, "CalcEnergy", None))
+        assert callable(getattr(uff, "CalcEnergy", None))
+
     def test_is_aromatic_non_aromatic_molecules(self):
         """Regression test: non-aromatic molecules must not be reported as aromatic.
 
@@ -848,6 +871,7 @@ class TestMoleculeAdvanced:
             -1,
             -1,
             -1,
+            0,
             0,
             0,
             0,
