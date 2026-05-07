@@ -93,6 +93,7 @@ exclude = [".github"]
     "VERSION",
     "settings/templates/**",
     "settings/templates/.chemsmart/**",
+    "agent/prompts/*.md",
 ]
 
 [tool.flake8]

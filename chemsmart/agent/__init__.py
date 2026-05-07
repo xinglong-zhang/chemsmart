@@ -1,10 +1,6 @@
-"""
-chemsmart.agent — AI-scientist agent layer (Wave 1 scaffold).
+"""Public agent exports for chemsmart."""
 
-AgentSession and run_agent are placeholders; full implementation
-arrives in subsequent waves (see bin/plan.md).
-"""
-
+from chemsmart.agent.core import AgentSession, run_agent
 from chemsmart.agent.tools import (
     build_gaussian_settings,
     build_job,
@@ -22,16 +18,6 @@ from chemsmart.agent.transport import (
     SshQsubTransport,
     SubmitTransport,
 )
-
-
-class AgentSession:
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-def run_agent(*args, **kwargs):
-    raise NotImplementedError
-
 
 __all__ = [
     "AgentSession",

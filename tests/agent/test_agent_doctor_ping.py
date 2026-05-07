@@ -70,4 +70,4 @@ def test_doctor_ping_failure_exits_nonzero(monkeypatch, tmp_path):
         result.output
     )
     assert "ping: FAILED boom" in result.output
-    assert "tools registered: 2" in result.output
+    assert "tools registered: 9" in result.output
