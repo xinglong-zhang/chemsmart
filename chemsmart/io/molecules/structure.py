@@ -472,7 +472,7 @@ class Molecule:
         try:
             Chem.SanitizeMol(mol)
         except Exception as exc:
-            raise ValueError(f"RDKit sanitization failed: {exc}")
+            raise ValueError(f"RDKit sanitization failed: {exc}") from exc
 
         mol = Chem.AddHs(mol, addCoords=True)
         if mol.GetNumConformers() == 0 or not mol.GetConformer().Is3D():
