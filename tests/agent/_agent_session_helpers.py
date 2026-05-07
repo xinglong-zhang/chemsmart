@@ -73,6 +73,7 @@ def planner_plan(filepath: str, label: str, final_tool: str | None = None):
 def critic_ok():
     return {
         "verdict": "ok",
+        "confidence": 0.95,
         "issues": [],
         "rationale": "The generated input looks reasonable.",
     }
@@ -81,6 +82,7 @@ def critic_ok():
 def critic_warn(issue: str):
     return {
         "verdict": "warn",
+        "confidence": 0.5,
         "issues": [issue],
         "rationale": "Proceed only with explicit override.",
     }
@@ -89,6 +91,7 @@ def critic_warn(issue: str):
 def critic_reject(issue: str):
     return {
         "verdict": "reject",
+        "confidence": 0.0,
         "issues": [issue],
         "rationale": "Do not execute this workflow.",
     }

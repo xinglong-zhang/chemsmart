@@ -21,6 +21,28 @@ def test_registry_round_trips_build_gaussian_settings_call():
     tool_defs = registry.openai_tool_defs()
     names = [tool_def["function"]["name"] for tool_def in tool_defs]
     assert "build_gaussian_settings" in names
+    build_job_def = next(
+        tool_def
+        for tool_def in tool_defs
+        if tool_def["function"]["name"] == "build_job"
+    )
+    assert build_job_def["function"]["parameters"]["properties"]["kind"] == {
+        "type": "string",
+        "enum": [
+            "gaussian.opt",
+            "gaussian.ts",
+            "gaussian.freq",
+            "gaussian.sp",
+            "gaussian.irc",
+            "gaussian.scan",
+            "orca.opt",
+            "orca.ts",
+            "orca.freq",
+            "orca.sp",
+            "orca.irc",
+            "orca.scan",
+        ],
+    }
 
 
 def test_registry_unknown_tool_name_raises_clearly():
