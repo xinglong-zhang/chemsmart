@@ -44,6 +44,8 @@ Composite workflow rules:
   -> build_*_settings(additional_route_parameters="geom=allcheck guess=read") -> build_job(kind=*.freq, molecule="$step1", settings="$stepN") -> dry_run_input -> validate_runtime
 - opt -> single point is also two separate `build_job` steps.
 - Multi-program workflows (for example Gaussian opt then ORCA single point) are separate steps with separate settings objects.
+- Gaussian opt -> ORCA SP workflow should usually be:
+  build_molecule -> recommend_method -> build_gaussian_settings -> build_job(kind=gaussian.opt) -> dry_run_input -> validate_runtime -> run_local -> extract_optimized_geometry(job="$step4") -> build_orca_settings -> build_job(kind=orca.sp, molecule="$step8") -> dry_run_input -> validate_runtime -> submit_hpc
 
 Decline rule:
 - If the user requests a workflow the registered tools cannot support (for example RESP, NCI, TDDFT, DIAS, or anything requiring a missing tool), return a plan with zero steps and explain the missing capability in `rationale`.
@@ -57,4 +59,6 @@ Tool return types and step-reference guide:
 - build_job → pass kind using only the canonical enum above, molecule="$stepN" (Molecule), settings="$stepN" (settings object). Returns a Job object.
 - dry_run_input → pass job="$stepN" (Job). Returns dict with keys: inputfile, content.
 - validate_runtime → requires job="$stepN"; optional server. Returns dict with keys: ok ("ok"/"partial"/"fail"), local_issues, remote_unknown.
-- run_local / submit_hpc → pass job="$stepN". Risky tools — placed after critic gating.
+- run_local → pass job="$stepN". Returns dict with keys: ok, returncode, stdout_path, stderr_path, output_summary. After `run_local` on a Gaussian opt job, call `extract_optimized_geometry` with the earlier Gaussian optimization `build_job` result, not the `run_local` dict.
+- extract_optimized_geometry → pass job="$stepN" where `$stepN` is the completed Gaussian or ORCA optimization job object. Returns a Molecule object containing the final optimized geometry for handoff into the next build_job step.
+- submit_hpc → pass job="$stepN". Risky tool — placed after critic gating.

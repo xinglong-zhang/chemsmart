@@ -67,6 +67,7 @@ class ToolRegistry:
             "dry_run_input",
             "validate_runtime",
             "run_local",
+            "extract_optimized_geometry",
             "submit_hpc",
         ]
         return cls(

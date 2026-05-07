@@ -453,6 +453,43 @@ def run_local(job: Job) -> dict[str, Any]:
     }
 
 
+def extract_optimized_geometry(job: Job) -> Molecule:
+    """Extract final optimized geometry from a completed job output log.
+
+    Use after run_local completes. Reads the completed Gaussian or ORCA
+    output file from the job folder and returns a Molecule containing the
+    last optimized Cartesian coordinates while preserving charge and
+    multiplicity from job.settings.
+
+    Raises:
+        FileNotFoundError: If the job output log does not exist.
+        ValueError: If no optimized geometry block can be parsed.
+    """
+    logfile = _resolve_geometry_logfile(job)
+    if not os.path.exists(logfile):
+        raise FileNotFoundError(f"Output log not found: {logfile}")
+
+    with open(logfile, encoding="utf-8", errors="ignore") as file:
+        lines = file.readlines()
+
+    if isinstance(job, GaussianJob):
+        symbols, positions = _parse_gaussian_geometry(lines)
+    elif isinstance(job, ORCAJob):
+        symbols, positions = _parse_orca_geometry(lines)
+    else:
+        raise ValueError(
+            "extract_optimized_geometry only supports GaussianJob and "
+            "ORCAJob instances"
+        )
+
+    return Molecule(
+        symbols=symbols,
+        positions=positions,
+        charge=getattr(job.settings, "charge", None),
+        multiplicity=getattr(job.settings, "multiplicity", None),
+    )
+
+
 def submit_hpc(
     job: Job,
     server,
@@ -760,6 +797,91 @@ def _get_server_account_name(server_config: dict[str, Any]) -> Any:
 
 def _is_non_empty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def _resolve_geometry_logfile(job: Job) -> str:
+    outputfile = getattr(job, "outputfile", None)
+    if isinstance(outputfile, str) and os.path.exists(outputfile):
+        return outputfile
+
+    fallback_paths = [
+        os.path.join(job.folder, f"{job.label}.log"),
+        os.path.join(job.folder, f"{job.label}.out"),
+    ]
+    for path in fallback_paths:
+        if os.path.exists(path):
+            return path
+
+    if isinstance(outputfile, str):
+        return outputfile
+    return fallback_paths[0]
+
+
+def _parse_gaussian_geometry(
+    lines: list[str],
+) -> tuple[list[str], list[list[float]]]:
+    blocks: list[tuple[list[str], list[list[float]]]] = []
+
+    for index, line in enumerate(lines):
+        if "Standard orientation:" not in line:
+            continue
+
+        symbols = []
+        positions = []
+        coord_start = index + 5
+        for coord_line in lines[coord_start:]:
+            stripped = coord_line.strip()
+            if not stripped or set(stripped) == {"-"}:
+                break
+            parts = stripped.split()
+            if len(parts) < 6:
+                break
+            atomic_number = int(parts[1])
+            symbols.append(_PERIODIC_TABLE.to_symbol(atomic_number))
+            positions.append([float(value) for value in parts[3:6]])
+
+        if symbols:
+            blocks.append((symbols, positions))
+
+    if not blocks:
+        raise ValueError("No optimized Gaussian geometry found in output log")
+
+    return blocks[-1]
+
+
+def _parse_orca_geometry(
+    lines: list[str],
+) -> tuple[list[str], list[list[float]]]:
+    blocks: list[tuple[list[str], list[list[float]]]] = []
+
+    for index, line in enumerate(lines):
+        if "CARTESIAN COORDINATES (ANGSTROEM)" not in line:
+            continue
+
+        symbols = []
+        positions = []
+        coord_start = index + 2
+        for coord_line in lines[coord_start:]:
+            stripped = coord_line.strip()
+            if (
+                not stripped
+                or set(stripped) == {"-"}
+                or "CARTESIAN COORDINATES" in stripped
+            ):
+                break
+            parts = stripped.split()
+            if len(parts) < 4:
+                break
+            symbols.append(parts[0])
+            positions.append([float(value) for value in parts[1:4]])
+
+        if symbols:
+            blocks.append((symbols, positions))
+
+    if not blocks:
+        raise ValueError("No optimized ORCA geometry found in output log")
+
+    return blocks[-1]
 
 
 def _has_unresolved_envvars(path: str) -> bool:
