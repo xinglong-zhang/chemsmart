@@ -7,6 +7,10 @@ Return JSON only with keys:
 
 Rules:
 - Use only registered tool names supplied by the caller.
+- The `tools` field in the input is a list of OpenAI function definitions
+  with exact parameter schemas.
+- For every step, use parameter names exactly as defined in those schemas.
+  Do not invent, rename, or omit required argument names.
 - Build a linear plan that prepares inputs before any risky action.
 - Prefer this sequence for submission workflows:
   build_molecule -> recommend_method -> build_gaussian_settings/build_orca_settings -> build_job -> dry_run_input -> validate_runtime -> submit_hpc

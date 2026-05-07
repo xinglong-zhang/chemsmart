@@ -302,7 +302,7 @@ class AgentSession:
     def _planner_call(self, request: str) -> Plan:
         provider = self._provider_instance()
         prompt = _load_prompt("planner.md")
-        tool_names = [tool.name for tool in self.registry.list_tools()]
+        tool_defs = self.registry.openai_tool_defs()
         response = provider.chat(
             [
                 {"role": "system", "content": prompt},
@@ -311,7 +311,7 @@ class AgentSession:
                     "content": json.dumps(
                         {
                             "request": request,
-                            "tools": tool_names,
+                            "tools": tool_defs,
                         }
                     ),
                 },
