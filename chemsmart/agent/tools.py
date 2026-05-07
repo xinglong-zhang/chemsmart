@@ -7,7 +7,7 @@ import re
 import shutil
 import traceback
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -74,12 +74,39 @@ _ORCA_FREQ_JOB_CLASS = _resolve_optional_job_class(
     "ORCAFreqJob",
     ORCAGeneralJob,
 )
+JobKind = Literal[
+    "gaussian.opt",
+    "gaussian.ts",
+    "gaussian.freq",
+    "gaussian.sp",
+    "gaussian.irc",
+    "gaussian.scan",
+    "orca.opt",
+    "orca.ts",
+    "orca.freq",
+    "orca.sp",
+    "orca.irc",
+    "orca.scan",
+]
+_CANONICAL_JOB_KINDS: tuple[JobKind, ...] = (
+    "gaussian.opt",
+    "gaussian.ts",
+    "gaussian.freq",
+    "gaussian.sp",
+    "gaussian.irc",
+    "gaussian.scan",
+    "orca.opt",
+    "orca.ts",
+    "orca.freq",
+    "orca.sp",
+    "orca.irc",
+    "orca.scan",
+)
 _JOBTYPE_BY_KIND_SUFFIX = {
     "opt": "opt",
     "ts": "ts",
     "freq": "freq",
     "sp": "sp",
-    "singlepoint": "sp",
     "irc": "irc",
     "scan": "scan",
 }
@@ -88,19 +115,21 @@ _JOB_CLASS_BY_KIND = {
     "gaussian.ts": GaussianTSJob,
     "gaussian.freq": _GAUSSIAN_FREQ_JOB_CLASS,
     "gaussian.sp": GaussianSinglePointJob,
-    "gaussian.singlepoint": GaussianSinglePointJob,
     "gaussian.irc": GaussianIRCJob,
     "gaussian.scan": GaussianScanJob,
     "orca.opt": ORCAOptJob,
     "orca.ts": ORCATSJob,
     "orca.freq": _ORCA_FREQ_JOB_CLASS,
     "orca.sp": ORCASinglePointJob,
-    "orca.singlepoint": ORCASinglePointJob,
     "orca.irc": ORCAIRCJob,
     "orca.scan": ORCAScanJob,
 }
-_SUPPORTED_JOB_KINDS = tuple(_JOB_CLASS_BY_KIND)
-_SUPPORTED_SUBMIT_JOBTYPES = {"opt", "ts", "sp", "singlepoint", "irc", "scan"}
+_JOB_KIND_ALIASES = {
+    "gaussian.singlepoint": "gaussian.sp",
+    "orca.singlepoint": "orca.sp",
+}
+_SUPPORTED_JOB_KINDS = _CANONICAL_JOB_KINDS
+_SUPPORTED_SUBMIT_JOBTYPES = {"opt", "ts", "sp", "irc", "scan"}
 _REMOTE_UNKNOWN_SERVER_FIELDS = [
     "server.queue required",
     "server.account required",
@@ -232,13 +261,14 @@ def build_orca_settings(
 
 
 def build_job(
-    kind: str,
+    kind: JobKind,
     molecule: Molecule,
     settings,
     label: str | None = None,
     jobrunner=None,
 ) -> Job:
     normalized_kind = (kind or "").strip().lower()
+    normalized_kind = _JOB_KIND_ALIASES.get(normalized_kind, normalized_kind)
     job_class = _JOB_CLASS_BY_KIND.get(normalized_kind)
     if job_class is None:
         supported_kinds = ", ".join(_SUPPORTED_JOB_KINDS)

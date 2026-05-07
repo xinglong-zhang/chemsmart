@@ -80,6 +80,7 @@ def test_critic_blocks_malformed_input(
 
     assert result["blocked"] is True
     assert result["critic_verdict"].verdict == "warn"
+    assert result["critic_verdict"].confidence == pytest.approx(0.95)
     assert (
         "Gaussian route line missing or malformed"
         in result["critic_verdict"].issues

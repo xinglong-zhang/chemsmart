@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
-from typing import Any, get_type_hints
+from dataclasses import dataclass, field
+from typing import Any, Literal, get_args, get_origin, get_type_hints
 
 from pydantic import (
     BaseModel,
@@ -26,11 +26,22 @@ class ToolSpec:
     func: Any
     input_schema: type[ToolInputModel]
     accepts_kwargs: bool = False
+    schema_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def openai_tool_def(self) -> dict[str, Any]:
         schema = self.input_schema.model_json_schema()
         schema.pop("title", None)
         schema.pop("$defs", None)
+        properties = schema.get("properties", {})
+        for field_name, override in self.schema_overrides.items():
+            if field_name not in properties:
+                continue
+            properties[field_name] = {
+                key: value
+                for key, value in properties[field_name].items()
+                if key != "title"
+            }
+            properties[field_name].update(override)
         return {
             "type": "function",
             "function": {
@@ -116,6 +127,7 @@ def _build_tool_spec(
     registered_name: str | None = None,
 ) -> ToolSpec:
     fields: dict[str, Any] = {}
+    schema_overrides: dict[str, dict[str, Any]] = {}
     accepts_kwargs = False
     signature = inspect.signature(func)
     resolved_hints = get_type_hints(func)
@@ -128,6 +140,9 @@ def _build_tool_spec(
         annotation = resolved_hints.get(param.name, param.annotation)
         if annotation is inspect.Signature.empty:
             annotation = Any
+        schema_override = _annotation_to_schema(annotation)
+        if schema_override is not None:
+            schema_overrides[param.name] = schema_override
         annotation = _schema_friendly_annotation(annotation)
         default = param.default
         if default is inspect.Signature.empty:
@@ -149,7 +164,28 @@ def _build_tool_spec(
         func=func,
         input_schema=model,
         accepts_kwargs=accepts_kwargs,
+        schema_overrides=schema_overrides,
     )
+
+
+def _annotation_to_schema(annotation: Any) -> dict[str, Any] | None:
+    if get_origin(annotation) is not Literal:
+        return None
+
+    values = list(get_args(annotation))
+    if not values:
+        return None
+
+    value_types = {type(value) for value in values}
+    if value_types == {str}:
+        return {"type": "string", "enum": values}
+    if value_types == {int}:
+        return {"type": "integer", "enum": values}
+    if value_types == {float}:
+        return {"type": "number", "enum": values}
+    if value_types == {bool}:
+        return {"type": "boolean", "enum": values}
+    return {"enum": values}
 
 
 def _schema_friendly_annotation(annotation: Any) -> Any:
