@@ -7,6 +7,10 @@ dependencies:
   - pymol-open-source=3.1.0
   - ffmpeg=7.1.1  # movie support for pymol
   - openbabel          # includes Python bindings on conda-forge
+  - anthropic>=0.40
+  - openai>=1
+  - pydantic>=2
+  - python-dotenv>=1
   - pip
   - pip:
       - -e .[dev,test,docs]   # pulls all Python deps from pyproject.toml

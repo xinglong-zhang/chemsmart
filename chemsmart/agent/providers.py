@@ -2,7 +2,7 @@
 Provider adapters for chemsmart agent.
 
 Reads api.env via python-dotenv (key: ai_api_key).
-Dispatches on AI_PROVIDER env var; v1 supports Anthropic only.
+Dispatches on AI_PROVIDER env var; v1 supports Anthropic and OpenAI.
 """
 
 import os
@@ -11,7 +11,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 _API_ENV_PATH = "/Users/hongjiseung/developer/chemsmart/api.env"
-_SUPPORTED = frozenset({"anthropic"})
+_SUPPORTED = frozenset({"anthropic", "openai"})
 
 
 class ProviderError(Exception):
@@ -42,9 +42,32 @@ class AnthropicProvider:
         return response.model_dump()
 
 
+class OpenAIProvider:
+    name = "openai"
+
+    def __init__(self, api_key: str) -> None:
+        import openai
+
+        self._client = openai.OpenAI(api_key=api_key)
+
+    def chat(
+        self,
+        messages: list,
+        tools: Optional[list] = None,
+    ) -> dict:
+        kwargs: dict = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+        response = self._client.chat.completions.create(**kwargs)
+        return response.model_dump()
+
+
 def get_provider(
     env_path: Optional[str] = None,
-) -> AnthropicProvider:
+) -> AnthropicProvider | OpenAIProvider:
     """Return a configured provider instance; raises ProviderError on failure.
 
     Validates AI_PROVIDER and ai_api_key before constructing the provider.
@@ -70,5 +93,7 @@ def get_provider(
 
     if provider_name == "anthropic":
         return AnthropicProvider(api_key)
+    if provider_name == "openai":
+        return OpenAIProvider(api_key)
 
     raise ProviderError(f"AI_PROVIDER={provider_name!r} is not supported")

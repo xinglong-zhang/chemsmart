@@ -45,6 +45,7 @@ dependencies = [
     "ipython>=8.12.3",
     "image>=1.5.33",
     "anthropic>=0.40",
+    "openai>=1",
     "python-dotenv>=1",
     "pydantic>=2",
 ]

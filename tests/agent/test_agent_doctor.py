@@ -43,6 +43,25 @@ def test_doctor_valid_anthropic(monkeypatch, api_env_file):
     assert "tools registered: 0" in result.output
 
 
+def test_doctor_valid_openai(monkeypatch, api_env_file):
+    """AI_PROVIDER=openai + valid api.env -> green output."""
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setattr(
+        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
+    )
+
+    mock_openai = MagicMock()
+    monkeypatch.setitem(sys.modules, "openai", mock_openai)
+
+    runner = CliRunner()
+    result = runner.invoke(agent, ["doctor"])
+
+    assert result.exit_code == 0, result.output
+    assert "AI_PROVIDER=openai OK" in result.output
+    assert "api.env: OK (key length=" in result.output
+    assert "tools registered: 0" in result.output
+
+
 def test_doctor_missing_ai_provider(monkeypatch, api_env_file):
     """b. Missing AI_PROVIDER -> exit != 0, message names env var."""
     monkeypatch.delenv("AI_PROVIDER", raising=False)
@@ -87,3 +106,19 @@ def test_doctor_unsupported_provider(monkeypatch, api_env_file):
     assert result.exit_code != 0
     assert "azure" in result.output
     assert "anthropic" in result.output
+    assert "openai" in result.output
+
+
+def test_doctor_unsupported_now_lists_both(monkeypatch, api_env_file):
+    """Unsupported AI_PROVIDER now lists Anthropic and OpenAI."""
+    monkeypatch.setenv("AI_PROVIDER", "bedrock")
+    monkeypatch.setattr(
+        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(agent, ["doctor"])
+
+    assert result.exit_code != 0
+    assert "anthropic" in result.output
+    assert "openai" in result.output
