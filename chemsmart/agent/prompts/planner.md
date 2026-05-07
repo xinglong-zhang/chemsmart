@@ -35,14 +35,14 @@ Task → kind mapping (mandatory):
 - "frequency", "vibrational analysis" alone -> *.freq
 - "single point", "single-point", "SP", "energy" -> *.sp (NEVER *.opt)
 - "scan", "PES scan", "potential energy scan" -> *.scan
-- "opt+freq", "opt and freq", "optimize and frequency" -> TWO build_job steps: first *.opt, then *.freq
+- "opt+freq", "opt and freq", "optimize and frequency" -> ONE *.opt job with `freq=true` in build_gaussian_settings/build_orca_settings
 
 Composite workflow rules:
-- opt+freq requires two separate `build_job` steps. Do not collapse it into one job.
-- opt -> freq should usually be:
-  build_molecule -> recommend_method -> build_*_settings -> build_job(kind=*.opt) -> dry_run_input -> validate_runtime
-  -> build_*_settings(additional_route_parameters="geom=allcheck guess=read") -> build_job(kind=*.freq, molecule="$step1", settings="$stepN") -> dry_run_input -> validate_runtime
-- opt -> single point is also two separate `build_job` steps.
+- Gaussian opt+freq should usually be:
+  build_molecule -> recommend_method -> build_gaussian_settings(freq=true) -> build_job(kind=gaussian.opt) -> dry_run_input -> validate_runtime
+- This must produce one Gaussian input file with a single route line containing both `opt` and `freq` (for example `# opt freq B3LYP 6-31G*`).
+- Use `gaussian.freq` as a standalone step only when the user explicitly provides an already-optimized structure or explicitly asks for a frequency-only job.
+- ORCA opt -> single point and other mixed workflows remain separate `build_job` steps.
 - Multi-program workflows (for example Gaussian opt then ORCA single point) are separate steps with separate settings objects.
 - Gaussian opt -> ORCA SP workflow should usually be:
   build_molecule -> recommend_method -> build_gaussian_settings -> build_job(kind=gaussian.opt) -> dry_run_input -> validate_runtime -> run_local -> extract_optimized_geometry(job="$step4") -> build_orca_settings -> build_job(kind=orca.sp, molecule="$step8") -> dry_run_input -> validate_runtime -> submit_hpc
@@ -55,7 +55,6 @@ Tool return types and step-reference guide:
 - recommend_method → pass only literal values: task (string), charge (int, default 0), multiplicity (int, default 1), project_hint (string, optional). Returns dict with keys: match, functional, basis, solvent_model, solvent_id, heavy_elements, heavy_elements_basis, rationale, available_projects. The field is `match`, not `project`.
 - build_gaussian_settings / build_orca_settings → ALWAYS pass literal string values for functional and basis. Prefer "$stepN.functional" and "$stepN.basis" from recommend_method only when recommend_method is likely to match (i.e., when project_hint is given and projects are configured). When uncertain, use safe defaults: functional="B3LYP", basis="6-31G*" for small organics (H, C, N, O), or functional="PBE0", basis="def2-SVP" for heavier elements.
 - For Gaussian route-level requests such as "tight SCF" or "very tight SCF", pass `additional_route_parameters` explicitly (for example `scf=tight` or `scf=verytight`).
-- For Gaussian opt+freq workflows, set the freq-step `additional_route_parameters` to `geom=allcheck guess=read` so the frequency job reads the optimization checkpoint.
 - build_job → pass kind using only the canonical enum above, molecule="$stepN" (Molecule), settings="$stepN" (settings object). Returns a Job object.
 - dry_run_input → pass job="$stepN" (Job). Returns dict with keys: inputfile, content.
 - validate_runtime → requires job="$stepN"; optional server. Returns dict with keys: ok ("ok"/"partial"/"fail"), local_issues, remote_unknown.
