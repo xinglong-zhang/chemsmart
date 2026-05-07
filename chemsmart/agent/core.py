@@ -4,6 +4,7 @@ import importlib
 import json
 import os
 import re
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,6 +25,29 @@ _ORCA_ROUTE_RE = re.compile(r"^\s*!\s*\S+", re.MULTILINE)
 _REFERENCE_RE = re.compile(
     r"^\$step(?P<index>\d+)(?P<path>(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$"
 )
+_INTENT_PATTERNS = {
+    "opt": (
+        r"\bopt(?:imize|imization|imisation)?\b",
+        r"\bgeometry optimi[sz]ation\b",
+    ),
+    "ts": (r"\btransition state\b", r"\bts\b"),
+    "irc": (r"\birc\b", r"\breaction path\b"),
+    "sp": (
+        r"\bsingle[ -]?point\b",
+        r"\bsp\b",
+        r"\bsingle point energy\b",
+    ),
+    "freq": (
+        r"\bfrequenc(?:y|ies)\b",
+        r"\bfreq\b",
+        r"\bvibrational\b",
+    ),
+    "scan": (r"\bscan\b", r"\bpes\b"),
+}
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 class Step(BaseModel):
@@ -40,6 +64,7 @@ class Plan(BaseModel):
 
 class CriticVerdict(BaseModel):
     verdict: Literal["ok", "warn", "reject"]
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     issues: list[str] = Field(default_factory=list)
     rationale: str = ""
 
@@ -49,6 +74,9 @@ class SessionState(BaseModel):
 
     session_id: str
     cwd: str
+    started_at: str = Field(default_factory=_utc_now_iso)
+    request_intent: str = "unknown"
+    total_steps_planned: int = 0
     current_step_index: int = 0
     plan: Plan | None = None
     request: str | None = None
@@ -105,6 +133,7 @@ class AgentSession:
         self.state: SessionState | None = None
         self.session_dir: Path | None = None
         self.decision_log: DecisionLog | None = None
+        self._run_start_time: float | None = None
 
     @classmethod
     def resume(
@@ -116,6 +145,7 @@ class AgentSession:
         session._load_existing_session(session_id)
         assert session.state is not None
         assert session.decision_log is not None
+        session._run_start_time = time.perf_counter()
         original_cwd = os.getcwd()
         os.chdir(session.state.cwd)
         try:
@@ -139,6 +169,7 @@ class AgentSession:
         allow_remote_unknown: bool = False,
         allow_critic_override: bool = False,
     ) -> dict[str, Any]:
+        self._run_start_time = time.perf_counter()
         session_id = _new_session_id()
         self.session_dir = self.session_root / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
@@ -159,6 +190,8 @@ class AgentSession:
 
         plan = self._planner_call(request)
         self.state.plan = plan
+        self.state.request_intent = _classify_intent(request)
+        self.state.total_steps_planned = len(plan.steps)
         self._save_state()
         self.decision_log.write(
             "plan", plan.model_dump(), rationale=plan.rationale
@@ -189,57 +222,103 @@ class AgentSession:
         results = list(completed_results)
         dry_run_result = self._find_prior_result(results, "dry_run_input")
         runtime_result = self._find_prior_result(results, "validate_runtime")
-
-        risky_start = len(plan.steps)
-        for step_index in range(
-            self.state.current_step_index, len(plan.steps)
-        ):
-            step = plan.steps[step_index]
-            if step.tool in _RISKY_TOOLS:
-                risky_start = step_index
-                break
-            result = self._execute_step(step_index, step, results)
-            results.append(result)
-            self.state.current_step_index = step_index + 1
-            self._save_state()
-            if step.tool == "dry_run_input":
-                dry_run_result = result
-            elif step.tool == "validate_runtime":
-                runtime_result = result
+        verdict: CriticVerdict | None = self._get_logged_verdict()
+        blocked = False
+        block_reason: str | None = None
+        run_error: Exception | None = None
 
         preview_submit = None
-        if (
-            risky_start < len(plan.steps)
-            and plan.steps[risky_start].tool == "submit_hpc"
-        ):
-            preview_submit = self._preview_submit_step(
-                risky_start,
-                plan.steps[risky_start],
-                results,
+        risky_start = len(plan.steps)
+        try:
+            for step_index in range(
+                self.state.current_step_index, len(plan.steps)
+            ):
+                step = plan.steps[step_index]
+                if step.tool in _RISKY_TOOLS:
+                    risky_start = step_index
+                    break
+                result = self._execute_step(step_index, step, results)
+                results.append(result)
+                self.state.current_step_index = step_index + 1
+                self._save_state()
+                if step.tool == "dry_run_input":
+                    dry_run_result = result
+                elif step.tool == "validate_runtime":
+                    runtime_result = result
+
+            if (
+                risky_start < len(plan.steps)
+                and plan.steps[risky_start].tool == "submit_hpc"
+            ):
+                preview_submit = self._preview_submit_step(
+                    risky_start,
+                    plan.steps[risky_start],
+                    results,
+                )
+
+            verdict = verdict or self._critic_call(
+                plan=plan,
+                dry_run_result=dry_run_result,
+            )
+            verdict = self._apply_deterministic_gates(
+                verdict=verdict,
+                runtime_result=runtime_result,
+                dry_run_result=dry_run_result,
+                preview_submit=preview_submit,
+            )
+            self.decision_log.write(
+                "critic_verdict",
+                verdict.model_dump(),
+                rationale=verdict.rationale,
             )
 
-        verdict = self._get_logged_verdict() or self._critic_call(
-            plan=plan,
-            dry_run_result=dry_run_result,
-        )
-        verdict = self._apply_deterministic_gates(
-            verdict=verdict,
-            runtime_result=runtime_result,
-            dry_run_result=dry_run_result,
-            preview_submit=preview_submit,
-        )
-        self.decision_log.write(
-            "critic_verdict",
-            verdict.model_dump(),
-            rationale=verdict.rationale,
-        )
+            block_reason = self._block_reason(
+                verdict=verdict,
+                allow_remote_unknown=allow_remote_unknown,
+                allow_critic_override=allow_critic_override,
+            )
+            blocked = block_reason is not None
+            if blocked:
+                return {
+                    "session_id": self.state.session_id,
+                    "session_dir": str(self.session_dir),
+                    "plan": plan,
+                    "plan_text": render_plan(plan) if rerender_plan else None,
+                    "critic_verdict": verdict,
+                    "completed_steps": self.state.current_step_index,
+                    "blocked": True,
+                    "dry_run_result": dry_run_result,
+                    "runtime_result": runtime_result,
+                    "preview_submit": preview_submit,
+                }
 
-        should_block = self._should_block(
-            verdict=verdict,
-            allow_remote_unknown=allow_remote_unknown,
-            allow_critic_override=allow_critic_override,
-        )
-        if should_block:
+            for step_index in range(risky_start, len(plan.steps)):
+                if step_index < self.state.current_step_index:
+                    continue
+                step = plan.steps[step_index]
+                if (
+                    step.tool == "submit_hpc"
+                    and preview_submit is not None
+                    and dry_submit
+                ):
+                    result = preview_submit
+                    self._record_final_preview_step(step_index, step, result)
+                else:
+                    extra_kwargs = {}
+                    if step.tool == "submit_hpc":
+                        extra_kwargs["execute"] = not dry_submit
+                        if self.transport is not None:
+                            extra_kwargs["transport"] = self.transport
+                    result = self._execute_step(
+                        step_index,
+                        step,
+                        results,
+                        extra_kwargs=extra_kwargs,
+                    )
+                results.append(result)
+                self.state.current_step_index = step_index + 1
+                self._save_state()
+
             return {
                 "session_id": self.state.session_id,
                 "session_dir": str(self.session_dir),
@@ -247,52 +326,23 @@ class AgentSession:
                 "plan_text": render_plan(plan) if rerender_plan else None,
                 "critic_verdict": verdict,
                 "completed_steps": self.state.current_step_index,
-                "blocked": True,
+                "blocked": False,
                 "dry_run_result": dry_run_result,
                 "runtime_result": runtime_result,
                 "preview_submit": preview_submit,
+                "results": results,
             }
-
-        for step_index in range(risky_start, len(plan.steps)):
-            if step_index < self.state.current_step_index:
-                continue
-            step = plan.steps[step_index]
-            if (
-                step.tool == "submit_hpc"
-                and preview_submit is not None
-                and dry_submit
-            ):
-                result = preview_submit
-                self._record_final_preview_step(step_index, step, result)
-            else:
-                extra_kwargs = {}
-                if step.tool == "submit_hpc":
-                    extra_kwargs["execute"] = not dry_submit
-                    if self.transport is not None:
-                        extra_kwargs["transport"] = self.transport
-                result = self._execute_step(
-                    step_index,
-                    step,
-                    results,
-                    extra_kwargs=extra_kwargs,
-                )
-            results.append(result)
-            self.state.current_step_index = step_index + 1
-            self._save_state()
-
-        return {
-            "session_id": self.state.session_id,
-            "session_dir": str(self.session_dir),
-            "plan": plan,
-            "plan_text": render_plan(plan) if rerender_plan else None,
-            "critic_verdict": verdict,
-            "completed_steps": self.state.current_step_index,
-            "blocked": False,
-            "dry_run_result": dry_run_result,
-            "runtime_result": runtime_result,
-            "preview_submit": preview_submit,
-            "results": results,
-        }
+        except Exception as exc:
+            run_error = exc
+            raise
+        finally:
+            self._finalize_session(
+                verdict=verdict,
+                blocked=blocked,
+                block_reason=block_reason,
+                dry_run_result=dry_run_result,
+                run_error=run_error,
+            )
 
     def _provider_instance(self) -> Any:
         if self._provider is None:
@@ -356,17 +406,36 @@ class AgentSession:
         resolved_args = _resolve_refs(step.args, prior_results)
         if extra_kwargs:
             resolved_args.update(extra_kwargs)
+        ts_start = _utc_now_iso()
+        step_start_time = time.perf_counter()
         self.decision_log.write(
             "tool_call",
             {
                 "step_index": step_index,
                 "tool": step.tool,
                 "args": _preview_value(resolved_args),
+                "ts_start": ts_start,
+                "step_wall_time_ms": None,
             },
             rationale=step.rationale,
         )
         result = self.registry.call(step.tool, resolved_args)
         if _is_tool_error(result):
+            error = result["error"]
+            self.decision_log.write(
+                "tool_error",
+                {
+                    "step_index": step_index,
+                    "tool": step.tool,
+                    "error_type": error.get("type", "RuntimeError"),
+                    "message": error.get("message", "Unknown tool error"),
+                    "payload": _preview_value(result),
+                    "ts_start": ts_start,
+                    "ts_end": _utc_now_iso(),
+                    "step_wall_time_ms": _elapsed_ms(step_start_time),
+                },
+                rationale=step.rationale,
+            )
             raise RuntimeError(result["error"]["message"])
         artifact_path = self._write_result_artifact(step_index, result)
         self.decision_log.write(
@@ -376,6 +445,8 @@ class AgentSession:
                 "tool": step.tool,
                 "artifact": artifact_path.name,
                 "payload": _preview_value(result),
+                "ts_end": _utc_now_iso(),
+                "step_wall_time_ms": _elapsed_ms(step_start_time),
             },
             rationale=step.rationale,
         )
@@ -432,6 +503,85 @@ class AgentSession:
             },
             rationale=step.rationale,
         )
+
+    def _finalize_session(
+        self,
+        verdict: CriticVerdict | None,
+        blocked: bool,
+        block_reason: str | None,
+        dry_run_result: dict[str, Any] | None,
+        run_error: Exception | None = None,
+    ) -> None:
+        assert self.state is not None
+        assert self.session_dir is not None
+        assert self.decision_log is not None
+
+        ended_at = _utc_now_iso()
+        effective_blocked = blocked or run_error is not None
+        effective_block_reason = block_reason
+        if run_error is not None and effective_block_reason is None:
+            effective_block_reason = (
+                f"exception:{run_error.__class__.__name__}"
+            )
+
+        wall_time_ms = _elapsed_ms(
+            self._run_start_time,
+            started_at=self.state.started_at,
+            ended_at=ended_at,
+        )
+        summary = {
+            "total_steps_executed": self.state.current_step_index,
+            "total_steps_planned": self.state.total_steps_planned,
+            "blocked": effective_blocked,
+            "block_reason": effective_block_reason,
+            "wall_time_ms": wall_time_ms,
+            "tools_called": self._tools_called(),
+            "critic_confidence": (
+                verdict.confidence if verdict is not None else None
+            ),
+            "request_intent": self.state.request_intent,
+        }
+        self.decision_log.write("session_summary", summary)
+
+        metadata = {
+            "session_id": self.state.session_id,
+            "request": self.state.request,
+            "intent": self.state.request_intent,
+            "request_intent": self.state.request_intent,
+            "plan_steps": self.state.total_steps_planned,
+            "executed_steps": self.state.current_step_index,
+            "input_file": (
+                str(dry_run_result.get("inputfile"))
+                if dry_run_result and dry_run_result.get("inputfile")
+                else None
+            ),
+            "critic_verdict": (
+                verdict.verdict if verdict is not None else None
+            ),
+            "critic_confidence": (
+                verdict.confidence if verdict is not None else None
+            ),
+            "blocked": effective_blocked,
+            "block_reason": effective_block_reason,
+            "wall_time_ms": wall_time_ms,
+            "started_at": self.state.started_at,
+            "ended_at": ended_at,
+        }
+        (self.session_dir / "session_metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+    def _tools_called(self) -> list[str]:
+        assert self.decision_log is not None
+        tools: list[str] = []
+        for entry in self.decision_log.read_all():
+            if entry.get("kind") not in {"tool_call", "tool_preview"}:
+                continue
+            tool = entry.get("payload", {}).get("tool")
+            if isinstance(tool, str) and tool not in tools:
+                tools.append(tool)
+        return tools
 
     def _write_result_artifact(self, step_index: int, result: Any) -> Path:
         assert self.session_dir is not None
@@ -537,20 +687,21 @@ class AgentSession:
 
         return CriticVerdict(
             verdict=final_verdict,
+            confidence=verdict.confidence,
             issues=_dedupe_strings(issues),
             rationale="; ".join(part for part in rationale_parts if part),
         )
 
     @staticmethod
-    def _should_block(
+    def _block_reason(
         verdict: CriticVerdict,
         allow_remote_unknown: bool,
         allow_critic_override: bool,
-    ) -> bool:
+    ) -> str | None:
         if verdict.verdict == "reject":
-            return True
+            return "critic_reject"
         if verdict.verdict == "ok":
-            return False
+            return None
 
         has_remote_unknown = any(
             issue.startswith("server.")
@@ -569,10 +720,10 @@ class AgentSession:
         if not verdict.issues:
             has_other_warn = True
         if has_remote_unknown and not allow_remote_unknown:
-            return True
+            return "critic_warn_remote_unknown"
         if has_other_warn and not allow_critic_override:
-            return True
-        return False
+            return "critic_warn_no_override"
+        return None
 
 
 def render_plan(plan: Plan) -> str:
@@ -623,9 +774,46 @@ def _env_snapshot() -> dict[str, str | None]:
     }
 
 
+def _classify_intent(request: str) -> str:
+    normalized = request.lower()
+    matches = [
+        intent
+        for intent, patterns in _INTENT_PATTERNS.items()
+        if any(re.search(pattern, normalized) for pattern in patterns)
+    ]
+    if not matches:
+        return "unknown"
+    unique_matches = list(dict.fromkeys(matches))
+    if len(unique_matches) == 1:
+        return unique_matches[0]
+
+    has_composite_marker = any(
+        marker in normalized for marker in ("+", " then ", " and ", " after ")
+    )
+    non_opt = [intent for intent in unique_matches if intent != "opt"]
+    if len(non_opt) == 1 and not has_composite_marker:
+        return non_opt[0]
+    return "composite"
+
+
 def _load_prompt(name: str) -> str:
     prompt_path = Path(__file__).with_name("prompts") / name
     return prompt_path.read_text(encoding="utf-8")
+
+
+def _elapsed_ms(
+    start_time: float | None,
+    *,
+    started_at: str | None = None,
+    ended_at: str | None = None,
+) -> int:
+    if start_time is not None:
+        return max(0, int(round((time.perf_counter() - start_time) * 1000)))
+    if started_at is not None and ended_at is not None:
+        started = datetime.fromisoformat(started_at)
+        ended = datetime.fromisoformat(ended_at)
+        return max(0, int(round((ended - started).total_seconds() * 1000)))
+    return 0
 
 
 def _parse_json_response(response: Any) -> dict[str, Any]:
