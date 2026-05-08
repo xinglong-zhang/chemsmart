@@ -11,10 +11,27 @@ from chemsmart.agent.providers import ProviderError
 from chemsmart.agent.registry import ToolRegistry
 
 
-@click.group(name="agent")
-def agent():
+@click.group(name="agent", invoke_without_command=True)
+@click.option(
+    "--plain",
+    is_flag=True,
+    default=False,
+    help="Run the agent TUI in plain inline mode for conservative terminals.",
+)
+@click.pass_context
+def agent(ctx, plain: bool):
     """AI-scientist agent commands for chemsmart."""
-    pass
+    if ctx.invoked_subcommand is not None:
+        return
+    try:
+        from chemsmart.agent.tui import launch_tui
+    except ImportError as exc:
+        click.echo(
+            "The agent TUI requires optional dependencies. "
+            'Install them with: pip install -e ".[agent-tui]"'
+        )
+        raise click.exceptions.Exit(1) from exc
+    launch_tui(plain=plain)
 
 
 @agent.command()

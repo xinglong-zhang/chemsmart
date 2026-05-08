@@ -76,6 +76,11 @@ docs = [
     "rstcheck",
     "rstfmt",
 ]
+agent-tui = [
+    "textual>=0.80,<1.0",
+    "watchdog>=3,<5",
+    "pyperclip",
+]
 
 [project.urls]
 ##"Documentation" = "https://documentation_url"
@@ -94,6 +99,7 @@ exclude = [".github"]
     "settings/templates/**",
     "settings/templates/.chemsmart/**",
     "agent/prompts/*.md",
+    "agent/tui/*.tcss",
 ]
 
 [tool.flake8]

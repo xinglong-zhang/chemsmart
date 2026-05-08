@@ -1,0 +1,53 @@
+"""Textual worker helpers for running AgentSession methods."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from textual import work
+
+from chemsmart.agent.core import AgentSession
+
+
+class SessionRunnerMixin:
+    session_root: Path
+    active_agent_session: AgentSession | None = None
+    active_resume_id: str | None = None
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
+        name="agent-run",
+    )
+    def run_agent_session(self, request: str) -> dict[str, Any]:
+        self.active_resume_id = None
+        self.active_agent_session = AgentSession(
+            session_root=str(self.session_root)
+        )
+        return self.active_agent_session.run(request, dry_submit=True)
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
+        name="agent-resume",
+    )
+    def resume_agent_session(self, session_id: str) -> dict[str, Any]:
+        self.active_resume_id = session_id
+        self.active_agent_session = None
+        return AgentSession.resume(
+            session_id,
+            session_root=str(self.session_root),
+            dry_submit=True,
+        )
+
+    def current_session_dir(self) -> Path | None:
+        if self.active_agent_session is not None:
+            return self.active_agent_session.session_dir
+        if self.active_resume_id:
+            return self.session_root / self.active_resume_id
+        return None

@@ -1,0 +1,39 @@
+Screen {
+    background: $background;
+}
+
+Transcript {
+    margin: 1 1 0 1;
+}
+
+Composer {
+    margin: 1;
+}
+
+FooterWidget {
+    dock: bottom;
+}
+
+.user-cell {
+    border: round $accent;
+}
+
+.agent-cell {
+    border: round $primary;
+}
+
+.plan-cell {
+    border: round $warning;
+}
+
+.dry-run-cell {
+    border: round $success;
+}
+
+.critic-cell {
+    border: round $secondary;
+}
+
+.error-cell {
+    border: round $error;
+}
