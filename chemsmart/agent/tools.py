@@ -147,6 +147,7 @@ _UNRESOLVED_ENVVAR_PATTERN = re.compile(
 
 
 def build_molecule(filepath: str, index: str = "-1") -> Molecule:
+    """Load one molecule from a structure file using chemsmart parsing."""
     return Molecule.from_filepath(
         filepath=filepath,
         index=index,
@@ -170,6 +171,7 @@ def build_gaussian_settings(
     additional_route_parameters=None,
     **extras,
 ) -> GaussianJobSettings:
+    """Build validated Gaussian job settings from planner-supplied fields."""
     return GaussianJobSettings(
         functional=functional,
         basis=basis,
@@ -228,6 +230,7 @@ def build_orca_settings(
     invert_constraints=False,
     **extras,
 ) -> ORCAJobSettings:
+    """Build validated ORCA job settings from planner-supplied fields."""
     return ORCAJobSettings(
         ab_initio=ab_initio,
         functional=functional,
@@ -277,6 +280,7 @@ def build_job(
     label: str | None = None,
     jobrunner=None,
 ) -> Job:
+    """Instantiate a chemsmart job object for a canonical agent job kind."""
     normalized_kind = (kind or "").strip().lower()
     normalized_kind = _JOB_KIND_ALIASES.get(normalized_kind, normalized_kind)
     job_class = _JOB_CLASS_BY_KIND.get(normalized_kind)
@@ -308,6 +312,7 @@ def build_job(
 
 
 def dry_run_input(job: Job) -> dict[str, str]:
+    """Render a job input file and return its absolute path and contents."""
     target_directory = os.path.abspath(job.folder)
     job.set_folder(target_directory)
     if job.jobrunner is None:
@@ -334,6 +339,7 @@ def validate_runtime(
     job: Job,
     server=None,
 ) -> dict[str, Any]:
+    """Check local/runtime prerequisites and remote unknowns for a job."""
     local_issues = _validate_job_fields(job)
     remote_unknown = []
 
@@ -420,6 +426,7 @@ def validate_runtime(
 
 
 def run_local(job: Job) -> dict[str, Any]:
+    """Execute a job locally and summarize the generated output artifacts."""
     job_folder = os.path.abspath(job.folder)
     os.makedirs(job_folder, exist_ok=True)
     job.set_folder(job_folder)
@@ -458,17 +465,7 @@ def run_local(job: Job) -> dict[str, Any]:
 
 
 def extract_optimized_geometry(job: Job) -> Molecule:
-    """Extract final optimized geometry from a completed job output log.
-
-    Use after run_local completes. Reads the completed Gaussian or ORCA
-    output file from the job folder and returns a Molecule containing the
-    last optimized Cartesian coordinates while preserving charge and
-    multiplicity from job.settings.
-
-    Raises:
-        FileNotFoundError: If the job output log does not exist.
-        ValueError: If no optimized geometry block can be parsed.
-    """
+    """Extract the final optimized geometry from a completed job log."""
     logfile = _resolve_geometry_logfile(job)
     if not os.path.exists(logfile):
         raise FileNotFoundError(f"Output log not found: {logfile}")
@@ -496,10 +493,11 @@ def extract_optimized_geometry(job: Job) -> Molecule:
 
 def submit_hpc(
     job: Job,
-    server,
+    server=None,
     transport: SubmitTransport | None = None,
     execute: bool = False,
 ) -> dict[str, Any]:
+    """Generate and optionally submit an HPC script for a prepared job."""
     selected_transport = _select_submit_transport(
         transport=transport,
         execute=execute,
@@ -555,6 +553,7 @@ def recommend_method(
     atomic_numbers: list[int] | None = None,
     project_hint: str | None = None,
 ) -> dict[str, Any]:
+    """Return a conservative project-based method recommendation or no-match."""
     user_settings = ChemsmartUserSettings()
     available_project_paths = _get_available_project_paths(user_settings)
     available_projects = sorted(available_project_paths)
@@ -965,11 +964,28 @@ def _check_duplicate_submission(job: Job) -> dict[str, Any]:
 
 
 def _coerce_server(server) -> Server:
+    if server is None:
+        server = _default_submit_server_name()
     if isinstance(server, Server):
         return server
     if isinstance(server, str):
         return Server.from_servername(server)
     raise TypeError("server must be a chemsmart.settings.server.Server or str")
+
+
+def _default_submit_server_name() -> str:
+    user_settings = ChemsmartUserSettings()
+    available_servers = sorted(user_settings.all_available_servers)
+    if len(available_servers) == 1:
+        return available_servers[0]
+    if not available_servers:
+        raise ValueError(
+            "submit_hpc requires server when no configured servers are available"
+        )
+    raise ValueError(
+        "submit_hpc requires server when multiple configured servers are "
+        f"available: {', '.join(available_servers)}"
+    )
 
 
 def _reconstruct_submit_cli_args(job: Job, server: Server) -> list[str]:

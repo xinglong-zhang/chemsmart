@@ -94,11 +94,25 @@ def test_session_metadata_json_is_written_with_required_keys(
         "wall_time_ms",
         "started_at",
         "ended_at",
+        "provider_name",
+        "resolved_model",
+        "git_sha",
+        "schema_hash",
+        "total_input_tokens",
+        "total_output_tokens",
     } <= metadata.keys()
     assert metadata["intent"] == "opt"
     assert metadata["plan_steps"] == 5
     assert metadata["critic_confidence"] == 0.83
     assert metadata["input_file"].endswith("metadata_case.com")
+    assert metadata["provider_name"] == "openai"
+    assert metadata["resolved_model"] == "gpt-5.4-mock"
+    assert isinstance(metadata["git_sha"], str)
+    assert len(metadata["git_sha"]) == 40
+    assert isinstance(metadata["schema_hash"], str)
+    assert len(metadata["schema_hash"]) == 64
+    assert metadata["total_input_tokens"] > 0
+    assert metadata["total_output_tokens"] > 0
 
 
 def test_tool_error_is_logged_before_runtime_error(
@@ -323,6 +337,10 @@ def test_session_summary_is_last_entry_with_tools_called(
         "validate_runtime",
         "run_local",
     ]
+    assert entries[-1]["payload"]["provider_name"] == "openai"
+    assert entries[-1]["payload"]["resolved_model"] == "gpt-5.4-mock"
+    assert entries[-1]["payload"]["total_input_tokens"] > 0
+    assert entries[-1]["payload"]["total_output_tokens"] > 0
 
 
 def test_critic_confidence_is_logged_in_critic_verdict_entry(
@@ -357,3 +375,55 @@ def test_critic_confidence_is_logged_in_critic_verdict_entry(
         if entry["kind"] == "critic_verdict"
     )
     assert verdict_entry["payload"]["confidence"] == 0.91
+
+
+def test_llm_parse_error_logs_full_raw_response_and_retries(
+    monkeypatch,
+    single_molecule_xyz_file,
+    tmp_path: Path,
+):
+    _patch_runtime_ok(monkeypatch)
+    sleep_calls = []
+
+    def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr("chemsmart.agent.core.time.sleep", fake_sleep)
+
+    provider = FakeProvider(
+        [
+            {
+                "__raw_response__": {
+                    "content": "{not valid json",
+                    "model": "gpt-5.4-mock",
+                }
+            },
+            planner_plan(single_molecule_xyz_file, "retry_case"),
+            {
+                "verdict": "ok",
+                "confidence": 0.8,
+                "issues": [],
+                "rationale": "Looks good.",
+            },
+        ]
+    )
+    session = AgentSession(
+        provider=provider,
+        registry=ToolRegistry.default(),
+        session_root=tmp_path / "sessions",
+    )
+
+    result = session.run("optimize with retry logging", dry_submit=True)
+
+    assert result["blocked"] is False
+    assert sleep_calls == [1]
+    entries = _read_decision_log(Path(result["session_dir"]))
+    llm_error = next(
+        entry for entry in entries if entry["kind"] == "llm_error"
+    )
+    assert llm_error["payload"]["stage"] == "planner"
+    assert llm_error["payload"]["attempt"] == 1
+    assert (
+        llm_error["payload"]["raw_response"]
+        == '{"content": "{not valid json", "model": "gpt-5.4-mock"}'
+    )

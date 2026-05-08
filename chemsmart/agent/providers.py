@@ -31,6 +31,7 @@ _AVAILABLE_MODELS = {
 }
 _SUPPORTED = frozenset(_AVAILABLE_MODELS)
 _PING_MESSAGES = [{"role": "user", "content": "ping"}]
+DEFAULT_TIMEOUT_S = 30
 
 
 class ProviderError(Exception):
@@ -54,11 +55,13 @@ class AnthropicProvider:
         self,
         messages: list,
         tools: Optional[list] = None,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
     ) -> dict:
         kwargs: dict[str, Any] = {
             "model": self.default_model,
             "max_tokens": 4096,
             "messages": messages,
+            "timeout": timeout_s,
         }
         if tools:
             kwargs["tools"] = tools
@@ -72,6 +75,7 @@ class AnthropicProvider:
                 model=self.default_model,
                 max_tokens=5,
                 messages=_PING_MESSAGES,
+                timeout=DEFAULT_TIMEOUT_S,
             )
         except Exception as exc:
             raise ProviderError(f"ping failed: {exc}") from exc
@@ -100,10 +104,12 @@ class OpenAIProvider:
         self,
         messages: list,
         tools: Optional[list] = None,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
     ) -> dict:
         kwargs: dict[str, Any] = {
             "model": self.default_model,
             "messages": messages,
+            "timeout": timeout_s,
         }
         if tools:
             kwargs["tools"] = tools
@@ -117,6 +123,7 @@ class OpenAIProvider:
                 model=self.default_model,
                 messages=_PING_MESSAGES,
                 max_tokens=5,
+                timeout=DEFAULT_TIMEOUT_S,
             )
         except Exception as exc:
             raise ProviderError(f"ping failed: {exc}") from exc
@@ -178,3 +185,25 @@ def _resolve_model(response: Any, fallback: str) -> str:
 
 def _latency_ms(started: float) -> int:
     return max(0, int((time.perf_counter() - started) * 1000))
+
+
+def extract_response_usage(response: Any) -> dict[str, int | None]:
+    usage = None
+    if isinstance(response, dict):
+        usage = response.get("usage")
+    elif hasattr(response, "model_dump"):
+        usage = response.model_dump().get("usage")
+
+    if not isinstance(usage, dict):
+        return {"input_tokens": None, "output_tokens": None}
+
+    input_tokens = usage.get("input_tokens", usage.get("prompt_tokens"))
+    output_tokens = usage.get("output_tokens", usage.get("completion_tokens"))
+    return {
+        "input_tokens": (
+            int(input_tokens) if isinstance(input_tokens, int) else None
+        ),
+        "output_tokens": (
+            int(output_tokens) if isinstance(output_tokens, int) else None
+        ),
+    }

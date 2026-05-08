@@ -62,3 +62,26 @@ def test_submit_hpc_execute_true_uses_provided_transport(
     assert result["job_id"] == "mock-job-0001"
     assert len(transport.calls) == 1
     assert transport.calls[0]["working_dir"] == str(Path(job.folder).resolve())
+
+
+def test_submit_hpc_uses_sole_configured_server_when_omitted(
+    monkeypatch,
+    tmp_path: Path,
+    single_molecule_xyz_file,
+):
+    build_submit_server(monkeypatch, tmp_path, server_name="default-server")
+    job = build_gaussian_submit_job(
+        single_molecule_xyz_file,
+        tmp_path / "default-server-job",
+        kind="gaussian.opt",
+        label="default_server_job",
+    )
+
+    result = submit_hpc(
+        job,
+        execute=False,
+    )
+
+    assert result["transport"] == "LocalDryRunTransport"
+    assert result["script_path"] is not None
+    assert Path(result["script_path"]).exists()

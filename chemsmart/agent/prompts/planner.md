@@ -60,4 +60,4 @@ Tool return types and step-reference guide:
 - validate_runtime → requires job="$stepN"; optional server. Returns dict with keys: ok ("ok"/"partial"/"fail"), local_issues, remote_unknown.
 - run_local → pass job="$stepN". Returns dict with keys: ok, returncode, stdout_path, stderr_path, output_summary. After `run_local` on a Gaussian opt job, call `extract_optimized_geometry` with the earlier Gaussian optimization `build_job` result, not the `run_local` dict.
 - extract_optimized_geometry → pass job="$stepN" where `$stepN` is the completed Gaussian or ORCA optimization job object. Returns a Molecule object containing the final optimized geometry for handoff into the next build_job step.
-- submit_hpc → pass job="$stepN". Risky tool — placed after critic gating.
+- submit_hpc → pass job="$stepN". If the user specifies a server or multiple configured servers may exist, also pass `server`. When exactly one server is configured, `server` may be omitted and the tool will use that default. Risky tool — placed after critic gating.

@@ -8,11 +8,21 @@ class FakeProvider:
     def __init__(self, responses: list[dict[str, Any]]):
         self._responses = list(responses)
         self.calls: list[dict[str, Any]] = []
+        self.name = "openai"
+        self.default_model = "gpt-5.4-mock"
 
-    def chat(self, messages, tools=None):
-        self.calls.append({"messages": messages, "tools": tools})
+    def chat(self, messages, tools=None, timeout_s=30):
+        self.calls.append(
+            {"messages": messages, "tools": tools, "timeout_s": timeout_s}
+        )
         response = self._responses.pop(0)
-        return {"content": json.dumps(response)}
+        if isinstance(response, dict) and response.get("__raw_response__"):
+            return response["__raw_response__"]
+        return {
+            "content": json.dumps(response),
+            "model": self.default_model,
+            "usage": {"prompt_tokens": 100, "completion_tokens": 25},
+        }
 
     def ping(self):
         return {

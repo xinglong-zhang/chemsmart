@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import os
 import re
+import subprocess
 import time
 import uuid
 from datetime import UTC, datetime
@@ -12,7 +14,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from chemsmart.agent.providers import get_provider
+from chemsmart.agent.providers import (
+    DEFAULT_TIMEOUT_S,
+    extract_response_usage,
+    get_provider,
+)
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -44,6 +50,8 @@ _INTENT_PATTERNS = {
     ),
     "scan": (r"\bscan\b", r"\bpes\b"),
 }
+_LLM_MAX_ATTEMPTS = 3
+_LLM_BACKOFF_SECONDS = (1, 2, 4)
 
 
 def _utc_now_iso() -> str:
@@ -134,6 +142,7 @@ class AgentSession:
         self.session_dir: Path | None = None
         self.decision_log: DecisionLog | None = None
         self._run_start_time: float | None = None
+        self._llm_stats: list[dict[str, Any]] = []
 
     @classmethod
     def resume(
@@ -353,11 +362,11 @@ class AgentSession:
         return self._provider
 
     def _planner_call(self, request: str) -> Plan:
-        provider = self._provider_instance()
         prompt = _load_prompt("planner.md")
         tool_defs = self.registry.openai_tool_defs()
-        response = provider.chat(
-            [
+        return self._llm_json_call(
+            stage="planner",
+            messages=[
                 {"role": "system", "content": prompt},
                 {
                     "role": "user",
@@ -369,19 +378,18 @@ class AgentSession:
                     ),
                 },
             ],
-            tools=None,
+            model_cls=Plan,
         )
-        return Plan.model_validate(_parse_json_response(response))
 
     def _critic_call(
         self,
         plan: Plan,
         dry_run_results: list[dict[str, Any]],
     ) -> CriticVerdict:
-        provider = self._provider_instance()
         prompt = _load_prompt("critic.md")
-        response = provider.chat(
-            [
+        return self._llm_json_call(
+            stage="critic",
+            messages=[
                 {"role": "system", "content": prompt},
                 {
                     "role": "user",
@@ -393,9 +401,149 @@ class AgentSession:
                     ),
                 },
             ],
-            tools=None,
+            model_cls=CriticVerdict,
         )
-        return CriticVerdict.model_validate(_parse_json_response(response))
+
+    def _llm_json_call(
+        self,
+        *,
+        stage: str,
+        messages: list[dict[str, Any]],
+        model_cls: type[BaseModel],
+    ) -> Any:
+        provider = self._provider_instance()
+        last_error: Exception | None = None
+
+        for attempt in range(1, _LLM_MAX_ATTEMPTS + 1):
+            response = None
+            started = time.perf_counter()
+            try:
+                response = provider.chat(
+                    messages,
+                    tools=None,
+                    timeout_s=DEFAULT_TIMEOUT_S,
+                )
+                parsed = _parse_json_response(response)
+                model = model_cls.model_validate(parsed)
+                self._record_llm_stats(
+                    stage=stage,
+                    attempt=attempt,
+                    provider=provider,
+                    messages=messages,
+                    response=response,
+                    latency_ms=_elapsed_ms(started),
+                )
+                return model
+            except Exception as exc:
+                last_error = exc
+                self._log_llm_failure(
+                    stage=stage,
+                    attempt=attempt,
+                    provider=provider,
+                    messages=messages,
+                    response=response,
+                    error=exc,
+                    latency_ms=_elapsed_ms(started),
+                )
+                if attempt >= _LLM_MAX_ATTEMPTS:
+                    break
+                time.sleep(_LLM_BACKOFF_SECONDS[attempt - 1])
+
+        assert last_error is not None
+        raise last_error
+
+    def _record_llm_stats(
+        self,
+        *,
+        stage: str,
+        attempt: int,
+        provider: Any,
+        messages: list[dict[str, Any]],
+        response: Any,
+        latency_ms: int,
+    ) -> None:
+        usage = extract_response_usage(response)
+        input_tokens = usage["input_tokens"]
+        output_tokens = usage["output_tokens"]
+        raw_response = _stringify_response(response)
+        if input_tokens is None:
+            input_tokens = _estimate_tokens(messages)
+        if output_tokens is None:
+            output_tokens = _estimate_tokens(raw_response)
+
+        self._llm_stats.append(
+            {
+                "stage": stage,
+                "attempt": attempt,
+                "provider_name": getattr(provider, "name", None),
+                "resolved_model": _resolved_model_for_response(
+                    provider, response
+                ),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "latency_ms": latency_ms,
+                "success": True,
+            }
+        )
+
+    def _log_llm_failure(
+        self,
+        *,
+        stage: str,
+        attempt: int,
+        provider: Any,
+        messages: list[dict[str, Any]],
+        response: Any,
+        error: Exception,
+        latency_ms: int,
+    ) -> None:
+        if self.decision_log is None:
+            pass
+
+        raw_response = _stringify_response(response)
+        usage = extract_response_usage(response)
+        input_tokens = usage["input_tokens"]
+        output_tokens = usage["output_tokens"]
+        if input_tokens is None:
+            input_tokens = _estimate_tokens(messages)
+        if output_tokens is None:
+            output_tokens = _estimate_tokens(raw_response)
+
+        self._llm_stats.append(
+            {
+                "stage": stage,
+                "attempt": attempt,
+                "provider_name": getattr(provider, "name", None),
+                "resolved_model": _resolved_model_for_response(
+                    provider, response
+                ),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "latency_ms": latency_ms,
+                "success": False,
+            }
+        )
+
+        if self.decision_log is None:
+            return
+
+        self.decision_log.write(
+            "llm_error",
+            {
+                "stage": stage,
+                "attempt": attempt,
+                "provider_name": getattr(provider, "name", None),
+                "resolved_model": _resolved_model_for_response(
+                    provider, response
+                ),
+                "error_type": error.__class__.__name__,
+                "message": str(error),
+                "messages": messages,
+                "raw_response": raw_response,
+                "step_wall_time_ms": latency_ms,
+            },
+            rationale=f"{stage} attempt {attempt} failed",
+        )
 
     def _execute_step(
         self,
@@ -562,10 +710,15 @@ class AgentSession:
                 verdict.confidence if verdict is not None else None
             ),
             "request_intent": self.state.request_intent,
+            "provider_name": self._metadata_provider_name(),
+            "resolved_model": self._metadata_resolved_model(),
+            "total_input_tokens": self._total_llm_tokens("input_tokens"),
+            "total_output_tokens": self._total_llm_tokens("output_tokens"),
         }
         self.decision_log.write("session_summary", summary)
 
         primary_dry_run_result = _primary_dry_run_result(dry_run_results)
+        schema_hash = _schema_hash(self.registry.openai_tool_defs())
         metadata = {
             "session_id": self.state.session_id,
             "request": self.state.request,
@@ -595,6 +748,12 @@ class AgentSession:
             "wall_time_ms": wall_time_ms,
             "started_at": self.state.started_at,
             "ended_at": ended_at,
+            "provider_name": self._metadata_provider_name(),
+            "resolved_model": self._metadata_resolved_model(),
+            "git_sha": _git_sha(),
+            "schema_hash": schema_hash,
+            "total_input_tokens": self._total_llm_tokens("input_tokens"),
+            "total_output_tokens": self._total_llm_tokens("output_tokens"),
         }
         (self.session_dir / "session_metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True),
@@ -611,6 +770,21 @@ class AgentSession:
             if isinstance(tool, str) and tool not in tools:
                 tools.append(tool)
         return tools
+
+    def _metadata_provider_name(self) -> str | None:
+        if self._llm_stats:
+            return self._llm_stats[-1].get("provider_name")
+        provider = self._provider
+        return getattr(provider, "name", None)
+
+    def _metadata_resolved_model(self) -> str | None:
+        if self._llm_stats:
+            return self._llm_stats[-1].get("resolved_model")
+        provider = self._provider
+        return getattr(provider, "default_model", None)
+
+    def _total_llm_tokens(self, field: str) -> int:
+        return sum(int(stat.get(field) or 0) for stat in self._llm_stats)
 
     def _write_result_artifact(self, step_index: int, result: Any) -> Path:
         assert self.session_dir is not None
@@ -903,7 +1077,7 @@ def _parse_json_response(response: Any) -> dict[str, Any]:
         return json.loads(text)
     except json.JSONDecodeError as exc:
         raise ValueError(
-            f"LLM returned invalid JSON: {exc}\nRaw: {text[:300]!r}"
+            f"LLM returned invalid JSON: {exc}\nRaw: {text!r}"
         ) from exc
 
 
@@ -934,6 +1108,57 @@ def _extract_text(response: Any) -> str:
                     if isinstance(item, dict)
                 )
     raise ValueError("Could not extract text from provider response")
+
+
+def _stringify_response(response: Any) -> str | None:
+    if response is None:
+        return None
+    if isinstance(response, str):
+        return response
+    try:
+        return json.dumps(_json_safe(response), ensure_ascii=False)
+    except TypeError:
+        return repr(response)
+
+
+def _estimate_tokens(value: Any) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, str):
+        text = value
+    else:
+        text = json.dumps(_json_safe(value), sort_keys=True)
+    return max(1, int(round(len(text) / 4)))
+
+
+def _resolved_model_for_response(provider: Any, response: Any) -> str | None:
+    fallback = getattr(provider, "default_model", None)
+    if isinstance(response, dict):
+        model = response.get("model")
+        if isinstance(model, str) and model.strip():
+            return model
+    return fallback
+
+
+def _schema_hash(tool_defs: list[dict[str, Any]]) -> str:
+    payload = json.dumps(tool_defs, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _git_sha() -> str | None:
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    git_sha = result.stdout.strip()
+    return git_sha or None
 
 
 def _resolve_refs(value: Any, prior_results: list[Any]) -> Any:

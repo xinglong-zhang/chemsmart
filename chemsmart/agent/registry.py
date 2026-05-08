@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Literal, get_args, get_origin, get_type_hints
 
@@ -15,9 +16,11 @@ from pydantic.errors import PydanticInvalidForJsonSchema
 
 from chemsmart.agent import tools as agent_tools
 
+logger = logging.getLogger(__name__)
+
 
 class ToolInputModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
 
 @dataclass(frozen=True)
@@ -144,7 +147,11 @@ def _build_tool_spec(
         schema_override = _annotation_to_schema(annotation)
         if schema_override is not None:
             schema_overrides[param.name] = schema_override
-        annotation = _schema_friendly_annotation(annotation)
+        annotation = _schema_friendly_annotation(
+            annotation,
+            tool_name=registered_name or func.__name__,
+            field_name=param.name,
+        )
         default = param.default
         if default is inspect.Signature.empty:
             fields[param.name] = (annotation, Field(...))
@@ -189,9 +196,20 @@ def _annotation_to_schema(annotation: Any) -> dict[str, Any] | None:
     return {"enum": values}
 
 
-def _schema_friendly_annotation(annotation: Any) -> Any:
+def _schema_friendly_annotation(
+    annotation: Any,
+    *,
+    tool_name: str,
+    field_name: str,
+) -> Any:
     try:
         TypeAdapter(annotation).json_schema()
     except (PydanticInvalidForJsonSchema, TypeError):
+        logger.warning(
+            "Falling back to Any for tool schema field %s.%s with annotation %r",
+            tool_name,
+            field_name,
+            annotation,
+        )
         return Any
     return annotation

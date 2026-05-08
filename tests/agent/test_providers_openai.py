@@ -36,6 +36,7 @@ def test_openai_provider_chat_returns_dict_and_forwards_tools(monkeypatch):
         model="gpt-5.4",
         messages=messages,
         tools=tools,
+        timeout=30,
     )
 
 
@@ -64,4 +65,5 @@ def test_openai_provider_ping_returns_resolved_model(monkeypatch):
         model="gpt-5.4",
         messages=[{"role": "user", "content": "ping"}],
         max_tokens=5,
+        timeout=30,
     )

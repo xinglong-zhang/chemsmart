@@ -67,3 +67,32 @@ def test_registry_unknown_tool_name_raises_clearly():
     message = str(excinfo.value)
     assert "does_not_exist" in message
     assert "build_molecule" in message
+
+
+def test_registry_forbids_unexpected_tool_arguments():
+    registry = ToolRegistry.default()
+
+    result = registry.call(
+        "build_gaussian_settings",
+        {
+            "functional": "B3LYP",
+            "basis": "6-31G*",
+            "unexpected": "boom",
+        },
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["type"] == "ValidationError"
+    assert "unexpected" in result["error"]["message"]
+
+
+def test_registry_exposes_machine_readable_tool_descriptions():
+    registry = ToolRegistry.default()
+
+    build_molecule_def = next(
+        tool_def
+        for tool_def in registry.openai_tool_defs()
+        if tool_def["function"]["name"] == "build_molecule"
+    )
+
+    assert "Load one molecule" in build_molecule_def["function"]["description"]
