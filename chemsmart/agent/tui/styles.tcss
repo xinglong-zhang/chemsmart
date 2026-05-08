@@ -50,6 +50,22 @@ FooterWidget {
     border: round $secondary;
 }
 
+.job-status-cell {
+    border: round $accent;
+}
+
+.run-result-cell {
+    border: round $success;
+}
+
+.workflow-cell {
+    border: round $primary;
+}
+
+.molecule-cell {
+    border: round $secondary;
+}
+
 .error-cell {
     border: round $error;
 }

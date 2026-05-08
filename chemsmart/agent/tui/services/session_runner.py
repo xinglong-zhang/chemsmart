@@ -40,7 +40,12 @@ class SessionRunnerMixin:
         group="agent-session",
         name="agent-resume",
     )
-    def resume_agent_session(self, session_id: str) -> dict[str, Any]:
+    def resume_agent_session(
+        self,
+        session_id: str,
+        *,
+        cwd_override: str | None = None,
+    ) -> dict[str, Any]:
         self.active_resume_id = session_id
         self.active_agent_session = None
         return AgentSession.resume(
@@ -48,6 +53,7 @@ class SessionRunnerMixin:
             session_root=str(self.session_root),
             dry_submit=True,
             pause_before_risky=True,
+            cwd_override=cwd_override,
         )
 
     @work(

@@ -24,10 +24,14 @@ def assert_matches_snapshot(name: str, actual: str) -> None:
 
 
 def write_session_fixture(
-    session_root: Path, session_id: str = "session-001"
+    session_root: Path,
+    session_id: str = "session-001",
+    *,
+    cwd: str | None = None,
 ) -> Path:
     session_dir = session_root / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
+    recorded_cwd = cwd or str(Path.cwd())
     entries = [
         {
             "kind": "request",
@@ -101,7 +105,7 @@ def write_session_fixture(
         json.dumps(
             {
                 "session_id": session_id,
-                "cwd": "/tmp",
+                "cwd": recorded_cwd,
                 "started_at": "2026-05-08T00:00:00Z",
                 "request_intent": "opt",
                 "total_steps_planned": 2,
@@ -111,6 +115,10 @@ def write_session_fixture(
             },
             indent=2,
         ),
+        encoding="utf-8",
+    )
+    (session_dir / "state.json").write_text(
+        (session_dir / "session.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (session_dir / "session_metadata.json").write_text(
