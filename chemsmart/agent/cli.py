@@ -15,6 +15,7 @@ from rich.syntax import Syntax
 from chemsmart.agent.core import AgentSession, render_plan
 from chemsmart.agent.providers import ProviderError
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.tui._logging import _silence_console_logging
 from chemsmart.agent.tui.events import (
     CriticVerdictEvent,
     DryRunInputEvent,
@@ -175,6 +176,7 @@ def agent_run(
 def ask(request: str):
     """Run a one-shot dry-run request and stream Rich output to stdout."""
     session = AgentSession()
+    _silence_console_logging(session.session_root.parent)
     console = Console()
     result_box: dict[str, dict] = {}
     error_box: dict[str, Exception] = {}

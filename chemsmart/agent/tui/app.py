@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import sys
 from pathlib import Path
 
 from textual.app import App
 
 from chemsmart.agent.core import _default_session_root
+from chemsmart.agent.tui._logging import _silence_console_logging
 from chemsmart.agent.tui.bindings import BINDINGS
 from chemsmart.agent.tui.screens.chat import ChatScreen
 
@@ -47,8 +50,16 @@ def launch_tui(
         session_root=session_root,
         job_poll_interval=job_poll_interval,
     )
+    log_path = _silence_console_logging(app.session_root.parent)
+    run_kwargs = {}
     if plain:
         app.animation_level = "none"
-        app.run(inline=True, inline_no_clear=True, mouse=False)
-        return
-    app.run()
+        run_kwargs = {"inline": True, "inline_no_clear": True, "mouse": False}
+    try:
+        app.run(**run_kwargs)
+    finally:
+        for handler in logging.getLogger().handlers:
+            if isinstance(handler, logging.FileHandler):
+                handler.flush()
+        if log_path.exists() and log_path.stat().st_size:
+            print(f"agent tui exited; debug log: {log_path}", file=sys.stderr)
