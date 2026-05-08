@@ -162,6 +162,7 @@ class AgentSession:
             return session._continue_run(
                 completed_results=completed_results,
                 dry_submit=kwargs.get("dry_submit", True),
+                pause_before_risky=kwargs.get("pause_before_risky", False),
                 allow_remote_unknown=kwargs.get("allow_remote_unknown", False),
                 allow_critic_override=kwargs.get(
                     "allow_critic_override", False
@@ -175,6 +176,7 @@ class AgentSession:
         self,
         request: str,
         dry_submit: bool = True,
+        pause_before_risky: bool = False,
         allow_remote_unknown: bool = False,
         allow_critic_override: bool = False,
     ) -> dict[str, Any]:
@@ -209,6 +211,7 @@ class AgentSession:
         return self._continue_run(
             completed_results=[],
             dry_submit=dry_submit,
+            pause_before_risky=pause_before_risky,
             allow_remote_unknown=allow_remote_unknown,
             allow_critic_override=allow_critic_override,
             rerender_plan=True,
@@ -218,6 +221,7 @@ class AgentSession:
         self,
         completed_results: list[Any],
         dry_submit: bool,
+        pause_before_risky: bool,
         allow_remote_unknown: bool,
         allow_critic_override: bool,
         rerender_plan: bool,
@@ -235,6 +239,7 @@ class AgentSession:
         blocked = False
         block_reason: str | None = None
         run_error: Exception | None = None
+        paused_for_approval = False
 
         preview_submit = None
         risky_start = len(plan.steps)
@@ -303,6 +308,24 @@ class AgentSession:
                     "preview_submit": preview_submit,
                 }
 
+            if pause_before_risky and risky_start < len(plan.steps):
+                paused_for_approval = True
+                return {
+                    "session_id": self.state.session_id,
+                    "session_dir": str(self.session_dir),
+                    "plan": plan,
+                    "plan_text": render_plan(plan) if rerender_plan else None,
+                    "critic_verdict": verdict,
+                    "completed_steps": self.state.current_step_index,
+                    "blocked": False,
+                    "dry_run_result": _primary_dry_run_result(dry_run_results),
+                    "dry_run_results": dry_run_results,
+                    "runtime_result": runtime_result,
+                    "preview_submit": preview_submit,
+                    "pending_approval": True,
+                    "next_risky_tool": plan.steps[risky_start].tool,
+                }
+
             for step_index in range(risky_start, len(plan.steps)):
                 if step_index < self.state.current_step_index:
                     continue
@@ -348,13 +371,14 @@ class AgentSession:
             run_error = exc
             raise
         finally:
-            self._finalize_session(
-                verdict=verdict,
-                blocked=blocked,
-                block_reason=block_reason,
-                dry_run_results=dry_run_results,
-                run_error=run_error,
-            )
+            if not paused_for_approval:
+                self._finalize_session(
+                    verdict=verdict,
+                    blocked=blocked,
+                    block_reason=block_reason,
+                    dry_run_results=dry_run_results,
+                    run_error=run_error,
+                )
 
     def _provider_instance(self) -> Any:
         if self._provider is None:

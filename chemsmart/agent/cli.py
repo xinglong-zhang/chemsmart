@@ -2,13 +2,30 @@
 
 from __future__ import annotations
 
+import json
 import os
+import threading
+import time
 
 import click
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
 
 from chemsmart.agent.core import AgentSession, render_plan
 from chemsmart.agent.providers import ProviderError
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.tui.events import (
+    CriticVerdictEvent,
+    DryRunInputEvent,
+    ErrorEvent,
+    MethodEvent,
+    PlanEvent,
+    RequestEvent,
+    RuntimeValidationEvent,
+    SubmissionPreviewEvent,
+    parse_decision_event,
+)
 
 
 @click.group(name="agent", invoke_without_command=True)
@@ -154,6 +171,58 @@ def agent_run(
 
 
 @agent.command()
+@click.argument("request")
+def ask(request: str):
+    """Run a one-shot dry-run request and stream Rich output to stdout."""
+    session = AgentSession()
+    console = Console()
+    result_box: dict[str, dict] = {}
+    error_box: dict[str, Exception] = {}
+
+    def runner() -> None:
+        try:
+            result_box["result"] = session.run(
+                request,
+                dry_submit=True,
+                pause_before_risky=True,
+            )
+        except Exception as exc:  # pragma: no cover - bridged below
+            error_box["error"] = exc
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+
+    seen = 0
+    while thread.is_alive() or (
+        session.session_dir
+        and (session.session_dir / "decision_log.jsonl").exists()
+    ):
+        log_path = (
+            None
+            if session.session_dir is None
+            else session.session_dir / "decision_log.jsonl"
+        )
+        if log_path and log_path.exists():
+            lines = log_path.read_text(encoding="utf-8").splitlines()
+            for line in lines[seen:]:
+                if line.strip():
+                    _stream_event(console, json.loads(line))
+            seen = len(lines)
+        if not thread.is_alive():
+            break
+        time.sleep(0.05)
+    thread.join()
+
+    if "error" in error_box:
+        raise click.ClickException(str(error_box["error"])) from error_box[
+            "error"
+        ]
+    result = result_box["result"]
+    if result.get("blocked"):
+        raise click.ClickException("critic gating blocked execution")
+
+
+@agent.command()
 @click.option(
     "--dry-submit/--execute",
     default=True,
@@ -218,3 +287,44 @@ def _first_dry_run_result(result: dict) -> dict | None:
     if dry_run_results:
         return dry_run_results[0]
     return result.get("dry_run_result")
+
+
+def _stream_event(console: Console, entry: dict) -> None:
+    event = parse_decision_event(entry)
+    if isinstance(event, RequestEvent):
+        console.print(Panel(event.request, title="Request"))
+    elif isinstance(event, PlanEvent):
+        console.print(Panel(event.text, title="Plan"))
+    elif isinstance(event, MethodEvent):
+        recommendation = event.recommendation
+        text = (
+            f"{recommendation.get('functional') or 'manual'} / "
+            f"{recommendation.get('basis') or 'manual'}\n"
+            f"{recommendation.get('rationale') or ''}"
+        ).strip()
+        console.print(Panel(text, title="Method"))
+    elif isinstance(event, DryRunInputEvent):
+        console.print(
+            Panel(
+                Syntax(event.content, "text", theme="ansi_dark"),
+                title=event.inputfile or "Dry run input",
+            )
+        )
+    elif isinstance(event, RuntimeValidationEvent):
+        validation = event.validation
+        text = json.dumps(validation, indent=2, sort_keys=True)
+        console.print(Panel(text, title="Runtime validation"))
+    elif isinstance(event, SubmissionPreviewEvent):
+        preview = json.dumps(event.preview, indent=2, sort_keys=True)
+        console.print(Panel(preview, title="Submission preview"))
+    elif isinstance(event, CriticVerdictEvent):
+        verdict = event.verdict
+        issues = "\n".join(f"- {issue}" for issue in verdict.issues)
+        text = (
+            f"verdict: {verdict.verdict}\nconfidence: {verdict.confidence:.2f}"
+        )
+        if issues:
+            text += f"\n{issues}"
+        console.print(Panel(text, title="Critic"))
+    elif isinstance(event, ErrorEvent):
+        console.print(Panel(event.message, title=event.title))
