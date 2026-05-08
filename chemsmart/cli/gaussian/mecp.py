@@ -59,43 +59,43 @@ logger = logging.getLogger(__name__)
     "--step-size",
     type=float,
     default=None,
-    help="Step size (Bohr^2/Hartree) for internal MECP optimization.",
+    help="Step size (Bohr^2/Hartree) for internal MECP optimization. Default: 0.1",
 )
 @click.option(
     "--trust-radius",
     type=float,
     default=None,
-    help="Maximum Cartesian displacement per atom (Bohr) per step.",
+    help="Maximum Cartesian displacement per atom (Bohr) per step. Default: 0.3",
 )
 @click.option(
     "--energy-diff-tol",
     type=float,
     default=None,
-    help="Convergence threshold for |E(A)-E(B)| in Hartree.",
+    help="Convergence threshold for |E(A)-E(B)| in Hartree. Default: 5.0e-5",
 )
 @click.option(
     "--force-max-tol",
     type=float,
     default=None,
-    help="Convergence threshold for max effective gradient (Hartree/Bohr).",
+    help="Convergence threshold for max effective gradient (Hartree/Bohr). Default: 1.5e-5",
 )
 @click.option(
     "--force-rms-tol",
     type=float,
     default=None,
-    help="Convergence threshold for RMS effective gradient (Hartree/Bohr).",
+    help="Convergence threshold for RMS effective gradient (Hartree/Bohr). Default: 5.0e-4",
 )
 @click.option(
     "--disp-max-tol",
     type=float,
     default=None,
-    help="Convergence threshold for max displacement (Bohr).",
+    help="Convergence threshold for max displacement (Bohr). Default: 1.2e-4",
 )
 @click.option(
     "--disp-rms-tol",
     type=float,
     default=None,
-    help="Convergence threshold for RMS displacement (Bohr).",
+    help="Convergence threshold for RMS displacement (Bohr). Default: 3.8e-3",
 )
 @click.option(
     "--adaptive-step-size/--no-adaptive-step-size",
@@ -122,7 +122,8 @@ logger = logging.getLogger(__name__)
     "--step-size-shrink",
     type=float,
     default=None,
-    help="Factor to shrink step size on overshoot/oscillation (default: 0.7; grow×shrink=0.84 for mild damping).",
+    help="Factor to shrink step size on overshoot/oscillation "
+    "(default: 0.7; grow×shrink=0.84 for mild damping).",
 )
 @click.option(
     "--step-size-min",
