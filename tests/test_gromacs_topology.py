@@ -11,9 +11,13 @@ def _build_rdkit_mol(smiles: str) -> Chem.Mol:
     params = AllChem.ETKDG()
     params.randomSeed = 0
     embed_status = AllChem.EmbedMolecule(mol, params)
-    assert embed_status == 0, f"RDKit embedding failed for {smiles!r} with code {embed_status}"
+    assert (
+        embed_status == 0
+    ), f"RDKit embedding failed for {smiles!r} with code {embed_status}"
     optimize_status = AllChem.UFFOptimizeMolecule(mol)
-    assert optimize_status == 0, f"RDKit UFF optimization failed for {smiles!r} with code {optimize_status}"
+    assert (
+        optimize_status == 0
+    ), f"RDKit UFF optimization failed for {smiles!r} with code {optimize_status}"
     return mol
 
 
