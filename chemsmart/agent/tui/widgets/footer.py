@@ -25,7 +25,7 @@ class FooterWidget(Static):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._job_counts = OrderedDict(queued=0, running=0, done=0, failed=0)
+        self._job_counts = OrderedDict(queued=0, running=0, failed=0)
 
     def on_mount(self) -> None:
         self._refresh_text()
@@ -49,10 +49,12 @@ class FooterWidget(Static):
         self._refresh_text()
 
     def reset_job_counts(self) -> None:
-        self.set_job_counts(queued=0, running=0, done=0, failed=0)
+        self.set_job_counts(queued=0, running=0, failed=0)
 
     def _refresh_text(self) -> None:
-        badges = " ".join(
-            f"[{name}:{count}]" for name, count in self._job_counts.items()
+        jobs = (
+            f"jobs: {self._job_counts['queued']}q "
+            f"{self._job_counts['running']}r "
+            f"{self._job_counts['failed']}f"
         )
-        self.update(f"{self.phase.label}   {badges}   {self.hint}")
+        self.update(f"{self.phase.label}   {jobs}   {self.hint}")

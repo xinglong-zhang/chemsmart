@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from threading import get_ident
 from typing import Iterable
 
 from click.testing import CliRunner
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import Screen
 from textual.worker import Worker, WorkerState
 
@@ -29,7 +31,19 @@ from chemsmart.agent.tui.events import (
     session_completed,
 )
 from chemsmart.agent.tui.phase import Phase
+from chemsmart.agent.tui.screens.jobs_panel import JobsPanel, JobsPanelAction
 from chemsmart.agent.tui.screens.sessions import SessionsScreen
+from chemsmart.agent.tui.services.job_poller import (
+    JobPollerMixin,
+    JobStateReader,
+    JobStatusUpdated,
+    available_server_names,
+    cancel_job,
+    collect_job_snapshot,
+    extract_run_result,
+    format_jobs_table,
+    queue_snapshot,
+)
 from chemsmart.agent.tui.services.log_tailer import LogTailer
 from chemsmart.agent.tui.services.session_runner import SessionRunnerMixin
 from chemsmart.agent.tui.widgets.cells import (
@@ -38,8 +52,11 @@ from chemsmart.agent.tui.widgets.cells import (
     DryRunInputCell,
     ErrorCell,
     GeometryHandoffCell,
+    JobStatusCell,
     MethodCell,
+    MoleculeCell,
     PlanCell,
+    RunResultCell,
     RuntimeValidationCell,
     SubmissionPreviewCell,
     UserMessageCell,
@@ -49,13 +66,18 @@ from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.popups import (
     ApprovalOverlay,
     ApprovalResult,
+    CwdMismatchChoice,
+    CwdMismatchOverlay,
     FilePickerOverlay,
     TextPromptOverlay,
 )
 from chemsmart.agent.tui.widgets.transcript import Transcript
+from chemsmart.io.molecules.structure import Molecule
 
 
-class ChatScreen(SessionRunnerMixin, Screen):
+class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
+    BINDINGS = [Binding("j", "open_jobs_panel", "Jobs", show=False)]
+
     DEFAULT_CSS = """
     ChatScreen {
         layout: vertical;
@@ -66,9 +88,15 @@ class ChatScreen(SessionRunnerMixin, Screen):
     }
     """
 
-    def __init__(self, *, session_root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        session_root: Path,
+        job_poll_interval: float = 5.0,
+    ) -> None:
         super().__init__()
         self.session_root = session_root
+        self.job_poll_interval = job_poll_interval
         self._tailer: LogTailer | None = None
         self._tailer_path: Path | None = None
         self._current_worker: Worker | None = None
@@ -84,8 +112,11 @@ class ChatScreen(SessionRunnerMixin, Screen):
         self._pending_risky_tool: str | None = None
         self._approval_session_granted = False
         self._latest_dry_run_content: str | None = None
-        self._running_risky_steps: set[tuple[str, int]] = set()
-        self._job_counts = {"queued": 0, "running": 0, "done": 0, "failed": 0}
+        self._job_snapshot: dict[str, dict] = {}
+        self._job_cells: dict[str, JobStatusCell] = {}
+        self._rendered_run_results: set[str] = set()
+        self._cancelled_job_ids: set[str] = set()
+        self._active_server_name = self._default_active_server_name()
 
     def compose(self) -> ComposeResult:
         yield Transcript(id="chat-body")
@@ -97,6 +128,8 @@ class ChatScreen(SessionRunnerMixin, Screen):
             "Welcome to the chemsmart agent TUI. Type a request or use /help."
         )
         self.focus_composer()
+        self.run_job_poller(self.job_poll_interval)
+        self._refresh_job_snapshot()
 
     def on_composer_submitted(self, event: Composer.Submitted) -> None:
         text = event.text.strip()
@@ -106,11 +139,36 @@ class ChatScreen(SessionRunnerMixin, Screen):
             return
         self.start_request(text)
 
+    def on_job_status_updated(self, message: JobStatusUpdated) -> None:
+        snapshot = self._job_snapshot.setdefault(
+            message.job_id, {"job_id": message.job_id}
+        )
+        snapshot.update(message.fields)
+        if message.job_id in self._cancelled_job_ids:
+            snapshot["status"] = "cancelled"
+        self._update_footer_job_counts()
+        active_session_dir = self.current_session_dir()
+        active_session_id = (
+            active_session_dir.name if active_session_dir is not None else None
+        )
+        track_in_transcript = snapshot.get("session_id") == active_session_id
+        cell = self._job_cells.get(message.job_id)
+        if cell is None:
+            if not track_in_transcript:
+                return
+            cell = JobStatusCell(message.job_id, snapshot)
+            self._job_cells[message.job_id] = cell
+            self.query_one(Transcript).add_cell(cell)
+        else:
+            cell.apply_update(snapshot)
+        if track_in_transcript and snapshot.get("status") == "done":
+            self._maybe_render_run_result(message.job_id, snapshot)
+
     def start_request(self, text: str) -> None:
         if self._current_worker and not self._current_worker.is_finished:
             self.post_error(
                 "Session already running",
-                "Wait for the current request to finish before starting a new one.",
+                "Wait for the current request to finish before starting a new request.",
             )
             return
         self._stop_tailer()
@@ -127,7 +185,12 @@ class ChatScreen(SessionRunnerMixin, Screen):
             0.1, self._attach_live_tailer, pause=False
         )
 
-    def start_resume(self, session_id: str) -> None:
+    def start_resume(
+        self,
+        session_id: str,
+        *,
+        cwd_override: str | None = None,
+    ) -> None:
         session_dir = self.session_root / session_id
         if not session_dir.exists():
             self.post_error(
@@ -147,7 +210,10 @@ class ChatScreen(SessionRunnerMixin, Screen):
                 "Loaded saved session transcript"
             )
             return
-        self._current_worker = self.resume_agent_session(session_id)
+        self._current_worker = self.resume_agent_session(
+            session_id,
+            cwd_override=cwd_override,
+        )
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         if event.worker.group != "agent-session":
@@ -168,6 +234,7 @@ class ChatScreen(SessionRunnerMixin, Screen):
             if result.get("blocked"):
                 self.query_one(FooterWidget).set_hint("Execution blocked")
             else:
+                self.query_one(FooterWidget).set_phase(Phase.FINISHED)
                 self.query_one(FooterWidget).set_hint("Session complete")
         elif event.state == WorkerState.ERROR:
             error = event.worker.error
@@ -183,6 +250,20 @@ class ChatScreen(SessionRunnerMixin, Screen):
             self.query_one(FooterWidget).set_phase(Phase.IDLE)
             self.query_one(FooterWidget).set_hint("Ready")
             self._current_worker = event.worker
+        self._refresh_job_snapshot()
+
+    def action_open_jobs_panel(self) -> None:
+        self._refresh_job_snapshot()
+        if self.app.plain:
+            rows = sorted(self._job_snapshot.values(), key=_jobs_sort_key)
+            self.post_agent_message(
+                f"```\n{format_jobs_table(rows)}\n```",
+                title="Jobs",
+            )
+            return
+        self.app.push_screen(
+            JobsPanel(self._job_snapshot), self._handle_jobs_panel_action
+        )
 
     def action_soft_cancel(self) -> None:
         if self._quit_armed:
@@ -258,6 +339,102 @@ class ChatScreen(SessionRunnerMixin, Screen):
             return
         self.start_request(self._corrected_request(value))
 
+    def _handle_jobs_panel_action(
+        self, action: JobsPanelAction | None
+    ) -> None:
+        if action is None or not action.job_id:
+            return
+        if action.action == "cancel":
+            self._confirm_cancel(action.job_id)
+        elif action.action == "extract":
+            self._extract_job_result(action.job_id)
+        elif action.action == "resume":
+            session_id = self._job_snapshot.get(action.job_id, {}).get(
+                "session_id"
+            )
+            if session_id:
+                self._resume_or_prompt(str(session_id))
+
+    def _confirm_cancel(self, job_id: str) -> None:
+        self.app.push_screen(
+            TextPromptOverlay(
+                title="Cancel job",
+                prompt=f"Type yes to cancel `{job_id}`.",
+            ),
+            lambda value: self._handle_cancel_confirmation(job_id, value),
+        )
+
+    def _handle_cancel_confirmation(
+        self, job_id: str, value: str | None
+    ) -> None:
+        if (value or "").strip().lower() not in {"y", "yes"}:
+            return
+        job = self._job_snapshot.get(job_id)
+        if not job:
+            self.post_error("Cancel failed", f"Unknown job id: {job_id}")
+            return
+        try:
+            result = cancel_job(job)
+        except Exception as exc:
+            self.post_error("Cancel failed", str(exc))
+            return
+        self._cancelled_job_ids.add(job_id)
+        self._emit_job_update(job_id, {"status": "cancelled"})
+        command = " ".join(result["command"])
+        self.post_agent_message(
+            f"Cancelled `{job_id}` with `{command}`.",
+            title="Jobs",
+        )
+
+    def _extract_job_result(self, value: str) -> None:
+        try:
+            result = extract_run_result(value, self._job_snapshot)
+        except Exception as exc:
+            self.post_error("Extract failed", str(exc))
+            return
+        self.query_one(Transcript).add_cell(RunResultCell(result))
+        self._rendered_run_results.add(str(value))
+
+    def _resume_or_prompt(self, session_id: str) -> None:
+        state = JobStateReader.load(self.session_root / session_id)
+        if state is None:
+            self.post_error(
+                "Resume failed", f"Unknown session id: {session_id}"
+            )
+            return
+        current_cwd = os.path.abspath(os.getcwd())
+        recorded_cwd = os.path.abspath(state.cwd)
+        if recorded_cwd != current_cwd:
+            self.app.push_screen(
+                CwdMismatchOverlay(
+                    recorded_cwd=recorded_cwd,
+                    current_cwd=current_cwd,
+                ),
+                lambda result: self._handle_cwd_choice(
+                    session_id, recorded_cwd, result
+                ),
+            )
+            return
+        self.start_resume(session_id)
+
+    def _handle_cwd_choice(
+        self,
+        session_id: str,
+        recorded_cwd: str,
+        result: CwdMismatchChoice | None,
+    ) -> None:
+        if result is None or result.choice == "n":
+            return
+        if result.choice == "c":
+            os.chdir(recorded_cwd)
+            self.start_resume(session_id)
+            return
+        if result.choice == "i":
+            self.start_resume(
+                session_id,
+                cwd_override=os.path.abspath(os.getcwd()),
+            )
+
     def _disarm_soft_cancel(self) -> None:
         self._quit_armed = False
         self.query_one(FooterWidget).set_hint(
@@ -297,7 +474,6 @@ class ChatScreen(SessionRunnerMixin, Screen):
         self.app.call_from_thread(self._apply_log_entry, entry)
 
     def _apply_log_entry(self, entry: dict) -> None:
-        self._update_job_counts(entry)
         event = parse_decision_event(
             entry,
             session_dir=(
@@ -376,7 +552,11 @@ class ChatScreen(SessionRunnerMixin, Screen):
                 summary += f" Block reason: {event.block_reason}."
             transcript.add_cell(AgentMessageCell(summary, title="Summary"))
         elif isinstance(event, IgnoredEvent):
-            return
+            pass
+
+        payload = entry.get("payload") or {}
+        if payload.get("tool") in {"run_local", "submit_hpc"}:
+            self._refresh_job_snapshot()
 
     def _has_user_message(self, request: str) -> bool:
         return request in self._user_requests
@@ -389,20 +569,26 @@ class ChatScreen(SessionRunnerMixin, Screen):
             self.post_agent_message(
                 "\n".join(
                     [
-                        "# Phase 2 slash commands",
+                        "# Phase 3 slash commands",
                         "- `[A] /help` show this help",
+                        "- `[A] /jobs` open the jobs panel",
+                        "- `[A] /queue` show the current queue snapshot",
+                        "- `[A] /server <name>` switch the active HPC server",
+                        "- `[A] /molecule <path>` load and preview a molecule",
+                        "- `[A] /cancel <job-id>` cancel a queued/running job",
+                        "- `[F] /extract <job-id|inputfile>` parse a final result",
                         "- `[D] /dryrun` regenerate the current dry-run",
                         "- `[D] /submit` approve pending HPC submission",
                         "- `[D] /run` approve pending local execution",
                         "- `[P,D] /critic` show the current critic verdict",
                         "- `[P,D,R] /plan` show the current plan",
                         "- `[A] /rationale` show planner rationale",
-                        "- `[A] /quit` exit the TUI",
                         "- `[I,F] /clear` clear the transcript",
                         "- `[I] /sessions` browse recent sessions",
                         "- `[I] /resume <session-id>` load or continue a session",
                         "- `[A] /tools` list registered tools",
                         "- `[A] /doctor` run inline diagnostics",
+                        "- `[A] /quit` exit the TUI",
                     ]
                 )
             )
@@ -425,7 +611,31 @@ class ChatScreen(SessionRunnerMixin, Screen):
             if not argument:
                 self.app.push_screen(SessionsScreen(self.session_root))
                 return
-            self.start_resume(argument)
+            self._resume_or_prompt(argument)
+        elif command == "/jobs":
+            self.action_open_jobs_panel()
+        elif command == "/queue":
+            self._show_queue_snapshot()
+        elif command == "/server":
+            self._switch_active_server(argument)
+        elif command == "/cancel":
+            if not argument:
+                self.post_error("Missing job id", "Usage: /cancel <job-id>")
+                return
+            self._confirm_cancel(argument)
+        elif command == "/extract":
+            if not argument:
+                self.post_error(
+                    "Missing target",
+                    "Usage: /extract <job-id|inputfile>",
+                )
+                return
+            self._extract_job_result(argument)
+        elif command == "/molecule":
+            if not argument:
+                self.post_error("Missing path", "Usage: /molecule <path>")
+                return
+            self._show_molecule(argument)
         elif command == "/tools":
             self._run_inline_cli(["tools"], title="Tools")
         elif command == "/doctor":
@@ -562,37 +772,111 @@ class ChatScreen(SessionRunnerMixin, Screen):
         self._current_verdict = None
         self._pending_approval = False
         self._pending_risky_tool = None
-        self._running_risky_steps.clear()
-        self._job_counts = {"queued": 0, "running": 0, "done": 0, "failed": 0}
+        self._latest_dry_run_content = None
+        self._job_cells.clear()
+        self._rendered_run_results.clear()
         footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.IDLE)
         footer.set_hint("Enter to submit • /help for commands")
         footer.reset_job_counts()
         if clear_transcript:
             self.query_one(Transcript).clear_cells()
+        self._refresh_job_snapshot()
 
-    def _update_job_counts(self, entry: dict) -> None:
-        kind = entry.get("kind")
-        payload = entry.get("payload") or {}
-        tool = payload.get("tool")
-        step_index = int(payload.get("step_index") or -1)
-        key = (str(tool), step_index)
+    def _emit_job_update(self, job_id: str, fields: dict) -> None:
+        self.post_message(JobStatusUpdated(job_id, fields))
+        if isinstance(self.app.screen, JobsPanel):
+            self.app.screen.post_message(JobStatusUpdated(job_id, fields))
 
-        if kind == "tool_call" and tool in {"run_local", "submit_hpc"}:
-            self._running_risky_steps.add(key)
-        elif kind == "tool_result" and tool == "run_local":
-            self._running_risky_steps.discard(key)
-            self._job_counts["done"] += 1
-        elif (
-            kind == "tool_result"
-            and tool == "submit_hpc"
-            and not payload.get("from_preview")
-        ):
-            self._running_risky_steps.discard(key)
-            self._job_counts["queued"] += 1
-        elif kind == "tool_error" and tool in {"run_local", "submit_hpc"}:
-            self._running_risky_steps.discard(key)
-            self._job_counts["failed"] += 1
+    def _refresh_job_snapshot(self) -> None:
+        snapshot = collect_job_snapshot(self.session_root)
+        for job_id in self._cancelled_job_ids:
+            if job_id in snapshot:
+                snapshot[job_id]["status"] = "cancelled"
+        for job_id, current in snapshot.items():
+            changed = {
+                key: value
+                for key, value in current.items()
+                if self._job_snapshot.get(job_id, {}).get(key) != value
+            }
+            if changed:
+                self._emit_job_update(job_id, changed)
+        self._job_snapshot = snapshot
+        self._update_footer_job_counts()
 
-        self._job_counts["running"] = len(self._running_risky_steps)
-        self.query_one(FooterWidget).set_job_counts(**self._job_counts)
+    def _update_footer_job_counts(self) -> None:
+        counts = {"queued": 0, "running": 0, "failed": 0}
+        for snapshot in self._job_snapshot.values():
+            status = snapshot.get("status")
+            if status in counts:
+                counts[str(status)] += 1
+        self.query_one(FooterWidget).set_job_counts(**counts)
+
+    def _maybe_render_run_result(self, job_id: str, snapshot: dict) -> None:
+        if job_id in self._rendered_run_results:
+            return
+        output_path = snapshot.get("output_path")
+        if not output_path:
+            return
+        try:
+            result = extract_run_result(str(output_path), self._job_snapshot)
+        except Exception:
+            return
+        self.query_one(Transcript).add_cell(RunResultCell(result))
+        self._rendered_run_results.add(job_id)
+
+    def _show_queue_snapshot(self) -> None:
+        self._refresh_job_snapshot()
+        rows = queue_snapshot(
+            self._job_snapshot,
+            server_name=self._active_server_name,
+        )
+        self.post_agent_message(
+            f"```\n{format_jobs_table(rows)}\n```",
+            title="Queue",
+        )
+
+    def _switch_active_server(self, name: str) -> None:
+        names = available_server_names()
+        if not name:
+            current = self._active_server_name or "(none)"
+            self.post_agent_message(
+                f"Active server: {current}\nAvailable: {', '.join(names) or '(none)'}",
+                title="Server",
+            )
+            return
+        if name not in names:
+            self.post_error(
+                "Unknown server",
+                f"{name} is not configured. Available: {', '.join(names) or '(none)'}",
+            )
+            return
+        self._active_server_name = name
+        self.post_agent_message(
+            f"Active server set to `{name}`.", title="Server"
+        )
+
+    def _show_molecule(self, path: str) -> None:
+        try:
+            molecule = Molecule.from_filepath(path)
+        except Exception as exc:
+            self.post_error("Molecule load failed", str(exc))
+            return
+        self.query_one(Transcript).add_cell(
+            MoleculeCell(molecule, source=str(Path(path).expanduser()))
+        )
+
+    def _default_active_server_name(self) -> str | None:
+        names = available_server_names()
+        if len(names) == 1:
+            return names[0]
+        return None
+
+
+def _jobs_sort_key(job: dict) -> tuple[int, str, str]:
+    order = {"running": 0, "queued": 1, "failed": 2, "cancelled": 3, "done": 4}
+    return (
+        order.get(str(job.get("status")), 9),
+        str(job.get("raw_started") or ""),
+        str(job.get("job_id") or ""),
+    )

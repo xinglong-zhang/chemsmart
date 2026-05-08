@@ -156,7 +156,13 @@ class AgentSession:
         assert session.decision_log is not None
         session._run_start_time = time.perf_counter()
         original_cwd = os.getcwd()
-        os.chdir(session.state.cwd)
+        resume_cwd = os.path.abspath(
+            kwargs.get("cwd_override") or session.state.cwd
+        )
+        if kwargs.get("cwd_override"):
+            session.state.cwd = resume_cwd
+            session._save_state()
+        os.chdir(resume_cwd)
         try:
             completed_results = session._load_completed_results()
             return session._continue_run(
@@ -825,6 +831,8 @@ class AgentSession:
     def _load_existing_session(self, session_id: str) -> None:
         self.session_dir = self.session_root / session_id
         state_path = self.session_dir / "session.json"
+        if not state_path.exists():
+            state_path = self.session_dir / "state.json"
         self.state = SessionState.load(state_path)
         self.decision_log = DecisionLog(
             self.session_dir / "decision_log.jsonl"
@@ -846,6 +854,7 @@ class AgentSession:
         assert self.session_dir is not None
         assert self.state is not None
         self.state.save(self.session_dir / "session.json")
+        self.state.save(self.session_dir / "state.json")
 
     def _collect_prior_results(
         self,

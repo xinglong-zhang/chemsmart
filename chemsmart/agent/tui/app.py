@@ -20,12 +20,16 @@ class ChemsmartTuiApp(App[None]):
         *,
         plain: bool = False,
         session_root: str | Path | None = None,
+        job_poll_interval: float = 5.0,
     ) -> None:
         super().__init__()
         self.plain = plain
         self.session_root = Path(session_root or _default_session_root())
         self.session_root.mkdir(parents=True, exist_ok=True)
-        self.chat_screen = ChatScreen(session_root=self.session_root)
+        self.chat_screen = ChatScreen(
+            session_root=self.session_root,
+            job_poll_interval=job_poll_interval,
+        )
 
     def on_mount(self) -> None:
         self.push_screen(self.chat_screen)
@@ -35,8 +39,13 @@ def launch_tui(
     *,
     plain: bool = False,
     session_root: str | Path | None = None,
+    job_poll_interval: float = 5.0,
 ) -> None:
-    app = ChemsmartTuiApp(plain=plain, session_root=session_root)
+    app = ChemsmartTuiApp(
+        plain=plain,
+        session_root=session_root,
+        job_poll_interval=job_poll_interval,
+    )
     if plain:
         app.animation_level = "none"
     app.run(inline=True, inline_no_clear=True, mouse=not plain)
