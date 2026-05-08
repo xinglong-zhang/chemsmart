@@ -99,24 +99,27 @@ def agent_run(
 ):
     """Plan and execute an agent workflow."""
     session = AgentSession()
-    if resume_id:
-        result = AgentSession.resume(
-            resume_id,
-            dry_submit=dry_submit,
-            allow_remote_unknown=allow_remote_unknown,
-            allow_critic_override=allow_critic_override,
-        )
-    else:
-        if not request:
-            raise click.ClickException(
-                "REQUEST is required unless --resume is used"
+    try:
+        if resume_id:
+            result = AgentSession.resume(
+                resume_id,
+                dry_submit=dry_submit,
+                allow_remote_unknown=allow_remote_unknown,
+                allow_critic_override=allow_critic_override,
             )
-        result = session.run(
-            request,
-            dry_submit=dry_submit,
-            allow_remote_unknown=allow_remote_unknown,
-            allow_critic_override=allow_critic_override,
-        )
+        else:
+            if not request:
+                raise click.ClickException(
+                    "REQUEST is required unless --resume is used"
+                )
+            result = session.run(
+                request,
+                dry_submit=dry_submit,
+                allow_remote_unknown=allow_remote_unknown,
+                allow_critic_override=allow_critic_override,
+            )
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     click.echo(f"session: {result['session_id']}")
     click.echo(render_plan(result["plan"]))
@@ -159,12 +162,15 @@ def resume(
     allow_critic_override: bool,
 ):
     """Resume an agent session."""
-    result = AgentSession.resume(
-        session_id,
-        dry_submit=dry_submit,
-        allow_remote_unknown=allow_remote_unknown,
-        allow_critic_override=allow_critic_override,
-    )
+    try:
+        result = AgentSession.resume(
+            session_id,
+            dry_submit=dry_submit,
+            allow_remote_unknown=allow_remote_unknown,
+            allow_critic_override=allow_critic_override,
+        )
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"session: {result['session_id']}")
     click.echo(render_plan(result["plan"]))
     click.echo(f"critic verdict: {result['critic_verdict'].verdict}")

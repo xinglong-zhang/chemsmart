@@ -66,3 +66,25 @@ def test_agent_cli_tools_lists_registered_tools():
     assert result.exit_code == 0, result.output
     assert "registered tools:" in result.output
     assert "build_molecule" in result.output
+
+
+def test_agent_cli_run_wraps_runtime_errors_as_click_exceptions(
+    monkeypatch,
+):
+    def fake_run(self, request, **kwargs):
+        raise RuntimeError(
+            "run_local failed with returncode 1; see /tmp/run.stderr"
+        )
+
+    monkeypatch.setattr("chemsmart.agent.cli.AgentSession.run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        agent,
+        ["run", "--dry-submit", "optimize examples/h2o.xyz"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 1
+    assert "Error: run_local failed with returncode 1" in result.output
+    assert "Traceback" not in result.output

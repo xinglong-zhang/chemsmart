@@ -440,6 +440,25 @@ class AgentSession:
                 rationale=step.rationale,
             )
             raise RuntimeError(result["error"]["message"])
+        if _run_local_failed(step.tool, result):
+            artifact_path = self._write_result_artifact(step_index, result)
+            message = _run_local_failure_message(result)
+            self.decision_log.write(
+                "tool_error",
+                {
+                    "step_index": step_index,
+                    "tool": step.tool,
+                    "artifact": artifact_path.name,
+                    "error_type": "RuntimeError",
+                    "message": message,
+                    "payload": _preview_value(result),
+                    "ts_start": ts_start,
+                    "ts_end": _utc_now_iso(),
+                    "step_wall_time_ms": _elapsed_ms(step_start_time),
+                },
+                rationale=step.rationale,
+            )
+            raise RuntimeError(message)
         artifact_path = self._write_result_artifact(step_index, result)
         self.decision_log.write(
             "tool_result",
@@ -1070,6 +1089,25 @@ def _primary_dry_run_result(
     dry_run_results: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     return dry_run_results[0] if dry_run_results else None
+
+
+def _run_local_failed(tool_name: str, result: Any) -> bool:
+    return (
+        tool_name == "run_local"
+        and isinstance(result, dict)
+        and result.get("ok") is False
+    )
+
+
+def _run_local_failure_message(result: dict[str, Any]) -> str:
+    message = "run_local failed"
+    returncode = result.get("returncode")
+    if returncode is not None:
+        message += f" with returncode {returncode}"
+    stderr_path = result.get("stderr_path")
+    if isinstance(stderr_path, str) and stderr_path.strip():
+        message += f"; see {stderr_path}"
+    return message
 
 
 def _malformed_input_issue(
