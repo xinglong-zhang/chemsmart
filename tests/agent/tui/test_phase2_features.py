@@ -7,10 +7,10 @@ from click.testing import CliRunner
 from textual import events
 
 from chemsmart.agent.cli import agent
-from chemsmart.agent.tui.app import ChemsmartTuiApp
+from chemsmart.agent.tui.app import ChemsmartTuiApp, launch_tui
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
-from chemsmart.agent.tui.widgets.popups import ApprovalResult
+from chemsmart.agent.tui.widgets.popups import ApprovalOverlay, ApprovalResult
 from chemsmart.agent.tui.widgets.transcript import Transcript
 
 from .._agent_session_helpers import FakeProvider, critic_ok, planner_plan
@@ -178,6 +178,86 @@ def test_composer_large_paste_placeholder_and_external_editor(
             assert composer.text == "edited externally"
 
     asyncio.run(scenario())
+
+
+def test_composer_submit_is_guarded_until_screen_handles_message(
+    tmp_path: Path,
+):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        submitted: list[str] = []
+        app.chat_screen.start_request = submitted.append
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            composer = app.query_one(Composer)
+            composer.load_text("single submit only")
+            composer.action_submit()
+            composer.action_submit()
+            await pilot.pause()
+            assert submitted == ["single submit only"]
+            composer.clear_text()
+            composer.load_text("next request")
+            composer.action_submit()
+            await pilot.pause()
+            assert submitted == ["single submit only", "next request"]
+
+    asyncio.run(scenario())
+
+
+def test_approval_overlay_stops_s_key_from_reaching_composer(tmp_path: Path):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        results: list[ApprovalResult | None] = []
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            composer = app.query_one(Composer)
+            composer.focus()
+            app.push_screen(
+                ApprovalOverlay(action="run_local", request="optimize water"),
+                results.append,
+            )
+            await pilot.pause()
+            await pilot.press("s")
+            await pilot.pause()
+            assert results
+            assert results[0] == ApprovalResult("s")
+            assert composer.text == ""
+            assert app.screen is app.chat_screen
+
+    asyncio.run(scenario())
+
+
+def test_launch_tui_uses_fullscreen_by_default(monkeypatch, tmp_path: Path):
+    captured: list[tuple[bool, dict, str]] = []
+
+    def fake_run(self, **kwargs) -> None:
+        captured.append((self.plain, kwargs, self.animation_level))
+
+    monkeypatch.setattr(ChemsmartTuiApp, "run", fake_run)
+
+    launch_tui(session_root=tmp_path / "sessions")
+
+    assert captured == [(False, {}, "full")]
+
+
+def test_launch_tui_plain_mode_stays_inline(monkeypatch, tmp_path: Path):
+    captured: list[tuple[bool, dict, str]] = []
+
+    def fake_run(self, **kwargs) -> None:
+        captured.append((self.plain, kwargs, self.animation_level))
+
+    monkeypatch.setattr(ChemsmartTuiApp, "run", fake_run)
+
+    launch_tui(plain=True, session_root=tmp_path / "sessions")
+
+    assert captured == [
+        (
+            True,
+            {"inline": True, "inline_no_clear": True, "mouse": False},
+            "none",
+        )
+    ]
 
 
 def test_agent_cli_ask_streams_without_tui_import(

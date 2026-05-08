@@ -32,6 +32,7 @@ class ChemsmartTuiApp(App[None]):
         )
 
     def on_mount(self) -> None:
+        self.theme = "textual-dark"
         self.push_screen(self.chat_screen)
 
 
@@ -48,4 +49,6 @@ def launch_tui(
     )
     if plain:
         app.animation_level = "none"
-    app.run(inline=True, inline_no_clear=True, mouse=not plain)
+        app.run(inline=True, inline_no_clear=True, mouse=False)
+        return
+    app.run()
