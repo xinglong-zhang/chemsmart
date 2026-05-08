@@ -82,10 +82,10 @@ class GromacsJobRunner(JobRunner):
 
     def _get_command(self, job):
         """
-         Return the GROMACS mdrun command.
+        Return the GROMACS mdrun command.
 
-         The TPR file should already be assembled in _prerun.
-         The -deffnm value should match the actual TPR file prefix.
+        The TPR file should already be assembled in _prerun.
+        The -deffnm value should match the actual TPR file prefix.
         """
         exe = self._get_executable()
         deffnm = Path(job.tpr_file).with_suffix("")
@@ -157,9 +157,9 @@ class GromacsJobRunner(JobRunner):
         mdp_file, structure_file, and top_file.
         """
         required_files = {
-            "mdp_file": getattr(job,"mdp_file",None),
-            "structure_file": getattr(job,"structure_file",None),
-            "top_file": getattr(job,"top_file",None),
+            "mdp_file": getattr(job, "mdp_file", None),
+            "structure_file": getattr(job, "structure_file", None),
+            "top_file": getattr(job, "top_file", None),
         }
 
         missing = [
@@ -170,6 +170,5 @@ class GromacsJobRunner(JobRunner):
 
         if missing:
             raise FileNotFoundError(
-                "Missing required GROMACS input files: "
-                + ", ".join(missing)
+                "Missing required GROMACS input files: " + ", ".join(missing)
             )

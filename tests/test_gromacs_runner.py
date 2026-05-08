@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 
 from chemsmart.jobs.gromacs.job import GromacsEMJob
 from chemsmart.jobs.gromacs.runner import GromacsJobRunner
@@ -33,7 +32,7 @@ def test_gromacs_em_job_stores_file_attributes(tmp_path):
     assert job.mdp_file == mdp_file
     assert job.structure_file == structure_file
     assert job.top_file == top_file
-    assert job.tpr_file ==tpr_file
+    assert job.tpr_file == tpr_file
     assert job.has_required_prepared_inputs()
 
 
@@ -55,7 +54,7 @@ def test_gromacs_runner_get_command_uses_tpr_file(tmp_path):
         mdp_file=mdp_file,
         structure_file=structure_file,
         top_file=top_file,
-        tpr_file=tmp_path/"em.tpr",
+        tpr_file=tmp_path / "em.tpr",
     )
 
     job.set_folder(str(tmp_path))
@@ -64,6 +63,8 @@ def test_gromacs_runner_get_command_uses_tpr_file(tmp_path):
     command = runner._get_command(job)
 
     assert command == f"gmx mdrun -deffnm {tmp_path / 'em'}"
+
+
 def test_gromacs_em_job_keeps_user_provided_tpr_file(tmp_path):
     mdp_file = tmp_path / "em.mdp"
     structure_file = tmp_path / "input.gro"
@@ -90,6 +91,8 @@ def test_gromacs_em_job_keeps_user_provided_tpr_file(tmp_path):
     job.set_folder(str(new_folder))
 
     assert job.tpr_file == custom_tpr_file
+
+
 def test_gromacs_runner_validate_inputs_passes_with_required_files(tmp_path):
     mdp_file = tmp_path / "em.mdp"
     structure_file = tmp_path / "input.gro"
