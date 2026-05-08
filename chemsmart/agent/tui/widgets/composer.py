@@ -45,6 +45,7 @@ class Composer(TextArea):
         )
         self.border_title = "Request"
         self._large_paste_chunks: list[tuple[str, str]] = []
+        self._submitting = False
 
     async def _on_paste(self, event: events.Paste) -> None:
         if len(event.text) <= 10000:
@@ -56,9 +57,12 @@ class Composer(TextArea):
             self.move_cursor(result.end_location)
 
     def action_submit(self) -> None:
+        if self._submitting:
+            return
         text = self.resolve_text().strip()
         if not text:
             return
+        self._submitting = True
         self.post_message(self.Submitted(self, text))
 
     def action_insert_newline(self) -> None:
@@ -98,8 +102,10 @@ class Composer(TextArea):
 
     def clear_text(self) -> None:
         self._large_paste_chunks.clear()
+        self._submitting = False
         self.load_text("")
 
     def load_text(self, text: str) -> None:
         self._large_paste_chunks.clear()
+        self._submitting = False
         super().load_text(text)

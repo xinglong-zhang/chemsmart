@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -19,12 +20,14 @@ class ApprovalResult:
 
 class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
     BINDINGS = [
-        Binding("y", "approve_once", "Yes once", show=False),
-        Binding("n", "deny", "No", show=False),
-        Binding("s", "approve_session", "Session", show=False),
-        Binding("r", "revise", "Revise", show=False),
-        Binding("escape", "cancel", "Cancel", show=False),
-        Binding("enter", "submit_revision", "Submit", show=False),
+        Binding("y", "approve_once", "Yes once", show=False, priority=True),
+        Binding("n", "deny", "No", show=False, priority=True),
+        Binding("s", "approve_session", "Session", show=False, priority=True),
+        Binding("r", "revise", "Revise", show=False, priority=True),
+        Binding("escape", "cancel", "Cancel", show=False, priority=True),
+        Binding(
+            "enter", "submit_revision", "Submit", show=False, priority=True
+        ),
     ]
 
     DEFAULT_CSS = """
@@ -68,10 +71,36 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
             yield Input(
                 placeholder="Add a corrective instruction, then press Enter",
                 id="approval-revision",
+                disabled=True,
             )
 
     def on_mount(self) -> None:
         self.query_one("#approval-summary", Static).border_title = "Approval"
+
+    def on_key(self, event: events.Key) -> None:
+        if self._revising:
+            if event.key == "enter":
+                event.stop()
+                self.action_submit_revision()
+            elif event.key == "escape":
+                event.stop()
+                self.action_cancel()
+            return
+        if event.key == "y":
+            event.stop()
+            self.action_approve_once()
+        elif event.key == "n":
+            event.stop()
+            self.action_deny()
+        elif event.key == "s":
+            event.stop()
+            self.action_approve_session()
+        elif event.key == "r":
+            event.stop()
+            self.action_revise()
+        elif event.key == "escape":
+            event.stop()
+            self.action_cancel()
 
     def action_approve_once(self) -> None:
         self.dismiss(ApprovalResult("y"))
@@ -85,7 +114,9 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
     def action_revise(self) -> None:
         self._revising = True
         self.add_class("-revising")
-        self.query_one("#approval-revision", Input).focus()
+        revision = self.query_one("#approval-revision", Input)
+        revision.disabled = False
+        revision.focus()
 
     def action_submit_revision(self) -> None:
         if not self._revising:
