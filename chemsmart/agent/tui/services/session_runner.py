@@ -27,7 +27,11 @@ class SessionRunnerMixin:
         self.active_agent_session = AgentSession(
             session_root=str(self.session_root)
         )
-        return self.active_agent_session.run(request, dry_submit=True)
+        return self.active_agent_session.run(
+            request,
+            dry_submit=True,
+            pause_before_risky=True,
+        )
 
     @work(
         thread=True,
@@ -43,6 +47,24 @@ class SessionRunnerMixin:
             session_id,
             session_root=str(self.session_root),
             dry_submit=True,
+            pause_before_risky=True,
+        )
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
+        name="agent-execute",
+    )
+    def execute_agent_session(self, session_id: str) -> dict[str, Any]:
+        self.active_resume_id = session_id
+        self.active_agent_session = None
+        return AgentSession.resume(
+            session_id,
+            session_root=str(self.session_root),
+            dry_submit=False,
+            pause_before_risky=False,
         )
 
     def current_session_dir(self) -> Path | None:

@@ -1,5 +1,12 @@
-"""Phase 1 Textual TUI for ``chemsmart agent``."""
+"""Textual TUI for ``chemsmart agent``."""
 
-from .app import ChemsmartTuiApp, launch_tui
+from __future__ import annotations
 
-__all__ = ["ChemsmartTuiApp", "launch_tui"]
+
+def launch_tui(*, plain: bool = False, session_root=None) -> None:
+    from .app import launch_tui as _launch_tui
+
+    _launch_tui(plain=plain, session_root=session_root)
+
+
+__all__ = ["launch_tui"]

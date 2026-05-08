@@ -6,6 +6,8 @@ from textual.widgets import Static
 
 
 class BaseCell(Static):
+    can_focus = True
+
     DEFAULT_CSS = """
     BaseCell {
         width: 100%;
@@ -14,6 +16,10 @@ class BaseCell(Static):
         padding: 0 1;
         border: round $surface;
         background: $panel;
+    }
+
+    BaseCell:focus {
+        border: heavy $accent;
     }
     """
 

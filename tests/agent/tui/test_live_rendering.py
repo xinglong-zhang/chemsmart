@@ -57,10 +57,11 @@ def test_live_run_renders_plan_dry_run_and_critic_cells(
             child_types = [
                 type(child).__name__ for child in transcript.children
             ]
-            assert child_types[:4] == [
+            assert child_types[:5] == [
                 "UserMessageCell",
                 "PlanCell",
                 "DryRunInputCell",
+                "RuntimeValidationCell",
                 "CriticVerdictCell",
             ]
             footer_text = str(app.query_one(FooterWidget).renderable).lower()

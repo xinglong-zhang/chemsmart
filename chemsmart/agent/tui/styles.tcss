@@ -30,6 +30,22 @@ FooterWidget {
     border: round $success;
 }
 
+.method-cell {
+    border: round $secondary;
+}
+
+.geometry-cell {
+    border: round $accent;
+}
+
+.runtime-cell {
+    border: round $warning;
+}
+
+.submission-cell {
+    border: round $primary;
+}
+
 .critic-cell {
     border: round $secondary;
 }

@@ -1,4 +1,4 @@
-"""Main Phase 1 chat screen."""
+"""Main chat screen for the chemsmart agent TUI."""
 
 from __future__ import annotations
 
@@ -12,14 +12,19 @@ from textual.screen import Screen
 from textual.worker import Worker, WorkerState
 
 from chemsmart.agent.cli import agent
+from chemsmart.agent.core import CriticVerdict, Plan
 from chemsmart.agent.tui.events import (
     CriticVerdictEvent,
     DryRunInputEvent,
     ErrorEvent,
+    GeometryHandoffEvent,
     IgnoredEvent,
+    MethodEvent,
     PlanEvent,
     RequestEvent,
+    RuntimeValidationEvent,
     SessionSummaryEvent,
+    SubmissionPreviewEvent,
     parse_decision_event,
     session_completed,
 )
@@ -32,11 +37,21 @@ from chemsmart.agent.tui.widgets.cells import (
     CriticVerdictCell,
     DryRunInputCell,
     ErrorCell,
+    GeometryHandoffCell,
+    MethodCell,
     PlanCell,
+    RuntimeValidationCell,
+    SubmissionPreviewCell,
     UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
+from chemsmart.agent.tui.widgets.popups import (
+    ApprovalOverlay,
+    ApprovalResult,
+    FilePickerOverlay,
+    TextPromptOverlay,
+)
 from chemsmart.agent.tui.widgets.transcript import Transcript
 
 
@@ -61,6 +76,16 @@ class ChatScreen(SessionRunnerMixin, Screen):
         self._quit_timer = None
         self._session_poll_timer = None
         self._user_requests: set[str] = set()
+        self._current_request: str | None = None
+        self._current_plan: Plan | None = None
+        self._current_plan_text: str | None = None
+        self._current_verdict: CriticVerdict | None = None
+        self._pending_approval = False
+        self._pending_risky_tool: str | None = None
+        self._approval_session_granted = False
+        self._latest_dry_run_content: str | None = None
+        self._running_risky_steps: set[tuple[str, int]] = set()
+        self._job_counts = {"queued": 0, "running": 0, "done": 0, "failed": 0}
 
     def compose(self) -> ComposeResult:
         yield Transcript(id="chat-body")
@@ -89,8 +114,8 @@ class ChatScreen(SessionRunnerMixin, Screen):
             )
             return
         self._stop_tailer()
-        self._user_requests.clear()
-        self.query_one(Transcript).clear_cells()
+        self._reset_request_state(clear_transcript=True)
+        self._current_request = text
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint("Agent is planning…")
         self.query_one(Transcript).add_cell(UserMessageCell(text))
@@ -110,8 +135,7 @@ class ChatScreen(SessionRunnerMixin, Screen):
             )
             return
         self._stop_tailer()
-        self._user_requests.clear()
-        self.query_one(Transcript).clear_cells()
+        self._reset_request_state(clear_transcript=True)
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint(f"Loading session {session_id}")
         self._attach_tailer(session_dir / "decision_log.jsonl")
@@ -129,8 +153,22 @@ class ChatScreen(SessionRunnerMixin, Screen):
         if event.worker.group != "agent-session":
             return
         if event.state == WorkerState.SUCCESS:
-            self.query_one(FooterWidget).set_hint("Session complete")
+            result = event.worker.result or {}
             self._current_worker = event.worker
+            if result.get("pending_approval"):
+                self._pending_approval = True
+                self._pending_risky_tool = result.get("next_risky_tool")
+                self.query_one(FooterWidget).set_phase(Phase.DRY_RUN_READY)
+                self.query_one(FooterWidget).set_hint(
+                    f"Approval required for {self._pending_risky_tool}"
+                )
+                if self._approval_session_granted:
+                    self._approve_current_request()
+                return
+            if result.get("blocked"):
+                self.query_one(FooterWidget).set_hint("Execution blocked")
+            else:
+                self.query_one(FooterWidget).set_hint("Session complete")
         elif event.state == WorkerState.ERROR:
             error = event.worker.error
             self.post_error(
@@ -191,6 +229,35 @@ class ChatScreen(SessionRunnerMixin, Screen):
     ) -> None:
         self.query_one(Transcript).add_cell(ErrorCell(title, message, details))
 
+    def open_file_picker(self) -> None:
+        self.app.push_screen(
+            FilePickerOverlay(Path.cwd()), self._handle_file_pick
+        )
+
+    def edit_method_from_cell(self, recommendation: dict) -> None:
+        method = recommendation.get("functional") or "manual"
+        basis = recommendation.get("basis") or "manual"
+        self.app.push_screen(
+            TextPromptOverlay(
+                title="Revise method",
+                prompt=(
+                    "Describe the corrected method/basis to use. "
+                    f"Current: {method}/{basis}"
+                ),
+            ),
+            self._handle_method_revision,
+        )
+
+    def _handle_file_pick(self, value: str | None) -> None:
+        if not value:
+            return
+        self.query_one(Composer).insert_file_reference(value)
+
+    def _handle_method_revision(self, value: str | None) -> None:
+        if not value or not self._current_request:
+            return
+        self.start_request(self._corrected_request(value))
+
     def _disarm_soft_cancel(self) -> None:
         self._quit_armed = False
         self.query_one(FooterWidget).set_hint(
@@ -230,27 +297,57 @@ class ChatScreen(SessionRunnerMixin, Screen):
         self.app.call_from_thread(self._apply_log_entry, entry)
 
     def _apply_log_entry(self, entry: dict) -> None:
-        event = parse_decision_event(entry)
+        self._update_job_counts(entry)
+        event = parse_decision_event(
+            entry,
+            session_dir=(
+                self._tailer_path.parent if self._tailer_path else None
+            ),
+        )
         transcript = self.query_one(Transcript)
         footer = self.query_one(FooterWidget)
 
         if isinstance(event, RequestEvent):
+            self._current_request = event.request
             if not self._has_user_message(event.request):
                 self._user_requests.add(event.request)
                 transcript.add_cell(UserMessageCell(event.request))
             footer.set_phase(Phase.PLANNING)
             footer.set_hint("Planning…")
         elif isinstance(event, PlanEvent):
+            self._current_plan = event.plan
+            self._current_plan_text = event.text
             transcript.add_cell(PlanCell(event.text))
             footer.set_phase(Phase.PLANNING)
             footer.set_hint("Generating dry-run input…")
+        elif isinstance(event, MethodEvent):
+            transcript.add_cell(MethodCell(event.recommendation))
         elif isinstance(event, DryRunInputEvent):
             transcript.add_cell(
-                DryRunInputCell(event.content, inputfile=event.inputfile)
+                DryRunInputCell(
+                    event.content,
+                    inputfile=event.inputfile,
+                    previous_content=self._latest_dry_run_content,
+                )
             )
+            self._latest_dry_run_content = event.content
             footer.set_phase(Phase.DRY_RUN_READY)
             footer.set_hint("Dry-run input ready")
+        elif isinstance(event, RuntimeValidationEvent):
+            transcript.add_cell(RuntimeValidationCell(event.validation))
+        elif isinstance(event, SubmissionPreviewEvent):
+            transcript.add_cell(SubmissionPreviewCell(event.preview))
+            footer.set_phase(Phase.DRY_RUN_READY)
+            footer.set_hint("Submission preview ready")
+        elif isinstance(event, GeometryHandoffEvent):
+            transcript.add_cell(
+                GeometryHandoffCell(
+                    event.molecule,
+                    session_dir=event.session_dir,
+                )
+            )
         elif isinstance(event, CriticVerdictEvent):
+            self._current_verdict = event.verdict
             transcript.add_cell(CriticVerdictCell(event.verdict))
             if event.verdict.verdict == "reject":
                 footer.set_phase(Phase.ERROR)
@@ -265,6 +362,8 @@ class ChatScreen(SessionRunnerMixin, Screen):
             footer.set_phase(Phase.ERROR)
             footer.set_hint("Agent reported an error")
         elif isinstance(event, SessionSummaryEvent):
+            self._pending_approval = False
+            self._pending_risky_tool = None
             footer.set_phase(Phase.ERROR if event.blocked else Phase.FINISHED)
             footer.set_hint(
                 "Blocked" if event.blocked else "Finished successfully"
@@ -290,38 +389,39 @@ class ChatScreen(SessionRunnerMixin, Screen):
             self.post_agent_message(
                 "\n".join(
                     [
-                        "# Phase 1 slash commands",
-                        "- `/help` show this help",
-                        "- `/quit` exit the TUI",
-                        "- `/clear` clear the transcript",
-                        "- `/sessions` browse recent sessions",
-                        "- `/resume <session-id>` load or continue a session",
-                        "- `/tools` list registered tools",
-                        "- `/doctor` run inline diagnostics",
+                        "# Phase 2 slash commands",
+                        "- `[A] /help` show this help",
+                        "- `[D] /dryrun` regenerate the current dry-run",
+                        "- `[D] /submit` approve pending HPC submission",
+                        "- `[D] /run` approve pending local execution",
+                        "- `[P,D] /critic` show the current critic verdict",
+                        "- `[P,D,R] /plan` show the current plan",
+                        "- `[A] /rationale` show planner rationale",
+                        "- `[A] /quit` exit the TUI",
+                        "- `[I,F] /clear` clear the transcript",
+                        "- `[I] /sessions` browse recent sessions",
+                        "- `[I] /resume <session-id>` load or continue a session",
+                        "- `[A] /tools` list registered tools",
+                        "- `[A] /doctor` run inline diagnostics",
                     ]
                 )
             )
         elif command in {"/quit", "/exit"}:
             self.app.exit()
         elif command == "/clear":
-            if self._current_worker and not self._current_worker.is_finished:
-                self.post_error(
-                    "Cannot clear",
-                    "Wait for the current request to finish before clearing the transcript.",
-                )
+            if not self._guard_phase(command, {Phase.IDLE, Phase.FINISHED}):
                 return
             self._stop_tailer()
-            self.query_one(Transcript).clear_cells()
-            self.query_one(FooterWidget).set_phase(Phase.IDLE)
-            self.query_one(FooterWidget).set_hint(
-                "Enter to submit • /help for commands"
-            )
-            self._user_requests.clear()
+            self._reset_request_state(clear_transcript=True)
             self.post_agent_message("Transcript cleared.")
             self.focus_composer()
         elif command == "/sessions":
+            if not self._guard_phase(command, {Phase.IDLE}):
+                return
             self.app.push_screen(SessionsScreen(self.session_root))
         elif command == "/resume":
+            if not self._guard_phase(command, {Phase.IDLE}):
+                return
             if not argument:
                 self.app.push_screen(SessionsScreen(self.session_root))
                 return
@@ -330,6 +430,55 @@ class ChatScreen(SessionRunnerMixin, Screen):
             self._run_inline_cli(["tools"], title="Tools")
         elif command == "/doctor":
             self._run_inline_cli(["doctor"], title="Doctor")
+        elif command == "/dryrun":
+            if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
+                return
+            if not self._current_request:
+                self.post_error("No request", "There is no active request.")
+                return
+            self.start_request(self._current_request)
+        elif command == "/critic":
+            if not self._guard_phase(
+                command, {Phase.PLANNING, Phase.DRY_RUN_READY}
+            ):
+                return
+            if self._current_verdict is None:
+                self.post_error(
+                    "No critic verdict", "The critic has not finished yet."
+                )
+                return
+            self.query_one(Transcript).add_cell(
+                CriticVerdictCell(self._current_verdict)
+            )
+        elif command == "/plan":
+            if not self._guard_phase(
+                command, {Phase.PLANNING, Phase.DRY_RUN_READY, Phase.RUNNING}
+            ):
+                return
+            if not self._current_plan_text:
+                self.post_error("No plan", "The planner has not finished yet.")
+                return
+            self.query_one(Transcript).add_cell(
+                PlanCell(self._current_plan_text)
+            )
+        elif command == "/rationale":
+            rationale = (
+                self._current_plan.rationale if self._current_plan else None
+            )
+            if not rationale:
+                self.post_error(
+                    "No rationale", "No planner rationale is available."
+                )
+                return
+            self.post_agent_message(rationale, title="Rationale")
+        elif command == "/submit":
+            if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
+                return
+            self._request_approval("submit_hpc")
+        elif command == "/run":
+            if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
+                return
+            self._request_approval("run_local")
         else:
             self.post_error("Unknown command", raw)
 
@@ -340,3 +489,110 @@ class ChatScreen(SessionRunnerMixin, Screen):
             self.post_agent_message(f"```\n{text}\n```", title=title)
         else:
             self.post_error(title, text)
+
+    def _guard_phase(self, command: str, allowed: set[Phase]) -> bool:
+        current = self.query_one(FooterWidget).phase
+        if current in allowed:
+            return True
+        allowed_text = ", ".join(sorted(phase.value for phase in allowed))
+        self.post_error(
+            "Command unavailable",
+            f"{command} is only available in: {allowed_text}.",
+        )
+        return False
+
+    def _request_approval(self, expected_tool: str) -> None:
+        if (
+            not self._pending_approval
+            or self._pending_risky_tool != expected_tool
+        ):
+            self.post_error(
+                "Approval unavailable",
+                f"No pending `{expected_tool}` action is waiting for approval.",
+            )
+            return
+        self.app.push_screen(
+            ApprovalOverlay(
+                action=expected_tool,
+                request=self._current_request or "",
+            ),
+            self._handle_approval_result,
+        )
+
+    def _handle_approval_result(self, result: ApprovalResult | None) -> None:
+        if result is None:
+            return
+        if result.choice == "n":
+            self.query_one(FooterWidget).set_hint("Approval denied")
+            return
+        if result.choice == "s":
+            self._approval_session_granted = True
+            self._approve_current_request()
+            return
+        if result.choice == "y":
+            self._approve_current_request()
+            return
+        if result.choice == "r" and result.corrective_text:
+            self.start_request(self._corrected_request(result.corrective_text))
+
+    def _approve_current_request(self) -> None:
+        session_dir = self.current_session_dir()
+        if session_dir is None:
+            self.post_error("No session", "No paused session is available.")
+            return
+        self._pending_approval = False
+        self.query_one(FooterWidget).set_phase(Phase.RUNNING)
+        self.query_one(FooterWidget).set_hint(
+            f"Executing {self._pending_risky_tool or 'workflow'}…"
+        )
+        self._current_worker = self.execute_agent_session(session_dir.name)
+
+    def _corrected_request(self, corrective_text: str) -> str:
+        original = self._current_request or ""
+        return (
+            f"Corrective instruction: {corrective_text}\n\n"
+            f"Original request:\n{original}"
+        )
+
+    def _reset_request_state(self, *, clear_transcript: bool) -> None:
+        self._user_requests.clear()
+        self._current_request = None
+        self._current_plan = None
+        self._current_plan_text = None
+        self._current_verdict = None
+        self._pending_approval = False
+        self._pending_risky_tool = None
+        self._running_risky_steps.clear()
+        self._job_counts = {"queued": 0, "running": 0, "done": 0, "failed": 0}
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.IDLE)
+        footer.set_hint("Enter to submit • /help for commands")
+        footer.reset_job_counts()
+        if clear_transcript:
+            self.query_one(Transcript).clear_cells()
+
+    def _update_job_counts(self, entry: dict) -> None:
+        kind = entry.get("kind")
+        payload = entry.get("payload") or {}
+        tool = payload.get("tool")
+        step_index = int(payload.get("step_index") or -1)
+        key = (str(tool), step_index)
+
+        if kind == "tool_call" and tool in {"run_local", "submit_hpc"}:
+            self._running_risky_steps.add(key)
+        elif kind == "tool_result" and tool == "run_local":
+            self._running_risky_steps.discard(key)
+            self._job_counts["done"] += 1
+        elif (
+            kind == "tool_result"
+            and tool == "submit_hpc"
+            and not payload.get("from_preview")
+        ):
+            self._running_risky_steps.discard(key)
+            self._job_counts["queued"] += 1
+        elif kind == "tool_error" and tool in {"run_local", "submit_hpc"}:
+            self._running_risky_steps.discard(key)
+            self._job_counts["failed"] += 1
+
+        self._job_counts["running"] = len(self._running_risky_steps)
+        self.query_one(FooterWidget).set_job_counts(**self._job_counts)
