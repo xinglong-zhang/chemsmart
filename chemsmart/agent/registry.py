@@ -88,6 +88,26 @@ class ToolRegistry:
     def openai_tool_defs(self) -> list[dict[str, Any]]:
         return [tool.openai_tool_def() for tool in self.list_tools()]
 
+    def normalize_args(
+        self,
+        name: str,
+        args: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if name not in self._tools:
+            return dict(args or {})
+
+        tool = self._tools[name]
+        payload = dict(args or {})
+        try:
+            validated = tool.input_schema.model_validate(payload)
+        except Exception:
+            return payload
+
+        normalized = dict(validated.model_dump(exclude_defaults=True))
+        if tool.accepts_kwargs and validated.model_extra:
+            normalized.update(validated.model_extra)
+        return normalized
+
     def call(self, name: str, args: dict[str, Any] | None = None) -> Any:
         if name not in self._tools:
             known = ", ".join(sorted(self._tools))

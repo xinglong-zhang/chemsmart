@@ -364,7 +364,7 @@ class AgentSession:
     def _planner_call(self, request: str) -> Plan:
         prompt = _load_prompt("planner.md")
         tool_defs = self.registry.openai_tool_defs()
-        return self._llm_json_call(
+        plan = self._llm_json_call(
             stage="planner",
             messages=[
                 {"role": "system", "content": prompt},
@@ -380,6 +380,9 @@ class AgentSession:
             ],
             model_cls=Plan,
         )
+        for step in plan.steps:
+            step.args = self.registry.normalize_args(step.tool, step.args)
+        return plan
 
     def _critic_call(
         self,

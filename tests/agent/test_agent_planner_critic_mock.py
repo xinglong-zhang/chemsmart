@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -306,3 +307,103 @@ def test_critic_hard_rejects_irc_without_irc_keyword(
         "Gaussian IRC input missing irc= keyword"
         in result["critic_verdict"].issues
     )
+
+
+def test_identical_queries_produce_identical_plan_hashes(
+    single_molecule_xyz_file,
+    tmp_path: Path,
+):
+    query = "optimize examples/h2o.xyz"
+    explicit_defaults_plan = {
+        "steps": [
+            {
+                "tool": "build_molecule",
+                "args": {"filepath": single_molecule_xyz_file, "index": "-1"},
+                "rationale": "Load the neutral closed-shell structure.",
+            },
+            {
+                "tool": "build_gaussian_settings",
+                "args": {
+                    "functional": "B3LYP",
+                    "basis": "6-31G*",
+                    "charge": 0,
+                    "multiplicity": 1,
+                    "freq": False,
+                    "numfreq": False,
+                },
+                "rationale": "B3LYP/6-31G* is a cost-effective starting point for a small closed-shell neutral molecule.",
+            },
+            {
+                "tool": "build_job",
+                "args": {
+                    "kind": "gaussian.opt",
+                    "molecule": "$step1",
+                    "settings": "$step2",
+                    "label": "hash_case",
+                },
+                "rationale": "A geometry optimization is appropriate because the request is to relax the structure before any higher-level follow-up.",
+            },
+            {
+                "tool": "dry_run_input",
+                "args": {"job": "$step3"},
+                "rationale": "The dry run verifies the chosen route line before any execution.",
+            },
+            {
+                "tool": "validate_runtime",
+                "args": {"job": "$step3", "server": None},
+                "rationale": "Runtime validation confirms the local prerequisites for this small Gaussian optimization.",
+            },
+        ],
+        "rationale": "Prepare a Gaussian optimization dry run for a small neutral molecule.",
+        "estimated_cost": "low",
+    }
+    omitted_defaults_plan = {
+        "steps": [
+            {
+                "tool": "build_molecule",
+                "args": {"filepath": single_molecule_xyz_file},
+                "rationale": "Load the neutral closed-shell structure.",
+            },
+            {
+                "tool": "build_gaussian_settings",
+                "args": {"functional": "B3LYP", "basis": "6-31G*"},
+                "rationale": "B3LYP/6-31G* is a cost-effective starting point for a small closed-shell neutral molecule.",
+            },
+            {
+                "tool": "build_job",
+                "args": {
+                    "kind": "gaussian.opt",
+                    "molecule": "$step1",
+                    "settings": "$step2",
+                    "label": "hash_case",
+                },
+                "rationale": "A geometry optimization is appropriate because the request is to relax the structure before any higher-level follow-up.",
+            },
+            {
+                "tool": "dry_run_input",
+                "args": {"job": "$step3"},
+                "rationale": "The dry run verifies the chosen route line before any execution.",
+            },
+            {
+                "tool": "validate_runtime",
+                "args": {"job": "$step3"},
+                "rationale": "Runtime validation confirms the local prerequisites for this small Gaussian optimization.",
+            },
+        ],
+        "rationale": "Prepare a Gaussian optimization dry run for a small neutral molecule.",
+        "estimated_cost": "low",
+    }
+
+    plan_hashes = []
+    for response in (explicit_defaults_plan, omitted_defaults_plan):
+        provider = FakeProvider([response])
+        session = AgentSession(
+            provider=provider,
+            registry=ToolRegistry.default(),
+            session_root=tmp_path,
+        )
+        plan = session._planner_call(query)
+        payload = json.dumps(plan.model_dump(), sort_keys=True)
+        plan_hashes.append(hashlib.sha256(payload.encode("utf-8")).hexdigest())
+
+    assert plan_hashes[0] == plan_hashes[1]

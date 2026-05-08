@@ -141,3 +141,40 @@ class TestBuildSettingsAndJob:
         assert sorted(path.name for path in tmp_path.glob("*.com")) == [
             "gaussian_opt_freq.com"
         ]
+
+    def test_scan_with_definition_produces_modredundant_section(
+        self,
+        tmp_path: Path,
+        single_molecule_xyz_file,
+    ):
+        molecule = build_molecule(single_molecule_xyz_file)
+        settings = build_gaussian_settings(
+            "B3LYP",
+            "6-31G*",
+            scan_definition="B 1 2 S 10 0.05",
+        )
+
+        job = build_job(
+            "gaussian.scan",
+            molecule=molecule,
+            settings=settings,
+            label="gaussian_scan",
+        )
+        job.set_folder(str(tmp_path))
+
+        result = dry_run_input(job)
+
+        assert "# opt=modredundant" in result["content"].lower()
+        assert "B 1 2 S 10 0.05" in result["content"]
+
+    def test_scan_without_definition_raises_value_error(
+        self,
+        single_molecule_xyz_file,
+    ):
+        molecule = build_molecule(single_molecule_xyz_file)
+        settings = build_gaussian_settings("B3LYP", "6-31G*")
+
+        with pytest.raises(ValueError) as excinfo:
+            build_job("gaussian.scan", molecule=molecule, settings=settings)
+
+        assert "scan_definition" in str(excinfo.value)

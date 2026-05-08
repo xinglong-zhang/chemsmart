@@ -144,6 +144,17 @@ _REMOTE_UNKNOWN_SSH = "ssh login reachable"
 _UNRESOLVED_ENVVAR_PATTERN = re.compile(
     r"(\$(?:\{)?[A-Za-z_][A-Za-z0-9_]*(?:\})?)|(%[^%]+%)"
 )
+_ORCA_AB_INITIO_KEYWORDS = (
+    "MP2",
+    "MP3",
+    "MP4",
+    "CCSD",
+    "DLPNO",
+    "CASSCF",
+    "NEVPT2",
+    "MRCI",
+)
+_ORCA_AB_INITIO_EXACT_METHODS = {"HF", "RHF", "UHF", "ROHF"}
 
 
 def build_molecule(filepath: str, index: str = "-1") -> Molecule:
@@ -169,9 +180,24 @@ def build_gaussian_settings(
     numfreq=False,
     additional_opt_options_in_route=None,
     additional_route_parameters=None,
+    scan_definition: str | None = None,
     **extras,
 ) -> GaussianJobSettings:
-    """Build validated Gaussian job settings from planner-supplied fields."""
+    """Build Gaussian settings.
+
+    `scan_definition` is the ModRedundant coordinate scan specification for
+    Gaussian scan jobs, for example ``D 1 2 3 4 S 10 36.0`` for a 10-step
+    dihedral scan in 36° increments. It is required for ``gaussian.scan``
+    workflows and is translated into ``settings.modred``.
+    """
+    modred = extras.pop("modred", None)
+    if scan_definition is not None:
+        if modred is not None:
+            raise ValueError(
+                "Provide either scan_definition or modred, not both."
+            )
+        modred = _parse_gaussian_scan_definition(scan_definition)
+
     return GaussianJobSettings(
         functional=functional,
         basis=basis,
@@ -186,6 +212,7 @@ def build_gaussian_settings(
         numfreq=numfreq,
         additional_opt_options_in_route=additional_opt_options_in_route,
         additional_route_parameters=additional_route_parameters,
+        modred=modred,
         **extras,
     )
 
@@ -231,6 +258,14 @@ def build_orca_settings(
     **extras,
 ) -> ORCAJobSettings:
     """Build validated ORCA job settings from planner-supplied fields."""
+    if (
+        ab_initio is None
+        and isinstance(functional, str)
+        and _looks_like_orca_ab_initio_method(functional)
+    ):
+        ab_initio = functional
+        functional = None
+
     return ORCAJobSettings(
         ab_initio=ab_initio,
         functional=functional,
@@ -273,6 +308,98 @@ def build_orca_settings(
     )
 
 
+def _looks_like_orca_ab_initio_method(method: Any) -> bool:
+    if not isinstance(method, str):
+        return False
+
+    normalized = method.strip().upper()
+    if not normalized:
+        return False
+    if normalized in _ORCA_AB_INITIO_EXACT_METHODS:
+        return True
+    return any(keyword in normalized for keyword in _ORCA_AB_INITIO_KEYWORDS)
+
+
+def _parse_gaussian_scan_definition(scan_definition: str) -> dict[str, Any]:
+    lines = [
+        line.strip()
+        for chunk in scan_definition.splitlines()
+        for line in chunk.split(";")
+        if line.strip()
+    ]
+    if not lines:
+        raise ValueError("scan_definition cannot be empty.")
+
+    atom_count_by_coordinate = {"B": 2, "A": 3, "D": 4}
+    coords: list[list[int]] = []
+    num_steps: list[int] = []
+    step_sizes: list[float] = []
+    constrained_coordinates: list[list[int]] = []
+
+    for line in lines:
+        tokens = line.split()
+        coordinate_type = tokens[0].upper()
+        expected_atoms = atom_count_by_coordinate.get(coordinate_type)
+        if expected_atoms is None:
+            raise ValueError(
+                "scan_definition must start with B, A, or D followed by "
+                "1-based atom indices."
+            )
+        if len(tokens) < expected_atoms + 2:
+            raise ValueError(
+                f"scan_definition {line!r} is incomplete. Expected a "
+                "coordinate, indices, and a scan directive."
+            )
+
+        try:
+            coordinate = [
+                int(token) for token in tokens[1 : 1 + expected_atoms]
+            ]
+        except ValueError as exc:
+            raise ValueError(
+                f"scan_definition {line!r} has non-integer atom indices."
+            ) from exc
+
+        directive = tokens[1 + expected_atoms].upper()
+        if directive == "F":
+            constrained_coordinates.append(coordinate)
+            continue
+
+        if directive != "S" or len(tokens) != expected_atoms + 4:
+            raise ValueError(
+                "scan_definition entries must look like "
+                "'D 1 2 3 4 S 10 36.0' or 'B 1 2 F'."
+            )
+
+        try:
+            steps = int(tokens[2 + expected_atoms])
+            step_size = float(tokens[3 + expected_atoms])
+        except ValueError as exc:
+            raise ValueError(
+                f"scan_definition {line!r} has an invalid step count "
+                "or step size."
+            ) from exc
+
+        coords.append(coordinate)
+        num_steps.append(steps)
+        step_sizes.append(step_size)
+
+    if not coords:
+        raise ValueError(
+            "scan_definition must include at least one scan entry with "
+            "an 'S <steps> <step_size>' directive."
+        )
+
+    modred: dict[str, Any] = {
+        "coords": coords,
+        "num_steps": num_steps,
+        "step_size": step_sizes,
+    }
+    if constrained_coordinates:
+        modred["constrained_coordinates"] = constrained_coordinates
+    return modred
+
+
 def build_job(
     kind: JobKind,
     molecule: Molecule,
@@ -302,6 +429,12 @@ def build_job(
         and not job_settings.numfreq
     ):
         job_settings.freq = True
+    if normalized_kind == "gaussian.scan" and not job_settings.modred:
+        raise ValueError(
+            "gaussian.scan requires scan_definition in "
+            "build_gaussian_settings, for example "
+            "'D 1 2 3 4 S 10 36.0' or 'B 1 2 S 10 0.05'."
+        )
 
     return job_class(
         molecule=molecule,

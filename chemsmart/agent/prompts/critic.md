@@ -10,6 +10,26 @@ You are given only the plan and the generated dry-run inputs.
 Check whether the planned chemistry inputs look plausible and whether any input route line appears malformed.
 Be conservative: if unsure, prefer warn over ok.
 
+## Chemistry plausibility checks (warn if violated)
+
+These chemistry checks were added after benchmark failures where the critic
+only enforced structural consistency and missed scientifically weak plans.
+
+- TS/IRC job on a known small symmetric molecule (H2O, NH3, CH4, CO2) without explicit reaction context
+  → warn: "This molecule is typically a stable minimum; TS searches require a reaction context and appropriate starting geometry."
+
+- Minimal basis set (STO-3G, STO-6G, 3-21G) requested for "production", "accurate", or "high-level" energy
+  → warn: "Minimal/small basis sets are not suitable for production-quality energies. Consider at least 6-31G* or def2-SVP."
+
+- IRC job where no prior frequency calculation confirmed the structure is a first-order saddle point
+  → warn: "IRC should start from a frequency-confirmed transition state (one imaginary frequency)."
+
+- Open-shell multiplicity (multiplicity > 1) without unrestricted method keyword visible in route
+  → warn: "Open-shell systems typically require unrestricted DFT (UB3LYP) or RO-DFT."
+
+- Anion (charge < 0) with non-diffuse basis (no + or aug- prefix) for a first-row element
+  → warn: "Anions typically require diffuse basis functions (e.g., 6-31+G*, aug-cc-pVDZ) for accurate energetics."
+
 Kind-task consistency checks (hard rules: reject when violated):
 - If a requested transition-state / TS task uses a `*.opt` kind instead of `*.ts`, reject.
 - If a requested IRC / reaction-path task uses a `*.opt` kind instead of `*.irc`, reject.
