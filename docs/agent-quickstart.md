@@ -3,6 +3,7 @@
 This page is a single-session transcript for the current preview agent layer.
 All commands below were run on 2026-05-09 with `AI_PROVIDER=openai`;
 session IDs and temp paths will differ on your machine.
+Sample inputs ship in `examples/`; this guide uses `examples/h2o.xyz`.
 
 ## Setup
 
@@ -28,7 +29,7 @@ A healthy doctor run prints lines like:
 AI_PROVIDER=openai OK
 api.env: OK (key length=32)
 gateway: https://factchat-cloud.mindlogic.ai/v1/gateway
-ping: ok (model=gpt-5.4-2026-03-05, latency=1122ms)
+ping: ok (model=gpt-5.4-2026-03-05, latency=911ms)
 tools registered: 10
 ```
 
@@ -47,9 +48,11 @@ Sample output (abridged):
 │ Recommend method/basis for a Cope rearrangement TS                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─────────────────────────────────── Advice ───────────────────────────────────╮
-│ For a Cope rearrangement TS, a good default is a DFT TS search with          │
-│ frequency confirmation using M06-2X/6-31+G(d,p) or wB97X-D/def2-SVP, then a  │
-│ single-point refinement at M06-2X/def2-TZVP or wB97X-D/def2-TZVP ...         │
+│ For a Cope rearrangement transition state, a good default is a DFT TS search │
+│ with frequency confirmation using a modern hybrid functional and at least a  │
+│ polarized double-zeta basis; for example, optimize the TS at M06-2X/6-31G*   │
+│ or wB97X-D/def2-SVP, then verify exactly one imaginary frequency and follow  │
+│ with an IRC.                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -58,49 +61,38 @@ reasoning directly and does not create an input file.
 
 ## First run — dry-run input generation
 
-For the transcript below, I first created a minimal `water.xyz` in the working
-directory:
+For the transcript below, I used the shipped sample file
+`examples/h2o.xyz` and ran the dry-submit path:
 
 ```bash
-cat > water.xyz <<'EOF'
-3
-water
-O 0.000000 0.000000 0.000000
-H 0.758602 0.000000 0.504284
-H -0.758602 0.000000 0.504284
-EOF
-```
-
-Then I ran the dry-submit path:
-
-```bash
-AI_PROVIDER=openai chemsmart agent run "single-point on water.xyz at B3LYP/6-31G(d) Gaussian" --dry-submit
+AI_PROVIDER=openai chemsmart agent run "single-point on examples/h2o.xyz at B3LYP/6-31G(d) Gaussian" --dry-submit
 ```
 
 Sample stdout (abridged):
 
 ```text
-session: 20260509T064536Z-aac23479
+session: 20260509T082732Z-31b18565
 Plan:
-Rationale: This prepares a Gaussian single-point calculation on water.xyz at the exact requested B3LYP/6-31G(d) level; if you want execution, the next step would be run_local or submit_hpc after validation.
-Estimated cost: Very low; seconds to minutes on a typical CPU.
-1. build_molecule {"filepath": "water.xyz"}
-2. build_gaussian_settings {"basis": "6-31G(d)", "functional": "B3LYP", "title": "water_sp"}
-3. build_job {"kind": "gaussian.sp", "label": "water_sp", "molecule": "$step1", "settings": "$step2"}
+Rationale: This plan prepares a Gaussian single-point energy calculation on examples/h2o.xyz exactly at B3LYP/6-31G(d), with input preview and runtime validation before any execution step.
+Estimated cost: Low; very small Gaussian DFT single-point job, typically seconds to minutes locally.
+1. build_molecule {"filepath": "examples/h2o.xyz"}
+2. build_gaussian_settings {"basis": "6-31G(d)", "functional": "B3LYP", "title": "h2o_sp"}
+3. build_job {"kind": "gaussian.sp", "label": "h2o_gaussian_sp", "molecule": "$step1", "settings": "$step2"}
 4. dry_run_input {"job": "$step3"}
 5. validate_runtime {"job": "$step3"}
 critic verdict: ok
-inputfile: /private/tmp/chemsmart-agent-docs.8MdMeA/water_sp.com
-decision log: /Users/hongjiseung/.chemsmart/agent/sessions/20260509T064536Z-aac23479/decision_log.jsonl
+inputfile: /Users/hongjiseung/developer/chemsmart/h2o_gaussian_sp.com
+decision log: /Users/hongjiseung/.chemsmart/agent/sessions/20260509T082732Z-31b18565/decision_log.jsonl
 ```
 
 The generated Gaussian input was:
 
 ```text
-%chk=water_sp.chk
+%chk=h2o_gaussian_sp.chk
 %nprocshared=12
 %mem=16GB
 # B3LYP 6-31G(d)
+h2o_sp
 ```
 
 The command exited with code `0`.
@@ -110,11 +102,11 @@ The command exited with code `0`.
 Re-run the saved plan with the session id printed above:
 
 ```bash
-AI_PROVIDER=openai chemsmart agent resume 20260509T064536Z-aac23479 --dry-submit
+AI_PROVIDER=openai chemsmart agent resume 20260509T082732Z-31b18565 --dry-submit
 ```
 
 That replayed the same plan and printed the same `inputfile:` path for the
-dry-run `.com` file.
+dry-run `.com` file without appending a second `session_summary` entry.
 
 ## Going live (HPC submission)
 
@@ -132,13 +124,13 @@ Every run writes an audit trail under `~/.chemsmart/agent/sessions/<id>/`. For
 the dry-run session above, the log lived at:
 
 ```text
-~/.chemsmart/agent/sessions/20260509T064536Z-aac23479/decision_log.jsonl
+~/.chemsmart/agent/sessions/20260509T082732Z-31b18565/decision_log.jsonl
 ```
 
 Example event line:
 
 ```json
-{"kind":"request","payload":{"request":"single-point on water.xyz at B3LYP/6-31G(d) Gaussian"},"rationale":"single-point on water.xyz at B3LYP/6-31G(d) Gaussian","ts":"2026-05-09T06:45:36.351393+00:00"}
+{"kind":"request","payload":{"request":"single-point on examples/h2o.xyz at B3LYP/6-31G(d) Gaussian"},"rationale":"single-point on examples/h2o.xyz at B3LYP/6-31G(d) Gaussian","ts":"2026-05-09T08:27:32.455631+00:00"}
 ```
 
 Read it as: `kind=request` records the original prompt, `payload.request` is
@@ -159,7 +151,6 @@ HPC login nodes. In my launch test, the footer advertised `/help` and the first
   any `chemsmart agent ...` command.
 - Missing extras for the TUI: if `chemsmart agent` refuses to start the UI, run
   `pip install -e ".[agent-tui]"`.
-- Missing input file: the actual dry-run error was
-  `/private/tmp/chemsmart-agent-missing.tcJmgC/water.xyz could not be found!`;
-  fix it by creating `water.xyz` in the current directory or by naming the file
-  explicitly in the request.
+- Missing input file: `examples/h2o.xyz` ships in the repo, so if that path
+  cannot be found, run the command from the repository root or pass an absolute
+  path in the request.

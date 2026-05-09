@@ -8,7 +8,7 @@ import pytest
 from chemsmart.agent.core import AgentSession
 from chemsmart.agent.registry import ToolRegistry
 
-from ._agent_session_helpers import FakeProvider, planner_plan
+from ._agent_session_helpers import FakeProvider, critic_ok, planner_plan
 
 
 def _read_decision_log(session_dir: Path) -> list[dict]:
@@ -341,6 +341,95 @@ def test_session_summary_is_last_entry_with_tools_called(
     assert entries[-1]["payload"]["resolved_model"] == "gpt-5.4-mock"
     assert entries[-1]["payload"]["total_input_tokens"] > 0
     assert entries[-1]["payload"]["total_output_tokens"] > 0
+
+
+def test_session_summary_emitted_once_per_run(
+    monkeypatch,
+    single_molecule_xyz_file,
+    tmp_path: Path,
+):
+    _patch_runtime_ok(monkeypatch)
+    session = AgentSession(
+        provider=FakeProvider(
+            [
+                planner_plan(single_molecule_xyz_file, "summary_once_case"),
+                critic_ok(),
+            ]
+        ),
+        registry=ToolRegistry.default(),
+        session_root=tmp_path / "sessions",
+    )
+
+    result = session.run("single-point metadata regression", dry_submit=True)
+    summary_entries = [
+        entry
+        for entry in _read_decision_log(Path(result["session_dir"]))
+        if entry["kind"] == "session_summary"
+    ]
+    assert len(summary_entries) == 1
+    assert summary_entries[0]["payload"]["exit_status"] == "ok"
+
+
+def test_session_metadata_has_all_required_fields(
+    monkeypatch,
+    single_molecule_xyz_file,
+    tmp_path: Path,
+):
+    _patch_runtime_ok(monkeypatch)
+    session = AgentSession(
+        provider=FakeProvider(
+            [
+                planner_plan(
+                    single_molecule_xyz_file, "metadata_required_case"
+                ),
+                critic_ok(),
+            ]
+        ),
+        registry=ToolRegistry.default(),
+        session_root=tmp_path / "sessions",
+    )
+    result = session.run("single-point metadata fields", dry_submit=True)
+    metadata = json.loads(
+        (Path(result["session_dir"]) / "session_metadata.json").read_text()
+    )
+    required = {
+        "session_id": str,
+        "request_intent": str,
+        "provider_name": str,
+        "resolved_model": str,
+        "total_input_tokens": int,
+        "total_output_tokens": int,
+        "wall_time_ms": int,
+        "total_steps_planned": int,
+        "total_steps_executed": int,
+        "tools_called": list,
+        "critic_confidence": (int, float),
+        "block_reason": str,
+        "blocked": bool,
+        "exit_status": str,
+    }
+    for key, expected_type in required.items():
+        assert key in metadata and metadata[key] is not None
+        assert isinstance(metadata[key], expected_type)
+    assert (metadata["provider_name"], metadata["resolved_model"]) == (
+        "openai",
+        "gpt-5.4-mock",
+    )
+    assert (
+        metadata["block_reason"],
+        metadata["exit_status"],
+        metadata["tools_called"],
+    ) == (
+        "unknown",
+        "ok",
+        [
+            "build_molecule",
+            "build_gaussian_settings",
+            "build_job",
+            "dry_run_input",
+            "validate_runtime",
+        ],
+    )
 
 
 def test_critic_confidence_is_logged_in_critic_verdict_entry(
