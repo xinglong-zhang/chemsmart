@@ -182,7 +182,7 @@ def test_critic_blocks_malformed_input(
     )
 
 
-def test_critic_refuses_partial_without_allow_remote_unknown(
+def test_dry_submit_allows_partial_runtime_without_remote_override(
     monkeypatch,
     single_molecule_xyz_file,
     tmp_path: Path,
@@ -218,10 +218,10 @@ def test_critic_refuses_partial_without_allow_remote_unknown(
     )
     result = session.run("optimize with partial runtime", dry_submit=True)
 
-    assert result["blocked"] is True
-    assert result["critic_verdict"].verdict == "warn"
-    assert run_local_calls["count"] == 0
-    assert "server.queue required" in result["critic_verdict"].issues
+    assert result["blocked"] is False
+    assert result["critic_verdict"].verdict == "ok"
+    assert run_local_calls["count"] == 1
+    assert "server.queue required" not in result["critic_verdict"].issues
 
 
 def test_critic_receives_all_dry_run_inputs(
