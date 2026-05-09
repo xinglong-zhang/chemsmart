@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -76,3 +77,50 @@ def test_session_resume_uses_original_absolute_cwd(
     assert resumed["blocked"] is False
     assert Path(recorded["cwd"]).resolve() == dir_a.resolve()
     assert Path(recorded["job_folder"]).resolve() == dir_a.resolve()
+
+
+def test_resume_does_not_duplicate_summary(
+    monkeypatch,
+    single_molecule_xyz_file,
+    tmp_path: Path,
+):
+    import chemsmart.agent.tools as agent_tools
+
+    def fake_validate_runtime(job, server=None):
+        return {
+            "ok": "ok",
+            "local_ok": True,
+            "local_issues": [],
+            "remote_unknown": [],
+        }
+
+    monkeypatch.setattr(agent_tools, "validate_runtime", fake_validate_runtime)
+    session = AgentSession(
+        provider=FakeProvider(
+            [
+                planner_plan(single_molecule_xyz_file, "resume_summary_case"),
+                critic_ok(),
+            ]
+        ),
+        registry=ToolRegistry.default(),
+        session_root=tmp_path / "sessions",
+    )
+
+    first = session.run("dry submit before resume", dry_submit=True)
+    resumed = AgentSession.resume(
+        first["session_id"],
+        provider=session._provider,
+        registry=ToolRegistry.default(),
+        session_root=tmp_path / "sessions",
+        dry_submit=True,
+    )
+
+    assert resumed["blocked"] is False
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (Path(first["session_dir"]) / "decision_log.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert kinds.count("critic_verdict") == 1
+    assert kinds.count("session_summary") == 1

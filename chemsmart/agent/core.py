@@ -263,6 +263,24 @@ class AgentSession:
                 "results": results,
                 "advisory_only": True,
             }
+        if (
+            self.state.current_step_index >= len(plan.steps)
+            and self._get_logged_summary() is not None
+        ):
+            return {
+                "session_id": self.state.session_id,
+                "session_dir": str(self.session_dir),
+                "plan": plan,
+                "plan_text": render_plan(plan) if rerender_plan else None,
+                "critic_verdict": verdict,
+                "completed_steps": self.state.current_step_index,
+                "blocked": False,
+                "dry_run_result": _primary_dry_run_result(dry_run_results),
+                "dry_run_results": dry_run_results,
+                "runtime_result": runtime_result,
+                "preview_submit": None,
+                "results": results,
+            }
 
         preview_submit = None
         risky_start = len(plan.steps)
@@ -295,24 +313,25 @@ class AgentSession:
                     dry_submit=dry_submit,
                 )
 
-            verdict = verdict or self._critic_call(
-                plan=plan,
-                dry_run_results=dry_run_results,
-                dry_submit=dry_submit,
-            )
-            verdict = self._apply_deterministic_gates(
-                plan=plan,
-                verdict=verdict,
-                runtime_result=runtime_result,
-                dry_run_results=dry_run_results,
-                preview_submit=preview_submit,
-                dry_submit=dry_submit,
-            )
-            self.decision_log.write(
-                "critic_verdict",
-                verdict.model_dump(),
-                rationale=verdict.rationale,
-            )
+            if verdict is None:
+                verdict = self._critic_call(
+                    plan=plan,
+                    dry_run_results=dry_run_results,
+                    dry_submit=dry_submit,
+                )
+                verdict = self._apply_deterministic_gates(
+                    plan=plan,
+                    verdict=verdict,
+                    runtime_result=runtime_result,
+                    dry_run_results=dry_run_results,
+                    preview_submit=preview_submit,
+                    dry_submit=dry_submit,
+                )
+                self.decision_log.write(
+                    "critic_verdict",
+                    verdict.model_dump(),
+                    rationale=verdict.rationale,
+                )
 
             block_reason = self._block_reason(
                 verdict=verdict,
@@ -783,17 +802,22 @@ class AgentSession:
             "total_steps_executed": self.state.current_step_index,
             "total_steps_planned": self.state.total_steps_planned,
             "blocked": effective_blocked,
-            "block_reason": effective_block_reason,
+            "block_reason": effective_block_reason or "unknown",
             "wall_time_ms": wall_time_ms,
             "tools_called": self._tools_called(),
             "critic_confidence": (
-                verdict.confidence if verdict is not None else None
+                verdict.confidence if verdict is not None else 0.0
             ),
             "request_intent": self.state.request_intent,
             "provider_name": self._metadata_provider_name(),
             "resolved_model": self._metadata_resolved_model(),
             "total_input_tokens": self._total_llm_tokens("input_tokens"),
             "total_output_tokens": self._total_llm_tokens("output_tokens"),
+            "exit_status": (
+                "error"
+                if run_error is not None
+                else "blocked" if blocked else "ok"
+            ),
         }
         self.decision_log.write("session_summary", summary)
 
@@ -801,16 +825,18 @@ class AgentSession:
         schema_hash = _schema_hash(self.registry.openai_tool_defs())
         metadata = {
             "session_id": self.state.session_id,
-            "request": self.state.request,
+            "request": self.state.request or "unknown",
             "intent": self.state.request_intent,
             "request_intent": self.state.request_intent,
             "plan_steps": self.state.total_steps_planned,
             "executed_steps": self.state.current_step_index,
+            "total_steps_planned": summary["total_steps_planned"],
+            "total_steps_executed": summary["total_steps_executed"],
             "input_file": (
                 str(primary_dry_run_result.get("inputfile"))
                 if primary_dry_run_result
                 and primary_dry_run_result.get("inputfile")
-                else None
+                else "unknown"
             ),
             "input_files": [
                 str(result.get("inputfile"))
@@ -818,22 +844,22 @@ class AgentSession:
                 if result.get("inputfile")
             ],
             "critic_verdict": (
-                verdict.verdict if verdict is not None else None
+                verdict.verdict if verdict is not None else "unknown"
             ),
-            "critic_confidence": (
-                verdict.confidence if verdict is not None else None
-            ),
-            "blocked": effective_blocked,
-            "block_reason": effective_block_reason,
+            "critic_confidence": summary["critic_confidence"],
+            "blocked": summary["blocked"],
+            "block_reason": summary["block_reason"],
             "wall_time_ms": wall_time_ms,
             "started_at": self.state.started_at,
             "ended_at": ended_at,
-            "provider_name": self._metadata_provider_name(),
-            "resolved_model": self._metadata_resolved_model(),
-            "git_sha": _git_sha(),
+            "provider_name": summary["provider_name"],
+            "resolved_model": summary["resolved_model"],
+            "git_sha": _git_sha() or "unknown",
             "schema_hash": schema_hash,
-            "total_input_tokens": self._total_llm_tokens("input_tokens"),
-            "total_output_tokens": self._total_llm_tokens("output_tokens"),
+            "total_input_tokens": summary["total_input_tokens"],
+            "total_output_tokens": summary["total_output_tokens"],
+            "tools_called": summary["tools_called"],
+            "exit_status": summary["exit_status"],
         }
         (self.session_dir / "session_metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True),
@@ -851,17 +877,17 @@ class AgentSession:
                 tools.append(tool)
         return tools
 
-    def _metadata_provider_name(self) -> str | None:
+    def _metadata_provider_name(self) -> str:
         if self._llm_stats:
-            return self._llm_stats[-1].get("provider_name")
+            return self._llm_stats[-1].get("provider_name") or "unknown"
         provider = self._provider
-        return getattr(provider, "name", None)
+        return getattr(provider, "name", None) or "unknown"
 
-    def _metadata_resolved_model(self) -> str | None:
+    def _metadata_resolved_model(self) -> str:
         if self._llm_stats:
-            return self._llm_stats[-1].get("resolved_model")
+            return self._llm_stats[-1].get("resolved_model") or "unknown"
         provider = self._provider
-        return getattr(provider, "default_model", None)
+        return getattr(provider, "default_model", None) or "unknown"
 
     def _total_llm_tokens(self, field: str) -> int:
         return sum(int(stat.get(field) or 0) for stat in self._llm_stats)
@@ -938,6 +964,18 @@ class AgentSession:
         if not verdict_entries:
             return None
         return CriticVerdict.model_validate(verdict_entries[-1]["payload"])
+
+    def _get_logged_summary(self) -> dict[str, Any] | None:
+        assert self.decision_log is not None
+        summary_entries = [
+            entry
+            for entry in self.decision_log.read_all()
+            if entry.get("kind") == "session_summary"
+        ]
+        if not summary_entries:
+            return None
+        payload = summary_entries[-1].get("payload")
+        return payload if isinstance(payload, dict) else None
 
     def _apply_deterministic_gates(
         self,
@@ -1124,12 +1162,12 @@ def _elapsed_ms(
     started_at: str | None = None,
     ended_at: str | None = None,
 ) -> int:
-    if start_time is not None:
-        return max(0, int(round((time.perf_counter() - start_time) * 1000)))
     if started_at is not None and ended_at is not None:
         started = datetime.fromisoformat(started_at)
         ended = datetime.fromisoformat(ended_at)
         return max(0, int(round((ended - started).total_seconds() * 1000)))
+    if start_time is not None:
+        return max(0, int(round((time.perf_counter() - start_time) * 1000)))
     return 0
 
 
