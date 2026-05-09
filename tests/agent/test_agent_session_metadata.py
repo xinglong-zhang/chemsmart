@@ -370,6 +370,90 @@ def test_session_summary_emitted_once_per_run(
     assert summary_entries[0]["payload"]["exit_status"] == "ok"
 
 
+def test_advisory_plan_writes_session_summary(tmp_path: Path):
+    provider = FakeProvider(
+        [
+            {
+                "steps": [],
+                "rationale": "I am chemsmart agent.",
+                "estimated_cost": "low",
+            }
+        ]
+    )
+    session = AgentSession(
+        provider=provider,
+        registry=ToolRegistry.default(),
+        session_root=tmp_path / "sessions",
+    )
+
+    result = session.run("hello, what is your name?", dry_submit=True)
+
+    entries = _read_decision_log(Path(result["session_dir"]))
+    summary_entries = [
+        entry for entry in entries if entry["kind"] == "session_summary"
+    ]
+    assert len(summary_entries) == 1
+    summary = summary_entries[0]
+    assert summary["rationale"] == "I am chemsmart agent."
+    assert summary["payload"]["exit_status"] == "ok"
+    assert summary["payload"]["advisory_only"] is True
+    assert summary["payload"]["rationale"] == "I am chemsmart agent."
+    assert summary["payload"]["total_steps_planned"] == 0
+    assert summary["payload"]["total_steps_executed"] == 0
+    assert summary["payload"]["tools_called"] == []
+
+
+def test_advisory_session_metadata_complete(tmp_path: Path):
+    provider = FakeProvider(
+        [
+            {
+                "steps": [],
+                "rationale": "I am chemsmart agent.",
+                "estimated_cost": "low",
+            }
+        ]
+    )
+    session = AgentSession(
+        provider=provider,
+        registry=ToolRegistry.default(),
+        session_root=tmp_path / "sessions",
+    )
+
+    result = session.run("hello, what is your name?", dry_submit=True)
+    metadata = json.loads(
+        (Path(result["session_dir"]) / "session_metadata.json").read_text()
+    )
+
+    required = {
+        "session_id": str,
+        "request_intent": str,
+        "provider_name": str,
+        "resolved_model": str,
+        "total_input_tokens": int,
+        "total_output_tokens": int,
+        "wall_time_ms": int,
+        "total_steps_planned": int,
+        "total_steps_executed": int,
+        "tools_called": list,
+        "critic_confidence": (int, float),
+        "block_reason": str,
+        "blocked": bool,
+        "exit_status": str,
+        "advisory_only": bool,
+        "rationale": str,
+    }
+    for key, expected_type in required.items():
+        assert key in metadata and metadata[key] is not None
+        assert isinstance(metadata[key], expected_type)
+    assert metadata["advisory_only"] is True
+    assert metadata["rationale"] == "I am chemsmart agent."
+    assert metadata["total_steps_planned"] == 0
+    assert metadata["total_steps_executed"] == 0
+    assert metadata["tools_called"] == []
+    assert metadata["exit_status"] == "ok"
+    assert metadata["blocked"] is False
+
+
 def test_session_metadata_has_all_required_fields(
     monkeypatch,
     single_molecule_xyz_file,

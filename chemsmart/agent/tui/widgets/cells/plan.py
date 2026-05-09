@@ -102,6 +102,10 @@ class PlanCell(BaseCell):
         if self.plan is None:
             text = self.plan_text or ""
             return Text(text) if text.strip() else no_data_text()
+        if not self._rows:
+            if self.plan.rationale:
+                return Text(self.plan.rationale)
+            return no_data_text()
         lines = []
         for row in self._rows:
             icon = _STATUS_ICON.get(row.status, "•")
