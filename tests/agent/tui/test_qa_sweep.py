@@ -1,0 +1,209 @@
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+
+import pytest
+
+from chemsmart.agent.tui.app import ChemsmartTuiApp
+from chemsmart.agent.tui.phase import Phase
+from chemsmart.agent.tui.services.job_poller import (
+    _cluster_running_jobs,
+    collect_job_snapshot,
+    format_jobs_table,
+)
+from chemsmart.agent.tui.widgets.popups import ApprovalOverlay
+from chemsmart.agent.tui.widgets.transcript import Transcript
+
+
+def _last_cell(app: ChemsmartTuiApp):
+    cells = app.query_one(Transcript).query_one("#cells")
+    return list(cells.children)[-1]
+
+
+def _cell_text(cell) -> str:
+    source_text = getattr(cell, "source_text", None)
+    if isinstance(source_text, str):
+        return source_text
+    message = getattr(cell, "message", None)
+    error_title = getattr(cell, "error_title", None)
+    if isinstance(error_title, str):
+        return f"{error_title} {message or ''}"
+    if isinstance(message, str):
+        return message
+    return str(getattr(cell, "renderable", ""))
+
+
+def test_format_jobs_table_handles_empty_rows():
+    assert format_jobs_table([]) == "No jobs found."
+
+
+def test_collect_job_snapshot_raises_for_malformed_state(tmp_path: Path):
+    session_dir = tmp_path / "sessions" / "bad-session"
+    session_dir.mkdir(parents=True)
+    (session_dir / "state.json").write_text("{", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="Malformed session state"):
+        collect_job_snapshot(tmp_path / "sessions")
+
+
+def test_cluster_running_jobs_surfaces_scheduler_failures(monkeypatch):
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.services.job_poller.ClusterHelper.get_gaussian_running_jobs",
+        lambda self: (_ for _ in ()).throw(RuntimeError("scheduler offline")),
+    )
+
+    with pytest.raises(RuntimeError, match="Scheduler queue lookup failed"):
+        _cluster_running_jobs()
+
+
+@pytest.mark.parametrize(
+    ("command", "phase", "expected"),
+    [
+        ("/sessions", Phase.IDLE, "No sessions found."),
+        ("/resume", Phase.IDLE, "No sessions found."),
+        ("/cancel 12345.remote", Phase.IDLE, "Confirmation required"),
+        (
+            "/submit",
+            Phase.DRY_RUN_READY,
+            "Plain mode uses /submit yes|session|no|revise <instruction>.",
+        ),
+        (
+            "/run",
+            Phase.DRY_RUN_READY,
+            "Plain mode uses /run yes|session|no|revise <instruction>.",
+        ),
+    ],
+)
+def test_plain_mode_slash_commands_avoid_overlays(
+    command: str,
+    phase: Phase,
+    expected: str,
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
+        lambda _session_root: {},
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
+        lambda _session_root: {},
+    )
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(plain=True, session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_screen.query_one("#status-footer").set_phase(phase)
+            if command == "/submit":
+                app.chat_screen._pending_approval = True
+                app.chat_screen._pending_risky_tool = "submit_hpc"
+            if command == "/run":
+                app.chat_screen._pending_approval = True
+                app.chat_screen._pending_risky_tool = "run_local"
+            app.chat_screen._handle_slash_command(command)
+            await pilot.pause()
+            assert app.screen is app.chat_screen
+            assert expected in _cell_text(_last_cell(app))
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("command", "phase", "expected"),
+    [
+        ("/queue", Phase.IDLE, "No jobs found."),
+        ("/cancel", Phase.IDLE, "Usage: /cancel <job-id> [yes]"),
+        ("/extract", Phase.IDLE, "Usage: /extract <job-id|inputfile>"),
+        ("/molecule", Phase.IDLE, "Usage: /molecule <path>"),
+        ("/dryrun", Phase.DRY_RUN_READY, "There is no active request."),
+        (
+            "/critic",
+            Phase.PLANNING,
+            "The critic has not finished yet.",
+        ),
+        ("/plan", Phase.PLANNING, "The planner has not finished yet."),
+        ("/rationale", Phase.IDLE, "No planner rationale is available."),
+    ],
+)
+def test_slash_commands_report_empty_states(
+    command: str,
+    phase: Phase,
+    expected: str,
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
+        lambda _session_root: {},
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
+        lambda _session_root: {},
+    )
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_screen.query_one("#status-footer").set_phase(phase)
+            if command == "/submit":
+                app.chat_screen._pending_approval = True
+                app.chat_screen._pending_risky_tool = "submit_hpc"
+            if command == "/run":
+                app.chat_screen._pending_approval = True
+                app.chat_screen._pending_risky_tool = "run_local"
+            app.chat_screen._handle_slash_command(command)
+            await pilot.pause()
+            assert expected in _cell_text(_last_cell(app))
+
+    asyncio.run(scenario())
+
+
+def test_job_snapshot_failure_surfaces_error_cell(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
+        lambda _session_root: (_ for _ in ()).throw(
+            RuntimeError("broken job snapshot")
+        ),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
+        lambda _session_root: (_ for _ in ()).throw(
+            RuntimeError("broken job snapshot")
+        ),
+    )
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_screen._refresh_job_snapshot()
+            await pilot.pause()
+            cell = _last_cell(app)
+            assert cell.error_title == "Job snapshot failed"
+            assert cell.message == "broken job snapshot"
+
+    asyncio.run(scenario())
+
+
+def test_approval_overlay_escape_closes_when_revision_input_focused(
+    tmp_path: Path,
+):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.push_screen(
+                ApprovalOverlay(action="run_local", request="optimize h2o"),
+            )
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            assert isinstance(app.screen, ApprovalOverlay)
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.screen is app.chat_screen
+
+    asyncio.run(scenario())

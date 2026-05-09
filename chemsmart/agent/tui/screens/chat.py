@@ -8,6 +8,7 @@ from threading import get_ident
 from typing import Iterable
 
 from click.testing import CliRunner
+from rich.table import Table
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
@@ -34,6 +35,7 @@ from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.screens.jobs_panel import JobsPanel, JobsPanelAction
 from chemsmart.agent.tui.screens.sessions import SessionsScreen
 from chemsmart.agent.tui.services.job_poller import (
+    JobPollerError,
     JobPollerMixin,
     JobStateReader,
     JobStatusUpdated,
@@ -125,19 +127,34 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def on_mount(self) -> None:
         self.post_agent_message(
-            "Welcome to the chemsmart agent TUI. Type a request or use /help."
+            "## chemsmart agent\n\n"
+            "Try `/help`, `/jobs`, or `/queue`.\n\n"
+            "Example: `optimize water.xyz and validate the runtime`"
         )
         self.focus_composer()
+        self.query_one(FooterWidget).update_draft("")
         self.run_job_poller(self.job_poll_interval)
         self._refresh_job_snapshot()
 
     def on_composer_submitted(self, event: Composer.Submitted) -> None:
         text = event.text.strip()
         event.composer.clear_text()
+        self.query_one(FooterWidget).update_draft("")
         if text.startswith("/"):
             self._handle_slash_command(text)
             return
         self.start_request(text)
+
+    def on_text_area_changed(self, event) -> None:
+        if getattr(event.text_area, "id", None) == "composer":
+            self.query_one(FooterWidget).update_draft(event.text_area.text)
+
+    def on_job_poller_error(self, message: JobPollerError) -> None:
+        self.post_error(
+            message.summary,
+            message.summary,
+            {"traceback": message.details},
+        )
 
     def on_job_status_updated(self, message: JobStatusUpdated) -> None:
         snapshot = self._job_snapshot.setdefault(
@@ -405,6 +422,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         current_cwd = os.path.abspath(os.getcwd())
         recorded_cwd = os.path.abspath(state.cwd)
         if recorded_cwd != current_cwd:
+            if self.app.plain:
+                self.post_error(
+                    "Resume blocked",
+                    "Session cwd differs from the current cwd.",
+                    {"recorded_cwd": recorded_cwd, "current_cwd": current_cwd},
+                )
+                return
             self.app.push_screen(
                 CwdMismatchOverlay(
                     recorded_cwd=recorded_cwd,
@@ -566,32 +590,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         argument = remainder.strip()
 
         if command == "/help":
-            self.post_agent_message(
-                "\n".join(
-                    [
-                        "# Phase 3 slash commands",
-                        "- `[A] /help` show this help",
-                        "- `[A] /jobs` open the jobs panel",
-                        "- `[A] /queue` show the current queue snapshot",
-                        "- `[A] /server <name>` switch the active HPC server",
-                        "- `[A] /molecule <path>` load and preview a molecule",
-                        "- `[A] /cancel <job-id>` cancel a queued/running job",
-                        "- `[F] /extract <job-id|inputfile>` parse a final result",
-                        "- `[D] /dryrun` regenerate the current dry-run",
-                        "- `[D] /submit` approve pending HPC submission",
-                        "- `[D] /run` approve pending local execution",
-                        "- `[P,D] /critic` show the current critic verdict",
-                        "- `[P,D,R] /plan` show the current plan",
-                        "- `[A] /rationale` show planner rationale",
-                        "- `[I,F] /clear` clear the transcript",
-                        "- `[I] /sessions` browse recent sessions",
-                        "- `[I] /resume <session-id>` load or continue a session",
-                        "- `[A] /tools` list registered tools",
-                        "- `[A] /doctor` run inline diagnostics",
-                        "- `[A] /quit` exit the TUI",
-                    ]
-                )
-            )
+            self._show_help()
         elif command in {"/quit", "/exit"}:
             self.app.exit()
         elif command == "/clear":
@@ -604,11 +603,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif command == "/sessions":
             if not self._guard_phase(command, {Phase.IDLE}):
                 return
+            if self.app.plain:
+                self._show_sessions_snapshot()
+                return
             self.app.push_screen(SessionsScreen(self.session_root))
         elif command == "/resume":
             if not self._guard_phase(command, {Phase.IDLE}):
                 return
             if not argument:
+                if self.app.plain:
+                    self._show_sessions_snapshot()
+                    return
                 self.app.push_screen(SessionsScreen(self.session_root))
                 return
             self._resume_or_prompt(argument)
@@ -619,10 +624,23 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif command == "/server":
             self._switch_active_server(argument)
         elif command == "/cancel":
-            if not argument:
-                self.post_error("Missing job id", "Usage: /cancel <job-id>")
+            job_id, confirmed = self._parse_cancel_argument(argument)
+            if not job_id:
+                self.post_error(
+                    "Missing job id",
+                    "Usage: /cancel <job-id> [yes]",
+                )
                 return
-            self._confirm_cancel(argument)
+            if confirmed:
+                self._handle_cancel_confirmation(job_id, "yes")
+                return
+            if self.app.plain:
+                self.post_error(
+                    "Confirmation required",
+                    "Plain mode uses /cancel <job-id> yes.",
+                )
+                return
+            self._confirm_cancel(job_id)
         elif command == "/extract":
             if not argument:
                 self.post_error(
@@ -684,16 +702,148 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif command == "/submit":
             if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
                 return
+            if (
+                not self._pending_approval
+                or self._pending_risky_tool != "submit_hpc"
+            ):
+                self._request_approval("submit_hpc")
+                return
+            if self._handle_inline_approval(argument):
+                return
+            if self.app.plain:
+                self.post_error(
+                    "Approval required",
+                    "Plain mode uses /submit yes|session|no|revise <instruction>.",
+                )
+                return
             self._request_approval("submit_hpc")
         elif command == "/run":
             if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
+                return
+            if (
+                not self._pending_approval
+                or self._pending_risky_tool != "run_local"
+            ):
+                self._request_approval("run_local")
+                return
+            if self._handle_inline_approval(argument):
+                return
+            if self.app.plain:
+                self.post_error(
+                    "Approval required",
+                    "Plain mode uses /run yes|session|no|revise <instruction>.",
+                )
                 return
             self._request_approval("run_local")
         else:
             self.post_error("Unknown command", raw)
 
+    def _show_help(self) -> None:
+        table = Table(show_header=True, box=None, padding=(0, 1))
+        table.add_column("Phase", style="dim", no_wrap=True)
+        table.add_column("Command", style="bold")
+        table.add_column("Description")
+        rows = [
+            ("[A]", "/help", "show this help"),
+            ("[A]", "/jobs", "open the jobs panel"),
+            ("[A]", "/queue", "show the current queue snapshot"),
+            ("[A]", "/server <name>", "switch the active HPC server"),
+            ("[A]", "/molecule <path>", "load and preview a molecule"),
+            ("[A]", "/cancel <job-id> [yes]", "cancel a queued/running job"),
+            ("[F]", "/extract <job-id|inputfile>", "parse a final result"),
+            ("[D]", "/dryrun", "regenerate the current dry-run"),
+            ("[D]", "/submit", "approve pending HPC submission"),
+            ("[D]", "/run", "approve pending local execution"),
+            ("[P,D]", "/critic", "show the current critic verdict"),
+            ("[P,D,R]", "/plan", "show the current plan"),
+            ("[A]", "/rationale", "show planner rationale"),
+            ("[I,F]", "/clear", "clear the transcript"),
+            ("[I]", "/sessions", "browse recent sessions"),
+            ("[I]", "/resume <session-id>", "load or continue a session"),
+            ("[A]", "/tools", "list registered tools"),
+            ("[A]", "/doctor", "run inline diagnostics"),
+            ("[A]", "/quit", "exit the TUI"),
+        ]
+        for row in rows:
+            table.add_row(*row)
+        self.query_one(Transcript).add_cell(
+            AgentMessageCell(table, title="Help")
+        )
+
+    def _show_sessions_snapshot(self) -> None:
+        lines = ["Sessions", "", "Use /resume <session-id> to load one."]
+        if self.session_root.exists():
+            session_dirs = sorted(
+                [
+                    path
+                    for path in self.session_root.iterdir()
+                    if path.is_dir()
+                ],
+                reverse=True,
+            )
+        else:
+            session_dirs = []
+        if not session_dirs:
+            lines.extend(["", "No sessions found."])
+        for session_dir in session_dirs[:10]:
+            lines.append(f"- {session_dir.name}")
+        body = "\n".join(lines)
+        self.post_agent_message(f"```\n{body}\n```", title="Sessions")
+
+    def _parse_cancel_argument(self, argument: str) -> tuple[str | None, bool]:
+        if not argument:
+            return None, False
+        parts = argument.split(maxsplit=1)
+        if len(parts) == 1:
+            return parts[0], False
+        if parts[1].strip().lower() in {"y", "yes"}:
+            return parts[0], True
+        self.post_error(
+            "Unknown confirmation",
+            "Use /cancel <job-id> yes to confirm.",
+        )
+        return None, False
+
+    def _handle_inline_approval(self, argument: str) -> bool:
+        if not argument:
+            return False
+        keyword, _, remainder = argument.partition(" ")
+        keyword = keyword.strip().lower()
+        corrective_text = remainder.strip() or None
+        if keyword in {"y", "yes"}:
+            self._handle_approval_result(ApprovalResult("y"))
+            return True
+        if keyword in {"n", "no"}:
+            self._handle_approval_result(ApprovalResult("n"))
+            return True
+        if keyword in {"s", "session"}:
+            self._handle_approval_result(ApprovalResult("s"))
+            return True
+        if keyword in {"r", "revise"}:
+            if not corrective_text:
+                self.post_error(
+                    "Missing instruction",
+                    "Usage: /run revise <instruction> or /submit revise <instruction>.",
+                )
+                return True
+            self._handle_approval_result(
+                ApprovalResult("r", corrective_text=corrective_text)
+            )
+            return True
+        self.post_error(
+            "Unknown approval response",
+            "Use yes, no, session, or revise <instruction>.",
+        )
+        return True
+
     def _run_inline_cli(self, args: Iterable[str], *, title: str) -> None:
-        result = CliRunner().invoke(agent, list(args), catch_exceptions=False)
+        try:
+            result = CliRunner().invoke(
+                agent, list(args), catch_exceptions=False
+            )
+        except Exception as exc:
+            self.post_error(title, str(exc))
+            return
         text = result.output.strip() or f"{title} completed."
         if result.exit_code == 0:
             self.post_agent_message(f"```\n{text}\n```", title=title)
@@ -789,7 +939,16 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.app.screen.post_message(JobStatusUpdated(job_id, fields))
 
     def _refresh_job_snapshot(self) -> None:
-        snapshot = collect_job_snapshot(self.session_root)
+        try:
+            snapshot = collect_job_snapshot(self.session_root) or {}
+        except Exception as exc:
+            self.post_error("Job snapshot failed", str(exc))
+            return
+        if not isinstance(snapshot, dict):
+            self.post_error(
+                "Job snapshot failed", "Snapshot payload was not a mapping."
+            )
+            return
         for job_id in self._cancelled_job_ids:
             if job_id in snapshot:
                 snapshot[job_id]["status"] = "cancelled"
@@ -820,24 +979,34 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             return
         try:
             result = extract_run_result(str(output_path), self._job_snapshot)
-        except Exception:
+        except Exception as exc:
+            self.post_error("Run result parse failed", str(exc))
             return
         self.query_one(Transcript).add_cell(RunResultCell(result))
         self._rendered_run_results.add(job_id)
 
     def _show_queue_snapshot(self) -> None:
         self._refresh_job_snapshot()
-        rows = queue_snapshot(
-            self._job_snapshot,
-            server_name=self._active_server_name,
-        )
-        self.post_agent_message(
-            f"```\n{format_jobs_table(rows)}\n```",
-            title="Queue",
-        )
+        try:
+            rows = (
+                queue_snapshot(
+                    self._job_snapshot or {},
+                    server_name=self._active_server_name,
+                )
+                or []
+            )
+            table = format_jobs_table(rows)
+        except Exception as exc:
+            self.post_error("Queue snapshot failed", str(exc))
+            return
+        self.post_agent_message(f"```\n{table}\n```", title="Queue")
 
     def _switch_active_server(self, name: str) -> None:
-        names = available_server_names()
+        try:
+            names = available_server_names() or []
+        except Exception as exc:
+            self.post_error("Server lookup failed", str(exc))
+            return
         if not name:
             current = self._active_server_name or "(none)"
             self.post_agent_message(
@@ -845,10 +1014,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 title="Server",
             )
             return
+        if not names:
+            self.post_error(
+                "No servers configured", "No HPC servers are configured."
+            )
+            return
         if name not in names:
             self.post_error(
                 "Unknown server",
-                f"{name} is not configured. Available: {', '.join(names) or '(none)'}",
+                f"{name} is not configured. Available: {', '.join(names)}",
             )
             return
         self._active_server_name = name
@@ -857,20 +1031,22 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
 
     def _show_molecule(self, path: str) -> None:
+        source = str(Path(path).expanduser())
         try:
             molecule = Molecule.from_filepath(path)
         except Exception as exc:
             self.post_error("Molecule load failed", str(exc))
             return
         self.query_one(Transcript).add_cell(
-            MoleculeCell(molecule, source=str(Path(path).expanduser()))
+            MoleculeCell(molecule, source=source)
         )
 
     def _default_active_server_name(self) -> str | None:
-        names = available_server_names()
-        if len(names) == 1:
-            return names[0]
-        return None
+        try:
+            names = available_server_names() or []
+        except Exception:
+            return None
+        return next(iter(names), None) if len(names) == 1 else None
 
 
 def _jobs_sort_key(job: dict) -> tuple[int, str, str]:

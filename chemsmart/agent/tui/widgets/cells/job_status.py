@@ -25,9 +25,9 @@ _STATUS_STYLE = {
 
 
 class JobStatusCell(BaseCell):
-    def __init__(self, job_id: str, snapshot: dict) -> None:
+    def __init__(self, job_id: str, snapshot: dict | None) -> None:
         self.job_id = job_id
-        self.snapshot = dict(snapshot)
+        self.snapshot = dict(snapshot or {})
         super().__init__(
             self._build_renderable(),
             title="Job status",
@@ -40,17 +40,23 @@ class JobStatusCell(BaseCell):
 
     def _build_renderable(self):
         status = str(self.snapshot.get("status") or "queued")
-        name = str(self.snapshot.get("name") or self.job_id)
+        name = str(self.snapshot.get("name") or self.job_id or "no data")
         progress = _render_progress(_PROGRESS.get(status, 0.0), status)
         heading = Text(f"{name}  [{self.job_id}]", style="bold")
         heading.append(f"  {status}", style=_STATUS_STYLE.get(status, "text"))
         table = Table.grid(expand=True)
         table.add_column(ratio=2)
         table.add_column(ratio=3)
-        table.add_row("scheduler", str(self.snapshot.get("scheduler") or ""))
-        table.add_row("started", str(self.snapshot.get("started") or ""))
-        table.add_row("runtime", str(self.snapshot.get("runtime") or ""))
-        table.add_row("host", str(self.snapshot.get("host") or ""))
+        table.add_row(
+            "scheduler", str(self.snapshot.get("scheduler") or "no data")
+        )
+        table.add_row(
+            "started", str(self.snapshot.get("started") or "no data")
+        )
+        table.add_row(
+            "runtime", str(self.snapshot.get("runtime") or "no data")
+        )
+        table.add_row("host", str(self.snapshot.get("host") or "no data"))
         return Group(heading, progress, table)
 
 

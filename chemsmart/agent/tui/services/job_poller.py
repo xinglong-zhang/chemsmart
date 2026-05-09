@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import subprocess
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,15 @@ class JobStatusUpdated(Message):
         self.fields = fields
 
 
+class JobPollerError(Message):
+    """Background polling failure surfaced to the transcript."""
+
+    def __init__(self, summary: str, details: str) -> None:
+        super().__init__()
+        self.summary = summary
+        self.details = details
+
+
 class JobPollerMixin:
     session_root: Path
 
@@ -49,6 +59,7 @@ class JobPollerMixin:
     async def run_job_poller(self, poll_interval: float = 5.0) -> None:
         previous: dict[str, dict[str, Any]] = {}
         failures = 0
+        last_error_signature: str | None = None
         while self.is_mounted:
             try:
                 snapshot = await asyncio.to_thread(
@@ -56,6 +67,13 @@ class JobPollerMixin:
                     self.session_root,
                 )
                 failures = 0
+                last_error_signature = None
+                stale_job_ids = sorted(set(previous) - set(snapshot))
+                for stale_job_id in stale_job_ids:
+                    self._emit_job_error(
+                        "Removed stale job snapshot entry",
+                        f"{stale_job_id} no longer exists in the current snapshot.",
+                    )
                 for job_id, current in snapshot.items():
                     changed = {
                         key: value
@@ -66,9 +84,18 @@ class JobPollerMixin:
                         self._emit_job_update(job_id, changed)
                 previous = snapshot
                 await asyncio.sleep(poll_interval)
-            except Exception:  # pragma: no cover - defensive backoff
+            except Exception as exc:  # pragma: no cover - defensive backoff
+                signature = f"{exc.__class__.__name__}:{exc}"
+                if signature != last_error_signature:
+                    self._emit_job_error(
+                        "Job poller failed", traceback.format_exc()
+                    )
+                    last_error_signature = signature
                 failures += 1
                 await asyncio.sleep(min(poll_interval * (2**failures), 30.0))
+
+    def _emit_job_error(self, summary: str, details: str) -> None:
+        self.post_message(JobPollerError(summary, details))
 
 
 class JobStateReader:
@@ -79,7 +106,12 @@ class JobStateReader:
         for name in ("state.json", "session.json"):
             path = session_dir / name
             if path.exists():
-                return SessionState.load(path)
+                try:
+                    return SessionState.load(path)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Malformed session state: {path}"
+                    ) from exc
         return None
 
 
@@ -186,6 +218,8 @@ def extract_run_result(
 
 
 def format_jobs_table(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "No jobs found."
     headers = [
         "job_id",
         "name",
@@ -197,8 +231,10 @@ def format_jobs_table(rows: list[dict[str, Any]]) -> str:
     ]
     widths = {
         header: max(
-            len(header),
-            *[len(str(row.get(header) or "")) for row in rows],
+            [
+                len(header),
+                *[len(_display_job_value(row, header)) for row in rows],
+            ]
         )
         for header in headers
     }
@@ -206,12 +242,12 @@ def format_jobs_table(rows: list[dict[str, Any]]) -> str:
     sep = " ".join("-" * widths[header] for header in headers)
     body = [
         " ".join(
-            str(row.get(header) or "").ljust(widths[header])
+            _display_job_value(row, header).ljust(widths[header])
             for header in headers
         )
         for row in rows
     ]
-    return "\n".join([line, sep, *body]) if body else "No jobs found."
+    return "\n".join([line, sep, *body])
 
 
 def _session_jobs(
@@ -359,8 +395,13 @@ def _load_results(session_dir: Path, count: int) -> list[Any]:
         artifact = session_dir / f"step_{step_index:02d}.json"
         if not artifact.exists():
             break
-        with artifact.open(encoding="utf-8") as handle:
-            results.append(_restore_json_result(json.load(handle)))
+        try:
+            with artifact.open(encoding="utf-8") as handle:
+                results.append(_restore_json_result(json.load(handle)))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Malformed result artifact: {artifact}"
+            ) from exc
     return results
 
 
@@ -369,8 +410,8 @@ def _cluster_running_jobs() -> tuple[set[int], set[str]]:
         running_ids, running_names = (
             ClusterHelper().get_gaussian_running_jobs()
         )
-    except Exception:
-        return set(), set()
+    except Exception as exc:
+        raise RuntimeError("Scheduler queue lookup failed") from exc
     return set(int(job_id) for job_id in running_ids), set(running_names)
 
 
@@ -505,6 +546,11 @@ def _format_runtime(runtime_ms: int | None) -> str:
     if minutes:
         return f"{minutes}m {seconds:02d}s"
     return f"{seconds}s"
+
+
+def _display_job_value(row: dict[str, Any], header: str) -> str:
+    value = row.get(header) if isinstance(row, dict) else None
+    return str(value) if value is not None and value != "" else "—"
 
 
 def _job_sort_key(job: dict[str, Any]) -> tuple[int, str, str]:

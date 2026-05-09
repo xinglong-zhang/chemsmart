@@ -32,8 +32,9 @@ def _silence_console_logging(session_root: Path) -> Path:
         root.removeHandler(handler)
         handler.close()
 
-    if file_handlers:
-        file_handlers[0].setFormatter(_FORMATTER)
+    existing_handler = next(iter(file_handlers), None)
+    if existing_handler is not None:
+        existing_handler.setFormatter(_FORMATTER)
         return log_path
 
     handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")

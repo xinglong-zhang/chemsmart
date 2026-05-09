@@ -15,57 +15,59 @@ FooterWidget {
 }
 
 .user-cell {
-    border: round $accent;
+    border-left: outer $accent;
 }
 
 .agent-cell {
-    border: round $primary;
+    border-left: outer $primary;
 }
 
 .plan-cell {
     border: round $warning;
+    padding: 0 1;
 }
 
 .dry-run-cell {
-    border: round $success;
+    border-left: outer $success;
 }
 
 .method-cell {
-    border: round $secondary;
+    border-left: outer $secondary;
 }
 
 .geometry-cell {
-    border: round $accent;
+    border-left: outer $accent;
 }
 
 .runtime-cell {
-    border: round $warning;
+    border-left: outer $warning;
 }
 
 .submission-cell {
-    border: round $primary;
+    border-left: outer $primary;
 }
 
 .critic-cell {
     border: round $secondary;
+    padding: 0 1;
 }
 
 .job-status-cell {
-    border: round $accent;
+    border-left: outer $accent;
 }
 
 .run-result-cell {
-    border: round $success;
+    border-left: outer $success;
 }
 
 .workflow-cell {
-    border: round $primary;
+    border-left: outer $primary;
 }
 
 .molecule-cell {
-    border: round $secondary;
+    border-left: outer $secondary;
 }
 
 .error-cell {
-    border: round $error;
+    border-left: outer $error;
 }
