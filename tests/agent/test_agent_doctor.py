@@ -1,5 +1,6 @@
 """Tests for `chemsmart agent doctor`."""
 
+import logging
 import sys
 from unittest.mock import MagicMock
 
@@ -48,7 +49,7 @@ def test_doctor_valid_anthropic(monkeypatch, api_env_file):
     assert "api.env: OK (key length=" in result.output
     assert (
         "gateway: https://factchat-cloud.mindlogic.ai/v1/gateway/claude"
-        in (result.output)
+        in result.output
     )
     assert "ping: ok (model=gpt-5.4-2026-03-05, latency=42ms)" in (
         result.output
@@ -86,6 +87,82 @@ def test_doctor_valid_openai(monkeypatch, api_env_file):
         result.output
     )
     assert _REGISTERED_TOOLS_LINE in result.output
+
+
+def test_doctor_default_output_has_no_debug_or_warnings(
+    monkeypatch, api_env_file, tmp_path
+):
+    """Default doctor output should be quiet while still capturing logs."""
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setattr(
+        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.cli._default_session_root",
+        lambda: str(tmp_path / "sessions"),
+    )
+
+    def noisy_ping(self):
+        logging.getLogger("chemsmart.agent.registry").warning(
+            "registry warning should stay out of stderr"
+        )
+        logging.getLogger("numexpr.utils").info(
+            "numexpr info should stay out of stderr"
+        )
+        logging.getLogger("openai.http").debug(
+            "openai debug should stay out of stderr"
+        )
+        return _PING_RESULT
+
+    monkeypatch.setattr(
+        "chemsmart.agent.providers.OpenAIProvider.ping",
+        noisy_ping,
+    )
+
+    mock_openai = MagicMock()
+    monkeypatch.setitem(sys.modules, "openai", mock_openai)
+
+    runner = CliRunner()
+    result = runner.invoke(agent, ["doctor"], catch_exceptions=False)
+
+    assert result.exit_code == 0, result.output
+    assert "registry warning should stay out of stderr" not in result.output
+    assert "numexpr info should stay out of stderr" not in result.output
+    assert "openai debug should stay out of stderr" not in result.output
+
+    log_path = tmp_path / "_tui.log"
+    assert log_path.exists()
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "registry warning should stay out of stderr" in log_text
+    assert "numexpr info should stay out of stderr" in log_text
+    assert "openai debug should stay out of stderr" in log_text
+
+
+def test_doctor_verbose_emits_debug(monkeypatch, api_env_file, caplog):
+    """--verbose should keep DEBUG output on the console."""
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setattr(
+        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
+    )
+
+    def verbose_ping(self):
+        logging.getLogger("openai.http").debug("verbose doctor debug")
+        return _PING_RESULT
+
+    monkeypatch.setattr(
+        "chemsmart.agent.providers.OpenAIProvider.ping",
+        verbose_ping,
+    )
+
+    mock_openai = MagicMock()
+    monkeypatch.setitem(sys.modules, "openai", mock_openai)
+
+    caplog.set_level(logging.DEBUG)
+    runner = CliRunner()
+    result = runner.invoke(agent, ["--verbose", "doctor"])
+
+    assert result.exit_code == 0, result.output
+    assert "verbose doctor debug" in caplog.text
 
 
 def test_doctor_no_ping_reports_skip(monkeypatch, api_env_file):
