@@ -38,14 +38,23 @@ class DryRunInputCell(BaseCell):
         self.update(self._build_renderable())
 
     def _build_renderable(self):
+        filename = (
+            self.inputfile.rsplit("/", maxsplit=1)[-1]
+            if self.inputfile
+            else "dry-run input"
+        )
         header = Text()
+        header.append("✓ ", style="success")
         if self.inputfile:
-            header.append("Input file: ", style="bold")
-            header.append(self.inputfile)
+            header.append(f"{filename} ready", style="bold")
         else:
-            header.append("Dry-run input generated", style="bold")
+            header.append("Dry-run input ready", style="bold")
         if self.previous_content is not None:
             header.append("  [d diff]", style="dim")
+        path_line = Text()
+        if self.inputfile:
+            path_line.append("path: ", style="dim")
+            path_line.append(self.inputfile, style="dim")
 
         if self.show_diff and self.previous_content is not None:
             diff = (
@@ -68,4 +77,8 @@ class DryRunInputCell(BaseCell):
                 theme="ansi_dark",
                 word_wrap=True,
             )
-        return Group(header, Text(""), body)
+        lines = [header]
+        if self.inputfile:
+            lines.append(path_line)
+        lines.extend([Text(""), body])
+        return Group(*lines)

@@ -28,6 +28,8 @@ from chemsmart.agent.tui.events import (
     RuntimeValidationEvent,
     SessionSummaryEvent,
     SubmissionPreviewEvent,
+    ToolCallEvent,
+    ToolPreviewEvent,
     parse_decision_event,
     session_completed,
 )
@@ -127,9 +129,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def on_mount(self) -> None:
         self.post_agent_message(
-            "## chemsmart agent\n\n"
-            "Try `/help`, `/jobs`, or `/queue`.\n\n"
-            "Example: `optimize water.xyz and validate the runtime`"
+            "## chemsmart agent에 오신 것을 환영합니다\n\n"
+            "자연어로 계산을 계획하고, 입력 파일을 미리보고, "
+            "실행 전 점검까지 이어집니다.\n\n"
+            "먼저 해볼 것: /doctor · 안전하게 물어보기: ask 모드 · "
+            "실제 워크플로우: run 모드\n\n"
+            "예: `single-point on examples/h2o.xyz at B3LYP/6-31G(d) "
+            "Gaussian`"
         )
         self.focus_composer()
         self.query_one(FooterWidget).update_draft("")
@@ -509,6 +515,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
         transcript = self.query_one(Transcript)
         footer = self.query_one(FooterWidget)
+        workflow_cell = getattr(self, "_workflow_cell", None)
 
         if isinstance(event, RequestEvent):
             self._current_request = event.request
@@ -516,16 +523,64 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 self._user_requests.add(event.request)
                 transcript.add_cell(UserMessageCell(event.request))
             footer.set_phase(Phase.PLANNING)
-            footer.set_hint("Planning…")
+            footer.set_hint("계산 의도를 파악하는 중…")
         elif isinstance(event, PlanEvent):
             self._current_plan = event.plan
             self._current_plan_text = event.text
-            transcript.add_cell(PlanCell(event.text))
+            workflow_cell = PlanCell(event.plan)
+            self._workflow_cell = workflow_cell
+            transcript.add_cell(workflow_cell)
             footer.set_phase(Phase.PLANNING)
-            footer.set_hint("Generating dry-run input…")
+            footer.set_hint("도구 단계를 채우는 중…")
+        elif isinstance(event, ToolCallEvent):
+            if workflow_cell is not None:
+                if event.status == "running":
+                    workflow_cell.mark_started(
+                        event.step_index,
+                        event.tool,
+                        event.args,
+                    )
+                else:
+                    workflow_cell.mark_completed(
+                        event.step_index,
+                        event.tool,
+                        event.payload,
+                    )
+            if event.tool == "run_local":
+                footer.set_phase(Phase.RUNNING)
+                footer.set_hint(
+                    "로컬 실행 진행 중…"
+                    if event.status == "running"
+                    else "로컬 실행 완료"
+                )
+            else:
+                footer.set_phase(Phase.PLANNING)
+                footer.set_hint(
+                    f"{event.tool} 진행 중…"
+                    if event.status == "running"
+                    else f"{event.tool} 완료"
+                )
+        elif isinstance(event, ToolPreviewEvent):
+            if workflow_cell is not None and event.status == "running":
+                workflow_cell.mark_started(
+                    event.step_index,
+                    event.tool,
+                    event.args,
+                )
+            footer.set_phase(Phase.DRY_RUN_READY)
+            footer.set_hint("제출 미리보기 준비 중…")
         elif isinstance(event, MethodEvent):
             transcript.add_cell(MethodCell(event.recommendation))
         elif isinstance(event, DryRunInputEvent):
+            if workflow_cell is not None:
+                workflow_cell.mark_completed(
+                    event.step_index,
+                    "dry_run_input",
+                    {
+                        "inputfile": event.inputfile,
+                        "content": event.content,
+                    },
+                )
             transcript.add_cell(
                 DryRunInputCell(
                     event.content,
@@ -537,8 +592,22 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             footer.set_phase(Phase.DRY_RUN_READY)
             footer.set_hint("Dry-run input ready")
         elif isinstance(event, RuntimeValidationEvent):
+            if workflow_cell is not None:
+                workflow_cell.mark_completed(
+                    event.step_index,
+                    "validate_runtime",
+                    event.validation,
+                )
             transcript.add_cell(RuntimeValidationCell(event.validation))
+            footer.set_phase(Phase.DRY_RUN_READY)
+            footer.set_hint("Runtime check ready")
         elif isinstance(event, SubmissionPreviewEvent):
+            if workflow_cell is not None:
+                workflow_cell.mark_completed(
+                    event.step_index,
+                    "submit_hpc",
+                    event.preview,
+                )
             transcript.add_cell(SubmissionPreviewCell(event.preview))
             footer.set_phase(Phase.DRY_RUN_READY)
             footer.set_hint("Submission preview ready")
@@ -559,6 +628,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 footer.set_phase(Phase.DRY_RUN_READY)
                 footer.set_hint("Critic verdict ready")
         elif isinstance(event, ErrorEvent):
+            details = event.details if isinstance(event.details, dict) else {}
+            if workflow_cell is not None and details:
+                workflow_cell.mark_failed(
+                    int(details.get("step_index") or 0),
+                    str(details.get("tool") or ""),
+                    event.message,
+                )
             transcript.add_cell(
                 ErrorCell(event.title, event.message, event.details)
             )

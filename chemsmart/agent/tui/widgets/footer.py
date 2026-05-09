@@ -80,12 +80,9 @@ class FooterWidget(Static):
     def _refresh_text(self) -> None:
         text = Text()
         text.append(self.phase.label, style="bold")
-        text.append(" • ", style="dim")
-        text.append(self._provider, style="dim")
-        text.append("/", style="dim")
-        text.append(self._model, style="dim")
-        text.append(" • ", style="dim")
-        text.append(f"tok {self._draft_tokens}", style="dim")
+        if self.hint:
+            text.append(" • ", style="dim")
+            text.append(self.hint, style="dim")
         text.append(" • ", style="dim")
         text.append("jobs ", style="dim")
         text.append(f"q{self._job_counts['queued']} ", style="dim")
@@ -97,7 +94,10 @@ class FooterWidget(Static):
             f"f{self._job_counts['failed']}",
             style="error" if self._job_counts["failed"] else "dim",
         )
-        if self.hint:
-            text.append(" • ", style="dim")
-            text.append(self.hint, style="dim")
+        text.append(" • ", style="dim")
+        text.append(self._provider, style="dim")
+        text.append("/", style="dim")
+        text.append(self._model, style="dim")
+        text.append(" • ", style="dim")
+        text.append(f"tok {self._draft_tokens}", style="dim")
         self.update(text)
