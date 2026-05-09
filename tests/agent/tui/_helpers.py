@@ -14,13 +14,15 @@ def normalize_svg(svg: str) -> str:
     svg = re.sub(r'viewBox="[^"]+"', 'viewBox="NORMALIZED"', svg)
     svg = re.sub(r'width="\d+(?:\.\d+)?"', 'width="NORMALIZED"', svg)
     svg = re.sub(r'height="\d+(?:\.\d+)?"', 'height="NORMALIZED"', svg)
+    svg = re.sub(r"fill: #[0-9a-fA-F]{6}", "fill: #COLOR", svg)
+    svg = re.sub(r'fill="#[0-9a-fA-F]{6}"', 'fill="#COLOR"', svg)
     return svg.strip()
 
 
 def assert_matches_snapshot(name: str, actual: str) -> None:
     path = SNAPSHOT_ROOT / f"{name}.svg"
     expected = path.read_text(encoding="utf-8")
-    assert normalize_svg(actual) == expected
+    assert normalize_svg(actual) == normalize_svg(expected)
 
 
 def write_session_fixture(

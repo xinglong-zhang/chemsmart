@@ -1,0 +1,383 @@
+from __future__ import annotations
+
+import json
+import re
+from collections import Counter
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+_GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#.*$", re.MULTILINE)
+_ORCA_ROUTE_RE = re.compile(r"^\s*!.*$", re.MULTILINE)
+_DEFAULT_RECENT_TURN_LIMIT = 3
+_DEFAULT_TOKEN_BUDGET = 900
+_MAX_REQUEST_CHARS = 240
+_MAX_RATIONALE_CHARS = 220
+_MAX_RESULT_CHARS = 220
+
+
+class ConversationTurn(BaseModel):
+    turn_index: int
+    request: str
+    plan_rationale: str = ""
+    intent: Literal["workflow", "advisory", "chitchat"] | None = None
+    reusable_results: list[str] = Field(default_factory=list)
+    status: Literal["in_progress", "completed"] = "in_progress"
+    blocked: bool | None = None
+
+    def prompt_view(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "turn": self.turn_index,
+            "request": _truncate(self.request, _MAX_REQUEST_CHARS),
+        }
+        if self.plan_rationale:
+            payload["plan_rationale"] = _truncate(
+                self.plan_rationale,
+                _MAX_RATIONALE_CHARS,
+            )
+        if self.reusable_results:
+            payload["reusable_results"] = [
+                _truncate(result, _MAX_RESULT_CHARS)
+                for result in self.reusable_results[-3:]
+            ]
+        payload["status"] = self.status
+        if self.blocked is not None:
+            payload["blocked"] = self.blocked
+        return payload
+
+    def older_summary_line(self) -> str:
+        parts = [f"Turn {self.turn_index}: {self.request}"]
+        if self.reusable_results:
+            parts.append(self.reusable_results[0])
+        return _truncate(" — ".join(parts), _MAX_RESULT_CHARS)
+
+
+class ConversationMemory(BaseModel):
+    turns: list[ConversationTurn] = Field(default_factory=list)
+
+    @classmethod
+    def from_entries(
+        cls,
+        entries: list[dict[str, Any]],
+    ) -> "ConversationMemory":
+        turns: list[ConversationTurn] = []
+        current_turn: ConversationTurn | None = None
+        tool_calls: dict[int, dict[str, Any]] = {}
+
+        for entry in entries:
+            kind = entry.get("kind")
+            payload = entry.get("payload")
+            if kind == "request":
+                request = _string_value(
+                    (payload or {}).get("request")
+                    if isinstance(payload, dict)
+                    else None
+                ) or _string_value(entry.get("rationale"))
+                current_turn = ConversationTurn(
+                    turn_index=len(turns) + 1,
+                    request=request or "",
+                )
+                turns.append(current_turn)
+                tool_calls = {}
+                continue
+
+            if current_turn is None or not isinstance(payload, dict):
+                continue
+
+            if kind == "plan":
+                current_turn.plan_rationale = _string_value(
+                    payload.get("rationale")
+                ) or _string_value(entry.get("rationale"))
+                current_turn.intent = _normalize_intent(payload.get("intent"))
+                continue
+
+            if kind == "tool_call":
+                step_index = _coerce_int(payload.get("step_index"))
+                if step_index is not None:
+                    tool_calls[step_index] = payload
+                continue
+
+            if kind == "tool_result":
+                step_index = _coerce_int(payload.get("step_index"))
+                summary = _summarize_tool_result(
+                    payload,
+                    tool_calls.get(step_index),
+                )
+                if summary:
+                    current_turn.reusable_results.append(summary)
+                continue
+
+            if kind == "session_summary":
+                current_turn.status = "completed"
+                blocked = payload.get("blocked")
+                if isinstance(blocked, bool):
+                    current_turn.blocked = blocked
+
+        return cls(turns=turns)
+
+    def prompt_context(
+        self,
+        *,
+        current_turn_index: int | None = None,
+        recent_turn_limit: int = _DEFAULT_RECENT_TURN_LIMIT,
+        token_budget: int = _DEFAULT_TOKEN_BUDGET,
+    ) -> dict[str, Any]:
+        eligible_turns = [
+            turn
+            for turn in self.turns
+            if turn.request
+            and (
+                current_turn_index is None
+                or turn.turn_index < current_turn_index
+            )
+        ]
+        if not eligible_turns:
+            return {
+                "recent_turns": [],
+                "older_turn_summary": [],
+                "approx_token_budget": token_budget,
+            }
+
+        recent_turns = eligible_turns[-recent_turn_limit:]
+        older_turns = eligible_turns[: -len(recent_turns)]
+        context = {
+            "recent_turns": [turn.prompt_view() for turn in recent_turns],
+            "older_turn_summary": [
+                turn.older_summary_line() for turn in older_turns
+            ],
+            "approx_token_budget": token_budget,
+        }
+        _trim_context_to_budget(context, token_budget)
+        return context
+
+    def entries_for_turn(
+        self,
+        entries: list[dict[str, Any]],
+        turn_index: int,
+    ) -> list[dict[str, Any]]:
+        selected: list[dict[str, Any]] = []
+        current_index = 0
+        for entry in entries:
+            if entry.get("kind") == "request":
+                current_index += 1
+            if current_index == turn_index:
+                selected.append(entry)
+            elif current_index > turn_index and selected:
+                break
+        return selected
+
+
+def _trim_context_to_budget(
+    context: dict[str, Any],
+    token_budget: int,
+) -> None:
+    while _estimate_tokens(context) > token_budget:
+        older_summary = context.get("older_turn_summary") or []
+        if older_summary:
+            older_summary.pop(0)
+            continue
+
+        recent_turns = context.get("recent_turns") or []
+        if len(recent_turns) > 1:
+            recent_turns.pop(0)
+            continue
+
+        if not recent_turns:
+            return
+
+        recent = recent_turns[0]
+        reusable_results = recent.get("reusable_results") or []
+        if len(reusable_results) > 1:
+            reusable_results.pop(0)
+            continue
+
+        if reusable_results:
+            shortened = _truncate(reusable_results[0], 120)
+            if shortened != reusable_results[0]:
+                reusable_results[0] = shortened
+                continue
+            recent.pop("reusable_results", None)
+            continue
+
+        rationale = recent.get("plan_rationale")
+        if isinstance(rationale, str) and rationale:
+            shortened = _truncate(rationale, 120)
+            if shortened != rationale:
+                recent["plan_rationale"] = shortened
+                continue
+            recent.pop("plan_rationale", None)
+            continue
+
+        request = recent.get("request")
+        if isinstance(request, str):
+            shortened = _truncate(request, 120)
+            if shortened != request:
+                recent["request"] = shortened
+                continue
+        return
+
+
+def _summarize_tool_result(
+    payload: dict[str, Any],
+    tool_call: dict[str, Any] | None,
+) -> str | None:
+    tool = _string_value(payload.get("tool"))
+    if tool is None:
+        return None
+
+    result_payload = payload.get("payload")
+    if not isinstance(result_payload, dict):
+        return None
+
+    args = tool_call.get("args") if isinstance(tool_call, dict) else {}
+    if not isinstance(args, dict):
+        args = {}
+
+    if tool == "build_molecule":
+        source = _string_value(args.get("filepath")) or _string_value(
+            args.get("smiles")
+        )
+        formula = _molecule_formula(result_payload)
+        if source and formula:
+            return f"build_molecule loaded {formula} from {source}."
+        if source:
+            return f"build_molecule loaded the source from {source}."
+        if formula:
+            return f"build_molecule produced molecule {formula}."
+        return "build_molecule produced a reusable molecule."
+
+    if tool == "recommend_method":
+        method = _method_summary(result_payload)
+        if method:
+            return f"recommend_method suggested {method}."
+        return None
+
+    if tool in {"build_gaussian_settings", "build_orca_settings"}:
+        method = _settings_summary(result_payload)
+        if method:
+            return f"{tool} prepared {method} settings."
+        return None
+
+    if tool == "build_job":
+        kind = _string_value(args.get("kind"))
+        label = _string_value(result_payload.get("label")) or _string_value(
+            args.get("label")
+        )
+        pieces = ["build_job prepared"]
+        if kind:
+            pieces.append(kind)
+        if label:
+            pieces.append(f"label={label}")
+        return " ".join(pieces) + "."
+
+    if tool == "dry_run_input":
+        inputfile = _string_value(result_payload.get("inputfile"))
+        route = _extract_route_line(result_payload.get("content"))
+        pieces = ["dry_run_input wrote"]
+        if inputfile:
+            pieces.append(inputfile)
+        if route:
+            pieces.append(f"with route {route}")
+        return " ".join(pieces) + "."
+
+    if tool == "extract_optimized_geometry":
+        formula = _molecule_formula(result_payload)
+        if formula:
+            return (
+                "extract_optimized_geometry recovered optimized geometry "
+                f"for {formula}."
+            )
+        return "extract_optimized_geometry recovered optimized geometry."
+
+    if tool == "validate_runtime":
+        status = _string_value(result_payload.get("ok"))
+        if status and status != "ok":
+            return f"validate_runtime reported {status}."
+        return None
+
+    return None
+
+
+def _normalize_intent(
+    value: Any,
+) -> Literal["workflow", "advisory", "chitchat"] | None:
+    if value in {"workflow", "advisory", "chitchat"}:
+        return value
+    return None
+
+
+def _string_value(value: Any) -> str | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return None
+
+
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _truncate(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _estimate_tokens(value: Any) -> int:
+    return max(1, int(round(len(json.dumps(value, sort_keys=True)) / 4)))
+
+
+def _molecule_formula(payload: dict[str, Any]) -> str | None:
+    symbols = payload.get("symbols")
+    if not isinstance(symbols, list) or not symbols:
+        return None
+    counts = Counter(
+        symbol
+        for symbol in symbols
+        if isinstance(symbol, str) and symbol.strip()
+    )
+    if not counts:
+        return None
+    formula_parts: list[str] = []
+    for symbol in sorted(counts):
+        count = counts[symbol]
+        formula_parts.append(symbol if count == 1 else f"{symbol}{count}")
+    return "".join(formula_parts)
+
+
+def _method_summary(payload: dict[str, Any]) -> str | None:
+    functional = _string_value(payload.get("functional"))
+    basis = _string_value(payload.get("basis"))
+    ab_initio = _string_value(payload.get("ab_initio"))
+    solvent = _string_value(payload.get("solvent_id"))
+
+    method = None
+    if ab_initio and basis:
+        method = f"{ab_initio}/{basis}"
+    elif functional and basis:
+        method = f"{functional}/{basis}"
+    elif functional:
+        method = functional
+
+    if method and solvent:
+        return f"{method} in {solvent}"
+    return method
+
+
+def _settings_summary(payload: dict[str, Any]) -> str | None:
+    return _method_summary(payload)
+
+
+def _extract_route_line(content: Any) -> str | None:
+    if not isinstance(content, str):
+        return None
+    match = _GAUSSIAN_ROUTE_RE.search(content) or _ORCA_ROUTE_RE.search(
+        content
+    )
+    if match is None:
+        return None
+    return _truncate(match.group(0).strip(), 120)
