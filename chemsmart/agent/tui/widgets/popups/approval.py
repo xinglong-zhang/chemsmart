@@ -61,10 +61,15 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
         self._revising = False
 
     def compose(self) -> ComposeResult:
+        mode, remote_effect, rollback = _approval_copy(self.action)
         summary = (
             f"Approve `{self.action}` for this request?\n\n"
+            f"mode: {mode}\n"
+            f"target: {self.action}\n"
+            f"remote-effect: {remote_effect}\n"
+            f"rollback: {rollback}\n\n"
             "y once · n deny · s this-session · r decline-and-revise\n\n"
-            f"Request: {self.request}"
+            f"request: {self.request}"
         )
         with Vertical(id="approval-modal"):
             yield Static(summary, id="approval-summary")
@@ -128,3 +133,23 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+
+def _approval_copy(action: str) -> tuple[str, str, str]:
+    if action == "submit_hpc":
+        return (
+            "execute once",
+            "원격 큐에 실제 제출될 수 있습니다.",
+            "제출 후 취소는 별도의 큐 취소가 필요합니다.",
+        )
+    if action == "run_local":
+        return (
+            "execute once",
+            "현재 작업 폴더에서 로컬 실행이 시작됩니다.",
+            "실행을 막으려면 지금 거절하고, 시작 후 정리는 별도입니다.",
+        )
+    return (
+        "execute once",
+        "요청된 실행 단계가 시작됩니다.",
+        "실행 전에는 거절할 수 있고, 시작 후 정리는 별도입니다.",
+    )

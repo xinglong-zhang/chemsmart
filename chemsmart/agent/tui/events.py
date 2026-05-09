@@ -32,23 +32,44 @@ class PlanEvent(AgentEvent):
 
 
 @dataclass(slots=True)
+class ToolCallEvent(AgentEvent):
+    step_index: int
+    tool: str
+    status: str
+    args: dict[str, Any]
+    payload: Any | None = None
+
+
+@dataclass(slots=True)
+class ToolPreviewEvent(AgentEvent):
+    step_index: int
+    tool: str
+    status: str
+    args: dict[str, Any]
+    payload: Any | None = None
+
+
+@dataclass(slots=True)
 class MethodEvent(AgentEvent):
     recommendation: dict[str, Any]
 
 
 @dataclass(slots=True)
 class DryRunInputEvent(AgentEvent):
+    step_index: int
     inputfile: str | None
     content: str
 
 
 @dataclass(slots=True)
 class RuntimeValidationEvent(AgentEvent):
+    step_index: int
     validation: dict[str, Any]
 
 
 @dataclass(slots=True)
 class SubmissionPreviewEvent(AgentEvent):
+    step_index: int
     preview: dict[str, Any]
 
 
@@ -86,6 +107,8 @@ class IgnoredEvent(AgentEvent):
 _AGENT_EVENT_TYPES = (
     RequestEvent
     | PlanEvent
+    | ToolCallEvent
+    | ToolPreviewEvent
     | MethodEvent
     | DryRunInputEvent
     | RuntimeValidationEvent
@@ -115,21 +138,72 @@ def parse_decision_event(
         plan = Plan.model_validate(payload)
         return PlanEvent(kind=kind, plan=plan, text=render_plan(plan))
 
+    if kind == "tool_call":
+        return ToolCallEvent(
+            kind=kind,
+            step_index=int(payload.get("step_index") or 0),
+            tool=str(payload.get("tool") or ""),
+            status="running",
+            args=dict(payload.get("args") or {}),
+        )
+
+    if kind == "tool_preview":
+        return ToolPreviewEvent(
+            kind=kind,
+            step_index=int(payload.get("step_index") or 0),
+            tool=str(payload.get("tool") or ""),
+            status="running",
+            args=dict(payload.get("args") or {}),
+        )
+
     if kind in {"tool_result", "tool_preview_result"}:
         tool = payload.get("tool")
         tool_payload = payload.get("payload") or {}
+        step_index = int(payload.get("step_index") or 0)
+        if kind == "tool_preview_result" and tool != "submit_hpc":
+            return ToolPreviewEvent(
+                kind=kind,
+                step_index=step_index,
+                tool=str(tool or ""),
+                status="done",
+                args={},
+                payload=tool_payload,
+            )
+        if tool in {
+            "build_molecule",
+            "build_gaussian_settings",
+            "build_job",
+            "run_local",
+        }:
+            return ToolCallEvent(
+                kind=kind,
+                step_index=step_index,
+                tool=str(tool or ""),
+                status="done",
+                args={},
+                payload=tool_payload,
+            )
         if tool == "recommend_method":
             return MethodEvent(kind=kind, recommendation=tool_payload)
         if tool == "dry_run_input":
             return DryRunInputEvent(
                 kind=kind,
+                step_index=step_index,
                 inputfile=tool_payload.get("inputfile"),
                 content=str(tool_payload.get("content") or ""),
             )
         if tool == "validate_runtime":
-            return RuntimeValidationEvent(kind=kind, validation=tool_payload)
+            return RuntimeValidationEvent(
+                kind=kind,
+                step_index=step_index,
+                validation=tool_payload,
+            )
         if tool == "submit_hpc":
-            return SubmissionPreviewEvent(kind=kind, preview=tool_payload)
+            return SubmissionPreviewEvent(
+                kind=kind,
+                step_index=step_index,
+                preview=tool_payload,
+            )
         if tool == "extract_optimized_geometry":
             molecule = _restore_json_result(tool_payload)
             if isinstance(molecule, Molecule):
