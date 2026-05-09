@@ -272,9 +272,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "Wait for the current request to finish before starting a new request.",
             )
             return
-        self._stop_tailer()
-        preserve_transcript = self.active_agent_session is not None
-        self._reset_request_state(clear_transcript=not preserve_transcript)
+        if self.active_agent_session is None:
+            self._stop_tailer()
+        self._reset_request_state(clear_transcript=True)
         self._current_request = text
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint("Agent is planning…")
@@ -300,7 +300,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             return
         self._stop_tailer()
-        self._reset_request_state(clear_transcript=True)
+        self._reset_request_state(clear_transcript=True, clear_session=True)
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint(f"Loading session {session_id}")
         self._attach_tailer(session_dir / "decision_log.jsonl")
@@ -399,6 +399,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         composer = self.query_one(Composer)
         if composer.text.strip():
             return
+        self._reset_request_state(clear_transcript=False, clear_session=True)
         self.app.exit()
 
     def action_refresh_screen(self) -> None:
@@ -802,12 +803,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if command == "/help":
             self._show_help()
         elif command in {"/quit", "/exit"}:
+            self._reset_request_state(
+                clear_transcript=False, clear_session=True
+            )
             self.app.exit()
         elif command == "/clear":
             if not self._guard_phase(command, {Phase.IDLE, Phase.FINISHED}):
                 return
             self._stop_tailer()
-            self._reset_request_state(clear_transcript=True)
+            self._reset_request_state(
+                clear_transcript=True, clear_session=True
+            )
             self.notify("Transcript cleared.", timeout=3)
             self.focus_composer()
         elif command == "/sessions":
@@ -1139,9 +1145,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             f"Original request:\n{original}"
         )
 
-    def _reset_request_state(self, *, clear_transcript: bool) -> None:
+    def _reset_request_state(
+        self,
+        *,
+        clear_transcript: bool,
+        clear_session: bool = False,
+    ) -> None:
         if clear_transcript:
             self._user_requests.clear()
+        if clear_session:
             self.active_agent_session = None
             self.active_resume_id = None
         self._current_request = None
