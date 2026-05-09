@@ -247,6 +247,28 @@ chemsmart --help
 ```
 to get the options for running CHEMSMART package.
 
+## AI Agent (preview)
+
+CHEMSMART now ships an opt-in natural-language agent layer that can plan Gaussian/ORCA workflows, generate input files, validate runtime prerequisites, and optionally hand off to HPC submission. The interactive TUI is bundled behind the optional `[agent-tui]` extra.
+
+Install the preview layer with:
+
+```bash
+pip install -e ".[agent-tui]"
+export AI_PROVIDER=openai  # anthropic is also supported
+# add ai_api_key=... to api.env
+```
+
+60-second quickstart:
+
+```bash
+AI_PROVIDER=openai chemsmart agent doctor
+AI_PROVIDER=openai chemsmart agent ask "Recommend method/basis for a Cope rearrangement TS"
+AI_PROVIDER=openai chemsmart agent run "single-point on water.xyz at B3LYP/6-31G(d) Gaussian" --dry-submit
+```
+
+After a run, inspect `~/.chemsmart/agent/sessions/<id>/decision_log.jsonl` for the audit trail; the dry-run input file path is printed to stdout. For the full golden path, see [docs/agent-quickstart.md](docs/agent-quickstart.md).
+
 ## Usage
 
 With setup completed, one is able to run different Gaussian jobs via command-line interface (CLI).
