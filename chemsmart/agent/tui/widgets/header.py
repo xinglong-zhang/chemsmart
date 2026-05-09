@@ -6,7 +6,7 @@ import re
 
 from rich.style import Style
 from rich.text import Text
-from textual.color import Color, Gradient
+from textual.color import Color, ColorParseError
 from textual.widgets import Static
 
 
@@ -20,7 +20,7 @@ class ChemsmartHeader(Static):
     """
 
     plain_wordmark = "CHEMSMART"
-    styled_wordmark = "◢ CHEM▸SMART"
+    styled_wordmark = "chem · smart"
 
     def render(self) -> Text:
         if getattr(self.app, "plain", False):
@@ -28,35 +28,53 @@ class ChemsmartHeader(Static):
         return self._render_styled_wordmark()
 
     def _render_styled_wordmark(self) -> Text:
-        primary = self._theme_color("primary", "#0178D4")
-        accent = self._theme_color("accent", "#FFA62B")
-        smart_gradient = Gradient.from_colors(primary, accent, quality=24)
+        body_style = Style(
+            color=self._theme_color(
+                "$text-muted", fallback="#B8B8B8"
+            ).rich_color,
+        )
+        divider_style = Style(
+            color=self._theme_color(
+                "$foreground",
+                "$text-disabled",
+                fallback="#E0E0E0",
+            ).rich_color,
+        )
 
-        text = Text(no_wrap=True, overflow="ellipsis", end="")
-        text.append("◢", Style(color=primary.rich_color, bold=True))
-        text.append(" ", Style(dim=True))
-        text.append("CHEM", Style(color=primary.rich_color, bold=True))
-        text.append("▸", Style(color=accent.rich_color, bold=True))
-        self._append_gradient_text(text, "SMART", smart_gradient)
+        text = Text(
+            self.styled_wordmark,
+            style=body_style,
+            no_wrap=True,
+            overflow="ellipsis",
+            end="",
+        )
+        divider_index = self.styled_wordmark.index("·")
+        text.stylize(divider_style, divider_index, divider_index + 1)
         return text
 
-    def _append_gradient_text(
-        self, text: Text, value: str, gradient: Gradient
-    ) -> None:
-        last_index = max(len(value) - 1, 1)
-        for index, character in enumerate(value):
-            position = index / last_index
-            text.append(
-                character,
-                Style(color=gradient.get_rich_color(position), bold=True),
-            )
-
-    def _theme_color(self, name: str, fallback: str) -> Color:
+    def _theme_color(self, *names: str, fallback: str) -> Color:
         if self.app is None:
             return Color.parse(fallback)
+
         variables = self.app.get_css_variables()
-        color_value = variables.get(name, fallback)
-        return Color.parse(color_value)
+        for name in names:
+            for candidate in self._theme_candidates(name):
+                color_value = variables.get(candidate)
+                if color_value is None:
+                    continue
+                try:
+                    return Color.parse(color_value)
+                except ColorParseError:
+                    continue
+        return Color.parse(fallback)
+
+    def _theme_candidates(self, name: str) -> tuple[str, ...]:
+        token = name.removeprefix("$")
+        if token == "text":
+            return (token, "foreground")
+        if token.startswith("text-"):
+            return (token, f"foreground-{token.removeprefix('text-')}")
+        return (token,)
 
     @classmethod
     def normalize_wordmark(cls, value: str) -> str:
