@@ -33,8 +33,15 @@ class BaseCell(Static):
         *,
         title: str,
         classes: str | None = None,
+        expand: bool = False,
+        shrink: bool = False,
     ) -> None:
-        super().__init__(renderable, classes=classes)
+        super().__init__(
+            renderable,
+            classes=classes,
+            expand=expand,
+            shrink=shrink,
+        )
         self.border_title = title
 
 

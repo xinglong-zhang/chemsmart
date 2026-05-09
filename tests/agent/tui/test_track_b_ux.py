@@ -304,11 +304,15 @@ def test_user_messages_are_right_aligned_without_moving_slash_commands(
             transcript.add_cell(slash)
             await pilot.pause()
 
-            assert user.region.x > agent.region.x
-            assert (
-                user.region.width
-                <= int(transcript.content_region.width * 0.8) + 1
+            transcript_right_edge = (
+                transcript.content_region.x + transcript.content_region.width
             )
-            assert slash.region.x == agent.region.x
+            user_right_edge = user.bubble.region.x + user.bubble.region.width
+
+            assert user_right_edge >= transcript_right_edge - 1
+            assert user.bubble.region.x >= agent.region.x + int(
+                transcript.content_region.width * 0.15
+            )
+            assert slash.bubble.region.x == agent.region.x
 
     asyncio.run(scenario())

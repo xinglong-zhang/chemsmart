@@ -19,8 +19,8 @@ FooterWidget {
 }
 
 .user-request-cell {
-    width: 80%;
-    offset: 20% 0;
+    width: auto;
+    max-width: 80%;
 }
 
 .agent-cell {
