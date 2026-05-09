@@ -9,13 +9,14 @@ from typing import Iterable
 
 from click.testing import CliRunner
 from rich.table import Table
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.worker import Worker, WorkerState
 
 from chemsmart.agent.cli import agent
-from chemsmart.agent.core import CriticVerdict, Plan
+from chemsmart.agent.core import AgentSession, CriticVerdict, Plan
 from chemsmart.agent.tui.events import (
     CriticVerdictEvent,
     DryRunInputEvent,
@@ -187,6 +188,83 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if track_in_transcript and snapshot.get("status") == "done":
             self._maybe_render_run_result(message.job_id, snapshot)
 
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
+        name="agent-run",
+    )
+    def run_agent_session(self, request: str) -> dict[str, object]:
+        self.active_resume_id = None
+        if self.active_agent_session is None:
+            self.active_agent_session = AgentSession(
+                session_root=str(self.session_root)
+            )
+        return self.active_agent_session.run(
+            request,
+            dry_submit=True,
+            pause_before_risky=True,
+        )
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
+        name="agent-resume",
+    )
+    def resume_agent_session(
+        self,
+        session_id: str,
+        *,
+        cwd_override: str | None = None,
+    ) -> dict[str, object]:
+        self.active_resume_id = session_id
+        self.active_agent_session = AgentSession.load(
+            session_id,
+            session_root=str(self.session_root),
+            cwd_override=cwd_override,
+        )
+        return self.active_agent_session.continue_loaded_session(
+            dry_submit=True,
+            pause_before_risky=True,
+            rerender_plan=False,
+        )
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
+        name="agent-execute",
+    )
+    def execute_agent_session(self, session_id: str) -> dict[str, object]:
+        self.active_resume_id = session_id
+        self.active_agent_session = AgentSession.load(
+            session_id,
+            session_root=str(self.session_root),
+        )
+        return self.active_agent_session.continue_loaded_session(
+            dry_submit=False,
+            pause_before_risky=False,
+            rerender_plan=False,
+        )
+
+    def _load_agent_session(
+        self,
+        session_id: str,
+        *,
+        cwd_override: str | None = None,
+    ) -> AgentSession:
+        self.active_resume_id = session_id
+        self.active_agent_session = AgentSession.load(
+            session_id,
+            session_root=str(self.session_root),
+            cwd_override=cwd_override,
+        )
+        return self.active_agent_session
+
     def start_request(self, text: str) -> None:
         if self._current_worker and not self._current_worker.is_finished:
             self.post_error(
@@ -195,7 +273,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             return
         self._stop_tailer()
-        self._reset_request_state(clear_transcript=True)
+        preserve_transcript = self.active_agent_session is not None
+        self._reset_request_state(clear_transcript=not preserve_transcript)
         self._current_request = text
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint("Agent is planning…")
@@ -226,6 +305,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self.query_one(FooterWidget).set_hint(f"Loading session {session_id}")
         self._attach_tailer(session_dir / "decision_log.jsonl")
         if session_completed(session_dir):
+            self._load_agent_session(session_id, cwd_override=cwd_override)
             self.post_agent_message(
                 f"Loaded completed session `{session_id}`."
             )
@@ -1060,7 +1140,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
 
     def _reset_request_state(self, *, clear_transcript: bool) -> None:
-        self._user_requests.clear()
+        if clear_transcript:
+            self._user_requests.clear()
+            self.active_agent_session = None
+            self.active_resume_id = None
         self._current_request = None
         self._current_plan = None
         self._current_plan_text = None
@@ -1085,9 +1168,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.app.screen.post_message(JobStatusUpdated(job_id, fields))
 
     def _refresh_job_snapshot(self) -> None:
-        from chemsmart.agent.tui.services import (
-            job_poller as job_poller_service,
-        )
+        from chemsmart.agent.tui.services import job_poller as job_poller_service
 
         _ = collect_job_snapshot
         snapshot = (

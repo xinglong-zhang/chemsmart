@@ -21,6 +21,7 @@ from chemsmart.agent.providers import (
     get_provider,
 )
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.services.conversation_memory import ConversationMemory
 
 _RISKY_TOOLS = {"run_local", "submit_hpc"}
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#\s*\S+", re.MULTILINE)
@@ -109,6 +110,8 @@ class SessionState(BaseModel):
     session_id: str
     cwd: str
     started_at: str = Field(default_factory=_utc_now_iso)
+    request_started_at: str = Field(default_factory=_utc_now_iso)
+    turn_index: int = 1
     request_intent: str = "unknown"
     total_steps_planned: int = 0
     current_step_index: int = 0
@@ -167,8 +170,23 @@ class AgentSession:
         self.state: SessionState | None = None
         self.session_dir: Path | None = None
         self.decision_log: DecisionLog | None = None
+        self.conversation_history = ConversationMemory()
         self._run_start_time: float | None = None
         self._llm_stats: list[dict[str, Any]] = []
+
+    @classmethod
+    def load(
+        cls,
+        session_id: str,
+        **kwargs: Any,
+    ) -> "AgentSession":
+        session = cls(**_session_kwargs(kwargs))
+        session._load_existing_session(session_id)
+        if kwargs.get("cwd_override"):
+            assert session.state is not None
+            session.state.cwd = os.path.abspath(kwargs["cwd_override"])
+            session._save_state()
+        return session
 
     @classmethod
     def resume(
@@ -176,30 +194,40 @@ class AgentSession:
         session_id: str,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        session = cls(**_session_kwargs(kwargs))
-        session._load_existing_session(session_id)
-        assert session.state is not None
-        assert session.decision_log is not None
-        session._run_start_time = time.perf_counter()
-        original_cwd = os.getcwd()
-        resume_cwd = os.path.abspath(
-            kwargs.get("cwd_override") or session.state.cwd
+        session = cls.load(session_id, **kwargs)
+        return session.continue_loaded_session(
+            dry_submit=kwargs.get("dry_submit", True),
+            pause_before_risky=kwargs.get("pause_before_risky", False),
+            allow_remote_unknown=kwargs.get("allow_remote_unknown", False),
+            allow_critic_override=kwargs.get("allow_critic_override", False),
+            rerender_plan=False,
         )
-        if kwargs.get("cwd_override"):
-            session.state.cwd = resume_cwd
-            session._save_state()
+
+    def continue_loaded_session(
+        self,
+        *,
+        dry_submit: bool = True,
+        pause_before_risky: bool = False,
+        allow_remote_unknown: bool = False,
+        allow_critic_override: bool = False,
+        rerender_plan: bool = False,
+    ) -> dict[str, Any]:
+        assert self.state is not None
+        assert self.decision_log is not None
+        self._run_start_time = time.perf_counter()
+        self._llm_stats = []
+        original_cwd = os.getcwd()
+        resume_cwd = os.path.abspath(self.state.cwd)
         os.chdir(resume_cwd)
         try:
-            completed_results = session._load_completed_results()
-            return session._continue_run(
+            completed_results = self._load_completed_results()
+            return self._continue_run(
                 completed_results=completed_results,
-                dry_submit=kwargs.get("dry_submit", True),
-                pause_before_risky=kwargs.get("pause_before_risky", False),
-                allow_remote_unknown=kwargs.get("allow_remote_unknown", False),
-                allow_critic_override=kwargs.get(
-                    "allow_critic_override", False
-                ),
-                rerender_plan=False,
+                dry_submit=dry_submit,
+                pause_before_risky=pause_before_risky,
+                allow_remote_unknown=allow_remote_unknown,
+                allow_critic_override=allow_critic_override,
+                rerender_plan=rerender_plan,
             )
         finally:
             os.chdir(original_cwd)
@@ -213,23 +241,18 @@ class AgentSession:
         allow_critic_override: bool = False,
     ) -> dict[str, Any]:
         self._run_start_time = time.perf_counter()
-        session_id = _new_session_id()
-        self.session_dir = self.session_root / session_id
-        self.session_dir.mkdir(parents=True, exist_ok=True)
-        self.decision_log = DecisionLog(
-            self.session_dir / "decision_log.jsonl"
-        )
-        self.state = SessionState(
-            session_id=session_id,
-            cwd=os.path.abspath(os.getcwd()),
-            current_step_index=0,
-            request=request,
-            env_snapshot=_env_snapshot(),
-        )
+        self._llm_stats = []
+        if self.state is None or self.session_dir is None:
+            self._start_new_session(request)
+        else:
+            self._start_new_turn(request)
+        assert self.state is not None
+        assert self.decision_log is not None
         self._save_state()
         self.decision_log.write(
             "request", {"request": request}, rationale=request
         )
+        self._refresh_conversation_history()
 
         plan = self._planner_call(request)
         self.state.plan = plan
@@ -241,6 +264,7 @@ class AgentSession:
         self.decision_log.write(
             "plan", plan.model_dump(), rationale=plan.rationale
         )
+        self._refresh_conversation_history()
 
         return self._continue_run(
             completed_results=[],
@@ -481,6 +505,7 @@ class AgentSession:
         return self._provider
 
     def _planner_call(self, request: str) -> Plan:
+        current_turn_index = self.state.turn_index if self.state else None
         prompt = _load_prompt("planner.md")
         tool_defs = self.registry.openai_tool_defs()
         plan = self._llm_json_call(
@@ -492,6 +517,11 @@ class AgentSession:
                     "content": json.dumps(
                         {
                             "request": request,
+                            "conversation_history": (
+                                self.conversation_history.prompt_context(
+                                    current_turn_index=current_turn_index
+                                )
+                            ),
                             "tools": tool_defs,
                         }
                     ),
@@ -838,7 +868,7 @@ class AgentSession:
 
         wall_time_ms = _elapsed_ms(
             self._run_start_time,
-            started_at=self.state.started_at,
+            started_at=self.state.request_started_at,
             ended_at=ended_at,
         )
         summary = {
@@ -870,6 +900,7 @@ class AgentSession:
             summary,
             rationale=rationale or "",
         )
+        self._refresh_conversation_history()
 
         primary_dry_run_result = _primary_dry_run_result(dry_run_results)
         schema_hash = _schema_hash(self.registry.openai_tool_defs())
@@ -901,6 +932,7 @@ class AgentSession:
             "block_reason": summary["block_reason"],
             "wall_time_ms": wall_time_ms,
             "started_at": self.state.started_at,
+            "request_started_at": self.state.request_started_at,
             "ended_at": ended_at,
             "provider_name": summary["provider_name"],
             "resolved_model": summary["resolved_model"],
@@ -920,9 +952,8 @@ class AgentSession:
         )
 
     def _tools_called(self) -> list[str]:
-        assert self.decision_log is not None
         tools: list[str] = []
-        for entry in self.decision_log.read_all():
+        for entry in self._current_turn_entries():
             if entry.get("kind") not in {"tool_call", "tool_preview"}:
                 continue
             tool = entry.get("payload", {}).get("tool")
@@ -945,9 +976,82 @@ class AgentSession:
     def _total_llm_tokens(self, field: str) -> int:
         return sum(int(stat.get(field) or 0) for stat in self._llm_stats)
 
+    def _start_new_session(self, request: str) -> None:
+        session_id = _new_session_id()
+        self.session_dir = self.session_root / session_id
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.decision_log = DecisionLog(
+            self.session_dir / "decision_log.jsonl"
+        )
+        self.state = SessionState(
+            session_id=session_id,
+            cwd=os.path.abspath(os.getcwd()),
+            request_started_at=_utc_now_iso(),
+            turn_index=1,
+            current_step_index=0,
+            request=request,
+            env_snapshot=_env_snapshot(),
+        )
+        self.conversation_history = ConversationMemory()
+
+    def _start_new_turn(self, request: str) -> None:
+        assert self.state is not None
+        assert self.decision_log is not None
+        if self._get_logged_summary() is None and self.state.plan is not None:
+            raise RuntimeError(
+                "Cannot start a new request while the current turn is still "
+                "open. Resume or finish the existing turn first."
+            )
+        self.state.turn_index += 1
+        self.state.cwd = os.path.abspath(os.getcwd())
+        self.state.request_started_at = _utc_now_iso()
+        self.state.current_step_index = 0
+        self.state.total_steps_planned = 0
+        self.state.plan = None
+        self.state.request = request
+        self.state.request_intent = "unknown"
+        self.state.env_snapshot = _env_snapshot()
+
+    def _refresh_conversation_history(self) -> None:
+        if self.decision_log is None:
+            self.conversation_history = ConversationMemory()
+            return
+        self.conversation_history = ConversationMemory.from_entries(
+            self.decision_log.read_all()
+        )
+
+    def _current_turn_entries(self) -> list[dict[str, Any]]:
+        if self.decision_log is None or self.state is None:
+            return []
+        return self.conversation_history.entries_for_turn(
+            self.decision_log.read_all(),
+            self.state.turn_index,
+        )
+
+    def _artifact_paths_for_current_turn(self) -> list[Path] | None:
+        assert self.state is not None
+        assert self.session_dir is not None
+        tool_results = [
+            entry
+            for entry in self._current_turn_entries()
+            if entry.get("kind") == "tool_result"
+        ]
+        if not tool_results:
+            return None
+        artifact_paths: list[Path] = []
+        for entry in tool_results:
+            payload = entry.get("payload") or {}
+            artifact_name = payload.get("artifact")
+            if isinstance(artifact_name, str) and artifact_name:
+                artifact_paths.append(self.session_dir / artifact_name)
+        return artifact_paths or None
+
     def _write_result_artifact(self, step_index: int, result: Any) -> Path:
         assert self.session_dir is not None
-        artifact_path = self.session_dir / f"step_{step_index + 1:02d}.json"
+        assert self.state is not None
+        artifact_path = self.session_dir / (
+            f"turn_{self.state.turn_index:02d}_step_{step_index + 1:02d}.json"
+        )
         artifact_path.write_text(
             json.dumps(_json_safe(result), indent=2, sort_keys=True),
             encoding="utf-8",
@@ -963,15 +1067,23 @@ class AgentSession:
         self.decision_log = DecisionLog(
             self.session_dir / "decision_log.jsonl"
         )
+        self._refresh_conversation_history()
+        expected_turn_index = max(1, len(self.conversation_history.turns))
+        if self.state.turn_index != expected_turn_index:
+            self.state.turn_index = expected_turn_index
+            self._save_state()
 
     def _load_completed_results(self) -> list[Any]:
         assert self.session_dir is not None
         assert self.state is not None
         results: list[Any] = []
-        for step_index in range(self.state.current_step_index):
-            artifact_path = self.session_dir / (
-                f"step_{step_index + 1:02d}.json"
-            )
+        artifact_paths = self._artifact_paths_for_current_turn()
+        if artifact_paths is None:
+            artifact_paths = [
+                self.session_dir / f"step_{step_index + 1:02d}.json"
+                for step_index in range(self.state.current_step_index)
+            ]
+        for artifact_path in artifact_paths:
             with artifact_path.open(encoding="utf-8") as handle:
                 results.append(json.load(handle))
         return results
@@ -1008,10 +1120,9 @@ class AgentSession:
         )
 
     def _get_logged_verdict(self) -> CriticVerdict | None:
-        assert self.decision_log is not None
         verdict_entries = [
             entry
-            for entry in self.decision_log.read_all()
+            for entry in self._current_turn_entries()
             if entry.get("kind") == "critic_verdict"
         ]
         if not verdict_entries:
@@ -1019,10 +1130,9 @@ class AgentSession:
         return CriticVerdict.model_validate(verdict_entries[-1]["payload"])
 
     def _get_logged_summary(self) -> dict[str, Any] | None:
-        assert self.decision_log is not None
         summary_entries = [
             entry
-            for entry in self.decision_log.read_all()
+            for entry in self._current_turn_entries()
             if entry.get("kind") == "session_summary"
         ]
         if not summary_entries:
