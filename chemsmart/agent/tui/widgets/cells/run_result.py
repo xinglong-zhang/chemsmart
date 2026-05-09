@@ -10,8 +10,8 @@ from .base import BaseCell
 
 
 class RunResultCell(BaseCell):
-    def __init__(self, result: dict) -> None:
-        self.result = result
+    def __init__(self, result: dict | None) -> None:
+        self.result = result or {}
         super().__init__(
             self._build_renderable(),
             title="Run result",
@@ -26,11 +26,11 @@ class RunResultCell(BaseCell):
         delta_g = self.result.get("delta_g")
         table.add_row(
             "E_SCF",
-            f"{float(energy):.6f} Eh" if energy is not None else "n/a",
+            f"{float(energy):.6f} Eh" if energy is not None else "no data",
         )
         table.add_row(
             "ΔG",
-            f"{float(delta_g):.6f} Eh" if delta_g is not None else "n/a",
+            f"{float(delta_g):.6f} Eh" if delta_g is not None else "no data",
         )
         imag = list(self.result.get("imag_freqs") or [])
         freqs = list(self.result.get("frequencies") or [])
@@ -39,13 +39,13 @@ class RunResultCell(BaseCell):
             table.add_row("imag freqs", Text(freq_text, style="error"))
         else:
             freq_text = ", ".join(f"{float(freq):.1f}" for freq in freqs)
-            table.add_row("lowest freqs", freq_text or "n/a")
+            table.add_row("lowest freqs", freq_text or "no data")
         table.add_row(
             "output",
             str(
                 self.result.get("output_path")
                 or self.result.get("source")
-                or ""
+                or "no data"
             ),
         )
         input_path = self.result.get("input_path")

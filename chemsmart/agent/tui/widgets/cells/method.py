@@ -12,8 +12,8 @@ from .base import BaseCell
 class MethodCell(BaseCell):
     BINDINGS = [Binding("e", "edit_method", "Edit", show=False)]
 
-    def __init__(self, recommendation: dict) -> None:
-        self.recommendation = recommendation
+    def __init__(self, recommendation: dict | None) -> None:
+        self.recommendation = recommendation or {}
         super().__init__(
             self._build_renderable(),
             title="Method recommendation",
@@ -31,9 +31,11 @@ class MethodCell(BaseCell):
         match = self.recommendation.get("match") or "no automatic match"
         solvent_model = self.recommendation.get("solvent_model") or "gas phase"
         solvent_id = self.recommendation.get("solvent_id")
-        solvent = solvent_model
-        if solvent_id:
-            solvent = f"{solvent_model} / {solvent_id}"
+        solvent = (
+            solvent_model
+            if not solvent_id
+            else f"{solvent_model} / {solvent_id}"
+        )
 
         lines = [
             Text(f"Method: {functional}/{basis}", style="bold"),
@@ -52,8 +54,8 @@ class MethodCell(BaseCell):
                 )
             )
         rationale = self.recommendation.get("rationale")
-        if rationale:
-            lines.extend([Text(""), Text(str(rationale))])
-        lines.append(Text(""))
+        lines.extend(
+            [Text(""), Text(str(rationale or "no data"), style="dim")]
+        )
         lines.append(Text("Press e to revise method/basis.", style="dim"))
         return Group(*lines)

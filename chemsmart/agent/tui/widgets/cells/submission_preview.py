@@ -12,8 +12,8 @@ from .base import BaseCell
 
 
 class SubmissionPreviewCell(BaseCell):
-    def __init__(self, preview: dict) -> None:
-        self.preview = preview
+    def __init__(self, preview: dict | None) -> None:
+        self.preview = preview or {}
         super().__init__(
             self._build_renderable(),
             title="Submission preview",
@@ -30,9 +30,8 @@ class SubmissionPreviewCell(BaseCell):
         lines = [
             Text(f"Transport: {transport}", style="bold"),
             Text(f"Duplicate check: {'yes' if duplicate else 'no'}"),
+            Text(f"Command: {command or 'no data'}"),
         ]
-        if command:
-            lines.append(Text(f"Command: {command}"))
         if script_path:
             lines.append(Text(f"Script: {script_path}"))
             path = Path(script_path)
@@ -41,11 +40,14 @@ class SubmissionPreviewCell(BaseCell):
                     [
                         Text(""),
                         Syntax(
-                            path.read_text(encoding="utf-8", errors="ignore"),
+                            path.read_text(encoding="utf-8", errors="ignore")
+                            or "# no data",
                             "bash",
                             theme="ansi_dark",
                             word_wrap=True,
                         ),
                     ]
                 )
+        elif not self.preview:
+            lines.append(Text("No submission preview data.", style="dim"))
         return Group(*lines)

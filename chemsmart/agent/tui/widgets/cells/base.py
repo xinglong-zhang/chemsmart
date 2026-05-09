@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.text import Text
 from textual.widgets import Static
 
 
@@ -13,13 +14,16 @@ class BaseCell(Static):
         width: 100%;
         height: auto;
         margin: 0 0 1 0;
-        padding: 0 1;
-        border: round $surface;
+        padding: 0 1 0 2;
+        border: none;
+        border-left: outer $surface;
         background: $panel;
+        background-tint: $foreground 3%;
     }
 
     BaseCell:focus {
-        border: heavy $accent;
+        border-left: outer $accent;
+        background-tint: $accent 8%;
     }
     """
 
@@ -32,3 +36,7 @@ class BaseCell(Static):
     ) -> None:
         super().__init__(renderable, classes=classes)
         self.border_title = title
+
+
+def no_data_text(message: str = "no data") -> Text:
+    return Text(message, style="dim")

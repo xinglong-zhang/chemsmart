@@ -21,7 +21,7 @@ class DryRunInputCell(BaseCell):
         inputfile: str | None = None,
         previous_content: str | None = None,
     ) -> None:
-        self.content = content
+        self.content = content or "# no data"
         self.inputfile = inputfile
         self.previous_content = previous_content
         self.show_diff = False

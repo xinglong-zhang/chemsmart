@@ -8,5 +8,9 @@ from .base import BaseCell
 
 
 class AgentMessageCell(BaseCell):
-    def __init__(self, text: str, *, title: str = "Agent") -> None:
-        super().__init__(Markdown(text), title=title, classes="agent-cell")
+    def __init__(self, text, *, title: str = "Agent") -> None:
+        self.source_text = text if isinstance(text, str) else None
+        renderable = (
+            Markdown(text or "_no data_") if isinstance(text, str) else text
+        )
+        super().__init__(renderable, title=title, classes="agent-cell")

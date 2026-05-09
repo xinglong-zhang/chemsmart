@@ -286,9 +286,7 @@ def _get_gateway_url(providers_module, provider_name: str) -> str:
 
 def _first_dry_run_result(result: dict) -> dict | None:
     dry_run_results = result.get("dry_run_results") or []
-    if dry_run_results:
-        return dry_run_results[0]
-    return result.get("dry_run_result")
+    return next(iter(dry_run_results), result.get("dry_run_result"))
 
 
 def _stream_event(console: Console, entry: dict) -> None:
