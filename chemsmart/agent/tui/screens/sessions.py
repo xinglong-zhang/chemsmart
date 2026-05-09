@@ -51,6 +51,7 @@ class SessionsScreen(ModalScreen[str | None]):
         if not self._session_ids:
             return
         self._selected_index = max(0, self._selected_index - 1)
+        self._refresh_text()
 
     def action_cursor_down(self) -> None:
         if not self._session_ids:
@@ -59,12 +60,16 @@ class SessionsScreen(ModalScreen[str | None]):
             len(self._session_ids) - 1,
             self._selected_index + 1,
         )
+        self._refresh_text()
 
     def action_select_session(self) -> None:
         if not self._session_ids or self._selected_index < 0:
             self.dismiss(None)
             return
         self._resume_session(self._session_ids[self._selected_index])
+
+    def _refresh_text(self) -> None:
+        self.query_one("#sessions-modal", Static).update(self._render_text())
 
     def _resume_session(self, session_id: str) -> None:
         owner = (
@@ -94,36 +99,30 @@ class SessionsScreen(ModalScreen[str | None]):
 
     def _render_text(self) -> str:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]
-        session_dirs = (
-            sorted(
-                [
-                    path
-                    for path in self.session_root.iterdir()
-                    if path.is_dir()
-                ],
-                reverse=True,
-            )
-            if self.session_root.exists()
-            else []
-        )
-        if not session_dirs:
+        if not self._session_ids:
             lines.extend(["", "No sessions found."])
             return "\n".join(lines)
 
-        for session_dir in session_dirs[:10]:
-            request = ""
-            metadata_path = session_dir / "session_metadata.json"
-            session_path = session_dir / "session.json"
-            if metadata_path.exists():
-                data = json.loads(metadata_path.read_text())
-                request = str(data.get("request") or "")
-            elif session_path.exists():
-                data = json.loads(session_path.read_text())
-                request = str(data.get("request") or "")
-            request = request.strip().replace("\n", " ")
-            if len(request) > 48:
-                request = f"{request[:45]}..."
+        for index, session_id in enumerate(self._session_ids):
+            prefix = "▶ " if index == self._selected_index else "  "
+            request = self._load_request_summary(session_id)
             lines.append(
-                f"- {session_dir.name}: {request or '(no request saved)'}"
+                f"{prefix}{session_id}: {request or '(no request saved)'}"
             )
         return "\n".join(lines)
+
+    def _load_request_summary(self, session_id: str) -> str:
+        session_dir = self.session_root / session_id
+        request = ""
+        metadata_path = session_dir / "session_metadata.json"
+        session_path = session_dir / "session.json"
+        if metadata_path.exists():
+            data = json.loads(metadata_path.read_text())
+            request = str(data.get("request") or "")
+        elif session_path.exists():
+            data = json.loads(session_path.read_text())
+            request = str(data.get("request") or "")
+        request = request.strip().replace("\n", " ")
+        if len(request) > 48:
+            request = f"{request[:45]}..."
+        return request

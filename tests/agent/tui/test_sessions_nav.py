@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 from textual.app import App, ComposeResult
+from textual.widgets import Static
 
 from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.screens.sessions import SessionsScreen
@@ -66,5 +67,29 @@ def test_sessions_screen_calls_chat_resume_on_selection(tmp_path: Path):
             await pilot.pause()
             assert resumed == ["session-001"]
             assert app.screen is app.chat_screen
+
+    asyncio.run(scenario())
+
+
+def test_sessions_screen_updates_visible_selection_marker(tmp_path: Path):
+    session_root = tmp_path / "sessions"
+    write_session_fixture(session_root, "session-001")
+    write_session_fixture(session_root, "session-002")
+
+    async def scenario() -> None:
+        app = _SessionsHarness(session_root)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            modal = app.screen.query_one("#sessions-modal", Static)
+            before = str(modal.renderable)
+            assert "▶ session-002" in before
+            assert "  session-001" in before
+
+            await pilot.press("down")
+            await pilot.pause()
+
+            after = str(modal.renderable)
+            assert "  session-002" in after
+            assert "▶ session-001" in after
 
     asyncio.run(scenario())
