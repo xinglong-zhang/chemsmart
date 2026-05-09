@@ -223,7 +223,16 @@ entry_point.add_command(
                     "Run the agent TUI in plain inline mode for "
                     "conservative terminals."
                 ),
-            )
+            ),
+            click.Option(
+                ["--verbose", "-v"],
+                is_flag=True,
+                default=False,
+                help=(
+                    "Keep console logging at DEBUG instead of writing it "
+                    "only to the agent log file."
+                ),
+            ),
         ],
         help_only_subcommands={
             "doctor": "Validate api.env, AI_PROVIDER, and provider connectivity.",
