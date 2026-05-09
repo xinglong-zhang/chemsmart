@@ -47,6 +47,24 @@ _INTENT_PATTERNS = {
     ),
     "scan": (r"\bscan\b", r"\bpes\b"),
 }
+_CHITCHAT_EXACT_PATTERNS = (
+    r"(?:hi|hello|hey)(?: there)?[!. ]*",
+    r"(?:thanks|thank you|thx)[!. ]*",
+    r"good (?:morning|afternoon|evening)[!. ]*",
+    r"what can you do(?: for me)?\??",
+    r"what do you do\??",
+    r"who are you\??",
+    r"help\??",
+)
+_CHITCHAT_TOKENS = {
+    "hello",
+    "hey",
+    "hi",
+    "thanks",
+    "thank",
+    "you",
+    "thx",
+}
 _LLM_MAX_ATTEMPTS = 3
 _LLM_BACKOFF_SECONDS = (1, 2, 4)
 
@@ -65,6 +83,17 @@ class Plan(BaseModel):
     steps: list[Step]
     rationale: str = ""
     estimated_cost: str | None = None
+    intent: Literal["workflow", "advisory", "chitchat"] | None = None
+
+    def resolved_intent(self) -> Literal["workflow", "advisory", "chitchat"]:
+        if self.intent in {"workflow", "advisory", "chitchat"}:
+            return self.intent
+        if not self.steps:
+            return "advisory"
+        return "workflow"
+
+    def is_chitchat(self) -> bool:
+        return self.resolved_intent() == "chitchat"
 
 
 class CriticVerdict(BaseModel):
@@ -204,7 +233,9 @@ class AgentSession:
 
         plan = self._planner_call(request)
         self.state.plan = plan
-        self.state.request_intent = _classify_intent(request)
+        self.state.request_intent = (
+            "chitchat" if plan.is_chitchat() else _classify_intent(request)
+        )
         self.state.total_steps_planned = len(plan.steps)
         self._save_state()
         self.decision_log.write(
@@ -245,12 +276,14 @@ class AgentSession:
         paused_for_approval = False
 
         if not plan.steps:
+            is_chitchat = plan.is_chitchat()
             self._finalize_session(
                 verdict=None,
                 blocked=False,
                 block_reason=None,
                 dry_run_results=dry_run_results,
                 advisory_only=True,
+                is_chitchat=is_chitchat,
                 rationale=plan.rationale,
             )
             return {
@@ -267,6 +300,7 @@ class AgentSession:
                 "preview_submit": None,
                 "results": results,
                 "advisory_only": True,
+                "is_chitchat": is_chitchat,
             }
         if (
             self.state.current_step_index >= len(plan.steps)
@@ -467,6 +501,7 @@ class AgentSession:
         )
         for step in plan.steps:
             step.args = self.registry.normalize_args(step.tool, step.args)
+        plan.intent = _resolve_plan_intent(request, plan)
         return plan
 
     def _critic_call(
@@ -786,6 +821,7 @@ class AgentSession:
         dry_run_results: list[dict[str, Any]],
         run_error: Exception | None = None,
         advisory_only: bool = False,
+        is_chitchat: bool = False,
         rationale: str = "",
     ) -> None:
         assert self.state is not None
@@ -826,6 +862,7 @@ class AgentSession:
                 else "blocked" if blocked else "ok"
             ),
             "advisory_only": advisory_only,
+            "is_chitchat": is_chitchat,
             "rationale": rationale or "",
         }
         self.decision_log.write(
@@ -874,6 +911,7 @@ class AgentSession:
             "tools_called": summary["tools_called"],
             "exit_status": summary["exit_status"],
             "advisory_only": advisory_only,
+            "is_chitchat": is_chitchat,
             "rationale": rationale or "",
         }
         (self.session_dir / "session_metadata.json").write_text(
@@ -1164,6 +1202,36 @@ def _classify_intent(request: str) -> str:
     if len(non_opt) == 1 and not has_composite_marker:
         return non_opt[0]
     return "composite"
+
+
+def _resolve_plan_intent(
+    request: str,
+    plan: Plan,
+) -> Literal["workflow", "advisory", "chitchat"]:
+    if plan.steps:
+        return "workflow"
+    if _is_chitchat_request(request):
+        return "chitchat"
+    if plan.intent in {"workflow", "advisory", "chitchat"}:
+        return plan.intent
+    return "advisory"
+
+
+def _is_chitchat_request(request: str) -> bool:
+    normalized = re.sub(r"\s+", " ", request).strip().lower()
+    if not normalized:
+        return False
+    if any(
+        re.fullmatch(pattern, normalized)
+        for pattern in _CHITCHAT_EXACT_PATTERNS
+    ):
+        return True
+    tokens = re.findall(r"[a-z]+", normalized)
+    return (
+        bool(tokens)
+        and len(tokens) <= 3
+        and set(tokens).issubset(_CHITCHAT_TOKENS)
+    )
 
 
 def _load_prompt(name: str) -> str:

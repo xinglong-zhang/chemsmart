@@ -256,6 +256,12 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 return
             if result.get("blocked"):
                 self.query_one(FooterWidget).set_hint("Execution blocked")
+            elif (
+                isinstance(result.get("plan"), Plan)
+                and result["plan"].is_chitchat()
+            ):
+                self.query_one(FooterWidget).set_phase(Phase.IDLE)
+                self.query_one(FooterWidget).set_hint("Ready")
             else:
                 self.query_one(FooterWidget).set_phase(Phase.FINISHED)
                 self.query_one(FooterWidget).set_hint("Session complete")
@@ -526,6 +532,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 self._tailer_path.parent if self._tailer_path else None
             ),
         )
+        payload = entry.get("payload") or {}
         transcript = self.query_one(Transcript)
         footer = self.query_one(FooterWidget)
         workflow_cell = getattr(self, "_workflow_cell", None)
@@ -540,7 +547,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif isinstance(event, PlanEvent):
             self._current_plan = event.plan
             self._current_plan_text = event.text
-            if not event.plan.steps:
+            if event.plan.is_chitchat():
+                self._workflow_cell = None
+                transcript.add_cell(
+                    AgentMessageCell(
+                        event.plan.rationale or "(no reply)",
+                        title="Reply",
+                    )
+                )
+                footer.set_phase(Phase.IDLE)
+                footer.set_hint("Ready")
+            elif not event.plan.steps:
                 self._workflow_cell = None
                 transcript.add_cell(
                     AgentMessageCell(
@@ -643,6 +660,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 )
             )
         elif isinstance(event, CriticVerdictEvent):
+            if (
+                self._current_plan is not None
+                and self._current_plan.is_chitchat()
+            ):
+                footer.set_phase(Phase.IDLE)
+                footer.set_hint("Ready")
+                return
             self._current_verdict = event.verdict
             transcript.add_cell(CriticVerdictCell(event.verdict))
             if event.verdict.verdict == "reject":
@@ -667,6 +691,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif isinstance(event, SessionSummaryEvent):
             self._pending_approval = False
             self._pending_risky_tool = None
+            if payload.get("request_intent") == "chitchat":
+                footer.set_phase(Phase.IDLE)
+                footer.set_hint("Ready")
+                return
             footer.set_phase(Phase.ERROR if event.blocked else Phase.FINISHED)
             footer.set_hint(
                 "Blocked" if event.blocked else "Finished successfully"
@@ -681,7 +709,6 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif isinstance(event, IgnoredEvent):
             pass
 
-        payload = entry.get("payload") or {}
         if payload.get("tool") in {"run_local", "submit_hpc"}:
             self._refresh_job_snapshot()
 
@@ -1058,7 +1085,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.app.screen.post_message(JobStatusUpdated(job_id, fields))
 
     def _refresh_job_snapshot(self) -> None:
-        from chemsmart.agent.tui.services import job_poller as job_poller_service
+        from chemsmart.agent.tui.services import (
+            job_poller as job_poller_service,
+        )
 
         _ = collect_job_snapshot
         snapshot = (
