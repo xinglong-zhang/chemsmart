@@ -392,18 +392,31 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if not job:
             self.post_error("Cancel failed", f"Unknown job id: {job_id}")
             return
-        try:
-            result = cancel_job(job)
-        except Exception as exc:
-            self.post_error("Cancel failed", str(exc))
-            return
-        self._cancelled_job_ids.add(job_id)
-        self._emit_job_update(job_id, {"status": "cancelled"})
-        command = " ".join(result["command"])
-        self.post_agent_message(
-            f"Cancelled `{job_id}` with `{command}`.",
-            title="Jobs",
-        )
+        import threading
+
+        def run_cancel() -> None:
+            try:
+                result = cancel_job(job)
+            except Exception as exc:
+                self.app.call_from_thread(
+                    self.post_error,
+                    "Cancel failed",
+                    str(exc),
+                )
+                return
+
+            def publish() -> None:
+                self._cancelled_job_ids.add(job_id)
+                self._emit_job_update(job_id, {"status": "cancelled"})
+                command = " ".join(result["command"])
+                self.post_agent_message(
+                    f"Cancelled `{job_id}` with `{command}`.",
+                    title="Jobs",
+                )
+
+            self.app.call_from_thread(publish)
+
+        threading.Thread(target=run_cancel, daemon=True).start()
 
     def _extract_job_result(self, value: str) -> None:
         try:
@@ -840,18 +853,33 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         return True
 
     def _run_inline_cli(self, args: Iterable[str], *, title: str) -> None:
-        try:
-            result = CliRunner().invoke(
-                agent, list(args), catch_exceptions=False
-            )
-        except Exception as exc:
-            self.post_error(title, str(exc))
-            return
-        text = result.output.strip() or f"{title} completed."
-        if result.exit_code == 0:
-            self.post_agent_message(f"```\n{text}\n```", title=title)
-        else:
-            self.post_error(title, text)
+        import threading
+
+        from chemsmart.agent.cli import sanitize_inline_cli_output
+
+        command_args = list(args)
+
+        def run_inline() -> None:
+            try:
+                result = CliRunner().invoke(
+                    agent, command_args, catch_exceptions=False
+                )
+            except Exception as exc:
+                self.app.call_from_thread(self.post_error, title, str(exc))
+                return
+
+            text = sanitize_inline_cli_output(result.output)
+            text = text or f"{title} completed."
+
+            def publish() -> None:
+                if result.exit_code == 0:
+                    self.post_agent_message(f"```\n{text}\n```", title=title)
+                else:
+                    self.post_error(title, text)
+
+            self.app.call_from_thread(publish)
+
+        threading.Thread(target=run_inline, daemon=True).start()
 
     def _guard_phase(self, command: str, allowed: set[Phase]) -> bool:
         current = self.query_one(FooterWidget).phase
@@ -942,11 +970,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.app.screen.post_message(JobStatusUpdated(job_id, fields))
 
     def _refresh_job_snapshot(self) -> None:
-        try:
-            snapshot = collect_job_snapshot(self.session_root) or {}
-        except Exception as exc:
-            self.post_error("Job snapshot failed", str(exc))
-            return
+        from chemsmart.agent.tui.services import job_poller as job_poller_service
+
+        _ = collect_job_snapshot
+        snapshot = (
+            job_poller_service.get_cached_job_snapshot(self.session_root) or {}
+        )
+        job_poller_service.request_job_snapshot_refresh(self.session_root)
         if not isinstance(snapshot, dict):
             self.post_error(
                 "Job snapshot failed", "Snapshot payload was not a mapping."

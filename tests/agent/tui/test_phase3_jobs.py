@@ -5,6 +5,7 @@ from pathlib import Path
 
 from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.screens.jobs_panel import JobsPanel
+from chemsmart.agent.tui.services import job_poller
 from chemsmart.agent.tui.widgets.composer import Composer
 
 from ._helpers import normalize_svg, write_session_fixture
@@ -39,13 +40,10 @@ def test_jobs_panel_keys_and_polling_diff(monkeypatch, tmp_path: Path):
         return snapshots[0]
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
-        fake_collect_job_snapshot,
-    )
-    monkeypatch.setattr(
         "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
         fake_collect_job_snapshot,
     )
+    job_poller.refresh_job_snapshot_cache(session_root)
 
     async def scenario() -> None:
         app = ChemsmartTuiApp(
@@ -66,6 +64,8 @@ def test_jobs_panel_keys_and_polling_diff(monkeypatch, tmp_path: Path):
             assert app.screen.jobs["12345.remote"]["status"] == "queued"
 
             snapshots.pop(0)
+            app.chat_screen._refresh_job_snapshot()
+            await pilot.pause(0.2)
             app.chat_screen._refresh_job_snapshot()
             await pilot.pause()
             assert isinstance(app.screen, JobsPanel)
@@ -98,13 +98,10 @@ def test_jobs_plain_mode_falls_back_to_inline_table(
     snapshot = _job_snapshot("queued")
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
-        lambda _session_root: snapshot,
-    )
-    monkeypatch.setattr(
         "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
         lambda _session_root: snapshot,
     )
+    job_poller.refresh_job_snapshot_cache(session_root)
 
     async def scenario() -> None:
         app = ChemsmartTuiApp(

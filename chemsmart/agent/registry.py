@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import inspect
 import logging
 from dataclasses import dataclass, field
@@ -13,8 +14,6 @@ from pydantic import (
     create_model,
 )
 from pydantic.errors import PydanticInvalidForJsonSchema
-
-from chemsmart.agent import tools as agent_tools
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +74,7 @@ class ToolRegistry:
         ]
         return cls(
             [
-                _build_tool_spec(
-                    getattr(agent_tools, name), registered_name=name
-                )
+                _build_tool_spec(_load_agent_tool(name), registered_name=name)
                 for name in tool_names
             ]
         )
@@ -233,3 +230,8 @@ def _schema_friendly_annotation(
         )
         return Any
     return annotation
+
+
+def _load_agent_tool(name: str) -> Any:
+    module = importlib.import_module("chemsmart.agent.tools")
+    return getattr(module, name)

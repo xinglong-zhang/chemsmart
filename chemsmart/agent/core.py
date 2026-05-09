@@ -9,6 +9,7 @@ import subprocess
 import time
 import uuid
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -20,10 +21,6 @@ from chemsmart.agent.providers import (
     get_provider,
 )
 from chemsmart.agent.registry import ToolRegistry
-from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-from chemsmart.jobs.job import Job
-from chemsmart.jobs.orca.settings import ORCAJobSettings
 
 _RISKY_TOOLS = {"run_local", "submit_hpc"}
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#\s*\S+", re.MULTILINE)
@@ -1384,8 +1381,32 @@ def _resolve_ref_string(value: str, prior_results: list[Any]) -> Any:
     return _restore_json_result(resolved)
 
 
+@lru_cache(maxsize=1)
+def _molecule_class():
+    from chemsmart.io.molecules.structure import Molecule
+
+    return Molecule
+
+
+def _is_instance_of(
+    value: Any,
+    *,
+    module_name: str,
+    class_names: tuple[str, ...],
+) -> bool:
+    value_type = type(value)
+    return (
+        value_type.__module__ == module_name
+        and value_type.__name__ in class_names
+    )
+
+
 def _json_safe(value: Any) -> Any:
-    if isinstance(value, Molecule):
+    if _is_instance_of(
+        value,
+        module_name="chemsmart.io.molecules.structure",
+        class_names=("Molecule",),
+    ):
         positions = value.positions
         if hasattr(positions, "tolist"):
             positions = positions.tolist()
@@ -1403,7 +1424,15 @@ def _json_safe(value: Any) -> Any:
             "velocities": _json_safe(value.velocities),
             "info": _json_safe(value.info),
         }
-    if isinstance(value, (GaussianJobSettings, ORCAJobSettings)):
+    if _is_instance_of(
+        value,
+        module_name="chemsmart.jobs.gaussian.settings",
+        class_names=("GaussianJobSettings",),
+    ) or _is_instance_of(
+        value,
+        module_name="chemsmart.jobs.orca.settings",
+        class_names=("ORCAJobSettings",),
+    ):
         return {
             "__chemsmart_type__": "settings",
             "module": value.__class__.__module__,
@@ -1414,7 +1443,11 @@ def _json_safe(value: Any) -> Any:
                 if not key.startswith("_")
             },
         }
-    if isinstance(value, Job):
+    if (
+        value.__class__.__module__.startswith("chemsmart.jobs.")
+        and hasattr(value, "molecule")
+        and hasattr(value, "settings")
+    ):
         return {
             "__chemsmart_type__": "job",
             "module": value.__class__.__module__,
@@ -1451,7 +1484,8 @@ def _restore_json_result(value: Any) -> Any:
 
     marker = value.get("__chemsmart_type__")
     if marker == "molecule":
-        return Molecule(
+        molecule_cls = _molecule_class()
+        return molecule_cls(
             symbols=value.get("symbols"),
             positions=value.get("positions"),
             charge=value.get("charge"),

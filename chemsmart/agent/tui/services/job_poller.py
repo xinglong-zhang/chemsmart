@@ -7,8 +7,11 @@ import json
 import os
 import subprocess
 import traceback
+from concurrent.futures import Future
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Lock, Thread
 from typing import Any
 
 from textual import work
@@ -27,6 +30,18 @@ from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.cluster import ClusterHelper
 from chemsmart.utils.io import get_program_type_from_file
+
+_JOB_SNAPSHOT_CACHE_LOCK = Lock()
+
+
+@dataclass
+class _JobSnapshotCacheState:
+    snapshot: dict[str, dict[str, Any]] = field(default_factory=dict)
+    last_error: Exception | None = None
+    future: Future | None = None
+
+
+_JOB_SNAPSHOT_CACHE: dict[str, _JobSnapshotCacheState] = {}
 
 
 class JobStatusUpdated(Message):
@@ -63,7 +78,7 @@ class JobPollerMixin:
         while self.is_mounted:
             try:
                 snapshot = await asyncio.to_thread(
-                    collect_job_snapshot,
+                    refresh_job_snapshot_cache,
                     self.session_root,
                 )
                 failures = 0
@@ -117,6 +132,98 @@ class JobStateReader:
 
 def available_server_names() -> list[str]:
     return sorted(ChemsmartUserSettings().all_available_servers)
+
+
+def get_cached_job_snapshot(
+    session_root: str | os.PathLike[str],
+) -> dict[str, dict[str, Any]]:
+    key = _job_snapshot_cache_key(session_root)
+    with _JOB_SNAPSHOT_CACHE_LOCK:
+        state = _JOB_SNAPSHOT_CACHE.get(key)
+        if state is None:
+            return {}
+        return _copy_job_snapshot(state.snapshot)
+
+
+def request_job_snapshot_refresh(
+    session_root: str | os.PathLike[str],
+) -> Future | None:
+    root_path = Path(session_root)
+    key = _job_snapshot_cache_key(root_path)
+    with _JOB_SNAPSHOT_CACHE_LOCK:
+        state = _JOB_SNAPSHOT_CACHE.setdefault(key, _JobSnapshotCacheState())
+        future = state.future
+        if future is not None and not future.done():
+            return future
+        future = Future()
+        state.future = future
+        future.add_done_callback(
+            lambda done, cache_key=key: _clear_job_snapshot_future(
+                cache_key, done
+            )
+        )
+        Thread(
+            target=_run_job_snapshot_refresh,
+            args=(future, root_path),
+            daemon=True,
+            name="chemsmart-job-snapshot",
+        ).start()
+        return future
+
+
+def refresh_job_snapshot_cache(
+    session_root: str | os.PathLike[str],
+) -> dict[str, dict[str, Any]]:
+    root_path = Path(session_root)
+    key = _job_snapshot_cache_key(root_path)
+    try:
+        snapshot = collect_job_snapshot(root_path)
+    except Exception as exc:
+        with _JOB_SNAPSHOT_CACHE_LOCK:
+            state = _JOB_SNAPSHOT_CACHE.setdefault(
+                key, _JobSnapshotCacheState()
+            )
+            state.last_error = exc
+        raise
+    with _JOB_SNAPSHOT_CACHE_LOCK:
+        state = _JOB_SNAPSHOT_CACHE.setdefault(key, _JobSnapshotCacheState())
+        state.snapshot = _copy_job_snapshot(snapshot)
+        state.last_error = None
+    return snapshot
+
+
+def _job_snapshot_cache_key(session_root: str | os.PathLike[str]) -> str:
+    return str(Path(session_root).resolve())
+
+
+def _copy_job_snapshot(
+    snapshot: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    return {
+        job_id: dict(fields) if isinstance(fields, dict) else fields
+        for job_id, fields in snapshot.items()
+    }
+
+
+def _clear_job_snapshot_future(cache_key: str, future: Future) -> None:
+    with _JOB_SNAPSHOT_CACHE_LOCK:
+        state = _JOB_SNAPSHOT_CACHE.get(cache_key)
+        if state is not None and state.future is future:
+            state.future = None
+
+
+def _run_job_snapshot_refresh(
+    future: Future,
+    session_root: Path,
+) -> None:
+    if not future.set_running_or_notify_cancel():
+        return
+    try:
+        result = refresh_job_snapshot_cache(session_root)
+    except Exception as exc:
+        future.set_exception(exc)
+    else:
+        future.set_result(result)
 
 
 def collect_job_snapshot(session_root: Path) -> dict[str, dict[str, Any]]:
