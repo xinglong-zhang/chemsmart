@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 CLI interface for chemsmart project.
 
@@ -6,16 +7,32 @@ interface, organizing various subcommands and providing the ASCII art
 banner display.
 """
 
+import logging
+
 import click
 
+logging.getLogger("numexpr.utils").setLevel(logging.WARNING)
+
 from chemsmart import __version__
-from chemsmart.agent.cli import agent
 from chemsmart.utils.cli import MyGroup
 
 from .config import config
 from .run import run
 from .sub import sub
 from .update import update
+
+try:
+    from chemsmart.agent.cli import agent
+except ImportError as exc:
+    _AGENT_IMPORT_ERROR = str(exc)
+
+    @click.group(name="agent", invoke_without_command=True)
+    def agent():
+        """AI-scientist agent commands (install with `pip install -e .[agent-tui]`)."""
+        click.echo("agent support is not installed. Run:", err=True)
+        click.echo('  pip install -e ".[agent-tui]"', err=True)
+        click.echo(f"(import error: {_AGENT_IMPORT_ERROR})", err=True)
+        raise click.exceptions.Exit(1)
 
 
 @click.group(cls=MyGroup)
@@ -32,6 +49,9 @@ def entry_point(ctx, verbose):
     else:
         debug = False
         stream = False
+    if ctx.invoked_subcommand == "agent":
+        return
+
     # Set up logging
     from chemsmart.utils.logger import create_logger
 
@@ -47,22 +67,23 @@ def entry_point(ctx, verbose):
     logger.info(
         "   "
         + " " * 25
-        + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|"
+        + r" / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|"
     )
     logger.info(
         "   "
         + " " * 25
-        + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  "
+        + r"| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  "
     )
     logger.info(
         "   "
         + " " * 25
-        + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  "
+        + r"| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  "
     )
     logger.info(
         "   "
         + " " * 25
-        + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n"
+        + r" \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  "
+        + "\n"
     )
 
 
