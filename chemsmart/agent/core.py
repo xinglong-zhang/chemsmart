@@ -370,6 +370,10 @@ class AgentSession:
                         step,
                         reason="dry-submit skips remote submission",
                     )
+                    preview_submit = {
+                        "skipped": True,
+                        "skip_reason": "dry-submit skips remote submission",
+                    }
                     break
                 extra_kwargs = {}
                 if step.tool == "submit_hpc":
