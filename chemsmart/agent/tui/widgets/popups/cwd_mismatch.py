@@ -45,17 +45,17 @@ class CwdMismatchOverlay(ModalScreen[CwdMismatchChoice | None]):
 
     def compose(self) -> ComposeResult:
         text = (
-            "작업 디렉터리가 다릅니다\n\n"
-            "이 세션은 다른 폴더에서 만들어졌습니다. 경로 해석 결과가 "
-            "달라질 수 있습니다.\n\n"
+            "Working directory mismatch\n\n"
+            "This session was created in a different directory. Path "
+            "resolution may produce different results.\n\n"
             f"recorded: {self.recorded_cwd}\n"
             f"current:  {self.current_cwd}\n\n"
-            "c 기록된 폴더로 이동 후 재개 · "
-            "i 현재 폴더에서 강제로 계속 · n 지금은 취소"
+            "c resume after switching to the recorded directory · "
+            "i force continue from the current directory · n cancel for now"
         )
         with Vertical(id="cwd-mismatch-modal"):
             summary = Static(text)
-            summary.border_title = "작업 디렉터리가 다릅니다"
+            summary.border_title = "Working directory mismatch"
             yield summary
 
     def action_resume_from_recorded(self) -> None:

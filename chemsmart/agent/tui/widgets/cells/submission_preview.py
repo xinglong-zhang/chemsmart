@@ -28,7 +28,7 @@ class SubmissionPreviewCell(BaseCell):
         )
         command = self.preview.get("command_executed")
         lines = [
-            Text("⇡ 원격 제출은 아직 실행되지 않았습니다", style="bold"),
+            Text("⇡ Remote submission has not been sent yet", style="bold"),
             Text(""),
             Text(f"Transport: {transport}", style="bold"),
             Text(f"Duplicate check: {'yes' if duplicate else 'no'}"),

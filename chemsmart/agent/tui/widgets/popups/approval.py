@@ -139,17 +139,17 @@ def _approval_copy(action: str) -> tuple[str, str, str]:
     if action == "submit_hpc":
         return (
             "execute once",
-            "원격 큐에 실제 제출될 수 있습니다.",
-            "제출 후 취소는 별도의 큐 취소가 필요합니다.",
+            "This may submit to the remote queue.",
+            "After submission, cancellation requires a separate queue cancel.",
         )
     if action == "run_local":
         return (
             "execute once",
-            "현재 작업 폴더에서 로컬 실행이 시작됩니다.",
-            "실행을 막으려면 지금 거절하고, 시작 후 정리는 별도입니다.",
+            "A local run will start in the current working directory.",
+            "Reject now to prevent it; cleanup after start is handled separately.",
         )
     return (
         "execute once",
-        "요청된 실행 단계가 시작됩니다.",
-        "실행 전에는 거절할 수 있고, 시작 후 정리는 별도입니다.",
+        "The requested execution step will start.",
+        "You can reject before it starts; cleanup after start is handled separately.",
     )

@@ -34,15 +34,15 @@ class RuntimeValidationCell(BaseCell):
         if local_ok and remote_unknown and not local_issues:
             count = len(remote_unknown)
             return Group(
-                Text("! 원격 제출 정보가 아직 부족합니다", style="bold"),
+                Text("! Remote submission info is incomplete", style="bold"),
                 Text(
-                    f"로컬 OK / 원격 정보 {count}개 필요",
+                    f"Local OK / {count} remote item(s) needed",
                     style="bold",
                 ),
                 Text(
                     (
-                        "dry-run 결과는 준비됐지만, 실제 제출 전 서버 설정 "
-                        "확인이 필요합니다."
+                        "Dry-run results are ready, but server settings need "
+                        "to be confirmed before actual submission."
                     )
                 ),
                 Text(_compact_remote_unknown(remote_unknown), style="dim"),
@@ -51,11 +51,11 @@ class RuntimeValidationCell(BaseCell):
         lines = [Text(_header_text(local_ok, local_issues, remote_unknown))]
         if local_issues:
             lines.append(Text(""))
-            lines.append(Text("로컬 환경 확인 필요", style="bold"))
+            lines.append(Text("Local environment needs review", style="bold"))
             lines.extend(Text(f"- {issue}") for issue in local_issues)
         if remote_unknown:
             lines.append(Text(""))
-            lines.append(Text("확인 필요", style="bold"))
+            lines.append(Text("Needs review", style="bold"))
             lines.extend(Text(f"- {issue}") for issue in remote_unknown)
         if not local_issues and not remote_unknown:
             lines.extend(
@@ -80,12 +80,12 @@ def _header_text(
     remote_unknown: list[str],
 ) -> str:
     if local_ok and not local_issues and not remote_unknown:
-        return "✓ 로컬/원격 실행 준비됨"
+        return "✓ Local/remote run ready"
     if local_issues:
-        return "✖ 로컬 환경 확인 필요"
+        return "✖ Local environment needs review"
     if remote_unknown:
-        return f"! 로컬 OK / 원격 정보 {len(remote_unknown)}개 필요"
-    return "Runtime 상태를 확인할 수 없습니다"
+        return f"! Local OK / {len(remote_unknown)} remote item(s) needed"
+    return "Runtime status unavailable"
 
 
 def _compact_remote_unknown(remote_unknown: list[str]) -> str:

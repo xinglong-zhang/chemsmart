@@ -129,12 +129,12 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def on_mount(self) -> None:
         self.post_agent_message(
-            "## chemsmart agent에 오신 것을 환영합니다\n\n"
-            "자연어로 계산을 계획하고, 입력 파일을 미리보고, "
-            "실행 전 점검까지 이어집니다.\n\n"
-            "먼저 해볼 것: /doctor · 안전하게 물어보기: ask 모드 · "
-            "실제 워크플로우: run 모드\n\n"
-            "예: `single-point on examples/h2o.xyz at B3LYP/6-31G(d) "
+            "## Welcome to the chemsmart agent\n\n"
+            "Plan calculations in natural language, preview input files, "
+            "and run pre-flight checks before execution.\n\n"
+            "Start with: /doctor · Ask safely: ask mode · "
+            "Real workflows: run mode\n\n"
+            "Example: `single-point on examples/h2o.xyz at B3LYP/6-31G(d) "
             "Gaussian`"
         )
         self.focus_composer()
@@ -543,7 +543,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 self._user_requests.add(event.request)
                 transcript.add_cell(UserMessageCell(event.request))
             footer.set_phase(Phase.PLANNING)
-            footer.set_hint("계산 의도를 파악하는 중…")
+            footer.set_hint("Interpreting your request…")
         elif isinstance(event, PlanEvent):
             self._current_plan = event.plan
             self._current_plan_text = event.text
@@ -566,13 +566,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     )
                 )
                 footer.set_phase(Phase.FINISHED)
-                footer.set_hint("응답 완료")
+                footer.set_hint("Response ready")
             else:
                 workflow_cell = PlanCell(event.plan)
                 self._workflow_cell = workflow_cell
                 transcript.add_cell(workflow_cell)
                 footer.set_phase(Phase.PLANNING)
-                footer.set_hint("도구 단계를 채우는 중…")
+                footer.set_hint("Filling in tool steps…")
         elif isinstance(event, ToolCallEvent):
             if workflow_cell is not None:
                 if event.status == "running":
@@ -590,16 +590,16 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             if event.tool == "run_local":
                 footer.set_phase(Phase.RUNNING)
                 footer.set_hint(
-                    "로컬 실행 진행 중…"
+                    "Local run in progress…"
                     if event.status == "running"
-                    else "로컬 실행 완료"
+                    else "Local run complete"
                 )
             else:
                 footer.set_phase(Phase.PLANNING)
                 footer.set_hint(
-                    f"{event.tool} 진행 중…"
+                    f"{event.tool} in progress…"
                     if event.status == "running"
-                    else f"{event.tool} 완료"
+                    else f"{event.tool} complete"
                 )
         elif isinstance(event, ToolPreviewEvent):
             if workflow_cell is not None and event.status == "running":
@@ -609,7 +609,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     event.args,
                 )
             footer.set_phase(Phase.DRY_RUN_READY)
-            footer.set_hint("제출 미리보기 준비 중…")
+            footer.set_hint("Preparing submission preview…")
         elif isinstance(event, MethodEvent):
             transcript.add_cell(MethodCell(event.recommendation))
         elif isinstance(event, DryRunInputEvent):
@@ -728,7 +728,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 return
             self._stop_tailer()
             self._reset_request_state(clear_transcript=True)
-            self.post_agent_message("Transcript cleared.")
+            self.notify("Transcript cleared.", timeout=3)
             self.focus_composer()
         elif command == "/sessions":
             if not self._guard_phase(command, {Phase.IDLE}):
