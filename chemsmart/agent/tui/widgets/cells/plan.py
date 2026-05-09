@@ -89,7 +89,7 @@ class PlanCell(BaseCell):
         if row is None:
             return
         row.status = "failed"
-        row.detail = message.strip() or "실행이 중단되었습니다."
+        row.detail = message.strip() or "Execution was interrupted."
         self.update(self._build_renderable())
 
     def _find_row(self, step_index: int, tool: str) -> _WorkflowRow | None:
@@ -142,35 +142,35 @@ def _status_style(status: str) -> str:
 def _pending_detail(tool: str, args: dict[str, Any]) -> str:
     if tool == "build_molecule":
         path = str(args.get("filepath") or "")
-        return f"{path} 대기 중" if path else "구조 파일 대기 중"
+        return f"Waiting on {path}" if path else "Waiting on structure file"
     if tool == "dry_run_input":
-        return "입력 파일 렌더링 대기 중"
+        return "Waiting to render input file"
     if tool == "validate_runtime":
-        return "런타임 점검 대기 중"
+        return "Waiting on runtime check"
     if tool == "run_local":
-        return "실행 대기 중"
+        return "Waiting to run"
     if tool == "submit_hpc":
-        return "제출 미리보기 대기 중"
-    return "대기 중"
+        return "Waiting on submission preview"
+    return "Waiting"
 
 
 def _running_detail(tool: str, args: dict[str, Any]) -> str:
     if tool == "build_molecule":
         path = str(args.get("filepath") or "")
-        return f"{path} 확인 중…" if path else "구조 파일 확인 중…"
+        return f"Checking {path}…" if path else "Checking structure file…"
     if tool == "build_gaussian_settings":
-        return "Gaussian 설정 정리 중…"
+        return "Resolving Gaussian settings…"
     if tool == "build_job":
-        return "계산 작업 조립 중…"
+        return "Assembling calculation job…"
     if tool == "dry_run_input":
-        return "입력 파일 렌더링 중…"
+        return "Rendering input file…"
     if tool == "validate_runtime":
-        return "런타임 점검 중…"
+        return "Running runtime check…"
     if tool == "run_local":
-        return "로컬 실행 시작 중…"
+        return "Starting local run…"
     if tool == "submit_hpc":
-        return "제출 미리보기 생성 중…"
-    return "진행 중…"
+        return "Generating submission preview…"
+    return "In progress…"
 
 
 def _completed_detail(
@@ -206,25 +206,25 @@ def _completed_detail(
         return " · ".join(part for part in (kind, label) if part)
     if tool == "dry_run_input" and isinstance(restored, dict):
         inputfile = str(restored.get("inputfile") or "")
-        return Path(inputfile).name if inputfile else "입력 파일 준비됨"
+        return Path(inputfile).name if inputfile else "Input file ready"
     if tool == "validate_runtime" and isinstance(restored, dict):
         return _runtime_summary(restored)
     if tool == "run_local" and isinstance(restored, dict):
         if restored.get("ok"):
-            return "로컬 실행 완료"
+            return "Local run complete"
         return f"returncode {restored.get('returncode', '?')}"
     if tool == "submit_hpc" and isinstance(restored, dict):
         if restored.get("job_id"):
             return f"job {restored['job_id']}"
-        return "제출 미리보기 준비됨"
-    return "완료"
+        return "Submission preview ready"
+    return "Done"
 
 
 def _runtime_summary(validation: dict[str, Any]) -> str:
     remote_unknown = validation.get("remote_unknown") or []
     local_issues = validation.get("local_issues") or []
     if local_issues:
-        return f"로컬 이슈 {len(local_issues)}개"
+        return f"{len(local_issues)} local issue(s)"
     if remote_unknown:
-        return f"로컬 OK / 원격 정보 {len(remote_unknown)}개 필요"
-    return "로컬/원격 실행 준비됨"
+        return f"Local OK / {len(remote_unknown)} remote item(s) needed"
+    return "Local/remote run ready"

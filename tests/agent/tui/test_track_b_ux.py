@@ -83,7 +83,7 @@ def test_tool_call_workflow_row_updates_to_done(
             await pilot.pause()
             running_text = _render_plain(plan_cell.renderable)
             assert "build_molecule" in running_text
-            assert "확인 중" in running_text
+            assert "Checking" in running_text
 
             molecule = build_molecule(single_molecule_xyz_file)
             app.chat_screen._apply_log_entry(
@@ -137,7 +137,7 @@ def test_chat_advisory_renders_agent_message_cell(tmp_path: Path):
             footer = app.query_one(FooterWidget)
             assert footer.phase == Phase.FINISHED
             assert footer.phase != Phase.PLANNING
-            assert footer.hint == "응답 완료"
+            assert footer.hint == "Response ready"
 
     asyncio.run(scenario())
 
@@ -158,7 +158,7 @@ def test_runtime_validation_partial_copy_is_compact():
     )
 
     text = _render_plain(cell.renderable)
-    assert "로컬 OK / 원격 정보 4개 필요" in text
+    assert "Local OK / 4 remote item(s) needed" in text
     assert "queue / account / scratch_dir / modules_or_executable_path" in text
     assert "- server.queue required" not in text
 
@@ -210,26 +210,42 @@ def test_greeter_copy_mentions_doctor_ask_and_run(tmp_path: Path):
             first = transcript.children[0]
             text = _render_plain(first.renderable)
             assert "/doctor" in text
-            assert "ask 모드" in text
-            assert "run 모드" in text
+            assert "ask mode" in text
+            assert "run mode" in text
 
     asyncio.run(scenario())
 
 
-def test_clear_message_uses_designer_copy(tmp_path: Path):
+def test_clear_emits_short_notification(tmp_path: Path):
     async def scenario() -> None:
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
             await pilot.pause()
+
+            calls: list[tuple[str, float | None]] = []
+            original_notify = app.chat_screen.notify
+
+            def spy(message, *args, **kwargs):
+                calls.append((message, kwargs.get("timeout")))
+                return original_notify(message, *args, **kwargs)
+
+            app.chat_screen.notify = spy
+
             composer = app.query_one(Composer)
             composer.load_text("/clear")
             await pilot.press("enter")
             await pilot.pause()
+
+            assert any(
+                msg == "Transcript cleared." and timeout == 3
+                for msg, timeout in calls
+            )
             transcript = app.query_one(Transcript).query_one("#cells")
-            first = transcript.children[0]
-            text = _render_plain(first.renderable)
-            assert "대화가 비워졌습니다." in text
-            assert "/sessions" in text
+            assert not any(
+                isinstance(child, AgentMessageCell)
+                and (child.source_text or "").startswith("Transcript cleared")
+                for child in transcript.children
+            )
 
     asyncio.run(scenario())
 
@@ -242,9 +258,10 @@ def test_missing_file_error_uses_exact_copy():
     )
 
     text = _render_plain(cell.renderable)
-    assert "입력 파일을 찾을 수 없습니다" in text
+    assert "Input file not found" in text
     assert (
-        "요청에 적힌 경로가 현재 작업 폴더 기준으로 존재하지 않습니다." in text
+        "The path in your request does not exist relative to the current working directory."
+        in text
     )
     assert "examples/h2o.xyz" in text
 
@@ -263,9 +280,9 @@ def test_cwd_mismatch_popup_uses_designer_copy(tmp_path: Path):
             await pilot.pause()
             summary = app.screen.query_one(Static)
             text = str(summary.renderable)
-            assert "작업 디렉터리가 다릅니다" in text
-            assert "기록된 폴더로 이동 후 재개" in text
-            assert "현재 폴더에서 강제로 계속" in text
+            assert "Working directory mismatch" in text
+            assert "resume after switching to the recorded directory" in text
+            assert "force continue from the current directory" in text
 
     asyncio.run(scenario())
 

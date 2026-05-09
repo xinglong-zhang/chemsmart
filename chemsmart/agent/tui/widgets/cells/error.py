@@ -99,29 +99,29 @@ def _normalize_error(
         or "not found" in lowered_message
     ):
         return _NormalizedError(
-            title="입력 파일을 찾을 수 없습니다",
+            title="Input file not found",
             message=(
-                "요청에 적힌 경로가 현재 작업 폴더 기준으로 존재하지 "
-                "않습니다."
+                "The path in your request does not exist relative to the "
+                "current working directory."
             ),
-            notes=["예: examples/h2o.xyz 처럼 상대경로를 다시 확인하세요."],
+            notes=["Tip: double-check the relative path, e.g. examples/h2o.xyz."],
         )
     if title == "Resume failed" and message.startswith("Unknown session id:"):
         return _NormalizedError(
-            title="세션을 찾지 못했습니다",
-            message=("해당 session id가 현재 저장소에서 보이지 않습니다."),
+            title="Session not found",
+            message=("That session id is not visible in the current store."),
             notes=[
                 (
-                    "/sessions 로 최근 세션을 확인하거나, 다른 작업 "
-                    "디렉터리에서 생성된 세션인지 확인하세요."
+                    "Use /sessions to see recent sessions, or check whether "
+                    "the session was created in a different working directory."
                 )
             ],
         )
     if title == "Resume blocked" and isinstance(payload, dict):
         notes = [
             (
-                "이 세션은 다른 폴더에서 만들어졌습니다. 경로 해석 "
-                "결과가 달라질 수 있습니다."
+                "This session was created in a different directory. Path "
+                "resolution may produce different results."
             )
         ]
         recorded_cwd = payload.get("recorded_cwd")
@@ -134,22 +134,22 @@ def _normalize_error(
                 ]
             )
         return _NormalizedError(
-            title="작업 디렉터리가 다릅니다",
+            title="Working directory mismatch",
             message=(
-                "이 세션은 다른 폴더에서 만들어졌습니다. 경로 해석 결과가 "
-                "달라질 수 있습니다."
+                "This session was created in a different directory. Path "
+                "resolution may produce different results."
             ),
             notes=notes,
         )
     lowered = f"{title} {message}".lower()
     if "registry" in lowered or "schema" in lowered:
         return _NormalizedError(
-            title="도구 구성이 예상과 다릅니다",
-            message=("등록된 도구 수나 스키마가 이전 세션과 달라졌습니다."),
+            title="Tool configuration differs from expected",
+            message=("The registered tool count or schema has changed since the previous session."),
             notes=[
                 (
-                    "이전 transcript는 읽을 수 있지만, 재실행 결과는 "
-                    "달라질 수 있습니다."
+                    "You can still read the previous transcript, but re-running "
+                    "may produce different results."
                 )
             ],
         )
