@@ -7,6 +7,7 @@ from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.jobs.gaussian.settings import (
     GaussianJobSettings,
     GaussianpKaJobSettings,
+    GaussianLinkJobSettings,
     GaussianQMMMJobSettings,
 )
 from chemsmart.jobs.settings import read_molecular_job_yaml
@@ -1624,3 +1625,36 @@ class TestGaussianpKaJobSettings:
 
         assert protonated_job.label == "acetic_acid_pka_HA_opt"
         assert conjugate_base_job.label == "acetic_acid_pka_A_opt"
+
+        
+class TestGaussianLinkJobSettingsGuess:
+    """Tests for guess= formatting in GaussianLinkJobSettings route strings."""
+
+    _COMMON = dict(
+        functional="um062x", basis="def2svp", charge=0, multiplicity=1
+    )
+
+    def _route(self, guess):
+        s = GaussianLinkJobSettings(guess=guess, **self._COMMON)
+        return s._get_route_string_from_jobtype()
+
+    def test_single_guess_option_no_parentheses(self):
+        """Single option must appear without parentheses: guess=mix"""
+        assert "guess=mix" in self._route("mix")
+        assert "guess=(mix)" not in self._route("mix")
+
+    def test_multiple_guess_options_with_parentheses(self):
+        """Multiple comma-separated options must be wrapped: guess=(mix,always)"""
+        assert "guess=(mix,always)" in self._route("mix,always")
+
+    def test_pre_parenthesized_input_no_double_wrapping(self):
+        """Already-parenthesized input must not produce double parentheses."""
+        route = self._route("(mix,always)")
+        assert "guess=(mix,always)" in route
+        assert "guess=((mix,always))" not in route
+
+    def test_pre_parenthesized_input_with_whitespace(self):
+        """Whitespace around parenthesized input must be handled."""
+        route = self._route(" (mix,always) ")
+        assert "guess=(mix,always)" in route
+        assert "guess=((mix,always))" not in route
