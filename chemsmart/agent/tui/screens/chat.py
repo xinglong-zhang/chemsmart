@@ -68,6 +68,7 @@ from chemsmart.agent.tui.widgets.cells import (
 )
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
+from chemsmart.agent.tui.widgets.header import ChemsmartHeader
 from chemsmart.agent.tui.widgets.popups import (
     ApprovalOverlay,
     ApprovalResult,
@@ -124,6 +125,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._active_server_name = self._default_active_server_name()
 
     def compose(self) -> ComposeResult:
+        yield ChemsmartHeader(id="chat-header")
         yield Transcript(id="chat-body")
         yield Composer()
         yield FooterWidget(id="status-footer")
