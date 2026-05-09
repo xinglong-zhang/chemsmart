@@ -269,6 +269,7 @@ class AgentSession:
             if (
                 risky_start < len(plan.steps)
                 and plan.steps[risky_start].tool == "submit_hpc"
+                and not dry_submit
             ):
                 preview_submit = self._preview_submit_step(
                     risky_start,
@@ -314,7 +315,13 @@ class AgentSession:
                     "preview_submit": preview_submit,
                 }
 
-            if pause_before_risky and risky_start < len(plan.steps):
+            if (
+                pause_before_risky
+                and risky_start < len(plan.steps)
+                and not (
+                    dry_submit and plan.steps[risky_start].tool == "submit_hpc"
+                )
+            ):
                 paused_for_approval = True
                 return {
                     "session_id": self.state.session_id,
@@ -336,25 +343,24 @@ class AgentSession:
                 if step_index < self.state.current_step_index:
                     continue
                 step = plan.steps[step_index]
-                if (
-                    step.tool == "submit_hpc"
-                    and preview_submit is not None
-                    and dry_submit
-                ):
-                    result = preview_submit
-                    self._record_final_preview_step(step_index, step, result)
-                else:
-                    extra_kwargs = {}
-                    if step.tool == "submit_hpc":
-                        extra_kwargs["execute"] = not dry_submit
-                        if self.transport is not None:
-                            extra_kwargs["transport"] = self.transport
-                    result = self._execute_step(
+                if step.tool == "submit_hpc" and dry_submit:
+                    self._record_skipped_step(
                         step_index,
                         step,
-                        results,
-                        extra_kwargs=extra_kwargs,
+                        reason="dry-submit skips remote submission",
                     )
+                    break
+                extra_kwargs = {}
+                if step.tool == "submit_hpc":
+                    extra_kwargs["execute"] = not dry_submit
+                    if self.transport is not None:
+                        extra_kwargs["transport"] = self.transport
+                result = self._execute_step(
+                    step_index,
+                    step,
+                    results,
+                    extra_kwargs=extra_kwargs,
+                )
                 results.append(result)
                 self.state.current_step_index = step_index + 1
                 self._save_state()
@@ -687,22 +693,19 @@ class AgentSession:
         )
         return result
 
-    def _record_final_preview_step(
+    def _record_skipped_step(
         self,
         step_index: int,
         step: Step,
-        result: Any,
+        reason: str,
     ) -> None:
         assert self.decision_log is not None
-        artifact_path = self._write_result_artifact(step_index, result)
         self.decision_log.write(
-            "tool_result",
+            "tool_skipped",
             {
                 "step_index": step_index,
                 "tool": step.tool,
-                "artifact": artifact_path.name,
-                "payload": _preview_value(result),
-                "from_preview": True,
+                "reason": reason,
             },
             rationale=step.rationale,
         )
