@@ -126,17 +126,22 @@ def test_second_tui_request_includes_prior_turn_memory(
             children = list(transcript.children)
             assert [type(child) for child in children] == [
                 UserMessageCell,
+                UserMessageCell,
                 PlanCell,
                 DryRunInputCell,
                 RuntimeValidationCell,
                 CriticVerdictCell,
                 AgentMessageCell,
             ]
-            assert children[0].source_text == second_request
-            assert all(
-                getattr(child, "source_text", second_request) != first_request
+            assert children[0].source_text == first_request
+            assert children[1].source_text == second_request
+            ephemeral_summary_cells = [
+                child
                 for child in children
-            )
+                if isinstance(child, AgentMessageCell)
+                and getattr(child, "border_title", None) == "Summary"
+            ]
+            assert len(ephemeral_summary_cells) == 1
             assert app.chat_screen.active_agent_session is not None
 
         planner_payload = json.loads(

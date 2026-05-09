@@ -272,9 +272,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "Wait for the current request to finish before starting a new request.",
             )
             return
-        if self.active_agent_session is None:
+        keep_conversational = self.active_agent_session is not None
+        if not keep_conversational:
             self._stop_tailer()
-        self._reset_request_state(clear_transcript=True)
+        self._reset_request_state(
+            clear_transcript=True,
+            keep_conversational=keep_conversational,
+        )
         self._current_request = text
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint("Agent is planning…")
@@ -1150,8 +1154,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         *,
         clear_transcript: bool,
         clear_session: bool = False,
+        keep_conversational: bool = False,
     ) -> None:
-        if clear_transcript:
+        if clear_transcript and not keep_conversational:
             self._user_requests.clear()
         if clear_session:
             self.active_agent_session = None
@@ -1171,7 +1176,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         footer.set_hint("Enter to submit • /help for commands")
         footer.reset_job_counts()
         if clear_transcript:
-            self.query_one(Transcript).clear_cells()
+            transcript = self.query_one(Transcript)
+            if keep_conversational:
+                transcript.clear_turn_chrome()
+            else:
+                transcript.clear_cells()
         self._refresh_job_snapshot()
 
     def _emit_job_update(self, job_id: str, fields: dict) -> None:
