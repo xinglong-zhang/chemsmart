@@ -38,6 +38,24 @@ class ChemsmartTuiApp(App[None]):
         self.theme = "textual-dark"
         self.push_screen(self.chat_screen)
 
+    def _delegate_to_chat(self, name: str) -> None:
+        screen = self.chat_screen
+        action = getattr(screen, name, None)
+        if callable(action):
+            action()
+
+    def action_soft_cancel(self) -> None:
+        self._delegate_to_chat("action_soft_cancel")
+
+    def action_quit_if_empty(self) -> None:
+        self._delegate_to_chat("action_quit_if_empty")
+
+    def action_refresh_screen(self) -> None:
+        self._delegate_to_chat("action_refresh_screen")
+
+    def action_dismiss_overlay(self) -> None:
+        self._delegate_to_chat("action_dismiss_overlay")
+
 
 def launch_tui(
     *,

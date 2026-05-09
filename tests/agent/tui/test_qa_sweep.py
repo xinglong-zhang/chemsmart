@@ -246,3 +246,22 @@ def test_ctrl_c_disarms_after_timer_expires(tmp_path: Path):
             assert chat._quit_timer is None
 
     asyncio.run(scenario())
+
+
+def test_ctrl_c_keypress_dispatches_via_app_to_screen(tmp_path: Path):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        exit_calls: list[bool] = []
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.exit = lambda *a, **kw: exit_calls.append(True)  # type: ignore[method-assign]
+            chat = app.chat_screen
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+            assert chat._quit_armed is True
+            assert exit_calls == []
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+            assert exit_calls == [True]
+
+    asyncio.run(scenario())
