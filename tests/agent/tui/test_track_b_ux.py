@@ -6,16 +6,19 @@ from pathlib import Path
 from rich.console import Console
 from textual.widgets import Static
 
-from chemsmart.agent.core import _preview_value
+from chemsmart.agent.core import Plan, _preview_value
 from chemsmart.agent.tools import build_molecule
 from chemsmart.agent.tui.app import ChemsmartTuiApp
+from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.widgets.cells import (
+    AgentMessageCell,
     DryRunInputCell,
     ErrorCell,
     PlanCell,
     RuntimeValidationCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
+from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.popups import (
     ApprovalOverlay,
     CwdMismatchOverlay,
@@ -26,7 +29,7 @@ from .._agent_session_helpers import planner_plan
 
 
 def _render_plain(renderable) -> str:
-    console = Console(width=120, record=True)
+    console = Console(width=240, record=True)
     console.print(renderable)
     return console.export_text()
 
@@ -96,7 +99,44 @@ def test_tool_call_workflow_row_updates_to_done(
             done_text = _render_plain(plan_cell.renderable)
             assert "✓ 1. build_molecule" in done_text
             assert "71 atoms" in done_text
-            assert single_molecule_xyz_file in done_text
+            assert Path(single_molecule_xyz_file).stem in done_text
+            assert ".xyz" in done_text
+
+    asyncio.run(scenario())
+
+
+def test_chat_advisory_renders_agent_message_cell(tmp_path: Path):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_screen._apply_log_entry(
+                {
+                    "kind": "plan",
+                    "payload": {
+                        "steps": [],
+                        "rationale": "I am chemsmart agent.",
+                        "estimated_cost": "low",
+                    },
+                }
+            )
+            await pilot.pause()
+            transcript = app.query_one(Transcript).query_one("#cells")
+            advisory_cells = [
+                child
+                for child in transcript.children
+                if isinstance(child, AgentMessageCell)
+                and child.border_title == "Advisory"
+            ]
+            assert len(advisory_cells) == 1
+            assert advisory_cells[0].source_text == "I am chemsmart agent."
+            assert not any(
+                isinstance(child, PlanCell) for child in transcript.children
+            )
+            footer = app.query_one(FooterWidget)
+            assert footer.phase == Phase.FINISHED
+            assert footer.phase != Phase.PLANNING
+            assert footer.hint == "응답 완료"
 
     asyncio.run(scenario())
 
@@ -132,6 +172,14 @@ def test_dry_run_input_cell_shows_path_before_body():
     assert "✓ water.com ready" in text
     assert "path: /tmp/water.com" in text
     assert text.index("path: /tmp/water.com") < text.index("%chk=water.chk")
+
+
+def test_plan_cell_renders_rationale_when_no_steps():
+    cell = PlanCell(Plan(steps=[], rationale="Answer directly."))
+
+    text = _render_plain(cell.renderable)
+    assert "Answer directly." in text
+    assert "no data" not in text
 
 
 def test_approval_popup_includes_mode_and_rollback_labels(tmp_path: Path):

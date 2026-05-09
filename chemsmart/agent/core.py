@@ -245,6 +245,14 @@ class AgentSession:
         paused_for_approval = False
 
         if not plan.steps:
+            self._finalize_session(
+                verdict=None,
+                blocked=False,
+                block_reason=None,
+                dry_run_results=dry_run_results,
+                advisory_only=True,
+                rationale=plan.rationale,
+            )
             return {
                 "session_id": self.state.session_id,
                 "session_dir": str(self.session_dir),
@@ -777,6 +785,8 @@ class AgentSession:
         block_reason: str | None,
         dry_run_results: list[dict[str, Any]],
         run_error: Exception | None = None,
+        advisory_only: bool = False,
+        rationale: str = "",
     ) -> None:
         assert self.state is not None
         assert self.session_dir is not None
@@ -815,8 +825,14 @@ class AgentSession:
                 if run_error is not None
                 else "blocked" if blocked else "ok"
             ),
+            "advisory_only": advisory_only,
+            "rationale": rationale or "",
         }
-        self.decision_log.write("session_summary", summary)
+        self.decision_log.write(
+            "session_summary",
+            summary,
+            rationale=rationale or "",
+        )
 
         primary_dry_run_result = _primary_dry_run_result(dry_run_results)
         schema_hash = _schema_hash(self.registry.openai_tool_defs())
@@ -857,6 +873,8 @@ class AgentSession:
             "total_output_tokens": summary["total_output_tokens"],
             "tools_called": summary["tools_called"],
             "exit_status": summary["exit_status"],
+            "advisory_only": advisory_only,
+            "rationale": rationale or "",
         }
         (self.session_dir / "session_metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True),

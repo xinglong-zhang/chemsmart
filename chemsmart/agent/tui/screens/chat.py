@@ -540,11 +540,22 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif isinstance(event, PlanEvent):
             self._current_plan = event.plan
             self._current_plan_text = event.text
-            workflow_cell = PlanCell(event.plan)
-            self._workflow_cell = workflow_cell
-            transcript.add_cell(workflow_cell)
-            footer.set_phase(Phase.PLANNING)
-            footer.set_hint("도구 단계를 채우는 중…")
+            if not event.plan.steps:
+                self._workflow_cell = None
+                transcript.add_cell(
+                    AgentMessageCell(
+                        event.plan.rationale or "(no rationale)",
+                        title="Advisory",
+                    )
+                )
+                footer.set_phase(Phase.FINISHED)
+                footer.set_hint("응답 완료")
+            else:
+                workflow_cell = PlanCell(event.plan)
+                self._workflow_cell = workflow_cell
+                transcript.add_cell(workflow_cell)
+                footer.set_phase(Phase.PLANNING)
+                footer.set_hint("도구 단계를 채우는 중…")
         elif isinstance(event, ToolCallEvent):
             if workflow_cell is not None:
                 if event.status == "running":
@@ -1027,6 +1038,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._current_plan = None
         self._current_plan_text = None
         self._current_verdict = None
+        self._workflow_cell = None
         self._pending_approval = False
         self._pending_risky_tool = None
         self._latest_dry_run_content = None
