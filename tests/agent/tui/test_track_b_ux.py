@@ -16,6 +16,7 @@ from chemsmart.agent.tui.widgets.cells import (
     ErrorCell,
     PlanCell,
     RuntimeValidationCell,
+    UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
@@ -265,5 +266,32 @@ def test_cwd_mismatch_popup_uses_designer_copy(tmp_path: Path):
             assert "작업 디렉터리가 다릅니다" in text
             assert "기록된 폴더로 이동 후 재개" in text
             assert "현재 폴더에서 강제로 계속" in text
+
+    asyncio.run(scenario())
+
+
+def test_user_messages_are_right_aligned_without_moving_slash_commands(
+    tmp_path: Path,
+):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            transcript = app.query_one(Transcript)
+            transcript.clear_cells()
+            agent = AgentMessageCell("agent " * 20)
+            user = UserMessageCell("build water and recommend a method " * 4)
+            slash = UserMessageCell("/help")
+            transcript.add_cell(agent)
+            transcript.add_cell(user)
+            transcript.add_cell(slash)
+            await pilot.pause()
+
+            assert user.region.x > agent.region.x
+            assert (
+                user.region.width
+                <= int(transcript.content_region.width * 0.8) + 1
+            )
+            assert slash.region.x == agent.region.x
 
     asyncio.run(scenario())

@@ -11,6 +11,8 @@ class Transcript(VerticalScroll):
     Transcript {
         border: round $panel;
         padding: 0 1;
+        overflow-x: hidden;
+        overflow-y: auto;
     }
 
     #cells {

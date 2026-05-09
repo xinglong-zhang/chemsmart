@@ -18,6 +18,11 @@ FooterWidget {
     border-left: outer $accent;
 }
 
+.user-request-cell {
+    width: 80%;
+    offset: 20% 0;
+}
+
 .agent-cell {
     border-left: outer $primary;
 }

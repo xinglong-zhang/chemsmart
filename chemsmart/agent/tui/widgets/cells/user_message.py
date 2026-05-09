@@ -9,4 +9,7 @@ from .base import BaseCell
 
 class UserMessageCell(BaseCell):
     def __init__(self, text: str) -> None:
-        super().__init__(Text(text), title="You", classes="user-cell")
+        classes = "user-cell"
+        if not text.startswith("/"):
+            classes += " user-request-cell"
+        super().__init__(Text(text), title="You", classes=classes)

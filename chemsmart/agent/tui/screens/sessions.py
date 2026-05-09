@@ -11,11 +11,13 @@ from textual.screen import ModalScreen
 from textual.widgets import Static
 
 
-class SessionsScreen(ModalScreen[None]):
+class SessionsScreen(ModalScreen[str | None]):
     BINDINGS = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
-        Binding("enter", "close", "Close"),
+        Binding("up", "cursor_up", show=False),
+        Binding("down", "cursor_down", show=False),
+        Binding("enter", "select_session", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -36,12 +38,59 @@ class SessionsScreen(ModalScreen[None]):
     def __init__(self, session_root: Path) -> None:
         super().__init__()
         self.session_root = session_root
+        self._session_ids = self._load_session_ids()
+        self._selected_index = 0 if self._session_ids else -1
 
     def compose(self) -> ComposeResult:
         yield Static(self._render_text(), id="sessions-modal")
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+    def action_cursor_up(self) -> None:
+        if not self._session_ids:
+            return
+        self._selected_index = max(0, self._selected_index - 1)
+
+    def action_cursor_down(self) -> None:
+        if not self._session_ids:
+            return
+        self._selected_index = min(
+            len(self._session_ids) - 1,
+            self._selected_index + 1,
+        )
+
+    def action_select_session(self) -> None:
+        if not self._session_ids or self._selected_index < 0:
+            self.dismiss(None)
+            return
+        self._resume_session(self._session_ids[self._selected_index])
+
+    def _resume_session(self, session_id: str) -> None:
+        owner = (
+            self.app.screen_stack[-2]
+            if len(self.app.screen_stack) > 1
+            else None
+        )
+        resume = getattr(owner, "_resume_or_prompt", None)
+        self.dismiss(session_id)
+        if callable(resume):
+            self.app.call_after_refresh(resume, session_id)
+
+    def _load_session_ids(self) -> list[str]:
+        if not self.session_root.exists():
+            return []
+        return [
+            path.name
+            for path in sorted(
+                [
+                    path
+                    for path in self.session_root.iterdir()
+                    if path.is_dir()
+                ],
+                reverse=True,
+            )[:10]
+        ]
 
     def _render_text(self) -> str:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]
