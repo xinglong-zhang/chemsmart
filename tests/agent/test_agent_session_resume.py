@@ -52,7 +52,7 @@ def test_session_resume_uses_original_absolute_cwd(
         )
         first = session.run(
             "prepare resume case",
-            dry_submit=True,
+            dry_submit=False,
             allow_remote_unknown=False,
         )
         assert first["blocked"] is True
@@ -67,7 +67,7 @@ def test_session_resume_uses_original_absolute_cwd(
             provider=provider,
             registry=ToolRegistry.default(),
             session_root=tmp_path / "sessions",
-            dry_submit=True,
+            dry_submit=False,
             allow_remote_unknown=True,
         )
     finally:

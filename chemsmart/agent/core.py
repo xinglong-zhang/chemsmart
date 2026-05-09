@@ -274,11 +274,13 @@ class AgentSession:
                     risky_start,
                     plan.steps[risky_start],
                     results,
+                    dry_submit=dry_submit,
                 )
 
             verdict = verdict or self._critic_call(
                 plan=plan,
                 dry_run_results=dry_run_results,
+                dry_submit=dry_submit,
             )
             verdict = self._apply_deterministic_gates(
                 plan=plan,
@@ -286,6 +288,7 @@ class AgentSession:
                 runtime_result=runtime_result,
                 dry_run_results=dry_run_results,
                 preview_submit=preview_submit,
+                dry_submit=dry_submit,
             )
             self.decision_log.write(
                 "critic_verdict",
@@ -295,6 +298,7 @@ class AgentSession:
 
             block_reason = self._block_reason(
                 verdict=verdict,
+                dry_submit=dry_submit,
                 allow_remote_unknown=allow_remote_unknown,
                 allow_critic_override=allow_critic_override,
             )
@@ -418,6 +422,7 @@ class AgentSession:
         self,
         plan: Plan,
         dry_run_results: list[dict[str, Any]],
+        dry_submit: bool,
     ) -> CriticVerdict:
         prompt = _load_prompt("critic.md")
         return self._llm_json_call(
@@ -430,6 +435,7 @@ class AgentSession:
                         {
                             "plan": plan.model_dump(),
                             "dry_run_inputs": dry_run_results,
+                            "dry_submit": dry_submit,
                         }
                     ),
                 },
@@ -660,6 +666,7 @@ class AgentSession:
         step_index: int,
         step: Step,
         prior_results: list[Any],
+        dry_submit: bool,
     ) -> Any:
         assert self.decision_log is not None
         resolved_args = _resolve_refs(step.args, prior_results)
@@ -675,7 +682,23 @@ class AgentSession:
         )
         result = self.registry.call(step.tool, resolved_args)
         if _is_tool_error(result):
-            raise RuntimeError(result["error"]["message"])
+            message = result["error"]["message"]
+            if dry_submit and _is_submit_server_error(message):
+                result = {
+                    "transport": None,
+                    "script_path": None,
+                    "script_bytes": None,
+                    "command_executed": None,
+                    "job_id": None,
+                    "duplicate_check": {
+                        "duplicate": False,
+                        "message": None,
+                    },
+                    "skipped": True,
+                    "skip_reason": message,
+                }
+            else:
+                raise RuntimeError(message)
         self.decision_log.write(
             "tool_preview_result",
             {
@@ -899,8 +922,13 @@ class AgentSession:
         runtime_result: dict[str, Any] | None,
         dry_run_results: list[dict[str, Any]],
         preview_submit: dict[str, Any] | None,
+        dry_submit: bool,
     ) -> CriticVerdict:
-        issues = list(verdict.issues)
+        issues = _filter_critic_issues(
+            plan=plan,
+            issues=verdict.issues,
+            dry_submit=dry_submit,
+        )
         rationale_parts = [verdict.rationale] if verdict.rationale else []
         final_verdict = verdict.verdict
 
@@ -910,7 +938,7 @@ class AgentSession:
                 final_verdict = "reject"
                 issues.extend(runtime_result.get("local_issues", []))
                 rationale_parts.append("validate_runtime returned fail")
-            elif runtime_ok == "partial":
+            elif runtime_ok == "partial" and not dry_submit:
                 final_verdict = (
                     "warn" if final_verdict == "ok" else final_verdict
                 )
@@ -954,6 +982,9 @@ class AgentSession:
                     "submit_hpc duplicate check rejected the plan"
                 )
 
+        if final_verdict == "warn" and not issues:
+            final_verdict = "ok"
+
         return CriticVerdict(
             verdict=final_verdict,
             confidence=verdict.confidence,
@@ -964,6 +995,7 @@ class AgentSession:
     @staticmethod
     def _block_reason(
         verdict: CriticVerdict,
+        dry_submit: bool,
         allow_remote_unknown: bool,
         allow_critic_override: bool,
     ) -> str | None:
@@ -973,22 +1005,14 @@ class AgentSession:
             return None
 
         has_remote_unknown = any(
-            issue.startswith("server.")
-            or issue.endswith("on HPC")
-            or issue == "ssh login reachable"
-            for issue in verdict.issues
+            _is_remote_unknown_issue(issue) for issue in verdict.issues
         )
         has_other_warn = any(
-            not (
-                issue.startswith("server.")
-                or issue.endswith("on HPC")
-                or issue == "ssh login reachable"
-            )
-            for issue in verdict.issues
+            not _is_remote_unknown_issue(issue) for issue in verdict.issues
         )
         if not verdict.issues:
             has_other_warn = True
-        if has_remote_unknown and not allow_remote_unknown:
+        if has_remote_unknown and not dry_submit and not allow_remote_unknown:
             return "critic_warn_remote_unknown"
         if has_other_warn and not allow_critic_override:
             return "critic_warn_no_override"
@@ -1115,6 +1139,76 @@ def _parse_json_response(response: Any) -> dict[str, Any]:
         raise ValueError(
             f"LLM returned invalid JSON: {exc}\nRaw: {text!r}"
         ) from exc
+
+
+def _filter_critic_issues(
+    *,
+    plan: Plan,
+    issues: list[str],
+    dry_submit: bool,
+) -> list[str]:
+    geometry_handoff_required = _plan_requires_geometry_handoff(plan)
+    filtered: list[str] = []
+    for issue in issues:
+        normalized = issue.lower()
+        if dry_submit and _is_remote_unknown_issue(issue):
+            continue
+        if (
+            "geometry handoff missing" in normalized
+            and not geometry_handoff_required
+        ):
+            continue
+        filtered.append(issue)
+    return filtered
+
+
+def _plan_requires_geometry_handoff(plan: Plan) -> bool:
+    for step_index, step in enumerate(plan.steps):
+        if step.tool != "build_job":
+            continue
+        kind = step.args.get("kind")
+        if not (isinstance(kind, str) and kind.endswith(".sp")):
+            continue
+        source_step = _source_step_for_ref(plan, step.args.get("molecule"))
+        if source_step is None or source_step.tool != "build_molecule":
+            continue
+        if any(
+            prior_step.tool == "build_job"
+            and isinstance(prior_step.args.get("kind"), str)
+            and prior_step.args["kind"].endswith((".opt", ".ts", ".irc"))
+            for prior_step in plan.steps[:step_index]
+        ):
+            return True
+    return False
+
+
+def _source_step_for_ref(plan: Plan, value: Any) -> Step | None:
+    if not isinstance(value, str):
+        return None
+    match = _REFERENCE_RE.match(value)
+    if match is None or match.group("path"):
+        return None
+    ref_index = int(match.group("index")) - 1
+    if ref_index < 0 or ref_index >= len(plan.steps):
+        return None
+    return plan.steps[ref_index]
+
+
+def _is_remote_unknown_issue(issue: str) -> bool:
+    return (
+        issue.startswith("server.")
+        or issue.endswith("on HPC")
+        or issue == "ssh login reachable"
+    )
+
+
+def _is_submit_server_error(message: str) -> bool:
+    return (
+        "submit_hpc requires server when no configured servers are available"
+        in message
+        or "submit_hpc requires server when multiple configured servers are "
+        in message
+    )
 
 
 def _extract_text(response: Any) -> str:

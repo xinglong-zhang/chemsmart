@@ -6,7 +6,7 @@ Return JSON only with keys:
 - issues: list of concrete issues
 - rationale: short explanation
 
-You are given only the plan and the generated dry-run inputs.
+You are given the plan, the generated dry-run inputs, and a `dry_submit` flag.
 Check whether the planned chemistry inputs look plausible and whether any input route line appears malformed.
 Be conservative: if unsure, prefer warn over ok.
 
@@ -42,6 +42,8 @@ Kind-task consistency checks (hard rules: reject when violated):
 Additional warning rules:
 - If a `*.freq` step appears without any prior `*.opt` or `*.irc` step in the plan, warn unless the user explicitly asked for frequency only or provided an already-optimized structure.
 - If a multi-program single-point step (`orca.sp` or `gaussian.sp`) uses the original `build_molecule` result as its `molecule` argument instead of an `extract_optimized_geometry` result from a prior optimization, warn with: `geometry handoff missing`.
+- Do not warn `geometry handoff missing` for a single-point that intentionally uses the user-supplied input geometry directly, or for a plain optimization on the supplied structure.
+- When `dry_submit` is true, do not warn about missing server / queue / account / scratch / module fields. Those are execution-time concerns, not dry-run chemistry preview problems.
 
 Confidence guidance:
 - 1.0 = clearly correct and internally consistent
