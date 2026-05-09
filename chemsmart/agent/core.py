@@ -247,6 +247,23 @@ class AgentSession:
         run_error: Exception | None = None
         paused_for_approval = False
 
+        if not plan.steps:
+            return {
+                "session_id": self.state.session_id,
+                "session_dir": str(self.session_dir),
+                "plan": plan,
+                "plan_text": render_plan(plan) if rerender_plan else None,
+                "critic_verdict": None,
+                "completed_steps": self.state.current_step_index,
+                "blocked": False,
+                "dry_run_result": None,
+                "dry_run_results": dry_run_results,
+                "runtime_result": runtime_result,
+                "preview_submit": None,
+                "results": results,
+                "advisory_only": True,
+            }
+
         preview_submit = None
         risky_start = len(plan.steps)
         try:

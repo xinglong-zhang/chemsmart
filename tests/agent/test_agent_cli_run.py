@@ -88,3 +88,88 @@ def test_agent_cli_run_wraps_runtime_errors_as_click_exceptions(
     assert result.exit_code == 1
     assert "Error: run_local failed with returncode 1" in result.output
     assert "Traceback" not in result.output
+
+
+def test_agent_cli_run_surfaces_advisory_only_answers(
+    monkeypatch,
+    tmp_path: Path,
+):
+    provider = FakeProvider(
+        [
+            {
+                "steps": [],
+                "rationale": "Use M06-2X/def2-SVP for the TS search and refine with def2-TZVP after one imaginary frequency check.",
+                "estimated_cost": "low",
+            }
+        ]
+    )
+
+    def fake_get_provider():
+        return provider
+
+    monkeypatch.setattr(
+        "chemsmart.agent.providers.get_provider", fake_get_provider
+    )
+    monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
+    monkeypatch.setattr(
+        "chemsmart.agent.core._default_session_root",
+        lambda: str(tmp_path / "sessions"),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        agent,
+        [
+            "run",
+            "--dry-submit",
+            "Recommend a TS method and basis set for a Cope rearrangement.",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Advice:" in result.output
+    assert "M06-2X/def2-SVP" in result.output
+    assert "critic verdict:" not in result.output
+
+
+def test_ask_renders_advisory_plan(
+    monkeypatch,
+    tmp_path: Path,
+):
+    provider = FakeProvider(
+        [
+            {
+                "steps": [],
+                "rationale": "Advisory text: start with wB97X-D/def2-SVP, confirm one imaginary frequency, then refine with def2-TZVP.",
+                "estimated_cost": "low",
+            }
+        ]
+    )
+
+    def fake_get_provider():
+        return provider
+
+    monkeypatch.setattr(
+        "chemsmart.agent.providers.get_provider", fake_get_provider
+    )
+    monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
+    monkeypatch.setattr(
+        "chemsmart.agent.core._default_session_root",
+        lambda: str(tmp_path / "sessions"),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        agent,
+        [
+            "ask",
+            "Recommend method/basis for a Cope rearrangement TS and explain trade-offs.",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Advice" in result.output
+    assert "Advisory text" in result.output
+    assert "Plan" not in result.output

@@ -157,15 +157,19 @@ def agent_run(
         raise click.ClickException(str(exc)) from exc
 
     click.echo(f"session: {result['session_id']}")
-    click.echo(render_plan(result["plan"]))
-    verdict = result["critic_verdict"]
-    click.echo(f"critic verdict: {verdict.verdict}")
-    if verdict.issues:
-        for issue in verdict.issues:
-            click.echo(f"- {issue}")
-    dry_run_result = _first_dry_run_result(result)
-    if dry_run_result:
-        click.echo(f"inputfile: {dry_run_result['inputfile']}")
+    if _is_advisory_plan(result["plan"]):
+        click.echo("Advice:")
+        click.echo(result["plan"].rationale or "No tool execution required.")
+    else:
+        click.echo(render_plan(result["plan"]))
+        verdict = result["critic_verdict"]
+        click.echo(f"critic verdict: {verdict.verdict}")
+        if verdict.issues:
+            for issue in verdict.issues:
+                click.echo(f"- {issue}")
+        dry_run_result = _first_dry_run_result(result)
+        if dry_run_result:
+            click.echo(f"inputfile: {dry_run_result['inputfile']}")
     click.echo(f"decision log: {result['session_dir']}/decision_log.jsonl")
     if result.get("blocked"):
         raise click.ClickException("critic gating blocked execution")
@@ -260,11 +264,15 @@ def resume(
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"session: {result['session_id']}")
-    click.echo(render_plan(result["plan"]))
-    click.echo(f"critic verdict: {result['critic_verdict'].verdict}")
-    dry_run_result = _first_dry_run_result(result)
-    if dry_run_result:
-        click.echo(f"inputfile: {dry_run_result['inputfile']}")
+    if _is_advisory_plan(result["plan"]):
+        click.echo("Advice:")
+        click.echo(result["plan"].rationale or "No tool execution required.")
+    else:
+        click.echo(render_plan(result["plan"]))
+        click.echo(f"critic verdict: {result['critic_verdict'].verdict}")
+        dry_run_result = _first_dry_run_result(result)
+        if dry_run_result:
+            click.echo(f"inputfile: {dry_run_result['inputfile']}")
     if result.get("blocked"):
         raise click.ClickException("critic gating blocked execution")
 
@@ -289,12 +297,24 @@ def _first_dry_run_result(result: dict) -> dict | None:
     return next(iter(dry_run_results), result.get("dry_run_result"))
 
 
+def _is_advisory_plan(plan) -> bool:
+    return not bool(getattr(plan, "steps", None))
+
+
 def _stream_event(console: Console, entry: dict) -> None:
     event = parse_decision_event(entry)
     if isinstance(event, RequestEvent):
         console.print(Panel(event.request, title="Request"))
     elif isinstance(event, PlanEvent):
-        console.print(Panel(event.text, title="Plan"))
+        if _is_advisory_plan(event.plan):
+            console.print(
+                Panel(
+                    event.plan.rationale or "No tool execution required.",
+                    title="Advice",
+                )
+            )
+        else:
+            console.print(Panel(event.text, title="Plan"))
     elif isinstance(event, MethodEvent):
         recommendation = event.recommendation
         text = (
