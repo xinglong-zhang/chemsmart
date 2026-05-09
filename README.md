@@ -233,6 +233,64 @@ Finally one can clean up by running
 make clean
 ``` -->
 
+## AI Agent (`chemsmart agent`)
+
+The fork adds an AI planning agent that translates natural-language requests into validated Gaussian/ORCA input files and, optionally, HPC submissions.
+
+#### Setup
+
+1. **Copy and fill the credentials file:**
+   ```bash
+   cp api.env.example api.env
+   # Edit api.env: set AI_PROVIDER and the corresponding API key
+   ```
+
+2. **Set the provider when running:**
+   ```bash
+   export AI_PROVIDER=openai   # or: anthropic
+   ```
+
+#### Quick start
+
+```bash
+# Dry-submit: plan and generate inputs, do not submit to HPC
+AI_PROVIDER=openai chemsmart agent run --dry-submit "optimize examples/h2o.xyz with B3LYP/6-31G*"
+
+# Full run (requires configured HPC server)
+AI_PROVIDER=openai chemsmart agent run "optimize examples/h2o.xyz with B3LYP/6-31G*"
+
+# List supported tools
+chemsmart agent tools
+
+# System health check
+AI_PROVIDER=openai chemsmart agent doctor
+```
+
+#### Supported workflows
+
+| Request type | Example |
+|---|---|
+| Geometry optimization | `"optimize h2o.xyz with B3LYP/6-31G*"` |
+| Opt + frequency | `"optimize and compute frequencies for h2o.xyz"` |
+| Transition state search | `"find the transition state for carbene.xyz"` |
+| IRC | `"run IRC from the TS in carbene.xyz"` |
+| ORCA single-point | `"ORCA DLPNO-CCSD(T)/def2-TZVP single-point on h2o.xyz"` |
+| Cross-program | `"Gaussian opt then ORCA high-level SP on h2o.xyz"` |
+| Solvent | `"optimize h2o.xyz in water with SMD"` |
+
+#### Session artifacts
+
+Each run writes to `~/.chemsmart/agent/sessions/<timestamp>/`:
+- `decision_log.jsonl` — full plan, tool calls, and critic verdict
+- `session_metadata.json` — summary (intent, timing, critic confidence, blocked status)
+- Generated `.com` / `.inp` input files
+
+#### Notes
+
+- `--dry-submit` stops before HPC submission; use it to review inputs before committing compute time.
+- Sessions can be resumed: `chemsmart agent resume <session-id>`
+- HPC submission requires a configured server in `~/.chemsmart/`.
+
 ## Testing Installations
 
 Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
