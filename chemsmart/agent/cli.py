@@ -40,6 +40,11 @@ from chemsmart.agent.tui.events import (
 
 logger = logging.getLogger(__name__)
 
+_INLINE_CLI_STDERR_HINTS = (
+    "agent tui exited; debug log:",
+    "Debug log saved to:",
+)
+
 
 @click.group(name="agent", invoke_without_command=True)
 @click.option(
@@ -568,6 +573,15 @@ def _first_dry_run_result(result: dict) -> dict | None:
 
 def _is_advisory_plan(plan) -> bool:
     return not bool(getattr(plan, "steps", None))
+
+
+def sanitize_inline_cli_output(text: str) -> str:
+    lines = [
+        line
+        for line in text.splitlines()
+        if not any(hint in line for hint in _INLINE_CLI_STDERR_HINTS)
+    ]
+    return "\n".join(lines).strip()
 
 
 def _stream_event(console: Console, entry: dict) -> None:

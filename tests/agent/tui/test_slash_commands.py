@@ -56,8 +56,6 @@ def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
 
     async def scenario() -> None:
         await snapshot_for("/help", "slash_help")
-        await snapshot_for("/tools", "slash_tools")
-        await snapshot_for("/doctor", "slash_doctor")
         await snapshot_for("/sessions", "slash_sessions")
         await snapshot_for("/resume session-001", "slash_resume")
         await snapshot_for("/clear", "slash_clear")

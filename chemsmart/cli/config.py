@@ -8,16 +8,29 @@ from pathlib import Path
 import click
 import yaml
 
-from chemsmart.utils.io import (
-    update_powershell_profiles,
-    update_shell_config,
-    update_windows_env,
-)
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
 
 create_logger(debug=True, stream=True)
+
+
+def _update_powershell_profiles(profiles, env_vars) -> None:
+    from chemsmart.utils.io import update_powershell_profiles
+
+    update_powershell_profiles(profiles, env_vars)
+
+
+def _update_shell_config_file(shell_file: Path, env_vars) -> None:
+    from chemsmart.utils.io import update_shell_config
+
+    update_shell_config(shell_file, env_vars)
+
+
+def _update_windows_environment(paths_to_add, package_path) -> None:
+    from chemsmart.utils.io import update_windows_env
+
+    update_windows_env(paths_to_add, package_path)
 
 
 class Config:
@@ -191,7 +204,7 @@ class Config:
 
         Delegates to :func:`chemsmart.utils.io.update_shell_config`.
         """
-        update_shell_config(shell_file, self.env_vars)
+        _update_shell_config_file(shell_file, self.env_vars)
 
     # ------------------------------------------------------------------ #
     # 4. Windows PowerShell management                                      #
@@ -267,7 +280,7 @@ class Config:
 
         Delegates to :func:`chemsmart.utils.io.update_powershell_profiles`.
         """
-        update_powershell_profiles(profiles, self.ps_env_vars)
+        _update_powershell_profiles(profiles, self.ps_env_vars)
 
     # ------------------------------------------------------------------ #
     # 5. Windows registry management (CMD / plain Windows fallback)         #
@@ -288,7 +301,7 @@ class Config:
             str(Path(self.chemsmart_package_path) / "chemsmart" / "cli"),
             str(Path(self.chemsmart_package_path) / "chemsmart" / "scripts"),
         ]
-        update_windows_env(paths_to_add, pkg_path)
+        _update_windows_environment(paths_to_add, pkg_path)
 
     # ------------------------------------------------------------------ #
     # High-level orchestration                                              #

@@ -83,10 +83,6 @@ def test_plain_mode_slash_commands_avoid_overlays(
     tmp_path: Path,
 ):
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
-        lambda _session_root: {},
-    )
-    monkeypatch.setattr(
         "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
         lambda _session_root: {},
     )
@@ -135,10 +131,6 @@ def test_slash_commands_report_empty_states(
     tmp_path: Path,
 ):
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
-        lambda _session_root: {},
-    )
-    monkeypatch.setattr(
         "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
         lambda _session_root: {},
     )
@@ -163,12 +155,6 @@ def test_slash_commands_report_empty_states(
 
 def test_job_snapshot_failure_surfaces_error_cell(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.collect_job_snapshot",
-        lambda _session_root: (_ for _ in ()).throw(
-            RuntimeError("broken job snapshot")
-        ),
-    )
-    monkeypatch.setattr(
         "chemsmart.agent.tui.services.job_poller.collect_job_snapshot",
         lambda _session_root: (_ for _ in ()).throw(
             RuntimeError("broken job snapshot")
@@ -178,12 +164,11 @@ def test_job_snapshot_failure_surfaces_error_cell(monkeypatch, tmp_path: Path):
     async def scenario() -> None:
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
-            await pilot.pause()
-            app.chat_screen._refresh_job_snapshot()
-            await pilot.pause()
+            await pilot.pause(0.2)
             cell = _last_cell(app)
-            assert cell.error_title == "Job snapshot failed"
-            assert cell.message == "broken job snapshot"
+            assert cell.error_title == "Job poller failed"
+            assert cell.message == "Job poller failed"
+            assert "broken job snapshot" in str(cell.details)
 
     asyncio.run(scenario())
 
