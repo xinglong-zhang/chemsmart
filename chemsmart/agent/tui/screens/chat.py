@@ -284,19 +284,21 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def action_soft_cancel(self) -> None:
         if self._quit_armed:
-            self.app.exit()
-            return
-        if not self._current_worker or self._current_worker.is_finished:
+            if self._quit_timer is not None:
+                self._quit_timer.stop()
+                self._quit_timer = None
             self.app.exit()
             return
         self._quit_armed = True
         self.query_one(FooterWidget).set_hint(
-            "Cancellation requested • press Ctrl+C again within 3s to quit"
+            "Press Ctrl+C again within 3s to quit"
         )
-        self.post_agent_message(
-            "Soft cancel requested. The current step may still finish because "
-            "the underlying agent run is not cooperatively interruptible yet."
-        )
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_agent_message(
+                "Soft cancel requested. The current step may still finish "
+                "because the underlying agent run is not cooperatively "
+                "interruptible yet."
+            )
         if self._quit_timer is not None:
             self._quit_timer.stop()
         self._quit_timer = self.set_timer(3, self._disarm_soft_cancel)
@@ -461,6 +463,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def _disarm_soft_cancel(self) -> None:
         self._quit_armed = False
+        self._quit_timer = None
         self.query_one(FooterWidget).set_hint(
             "Enter to submit • /help for commands"
         )
