@@ -47,6 +47,10 @@ from chemsmart.agent.wizard.validate import (
     ValidationResult,
     validate_server_yaml,
 )
+from chemsmart.agent.wizard.verify import (
+    VerifyResult,
+    verify_server_yaml,
+)
 from chemsmart.agent.wizard.write import write_server_yaml
 
 __all__ = [
@@ -66,6 +70,7 @@ __all__ = [
     "SoftwareSurvey",
     "Topology",
     "ValidationResult",
+    "VerifyResult",
     "WizardOutcome",
     "choose_queue",
     "detect_module_system",
@@ -79,5 +84,6 @@ __all__ = [
     "run_schedule_survey",
     "run_software_survey",
     "validate_server_yaml",
+    "verify_server_yaml",
     "write_server_yaml",
 ]

@@ -1127,6 +1127,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._run_inline_cli(["doctor"], title="Doctor")
         elif command == "/wizard":
             self._handle_wizard_probe_command(argument)
+        elif command == "/wizard-verify":
+            self._handle_wizard_verify_command(argument)
         elif command == "/wizard-write":
             self._handle_wizard_write_command(argument)
         elif command == "/dryrun":
@@ -1251,6 +1253,32 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "server_name": server_name,
                 "ssh_host_hint": ssh_host_hint,
             },
+        )
+
+    def _handle_wizard_verify_command(self, argument: str) -> None:
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before starting a new request.",
+            )
+            return
+        try:
+            parts = shlex.split(argument)
+        except ValueError as exc:
+            self.post_error("Invalid wizard-verify command", str(exc))
+            return
+        if len(parts) != 1:
+            self.post_error(
+                "Invalid wizard-verify command",
+                "Usage: /wizard-verify <name>",
+            )
+            return
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.PLANNING)
+        footer.set_hint("Wizard verify is checking transport wiring…")
+        self._current_worker = self.run_slash_tool_request(
+            "wizard_verify",
+            {"server_name": parts[0]},
         )
 
     def _handle_wizard_write_command(self, argument: str) -> None:
@@ -1390,6 +1418,26 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             footer.set_hint("Wizard YAML written")
             return
+        if tool_name == "wizard_verify" and isinstance(result, dict):
+            self.post_agent_message(
+                self._wizard_verify_result_table(result),
+                title=f"Wizard verify: {result.get('server_name') or 'server'}",
+            )
+            errors = result.get("errors") or []
+            warnings = result.get("warnings") or []
+            if errors:
+                self.post_error(
+                    "Wizard verify failed",
+                    "\n".join(str(error) for error in errors),
+                )
+                footer.set_phase(Phase.ERROR)
+                footer.set_hint("Wizard verify found errors")
+                return
+            if warnings:
+                footer.set_hint("Wizard verify completed with warnings")
+                return
+            footer.set_hint("Wizard verify completed")
+            return
         footer.set_hint("Slash command complete")
 
     def _tool_success_note(self, tool_name: str, result: object) -> str:
@@ -1398,9 +1446,43 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             if isinstance(validation, dict) and validation.get("ok", False):
                 return "Rendered validated wizard YAML."
             return "Rendered wizard YAML with validation issues."
+        if tool_name == "wizard_verify" and isinstance(result, dict):
+            if result.get("errors"):
+                return "Verified transport wiring and found errors."
+            if result.get("warnings"):
+                return "Verified transport wiring with warnings."
+            return "Verified transport wiring."
         if tool_name == "wizard_write" and isinstance(result, dict):
             return f"Wrote {result.get('written_path')}"
         return "Completed successfully."
+
+    def _wizard_verify_result_table(self, result: dict[str, object]) -> Table:
+        table = Table(show_header=True, box=None, padding=(0, 1))
+        table.add_column("Field", style="cyan", no_wrap=True)
+        table.add_column("Value")
+        table.add_row("server_name", str(result.get("server_name") or "-"))
+        table.add_row("host", str(result.get("host") or "-"))
+        table.add_row("mode", str(result.get("mode") or "-"))
+        table.add_row(
+            "would_submit_via",
+            str(result.get("would_submit_via") or "-"),
+        )
+        invocation = result.get("transport_invocation")
+        table.add_row(
+            "transport_invocation",
+            json.dumps(invocation or []),
+        )
+        warnings = result.get("warnings") or []
+        table.add_row(
+            "warnings",
+            "\n".join(str(item) for item in warnings) if warnings else "-",
+        )
+        errors = result.get("errors") or []
+        table.add_row(
+            "errors",
+            "\n".join(str(item) for item in errors) if errors else "-",
+        )
+        return table
 
     def _show_help(self) -> None:
         table = Table(show_header=True, box=None, padding=(0, 1))
@@ -1434,6 +1516,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ("[I]", "/sessions", "browse recent sessions"),
             ("[I]", "/resume <session-id>", "load or continue a session"),
             ("[A]", "/tools", "list registered tools"),
+            ("[A]", "/wizard-verify <name>", "verify server transport wiring"),
             ("[A]", "/doctor", "run inline diagnostics"),
             ("[A]", "/quit", "exit the TUI"),
         ]

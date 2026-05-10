@@ -74,6 +74,12 @@ _TOOL_META = {
         "style": "warning",
         "summary": "probes local or remote server state",
     },
+    "wizard_verify": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "verifies wizard/server transport wiring",
+    },
     "wizard_write": {
         "risk": "risky",
         "read_only": False,

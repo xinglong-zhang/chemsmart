@@ -7,6 +7,7 @@ from typing import Any
 
 from chemsmart.agent.wizard.orchestrator import run_wizard
 from chemsmart.agent.wizard.probe import ProbeRunner
+from chemsmart.agent.wizard.verify import verify_server_yaml
 from chemsmart.agent.wizard.write import write_server_yaml
 
 
@@ -53,6 +54,12 @@ def wizard_write(
         "written_path": path,
         "overwrite": overwrite,
     }
+
+
+def wizard_verify(server_name: str) -> dict[str, Any]:
+    """Verify wizard/server transport wiring for an existing YAML."""
+
+    return _json_safe(verify_server_yaml(server_name))
 
 
 def _json_safe(value: Any) -> Any:

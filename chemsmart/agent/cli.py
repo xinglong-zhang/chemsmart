@@ -51,6 +51,7 @@ from chemsmart.agent.tui.events import (
 from chemsmart.agent.wizard import (
     ProbeRunner,
     run_wizard,
+    verify_server_yaml,
     write_server_yaml,
 )
 
@@ -481,6 +482,17 @@ def wizard(
         click.echo(f"Wrote {written_path}")
 
 
+@agent.command(name="wizard-verify")
+@click.argument("name")
+def wizard_verify(name: str):
+    """Verify wizard/server transport wiring for an existing YAML."""
+    with _agent_command_logging():
+        result = verify_server_yaml(name)
+        Console().print(_wizard_verify_table(result))
+        if result.errors:
+            raise click.ClickException("\n".join(result.errors))
+
+
 @agent.command()
 def tools():
     """List registered agent tools."""
@@ -559,6 +571,29 @@ def _format_wizard_validation_errors(errors: list[str]) -> str:
     lines = ["wizard output did not validate:"]
     lines.extend(f"- {error}" for error in errors)
     return "\n".join(lines)
+
+
+def _wizard_verify_table(result) -> Table:
+    table = Table(title=f"Wizard verify: {result.server_name}")
+    table.add_column("Field", style="cyan", no_wrap=True)
+    table.add_column("Value")
+    table.add_row("server_name", result.server_name)
+    table.add_row("host", result.host or "-")
+    table.add_row("mode", result.mode)
+    table.add_row("would_submit_via", result.would_submit_via)
+    table.add_row(
+        "transport_invocation",
+        json.dumps(result.transport_invocation or []),
+    )
+    table.add_row(
+        "warnings",
+        "\n".join(result.warnings) if result.warnings else "-",
+    )
+    table.add_row(
+        "errors",
+        "\n".join(result.errors) if result.errors else "-",
+    )
+    return table
 
 
 def _load_session_snapshots(session_root: Path) -> list[dict[str, object]]:

@@ -83,6 +83,7 @@ class ToolRegistry:
             ("extract_optimized_geometry", "chemsmart.agent.tools"),
             ("submit_hpc", "chemsmart.agent.tools"),
             ("wizard_probe", "chemsmart.agent.wizard.tools"),
+            ("wizard_verify", "chemsmart.agent.wizard.tools"),
             ("wizard_write", "chemsmart.agent.wizard.tools"),
         ]
         return cls(
