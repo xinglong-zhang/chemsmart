@@ -21,6 +21,8 @@ def test_registry_round_trips_build_gaussian_settings_call():
     tool_defs = registry.openai_tool_defs()
     names = [tool_def["function"]["name"] for tool_def in tool_defs]
     assert "build_gaussian_settings" in names
+    assert "wizard_probe" in names
+    assert "wizard_write" in names
     build_job_def = next(
         tool_def
         for tool_def in tool_defs

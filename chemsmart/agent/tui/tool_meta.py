@@ -68,6 +68,18 @@ _TOOL_META = {
         "style": "error",
         "summary": "may submit to a remote queue",
     },
+    "wizard_probe": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "probes local or remote server state",
+    },
+    "wizard_write": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "writes a server YAML config",
+    },
 }
 
 _STATUS_STYLE = {

@@ -1,6 +1,10 @@
 """Wizard probe, survey, render, and validation exports."""
 
 from chemsmart.agent.wizard.normalize import choose_queue
+from chemsmart.agent.wizard.orchestrator import (
+    WizardOutcome,
+    run_wizard,
+)
 from chemsmart.agent.wizard.parsers import QueueFacts
 from chemsmart.agent.wizard.probe import (
     ALLOWED_COMMANDS,
@@ -43,6 +47,7 @@ from chemsmart.agent.wizard.validate import (
     ValidationResult,
     validate_server_yaml,
 )
+from chemsmart.agent.wizard.write import write_server_yaml
 
 __all__ = [
     "ALLOWED_COMMANDS",
@@ -61,15 +66,18 @@ __all__ = [
     "SoftwareSurvey",
     "Topology",
     "ValidationResult",
+    "WizardOutcome",
     "choose_queue",
     "detect_module_system",
     "detect_topology",
     "discover_conda",
     "discover_project",
+    "run_wizard",
     "discover_scratch",
     "find_program",
     "render_server_yaml",
     "run_schedule_survey",
     "run_software_survey",
     "validate_server_yaml",
+    "write_server_yaml",
 ]

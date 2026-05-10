@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from chemsmart.agent.permissions import (
+    ALWAYS_REQUIRE_APPROVAL,
+    DRIVING_DEFAULT_DENY,
     ApprovalDecision,
     PermissionMode,
     PermissionPolicy,
@@ -105,3 +107,39 @@ def test_permission_policy_record_persists_session_allow():
     policy.record("recommend_method", ApprovalDecision.ALLOW_SESSION)
 
     assert "recommend_method" in policy.session_allow
+
+
+def test_remote_probe_is_denied_without_yolo_in_driving_mode():
+    policy = PermissionPolicy(mode=PermissionMode.DRIVING)
+
+    request = make_request("wizard_probe")
+    request = ToolRequest(
+        request_id=request.request_id,
+        provider=request.provider,
+        provider_call_id=request.provider_call_id,
+        name=request.name,
+        arguments_json=request.arguments_json,
+        arguments={"ssh_host_hint": "cluster"},
+        raw=request.raw,
+    )
+
+    resolved = policy.resolve(request)
+
+    assert "remote_probe" in DRIVING_DEFAULT_DENY
+    assert resolved.decision == ResolvedDecision.AUTO_DENY
+    assert resolved.reason == "missing_yolo"
+
+
+def test_wizard_write_always_requires_explicit_approval():
+    policy = PermissionPolicy(
+        mode=PermissionMode.DRIVING,
+        yolo=True,
+    )
+
+    resolved = policy.resolve(make_request("wizard_write"))
+    policy.record("wizard_write", ApprovalDecision.ALLOW_SESSION)
+
+    assert "wizard_write" in ALWAYS_REQUIRE_APPROVAL
+    assert resolved.decision == ResolvedDecision.NEEDS_USER
+    assert resolved.reason == "always_require_approval"
+    assert "wizard_write" not in policy.session_allow

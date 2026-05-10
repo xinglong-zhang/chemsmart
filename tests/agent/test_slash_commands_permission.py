@@ -83,3 +83,48 @@ def test_permission_slash_commands_route_and_backcompat(tmp_path):
             ]
 
     asyncio.run(scenario())
+
+
+def test_wizard_slash_commands_route_probe_and_write(tmp_path):
+    class DummyWorker:
+        is_finished = True
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        calls: list[tuple[str, dict]] = []
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            screen = app.chat_screen
+            screen.run_slash_tool_request = (  # type: ignore[method-assign]
+                lambda tool, args: calls.append((tool, args)) or DummyWorker()
+            )
+
+            screen._handle_slash_command("/wizard perlmutter login.cluster")
+            assert calls == [
+                (
+                    "wizard_probe",
+                    {
+                        "server_name": "perlmutter",
+                        "ssh_host_hint": "login.cluster",
+                    },
+                )
+            ]
+
+            screen._latest_wizard_probe = {
+                "server_name": "perlmutter",
+                "yaml_text": "SERVER:\n  SCHEDULER: SLURM\n",
+                "validation": {"ok": True, "errors": []},
+            }
+            screen._handle_slash_command("/wizard-write overwrite")
+
+            assert calls[-1] == (
+                "wizard_write",
+                {
+                    "server_name": "perlmutter",
+                    "yaml_text": "SERVER:\n  SCHEDULER: SLURM\n",
+                    "overwrite": True,
+                },
+            )
+
+    asyncio.run(scenario())

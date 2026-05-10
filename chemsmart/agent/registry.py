@@ -71,22 +71,27 @@ class ToolRegistry:
 
     @classmethod
     def default(cls) -> "ToolRegistry":
-        tool_names = [
-            "build_molecule",
-            "recommend_method",
-            "build_gaussian_settings",
-            "build_orca_settings",
-            "build_job",
-            "dry_run_input",
-            "validate_runtime",
-            "run_local",
-            "extract_optimized_geometry",
-            "submit_hpc",
+        tool_sources = [
+            ("build_molecule", "chemsmart.agent.tools"),
+            ("recommend_method", "chemsmart.agent.tools"),
+            ("build_gaussian_settings", "chemsmart.agent.tools"),
+            ("build_orca_settings", "chemsmart.agent.tools"),
+            ("build_job", "chemsmart.agent.tools"),
+            ("dry_run_input", "chemsmart.agent.tools"),
+            ("validate_runtime", "chemsmart.agent.tools"),
+            ("run_local", "chemsmart.agent.tools"),
+            ("extract_optimized_geometry", "chemsmart.agent.tools"),
+            ("submit_hpc", "chemsmart.agent.tools"),
+            ("wizard_probe", "chemsmart.agent.wizard.tools"),
+            ("wizard_write", "chemsmart.agent.wizard.tools"),
         ]
         return cls(
             [
-                _build_tool_spec(_load_agent_tool(name), registered_name=name)
-                for name in tool_names
+                _build_tool_spec(
+                    _load_agent_tool(name, module_name),
+                    registered_name=name,
+                )
+                for name, module_name in tool_sources
             ]
         )
 
@@ -263,6 +268,6 @@ def _schema_friendly_annotation(
     return annotation
 
 
-def _load_agent_tool(name: str) -> Any:
-    module = importlib.import_module("chemsmart.agent.tools")
+def _load_agent_tool(name: str, module_name: str) -> Any:
+    module = importlib.import_module(module_name)
     return getattr(module, name)

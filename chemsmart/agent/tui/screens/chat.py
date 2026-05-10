@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shlex
 from pathlib import Path
 from threading import Event, get_ident
 from typing import Iterable
@@ -21,8 +23,10 @@ from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
     PermissionPolicy,
+    ResolvedDecision,
 )
 from chemsmart.agent.provider_adapter import ToolRequest
+from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.tui.events import (
     AssistantTurnEvent,
     CriticVerdictEvent,
@@ -145,6 +149,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._rendered_run_results: set[str] = set()
         self._cancelled_job_ids: set[str] = set()
         self._active_server_name = self._default_active_server_name()
+        self._latest_wizard_probe: dict[str, object] | None = None
 
     def compose(self) -> ComposeResult:
         yield ChemsmartHeader(id="chat-header")
@@ -324,6 +329,136 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             0.1, self._attach_live_tailer, pause=False
         )
 
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="slash-tool",
+        name="slash-tool",
+    )
+    def run_slash_tool_request(
+        self,
+        tool_name: str,
+        arguments: dict[str, object],
+    ) -> dict[str, object]:
+        registry = ToolRegistry.default()
+        normalized_args = registry.normalize_args(tool_name, arguments)
+        description = registry.describe_tool(tool_name)
+        request = ToolRequest(
+            request_id=f"slash:{tool_name}:{get_ident()}",
+            provider="slash",
+            provider_call_id=f"slash-{tool_name}",
+            name=tool_name,
+            arguments_json=json.dumps(normalized_args, sort_keys=True),
+            arguments=normalized_args,
+            raw={"source": "slash"},
+        )
+        policy = self._permission_policy()
+        resolved = policy.resolve(request)
+
+        if resolved.decision == ResolvedDecision.NEEDS_USER:
+            self.app.call_from_thread(
+                self._set_pending_tool_context,
+                description,
+                normalized_args,
+            )
+            self.app.call_from_thread(
+                self._publish_tool_call_cell,
+                tool_name,
+                "pending",
+                description,
+                normalized_args,
+                "Awaiting approval.",
+            )
+            decision = self._await_approval(request)
+            if decision == ApprovalDecision.DENY:
+                self.app.call_from_thread(
+                    self._publish_tool_call_cell,
+                    tool_name,
+                    "denied",
+                    description,
+                    normalized_args,
+                    "Denied by user.",
+                )
+                return {"tool": tool_name, "status": "denied"}
+            policy.record(tool_name, decision)
+            self.app.call_from_thread(
+                self._sync_session_allow_tools,
+                policy.session_allow,
+            )
+            approval_note = (
+                "Approved for this session."
+                if decision == ApprovalDecision.ALLOW_SESSION
+                else "Approved once."
+            )
+            self.app.call_from_thread(
+                self._publish_tool_call_cell,
+                tool_name,
+                "approved",
+                description,
+                normalized_args,
+                approval_note,
+            )
+        elif resolved.decision == ResolvedDecision.AUTO_DENY:
+            self.app.call_from_thread(
+                self._publish_tool_call_cell,
+                tool_name,
+                "denied",
+                description,
+                normalized_args,
+                "Blocked by current permissions; enable /yolo on to proceed.",
+            )
+            return {"tool": tool_name, "status": "denied"}
+        else:
+            self.app.call_from_thread(
+                self._publish_tool_call_cell,
+                tool_name,
+                "approved",
+                description,
+                normalized_args,
+                "Auto-approved.",
+            )
+
+        result = registry.call(tool_name, normalized_args)
+        if (
+            isinstance(result, dict)
+            and result.get("ok") is False
+            and "error" in result
+        ):
+            message = str(
+                result.get("error", {}).get("message") or "Tool failed."
+            )
+            self.app.call_from_thread(
+                self._publish_tool_call_cell,
+                tool_name,
+                "error",
+                description,
+                normalized_args,
+                message,
+            )
+            self.app.call_from_thread(
+                self._handle_slash_tool_failure,
+                tool_name,
+                message,
+            )
+            return {"tool": tool_name, "status": "error", "result": result}
+
+        self.app.call_from_thread(
+            self._publish_tool_call_cell,
+            tool_name,
+            "ok",
+            description,
+            normalized_args,
+            self._tool_success_note(tool_name, result),
+        )
+        self.app.call_from_thread(
+            self._handle_slash_tool_success,
+            tool_name,
+            normalized_args,
+            result,
+        )
+        return {"tool": tool_name, "status": "ok", "result": result}
+
     def start_resume(
         self,
         session_id: str,
@@ -356,6 +491,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        if event.worker.group == "slash-tool":
+            self._current_worker = event.worker
+            if event.state == WorkerState.ERROR:
+                error = event.worker.error
+                self.post_error(
+                    error.__class__.__name__ if error else "Worker error",
+                    str(error) if error else "Unknown worker error",
+                )
+                self.query_one(FooterWidget).set_phase(Phase.ERROR)
+                self.query_one(FooterWidget).set_hint("Slash command failed")
+            return
         if event.worker.group != "agent-session":
             return
         if event.state == WorkerState.SUCCESS:
@@ -979,6 +1125,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._run_inline_cli(["tools"], title="Tools")
         elif command == "/doctor":
             self._run_inline_cli(["doctor"], title="Doctor")
+        elif command == "/wizard":
+            self._handle_wizard_probe_command(argument)
+        elif command == "/wizard-write":
+            self._handle_wizard_write_command(argument)
         elif command == "/dryrun":
             if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
                 return
@@ -1071,6 +1221,186 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._request_approval("run_local")
         else:
             self.post_error("Unknown command", raw)
+
+    def _handle_wizard_probe_command(self, argument: str) -> None:
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before starting a new request.",
+            )
+            return
+        try:
+            parts = shlex.split(argument)
+        except ValueError as exc:
+            self.post_error("Invalid wizard command", str(exc))
+            return
+        if not parts or len(parts) > 2:
+            self.post_error(
+                "Invalid wizard command",
+                "Usage: /wizard <name> [host]",
+            )
+            return
+        server_name = parts[0]
+        ssh_host_hint = parts[1] if len(parts) == 2 else None
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.PLANNING)
+        footer.set_hint("Wizard is probing…")
+        self._current_worker = self.run_slash_tool_request(
+            "wizard_probe",
+            {
+                "server_name": server_name,
+                "ssh_host_hint": ssh_host_hint,
+            },
+        )
+
+    def _handle_wizard_write_command(self, argument: str) -> None:
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before starting a new request.",
+            )
+            return
+        try:
+            parts = shlex.split(argument)
+        except ValueError as exc:
+            self.post_error("Invalid wizard-write command", str(exc))
+            return
+        overwrite = False
+        if parts:
+            if len(parts) == 1 and parts[0] in {"overwrite", "--overwrite"}:
+                overwrite = True
+            else:
+                self.post_error(
+                    "Invalid wizard-write command",
+                    "Usage: /wizard-write [overwrite]",
+                )
+                return
+        probe = self._latest_wizard_probe
+        if not isinstance(probe, dict):
+            self.post_error(
+                "Wizard write unavailable",
+                "Run /wizard <name> [host] first.",
+            )
+            return
+        validation = probe.get("validation")
+        if isinstance(validation, dict) and not validation.get("ok", False):
+            self.post_error(
+                "Wizard write unavailable",
+                "The latest wizard result did not validate.",
+            )
+            return
+        server_name = str(probe.get("server_name") or "")
+        yaml_text = str(probe.get("yaml_text") or "")
+        if not server_name or not yaml_text:
+            self.post_error(
+                "Wizard write unavailable",
+                "The latest wizard result is incomplete.",
+            )
+            return
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.PLANNING)
+        footer.set_hint("Wizard is writing…")
+        self._current_worker = self.run_slash_tool_request(
+            "wizard_write",
+            {
+                "server_name": server_name,
+                "yaml_text": yaml_text,
+                "overwrite": overwrite,
+            },
+        )
+
+    def _set_pending_tool_context(
+        self,
+        description: str,
+        arguments: dict,
+    ) -> None:
+        self._pending_approval_description = description
+        self._pending_approval_args = dict(arguments)
+        self._pending_approval_index = 1
+        self._pending_approval_total = 1
+
+    def _publish_tool_call_cell(
+        self,
+        tool_name: str,
+        status: str,
+        description: str,
+        arguments: dict,
+        note: str,
+    ) -> None:
+        self.query_one(Transcript).add_cell(
+            ToolCallCell(
+                tool=tool_name,
+                status=status,
+                description=description,
+                arguments=arguments,
+                note=note,
+                queue_index=1,
+                queue_total=1,
+                session_rule_active=tool_name in self._session_allow_tools,
+            )
+        )
+
+    def _sync_session_allow_tools(self, allowed: set[str]) -> None:
+        self._session_allow_tools = set(allowed)
+
+    def _handle_slash_tool_failure(self, tool_name: str, message: str) -> None:
+        self.query_one(FooterWidget).set_phase(Phase.ERROR)
+        self.query_one(FooterWidget).set_hint("Slash command failed")
+        self.post_error(tool_name, message)
+
+    def _handle_slash_tool_success(
+        self,
+        tool_name: str,
+        arguments: dict[str, object],
+        result: object,
+    ) -> None:
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.FINISHED)
+        if tool_name == "wizard_probe" and isinstance(result, dict):
+            self._latest_wizard_probe = result
+            server_name = str(
+                result.get("server_name")
+                or arguments.get("server_name")
+                or "wizard"
+            )
+            yaml_text = str(result.get("yaml_text") or "")
+            self.post_agent_message(
+                f"```yaml\n{yaml_text.rstrip()}\n```",
+                title=f"Wizard: {server_name}",
+            )
+            validation = result.get("validation")
+            if isinstance(validation, dict) and not validation.get(
+                "ok", False
+            ):
+                errors = validation.get("errors") or []
+                self.post_error(
+                    "Wizard validation failed",
+                    "\n".join(str(error) for error in errors)
+                    or "wizard output did not validate",
+                )
+                footer.set_phase(Phase.ERROR)
+                footer.set_hint("Wizard validation failed")
+                return
+            footer.set_hint("Wizard YAML ready")
+            return
+        if tool_name == "wizard_write" and isinstance(result, dict):
+            self.post_agent_message(
+                f"Wrote `{result.get('written_path')}`.",
+                title="Wizard",
+            )
+            footer.set_hint("Wizard YAML written")
+            return
+        footer.set_hint("Slash command complete")
+
+    def _tool_success_note(self, tool_name: str, result: object) -> str:
+        if tool_name == "wizard_probe" and isinstance(result, dict):
+            validation = result.get("validation")
+            if isinstance(validation, dict) and validation.get("ok", False):
+                return "Rendered validated wizard YAML."
+            return "Rendered wizard YAML with validation issues."
+        if tool_name == "wizard_write" and isinstance(result, dict):
+            return f"Wrote {result.get('written_path')}"
+        return "Completed successfully."
 
     def _show_help(self) -> None:
         table = Table(show_header=True, box=None, padding=(0, 1))
@@ -1411,6 +1741,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._latest_dry_run_content = None
         self._job_cells.clear()
         self._rendered_run_results.clear()
+        self._latest_wizard_probe = None
         footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.IDLE)
         footer.set_hint("Enter to submit • /help for commands")

@@ -48,6 +48,11 @@ from chemsmart.agent.tui.events import (
     ToolUseEvent,
     parse_decision_event,
 )
+from chemsmart.agent.wizard import (
+    ProbeRunner,
+    run_wizard,
+    write_server_yaml,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -402,6 +407,81 @@ def sessions(show_all: bool):
 
 
 @agent.command()
+@click.argument("name")
+@click.option(
+    "--host",
+    "host",
+    default=None,
+    help="Optional SSH host or alias to probe remotely.",
+)
+@click.option(
+    "--write",
+    is_flag=True,
+    default=False,
+    help="Write the rendered YAML to ~/.chemsmart/server/<name>.yaml.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    help="Replace an existing ~/.chemsmart/server/<name>.yaml file.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    default=False,
+    help="Skip confirmation before writing the server YAML.",
+)
+def wizard(
+    name: str,
+    host: str | None,
+    write: bool,
+    overwrite: bool,
+    yes: bool,
+):
+    """Probe a target server and render or write a wizard YAML config."""
+    with _agent_command_logging():
+        if overwrite and not write:
+            raise click.ClickException("--overwrite requires --write")
+
+        outcome = run_wizard(
+            ProbeRunner,
+            server_name=name,
+            ssh_host_hint=host,
+            write=False,
+            overwrite=overwrite,
+        )
+
+        if not write:
+            click.echo(outcome.plan.text, nl=False)
+            if not outcome.validation.ok:
+                raise click.ClickException(
+                    _format_wizard_validation_errors(outcome.validation.errors)
+                )
+            return
+
+        if not outcome.validation.ok:
+            raise click.ClickException(
+                _format_wizard_validation_errors(outcome.validation.errors)
+            )
+
+        target = Path.home() / ".chemsmart" / "server" / f"{name}.yaml"
+        if not yes:
+            click.confirm(
+                f"Write wizard YAML to {target}?",
+                default=False,
+                abort=True,
+            )
+
+        written_path = write_server_yaml(
+            name=name,
+            yaml_text=outcome.plan.text,
+            overwrite=overwrite,
+        )
+        click.echo(f"Wrote {written_path}")
+
+
+@agent.command()
 def tools():
     """List registered agent tools."""
     with _agent_command_logging():
@@ -471,6 +551,14 @@ def _resume_session_or_fail(session_id: str, **kwargs):
             f"session '{session_id}' not found. List recent sessions with: "
             "chemsmart agent sessions"
         ) from exc
+
+
+def _format_wizard_validation_errors(errors: list[str]) -> str:
+    if not errors:
+        return "wizard output did not validate"
+    lines = ["wizard output did not validate:"]
+    lines.extend(f"- {error}" for error in errors)
+    return "\n".join(lines)
 
 
 def _load_session_snapshots(session_root: Path) -> list[dict[str, object]]:
