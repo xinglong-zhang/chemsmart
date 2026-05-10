@@ -16,6 +16,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.loop import ToolLoop, ToolLoopBudgets
 from chemsmart.agent.providers import (
     DEFAULT_TIMEOUT_S,
     extract_response_usage,
@@ -276,6 +277,161 @@ class AgentSession:
             allow_critic_override=allow_critic_override,
             rerender_plan=True,
         )
+
+    def run_loop(
+        self,
+        request: str,
+        *,
+        budgets: ToolLoopBudgets | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        log_raw_provider_turns: bool = False,
+    ) -> dict[str, Any]:
+        self._run_start_time = time.perf_counter()
+        self._llm_stats = []
+        if self.state is None or self.session_dir is None:
+            self._start_new_session(request)
+        else:
+            self._start_new_turn(request)
+        assert self.state is not None
+        assert self.decision_log is not None
+        assert self.handle_store is not None
+
+        self._save_state()
+        self.decision_log.write(
+            "request", {"request": request}, rationale=request
+        )
+        self._refresh_conversation_history()
+
+        provider = self._provider_instance()
+        provider_name = getattr(provider, "name", None) or "openai"
+        tool_defs = self._tool_defs_for_provider(provider_name)
+        if messages is None:
+            messages = [{"role": "user", "content": request}]
+        if budgets is None:
+            budgets = ToolLoopBudgets(
+                log_provider_turn_raw=log_raw_provider_turns
+            )
+        elif log_raw_provider_turns and not budgets.log_provider_turn_raw:
+            budgets = ToolLoopBudgets(
+                max_model_steps_per_turn=budgets.max_model_steps_per_turn,
+                max_total_tool_calls_per_turn=(
+                    budgets.max_total_tool_calls_per_turn
+                ),
+                max_consecutive_tool_errors=(
+                    budgets.max_consecutive_tool_errors
+                ),
+                max_same_signature_retries=(
+                    budgets.max_same_signature_retries
+                ),
+                log_provider_turn_raw=True,
+            )
+
+        loop = ToolLoop(
+            provider=provider,
+            registry=self.registry,
+            handle_store=self.handle_store,
+            decision_log=self.decision_log,
+            budgets=budgets,
+        )
+        loop_result = loop.run_turn(messages=messages, tool_defs=tool_defs)
+
+        tool_requests = loop_result["tool_requests"]
+        tool_outcomes = loop_result["tool_outcomes"]
+        results = [
+            (
+                outcome.raw_result
+                if outcome.raw_result is not None
+                else outcome.result
+            )
+            for outcome in tool_outcomes
+        ]
+        synthetic_plan = _synthetic_plan_from_tool_requests(tool_requests)
+        dry_run_results = [
+            outcome.raw_result
+            for outcome in tool_outcomes
+            if outcome.name == "dry_run_input"
+            and outcome.status == "ok"
+            and isinstance(outcome.raw_result, dict)
+        ]
+        runtime_result = next(
+            (
+                outcome.raw_result
+                for outcome in reversed(tool_outcomes)
+                if outcome.name == "validate_runtime"
+                and outcome.status == "ok"
+                and isinstance(outcome.raw_result, dict)
+            ),
+            None,
+        )
+
+        self.state.plan = synthetic_plan
+        self.state.request_intent = (
+            "chitchat"
+            if _is_chitchat_request(request) and not tool_requests
+            else "workflow" if tool_requests else "advisory"
+        )
+        self.state.total_steps_planned = len(tool_requests)
+        self.state.current_step_index = len(results)
+        self._save_state()
+
+        self._llm_stats = [
+            {
+                "stage": "tool_loop",
+                "attempt": 1,
+                "provider_name": provider_name,
+                "resolved_model": getattr(provider, "default_model", None),
+                "input_tokens": loop_result["total_input_tokens"],
+                "output_tokens": loop_result["total_output_tokens"],
+                "latency_ms": _elapsed_ms(self._run_start_time),
+                "success": True,
+            }
+        ]
+        self._finalize_session(
+            verdict=None,
+            blocked=False,
+            block_reason=loop_result["limit_reason"],
+            dry_run_results=dry_run_results,
+            advisory_only=not tool_requests,
+            is_chitchat=(_is_chitchat_request(request) and not tool_requests),
+            rationale=loop_result["assistant_text"] or "",
+        )
+        self._refresh_conversation_history()
+
+        return {
+            "session_id": self.state.session_id,
+            "session_dir": str(self.session_dir),
+            "plan": synthetic_plan,
+            "plan_text": render_plan(synthetic_plan),
+            "critic_verdict": None,
+            "completed_steps": self.state.current_step_index,
+            "blocked": False,
+            "dry_run_result": _primary_dry_run_result(dry_run_results),
+            "dry_run_results": dry_run_results,
+            "runtime_result": runtime_result,
+            "preview_submit": None,
+            "results": results,
+            "assistant_output": loop_result["assistant_text"],
+            "tool_requests": tool_requests,
+            "tool_outcomes": tool_outcomes,
+            "loop_state": {
+                "stop_reason": loop_result["stop_reason"],
+                "model_steps": loop_result["model_steps"],
+                "tool_calls": len(
+                    [
+                        outcome
+                        for outcome in tool_outcomes
+                        if outcome.status != "skipped"
+                    ]
+                ),
+                "limit_reason": loop_result["limit_reason"],
+            },
+            "final_message": loop_result["assistant_text"],
+            "limit_reason": loop_result["limit_reason"],
+            "advisory_only": not tool_requests,
+            "is_chitchat": (
+                _is_chitchat_request(request) and not tool_requests
+            ),
+        }
 
     def _continue_run(
         self,
@@ -966,12 +1122,24 @@ class AgentSession:
     def _tools_called(self) -> list[str]:
         tools: list[str] = []
         for entry in self._current_turn_entries():
-            if entry.get("kind") not in {"tool_call", "tool_preview"}:
+            if entry.get("kind") not in {
+                "tool_call",
+                "tool_preview",
+                "tool_use_request",
+            }:
                 continue
             tool = entry.get("payload", {}).get("tool")
             if isinstance(tool, str) and tool not in tools:
                 tools.append(tool)
         return tools
+
+    def _tool_defs_for_provider(
+        self,
+        provider_name: str,
+    ) -> list[dict[str, Any]]:
+        if hasattr(self.registry, "tool_defs_for_provider"):
+            return self.registry.tool_defs_for_provider(provider_name)
+        return self.registry.openai_tool_defs()
 
     def _metadata_provider_name(self) -> str:
         if self._llm_stats:
@@ -1287,6 +1455,22 @@ def render_plan(plan: Plan) -> str:
         if step.rationale:
             lines.append(f"   - {step.rationale}")
     return "\n".join(lines)
+
+
+def _synthetic_plan_from_tool_requests(tool_requests: list[Any]) -> Plan:
+    steps = [
+        Step(
+            tool=request.name,
+            args=dict(request.arguments),
+            rationale="",
+        )
+        for request in tool_requests
+    ]
+    return Plan(
+        steps=steps,
+        rationale="Synthetic plan projected from tool_use_request entries.",
+        intent="workflow" if steps else "advisory",
+    )
 
 
 def run_agent(request: str, **kwargs: Any) -> dict[str, Any]:

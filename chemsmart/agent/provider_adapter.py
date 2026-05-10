@@ -32,8 +32,10 @@ class ToolOutcome:
     status: ToolOutcomeStatus
     result: Any = None
     display_result: Any = None
+    raw_result: Any = None
     error_type: str | None = None
     error_message: str | None = None
+    handle_id: str | None = None
 
 
 def normalize_response(

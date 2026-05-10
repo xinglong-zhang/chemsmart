@@ -31,6 +31,24 @@ class ToolSpec:
     schema_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def openai_tool_def(self) -> dict[str, Any]:
+        schema = self._schema_with_overrides()
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": inspect.getdoc(self.func) or self.name,
+                "parameters": schema,
+            },
+        }
+
+    def anthropic_tool_def(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": inspect.getdoc(self.func) or self.name,
+            "input_schema": self._schema_with_overrides(),
+        }
+
+    def _schema_with_overrides(self) -> dict[str, Any]:
         schema = self.input_schema.model_json_schema()
         schema.pop("title", None)
         schema.pop("$defs", None)
@@ -44,14 +62,7 @@ class ToolSpec:
                 if key != "title"
             }
             properties[field_name].update(override)
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": inspect.getdoc(self.func) or self.name,
-                "parameters": schema,
-            },
-        }
+        return schema
 
 
 class ToolRegistry:
@@ -84,6 +95,16 @@ class ToolRegistry:
 
     def openai_tool_defs(self) -> list[dict[str, Any]]:
         return [tool.openai_tool_def() for tool in self.list_tools()]
+
+    def anthropic_tool_defs(self) -> list[dict[str, Any]]:
+        return [tool.anthropic_tool_def() for tool in self.list_tools()]
+
+    def tool_defs_for_provider(
+        self, provider_name: str
+    ) -> list[dict[str, Any]]:
+        if provider_name == "anthropic":
+            return self.anthropic_tool_defs()
+        return self.openai_tool_defs()
 
     def normalize_args(
         self,
