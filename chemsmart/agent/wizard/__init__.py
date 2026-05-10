@@ -8,6 +8,23 @@ from chemsmart.agent.wizard.probe import (
     ProbeResult,
     ProbeRunner,
 )
+from chemsmart.agent.wizard.project import (
+    ProjectFinding,
+    discover_project,
+)
+from chemsmart.agent.wizard.scratch import (
+    ScratchFinding,
+    discover_scratch,
+)
+from chemsmart.agent.wizard.software import (
+    ModuleSystem,
+    ProgramFinding,
+    SoftwareSurvey,
+    detect_module_system,
+    discover_conda,
+    find_program,
+    run_software_survey,
+)
 from chemsmart.agent.wizard.survey import (
     AmbiguousSchedulerError,
     ScheduleSurvey,
@@ -22,14 +39,25 @@ from chemsmart.agent.wizard.topology import (
 __all__ = [
     "ALLOWED_COMMANDS",
     "AmbiguousSchedulerError",
+    "ModuleSystem",
     "NoTargetError",
     "ProbeError",
     "ProbeResult",
     "ProbeRunner",
+    "ProgramFinding",
+    "ProjectFinding",
     "QueueFacts",
     "ScheduleSurvey",
+    "ScratchFinding",
+    "SoftwareSurvey",
     "Topology",
     "choose_queue",
+    "detect_module_system",
     "detect_topology",
+    "discover_conda",
+    "discover_project",
+    "discover_scratch",
+    "find_program",
     "run_schedule_survey",
+    "run_software_survey",
 ]
