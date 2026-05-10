@@ -5,9 +5,15 @@ from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.permissions import (
+    ApprovalDecision,
+    PermissionMode,
+    PermissionPolicy,
+    ResolvedDecision,
+)
 from chemsmart.agent.provider_adapter import (
     ToolOutcome,
     ToolRequest,
@@ -38,12 +44,16 @@ class ToolLoop:
         handle_store: HandleStore | None,
         decision_log: Any,
         budgets: ToolLoopBudgets | None = None,
+        policy: PermissionPolicy | None = None,
+        approver: Callable[[ToolRequest], ApprovalDecision] | None = None,
     ) -> None:
         self.provider = provider
         self.registry = registry
         self.handle_store = handle_store
         self.decision_log = decision_log
         self.budgets = budgets or ToolLoopBudgets()
+        self.policy = policy or PermissionPolicy(mode=PermissionMode.DRIVING)
+        self.approver = approver
 
     def run_turn(
         self,
@@ -63,6 +73,8 @@ class ToolLoop:
         signature_counts: Counter[tuple[str, str]] = Counter()
         tool_requests: list[ToolRequest] = []
         tool_outcomes: list[ToolOutcome] = []
+        approvals_count = 0
+        denials_count = 0
 
         while True:
             if model_steps >= self.budgets.max_model_steps_per_turn:
@@ -158,10 +170,17 @@ class ToolLoop:
                     stop_index = request_index
                     break
 
-                outcome = self._execute_request(model_steps, request)
+                outcome, approved = self._run_one_request(
+                    model_steps,
+                    request,
+                )
                 step_outcomes.append(outcome)
                 tool_outcomes.append(outcome)
-                tool_calls += 1
+                if approved:
+                    approvals_count += 1
+                    tool_calls += 1
+                elif outcome.status == "denied":
+                    denials_count += 1
 
                 if outcome.status == "error":
                     consecutive_tool_errors += 1
@@ -226,7 +245,68 @@ class ToolLoop:
             "total_input_tokens": total_input_tokens,
             "total_output_tokens": total_output_tokens,
             "messages": history,
+            "approvals_count": approvals_count,
+            "denials_count": denials_count,
         }
+
+    def _run_one_request(
+        self,
+        step: int,
+        request: ToolRequest,
+    ) -> tuple[ToolOutcome, bool]:
+        resolved = self.policy.resolve(request)
+        if resolved.decision == ResolvedDecision.AUTO_DENY:
+            return (
+                self._deny_request(
+                    step,
+                    request,
+                    reason=resolved.reason,
+                ),
+                False,
+            )
+
+        if resolved.decision == ResolvedDecision.NEEDS_USER:
+            if self.approver is None:
+                return (
+                    self._deny_request(
+                        step,
+                        request,
+                        reason="no_approver",
+                    ),
+                    False,
+                )
+
+            approval = self.approver(request)
+            if approval == ApprovalDecision.DENY:
+                return (
+                    self._deny_request(
+                        step,
+                        request,
+                        reason="user_denied",
+                    ),
+                    False,
+                )
+
+            self.policy.record(request.name, approval)
+            self._log_approved(
+                step,
+                request,
+                scope=(
+                    "session"
+                    if approval == ApprovalDecision.ALLOW_SESSION
+                    else "once"
+                ),
+                source="approver",
+            )
+            return self._execute_request(step, request), True
+
+        self._log_approved(
+            step,
+            request,
+            scope="session" if resolved.reason == "session_rule" else "auto",
+            source=resolved.reason,
+        )
+        return self._execute_request(step, request), True
 
     def _execute_request(
         self,
@@ -291,6 +371,70 @@ class ToolLoop:
             },
         )
         return outcome
+
+    def _deny_request(
+        self,
+        step: int,
+        request: ToolRequest,
+        *,
+        reason: str,
+    ) -> ToolOutcome:
+        self.decision_log.write(
+            "tool_use_denied",
+            {
+                "step": step,
+                "provider_call_id": request.provider_call_id,
+                "tool": request.name,
+                "mode": self.policy.mode.value,
+                "reason": reason,
+            },
+        )
+        outcome = ToolOutcome(
+            request_id=request.request_id,
+            provider_call_id=request.provider_call_id,
+            name=request.name,
+            status="denied",
+            error_type="PermissionDenied",
+            error_message=reason,
+        )
+        self.decision_log.write(
+            "tool_use_result",
+            {
+                "step": step,
+                "provider_call_id": request.provider_call_id,
+                "tool": request.name,
+                "status": outcome.status,
+                "payload": {
+                    "ok": False,
+                    "error": {
+                        "type": outcome.error_type,
+                        "message": reason,
+                        "tool": request.name,
+                    },
+                },
+                "handle_id": None,
+            },
+        )
+        return outcome
+
+    def _log_approved(
+        self,
+        step: int,
+        request: ToolRequest,
+        *,
+        scope: str,
+        source: str,
+    ) -> None:
+        self.decision_log.write(
+            "tool_use_approved",
+            {
+                "step": step,
+                "provider_call_id": request.provider_call_id,
+                "tool": request.name,
+                "scope": scope,
+                "source": source,
+            },
+        )
 
     def _error_outcome(
         self,

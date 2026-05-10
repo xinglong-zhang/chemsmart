@@ -11,12 +11,18 @@ import uuid
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from chemsmart.agent.handles import HandleStore, is_handle_id
 from chemsmart.agent.loop import ToolLoop, ToolLoopBudgets
+from chemsmart.agent.permissions import (
+    ApprovalDecision,
+    PermissionMode,
+    PermissionPolicy,
+)
+from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.providers import (
     DEFAULT_TIMEOUT_S,
     extract_response_usage,
@@ -176,6 +182,7 @@ class AgentSession:
         self.conversation_history = ConversationMemory()
         self._run_start_time: float | None = None
         self._llm_stats: list[dict[str, Any]] = []
+        self._loop_mode_state: tuple[str, bool] | None = None
 
     @classmethod
     def load(
@@ -285,6 +292,8 @@ class AgentSession:
         budgets: ToolLoopBudgets | None = None,
         messages: list[dict[str, Any]] | None = None,
         log_raw_provider_turns: bool = False,
+        policy: PermissionPolicy | None = None,
+        approver: Callable[[ToolRequest], ApprovalDecision] | None = None,
     ) -> dict[str, Any]:
         self._run_start_time = time.perf_counter()
         self._llm_stats = []
@@ -305,6 +314,8 @@ class AgentSession:
         provider = self._provider_instance()
         provider_name = getattr(provider, "name", None) or "openai"
         tool_defs = self._tool_defs_for_provider(provider_name)
+        policy = policy or PermissionPolicy(mode=PermissionMode.DRIVING)
+        self._log_loop_mode(policy)
         if messages is None:
             messages = [{"role": "user", "content": request}]
         if budgets is None:
@@ -332,6 +343,8 @@ class AgentSession:
             handle_store=self.handle_store,
             decision_log=self.decision_log,
             budgets=budgets,
+            policy=policy,
+            approver=approver,
         )
         loop_result = loop.run_turn(messages=messages, tool_defs=tool_defs)
 
@@ -431,6 +444,11 @@ class AgentSession:
             "is_chitchat": (
                 _is_chitchat_request(request) and not tool_requests
             ),
+            "approval_mode": policy.mode.value,
+            "driving_mode": policy.mode == PermissionMode.DRIVING,
+            "yolo": policy.yolo,
+            "denials_count": loop_result["denials_count"],
+            "approvals_count": loop_result["approvals_count"],
         }
 
     def _continue_run(
@@ -1140,6 +1158,23 @@ class AgentSession:
         if hasattr(self.registry, "tool_defs_for_provider"):
             return self.registry.tool_defs_for_provider(provider_name)
         return self.registry.openai_tool_defs()
+
+    def _log_loop_mode(self, policy: PermissionPolicy) -> None:
+        assert self.decision_log is not None
+
+        from_mode = None
+        if self._loop_mode_state is not None:
+            from_mode = self._loop_mode_state[0]
+
+        self.decision_log.write(
+            "mode_change",
+            {
+                "from_mode": from_mode,
+                "to_mode": policy.mode.value,
+                "yolo": policy.yolo,
+            },
+        )
+        self._loop_mode_state = (policy.mode.value, policy.yolo)
 
     def _metadata_provider_name(self) -> str:
         if self._llm_stats:

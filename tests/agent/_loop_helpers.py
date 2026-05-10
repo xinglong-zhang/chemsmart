@@ -74,6 +74,30 @@ def openai_final_response(text: str) -> dict[str, Any]:
     }
 
 
+def anthropic_tool_use_response(
+    *tool_uses: dict[str, Any],
+    text: str = "",
+    stop_reason: str = "tool_use",
+) -> dict[str, Any]:
+    content = []
+    if text:
+        content.append({"type": "text", "text": text})
+    content.extend(tool_uses)
+    return {
+        "content": content,
+        "stop_reason": stop_reason,
+        "usage": {"input_tokens": 10, "output_tokens": 5},
+    }
+
+
+def anthropic_final_response(text: str) -> dict[str, Any]:
+    return {
+        "content": [{"type": "text", "text": text}],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 8, "output_tokens": 4},
+    }
+
+
 def tool_call(
     call_id: str,
     name: str,
@@ -86,4 +110,17 @@ def tool_call(
             "name": name,
             "arguments": json.dumps(arguments, sort_keys=True),
         },
+    }
+
+
+def anthropic_tool_use(
+    call_id: str,
+    name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "type": "tool_use",
+        "id": call_id,
+        "name": name,
+        "input": arguments,
     }

@@ -52,6 +52,7 @@ def test_tool_loop_writes_new_decision_log_kinds_in_order(tmp_path):
         "provider_turn_raw",
         "assistant_turn",
         "tool_use_request",
+        "tool_use_approved",
         "tool_use_result",
         "provider_turn_raw",
         "assistant_turn",
