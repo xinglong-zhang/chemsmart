@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-_API_ENV_PATH = "/Users/hongjiseung/developer/chemsmart/api.env"
 _GATEWAY_URL_OPENAI = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 _GATEWAY_URL_ANTHROPIC = (
     "https://factchat-cloud.mindlogic.ai/v1/gateway/claude"
@@ -135,6 +135,25 @@ class OpenAIProvider:
         }
 
 
+def _resolve_api_env_path(explicit: str | None) -> str | None:
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    env_path = os.environ.get("CHEMSMART_API_ENV")
+    if isinstance(env_path, str) and env_path.strip():
+        return env_path.strip()
+
+    candidates = (
+        Path.home() / ".chemsmart" / "api.env",
+        Path.cwd() / "api.env",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+
+    return None
+
+
 def get_provider(
     env_path: Optional[str] = None,
 ) -> AnthropicProvider | OpenAIProvider:
@@ -142,8 +161,7 @@ def get_provider(
 
     Validates AI_PROVIDER and ai_api_key before constructing the provider.
     """
-    if env_path is None:
-        env_path = _API_ENV_PATH
+    env_path = _resolve_api_env_path(env_path)
 
     provider_name = os.environ.get("AI_PROVIDER")
     if not provider_name or not provider_name.strip():
@@ -156,7 +174,8 @@ def get_provider(
             f"supported: {sorted(_SUPPORTED)}"
         )
 
-    load_dotenv(env_path, override=True)
+    if env_path is not None:
+        load_dotenv(env_path, override=True)
     api_key = os.environ.get("ai_api_key", "").strip()
     if not api_key:
         raise ProviderError("api.env: ai_api_key is empty or missing")

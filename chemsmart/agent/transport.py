@@ -113,6 +113,12 @@ def build_submit_invocation(script_path, working_dir, server):
 
 
 def _server_host(server) -> str:
+    kwargs = getattr(server, "kwargs", None)
+    if isinstance(kwargs, dict):
+        host = kwargs.get("HOST")
+        if isinstance(host, str) and host.strip():
+            return host.strip()
+
     name = getattr(server, "name", None)
     if isinstance(name, str) and name.strip():
         basename = os.path.basename(name.strip())

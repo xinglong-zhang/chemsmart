@@ -7,6 +7,8 @@ SERVER:
     NUM_GPUS: 0
     NUM_THREADS: 64
     SUBMIT_COMMAND: sbatch
+    # HOST: login.cluster.example.edu
+    # explicit SSH alias; defaults to filename stem
     ##PROJECT: 13003611
     ##PROJECT: 13002374
     SCRATCH_DIR: null

@@ -20,9 +20,7 @@ def test_doctor_no_ping_skips_provider_ping(monkeypatch, tmp_path):
     env_file.write_text("ai_api_key=testkey12345678901234567890\n")
 
     monkeypatch.setenv("AI_PROVIDER", "openai")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", str(env_file)
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", str(env_file))
 
     ping_calls = {"count": 0}
 
@@ -56,9 +54,7 @@ def test_doctor_ping_failure_exits_nonzero(monkeypatch, tmp_path):
     env_file.write_text("ai_api_key=testkey12345678901234567890\n")
 
     monkeypatch.setenv("AI_PROVIDER", "openai")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", str(env_file)
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", str(env_file))
     monkeypatch.setattr(
         "chemsmart.agent.providers.OpenAIProvider.ping",
         lambda self: (_ for _ in ()).throw(ProviderError("boom")),

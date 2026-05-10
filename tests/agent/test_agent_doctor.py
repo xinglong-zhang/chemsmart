@@ -30,9 +30,7 @@ def api_env_file(tmp_path):
 def test_doctor_valid_anthropic(monkeypatch, api_env_file):
     """valid api.env + AI_PROVIDER=anthropic -> green output."""
     monkeypatch.setenv("AI_PROVIDER", "anthropic")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
     monkeypatch.setattr(
         "chemsmart.agent.providers.AnthropicProvider.ping",
         lambda self: _PING_RESULT,
@@ -63,9 +61,7 @@ def test_doctor_valid_anthropic(monkeypatch, api_env_file):
 def test_doctor_valid_openai(monkeypatch, api_env_file):
     """AI_PROVIDER=openai + valid api.env -> green output."""
     monkeypatch.setenv("AI_PROVIDER", "openai")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
     monkeypatch.setattr(
         "chemsmart.agent.providers.OpenAIProvider.ping",
         lambda self: _PING_RESULT,
@@ -94,9 +90,7 @@ def test_doctor_default_output_has_no_debug_or_warnings(
 ):
     """Default doctor output should be quiet while still capturing logs."""
     monkeypatch.setenv("AI_PROVIDER", "openai")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
     monkeypatch.setattr(
         "chemsmart.agent.cli._default_session_root",
         lambda: str(tmp_path / "sessions"),
@@ -141,9 +135,7 @@ def test_doctor_default_output_has_no_debug_or_warnings(
 def test_doctor_verbose_emits_debug(monkeypatch, api_env_file, caplog):
     """--verbose should keep DEBUG output on the console."""
     monkeypatch.setenv("AI_PROVIDER", "openai")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
 
     def verbose_ping(self):
         logging.getLogger("openai.http").debug("verbose doctor debug")
@@ -168,9 +160,7 @@ def test_doctor_verbose_emits_debug(monkeypatch, api_env_file, caplog):
 def test_doctor_no_ping_reports_skip(monkeypatch, api_env_file):
     """doctor --no-ping prints skip and still succeeds."""
     monkeypatch.setenv("AI_PROVIDER", "openai")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
 
     def _ping_should_not_run(self):  # pragma: no cover - defensive
         raise AssertionError("ping should not run when --no-ping is used")
@@ -194,9 +184,7 @@ def test_doctor_no_ping_reports_skip(monkeypatch, api_env_file):
 def test_doctor_missing_ai_provider(monkeypatch, api_env_file):
     """Missing AI_PROVIDER -> exit != 0, message names env var."""
     monkeypatch.delenv("AI_PROVIDER", raising=False)
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
 
     runner = CliRunner()
     result = runner.invoke(agent, ["doctor"])
@@ -211,9 +199,7 @@ def test_doctor_empty_api_key(monkeypatch, tmp_path):
     env_file.write_text("ai_api_key=\n")
 
     monkeypatch.setenv("AI_PROVIDER", "anthropic")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", str(env_file)
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", str(env_file))
 
     runner = CliRunner()
     result = runner.invoke(agent, ["doctor"])
@@ -225,9 +211,7 @@ def test_doctor_empty_api_key(monkeypatch, tmp_path):
 def test_doctor_unsupported_provider(monkeypatch, api_env_file):
     """Unsupported AI_PROVIDER -> exit != 0, lists supported providers."""
     monkeypatch.setenv("AI_PROVIDER", "azure")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
 
     runner = CliRunner()
     result = runner.invoke(agent, ["doctor"])
@@ -241,9 +225,7 @@ def test_doctor_unsupported_provider(monkeypatch, api_env_file):
 def test_doctor_unsupported_now_lists_both(monkeypatch, api_env_file):
     """Unsupported AI_PROVIDER now lists Anthropic and OpenAI."""
     monkeypatch.setenv("AI_PROVIDER", "bedrock")
-    monkeypatch.setattr(
-        "chemsmart.agent.providers._API_ENV_PATH", api_env_file
-    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", api_env_file)
 
     runner = CliRunner()
     result = runner.invoke(agent, ["doctor"])
