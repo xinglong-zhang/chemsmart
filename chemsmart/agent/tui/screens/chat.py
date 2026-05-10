@@ -959,6 +959,14 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 footer.set_phase(Phase.IDLE)
                 footer.set_hint("Ready")
                 return
+            if (
+                not event.blocked
+                and event.total_steps_planned == 0
+                and event.total_steps_executed == 0
+            ):
+                footer.set_phase(Phase.IDLE)
+                footer.set_hint("Ready")
+                return
             footer.set_phase(Phase.ERROR if event.blocked else Phase.FINISHED)
             footer.set_hint(
                 "Blocked" if event.blocked else "Finished successfully"
@@ -967,7 +975,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 f"Session finished ({event.total_steps_executed}/"
                 f"{event.total_steps_planned} steps)."
             )
-            if event.block_reason:
+            if event.blocked and event.block_reason:
                 summary += f" Block reason: {event.block_reason}."
             transcript.add_cell(AgentMessageCell(summary, title="Summary"))
         elif isinstance(event, IgnoredEvent):

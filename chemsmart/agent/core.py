@@ -65,6 +65,15 @@ _CHITCHAT_EXACT_PATTERNS = (
     r"who are you\??",
     r"help\??",
 )
+_CHITCHAT_IDENTITY_PATTERNS = (
+    r"(?:hi|hello|hey)[!.,? ]*(?:what(?:'s| is) your name|who are you|what are you|introduce yourself)[!.,? ]*",
+    r"what(?:'s| is) your name[!.,? ]*",
+    r"who are you[!.,? ]*",
+    r"what are you[!.,? ]*",
+    r"introduce yourself[!.,? ]*",
+    r"tell me about yourself[!.,? ]*",
+    r"which (?:model|llm|ai) (?:are you|do you use)[!.,? ]*",
+)
 _CHITCHAT_TOKENS = {
     "hello",
     "hey",
@@ -1580,6 +1589,11 @@ def _is_chitchat_request(request: str) -> bool:
     normalized = re.sub(r"\s+", " ", request).strip().lower()
     if not normalized:
         return False
+    if any(
+        re.fullmatch(pattern, normalized)
+        for pattern in _CHITCHAT_IDENTITY_PATTERNS
+    ):
+        return True
     if any(
         re.fullmatch(pattern, normalized)
         for pattern in _CHITCHAT_EXACT_PATTERNS
