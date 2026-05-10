@@ -1,5 +1,6 @@
 from chemsmart.agent.wizard.normalize import (
     FALLBACK_NUM_HOURS,
+    WALLTIME_SANITY_CEILING_HOURS,
     choose_queue,
     normalize_resources,
     normalize_walltime,
@@ -41,10 +42,34 @@ def test_choose_queue_returns_none_without_non_gpu_candidate():
     )
 
 
-def test_normalize_walltime_caps_to_fallback_hours():
+def test_normalize_walltime_caps_max_to_sanity_ceiling():
     assert (
         normalize_walltime(_queue("long", max_walltime_hours=240))
-        == FALLBACK_NUM_HOURS
+        == WALLTIME_SANITY_CEILING_HOURS
+    )
+
+
+def test_normalize_walltime_prefers_queue_default_without_cap():
+    assert (
+        normalize_walltime(
+            _queue("long", default_walltime_hours=48, max_walltime_hours=72)
+        )
+        == 48
+    )
+
+
+def test_normalize_walltime_uses_queue_max_when_default_missing():
+    assert normalize_walltime(_queue("long", max_walltime_hours=72)) == 72
+
+
+def test_normalize_walltime_falls_back_when_queue_lacks_limits():
+    assert normalize_walltime(_queue("long")) == FALLBACK_NUM_HOURS
+
+
+def test_normalize_walltime_caps_large_queue_max_to_sanity_ceiling():
+    assert (
+        normalize_walltime(_queue("long", max_walltime_hours=720))
+        == WALLTIME_SANITY_CEILING_HOURS
     )
 
 

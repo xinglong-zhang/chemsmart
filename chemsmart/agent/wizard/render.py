@@ -8,7 +8,8 @@ Canonical wizard schema mirrors the normalized server templates under
   ``NUM_HOURS``, ``MEM_GB``, ``NUM_CORES``, ``NUM_GPUS``,
   ``NUM_THREADS``, ``SUBMIT_COMMAND``, ``HOST``, optional ``PROJECT``,
   ``SCRATCH_DIR``, ``USE_HOSTS``, and ``EXTRA_COMMANDS``.
-- Program blocks use ``EXEFOLDER``, ``LOCAL_RUN``, ``SCRATCH``,
+- Program blocks use ``EXEFOLDER``, ``LOCAL_RUN``, ``SCRATCH`` (True iff
+  scratch is writable),
   ``CONDA_ENV``, ``MODULES``, optional ``SCRIPTS``, and ``ENVARS``.
 """
 
@@ -113,8 +114,8 @@ def render_server_yaml(
 
     if not scratch_finding.writable:
         notes.append(
-            "Program SCRATCH kept True despite scratch probe not confirming "
-            "writability."
+            "Program SCRATCH set to False because scratch probe could not "
+            "confirm writability."
         )
 
     program_blocks = _render_program_blocks(
@@ -170,6 +171,7 @@ def _render_program_blocks(
         program_blocks[block_name] = _render_program_block(
             block_name=block_name,
             finding=finding,
+            scratch_writable=scratch_finding.writable,
             conda_env=software_survey.conda_env,
             scratch_dir=scratch_finding.path,
             notes=notes,
@@ -180,6 +182,7 @@ def _render_program_blocks(
 def _render_program_block(
     block_name: str,
     finding,
+    scratch_writable: bool,
     conda_env: str | None,
     scratch_dir: str | None,
     notes: list[str],
@@ -187,7 +190,7 @@ def _render_program_block(
     block: dict[str, object] = {
         "EXEFOLDER": finding.exefolder,
         "LOCAL_RUN": _LOCAL_RUN_DEFAULTS[block_name],
-        "SCRATCH": True,
+        "SCRATCH": bool(scratch_writable),
         "CONDA_ENV": conda_env,
         "MODULES": "" if finding.on_path else _render_modules(finding),
         "ENVARS": _render_envars(block_name, finding.exefolder, scratch_dir),

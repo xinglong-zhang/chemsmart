@@ -132,14 +132,75 @@ def test_render_server_yaml_mode_a_applies_required_decisions():
     assert parsed["SERVER"]["HOST"] == "localhost"
     assert plan.server_block["PROJECT"] == "chem-123"
     assert parsed["SERVER"]["PROJECT"] == "chem-123"
-    assert plan.program_blocks["GAUSSIAN"]["SCRATCH"] is True
+    assert plan.program_blocks["GAUSSIAN"]["SCRATCH"] is False
+    assert parsed["GAUSSIAN"]["SCRATCH"] is False
     assert plan.program_blocks["GAUSSIAN"]["EXEFOLDER"] == "/apps/gaussian"
     assert plan.program_blocks["GAUSSIAN"]["MODULES"] == ""
     assert (
         plan.server_block["EXTRA_COMMANDS"]
         == "export PATH=/opt/chemsmart/bin:$PATH"
     )
-    assert any("SCRATCH kept True" in note for note in plan.notes)
+    assert any("SCRATCH set to False" in note for note in plan.notes)
+
+
+def test_render_server_yaml_keeps_program_scratch_true_when_writable():
+    plan = render_server_yaml(
+        Topology(mode="B", host="cluster", evidence=[]),
+        _schedule_survey(),
+        _software_survey(),
+        ScratchFinding(
+            path="/scratch/user",
+            source="env:SCRATCH",
+            writable=True,
+            candidates=[("env:SCRATCH", "/scratch/user")],
+        ),
+        ProjectFinding(
+            project="chem-123",
+            source="sacctmgr",
+            candidates=["chem-123"],
+        ),
+    )
+
+    parsed = yaml.safe_load(plan.text)
+
+    assert all(
+        block["SCRATCH"] is True for block in plan.program_blocks.values()
+    )
+    assert all(
+        parsed[block_name]["SCRATCH"] is True
+        for block_name in ["GAUSSIAN", "ORCA", "NCIPLOT"]
+    )
+    assert not any("SCRATCH set to False" in note for note in plan.notes)
+
+
+def test_render_server_yaml_sets_all_program_scratch_false_when_unwritable():
+    plan = render_server_yaml(
+        Topology(mode="B", host="cluster", evidence=[]),
+        _schedule_survey(),
+        _software_survey(),
+        ScratchFinding(
+            path="/scratch/user",
+            source="env:SCRATCH",
+            writable=False,
+            candidates=[("env:SCRATCH", "/scratch/user")],
+        ),
+        ProjectFinding(
+            project="chem-123",
+            source="sacctmgr",
+            candidates=["chem-123"],
+        ),
+    )
+
+    parsed = yaml.safe_load(plan.text)
+
+    assert all(
+        block["SCRATCH"] is False for block in plan.program_blocks.values()
+    )
+    assert all(
+        parsed[block_name]["SCRATCH"] is False
+        for block_name in ["GAUSSIAN", "ORCA", "NCIPLOT"]
+    )
+    assert any("SCRATCH set to False" in note for note in plan.notes)
 
 
 def test_render_server_yaml_comments_groups_project_in_text():

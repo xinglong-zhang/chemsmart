@@ -11,6 +11,7 @@ SCHEDULER_SUBMIT = {
     "SGE": "qsub",
 }
 FALLBACK_NUM_HOURS = 24
+WALLTIME_SANITY_CEILING_HOURS = 168
 
 
 def choose_queue(queues: list[QueueFacts]) -> str | None:
@@ -35,11 +36,15 @@ def choose_queue(queues: list[QueueFacts]) -> str | None:
 
 
 def normalize_walltime(queue: QueueFacts) -> int:
-    """Return a conservative walltime in hours for the selected queue."""
+    """Return a queue-aware walltime in hours for the selected queue."""
 
-    for value in [queue.default_walltime_hours, queue.max_walltime_hours]:
-        if value is not None and value > 0:
-            return min(value, FALLBACK_NUM_HOURS)
+    if (
+        queue.default_walltime_hours is not None
+        and queue.default_walltime_hours > 0
+    ):
+        return queue.default_walltime_hours
+    if queue.max_walltime_hours is not None and queue.max_walltime_hours > 0:
+        return min(queue.max_walltime_hours, WALLTIME_SANITY_CEILING_HOURS)
     return FALLBACK_NUM_HOURS
 
 
