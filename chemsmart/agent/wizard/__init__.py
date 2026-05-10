@@ -1,4 +1,4 @@
-"""Wizard probe and scheduler survey exports."""
+"""Wizard probe, survey, render, and validation exports."""
 
 from chemsmart.agent.wizard.normalize import choose_queue
 from chemsmart.agent.wizard.parsers import QueueFacts
@@ -11,6 +11,10 @@ from chemsmart.agent.wizard.probe import (
 from chemsmart.agent.wizard.project import (
     ProjectFinding,
     discover_project,
+)
+from chemsmart.agent.wizard.render import (
+    ServerYamlPlan,
+    render_server_yaml,
 )
 from chemsmart.agent.wizard.scratch import (
     ScratchFinding,
@@ -35,6 +39,10 @@ from chemsmart.agent.wizard.topology import (
     Topology,
     detect_topology,
 )
+from chemsmart.agent.wizard.validate import (
+    ValidationResult,
+    validate_server_yaml,
+)
 
 __all__ = [
     "ALLOWED_COMMANDS",
@@ -47,10 +55,12 @@ __all__ = [
     "ProgramFinding",
     "ProjectFinding",
     "QueueFacts",
+    "ServerYamlPlan",
     "ScheduleSurvey",
     "ScratchFinding",
     "SoftwareSurvey",
     "Topology",
+    "ValidationResult",
     "choose_queue",
     "detect_module_system",
     "detect_topology",
@@ -58,6 +68,8 @@ __all__ = [
     "discover_project",
     "discover_scratch",
     "find_program",
+    "render_server_yaml",
     "run_schedule_survey",
     "run_software_survey",
+    "validate_server_yaml",
 ]
