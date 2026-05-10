@@ -51,17 +51,19 @@ def _result(command, stdout="", returncode=0):
     )
 
 
-def test_discover_scratch_prefers_scratch_env_var():
+def test_discover_scratch_prefers_scratch_env_var(monkeypatch):
+    monkeypatch.delenv("TMPDIR", raising=False)
+    monkeypatch.delenv("WORK", raising=False)
+    monkeypatch.delenv("SCRATCH", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
     runner = StubRunner(
         local_results={
-            ("printf", "%s\\n", "$SCRATCH", "$WORK", "$TMPDIR"): _result(
-                "printf %s\\n $SCRATCH $WORK $TMPDIR",
-                "/scratch/user\n/work/user\n/tmp/user\n",
+            ("printenv", "SCRATCH"): _result(
+                "printenv SCRATCH",
+                "/scratch/user\n",
             ),
-            ("test", "-d", "~/scratch", "-a", "-w", "~/scratch"): _result(
-                "test -d ~/scratch -a -w ~/scratch",
-                returncode=1,
-            ),
+            ("printenv", "WORK"): _result("printenv WORK", "/work/user\n"),
+            ("printenv", "TMPDIR"): _result("printenv TMPDIR", "/tmp/user\n"),
             ("test", "-w", "/scratch/user"): _result("test -w /scratch/user"),
         }
     )
@@ -80,17 +82,30 @@ def test_discover_scratch_prefers_scratch_env_var():
     )
 
 
-def test_discover_scratch_falls_back_to_home_scratch():
+def test_discover_scratch_falls_back_to_home_scratch(monkeypatch):
+    monkeypatch.delenv("TMPDIR", raising=False)
+    monkeypatch.delenv("WORK", raising=False)
+    monkeypatch.delenv("SCRATCH", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
     runner = StubRunner(
         local_results={
-            ("printf", "%s\\n", "$SCRATCH", "$WORK", "$TMPDIR"): _result(
-                "printf %s\\n $SCRATCH $WORK $TMPDIR",
-                "\n\n\n",
+            ("printenv", "SCRATCH"): _result("printenv SCRATCH", "\n", 1),
+            ("printenv", "WORK"): _result("printenv WORK", "\n", 1),
+            ("printenv", "TMPDIR"): _result("printenv TMPDIR", "\n", 1),
+            ("printenv", "HOME"): _result("printenv HOME", "/home/tester\n"),
+            (
+                "test",
+                "-d",
+                "/home/tester/scratch",
+                "-a",
+                "-w",
+                "/home/tester/scratch",
+            ): _result(
+                "test -d /home/tester/scratch -a -w /home/tester/scratch"
             ),
-            ("test", "-d", "~/scratch", "-a", "-w", "~/scratch"): _result(
-                "test -d ~/scratch -a -w ~/scratch"
+            ("test", "-w", "/home/tester/scratch"): _result(
+                "test -w /home/tester/scratch"
             ),
-            ("test", "-w", "~/scratch"): _result("test -w ~/scratch"),
         }
     )
 
@@ -104,15 +119,26 @@ def test_discover_scratch_falls_back_to_home_scratch():
     )
 
 
-def test_discover_scratch_returns_none_when_no_candidate_exists():
+def test_discover_scratch_returns_none_when_no_candidate_exists(monkeypatch):
+    monkeypatch.delenv("TMPDIR", raising=False)
+    monkeypatch.delenv("WORK", raising=False)
+    monkeypatch.delenv("SCRATCH", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
     runner = StubRunner(
         local_results={
-            ("printf", "%s\\n", "$SCRATCH", "$WORK", "$TMPDIR"): _result(
-                "printf %s\\n $SCRATCH $WORK $TMPDIR",
-                "\n\n\n",
-            ),
-            ("test", "-d", "~/scratch", "-a", "-w", "~/scratch"): _result(
-                "test -d ~/scratch -a -w ~/scratch",
+            ("printenv", "SCRATCH"): _result("printenv SCRATCH", "\n", 1),
+            ("printenv", "WORK"): _result("printenv WORK", "\n", 1),
+            ("printenv", "TMPDIR"): _result("printenv TMPDIR", "\n", 1),
+            ("printenv", "HOME"): _result("printenv HOME", "/home/tester\n"),
+            (
+                "test",
+                "-d",
+                "/home/tester/scratch",
+                "-a",
+                "-w",
+                "/home/tester/scratch",
+            ): _result(
+                "test -d /home/tester/scratch -a -w /home/tester/scratch",
                 returncode=1,
             ),
         }

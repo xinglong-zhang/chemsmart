@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from chemsmart.agent.wizard.probe import ALL_PROBE_SPECS, run_local_probe
+
 _ENV_PATTERN = re.compile(r"^(SLURM_|PBS_|LSB_|SGE_)")
 
 
@@ -19,11 +21,11 @@ class NoTargetError(Exception):
     """Raised when no local or remote scheduler target can be inferred."""
 
 
-_LOCAL_SCHEDULER_COMMANDS = [
-    ["sinfo"],
-    ["qstat"],
-    ["bqueues"],
-    ["qconf"],
+_LOCAL_SCHEDULER_PROBES = [
+    ALL_PROBE_SPECS["topology.sinfo"],
+    ALL_PROBE_SPECS["topology.qstat"],
+    ALL_PROBE_SPECS["topology.bqueues"],
+    ALL_PROBE_SPECS["topology.qconf"],
 ]
 
 
@@ -31,7 +33,9 @@ def detect_topology(runner, ssh_host_hint: str | None = None) -> Topology:
     """Detect whether scheduler probes should run locally or over SSH."""
 
     evidence: list[str] = []
-    env_result = runner.run_local(["env"])
+    env_result = run_local_probe(
+        runner, ALL_PROBE_SPECS["common.printenv_all"]
+    )
     if env_result.returncode == 0:
         matches = [
             line.split("=", 1)[0]
@@ -42,10 +46,10 @@ def detect_topology(runner, ssh_host_hint: str | None = None) -> Topology:
             evidence.extend(f"env:{name}" for name in matches)
             return Topology(mode="A", host="localhost", evidence=evidence)
 
-    for command in _LOCAL_SCHEDULER_COMMANDS:
-        result = runner.run_local(command)
+    for spec in _LOCAL_SCHEDULER_PROBES:
+        result = run_local_probe(runner, spec)
         if result.returncode == 0:
-            evidence.append(f"local:{' '.join(command)}")
+            evidence.append(f"local:{' '.join(spec.argv_template)}")
             return Topology(mode="A", host="localhost", evidence=evidence)
 
     if ssh_host_hint:

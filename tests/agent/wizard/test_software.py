@@ -169,8 +169,8 @@ def test_find_program_sorts_multiple_module_candidates_by_length_then_name():
 def test_discover_conda_returns_env_and_base():
     runner = StubRunner(
         local_results={
-            ("printf", "%s\\n", "$CONDA_PREFIX"): _result(
-                "printf %s\\n $CONDA_PREFIX",
+            ("printenv", "CONDA_PREFIX"): _result(
+                "printenv CONDA_PREFIX",
                 "/opt/conda/envs/chemsmart\n",
             ),
             ("conda", "info", "--base"): _result(
@@ -196,8 +196,8 @@ def test_run_software_survey_collects_all_programs():
                 "module --version",
                 stderr="Lmod 8.7.49\n",
             ),
-            ("printf", "%s\\n", "$CONDA_PREFIX"): _result(
-                "printf %s\\n $CONDA_PREFIX",
+            ("printenv", "CONDA_PREFIX"): _result(
+                "printenv CONDA_PREFIX",
                 "/opt/conda/envs/chemsmart\n",
             ),
             ("conda", "info", "--base"): _result(

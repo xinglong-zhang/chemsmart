@@ -9,6 +9,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from chemsmart.agent.wizard.paths import server_cache_path, write_private_text
+
 logger = logging.getLogger(__name__)
 
 CacheStatus = Literal["fresh", "stale", "error"]
@@ -33,7 +35,7 @@ class CacheEntry:
 def cache_path(server_name: str) -> Path:
     """Return the sidecar cache path for a wizard server name."""
 
-    return Path.home() / ".chemsmart" / "server" / f"{server_name}.cache.json"
+    return server_cache_path(server_name)
 
 
 def load_cache(name: str) -> CacheEntry | None:
@@ -59,12 +61,11 @@ def write_cache(entry: CacheEntry) -> str:
     """Persist a cache entry as JSON and return its absolute path."""
 
     path = cache_path(entry.server_name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    return write_private_text(
+        path,
         json.dumps(asdict(entry), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+        overwrite=True,
     )
-    return str(path)
 
 
 def is_stale(entry: CacheEntry, ttl_hours: int = 24) -> bool:

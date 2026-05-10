@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from chemsmart.agent.wizard.paths import server_yaml_path, write_private_text
 
 
 def write_server_yaml(
@@ -12,9 +12,5 @@ def write_server_yaml(
 ) -> str:
     """Write a server YAML under ``~/.chemsmart/server`` and return its path."""
 
-    target = Path.home() / ".chemsmart" / "server" / f"{name}.yaml"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists() and not overwrite:
-        raise FileExistsError(f"Server YAML already exists: {target}")
-    target.write_text(yaml_text, encoding="utf-8")
-    return str(target)
+    target = server_yaml_path(name)
+    return write_private_text(target, yaml_text, overwrite=overwrite)

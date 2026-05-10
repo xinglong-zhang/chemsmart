@@ -3,30 +3,38 @@ import subprocess
 
 import pytest
 
-from chemsmart.agent.wizard import ProbeError, ProbeRunner
+from chemsmart.agent.wizard import ALL_PROBE_SPECS, ProbeError, ProbeRunner
 from chemsmart.agent.wizard.probe import MAX_OUTPUT_BYTES, TRUNCATION_MARKER
 
 
-def test_run_local_hostname():
-    result = ProbeRunner.run_local(["hostname"])
+def test_run_local_printenv():
+    result = ProbeRunner.run_local(ALL_PROBE_SPECS["common.printenv_all"])
 
     assert result.returncode == 0
     assert result.mode == "local"
     assert result.host is None
-    assert result.command == "hostname"
+    assert result.command == "printenv"
     assert isinstance(result.duration_s, float)
 
 
-@pytest.mark.parametrize("command", [["rm", "-rf", "/"], []])
-def test_run_local_rejects_invalid_commands(command):
+@pytest.mark.parametrize("command", ["rm -rf /", ["hostname"], []])
+def test_run_local_rejects_raw_commands(command):
     with pytest.raises(ProbeError):
         ProbeRunner.run_local(command)
 
 
-def test_run_local_truncates_large_output():
-    result = ProbeRunner.run_local(
-        ["printf", "%*s", str(MAX_OUTPUT_BYTES + 32), ""]
-    )
+def test_run_local_truncates_large_output(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args[0],
+            0,
+            stdout="x" * (MAX_OUTPUT_BYTES + 32),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = ProbeRunner.run_local(ALL_PROBE_SPECS["common.printenv_all"])
 
     assert result.returncode == 0
     assert result.truncated is True
@@ -40,7 +48,7 @@ def test_run_local_timeout(monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    result = ProbeRunner.run_local(["hostname"])
+    result = ProbeRunner.run_local(ALL_PROBE_SPECS["common.printenv_all"])
 
     assert result.returncode == 124
     assert "[probe-timeout]" in result.stderr
@@ -58,8 +66,11 @@ def test_run_ssh_uses_hardened_flags(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     host = "cluster.example.edu"
-    command = "hostname -f"
-    result = ProbeRunner.run_ssh(host, command)
+    result = ProbeRunner.run_ssh(
+        host,
+        ALL_PROBE_SPECS["software.command_v"],
+        exe_name="hostname",
+    )
 
     ssh_args = calls[0]
     assert result.returncode == 0
@@ -80,9 +91,15 @@ def test_run_ssh_uses_hardened_flags(monkeypatch):
         "StrictHostKeyChecking=yes",
     ]
     assert ssh_args[9] == host
-    assert ssh_args[10] == f"bash -lc {shlex.quote(command)}"
+    assert ssh_args[10] == shlex.join(
+        [
+            "bash",
+            "-lc",
+            shlex.join(["command", "-v", "hostname"]),
+        ]
+    )
 
 
-def test_run_ssh_rejects_invalid_commands():
+def test_run_ssh_rejects_raw_commands():
     with pytest.raises(ProbeError):
         ProbeRunner.run_ssh("cluster.example.edu", "rm -rf /")

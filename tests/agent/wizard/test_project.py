@@ -54,15 +54,14 @@ def _result(command, stdout="", returncode=0):
 def test_discover_project_prefers_sbatch_account_for_slurm():
     runner = StubRunner(
         local_results={
-            (
-                "printf",
-                "%s\\n",
-                "$SBATCH_ACCOUNT",
-                "$SLURM_ACCOUNT",
-            ): _result(
-                "printf %s\\n $SBATCH_ACCOUNT $SLURM_ACCOUNT",
-                "chem123\nbackup456\n",
-            )
+            ("printenv", "SBATCH_ACCOUNT"): _result(
+                "printenv SBATCH_ACCOUNT",
+                "chem123\n",
+            ),
+            ("printenv", "SLURM_ACCOUNT"): _result(
+                "printenv SLURM_ACCOUNT",
+                "backup456\n",
+            ),
         }
     )
 
@@ -80,25 +79,27 @@ def test_discover_project_prefers_sbatch_account_for_slurm():
 def test_discover_project_uses_sacctmgr_default_account_for_slurm():
     runner = StubRunner(
         local_results={
-            (
-                "printf",
-                "%s\\n",
-                "$SBATCH_ACCOUNT",
-                "$SLURM_ACCOUNT",
-            ): _result(
-                "printf %s\\n $SBATCH_ACCOUNT $SLURM_ACCOUNT",
-                "\n\n",
+            ("printenv", "SBATCH_ACCOUNT"): _result(
+                "printenv SBATCH_ACCOUNT",
+                "\n",
+                returncode=1,
             ),
+            ("printenv", "SLURM_ACCOUNT"): _result(
+                "printenv SLURM_ACCOUNT",
+                "\n",
+                returncode=1,
+            ),
+            ("printenv", "USER"): _result("printenv USER", "hongjiseung\n"),
             (
                 "sacctmgr",
                 "-n",
                 "-p",
                 "show",
                 "user",
-                "$USER",
+                "hongjiseung",
                 "format=DefaultAccount,Account",
             ): _result(
-                "sacctmgr -n -p show user $USER format=DefaultAccount,Account",
+                "sacctmgr -n -p show user hongjiseung format=DefaultAccount,Account",
                 "chem-main|chem-main,chem-alt\n",
             ),
         }
@@ -118,8 +119,8 @@ def test_discover_project_uses_sacctmgr_default_account_for_slurm():
 def test_discover_project_prefers_pbs_account_for_pbs():
     runner = StubRunner(
         local_results={
-            ("printf", "%s\\n", "$PBS_ACCOUNT"): _result(
-                "printf %s\\n $PBS_ACCOUNT",
+            ("printenv", "PBS_ACCOUNT"): _result(
+                "printenv PBS_ACCOUNT",
                 "pbs-chem\n",
             )
         }
@@ -139,27 +140,17 @@ def test_discover_project_prefers_pbs_account_for_pbs():
 def test_discover_project_returns_none_when_nothing_is_available():
     runner = StubRunner(
         local_results={
-            (
-                "printf",
-                "%s\\n",
-                "$SBATCH_ACCOUNT",
-                "$SLURM_ACCOUNT",
-            ): _result(
-                "printf %s\\n $SBATCH_ACCOUNT $SLURM_ACCOUNT",
-                "\n\n",
-            ),
-            (
-                "sacctmgr",
-                "-n",
-                "-p",
-                "show",
-                "user",
-                "$USER",
-                "format=DefaultAccount,Account",
-            ): _result(
-                "sacctmgr -n -p show user $USER format=DefaultAccount,Account",
+            ("printenv", "SBATCH_ACCOUNT"): _result(
+                "printenv SBATCH_ACCOUNT",
+                "\n",
                 returncode=1,
             ),
+            ("printenv", "SLURM_ACCOUNT"): _result(
+                "printenv SLURM_ACCOUNT",
+                "\n",
+                returncode=1,
+            ),
+            ("printenv", "USER"): _result("printenv USER", "hongjiseung\n"),
             (
                 "sacctmgr",
                 "-n",

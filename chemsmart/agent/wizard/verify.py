@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
 from chemsmart.agent.transport import build_submit_invocation
+from chemsmart.agent.wizard.paths import server_yaml_path, validate_server_name
 from chemsmart.settings.server import Server
 
 _LOCAL_HOSTS = {"", "localhost", "local"}
@@ -32,7 +32,19 @@ def verify_server_yaml(server_name: str) -> VerifyResult:
 
     warnings: list[str] = []
     errors: list[str] = []
-    path = _resolve_server_yaml_path(server_name)
+    try:
+        path = _resolve_server_yaml_path(server_name)
+    except ValueError as exc:
+        errors.append(str(exc))
+        return VerifyResult(
+            server_name=server_name,
+            host=None,
+            mode="unknown",
+            would_submit_via="unknown",
+            transport_invocation=None,
+            warnings=warnings,
+            errors=errors,
+        )
 
     try:
         raw_contents = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -127,15 +139,8 @@ def verify_server_yaml(server_name: str) -> VerifyResult:
 
 
 def _resolve_server_yaml_path(server_name: str) -> Path:
-    candidate = Path(server_name).expanduser()
-    if candidate.is_absolute():
-        return candidate
-    if any(sep and sep in server_name for sep in (os.sep, os.altsep)):
-        return candidate
-    filename = (
-        server_name if server_name.endswith(".yaml") else f"{server_name}.yaml"
-    )
-    return Path.home() / ".chemsmart" / "server" / filename
+    validate_server_name(server_name)
+    return server_yaml_path(server_name)
 
 
 def _normalize_host(host: object) -> str | None:

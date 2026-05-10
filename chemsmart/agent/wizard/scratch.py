@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import os
-import shlex
 from dataclasses import dataclass
 
+from chemsmart.agent.wizard.probe import (
+    ALL_PROBE_SPECS,
+    ProbeSpec,
+    run_local_probe,
+    run_ssh_probe,
+)
 from chemsmart.agent.wizard.topology import Topology
 
 
@@ -29,17 +34,13 @@ def discover_scratch(runner, topology: Topology) -> ScratchFinding:
     """Discover a likely scratch location and whether it is writable."""
 
     candidates = _discover_env_candidates(runner, topology)
-    home_result = _run_probe(
-        runner,
-        topology,
-        ["test", "-d", _HOME_SCRATCH, "-a", "-w", _HOME_SCRATCH],
-        remote_command="test -d ~/scratch -a -w ~/scratch",
-    )
-    if home_result.returncode == 0:
-        candidates.append(("home:~/scratch", _HOME_SCRATCH))
+    home_candidate = _discover_home_scratch_candidate(runner, topology)
+    if home_candidate is not None:
+        candidates.append(home_candidate)
 
     for source, path in candidates:
-        if _is_writable(runner, topology, path):
+        actual_path = _actual_probe_path(runner, topology, source, path)
+        if _is_writable(runner, topology, actual_path):
             return ScratchFinding(
                 path=path,
                 source=source,
@@ -68,52 +69,93 @@ def _discover_env_candidates(
     runner,
     topology: Topology,
 ) -> list[tuple[str, str]]:
-    names = [name for name, _ in _ENV_SOURCES]
-    remote_parts = [f'"${name}"' for name in names]
-    result = _run_probe(
-        runner,
-        topology,
-        ["printf", "%s\\n", *[f"${name}" for name in names]],
-        remote_command=f"printf '%s\\n' {' '.join(remote_parts)}",
-    )
-    values = [
-        _normalize_shell_value(line) for line in result.stdout.splitlines()
-    ]
-    if topology.mode == "A" and result.stdout.strip() and not any(values):
-        values = [
-            _normalize_shell_value(os.environ.get(name)) for name in names
-        ]
-
     candidates: list[tuple[str, str]] = []
-    for (_, source), value in zip(_ENV_SOURCES, values):
+    for name, source in _ENV_SOURCES:
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["common.printenv_var"],
+            env_name=name,
+        )
+        value = _normalize_shell_value(_first_nonempty_line(result.stdout))
+        if value is None and topology.mode == "A":
+            value = _normalize_shell_value(os.environ.get(name))
         if value:
             candidates.append((source, value))
     return candidates
+
+
+def _discover_home_scratch_candidate(
+    runner,
+    topology: Topology,
+) -> tuple[str, str] | None:
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["common.printenv_var"],
+        env_name="HOME",
+    )
+    home = _normalize_shell_value(_first_nonempty_line(result.stdout))
+    if home is None and topology.mode == "A":
+        home = _normalize_shell_value(os.environ.get("HOME"))
+    if not home:
+        return None
+
+    home_scratch = f"{home.rstrip('/')}/scratch"
+    home_result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["scratch.test_dir_writable"],
+        path=home_scratch,
+    )
+    if home_result.returncode == 0:
+        return ("home:~/scratch", _HOME_SCRATCH)
+    return None
+
+
+def _actual_probe_path(
+    runner, topology: Topology, source: str, path: str
+) -> str:
+    if source != "home:~/scratch":
+        return path
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["common.printenv_var"],
+        env_name="HOME",
+    )
+    home = _normalize_shell_value(_first_nonempty_line(result.stdout))
+    if home is None and topology.mode == "A":
+        home = _normalize_shell_value(os.environ.get("HOME"))
+    if not home:
+        return path
+    return f"{home.rstrip('/')}/scratch"
 
 
 def _is_writable(runner, topology: Topology, path: str) -> bool:
     result = _run_probe(
         runner,
         topology,
-        ["test", "-w", path],
-        remote_command=f"test -w {shlex.quote(path)}",
+        ALL_PROBE_SPECS["scratch.test_writable"],
+        path=path,
     )
     return result.returncode == 0
 
 
-def _run_probe(
-    runner,
-    topology: Topology,
-    command: list[str],
-    remote_command: str | None = None,
-):
+def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):
     if topology.mode == "A":
-        return runner.run_local(command)
+        return run_local_probe(runner, spec, **slots)
     if topology.mode == "B" and topology.host:
-        return runner.run_ssh(
-            topology.host, remote_command or shlex.join(command)
-        )
+        return run_ssh_probe(runner, topology.host, spec, **slots)
     raise ValueError(f"Unsupported topology: {topology}")
+
+
+def _first_nonempty_line(text: str) -> str | None:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return None
 
 
 def _normalize_shell_value(value: str | None) -> str | None:

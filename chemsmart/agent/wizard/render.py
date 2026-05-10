@@ -25,6 +25,7 @@ from chemsmart.agent.wizard.normalize import (
     normalize_resources,
     normalize_walltime,
 )
+from chemsmart.agent.wizard.probe import ALL_PROBE_SPECS, run_local_probe
 
 _PROGRAM_NAME_MAP = {
     "gaussian": "GAUSSIAN",
@@ -237,7 +238,11 @@ def _render_extra_commands(topology, runner, notes: list[str]) -> str:
         )
         return _EXTRA_COMMANDS_PLACEHOLDER
 
-    result = runner.run_local(["printf", "%s\\n", "$CHEMSMART_BIN"])
+    result = run_local_probe(
+        runner,
+        ALL_PROBE_SPECS["common.printenv_var"],
+        env_name="CHEMSMART_BIN",
+    )
     if result.returncode != 0:
         notes.append(
             "Left EXTRA_COMMANDS as a placeholder because CHEMSMART_BIN "

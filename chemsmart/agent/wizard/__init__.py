@@ -15,10 +15,12 @@ from chemsmart.agent.wizard.orchestrator import (
 )
 from chemsmart.agent.wizard.parsers import QueueFacts
 from chemsmart.agent.wizard.probe import (
-    ALLOWED_COMMANDS,
+    ALL_PROBE_SPECS,
     ProbeError,
     ProbeResult,
     ProbeRunner,
+    ProbeSpec,
+    resolve_probe_argv,
 )
 from chemsmart.agent.wizard.project import (
     ProjectFinding,
@@ -66,13 +68,14 @@ from chemsmart.agent.wizard.verify import (
 from chemsmart.agent.wizard.write import write_server_yaml
 
 __all__ = [
-    "ALLOWED_COMMANDS",
+    "ALL_PROBE_SPECS",
     "CacheEntry",
     "AmbiguousSchedulerError",
     "ModuleSystem",
     "NoTargetError",
     "ProbeError",
     "ProbeResult",
+    "ProbeSpec",
     "ProbeRunner",
     "ProgramFinding",
     "cache_path",
@@ -105,5 +108,6 @@ __all__ = [
     "validate_server_yaml",
     "verify_server_yaml",
     "write_cache",
+    "resolve_probe_argv",
     "write_server_yaml",
 ]

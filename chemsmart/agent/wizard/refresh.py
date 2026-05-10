@@ -11,12 +11,12 @@ import yaml
 
 from chemsmart.agent.wizard.cache import (
     CacheEntry,
-    cache_path,
     is_stale,
     load_cache,
     mark_status,
     write_cache,
 )
+from chemsmart.agent.wizard.paths import server_yaml_path, validate_server_name
 from chemsmart.agent.wizard.project import discover_project
 from chemsmart.agent.wizard.scratch import discover_scratch
 from chemsmart.agent.wizard.software import run_software_survey
@@ -31,6 +31,7 @@ _LOCAL_HOSTS = {"", "localhost", "local"}
 def refresh_cache(runner, name: str, force: bool = False) -> CacheEntry:
     """Refresh a node sidecar cache entry for a server configuration."""
 
+    validate_server_name(name)
     existing = load_cache(name)
     if existing is not None and not force and not is_stale(existing):
         return existing
@@ -75,6 +76,7 @@ def opportunistic_refresh(
 ) -> CacheEntry | None:
     """Refresh stale cache data without raising on failures."""
 
+    validate_server_name(name)
     existing = load_cache(name)
     if existing is not None and not is_stale(existing, ttl_hours=ttl_hours):
         return existing
@@ -148,15 +150,8 @@ def _load_server_context_or_default(name: str) -> dict[str, str | None]:
 
 
 def _resolve_server_yaml_path(server_name: str) -> Path:
-    candidate = Path(server_name).expanduser()
-    if candidate.is_absolute():
-        return candidate
-    if any(sep and sep in server_name for sep in ("/", "\\")):
-        return candidate
-    filename = (
-        server_name if server_name.endswith(".yaml") else f"{server_name}.yaml"
-    )
-    return cache_path(server_name).with_name(filename)
+    validate_server_name(server_name)
+    return server_yaml_path(server_name)
 
 
 def _topology_from_context(context: dict[str, str | None]) -> Topology:
@@ -172,10 +167,10 @@ def _topology_from_context(context: dict[str, str | None]) -> Topology:
 def _build_source_commands(scheduler: str) -> dict[str, str]:
     scheduler_name = scheduler.upper()
     commands = {
-        "topology": "SERVER.HOST from ~/.chemsmart/server/<name>.yaml",
-        "software": "type module; module --version; module -t avail; command -v; which; readlink -f; conda info --base",
-        "scratch": "printf '$SCRATCH' '$WORK' '$TMPDIR'; test -d ~/scratch -a -w ~/scratch; test -w <candidate>",
-        "project": "printf project env vars; sacctmgr show user ...; groups",
+        "topology": "printenv; sinfo; qstat; bqueues; qconf",
+        "software": "type module; module --version; module -t avail; command -v; which; readlink -f; printenv CONDA_PREFIX; conda info --base",
+        "scratch": "printenv SCRATCH/WORK/TMPDIR/HOME; test -d <home>/scratch -a -w <home>/scratch; test -w <candidate>",
+        "project": "printenv SBATCH_ACCOUNT/SLURM_ACCOUNT/PBS_ACCOUNT/USER; sacctmgr show user ...; groups",
     }
     scheduler_commands = {
         "SLURM": "sinfo --json; scontrol show partition --oneliner",

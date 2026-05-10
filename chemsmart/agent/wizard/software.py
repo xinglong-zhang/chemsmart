@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from chemsmart.agent.wizard.probe import (
+    ALL_PROBE_SPECS,
+    ProbeSpec,
+    run_local_probe,
+    run_ssh_probe,
+)
 from chemsmart.agent.wizard.topology import Topology
 
 
@@ -40,15 +45,13 @@ def detect_module_system(runner, topology: Topology) -> ModuleSystem:
     module_type = _run_probe(
         runner,
         topology,
-        ["type", "module"],
-        remote_command="type module",
+        ALL_PROBE_SPECS["software.type_module"],
     )
     if module_type.returncode != 0:
         which_module = _run_probe(
             runner,
             topology,
-            ["which", "module"],
-            remote_command="which module",
+            ALL_PROBE_SPECS["software.which_module"],
         )
         if which_module.returncode != 0:
             return ModuleSystem(kind="none", version=None)
@@ -56,11 +59,11 @@ def detect_module_system(runner, topology: Topology) -> ModuleSystem:
     version_result = _run_probe(
         runner,
         topology,
-        ["module", "--version"],
-        remote_command="module --version",
+        ALL_PROBE_SPECS["software.module_version"],
     )
-    version_text = _first_nonempty_line(_merge_output(version_result))
-    kind = "lmod" if "Lmod" in _merge_output(version_result) else "envmodules"
+    merged_output = _merge_output(version_result)
+    version_text = _first_nonempty_line(merged_output)
+    kind = "lmod" if "Lmod" in merged_output else "envmodules"
     return ModuleSystem(kind=kind, version=version_text)
 
 
@@ -116,8 +119,7 @@ def discover_conda(
     base_result = _run_probe(
         runner,
         topology,
-        ["conda", "info", "--base"],
-        remote_command="conda info --base",
+        ALL_PROBE_SPECS["software.conda_base"],
     )
     base_value = _first_nonempty_line(base_result.stdout)
     return _normalize_shell_value(base_value), env_value
@@ -167,27 +169,29 @@ def _resolve_executable(
     command_result = _run_probe(
         runner,
         topology,
-        ["command", "-v", exe_name],
-        remote_command=f"command -v {shlex.quote(exe_name)}",
+        ALL_PROBE_SPECS["software.command_v"],
+        exe_name=exe_name,
     )
     path_value = _first_nonempty_line(command_result.stdout)
     if not path_value and topology.mode == "A":
         which_result = _run_probe(
             runner,
             topology,
-            ["which", exe_name],
-            remote_command=f"which {shlex.quote(exe_name)}",
+            ALL_PROBE_SPECS["software.which_exe"],
+            exe_name=exe_name,
         )
         path_value = _first_nonempty_line(which_result.stdout)
     path_value = _normalize_shell_value(path_value)
     if not path_value:
         return None
+    if not path_value.startswith(("/", "~")):
+        return path_value
 
     readlink_result = _run_probe(
         runner,
         topology,
-        ["readlink", "-f", path_value],
-        remote_command=f"readlink -f {shlex.quote(path_value)}",
+        ALL_PROBE_SPECS["software.readlink"],
+        path=path_value,
     )
     resolved = _normalize_shell_value(
         _first_nonempty_line(readlink_result.stdout)
@@ -203,8 +207,7 @@ def _find_module_candidates(
     result = _run_probe(
         runner,
         topology,
-        ["module", "-t", "avail"],
-        remote_command="module -t avail",
+        ALL_PROBE_SPECS["software.module_avail"],
     )
     if result.returncode != 0:
         return []
@@ -235,41 +238,26 @@ def _probe_env_values(
     topology: Topology,
     names: list[str],
 ) -> list[str | None]:
-    remote_parts = [f'"${name}"' for name in names]
-    result = _run_probe(
-        runner,
-        topology,
-        ["printf", "%s\\n", *[f"${name}" for name in names]],
-        remote_command=f"printf '%s\\n' {' '.join(remote_parts)}",
-    )
-    values = [
-        _normalize_shell_value(line)
-        for line in result.stdout.splitlines()[: len(names)]
-    ]
-    while len(values) < len(names):
-        values.append(None)
-
-    if (
-        topology.mode == "A"
-        and result.stdout.strip()
-        and all(value is None for value in values)
-    ):
-        return [_normalize_shell_value(os.environ.get(name)) for name in names]
+    values: list[str | None] = []
+    for name in names:
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["common.printenv_var"],
+            env_name=name,
+        )
+        value = _normalize_shell_value(_first_nonempty_line(result.stdout))
+        if value is None and topology.mode == "A":
+            value = _normalize_shell_value(os.environ.get(name))
+        values.append(value)
     return values
 
 
-def _run_probe(
-    runner,
-    topology: Topology,
-    command: list[str],
-    remote_command: str | None = None,
-):
+def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):
     if topology.mode == "A":
-        return runner.run_local(command)
+        return run_local_probe(runner, spec, **slots)
     if topology.mode == "B" and topology.host:
-        return runner.run_ssh(
-            topology.host, remote_command or shlex.join(command)
-        )
+        return run_ssh_probe(runner, topology.host, spec, **slots)
     raise ValueError(f"Unsupported topology: {topology}")
 
 

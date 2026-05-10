@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shlex
 from dataclasses import dataclass
 
 from chemsmart.agent.wizard.normalize import SCHEDULER_SUBMIT, choose_queue
@@ -15,6 +14,12 @@ from chemsmart.agent.wizard.parsers import (
     parse_sge_qconf_sql,
     parse_slurm_scontrol_partition_oneliner,
     parse_slurm_sinfo_json,
+)
+from chemsmart.agent.wizard.probe import (
+    ALL_PROBE_SPECS,
+    ProbeSpec,
+    run_local_probe,
+    run_ssh_probe,
 )
 from chemsmart.agent.wizard.topology import Topology
 
@@ -73,7 +78,9 @@ def run_schedule_survey(runner, topology: Topology) -> ScheduleSurvey:
 
 def _probe_slurm(runner, topology: Topology):
     evidence: dict[str, str] = {}
-    sinfo = _run_probe(runner, topology, ["sinfo", "--json"])
+    sinfo = _run_probe(
+        runner, topology, ALL_PROBE_SPECS["survey.slurm.sinfo_json"]
+    )
     queues = []
     if sinfo.returncode == 0 and sinfo.stdout.strip():
         parsed = _safe_parse(parse_slurm_sinfo_json, sinfo.stdout)
@@ -81,11 +88,14 @@ def _probe_slurm(runner, topology: Topology):
             queues = parsed
             evidence["sinfo --json"] = "parsed"
     scontrol = _run_probe(
-        runner, topology, ["scontrol", "show", "partition", "--oneliner"]
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.slurm.scontrol_partition"],
     )
     if scontrol.returncode == 0 and scontrol.stdout.strip():
         parsed = _safe_parse(
-            parse_slurm_scontrol_partition_oneliner, scontrol.stdout
+            parse_slurm_scontrol_partition_oneliner,
+            scontrol.stdout,
         )
         if parsed:
             queues = parsed
@@ -98,7 +108,9 @@ def _probe_slurm(runner, topology: Topology):
 def _probe_pbs(runner, topology: Topology):
     evidence: dict[str, str] = {}
     qstat_json = _run_probe(
-        runner, topology, ["qstat", "-Q", "-f", "-F", "json"]
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.pbs.qstat_json"],
     )
     queues = []
     if qstat_json.returncode == 0 and qstat_json.stdout.strip():
@@ -106,7 +118,11 @@ def _probe_pbs(runner, topology: Topology):
         if parsed:
             queues = parsed
             evidence["qstat -Q -f -F json"] = "parsed"
-    qstat_text = _run_probe(runner, topology, ["qstat", "-Q", "-f"])
+    qstat_text = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.pbs.qstat_text"],
+    )
     if qstat_text.returncode == 0 and qstat_text.stdout.strip():
         parsed = _safe_parse(parse_pbs_qstat_qf_text, qstat_text.stdout)
         if parsed:
@@ -122,16 +138,15 @@ def _probe_lsf(runner, topology: Topology):
     bqueues_json = _run_probe(
         runner,
         topology,
-        [
-            "bqueues",
-            "-o",
-            "queue_name status runlimit memlimit prolimit",
-            "-json",
-        ],
+        ALL_PROBE_SPECS["survey.lsf.bqueues_json"],
     )
     if bqueues_json.returncode == 0:
         evidence["bqueues -o ... -json"] = "ok"
-    bqueues_text = _run_probe(runner, topology, ["bqueues", "-l"])
+    bqueues_text = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.lsf.bqueues_text"],
+    )
     if bqueues_text.returncode == 0 and bqueues_text.stdout.strip():
         parsed = _safe_parse(parse_lsf_bqueues_l, bqueues_text.stdout)
         if parsed:
@@ -142,7 +157,11 @@ def _probe_lsf(runner, topology: Topology):
 
 def _probe_sge(runner, topology: Topology):
     evidence: dict[str, str] = {}
-    qconf_sql = _run_probe(runner, topology, ["qconf", "-sql"])
+    qconf_sql = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.sge.qconf_sql"],
+    )
     if qconf_sql.returncode != 0 or not qconf_sql.stdout.strip():
         return None
     names = _safe_parse(parse_sge_qconf_sql, qconf_sql.stdout) or []
@@ -151,7 +170,12 @@ def _probe_sge(runner, topology: Topology):
     evidence["qconf -sql"] = "parsed"
     queues: list[QueueFacts] = []
     for name in names:
-        result = _run_probe(runner, topology, ["qconf", "-sq", name])
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["survey.sge.qconf_sq"],
+            queue_name=name,
+        )
         if result.returncode != 0 or not result.stdout.strip():
             continue
         queue = _safe_parse(parse_sge_qconf_sq, result.stdout)
@@ -164,11 +188,11 @@ def _probe_sge(runner, topology: Topology):
     return None
 
 
-def _run_probe(runner, topology: Topology, command: list[str]):
+def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):
     if topology.mode == "A":
-        return runner.run_local(command)
+        return run_local_probe(runner, spec, **slots)
     if topology.mode == "B" and topology.host:
-        return runner.run_ssh(topology.host, shlex.join(command))
+        return run_ssh_probe(runner, topology.host, spec, **slots)
     raise ValueError(f"Unsupported topology: {topology}")
 
 

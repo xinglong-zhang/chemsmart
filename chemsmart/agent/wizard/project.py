@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import os
-import shlex
 from dataclasses import dataclass
 
+from chemsmart.agent.wizard.probe import (
+    ALL_PROBE_SPECS,
+    ProbeSpec,
+    run_local_probe,
+    run_ssh_probe,
+)
 from chemsmart.agent.wizard.topology import Topology
 
 
@@ -77,59 +82,34 @@ def _discover_env_project(
 
 
 def _discover_sacctmgr_project(runner, topology: Topology) -> ProjectFinding:
-    user = os.environ.get("USER", "$USER")
-    commands = [
-        (
-            [
-                "sacctmgr",
-                "-n",
-                "-p",
-                "show",
-                "user",
-                "$USER",
-                "format=DefaultAccount,Account",
-            ],
-            "sacctmgr -n -p show user $USER format=DefaultAccount,Account",
-        ),
-        (
-            [
-                "sacctmgr",
-                "-n",
-                "-p",
-                "show",
-                "user",
-                user,
-                "format=DefaultAccount,Account",
-            ],
-            (
-                "sacctmgr -n -p show user "
-                f"{shlex.quote(user)} format=DefaultAccount,Account"
-            ),
-        ),
-    ]
+    user_values = _probe_env_values(runner, topology, ["USER"])
+    user = user_values[0] or _normalize_shell_value(os.environ.get("USER"))
+    if not user:
+        return ProjectFinding(project=None, source="none", candidates=[])
+
     seen_projects: list[str] = []
-    for command, remote_command in commands:
-        result = _run_probe(
-            runner,
-            topology,
-            command,
-            remote_command=remote_command,
-        )
-        if result.returncode != 0:
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["project.sacctmgr_show_user"],
+        user=user,
+    )
+    if result.returncode != 0:
+        return ProjectFinding(project=None, source="none", candidates=[])
+
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if not stripped:
             continue
-        for line in result.stdout.splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            default_account = _normalize_shell_value(stripped.split("|", 1)[0])
-            if default_account:
-                seen_projects.append(default_account)
-        if seen_projects:
-            return ProjectFinding(
-                project=seen_projects[0],
-                source="sacctmgr",
-                candidates=seen_projects,
-            )
+        default_account = _normalize_shell_value(stripped.split("|", 1)[0])
+        if default_account:
+            seen_projects.append(default_account)
+    if seen_projects:
+        return ProjectFinding(
+            project=seen_projects[0],
+            source="sacctmgr",
+            candidates=seen_projects,
+        )
     return ProjectFinding(project=None, source="none", candidates=[])
 
 
@@ -137,8 +117,7 @@ def _discover_groups_project(runner, topology: Topology) -> ProjectFinding:
     result = _run_probe(
         runner,
         topology,
-        ["groups"],
-        remote_command="groups",
+        ALL_PROBE_SPECS["project.groups"],
     )
     candidates = [
         _normalize_shell_value(token) for token in result.stdout.split()
@@ -158,42 +137,35 @@ def _probe_env_values(
     topology: Topology,
     names: list[str],
 ) -> list[str | None]:
-    remote_parts = [f'"${name}"' for name in names]
-    result = _run_probe(
-        runner,
-        topology,
-        ["printf", "%s\\n", *[f"${name}" for name in names]],
-        remote_command=f"printf '%s\\n' {' '.join(remote_parts)}",
-    )
-    values = [
-        _normalize_shell_value(line)
-        for line in result.stdout.splitlines()[: len(names)]
-    ]
-    while len(values) < len(names):
-        values.append(None)
-
-    if (
-        topology.mode == "A"
-        and result.stdout.strip()
-        and all(value is None for value in values)
-    ):
-        return [_normalize_shell_value(os.environ.get(name)) for name in names]
+    values: list[str | None] = []
+    for name in names:
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["common.printenv_var"],
+            env_name=name,
+        )
+        value = _normalize_shell_value(_first_nonempty_line(result.stdout))
+        if value is None and topology.mode == "A":
+            value = _normalize_shell_value(os.environ.get(name))
+        values.append(value)
     return values
 
 
-def _run_probe(
-    runner,
-    topology: Topology,
-    command: list[str],
-    remote_command: str | None = None,
-):
+def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):
     if topology.mode == "A":
-        return runner.run_local(command)
+        return run_local_probe(runner, spec, **slots)
     if topology.mode == "B" and topology.host:
-        return runner.run_ssh(
-            topology.host, remote_command or shlex.join(command)
-        )
+        return run_ssh_probe(runner, topology.host, spec, **slots)
     raise ValueError(f"Unsupported topology: {topology}")
+
+
+def _first_nonempty_line(text: str) -> str | None:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return None
 
 
 def _normalize_shell_value(value: str | None) -> str | None:

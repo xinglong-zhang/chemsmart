@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from chemsmart.agent.transport import build_submit_invocation
 from chemsmart.agent.wizard.orchestrator import run_wizard
 from chemsmart.agent.wizard.probe import ProbeResult
@@ -63,8 +62,8 @@ def test_mode_a_round_trip(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     runner = StubRunner(
         local_results={
-            ("env",): _result(
-                "env",
+            ("printenv",): _result(
+                "printenv",
                 stdout="SLURM_CLUSTER_NAME=perlmutter\nPATH=/usr/bin\n",
             ),
             ("sinfo", "--json"): _result(
@@ -85,9 +84,10 @@ def test_mode_a_round_trip(monkeypatch, tmp_path):
             ),
             ("type", "module"): _result("type module", returncode=1),
             ("which", "module"): _result("which module", returncode=1),
-            ("printf", "%s\\n", "$CONDA_PREFIX"): _result(
-                "printf %s\\n $CONDA_PREFIX",
+            ("printenv", "CONDA_PREFIX"): _result(
+                "printenv CONDA_PREFIX",
                 stdout="\n",
+                returncode=1,
             ),
             ("conda", "info", "--base"): _result(
                 "conda info --base",
@@ -115,22 +115,34 @@ def test_mode_a_round_trip(monkeypatch, tmp_path):
                 "module -t avail",
                 returncode=1,
             ),
-            ("printf", "%s\\n", "$SCRATCH", "$WORK", "$TMPDIR"): _result(
-                "printf %s\\n $SCRATCH $WORK $TMPDIR",
-                stdout="/scratch/user\n\n\n",
+            ("printenv", "SCRATCH"): _result(
+                "printenv SCRATCH",
+                stdout="/scratch/user\n",
             ),
-            ("test", "-d", "~/scratch", "-a", "-w", "~/scratch"): _result(
-                "test -d ~/scratch -a -w ~/scratch",
+            ("printenv", "WORK"): _result(
+                "printenv WORK",
+                stdout="\n",
+                returncode=1,
+            ),
+            ("printenv", "TMPDIR"): _result(
+                "printenv TMPDIR",
+                stdout="\n",
                 returncode=1,
             ),
             ("test", "-w", "/scratch/user"): _result("test -w /scratch/user"),
-            ("printf", "%s\\n", "$SBATCH_ACCOUNT", "$SLURM_ACCOUNT"): _result(
-                "printf %s\\n $SBATCH_ACCOUNT $SLURM_ACCOUNT",
-                stdout="chem123\n\n",
+            ("printenv", "SBATCH_ACCOUNT"): _result(
+                "printenv SBATCH_ACCOUNT",
+                stdout="chem123\n",
             ),
-            ("printf", "%s\\n", "$CHEMSMART_BIN"): _result(
-                "printf %s\\n $CHEMSMART_BIN",
+            ("printenv", "SLURM_ACCOUNT"): _result(
+                "printenv SLURM_ACCOUNT",
                 stdout="\n",
+                returncode=1,
+            ),
+            ("printenv", "CHEMSMART_BIN"): _result(
+                "printenv CHEMSMART_BIN",
+                stdout="\n",
+                returncode=1,
             ),
         }
     )
@@ -156,7 +168,7 @@ def test_mode_b_round_trip(monkeypatch, tmp_path):
     host = "cluster.example.edu"
     runner = StubRunner(
         local_results={
-            ("env",): _result("env", stdout="PATH=/usr/bin\n"),
+            ("printenv",): _result("printenv", stdout="PATH=/usr/bin\n"),
             ("sinfo",): _result("sinfo", returncode=1),
             ("qstat",): _result("qstat", returncode=1),
             ("bqueues",): _result("bqueues", returncode=1),
@@ -191,11 +203,12 @@ def test_mode_b_round_trip(monkeypatch, tmp_path):
                 host=host,
                 returncode=1,
             ),
-            (host, "printf '%s\\n' \"$CONDA_PREFIX\""): _result(
-                "printf '%s\\n' \"$CONDA_PREFIX\"",
+            (host, "printenv CONDA_PREFIX"): _result(
+                "printenv CONDA_PREFIX",
                 mode="ssh",
                 host=host,
                 stdout="\n",
+                returncode=1,
             ),
             (host, "conda info --base"): _result(
                 "conda info --base",
@@ -233,16 +246,24 @@ def test_mode_b_round_trip(monkeypatch, tmp_path):
                 host=host,
                 returncode=1,
             ),
-            (host, 'printf \'%s\\n\' "$SCRATCH" "$WORK" "$TMPDIR"'): _result(
-                'printf \'%s\\n\' "$SCRATCH" "$WORK" "$TMPDIR"',
+            (host, "printenv SCRATCH"): _result(
+                "printenv SCRATCH",
                 mode="ssh",
                 host=host,
-                stdout="/scratch/user\n\n\n",
+                stdout="/scratch/user\n",
             ),
-            (host, "test -d ~/scratch -a -w ~/scratch"): _result(
-                "test -d ~/scratch -a -w ~/scratch",
+            (host, "printenv WORK"): _result(
+                "printenv WORK",
                 mode="ssh",
                 host=host,
+                stdout="\n",
+                returncode=1,
+            ),
+            (host, "printenv TMPDIR"): _result(
+                "printenv TMPDIR",
+                mode="ssh",
+                host=host,
+                stdout="\n",
                 returncode=1,
             ),
             (host, "test -w /scratch/user"): _result(
@@ -250,14 +271,18 @@ def test_mode_b_round_trip(monkeypatch, tmp_path):
                 mode="ssh",
                 host=host,
             ),
-            (
-                host,
-                'printf \'%s\\n\' "$SBATCH_ACCOUNT" "$SLURM_ACCOUNT"',
-            ): _result(
-                'printf \'%s\\n\' "$SBATCH_ACCOUNT" "$SLURM_ACCOUNT"',
+            (host, "printenv SBATCH_ACCOUNT"): _result(
+                "printenv SBATCH_ACCOUNT",
                 mode="ssh",
                 host=host,
-                stdout="chem123\n\n",
+                stdout="chem123\n",
+            ),
+            (host, "printenv SLURM_ACCOUNT"): _result(
+                "printenv SLURM_ACCOUNT",
+                mode="ssh",
+                host=host,
+                stdout="\n",
+                returncode=1,
             ),
         },
     )

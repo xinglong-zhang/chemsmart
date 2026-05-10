@@ -1,4 +1,3 @@
-
 from chemsmart.agent.wizard import NoTargetError, Topology, detect_topology
 from chemsmart.agent.wizard.probe import ProbeResult
 
@@ -42,8 +41,8 @@ class StubRunner:
 def test_detect_topology_mode_a_on_local_scheduler_probe():
     runner = StubRunner(
         local_results={
-            ("env",): ProbeResult(
-                command="env",
+            ("printenv",): ProbeResult(
+                command="printenv",
                 mode="local",
                 host=None,
                 returncode=0,
@@ -73,8 +72,8 @@ def test_detect_topology_mode_a_on_local_scheduler_probe():
 def test_detect_topology_mode_b_on_hint_when_local_probes_fail():
     runner = StubRunner(
         local_results={
-            ("env",): ProbeResult(
-                command="env",
+            ("printenv",): ProbeResult(
+                command="printenv",
                 mode="local",
                 host=None,
                 returncode=0,
@@ -94,8 +93,8 @@ def test_detect_topology_mode_b_on_hint_when_local_probes_fail():
 def test_detect_topology_raises_when_no_target_is_available():
     runner = StubRunner(
         local_results={
-            ("env",): ProbeResult(
-                command="env",
+            ("printenv",): ProbeResult(
+                command="printenv",
                 mode="local",
                 host=None,
                 returncode=0,

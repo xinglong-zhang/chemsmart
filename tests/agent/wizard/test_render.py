@@ -118,8 +118,8 @@ def test_render_server_yaml_mode_a_applies_required_decisions():
         ),
         runner=StubRunner(
             local_results={
-                ("printf", "%s\\n", "$CHEMSMART_BIN"): _result(
-                    "printf %s\\n $CHEMSMART_BIN",
+                ("printenv", "CHEMSMART_BIN"): _result(
+                    "printenv CHEMSMART_BIN",
                     "/opt/chemsmart/bin\n",
                 )
             }

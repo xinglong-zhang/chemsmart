@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import stat
+
 import pytest
 
 from chemsmart.agent.wizard.write import write_server_yaml
@@ -13,7 +15,17 @@ UPDATED_TEXT = """SERVER:
 """
 
 
-def test_write_server_yaml_writes_to_user_server_dir(monkeypatch, tmp_path):
+def test_write_server_yaml_rejects_invalid_names(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    with pytest.raises(ValueError):
+        write_server_yaml("../../tmp/x", YAML_TEXT)
+
+    with pytest.raises(ValueError):
+        write_server_yaml("/etc/passwd", YAML_TEXT)
+
+
+def test_write_server_yaml_writes_private_file(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
 
     written = write_server_yaml("perlmutter", YAML_TEXT)
@@ -21,6 +33,7 @@ def test_write_server_yaml_writes_to_user_server_dir(monkeypatch, tmp_path):
     expected = tmp_path / ".chemsmart" / "server" / "perlmutter.yaml"
     assert written == str(expected)
     assert expected.read_text(encoding="utf-8") == YAML_TEXT
+    assert stat.S_IMODE(expected.stat().st_mode) == 0o600
 
 
 def test_write_server_yaml_rejects_existing_file_without_overwrite(
@@ -41,3 +54,4 @@ def test_write_server_yaml_overwrites_when_requested(monkeypatch, tmp_path):
 
     expected = tmp_path / ".chemsmart" / "server" / "perlmutter.yaml"
     assert expected.read_text(encoding="utf-8") == UPDATED_TEXT
+    assert stat.S_IMODE(expected.stat().st_mode) == 0o600
