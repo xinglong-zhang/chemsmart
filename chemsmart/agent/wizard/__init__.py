@@ -1,5 +1,13 @@
 """Wizard probe, survey, render, and validation exports."""
 
+from chemsmart.agent.wizard.cache import (
+    CacheEntry,
+    cache_path,
+    is_stale,
+    load_cache,
+    mark_status,
+    write_cache,
+)
 from chemsmart.agent.wizard.normalize import choose_queue
 from chemsmart.agent.wizard.orchestrator import (
     WizardOutcome,
@@ -15,6 +23,10 @@ from chemsmart.agent.wizard.probe import (
 from chemsmart.agent.wizard.project import (
     ProjectFinding,
     discover_project,
+)
+from chemsmart.agent.wizard.refresh import (
+    opportunistic_refresh,
+    refresh_cache,
 )
 from chemsmart.agent.wizard.render import (
     ServerYamlPlan,
@@ -55,6 +67,7 @@ from chemsmart.agent.wizard.write import write_server_yaml
 
 __all__ = [
     "ALLOWED_COMMANDS",
+    "CacheEntry",
     "AmbiguousSchedulerError",
     "ModuleSystem",
     "NoTargetError",
@@ -62,6 +75,7 @@ __all__ = [
     "ProbeResult",
     "ProbeRunner",
     "ProgramFinding",
+    "cache_path",
     "ProjectFinding",
     "QueueFacts",
     "ServerYamlPlan",
@@ -76,7 +90,12 @@ __all__ = [
     "detect_module_system",
     "detect_topology",
     "discover_conda",
+    "is_stale",
+    "load_cache",
+    "mark_status",
     "discover_project",
+    "opportunistic_refresh",
+    "refresh_cache",
     "run_wizard",
     "discover_scratch",
     "find_program",
@@ -85,5 +104,6 @@ __all__ = [
     "run_software_survey",
     "validate_server_yaml",
     "verify_server_yaml",
+    "write_cache",
     "write_server_yaml",
 ]

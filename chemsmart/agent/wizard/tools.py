@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from chemsmart.agent.wizard.cache import cache_path
 from chemsmart.agent.wizard.orchestrator import run_wizard
 from chemsmart.agent.wizard.probe import ProbeRunner
+from chemsmart.agent.wizard.refresh import _recover_cache_entry, refresh_cache
 from chemsmart.agent.wizard.verify import verify_server_yaml
 from chemsmart.agent.wizard.write import write_server_yaml
 
@@ -60,6 +62,20 @@ def wizard_verify(server_name: str) -> dict[str, Any]:
     """Verify wizard/server transport wiring for an existing YAML."""
 
     return _json_safe(verify_server_yaml(server_name))
+
+
+def wizard_refresh(server_name: str, force: bool = False) -> dict[str, Any]:
+    """Refresh or reuse the wizard node sidecar cache for a server."""
+
+    try:
+        entry = refresh_cache(ProbeRunner, server_name, force=force)
+    except Exception as exc:  # pragma: no cover - bridged to cache recovery
+        entry = _recover_cache_entry(server_name, exc)
+    result = _json_safe(entry)
+    result["ok"] = entry.status == "fresh"
+    result["cache_path"] = str(cache_path(server_name))
+    result["force"] = force
+    return result
 
 
 def _json_safe(value: Any) -> Any:

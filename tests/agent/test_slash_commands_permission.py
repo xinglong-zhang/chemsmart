@@ -116,6 +116,13 @@ def test_wizard_slash_commands_route_probe_and_write(tmp_path):
                 "yaml_text": "SERVER:\n  SCHEDULER: SLURM\n",
                 "validation": {"ok": True, "errors": []},
             }
+            screen._handle_slash_command("/wizard-refresh perlmutter --force")
+
+            assert calls[-1] == (
+                "wizard_refresh",
+                {"server_name": "perlmutter", "force": True},
+            )
+
             screen._handle_slash_command("/wizard-write overwrite")
 
             assert calls[-1] == (

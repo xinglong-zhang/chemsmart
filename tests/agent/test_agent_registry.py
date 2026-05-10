@@ -22,6 +22,7 @@ def test_registry_round_trips_build_gaussian_settings_call():
     names = [tool_def["function"]["name"] for tool_def in tool_defs]
     assert "build_gaussian_settings" in names
     assert "wizard_probe" in names
+    assert "wizard_refresh" in names
     assert "wizard_verify" in names
     assert "wizard_write" in names
     build_job_def = next(

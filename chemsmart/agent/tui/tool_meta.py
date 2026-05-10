@@ -74,6 +74,12 @@ _TOOL_META = {
         "style": "warning",
         "summary": "probes local or remote server state",
     },
+    "wizard_refresh": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "refreshes or reuses the wizard node cache",
+    },
     "wizard_verify": {
         "risk": "inspection",
         "read_only": True,

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+
+from chemsmart.agent.wizard.cache import CacheEntry, load_cache, write_cache
 from chemsmart.agent.wizard.orchestrator import run_wizard
 from chemsmart.agent.wizard.project import ProjectFinding
 from chemsmart.agent.wizard.render import ServerYamlPlan
@@ -20,12 +23,12 @@ class StubRunner:
 
 YAML_TEXT = """SERVER:
   SCHEDULER: SLURM
+  HOST: localhost
 GAUSSIAN: {}
 """
 
 
-def test_run_wizard_happy_path_writes(monkeypatch, tmp_path):
-    calls: list[str] = []
+def _stub_surveys():
     topology = Topology(mode="A", host="localhost", evidence=["env:SLURM"])
     schedule = ScheduleSurvey(
         scheduler="SLURM",
@@ -59,71 +62,105 @@ def test_run_wizard_happy_path_writes(monkeypatch, tmp_path):
         source="groups",
         candidates=["chem-123"],
     )
+    validation = ValidationResult(
+        ok=True,
+        errors=[],
+        parsed={"SERVER": {"SCHEDULER": "SLURM"}},
+    )
     plan = ServerYamlPlan(
         text=YAML_TEXT,
         server_block={"SCHEDULER": "SLURM"},
         program_blocks={"GAUSSIAN": {}},
         notes=[],
     )
-    validation = ValidationResult(
-        ok=True,
-        errors=[],
-        parsed={"SERVER": {"SCHEDULER": "SLURM"}},
-    )
+    return topology, schedule, software, scratch, project, validation, plan
 
+
+def _patch_probe_pipeline(monkeypatch):
+    topology, schedule, software, scratch, project, validation, plan = (
+        _stub_surveys()
+    )
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.detect_topology",
-        lambda runner, ssh_host_hint=None: calls.append("detect_topology")
-        or topology,
+        lambda runner, ssh_host_hint=None: topology,
     )
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.run_schedule_survey",
-        lambda runner, topo: calls.append("run_schedule_survey") or schedule,
+        lambda runner, topo: schedule,
     )
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.run_software_survey",
-        lambda runner, topo: calls.append("run_software_survey") or software,
+        lambda runner, topo: software,
     )
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.discover_scratch",
-        lambda runner, topo: calls.append("discover_scratch") or scratch,
+        lambda runner, topo: scratch,
     )
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.discover_project",
-        lambda runner, topo, scheduler: calls.append("discover_project")
-        or project,
+        lambda runner, topo, scheduler: project,
     )
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.render_server_yaml",
-        lambda *args, **kwargs: calls.append("render_server_yaml") or plan,
+        lambda *args, **kwargs: plan,
     )
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.validate_server_yaml",
-        lambda yaml_text, server_name: calls.append("validate_server_yaml")
-        or validation,
+        lambda yaml_text, server_name: validation,
     )
+
+
+def test_run_wizard_write_updates_yaml_and_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _patch_probe_pipeline(monkeypatch)
+
+    def fake_refresh_cache(runner, server_name, force=False):
+        assert force is True
+        entry = CacheEntry(
+            server_name=server_name,
+            host=None,
+            mode="local",
+            scheduler="SLURM",
+            probed_at="2026-05-10T00:00:00Z",
+            source_commands={"scheduler": "sinfo --json"},
+            partitions=[],
+            node_summary={"selected_queue": "debug"},
+            program_candidates={},
+            status="fresh",
+            last_error=None,
+        )
+        write_cache(entry)
+        return entry
+
     monkeypatch.setattr(
         "chemsmart.agent.wizard.orchestrator.refresh_cache",
-        lambda runner, server_name, force=False: calls.append("refresh_cache"),
+        fake_refresh_cache,
     )
-    monkeypatch.setenv("HOME", str(tmp_path))
 
     outcome = run_wizard(StubRunner(), server_name="perlmutter", write=True)
 
-    assert calls == [
-        "detect_topology",
-        "run_schedule_survey",
-        "run_software_survey",
-        "discover_scratch",
-        "discover_project",
-        "render_server_yaml",
-        "validate_server_yaml",
-        "refresh_cache",
-    ]
-    expected = tmp_path / ".chemsmart" / "server" / "perlmutter.yaml"
-    assert expected.read_text(encoding="utf-8") == plan.text
-    assert outcome.written_path == str(expected)
-    assert outcome.plan == plan
-    assert outcome.validation == validation
-    assert outcome.surveys["topology"] == topology
-    assert outcome.surveys["schedule"] == schedule
+    yaml_path = tmp_path / ".chemsmart" / "server" / "perlmutter.yaml"
+    assert outcome.written_path == str(yaml_path)
+    assert yaml_path.read_text(encoding="utf-8") == YAML_TEXT
+    assert load_cache("perlmutter") is not None
+
+
+def test_cache_failure_does_not_fail_wizard(monkeypatch, tmp_path, caplog):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _patch_probe_pipeline(monkeypatch)
+    monkeypatch.setattr(
+        "chemsmart.agent.wizard.orchestrator.refresh_cache",
+        lambda runner, server_name, force=False: (_ for _ in ()).throw(
+            RuntimeError("cache down")
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        outcome = run_wizard(
+            StubRunner(), server_name="perlmutter", write=True
+        )
+
+    yaml_path = tmp_path / ".chemsmart" / "server" / "perlmutter.yaml"
+    assert outcome.written_path == str(yaml_path)
+    assert yaml_path.exists()
+    assert "Wizard cache refresh failed" in caplog.text

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from chemsmart.agent.wizard.project import discover_project
+from chemsmart.agent.wizard.refresh import refresh_cache
 from chemsmart.agent.wizard.render import ServerYamlPlan, render_server_yaml
 from chemsmart.agent.wizard.scratch import discover_scratch
 from chemsmart.agent.wizard.software import run_software_survey
@@ -15,6 +17,8 @@ from chemsmart.agent.wizard.validate import (
     validate_server_yaml,
 )
 from chemsmart.agent.wizard.write import write_server_yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -60,6 +64,14 @@ def run_wizard(
             yaml_text=plan.text,
             overwrite=overwrite,
         )
+        try:
+            refresh_cache(runner, server_name, force=True)
+        except Exception as exc:  # pragma: no cover - defensive only
+            logger.warning(
+                "Wizard cache refresh failed for %s: %s",
+                server_name,
+                exc,
+            )
 
     return WizardOutcome(
         plan=plan,

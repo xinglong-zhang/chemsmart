@@ -1129,6 +1129,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._handle_wizard_probe_command(argument)
         elif command == "/wizard-verify":
             self._handle_wizard_verify_command(argument)
+        elif command == "/wizard-refresh":
+            self._handle_wizard_refresh_command(argument)
         elif command == "/wizard-write":
             self._handle_wizard_write_command(argument)
         elif command == "/dryrun":
@@ -1281,6 +1283,41 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             {"server_name": parts[0]},
         )
 
+    def _handle_wizard_refresh_command(self, argument: str) -> None:
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before starting a new request.",
+            )
+            return
+        try:
+            parts = shlex.split(argument)
+        except ValueError as exc:
+            self.post_error("Invalid wizard-refresh command", str(exc))
+            return
+        if not parts or len(parts) > 2:
+            self.post_error(
+                "Invalid wizard-refresh command",
+                "Usage: /wizard-refresh <name> [--force]",
+            )
+            return
+        force = False
+        if len(parts) == 2:
+            if parts[1] not in {"force", "--force"}:
+                self.post_error(
+                    "Invalid wizard-refresh command",
+                    "Usage: /wizard-refresh <name> [--force]",
+                )
+                return
+            force = True
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.PLANNING)
+        footer.set_hint("Wizard refresh is probing cache state…")
+        self._current_worker = self.run_slash_tool_request(
+            "wizard_refresh",
+            {"server_name": parts[0], "force": force},
+        )
+
     def _handle_wizard_write_command(self, argument: str) -> None:
         if self._current_worker and not self._current_worker.is_finished:
             self.post_error(
@@ -1418,6 +1455,21 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             footer.set_hint("Wizard YAML written")
             return
+        if tool_name == "wizard_refresh" and isinstance(result, dict):
+            self.post_agent_message(
+                self._wizard_refresh_result_table(result),
+                title=f"Wizard refresh: {result.get('server_name') or 'server'}",
+            )
+            status = str(result.get("status") or "")
+            if status == "error":
+                footer.set_phase(Phase.ERROR)
+                footer.set_hint("Wizard refresh failed")
+                return
+            if status == "stale":
+                footer.set_hint("Wizard refresh preserved stale cache")
+                return
+            footer.set_hint("Wizard cache ready")
+            return
         if tool_name == "wizard_verify" and isinstance(result, dict):
             self.post_agent_message(
                 self._wizard_verify_result_table(result),
@@ -1452,6 +1504,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             if result.get("warnings"):
                 return "Verified transport wiring with warnings."
             return "Verified transport wiring."
+        if tool_name == "wizard_refresh" and isinstance(result, dict):
+            status = str(result.get("status") or "")
+            if status == "error":
+                return (
+                    "Wizard refresh failed and recorded an error cache entry."
+                )
+            if status == "stale":
+                return "Wizard refresh failed; preserved the last-good stale cache."
+            return "Wizard refresh produced a fresh cache entry."
         if tool_name == "wizard_write" and isinstance(result, dict):
             return f"Wrote {result.get('written_path')}"
         return "Completed successfully."
@@ -1482,6 +1543,38 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             "errors",
             "\n".join(str(item) for item in errors) if errors else "-",
         )
+        return table
+
+    def _wizard_refresh_result_table(self, result: dict[str, object]) -> Table:
+        table = Table(show_header=True, box=None, padding=(0, 1))
+        table.add_column("Field", style="cyan", no_wrap=True)
+        table.add_column("Value")
+        table.add_row("cache_path", str(result.get("cache_path") or "-"))
+        table.add_row("status", str(result.get("status") or "-"))
+        table.add_row("host", str(result.get("host") or "-"))
+        table.add_row("mode", str(result.get("mode") or "-"))
+        table.add_row("scheduler", str(result.get("scheduler") or "-"))
+        table.add_row("probed_at", str(result.get("probed_at") or "-"))
+        node_summary = result.get("node_summary")
+        if not isinstance(node_summary, dict):
+            node_summary = {}
+        table.add_row(
+            "selected_queue",
+            str(node_summary.get("selected_queue") or "-"),
+        )
+        table.add_row(
+            "resources",
+            f"cpu={node_summary.get('cpu')} mem_gb={node_summary.get('mem_gb')} gpu={node_summary.get('gpu')}",
+        )
+        table.add_row(
+            "project",
+            str(node_summary.get("project") or "-"),
+        )
+        table.add_row(
+            "scratch",
+            f"{node_summary.get('scratch_dir') or '-'} (writable={node_summary.get('scratch_writable')})",
+        )
+        table.add_row("last_error", str(result.get("last_error") or "-"))
         return table
 
     def _show_help(self) -> None:
@@ -1516,6 +1609,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ("[I]", "/sessions", "browse recent sessions"),
             ("[I]", "/resume <session-id>", "load or continue a session"),
             ("[A]", "/tools", "list registered tools"),
+            ("[A]", "/wizard-refresh <name> [--force]", "refresh node cache"),
             ("[A]", "/wizard-verify <name>", "verify server transport wiring"),
             ("[A]", "/doctor", "run inline diagnostics"),
             ("[A]", "/quit", "exit the TUI"),

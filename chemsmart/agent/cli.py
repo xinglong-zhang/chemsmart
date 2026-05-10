@@ -54,6 +54,7 @@ from chemsmart.agent.wizard import (
     verify_server_yaml,
     write_server_yaml,
 )
+from chemsmart.agent.wizard.tools import wizard_refresh as run_wizard_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -493,6 +494,21 @@ def wizard_verify(name: str):
             raise click.ClickException("\n".join(result.errors))
 
 
+@agent.command(name="wizard-refresh")
+@click.argument("name")
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Reprobe even when the cache is still fresh.",
+)
+def wizard_refresh(name: str, force: bool):
+    """Refresh or reuse the wizard node sidecar cache for a server."""
+    with _agent_command_logging():
+        result = run_wizard_refresh(name, force=force)
+        Console().print(_wizard_refresh_table(result))
+
+
 @agent.command()
 def tools():
     """List registered agent tools."""
@@ -593,6 +609,61 @@ def _wizard_verify_table(result) -> Table:
         "errors",
         "\n".join(result.errors) if result.errors else "-",
     )
+    return table
+
+
+def _wizard_refresh_table(result: dict[str, object]) -> Table:
+    table = Table(
+        title=f"Wizard refresh: {result.get('server_name') or 'server'}"
+    )
+    table.add_column("Field", style="cyan", no_wrap=True)
+    table.add_column("Value")
+    table.add_row("cache_path", str(result.get("cache_path") or "-"))
+    table.add_row("status", str(result.get("status") or "-"))
+    table.add_row("host", str(result.get("host") or "-"))
+    table.add_row("mode", str(result.get("mode") or "-"))
+    table.add_row("scheduler", str(result.get("scheduler") or "-"))
+    table.add_row("probed_at", str(result.get("probed_at") or "-"))
+    node_summary = result.get("node_summary")
+    if not isinstance(node_summary, dict):
+        node_summary = {}
+    table.add_row(
+        "selected_queue",
+        str(node_summary.get("selected_queue") or "-"),
+    )
+    table.add_row(
+        "resources",
+        f"cpu={node_summary.get('cpu')} mem_gb={node_summary.get('mem_gb')} gpu={node_summary.get('gpu')}",
+    )
+    table.add_row(
+        "queue_counts",
+        ("total={total} enabled={enabled} started={started} gpu={gpu}").format(
+            total=node_summary.get("queue_count"),
+            enabled=node_summary.get("enabled_queue_count"),
+            started=node_summary.get("started_queue_count"),
+            gpu=node_summary.get("gpu_queue_count"),
+        ),
+    )
+    table.add_row("project", str(node_summary.get("project") or "-"))
+    table.add_row(
+        "scratch",
+        f"{node_summary.get('scratch_dir') or '-'} (writable={node_summary.get('scratch_writable')})",
+    )
+    program_candidates = result.get("program_candidates")
+    if not isinstance(program_candidates, dict):
+        program_candidates = {}
+    programs = []
+    for name in ["gaussian", "orca", "nciplot"]:
+        candidate = program_candidates.get(name)
+        if not isinstance(candidate, dict):
+            continue
+        source = candidate.get("source")
+        location = candidate.get("exefolder") or ", ".join(
+            str(item) for item in candidate.get("module_candidates") or []
+        )
+        programs.append(f"{name}: {source} {location}".strip())
+    table.add_row("programs", "\n".join(programs) if programs else "-")
+    table.add_row("last_error", str(result.get("last_error") or "-"))
     return table
 
 
