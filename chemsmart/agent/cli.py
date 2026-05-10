@@ -18,7 +18,16 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from chemsmart.agent.core import AgentSession, _default_session_root, render_plan
+from chemsmart.agent.core import (
+    AgentSession,
+    _default_session_root,
+    render_plan,
+)
+from chemsmart.agent.permissions import (
+    ApprovalDecision,
+    PermissionMode,
+    PermissionPolicy,
+)
 from chemsmart.agent.providers import ProviderError
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.tui._logging import (
@@ -27,6 +36,7 @@ from chemsmart.agent.tui._logging import (
     _silence_console_logging,
 )
 from chemsmart.agent.tui.events import (
+    AssistantTurnEvent,
     CriticVerdictEvent,
     DryRunInputEvent,
     ErrorEvent,
@@ -35,6 +45,7 @@ from chemsmart.agent.tui.events import (
     RequestEvent,
     RuntimeValidationEvent,
     SubmissionPreviewEvent,
+    ToolUseEvent,
     parse_decision_event,
 )
 
@@ -134,7 +145,9 @@ def doctor(no_ping: bool):
 
         click.echo(f"tools registered: {len(registry.list_tools())}")
         if provider_name == "anthropic":
-            click.echo("WARN: this gateway tenant may not have Anthropic access")
+            click.echo(
+                "WARN: this gateway tenant may not have Anthropic access"
+            )
 
 
 @agent.command(name="run")
@@ -142,6 +155,20 @@ def doctor(no_ping: bool):
     "--dry-submit/--execute",
     default=True,
     help="Write scripts without real remote submission, or execute submit_hpc.",
+)
+@click.option(
+    "--mode",
+    "mode_name",
+    type=click.Choice(["permission", "driving"]),
+    default="driving",
+    show_default=True,
+    help="Permission mode prompts for every tool; driving mode is autonomous.",
+)
+@click.option(
+    "--yolo",
+    is_flag=True,
+    default=False,
+    help="Allow run_local and submit_hpc in driving mode.",
 )
 @click.option(
     "--allow-remote-unknown",
@@ -165,6 +192,8 @@ def doctor(no_ping: bool):
 def agent_run(
     request: str | None,
     dry_submit: bool,
+    mode_name: str,
+    yolo: bool,
     allow_remote_unknown: bool,
     allow_critic_override: bool,
     resume_id: str | None,
@@ -172,6 +201,7 @@ def agent_run(
     """Plan and execute an agent workflow."""
     with _agent_command_logging():
         session = AgentSession()
+        policy = _permission_policy_from_flags(mode_name, yolo)
         try:
             if resume_id:
                 result = _resume_session_or_fail(
@@ -179,17 +209,18 @@ def agent_run(
                     dry_submit=dry_submit,
                     allow_remote_unknown=allow_remote_unknown,
                     allow_critic_override=allow_critic_override,
+                    policy=policy,
+                    approver=_auto_deny_approver,
                 )
             else:
                 if not request:
                     raise click.ClickException(
                         "REQUEST is required unless --resume is used"
                     )
-                result = session.run(
+                result = session.run_loop(
                     request,
-                    dry_submit=dry_submit,
-                    allow_remote_unknown=allow_remote_unknown,
-                    allow_critic_override=allow_critic_override,
+                    policy=policy,
+                    approver=_auto_deny_approver,
                 )
         except RuntimeError as exc:
             raise click.ClickException(str(exc)) from exc
@@ -197,38 +228,56 @@ def agent_run(
         click.echo(f"session: {result['session_id']}")
         if _is_advisory_plan(result["plan"]):
             click.echo("Advice:")
-            click.echo(result["plan"].rationale or "No tool execution required.")
+            click.echo(
+                result.get("assistant_output")
+                or result["plan"].rationale
+                or "No tool execution required."
+            )
         else:
             click.echo(render_plan(result["plan"]))
-            verdict = result["critic_verdict"]
-            click.echo(f"critic verdict: {verdict.verdict}")
-            if verdict.issues:
-                for issue in verdict.issues:
-                    click.echo(f"- {issue}")
+            click.echo(f"approval mode: {result.get('approval_mode')}")
+            click.echo(f"yolo: {bool(result.get('yolo'))}")
             dry_run_result = _first_dry_run_result(result)
             if dry_run_result:
                 click.echo(f"inputfile: {dry_run_result['inputfile']}")
+        if result.get("assistant_output"):
+            click.echo(f"assistant: {result['assistant_output']}")
         click.echo(f"decision log: {result['session_dir']}/decision_log.jsonl")
-        if result.get("blocked"):
-            raise click.ClickException("critic gating blocked execution")
+        if result.get("limit_reason"):
+            click.echo(f"limit reason: {result['limit_reason']}")
 
 
 @agent.command()
+@click.option(
+    "--mode",
+    "mode_name",
+    type=click.Choice(["permission", "driving"]),
+    default="driving",
+    show_default=True,
+    help="Permission mode prompts for every tool; driving mode is autonomous.",
+)
+@click.option(
+    "--yolo",
+    is_flag=True,
+    default=False,
+    help="Allow run_local and submit_hpc in driving mode.",
+)
 @click.argument("request")
-def ask(request: str):
+def ask(request: str, mode_name: str, yolo: bool):
     """Run a one-shot dry-run request and stream Rich output to stdout."""
     with _agent_command_logging():
         session = AgentSession()
         console = Console()
         result_box: dict[str, dict] = {}
         error_box: dict[str, Exception] = {}
+        policy = _permission_policy_from_flags(mode_name, yolo)
 
         def runner() -> None:
             try:
-                result_box["result"] = session.run(
+                result_box["result"] = session.run_loop(
                     request,
-                    dry_submit=True,
-                    pause_before_risky=True,
+                    policy=policy,
+                    approver=_auto_deny_approver,
                 )
             except Exception as exc:  # pragma: no cover - bridged below
                 error_box["error"] = exc
@@ -262,8 +311,8 @@ def ask(request: str):
                 "error"
             ]
         result = result_box["result"]
-        if result.get("blocked"):
-            raise click.ClickException("critic gating blocked execution")
+        if result.get("limit_reason"):
+            click.echo(f"limit reason: {result['limit_reason']}")
 
 
 @agent.command()
@@ -305,7 +354,9 @@ def resume(
         click.echo(f"session: {result['session_id']}")
         if _is_advisory_plan(result["plan"]):
             click.echo("Advice:")
-            click.echo(result["plan"].rationale or "No tool execution required.")
+            click.echo(
+                result["plan"].rationale or "No tool execution required."
+            )
         else:
             click.echo(render_plan(result["plan"]))
             click.echo(f"critic verdict: {result['critic_verdict'].verdict}")
@@ -404,6 +455,16 @@ def _agent_log_root() -> Path:
 
 def _resume_session_or_fail(session_id: str, **kwargs):
     try:
+        policy = kwargs.pop("policy", None)
+        approver = kwargs.pop("approver", None)
+        if policy is not None:
+            session = AgentSession.load(session_id, **kwargs)
+            request = session.state.request or "Continue."
+            return session.run_loop(
+                request,
+                policy=policy,
+                approver=approver,
+            )
         return AgentSession.resume(session_id, **kwargs)
     except FileNotFoundError as exc:
         raise click.ClickException(
@@ -525,7 +586,9 @@ def _coerce_timestamp(value: object) -> datetime | None:
 
 
 def _format_age(timestamp: datetime) -> str:
-    delta_seconds = max(0, int((datetime.now(UTC) - timestamp).total_seconds()))
+    delta_seconds = max(
+        0, int((datetime.now(UTC) - timestamp).total_seconds())
+    )
     if delta_seconds < 60:
         return f"{delta_seconds}s ago"
     minutes = delta_seconds // 60
@@ -575,6 +638,20 @@ def _is_advisory_plan(plan) -> bool:
     return not bool(getattr(plan, "steps", None))
 
 
+def _permission_policy_from_flags(
+    mode_name: str,
+    yolo: bool,
+) -> PermissionPolicy:
+    return PermissionPolicy(
+        mode=PermissionMode(mode_name),
+        yolo=yolo,
+    )
+
+
+def _auto_deny_approver(_request) -> ApprovalDecision:
+    return ApprovalDecision.DENY
+
+
 def sanitize_inline_cli_output(text: str) -> str:
     lines = [
         line
@@ -598,6 +675,14 @@ def _stream_event(console: Console, entry: dict) -> None:
             )
         else:
             console.print(Panel(event.text, title="Plan"))
+    elif isinstance(event, AssistantTurnEvent):
+        if event.text.strip():
+            console.print(Panel(event.text.strip(), title="Assistant"))
+    elif isinstance(event, ToolUseEvent):
+        body = f"{event.tool} [{event.status}]"
+        if event.reason:
+            body += f"\n{event.reason}"
+        console.print(Panel(body, title="Tool use"))
     elif isinstance(event, MethodEvent):
         recommendation = event.recommendation
         text = (

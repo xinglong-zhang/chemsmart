@@ -8,7 +8,12 @@ from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.transcript import Transcript
 
-from .._agent_session_helpers import FakeProvider, critic_ok, planner_plan
+from .._agent_session_helpers import FakeProvider, planner_plan
+from .._loop_helpers import (
+    openai_final_response,
+    openai_tool_call_response,
+    tool_call,
+)
 
 
 def test_live_run_renders_plan_dry_run_and_critic_cells(
@@ -18,8 +23,17 @@ def test_live_run_renders_plan_dry_run_and_critic_cells(
 ):
     import chemsmart.agent.tools as agent_tools
 
+    plan = planner_plan(single_molecule_xyz_file, "tui_case")
+    tool_calls = [
+        tool_call(f"call_{index}", step["tool"], step["args"])
+        for index, step in enumerate(plan["steps"], start=1)
+    ]
+
     provider = FakeProvider(
-        [planner_plan(single_molecule_xyz_file, "tui_case"), critic_ok()]
+        [
+            {"__raw_response__": openai_tool_call_response(*tool_calls)},
+            {"__raw_response__": openai_final_response("Done.")},
+        ]
     )
 
     def fake_get_provider():
@@ -57,13 +71,9 @@ def test_live_run_renders_plan_dry_run_and_critic_cells(
             child_types = [
                 type(child).__name__ for child in transcript.children
             ]
-            assert child_types[:5] == [
-                "UserMessageCell",
-                "PlanCell",
-                "DryRunInputCell",
-                "RuntimeValidationCell",
-                "CriticVerdictCell",
-            ]
+            assert child_types[0] == "UserMessageCell"
+            assert "ToolCallCell" in child_types
+            assert "AgentMessageCell" in child_types
             footer_text = str(app.query_one(FooterWidget).renderable).lower()
             assert "finished" in footer_text
 

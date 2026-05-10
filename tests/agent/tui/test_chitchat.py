@@ -7,17 +7,19 @@ from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.widgets.cells import (
     AgentMessageCell,
-    CriticVerdictCell,
-    DryRunInputCell,
-    PlanCell,
-    RuntimeValidationCell,
+    ToolCallCell,
     UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.transcript import Transcript
 
-from .._agent_session_helpers import FakeProvider, critic_ok, planner_plan
+from .._agent_session_helpers import FakeProvider, planner_plan
+from .._loop_helpers import (
+    openai_final_response,
+    openai_tool_call_response,
+    tool_call,
+)
 
 
 def test_chitchat_input_renders_single_reply_cell_only(
@@ -27,9 +29,9 @@ def test_chitchat_input_renders_single_reply_cell_only(
     provider = FakeProvider(
         [
             {
-                "steps": [],
-                "rationale": "Hello! I can help plan chemsmart workflows.",
-                "estimated_cost": "none",
+                "__raw_response__": openai_final_response(
+                    "Hello! I can help plan chemsmart workflows."
+                )
             }
         ]
     )
@@ -61,17 +63,12 @@ def test_chitchat_input_renders_single_reply_cell_only(
                 AgentMessageCell,
             ]
             reply_cell = children[1]
-            assert reply_cell.border_title == "Reply"
+            assert reply_cell.border_title == "Assistant"
             assert reply_cell.source_text == (
                 "Hello! I can help plan chemsmart workflows."
             )
-            assert not any(
-                isinstance(child, (PlanCell, CriticVerdictCell))
-                for child in children
-            )
             footer = app.query_one(FooterWidget)
-            assert footer.phase == Phase.IDLE
-            assert footer.hint == "Ready"
+            assert footer.phase in {Phase.IDLE, Phase.FINISHED}
             assert len(provider.calls) == 1
 
     asyncio.run(scenario())
@@ -84,8 +81,18 @@ def test_chemistry_request_keeps_full_workflow_rendering(
 ):
     import chemsmart.agent.tools as agent_tools
 
+    plan = planner_plan(single_molecule_xyz_file, "workflow_case")
+
+    tool_calls = [
+        tool_call(f"call_{index}", step["tool"], step["args"])
+        for index, step in enumerate(plan["steps"], start=1)
+    ]
+
     provider = FakeProvider(
-        [planner_plan(single_molecule_xyz_file, "workflow_case"), critic_ok()]
+        [
+            {"__raw_response__": openai_tool_call_response(*tool_calls)},
+            {"__raw_response__": openai_final_response("Workflow complete.")},
+        ]
     )
 
     def fake_get_provider():
@@ -127,19 +134,10 @@ def test_chemistry_request_keeps_full_workflow_rendering(
 
             transcript = app.query_one(Transcript).query_one("#cells")
             children = list(transcript.children)
-            assert any(isinstance(child, PlanCell) for child in children)
-            assert any(
-                isinstance(child, DryRunInputCell) for child in children
-            )
-            assert any(
-                isinstance(child, RuntimeValidationCell) for child in children
-            )
-            assert any(
-                isinstance(child, CriticVerdictCell) for child in children
-            )
+            assert any(isinstance(child, ToolCallCell) for child in children)
             assert any(
                 isinstance(child, AgentMessageCell)
-                and child.border_title == "Summary"
+                and child.border_title == "Assistant"
                 for child in children
             )
             footer = app.query_one(FooterWidget)

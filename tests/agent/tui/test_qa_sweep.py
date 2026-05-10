@@ -63,16 +63,6 @@ def test_cluster_running_jobs_surfaces_scheduler_failures(monkeypatch):
         ("/sessions", Phase.IDLE, "No sessions found."),
         ("/resume", Phase.IDLE, "No sessions found."),
         ("/cancel 12345.remote", Phase.IDLE, "Confirmation required"),
-        (
-            "/submit",
-            Phase.DRY_RUN_READY,
-            "Plain mode uses /submit yes|session|no|revise <instruction>.",
-        ),
-        (
-            "/run",
-            Phase.DRY_RUN_READY,
-            "Plain mode uses /run yes|session|no|revise <instruction>.",
-        ),
     ],
 )
 def test_plain_mode_slash_commands_avoid_overlays(
@@ -92,16 +82,40 @@ def test_plain_mode_slash_commands_avoid_overlays(
         async with app.run_test() as pilot:
             await pilot.pause()
             app.chat_screen.query_one("#status-footer").set_phase(phase)
-            if command == "/submit":
-                app.chat_screen._pending_approval = True
-                app.chat_screen._pending_risky_tool = "submit_hpc"
-            if command == "/run":
-                app.chat_screen._pending_approval = True
-                app.chat_screen._pending_risky_tool = "run_local"
             app.chat_screen._handle_slash_command(command)
             await pilot.pause()
             assert app.screen is app.chat_screen
             assert expected in _cell_text(_last_cell(app))
+
+    asyncio.run(scenario())
+
+
+def test_plain_mode_submit_and_run_commands_stay_inline(tmp_path: Path):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(plain=True, session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_screen._pending_approval = True
+            app.chat_screen._pending_tool_request = type(
+                "Req",
+                (),
+                {"name": "submit_hpc", "arguments": {}},
+            )()
+            app.chat_screen._pending_approval_index = 1
+            app.chat_screen._pending_approval_total = 1
+            app.chat_screen._approval_waiter = None
+            app.chat_screen._handle_slash_command("/submit")
+            await pilot.pause()
+            assert app.screen is app.chat_screen
+
+            app.chat_screen._pending_tool_request = type(
+                "Req",
+                (),
+                {"name": "run_local", "arguments": {}},
+            )()
+            app.chat_screen._handle_slash_command("/run")
+            await pilot.pause()
+            assert app.screen is app.chat_screen
 
     asyncio.run(scenario())
 
@@ -183,8 +197,6 @@ def test_approval_overlay_escape_closes_when_revision_input_focused(
             app.push_screen(
                 ApprovalOverlay(action="run_local", request="optimize h2o"),
             )
-            await pilot.pause()
-            await pilot.press("r")
             await pilot.pause()
             assert isinstance(app.screen, ApprovalOverlay)
             await pilot.press("escape")

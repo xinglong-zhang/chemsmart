@@ -20,6 +20,7 @@ _EPHEMERAL_CELL_TYPE_NAMES = frozenset(
         "MoleculeCell",
         "GeometryHandoffCell",
         "RunResultCell",
+        "ToolCallCell",
     }
 )
 

@@ -1,4 +1,4 @@
-"""Approval overlay shown before risky execution."""
+"""Approval and permission-mode popups."""
 
 from __future__ import annotations
 
@@ -9,25 +9,40 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Input, Static
+from textual.widgets import Static
+
+from chemsmart.agent.permissions import ApprovalDecision, PermissionMode
+from chemsmart.agent.tui.tool_meta import (
+    pretty_tool_args,
+    tool_risk_badge,
+    tool_side_effect_summary,
+)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class ApprovalResult:
     choice: str
-    corrective_text: str | None = None
+
+    def to_decision(self) -> ApprovalDecision | None:
+        return {
+            "y": ApprovalDecision.ALLOW_ONCE,
+            "s": ApprovalDecision.ALLOW_SESSION,
+            "n": ApprovalDecision.DENY,
+        }.get(self.choice)
+
+
+@dataclass(slots=True, frozen=True)
+class PermissionModeResult:
+    mode: PermissionMode
+    yolo: bool
 
 
 class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
     BINDINGS = [
         Binding("y", "approve_once", "Yes once", show=False, priority=True),
-        Binding("n", "deny", "No", show=False, priority=True),
         Binding("s", "approve_session", "Session", show=False, priority=True),
-        Binding("r", "revise", "Revise", show=False, priority=True),
+        Binding("n", "deny", "No", show=False, priority=True),
         Binding("escape", "cancel", "Cancel", show=False, priority=True),
-        Binding(
-            "enter", "submit_revision", "Submit", show=False, priority=True
-        ),
     ]
 
     DEFAULT_CSS = """
@@ -36,73 +51,89 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
     }
 
     #approval-modal {
-        width: 88;
+        width: 92;
         height: auto;
-        max-height: 22;
+        max-height: 24;
         border: round $warning;
         padding: 1 2;
         background: $surface;
     }
-
-    #approval-revision {
-        margin-top: 1;
-        display: none;
-    }
-
-    ApprovalOverlay.-revising #approval-revision {
-        display: block;
-    }
     """
 
-    def __init__(self, *, action: str, request: str) -> None:
+    def __init__(
+        self,
+        *,
+        action: str | None = None,
+        request: str | None = None,
+        tool_name: str = "",
+        description: str = "",
+        arguments: dict | None = None,
+        risk_badge: str = "",
+        side_effect_summary: str = "",
+        session_rule_active: bool = False,
+        queue_index: int | None = None,
+        queue_total: int | None = None,
+    ) -> None:
         super().__init__()
-        self.action = action
-        self.request = request
-        self._revising = False
+        tool_name = tool_name or action or ""
+        description = description or tool_name
+        arguments = dict(arguments or {})
+        risk_badge = risk_badge or tool_risk_badge(tool_name)[0]
+        side_effect_summary = side_effect_summary or tool_side_effect_summary(
+            tool_name
+        )
+        self.tool_name = tool_name
+        self.description = description
+        self.arguments = arguments
+        self.risk_badge = risk_badge
+        self.side_effect_summary = side_effect_summary
+        self.session_rule_active = session_rule_active
+        self.queue_index = queue_index
+        self.queue_total = queue_total
+        self.request = request or ""
 
     def compose(self) -> ComposeResult:
-        mode, remote_effect, rollback = _approval_copy(self.action)
+        queue_text = ""
+        if (
+            self.queue_index is not None
+            and self.queue_total is not None
+            and self.queue_total > 0
+        ):
+            queue_text = f" ({self.queue_index} of {self.queue_total})"
+
+        session_rule = "active" if self.session_rule_active else "none"
         summary = (
-            f"Approve `{self.action}` for this request?\n\n"
-            f"mode: {mode}\n"
-            f"target: {self.action}\n"
-            f"remote-effect: {remote_effect}\n"
-            f"rollback: {rollback}\n\n"
-            "y once · n deny · s this-session · r decline-and-revise\n\n"
-            f"request: {self.request}"
+            f"Approve tool use{queue_text}?\n\n"
+            f"tool: {self.tool_name}\n"
+            f"description: {self.description}\n"
+            f"risk: {self.risk_badge}\n"
+            f"mode: execute once\n"
+            f"remote-effect: {self.side_effect_summary}\n"
+            "rollback: deny before execution; cleanup after start is separate.\n"
+            f"effect: {self.side_effect_summary}\n"
+            f"session rule: {session_rule}\n\n"
+            "args:\n"
+            f"{pretty_tool_args(self.arguments)}\n\n"
+            "y once · s this-session · n deny · esc cancel"
         )
+        if self.request:
+            summary += f"\n\nrequest: {self.request}"
         with Vertical(id="approval-modal"):
             yield Static(summary, id="approval-summary")
-            yield Input(
-                placeholder="Add a corrective instruction, then press Enter",
-                id="approval-revision",
-                disabled=True,
-            )
 
     def on_mount(self) -> None:
         self.query_one("#approval-summary", Static).border_title = "Approval"
 
     def on_key(self, event: events.Key) -> None:
-        if self._revising:
-            if event.key == "enter":
-                event.stop()
-                self.action_submit_revision()
-            elif event.key == "escape":
-                event.stop()
-                self.action_cancel()
-            return
         if event.key == "y":
             event.stop()
             self.action_approve_once()
-        elif event.key == "n":
-            event.stop()
-            self.action_deny()
         elif event.key == "s":
             event.stop()
             self.action_approve_session()
-        elif event.key == "r":
+        elif event.key == "n":
             event.stop()
-            self.action_revise()
+            self.action_deny()
         elif event.key == "escape":
             event.stop()
             self.action_cancel()
@@ -110,46 +141,107 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
     def action_approve_once(self) -> None:
         self.dismiss(ApprovalResult("y"))
 
-    def action_deny(self) -> None:
-        self.dismiss(ApprovalResult("n"))
-
     def action_approve_session(self) -> None:
         self.dismiss(ApprovalResult("s"))
 
-    def action_revise(self) -> None:
-        self._revising = True
-        self.add_class("-revising")
-        revision = self.query_one("#approval-revision", Input)
-        revision.disabled = False
-        revision.focus()
-
-    def action_submit_revision(self) -> None:
-        if not self._revising:
-            return
-        text = self.query_one("#approval-revision", Input).value.strip()
-        if not text:
-            return
-        self.dismiss(ApprovalResult("r", corrective_text=text))
+    def action_deny(self) -> None:
+        self.dismiss(ApprovalResult("n"))
 
     def action_cancel(self) -> None:
         self.dismiss(None)
 
 
-def _approval_copy(action: str) -> tuple[str, str, str]:
-    if action == "submit_hpc":
-        return (
-            "execute once",
-            "This may submit to the remote queue.",
-            "After submission, cancellation requires a separate queue cancel.",
+class PermissionModeOverlay(ModalScreen[PermissionModeResult | None]):
+    BINDINGS = [
+        Binding("p", "set_permission", "Permission", show=False),
+        Binding("d", "set_driving", "Driving", show=False),
+        Binding("y", "toggle_yolo", "YOLO", show=False),
+        Binding("enter", "apply", "Apply", show=False),
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    PermissionModeOverlay {
+        align: center middle;
+    }
+
+    #permissions-modal {
+        width: 74;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        mode: PermissionMode,
+        yolo: bool,
+    ) -> None:
+        super().__init__()
+        self.mode = mode
+        self.yolo = yolo
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="permissions-modal"):
+            yield Static(self._summary_text(), id="permissions-summary")
+
+    def on_mount(self) -> None:
+        self.query_one("#permissions-summary", Static).border_title = (
+            "Permissions"
         )
-    if action == "run_local":
-        return (
-            "execute once",
-            "A local run will start in the current working directory.",
-            "Reject now to prevent it; cleanup after start is handled separately.",
+
+    def action_set_permission(self) -> None:
+        self.mode = PermissionMode.PERMISSION
+        self._refresh()
+
+    def action_set_driving(self) -> None:
+        self.mode = PermissionMode.DRIVING
+        self._refresh()
+
+    def action_toggle_yolo(self) -> None:
+        self.yolo = not self.yolo
+        self._refresh()
+
+    def action_apply(self) -> None:
+        self.dismiss(PermissionModeResult(mode=self.mode, yolo=self.yolo))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def _refresh(self) -> None:
+        self.query_one("#permissions-summary", Static).update(
+            self._summary_text()
         )
-    return (
-        "execute once",
-        "The requested execution step will start.",
-        "You can reject before it starts; cleanup after start is handled separately.",
+
+    def _summary_text(self) -> str:
+        return (
+            "Toggle permission policy.\n\n"
+            f"mode: {self.mode.value}\n"
+            f"yolo: {'on' if self.yolo else 'off'}\n\n"
+            "p permission · d driving · y toggle yolo · enter apply"
+        )
+
+
+def build_approval_overlay(
+    *,
+    tool_name: str,
+    description: str,
+    arguments: dict,
+    session_rule_active: bool = False,
+    queue_index: int | None = None,
+    queue_total: int | None = None,
+) -> ApprovalOverlay:
+    risk_badge, _ = tool_risk_badge(tool_name)
+    return ApprovalOverlay(
+        tool_name=tool_name,
+        description=description,
+        arguments=arguments,
+        risk_badge=risk_badge,
+        side_effect_summary=tool_side_effect_summary(tool_name),
+        session_rule_active=session_rule_active,
+        queue_index=queue_index,
+        queue_total=queue_total,
     )

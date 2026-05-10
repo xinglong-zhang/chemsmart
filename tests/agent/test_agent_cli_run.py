@@ -7,38 +7,55 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from chemsmart.agent.cli import agent
+from chemsmart.agent.core import Plan
 
-from ._agent_session_helpers import FakeProvider, critic_ok, planner_plan
+from ._agent_session_helpers import FakeProvider
+from ._loop_helpers import openai_final_response
 from .tui._helpers import write_session_fixture
 
 
 def test_agent_cli_run_prints_plan_and_writes_decision_log(
     monkeypatch,
-    single_molecule_xyz_file,
     tmp_path: Path,
 ):
-    import chemsmart.agent.tools as agent_tools
-
-    provider = FakeProvider(
-        [planner_plan(single_molecule_xyz_file, "cli_case"), critic_ok()]
-    )
-
-    def fake_get_provider():
-        return provider
-
-    def fake_validate_runtime(job, server=None):
+    def fake_run_loop(self, request, **kwargs):
+        session_dir = tmp_path / "sessions" / "session-001"
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / "decision_log.jsonl").write_text(
+            '{"kind":"request","payload":{"request":"optimize water"}}\n',
+            encoding="utf-8",
+        )
         return {
-            "ok": "ok",
-            "local_ok": True,
-            "local_issues": [],
-            "remote_unknown": [],
+            "session_id": "session-001",
+            "session_dir": str(session_dir),
+            "plan": Plan(steps=[], rationale="Answer directly."),
+            "plan_text": "Plan:",
+            "critic_verdict": None,
+            "completed_steps": 0,
+            "blocked": False,
+            "dry_run_result": None,
+            "dry_run_results": [],
+            "runtime_result": None,
+            "preview_submit": None,
+            "results": [],
+            "assistant_output": "Done.",
+            "tool_requests": [],
+            "tool_outcomes": [],
+            "loop_state": {},
+            "final_message": "Done.",
+            "limit_reason": None,
+            "advisory_only": True,
+            "is_chitchat": False,
+            "approval_mode": "driving",
+            "driving_mode": True,
+            "yolo": False,
+            "denials_count": 0,
+            "approvals_count": 0,
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.providers.get_provider", fake_get_provider
+        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
     )
-    monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
-    monkeypatch.setattr(agent_tools, "validate_runtime", fake_validate_runtime)
     monkeypatch.setattr(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
@@ -51,13 +68,13 @@ def test_agent_cli_run_prints_plan_and_writes_decision_log(
     runner = CliRunner()
     result = runner.invoke(
         agent,
-        ["run", "--dry-submit", f"optimize {single_molecule_xyz_file}"],
+        ["run", "--dry-submit", "optimize water"],
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0, result.output
-    assert "Plan:" in result.output
-    assert "inputfile:" in result.output
+    assert "Advice:" in result.output
+    assert "assistant: Done." in result.output
     assert "decision log:" in result.output
 
     session_dir = tmp_path / "sessions"
@@ -129,7 +146,9 @@ def test_agent_sessions_lists_recent(monkeypatch, tmp_path: Path):
     now = datetime.now(UTC)
     for index in range(12):
         session_id = f"session-{index:02d}"
-        session_dir = write_session_fixture(session_root, session_id=session_id)
+        session_dir = write_session_fixture(
+            session_root, session_id=session_id
+        )
         started_at = (now - timedelta(minutes=index + 5)).isoformat()
         ended_at = (now - timedelta(minutes=index)).isoformat()
         session_json = json.loads(
@@ -148,9 +167,7 @@ def test_agent_sessions_lists_recent(monkeypatch, tmp_path: Path):
         )
 
         metadata = json.loads(
-            (session_dir / "session_metadata.json").read_text(
-                encoding="utf-8"
-            )
+            (session_dir / "session_metadata.json").read_text(encoding="utf-8")
         )
         metadata["request"] = session_json["request"]
         metadata["started_at"] = started_at
@@ -177,12 +194,14 @@ def test_agent_sessions_lists_recent(monkeypatch, tmp_path: Path):
 def test_agent_cli_run_wraps_runtime_errors_as_click_exceptions(
     monkeypatch,
 ):
-    def fake_run(self, request, **kwargs):
+    def fake_run_loop(self, request, **kwargs):
         raise RuntimeError(
             "run_local failed with returncode 1; see /tmp/run.stderr"
         )
 
-    monkeypatch.setattr("chemsmart.agent.cli.AgentSession.run", fake_run)
+    monkeypatch.setattr(
+        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -200,23 +219,47 @@ def test_agent_cli_run_surfaces_advisory_only_answers(
     monkeypatch,
     tmp_path: Path,
 ):
-    provider = FakeProvider(
-        [
-            {
-                "steps": [],
-                "rationale": "Use M06-2X/def2-SVP for the TS search and refine with def2-TZVP after one imaginary frequency check.",
-                "estimated_cost": "low",
-            }
-        ]
-    )
-
-    def fake_get_provider():
-        return provider
+    def fake_run_loop(self, request, **kwargs):
+        return {
+            "session_id": "session-002",
+            "session_dir": str(tmp_path / "sessions" / "session-002"),
+            "plan": Plan(
+                steps=[],
+                rationale=(
+                    "Use M06-2X/def2-SVP for the TS search and refine with "
+                    "def2-TZVP after one imaginary frequency check."
+                ),
+            ),
+            "plan_text": "Plan:",
+            "critic_verdict": None,
+            "completed_steps": 0,
+            "blocked": False,
+            "dry_run_result": None,
+            "dry_run_results": [],
+            "runtime_result": None,
+            "preview_submit": None,
+            "results": [],
+            "assistant_output": (
+                "Use M06-2X/def2-SVP for the TS search and refine with "
+                "def2-TZVP after one imaginary frequency check."
+            ),
+            "tool_requests": [],
+            "tool_outcomes": [],
+            "loop_state": {},
+            "final_message": "Done.",
+            "limit_reason": None,
+            "advisory_only": True,
+            "is_chitchat": False,
+            "approval_mode": "driving",
+            "driving_mode": True,
+            "yolo": False,
+            "denials_count": 0,
+            "approvals_count": 0,
+        }
 
     monkeypatch.setattr(
-        "chemsmart.agent.providers.get_provider", fake_get_provider
+        "chemsmart.agent.cli.AgentSession.run_loop", fake_run_loop
     )
-    monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
     monkeypatch.setattr(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
@@ -250,9 +293,10 @@ def test_ask_renders_advisory_plan(
     provider = FakeProvider(
         [
             {
-                "steps": [],
-                "rationale": "Advisory text: start with wB97X-D/def2-SVP, confirm one imaginary frequency, then refine with def2-TZVP.",
-                "estimated_cost": "low",
+                "__raw_response__": openai_final_response(
+                    "Advisory text: start with wB97X-D/def2-SVP, confirm "
+                    "one imaginary frequency, then refine with def2-TZVP."
+                )
             }
         ]
     )
@@ -284,6 +328,6 @@ def test_ask_renders_advisory_plan(
     )
 
     assert result.exit_code == 0, result.output
-    assert "Advice" in result.output
+    assert "Assistant" in result.output
     assert "Advisory text" in result.output
     assert "Plan" not in result.output

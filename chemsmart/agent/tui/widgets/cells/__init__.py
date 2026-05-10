@@ -12,6 +12,7 @@ from .plan import PlanCell
 from .run_result import RunResultCell
 from .runtime_validation import RuntimeValidationCell
 from .submission_preview import SubmissionPreviewCell
+from .tool_call_cell import ToolCallCell
 from .user_message import UserMessageCell
 from .workflow import WorkflowCell
 
@@ -28,6 +29,7 @@ __all__ = [
     "RunResultCell",
     "RuntimeValidationCell",
     "SubmissionPreviewCell",
+    "ToolCallCell",
     "UserMessageCell",
     "WorkflowCell",
 ]

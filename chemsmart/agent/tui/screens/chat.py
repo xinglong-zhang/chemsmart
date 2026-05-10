@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from threading import get_ident
+from threading import Event, get_ident
 from typing import Iterable
 
 from click.testing import CliRunner
@@ -17,7 +17,14 @@ from textual.worker import Worker, WorkerState
 
 from chemsmart.agent.cli import agent
 from chemsmart.agent.core import AgentSession, CriticVerdict, Plan
+from chemsmart.agent.permissions import (
+    ApprovalDecision,
+    PermissionMode,
+    PermissionPolicy,
+)
+from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.tui.events import (
+    AssistantTurnEvent,
     CriticVerdictEvent,
     DryRunInputEvent,
     ErrorEvent,
@@ -31,6 +38,7 @@ from chemsmart.agent.tui.events import (
     SubmissionPreviewEvent,
     ToolCallEvent,
     ToolPreviewEvent,
+    ToolUseEvent,
     parse_decision_event,
     session_completed,
 )
@@ -51,6 +59,9 @@ from chemsmart.agent.tui.services.job_poller import (
 )
 from chemsmart.agent.tui.services.log_tailer import LogTailer
 from chemsmart.agent.tui.services.session_runner import SessionRunnerMixin
+from chemsmart.agent.tui.tool_meta import (
+    tool_description,
+)
 from chemsmart.agent.tui.widgets.cells import (
     AgentMessageCell,
     CriticVerdictCell,
@@ -64,18 +75,21 @@ from chemsmart.agent.tui.widgets.cells import (
     RunResultCell,
     RuntimeValidationCell,
     SubmissionPreviewCell,
+    ToolCallCell,
     UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.header import ChemsmartHeader
 from chemsmart.agent.tui.widgets.popups import (
-    ApprovalOverlay,
     ApprovalResult,
     CwdMismatchChoice,
     CwdMismatchOverlay,
     FilePickerOverlay,
+    PermissionModeOverlay,
+    PermissionModeResult,
     TextPromptOverlay,
+    build_approval_overlay,
 )
 from chemsmart.agent.tui.widgets.transcript import Transcript
 from chemsmart.io.molecules.structure import Molecule
@@ -114,9 +128,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._current_plan: Plan | None = None
         self._current_plan_text: str | None = None
         self._current_verdict: CriticVerdict | None = None
+        self._permission_mode = PermissionMode.DRIVING
+        self._yolo_enabled = False
+        self._session_allow_tools: set[str] = set()
         self._pending_approval = False
-        self._pending_risky_tool: str | None = None
-        self._approval_session_granted = False
+        self._pending_tool_request: ToolRequest | None = None
+        self._pending_approval_description: str = ""
+        self._pending_approval_args: dict = {}
+        self._pending_approval_index: int | None = None
+        self._pending_approval_total: int | None = None
+        self._approval_waiter: Event | None = None
+        self._approval_decision: ApprovalDecision | None = None
         self._latest_dry_run_content: str | None = None
         self._job_snapshot: dict[str, dict] = {}
         self._job_cells: dict[str, JobStatusCell] = {}
@@ -151,6 +173,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self.query_one(FooterWidget).update_draft("")
         if text.startswith("/"):
             self._handle_slash_command(text)
+            return
+        if self._handle_plain_approval_alias(text):
             return
         self.start_request(text)
 
@@ -203,11 +227,14 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.active_agent_session = AgentSession(
                 session_root=str(self.session_root)
             )
-        return self.active_agent_session.run(
+        policy = self._permission_policy()
+        result = self.active_agent_session.run_loop(
             request,
-            dry_submit=True,
-            pause_before_risky=True,
+            policy=policy,
+            approver=lambda req: self._await_approval(req),
         )
+        result["session_allow_tools"] = sorted(policy.session_allow)
+        return result
 
     @work(
         thread=True,
@@ -228,11 +255,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             session_root=str(self.session_root),
             cwd_override=cwd_override,
         )
-        return self.active_agent_session.continue_loaded_session(
-            dry_submit=True,
-            pause_before_risky=True,
-            rerender_plan=False,
+        policy = self._permission_policy()
+        request = self.active_agent_session.state.request or "Continue."
+        result = self.active_agent_session.run_loop(
+            request,
+            policy=policy,
+            approver=lambda req: self._await_approval(req),
         )
+        result["session_allow_tools"] = sorted(policy.session_allow)
+        return result
 
     @work(
         thread=True,
@@ -330,16 +361,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if event.state == WorkerState.SUCCESS:
             result = event.worker.result or {}
             self._current_worker = event.worker
-            if result.get("pending_approval"):
-                self._pending_approval = True
-                self._pending_risky_tool = result.get("next_risky_tool")
-                self.query_one(FooterWidget).set_phase(Phase.DRY_RUN_READY)
-                self.query_one(FooterWidget).set_hint(
-                    f"Approval required for {self._pending_risky_tool}"
-                )
-                if self._approval_session_granted:
-                    self._approve_current_request()
-                return
+            self._session_allow_tools = set(
+                result.get("session_allow_tools") or []
+            )
             if result.get("blocked"):
                 self.query_one(FooterWidget).set_hint("Execution blocked")
             elif (
@@ -660,6 +684,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 transcript.add_cell(workflow_cell)
                 footer.set_phase(Phase.PLANNING)
                 footer.set_hint("Filling in tool steps…")
+        elif isinstance(event, AssistantTurnEvent):
+            if event.text.strip():
+                transcript.add_cell(
+                    AgentMessageCell(event.text.strip(), title="Assistant")
+                )
         elif isinstance(event, ToolCallEvent):
             if workflow_cell is not None:
                 if event.status == "running":
@@ -697,6 +726,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 )
             footer.set_phase(Phase.DRY_RUN_READY)
             footer.set_hint("Preparing submission preview…")
+        elif isinstance(event, ToolUseEvent):
+            self._apply_tool_use_event(event)
         elif isinstance(event, MethodEvent):
             transcript.add_cell(MethodCell(event.recommendation))
         elif isinstance(event, DryRunInputEvent):
@@ -777,7 +808,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             footer.set_hint("Agent reported an error")
         elif isinstance(event, SessionSummaryEvent):
             self._pending_approval = False
-            self._pending_risky_tool = None
+            self._pending_tool_request = None
             if payload.get("request_intent") == "chitchat":
                 footer.set_phase(Phase.IDLE)
                 footer.set_hint("Ready")
@@ -801,6 +832,74 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def _has_user_message(self, request: str) -> bool:
         return request in self._user_requests
+
+    def _apply_tool_use_event(self, event: ToolUseEvent) -> None:
+        transcript = self.query_one(Transcript)
+        footer = self.query_one(FooterWidget)
+        note = None
+        if event.status == "approved":
+            if event.scope == "session":
+                note = "approved for the rest of this session"
+            else:
+                note = "approved"
+        elif event.status == "denied":
+            note = (
+                "Denied by user; model will continue without this action."
+                if event.reason == "user_denied"
+                else f"Denied: {event.reason or 'policy blocked'}"
+            )
+        elif event.status not in {"pending", "approved"}:
+            note = (
+                event.reason
+                or _tool_use_payload_summary(event.payload)
+                or event.status
+            )
+
+        transcript.add_cell(
+            ToolCallCell(
+                tool=event.tool,
+                status=event.status,
+                description=event.description or event.tool,
+                arguments=event.args,
+                note=note,
+                queue_index=event.queue_index,
+                queue_total=event.queue_total,
+                session_rule_active=(
+                    event.tool in self._session_allow_tools
+                    if event.status == "pending"
+                    else False
+                ),
+            )
+        )
+
+        if event.status == "pending":
+            self._pending_approval_description = (
+                event.description or event.tool
+            )
+            self._pending_approval_args = dict(event.args)
+            self._pending_approval_index = event.queue_index
+            self._pending_approval_total = event.queue_total
+            footer.set_phase(Phase.PLANNING)
+            if self._permission_mode == PermissionMode.PERMISSION:
+                footer.set_hint(
+                    "PERMISSION_PENDING "
+                    f"({event.queue_index or 1} of {event.queue_total or 1})"
+                )
+            else:
+                footer.set_hint("DRIVING_AUTO")
+        elif event.status == "denied":
+            footer.set_phase(Phase.PLANNING)
+            footer.set_hint("DENIED_CONTINUING")
+        elif event.status in {"approved", "ok"}:
+            footer.set_phase(Phase.PLANNING)
+            footer.set_hint(
+                "DRIVING_AUTO"
+                if self._permission_mode == PermissionMode.DRIVING
+                else "Awaiting next tool decision…"
+            )
+        elif event.status in {"error", "skipped", "interrupted"}:
+            footer.set_phase(Phase.ERROR)
+            footer.set_hint("Tool call reported an error")
 
     def _handle_slash_command(self, raw: str) -> None:
         command, _, remainder = raw.partition(" ")
@@ -921,40 +1020,53 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 )
                 return
             self.post_agent_message(rationale, title="Rationale")
-        elif command == "/submit":
-            if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
-                return
-            if (
-                not self._pending_approval
-                or self._pending_risky_tool != "submit_hpc"
-            ):
-                self._request_approval("submit_hpc")
-                return
-            if self._handle_inline_approval(argument):
+        elif command == "/allow":
+            self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
+        elif command == "/allow-session":
+            self._resolve_pending_approval(ApprovalDecision.ALLOW_SESSION)
+        elif command == "/deny":
+            self._resolve_pending_approval(ApprovalDecision.DENY)
+        elif command == "/permissions":
+            if argument:
+                if not self._apply_permission_command(argument):
+                    self.post_error(
+                        "Unknown permissions command",
+                        "Use /permissions permission|driving.",
+                    )
                 return
             if self.app.plain:
-                self.post_error(
-                    "Approval required",
-                    "Plain mode uses /submit yes|session|no|revise <instruction>.",
+                self.post_agent_message(
+                    (
+                        "```\n"
+                        f"mode: {self._permission_mode.value}\n"
+                        f"yolo: {'on' if self._yolo_enabled else 'off'}\n"
+                        "Use /permissions permission|driving and /yolo on|off.\n"
+                        "```"
+                    ),
+                    title="Permissions",
                 )
+                return
+            self.app.push_screen(
+                PermissionModeOverlay(
+                    mode=self._permission_mode,
+                    yolo=self._yolo_enabled,
+                ),
+                self._handle_permission_mode_result,
+            )
+        elif command == "/yolo":
+            if not argument:
+                self.post_error(
+                    "Missing value",
+                    "Usage: /yolo on|off",
+                )
+                return
+            self._set_yolo(argument)
+        elif command == "/submit":
+            if argument and self._handle_inline_approval(argument):
                 return
             self._request_approval("submit_hpc")
         elif command == "/run":
-            if not self._guard_phase(command, {Phase.DRY_RUN_READY}):
-                return
-            if (
-                not self._pending_approval
-                or self._pending_risky_tool != "run_local"
-            ):
-                self._request_approval("run_local")
-                return
-            if self._handle_inline_approval(argument):
-                return
-            if self.app.plain:
-                self.post_error(
-                    "Approval required",
-                    "Plain mode uses /run yes|session|no|revise <instruction>.",
-                )
+            if argument and self._handle_inline_approval(argument):
                 return
             self._request_approval("run_local")
         else:
@@ -974,8 +1086,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ("[A]", "/cancel <job-id> [yes]", "cancel a queued/running job"),
             ("[F]", "/extract <job-id|inputfile>", "parse a final result"),
             ("[D]", "/dryrun", "regenerate the current dry-run"),
-            ("[D]", "/submit", "approve pending HPC submission"),
-            ("[D]", "/run", "approve pending local execution"),
+            ("[A]", "/allow", "allow the focused tool request once"),
+            (
+                "[A]",
+                "/allow-session",
+                "allow the focused tool for the rest of this session",
+            ),
+            ("[A]", "/deny", "deny the focused tool request"),
+            ("[A]", "/permissions", "toggle permission/driving mode"),
+            ("[A]", "/yolo on|off", "toggle risky-tool autonomy"),
+            ("[D]", "/submit", "backward-compatible submit approval"),
+            ("[D]", "/run", "backward-compatible local-run approval"),
             ("[P,D]", "/critic", "show the current critic verdict"),
             ("[P,D,R]", "/plan", "show the current plan"),
             ("[A]", "/rationale", "show planner rationale"),
@@ -1033,13 +1154,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         keyword = keyword.strip().lower()
         corrective_text = remainder.strip() or None
         if keyword in {"y", "yes"}:
-            self._handle_approval_result(ApprovalResult("y"))
+            self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
             return True
         if keyword in {"n", "no"}:
-            self._handle_approval_result(ApprovalResult("n"))
+            self._resolve_pending_approval(ApprovalDecision.DENY)
             return True
         if keyword in {"s", "session"}:
-            self._handle_approval_result(ApprovalResult("s"))
+            self._resolve_pending_approval(ApprovalDecision.ALLOW_SESSION)
             return True
         if keyword in {"r", "revise"}:
             if not corrective_text:
@@ -1048,9 +1169,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     "Usage: /run revise <instruction> or /submit revise <instruction>.",
                 )
                 return True
-            self._handle_approval_result(
-                ApprovalResult("r", corrective_text=corrective_text)
-            )
+            self.start_request(self._corrected_request(corrective_text))
             return True
         self.post_error(
             "Unknown approval response",
@@ -1098,57 +1217,169 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
         return False
 
+    def _handle_plain_approval_alias(self, text: str) -> bool:
+        keyword = text.strip().lower()
+        if keyword in {"yes", "y"}:
+            self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
+            return True
+        if keyword in {"session", "s"}:
+            self._resolve_pending_approval(ApprovalDecision.ALLOW_SESSION)
+            return True
+        if keyword in {"no", "n"}:
+            self._resolve_pending_approval(ApprovalDecision.DENY)
+            return True
+        return False
+
     def _request_approval(self, expected_tool: str) -> None:
-        if (
-            not self._pending_approval
-            or self._pending_risky_tool != expected_tool
-        ):
+        if not self._pending_approval:
             self.post_error(
                 "Approval unavailable",
                 f"No pending `{expected_tool}` action is waiting for approval.",
             )
             return
+        pending = self._pending_tool_request
+        if pending is None or pending.name != expected_tool:
+            self.post_error(
+                "Approval unavailable",
+                f"No pending `{expected_tool}` action is waiting for approval.",
+            )
+            return
+        if self.app.plain:
+            self.query_one(FooterWidget).set_hint(
+                "PERMISSION_PENDING "
+                f"({self._pending_approval_index or 1} of "
+                f"{self._pending_approval_total or 1})"
+            )
+            return
         self.app.push_screen(
-            ApprovalOverlay(
-                action=expected_tool,
-                request=self._current_request or "",
+            build_approval_overlay(
+                tool_name=pending.name,
+                description=(
+                    self._pending_approval_description
+                    or tool_description(pending.name)
+                ),
+                arguments=self._pending_approval_args or pending.arguments,
+                session_rule_active=(
+                    pending.name in self._session_allow_tools
+                ),
+                queue_index=self._pending_approval_index,
+                queue_total=self._pending_approval_total,
             ),
             self._handle_approval_result,
         )
 
     def _handle_approval_result(self, result: ApprovalResult | None) -> None:
         if result is None:
+            self._resolve_pending_approval(ApprovalDecision.DENY)
             return
-        if result.choice == "n":
-            self.query_one(FooterWidget).set_hint("Approval denied")
+        decision = result.to_decision()
+        if decision is None:
             return
-        if result.choice == "s":
-            self._approval_session_granted = True
-            self._approve_current_request()
-            return
-        if result.choice == "y":
-            self._approve_current_request()
-            return
-        if result.choice == "r" and result.corrective_text:
-            self.start_request(self._corrected_request(result.corrective_text))
-
-    def _approve_current_request(self) -> None:
-        session_dir = self.current_session_dir()
-        if session_dir is None:
-            self.post_error("No session", "No paused session is available.")
-            return
-        self._pending_approval = False
-        self.query_one(FooterWidget).set_phase(Phase.RUNNING)
-        self.query_one(FooterWidget).set_hint(
-            f"Executing {self._pending_risky_tool or 'workflow'}…"
-        )
-        self._current_worker = self.execute_agent_session(session_dir.name)
+        self._resolve_pending_approval(decision)
 
     def _corrected_request(self, corrective_text: str) -> str:
         original = self._current_request or ""
         return (
             f"Corrective instruction: {corrective_text}\n\n"
             f"Original request:\n{original}"
+        )
+
+    def _await_approval(self, request: ToolRequest) -> ApprovalDecision:
+        decision_ready = Event()
+
+        def prompt() -> None:
+            self._approval_waiter = decision_ready
+            self._approval_decision = None
+            self._pending_approval = True
+            self._pending_tool_request = request
+            footer = self.query_one(FooterWidget)
+            footer.set_phase(Phase.PLANNING)
+            footer.set_hint(
+                "PERMISSION_PENDING "
+                f"({self._pending_approval_index or 1} of "
+                f"{self._pending_approval_total or 1})"
+            )
+            if not self.app.plain:
+                self._request_approval(request.name)
+
+        self.app.call_from_thread(prompt)
+        decision_ready.wait()
+        return self._approval_decision or ApprovalDecision.DENY
+
+    def _resolve_pending_approval(
+        self,
+        decision: ApprovalDecision,
+    ) -> bool:
+        if not self._pending_approval or self._approval_waiter is None:
+            self.post_error(
+                "Approval unavailable",
+                "No tool request is currently waiting for approval.",
+            )
+            return False
+        self._approval_decision = decision
+        self._pending_approval = False
+        self._pending_tool_request = None
+        self._pending_approval_description = ""
+        self._pending_approval_args = {}
+        self._pending_approval_index = None
+        self._pending_approval_total = None
+        waiter = self._approval_waiter
+        self._approval_waiter = None
+        self.query_one(FooterWidget).set_phase(Phase.PLANNING)
+        self.query_one(FooterWidget).set_hint(
+            "DENIED_CONTINUING"
+            if decision == ApprovalDecision.DENY
+            else (
+                "DRIVING_AUTO"
+                if self._permission_mode == PermissionMode.DRIVING
+                else "Approval recorded"
+            )
+        )
+        waiter.set()
+        return True
+
+    def _permission_policy(self) -> PermissionPolicy:
+        return PermissionPolicy(
+            mode=self._permission_mode,
+            yolo=self._yolo_enabled,
+            session_allow=set(self._session_allow_tools),
+        )
+
+    def _handle_permission_mode_result(
+        self,
+        result: PermissionModeResult | None,
+    ) -> None:
+        if result is None:
+            return
+        self._permission_mode = result.mode
+        self._yolo_enabled = result.yolo
+        self.post_agent_message(
+            (
+                f"Permissions set to `{self._permission_mode.value}` "
+                f"(yolo={'on' if self._yolo_enabled else 'off'})."
+            ),
+            title="Permissions",
+        )
+
+    def _apply_permission_command(self, argument: str) -> bool:
+        value = argument.strip().lower()
+        if value == "permission":
+            self._permission_mode = PermissionMode.PERMISSION
+            return True
+        if value == "driving":
+            self._permission_mode = PermissionMode.DRIVING
+            return True
+        return False
+
+    def _set_yolo(self, argument: str) -> None:
+        value = argument.strip().lower()
+        if value not in {"on", "off"}:
+            self.post_error("Unknown value", "Usage: /yolo on|off")
+            return
+        self._yolo_enabled = value == "on"
+        self.post_agent_message(
+            f"YOLO {'enabled' if self._yolo_enabled else 'disabled'}.",
+            title="Permissions",
         )
 
     def _reset_request_state(
@@ -1163,13 +1394,20 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if clear_session:
             self.active_agent_session = None
             self.active_resume_id = None
+            self._session_allow_tools.clear()
         self._current_request = None
         self._current_plan = None
         self._current_plan_text = None
         self._current_verdict = None
         self._workflow_cell = None
         self._pending_approval = False
-        self._pending_risky_tool = None
+        self._pending_tool_request = None
+        self._pending_approval_description = ""
+        self._pending_approval_args = {}
+        self._pending_approval_index = None
+        self._pending_approval_total = None
+        self._approval_waiter = None
+        self._approval_decision = None
         self._latest_dry_run_content = None
         self._job_cells.clear()
         self._rendered_run_results.clear()
@@ -1301,6 +1539,22 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         except Exception:
             return None
         return next(iter(names), None) if len(names) == 1 else None
+
+
+def _tool_use_payload_summary(payload: object) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("ok") is False:
+        error = payload.get("error")
+        if isinstance(error, dict):
+            return str(error.get("message") or "") or None
+    if "handle_id" in payload:
+        return f"returned {payload['handle_id']}"
+    if "inputfile" in payload:
+        return str(payload.get("inputfile"))
+    if "ok" in payload and payload.get("ok") is True:
+        return "completed successfully"
+    return None
 
 
 def _jobs_sort_key(job: dict) -> tuple[int, str, str]:

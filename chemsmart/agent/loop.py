@@ -135,6 +135,10 @@ class ToolLoop:
                         "provider_call_id": request.provider_call_id,
                         "tool": request.name,
                         "args": request.arguments,
+                        "normalized_args": self._normalized_args(request),
+                        "description": self._tool_description(request.name),
+                        "queue_index": request_index + 1,
+                        "queue_total": len(requests),
                         "raw": request.raw,
                     },
                 )
@@ -197,7 +201,10 @@ class ToolLoop:
                     break
 
             if should_stop and stop_index is not None:
-                for request in requests[stop_index + 1 :]:
+                for queued_index, request in enumerate(
+                    requests[stop_index + 1 :],
+                    start=stop_index + 2,
+                ):
                     tool_requests.append(request)
                     self.decision_log.write(
                         "tool_use_request",
@@ -206,6 +213,12 @@ class ToolLoop:
                             "provider_call_id": request.provider_call_id,
                             "tool": request.name,
                             "args": request.arguments,
+                            "normalized_args": self._normalized_args(request),
+                            "description": self._tool_description(
+                                request.name
+                            ),
+                            "queue_index": queued_index,
+                            "queue_total": len(requests),
                             "raw": request.raw,
                         },
                     )
@@ -366,6 +379,7 @@ class ToolLoop:
                 "provider_call_id": request.provider_call_id,
                 "tool": request.name,
                 "status": outcome.status,
+                "description": self._tool_description(request.name),
                 "payload": display_result,
                 "handle_id": handle_id,
             },
@@ -385,6 +399,7 @@ class ToolLoop:
                 "step": step,
                 "provider_call_id": request.provider_call_id,
                 "tool": request.name,
+                "description": self._tool_description(request.name),
                 "mode": self.policy.mode.value,
                 "reason": reason,
             },
@@ -404,6 +419,8 @@ class ToolLoop:
                 "provider_call_id": request.provider_call_id,
                 "tool": request.name,
                 "status": outcome.status,
+                "description": self._tool_description(request.name),
+                "reason": reason,
                 "payload": {
                     "ok": False,
                     "error": {
@@ -431,6 +448,7 @@ class ToolLoop:
                 "step": step,
                 "provider_call_id": request.provider_call_id,
                 "tool": request.name,
+                "description": self._tool_description(request.name),
                 "scope": scope,
                 "source": source,
             },
@@ -461,6 +479,7 @@ class ToolLoop:
                 "provider_call_id": request.provider_call_id,
                 "tool": request.name,
                 "status": outcome.status,
+                "description": self._tool_description(request.name),
                 "payload": {
                     "ok": False,
                     "error": {
@@ -505,6 +524,8 @@ class ToolLoop:
                 "provider_call_id": request.provider_call_id,
                 "tool": request.name,
                 "status": outcome.status,
+                "description": self._tool_description(request.name),
+                "reason": reason,
                 "payload": {
                     "ok": False,
                     "error": {
@@ -517,6 +538,18 @@ class ToolLoop:
             },
         )
         return outcome
+
+    def _normalized_args(self, request: ToolRequest) -> dict[str, Any]:
+        if hasattr(self.registry, "normalize_args"):
+            return self.registry.normalize_args(
+                request.name, request.arguments
+            )
+        return dict(request.arguments)
+
+    def _tool_description(self, tool_name: str) -> str:
+        if hasattr(self.registry, "describe_tool"):
+            return self.registry.describe_tool(tool_name)
+        return tool_name
 
     def _store_result_handle(
         self,

@@ -32,6 +32,12 @@ class PlanEvent(AgentEvent):
 
 
 @dataclass(slots=True)
+class AssistantTurnEvent(AgentEvent):
+    text: str
+    stop_reason: str | None
+
+
+@dataclass(slots=True)
 class ToolCallEvent(AgentEvent):
     step_index: int
     tool: str
@@ -47,6 +53,21 @@ class ToolPreviewEvent(AgentEvent):
     status: str
     args: dict[str, Any]
     payload: Any | None = None
+
+
+@dataclass(slots=True)
+class ToolUseEvent(AgentEvent):
+    step_index: int
+    tool: str
+    status: str
+    args: dict[str, Any]
+    description: str
+    provider_call_id: str
+    reason: str | None = None
+    payload: Any | None = None
+    queue_index: int | None = None
+    queue_total: int | None = None
+    scope: str | None = None
 
 
 @dataclass(slots=True)
@@ -107,8 +128,10 @@ class IgnoredEvent(AgentEvent):
 _AGENT_EVENT_TYPES = (
     RequestEvent
     | PlanEvent
+    | AssistantTurnEvent
     | ToolCallEvent
     | ToolPreviewEvent
+    | ToolUseEvent
     | MethodEvent
     | DryRunInputEvent
     | RuntimeValidationEvent
@@ -138,6 +161,17 @@ def parse_decision_event(
         plan = Plan.model_validate(payload)
         return PlanEvent(kind=kind, plan=plan, text=render_plan(plan))
 
+    if kind == "assistant_turn":
+        return AssistantTurnEvent(
+            kind=kind,
+            text=str(payload.get("assistant_text") or ""),
+            stop_reason=(
+                str(payload.get("stop_reason"))
+                if payload.get("stop_reason") is not None
+                else None
+            ),
+        )
+
     if kind == "tool_call":
         return ToolCallEvent(
             kind=kind,
@@ -154,6 +188,70 @@ def parse_decision_event(
             tool=str(payload.get("tool") or ""),
             status="running",
             args=dict(payload.get("args") or {}),
+        )
+
+    if kind == "tool_use_request":
+        return ToolUseEvent(
+            kind=kind,
+            step_index=int(payload.get("step") or 0),
+            tool=str(payload.get("tool") or ""),
+            status="pending",
+            args=dict(
+                payload.get("normalized_args") or payload.get("args") or {}
+            ),
+            description=str(payload.get("description") or ""),
+            provider_call_id=str(payload.get("provider_call_id") or ""),
+            queue_index=_coerce_int(payload.get("queue_index")),
+            queue_total=_coerce_int(payload.get("queue_total")),
+        )
+
+    if kind == "tool_use_approved":
+        return ToolUseEvent(
+            kind=kind,
+            step_index=int(payload.get("step") or 0),
+            tool=str(payload.get("tool") or ""),
+            status="approved",
+            args={},
+            description=str(payload.get("description") or ""),
+            provider_call_id=str(payload.get("provider_call_id") or ""),
+            scope=(
+                str(payload.get("scope"))
+                if payload.get("scope") is not None
+                else None
+            ),
+        )
+
+    if kind == "tool_use_denied":
+        return ToolUseEvent(
+            kind=kind,
+            step_index=int(payload.get("step") or 0),
+            tool=str(payload.get("tool") or ""),
+            status="denied",
+            args={},
+            description=str(payload.get("description") or ""),
+            provider_call_id=str(payload.get("provider_call_id") or ""),
+            reason=(
+                str(payload.get("reason"))
+                if payload.get("reason") is not None
+                else None
+            ),
+        )
+
+    if kind == "tool_use_result":
+        return ToolUseEvent(
+            kind=kind,
+            step_index=int(payload.get("step") or 0),
+            tool=str(payload.get("tool") or ""),
+            status=str(payload.get("status") or "ok"),
+            args={},
+            description=str(payload.get("description") or ""),
+            provider_call_id=str(payload.get("provider_call_id") or ""),
+            payload=payload.get("payload"),
+            reason=(
+                str(payload.get("reason"))
+                if payload.get("reason") is not None
+                else None
+            ),
         )
 
     if kind in {"tool_result", "tool_preview_result"}:
@@ -242,3 +340,11 @@ def parse_decision_event(
 def session_completed(session_dir: Path) -> bool:
     metadata_path = session_dir / "session_metadata.json"
     return metadata_path.exists()
+
+
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None

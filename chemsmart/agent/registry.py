@@ -93,6 +93,9 @@ class ToolRegistry:
     def list_tools(self) -> list[ToolSpec]:
         return list(self._tools.values())
 
+    def get_tool(self, name: str) -> ToolSpec | None:
+        return self._tools.get(name)
+
     def openai_tool_defs(self) -> list[dict[str, Any]]:
         return [tool.openai_tool_def() for tool in self.list_tools()]
 
@@ -125,6 +128,13 @@ class ToolRegistry:
         if tool.accepts_kwargs and validated.model_extra:
             normalized.update(validated.model_extra)
         return normalized
+
+    def describe_tool(self, name: str) -> str:
+        tool = self.get_tool(name)
+        if tool is None:
+            return name
+        doc = inspect.getdoc(tool.func) or name
+        return doc.splitlines()[0].strip()
 
     def call(self, name: str, args: dict[str, Any] | None = None) -> Any:
         if name not in self._tools:
