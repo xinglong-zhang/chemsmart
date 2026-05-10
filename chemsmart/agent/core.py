@@ -15,6 +15,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from chemsmart.agent.handles import HandleStore, is_handle_id
 from chemsmart.agent.providers import (
     DEFAULT_TIMEOUT_S,
     extract_response_usage,
@@ -170,6 +171,7 @@ class AgentSession:
         self.state: SessionState | None = None
         self.session_dir: Path | None = None
         self.decision_log: DecisionLog | None = None
+        self.handle_store: HandleStore | None = None
         self.conversation_history = ConversationMemory()
         self._run_start_time: float | None = None
         self._llm_stats: list[dict[str, Any]] = []
@@ -709,7 +711,11 @@ class AgentSession:
     ) -> Any:
         assert self.session_dir is not None
         assert self.decision_log is not None
-        resolved_args = _resolve_refs(step.args, prior_results)
+        resolved_args = _resolve_refs(
+            step.args,
+            prior_results,
+            handle_store=self.handle_store,
+        )
         if extra_kwargs:
             resolved_args.update(extra_kwargs)
         ts_start = _utc_now_iso()
@@ -763,12 +769,14 @@ class AgentSession:
             )
             raise RuntimeError(message)
         artifact_path = self._write_result_artifact(step_index, result)
+        handle_id = self._store_result_handle(step.tool, result)
         self.decision_log.write(
             "tool_result",
             {
                 "step_index": step_index,
                 "tool": step.tool,
                 "artifact": artifact_path.name,
+                "handle_id": handle_id,
                 "payload": _preview_value(result),
                 "ts_end": _utc_now_iso(),
                 "step_wall_time_ms": _elapsed_ms(step_start_time),
@@ -785,7 +793,11 @@ class AgentSession:
         dry_submit: bool,
     ) -> Any:
         assert self.decision_log is not None
-        resolved_args = _resolve_refs(step.args, prior_results)
+        resolved_args = _resolve_refs(
+            step.args,
+            prior_results,
+            handle_store=self.handle_store,
+        )
         resolved_args["execute"] = False
         self.decision_log.write(
             "tool_preview",
@@ -980,6 +992,7 @@ class AgentSession:
         session_id = _new_session_id()
         self.session_dir = self.session_root / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.handle_store = HandleStore(self.session_dir)
         self.decision_log = DecisionLog(
             self.session_dir / "decision_log.jsonl"
         )
@@ -1064,6 +1077,7 @@ class AgentSession:
         if not state_path.exists():
             state_path = self.session_dir / "state.json"
         self.state = SessionState.load(state_path)
+        self.handle_store = HandleStore(self.session_dir)
         self.decision_log = DecisionLog(
             self.session_dir / "decision_log.jsonl"
         )
@@ -1087,6 +1101,22 @@ class AgentSession:
             with artifact_path.open(encoding="utf-8") as handle:
                 results.append(json.load(handle))
         return results
+
+    def _store_result_handle(
+        self,
+        tool_name: str,
+        result: Any,
+    ) -> str | None:
+        if self.handle_store is None:
+            return None
+        kind = _result_handle_kind(tool_name, result)
+        if kind is None:
+            return None
+        return self.handle_store.put(
+            kind=kind,
+            obj=result,
+            summary=_preview_value(result),
+        )
 
     def _save_state(self) -> None:
         assert self.session_dir is not None
@@ -1546,35 +1576,65 @@ def _git_sha() -> str | None:
     return git_sha or None
 
 
-def _resolve_refs(value: Any, prior_results: list[Any]) -> Any:
+def _resolve_refs(
+    value: Any,
+    prior_results: list[Any],
+    handle_store: HandleStore | None = None,
+) -> Any:
     if isinstance(value, str):
-        return _resolve_ref_string(value, prior_results)
+        return _resolve_ref_string(
+            value,
+            prior_results,
+            handle_store=handle_store,
+        )
     if isinstance(value, list):
-        return [_resolve_refs(item, prior_results) for item in value]
+        return [
+            _resolve_refs(
+                item,
+                prior_results,
+                handle_store=handle_store,
+            )
+            for item in value
+        ]
     if isinstance(value, dict):
         return {
-            key: _resolve_refs(item, prior_results)
+            key: _resolve_refs(
+                item,
+                prior_results,
+                handle_store=handle_store,
+            )
             for key, item in value.items()
         }
     return value
 
 
-def _resolve_ref_string(value: str, prior_results: list[Any]) -> Any:
+def _resolve_ref_string(
+    value: str,
+    prior_results: list[Any],
+    handle_store: HandleStore | None = None,
+) -> Any:
     match = _REFERENCE_RE.match(value)
-    if match is None:
-        return value
-    index = int(match.group("index")) - 1
-    if index < 0 or index >= len(prior_results):
-        raise IndexError(f"Step reference {value!r} is out of range")
-    resolved = prior_results[index]
-    for part in match.group("path").split("."):
-        if not part:
-            continue
-        if isinstance(resolved, dict):
-            resolved = resolved[part]
-        else:
-            resolved = getattr(resolved, part)
-    return _restore_json_result(resolved)
+    if match is not None:
+        index = int(match.group("index")) - 1
+        if index < 0 or index >= len(prior_results):
+            raise IndexError(f"Step reference {value!r} is out of range")
+        resolved = prior_results[index]
+        for part in match.group("path").split("."):
+            if not part:
+                continue
+            if isinstance(resolved, dict):
+                resolved = resolved[part]
+            else:
+                resolved = getattr(resolved, part)
+        return _restore_json_result(resolved)
+
+    if handle_store is not None and is_handle_id(value):
+        try:
+            return handle_store.get(value)
+        except KeyError:
+            return _restore_json_result(handle_store.get_summary(value))
+
+    return value
 
 
 @lru_cache(maxsize=1)
@@ -1755,6 +1815,34 @@ def _run_local_failure_message(result: dict[str, Any]) -> str:
     if isinstance(stderr_path, str) and stderr_path.strip():
         message += f"; see {stderr_path}"
     return message
+
+
+def _result_handle_kind(tool_name: str, result: Any) -> str | None:
+    if tool_name == "build_molecule":
+        return "mol"
+    if tool_name == "build_gaussian_settings":
+        return "gset"
+    if tool_name == "build_orca_settings":
+        return "oset"
+    if tool_name == "build_job":
+        return "job"
+    if tool_name == "dry_run_input" and isinstance(result, dict):
+        return "dryrun"
+    if tool_name == "validate_runtime" and isinstance(result, dict):
+        return "runtime"
+    if tool_name == "run_local" and isinstance(result, dict):
+        return "runresult"
+    if tool_name == "extract_optimized_geometry":
+        return "geom"
+    if (
+        tool_name == "submit_hpc"
+        and isinstance(result, dict)
+        and "job_id" in result
+    ):
+        return "submit"
+    if tool_name == "recommend_method" and isinstance(result, dict):
+        return "recmethod"
+    return None
 
 
 def _malformed_input_issue(
