@@ -329,6 +329,25 @@ class AgentSession:
         self._log_loop_mode(policy)
         if messages is None:
             messages = [{"role": "user", "content": request}]
+            if (
+                self.state.turn_index > 1
+                and self.conversation_history is not None
+            ):
+                ctx = self.conversation_history.prompt_context(
+                    current_turn_index=self.state.turn_index
+                )
+                recent = ctx.get("recent_turns") or []
+                older = ctx.get("older_turn_summary") or []
+                if recent or older:
+                    ctx_text = json.dumps(ctx, ensure_ascii=False)
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Previous turns in this session:\n" + ctx_text
+                            ),
+                        }
+                    ] + messages
         if budgets is None:
             budgets = ToolLoopBudgets(
                 log_provider_turn_raw=log_raw_provider_turns

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#.*$", re.MULTILINE)
 _ORCA_ROUTE_RE = re.compile(r"^\s*!.*$", re.MULTILINE)
+_MOLECULE_REPR_RE = re.compile(r"Molecule<([^,>]+)")
 _DEFAULT_RECENT_TURN_LIMIT = 3
 _DEFAULT_TOKEN_BUDGET = 900
 _MAX_REQUEST_CHARS = 240
@@ -103,6 +104,22 @@ class ConversationMemory(BaseModel):
                     payload,
                     tool_calls.get(step_index),
                 )
+                if summary:
+                    current_turn.reusable_results.append(summary)
+                continue
+
+            # run_loop path: tool_use_request carries args; tool_use_result
+            # carries the handle-wrapped result. Both are keyed by step number.
+            if kind == "tool_use_request":
+                step = _coerce_int(payload.get("step"))
+                if step is not None:
+                    tool_calls[step] = payload
+                continue
+
+            if kind == "tool_use_result":
+                step = _coerce_int(payload.get("step"))
+                req = tool_calls.get(step) if step is not None else None
+                summary = _summarize_tool_use_result(payload, req)
                 if summary:
                     current_turn.reusable_results.append(summary)
                 continue
@@ -381,3 +398,122 @@ def _extract_route_line(content: Any) -> str | None:
     if match is None:
         return None
     return _truncate(match.group(0).strip(), 120)
+
+
+def _summarize_tool_use_result(
+    payload: dict[str, Any],
+    req: dict[str, Any] | None,
+) -> str | None:
+    """Summarize a run_loop-style tool_use_result event (display_result form)."""
+    if not isinstance(payload, dict):
+        return None
+    tool = _string_value(payload.get("tool"))
+    if tool is None:
+        return None
+    status = payload.get("status")
+    if status not in ("ok", "partial"):
+        return None
+
+    inner = payload.get("payload")
+    args = req.get("args") if isinstance(req, dict) else {}
+    if not isinstance(args, dict):
+        args = {}
+
+    if tool == "build_molecule":
+        source = _string_value(args.get("filepath")) or _string_value(
+            args.get("smiles")
+        )
+        formula = None
+        if isinstance(inner, dict):
+            s = inner.get("summary")
+            repr_str = _string_value(s.get("repr") if isinstance(s, dict) else None)
+            if repr_str:
+                m = _MOLECULE_REPR_RE.search(repr_str)
+                if m:
+                    formula = m.group(1)
+        if source and formula:
+            return f"build_molecule loaded {formula} from {source}."
+        if source:
+            return f"build_molecule loaded the source from {source}."
+        if formula:
+            return f"build_molecule produced molecule {formula}."
+        return "build_molecule produced a reusable molecule."
+
+    if tool == "recommend_method":
+        method = _method_summary(inner) if isinstance(inner, dict) else None
+        if method:
+            return f"recommend_method suggested {method}."
+        return None
+
+    if tool in {"build_gaussian_settings", "build_orca_settings"}:
+        method_data: dict[str, Any] = {
+            "functional": args.get("functional"),
+            "basis": args.get("basis"),
+            "ab_initio": args.get("ab_initio"),
+            "solvent_id": args.get("solvent_id"),
+        }
+        method = _method_summary(method_data)
+        if method:
+            return f"{tool} prepared {method} settings."
+        return None
+
+    if tool == "build_job":
+        kind = _string_value(args.get("kind"))
+        label = _string_value(args.get("label"))
+        if not label and isinstance(inner, dict):
+            s = inner.get("summary")
+            repr_str = _string_value(s.get("repr") if isinstance(s, dict) else None)
+            if repr_str:
+                m = re.search(r"label=([^,>]+)", repr_str)
+                if m:
+                    label = m.group(1).strip()
+        pieces = ["build_job prepared"]
+        if kind:
+            pieces.append(kind)
+        if label:
+            pieces.append(f"label={label}")
+        return " ".join(pieces) + "."
+
+    if tool == "dry_run_input":
+        summary: dict[str, Any] = {}
+        if isinstance(inner, dict):
+            s = inner.get("summary")
+            if isinstance(s, dict):
+                summary = s
+        inputfile = _string_value(summary.get("inputfile"))
+        route = _extract_route_line(summary.get("content"))
+        pieces = ["dry_run_input wrote"]
+        if inputfile:
+            pieces.append(inputfile)
+        if route:
+            pieces.append(f"with route {route}")
+        return " ".join(pieces) + "."
+
+    if tool == "extract_optimized_geometry":
+        formula = None
+        if isinstance(inner, dict):
+            s = inner.get("summary")
+            repr_str = _string_value(s.get("repr") if isinstance(s, dict) else None)
+            if repr_str:
+                m = _MOLECULE_REPR_RE.search(repr_str)
+                if m:
+                    formula = m.group(1)
+        if formula:
+            return (
+                "extract_optimized_geometry recovered optimized geometry "
+                f"for {formula}."
+            )
+        return "extract_optimized_geometry recovered optimized geometry."
+
+    if tool == "validate_runtime":
+        ok_val = None
+        if isinstance(inner, dict):
+            s = inner.get("summary")
+            ok_val = _string_value(
+                s.get("ok") if isinstance(s, dict) else inner.get("ok")
+            )
+        if ok_val and ok_val != "ok":
+            return f"validate_runtime reported {ok_val}."
+        return None
+
+    return None
