@@ -23,6 +23,19 @@ class QueueFacts:
     mem_mb: int | None = None
 
 
+@dataclass(frozen=True)
+class PbsServerFacts:
+    default_queue: str | None
+    default_mem_gb: int | None
+    default_cores: int | None
+
+
+@dataclass(frozen=True)
+class PbsNodeFacts:
+    min_mem_gb: int | None
+    min_ncpus: int | None
+
+
 def parse_slurm_sinfo_json(payload: str) -> list[QueueFacts]:
     """Parse partitions from ``sinfo --json`` output."""
 
@@ -165,7 +178,7 @@ def parse_pbs_qstat_qf_json(payload: str) -> list[QueueFacts]:
 def parse_pbs_qstat_qf_text(payload: str) -> list[QueueFacts]:
     """Parse queues from ``qstat -Q -f`` output."""
 
-    blocks = re.split(r"(?m)^Queue\s+", payload)
+    blocks = re.split(r"(?m)^Queue(?:\s*:\s*|\s+)", payload)
     queues: list[QueueFacts] = []
     for block in blocks:
         block = block.strip()
@@ -207,6 +220,61 @@ def parse_pbs_qstat_qf_text(payload: str) -> list[QueueFacts]:
             )
         )
     return queues
+
+
+def parse_pbs_qmgr_list_server(payload: str) -> PbsServerFacts:
+    """Parse ``qmgr -c "list server"`` output."""
+
+    fields: dict[str, str] = {}
+    in_server_block = False
+    for line in payload.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("Server "):
+            in_server_block = True
+            continue
+        if not in_server_block:
+            continue
+        match = re.match(r"\s*([\w.]+)\s*=\s*(.+)", line)
+        if match:
+            fields[match.group(1)] = match.group(2).strip()
+
+    return PbsServerFacts(
+        default_queue=fields.get("default_queue"),
+        default_mem_gb=_first_mem_gb(
+            fields.get("resources_default.mem"),
+            fields.get("default_chunk.mem"),
+        ),
+        default_cores=_first_int(
+            fields.get("resources_default.ncpus"),
+            fields.get("default_chunk.ncpus"),
+        ),
+    )
+
+
+def parse_pbs_pbsnodes_av(payload: str) -> PbsNodeFacts:
+    """Parse ``pbsnodes -av`` output into conservative node resources."""
+
+    mem_values: list[int] = []
+    cpu_values: list[int] = []
+    for line in payload.splitlines():
+        mem_match = re.match(r"\s*resources_available\.mem\s*=\s*(.+)", line)
+        if mem_match:
+            parsed_mem = _parse_mem_gb(mem_match.group(1))
+            if parsed_mem is not None:
+                mem_values.append(parsed_mem)
+            continue
+        cpu_match = re.match(r"\s*resources_available\.ncpus\s*=\s*(.+)", line)
+        if cpu_match:
+            parsed_cpu = _parse_int(cpu_match.group(1))
+            if parsed_cpu is not None:
+                cpu_values.append(parsed_cpu)
+
+    return PbsNodeFacts(
+        min_mem_gb=min(mem_values) if mem_values else None,
+        min_ncpus=min(cpu_values) if cpu_values else None,
+    )
 
 
 def parse_lsf_bqueues_l(payload: str) -> list[QueueFacts]:

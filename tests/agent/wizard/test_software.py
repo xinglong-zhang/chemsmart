@@ -13,6 +13,7 @@ from chemsmart.agent.wizard import (
 from chemsmart.agent.wizard.probe import ProbeResult
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sge"
+PBS_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "pbs"
 SOFTWARE_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "software"
 
 

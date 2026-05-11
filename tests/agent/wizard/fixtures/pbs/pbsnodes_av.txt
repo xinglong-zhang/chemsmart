@@ -1,0 +1,20 @@
+chemnode1
+     Mom = chemnode1.asia-northeast1-a.c.chemsmart-sge-260511.internal
+     ntype = PBS
+     state = free
+     pcpus = 2
+     resources_available.arch = linux
+     resources_available.host = chemnode1
+     resources_available.mem = 3000mb
+     resources_available.ncpus = 2
+     resources_available.vnode = chemnode1
+     resources_assigned.accelerator_memory = 0kb
+     resources_assigned.hbmem = 0kb
+     resources_assigned.mem = 0kb
+     resources_assigned.naccelerators = 0
+     resources_assigned.ncpus = 0
+     resources_assigned.vmem = 0kb
+     resv_enable = True
+     sharing = default_shared
+     license = l
+     last_state_change_time = Mon May 11 13:41:27 2026
