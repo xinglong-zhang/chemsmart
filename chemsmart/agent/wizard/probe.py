@@ -112,6 +112,16 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         argv_template=("qstat", "-Q", "-f"),
         slot_validators={},
     ),
+    "survey.pbs.qmgr_server": ProbeSpec(
+        template_id="survey.pbs.qmgr_server",
+        argv_template=("qmgr", "-c", "list server"),
+        slot_validators={},
+    ),
+    "survey.pbs.pbsnodes_text": ProbeSpec(
+        template_id="survey.pbs.pbsnodes_text",
+        argv_template=("pbsnodes", "-av"),
+        slot_validators={},
+    ),
     "survey.lsf.bqueues_json": ProbeSpec(
         template_id="survey.lsf.bqueues_json",
         argv_template=(

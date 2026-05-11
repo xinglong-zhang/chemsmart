@@ -11,7 +11,8 @@ from chemsmart.agent.wizard import (
 from chemsmart.agent.wizard.parsers import QueueFacts
 from chemsmart.agent.wizard.probe import ProbeResult
 
-SLURM_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "slurm"
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
+SLURM_FIXTURE_DIR = FIXTURE_DIR / "slurm"
 
 
 class StubRunner:
@@ -228,5 +229,53 @@ def test_run_schedule_survey_slurm_uses_node_cpus_when_sinfo_json_fails():
             started=True,
             slots_total=None,
             mem_mb=3000,
+        )
+    ]
+
+
+def test_run_schedule_survey_pbs_openpbs_live_shape_uses_node_resources():
+    runner = StubRunner(
+        local_results={
+            ("qstat", "-Q", "-f", "-F", "json"): _result(
+                "qstat -Q -f -F json",
+                (FIXTURE_DIR / "pbs" / "qstat_qf_json.txt").read_text(),
+            ),
+            ("qstat", "-Q", "-f"): _result(
+                "qstat -Q -f",
+                (FIXTURE_DIR / "pbs" / "qstat_qf_text.txt").read_text(),
+            ),
+            ("qmgr", "-c", "list server"): _result(
+                'qmgr -c "list server"',
+                (FIXTURE_DIR / "pbs" / "qmgr_list_server.txt").read_text(),
+            ),
+            ("pbsnodes", "-av"): _result(
+                "pbsnodes -av",
+                (FIXTURE_DIR / "pbs" / "pbsnodes_av.txt").read_text(),
+            ),
+        }
+    )
+
+    survey = run_schedule_survey(runner, Topology("A", "localhost", []))
+
+    assert survey.scheduler == "PBS"
+    assert survey.chosen_queue == "workq"
+    assert survey.evidence == {
+        "qstat -Q -f -F json": "parsed",
+        "qstat -Q -f": "parsed",
+        'qmgr -c "list server"': "parsed",
+        "pbsnodes -av": "parsed",
+    }
+    assert survey.queues == [
+        QueueFacts(
+            name="workq",
+            default=True,
+            max_walltime_hours=None,
+            default_walltime_hours=None,
+            default_mem_gb=3,
+            default_cores=2,
+            gpus_per_node=None,
+            enabled=True,
+            started=True,
+            slots_total=None,
         )
     ]
