@@ -32,11 +32,17 @@ class ProgramFinding:
 
 
 @dataclass(frozen=True)
+class CondaEnvSurvey:
+    base: str | None
+    env_path: str | None
+    env_name: str | None
+
+
+@dataclass(frozen=True)
 class SoftwareSurvey:
     module_system: ModuleSystem
     programs: dict[str, ProgramFinding]
-    conda_base: str | None
-    conda_env: str | None
+    conda: CondaEnvSurvey
 
 
 def detect_module_system(runner, topology: Topology) -> ModuleSystem:
@@ -121,8 +127,9 @@ def find_program(
 
 
 def discover_conda(
-    runner, topology: Topology
-) -> tuple[str | None, str | None]:
+    runner,
+    topology: Topology,
+) -> CondaEnvSurvey:
     """Discover the active conda env and base path, if available."""
 
     env_value = _probe_env_values(runner, topology, ["CONDA_PREFIX"])[0]
@@ -132,14 +139,20 @@ def discover_conda(
         ALL_PROBE_SPECS["software.conda_base"],
     )
     base_value = _first_nonempty_line(base_result.stdout)
-    return _normalize_shell_value(base_value), env_value
+    base = _normalize_shell_value(base_value)
+    env_path = env_value
+    return CondaEnvSurvey(
+        base=base,
+        env_path=env_path,
+        env_name=_derive_conda_env_name(base=base, env_path=env_path),
+    )
 
 
 def run_software_survey(runner, topology: Topology) -> SoftwareSurvey:
     """Collect module, program, and conda findings."""
 
     module_system = detect_module_system(runner, topology)
-    conda_base, conda_env = discover_conda(runner, topology)
+    conda = discover_conda(runner, topology)
     programs = {
         "gaussian": find_program(
             runner,
@@ -167,8 +180,7 @@ def run_software_survey(runner, topology: Topology) -> SoftwareSurvey:
     return SoftwareSurvey(
         module_system=module_system,
         programs=programs,
-        conda_base=conda_base,
-        conda_env=conda_env,
+        conda=conda,
     )
 
 
@@ -297,6 +309,19 @@ def _normalize_shell_value(value: str | None) -> str | None:
     return stripped
 
 
+def _derive_conda_env_name(
+    base: str | None,
+    env_path: str | None,
+) -> str | None:
+    if env_path is None or env_path == base:
+        return None
+
+    env = Path(env_path)
+    if env.parent.name != "envs":
+        return None
+    return env.name or None
+
+
 def _verify_orca_qchem(runner, topology: Topology, exe_path: str) -> bool:
     """Return True only if exe_path is the quantum chemistry ORCA.
 
@@ -307,6 +332,7 @@ def _verify_orca_qchem(runner, topology: Topology, exe_path: str) -> bool:
     """
     try:
         import subprocess as _sp
+
         r = _sp.run(
             [exe_path, "--version"],
             capture_output=True,

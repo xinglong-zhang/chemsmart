@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from chemsmart.agent.wizard import (
+    CondaEnvSurvey,
     ModuleSystem,
     ProgramFinding,
     Topology,
@@ -8,6 +11,8 @@ from chemsmart.agent.wizard import (
     run_software_survey,
 )
 from chemsmart.agent.wizard.probe import ProbeResult
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sge"
 
 
 class StubRunner:
@@ -167,26 +172,33 @@ def test_find_program_sorts_multiple_module_candidates_by_length_then_name():
 
 
 def test_discover_conda_returns_env_and_base():
+    conda_env = (FIXTURE_DIR / "conda_prefix_env.txt").read_text()
+    conda_base = (FIXTURE_DIR / "conda_info_base.txt").read_text()
     runner = StubRunner(
         local_results={
             ("printenv", "CONDA_PREFIX"): _result(
                 "printenv CONDA_PREFIX",
-                "/opt/conda/envs/chemsmart\n",
+                conda_env,
             ),
             ("conda", "info", "--base"): _result(
                 "conda info --base",
-                "/opt/conda\n",
+                conda_base,
             ),
         }
     )
 
     assert discover_conda(runner, Topology("A", "localhost", [])) == (
-        "/opt/conda",
-        "/opt/conda/envs/chemsmart",
+        CondaEnvSurvey(
+            base="/opt/conda",
+            env_path="/opt/conda/envs/chemsmart",
+            env_name="chemsmart",
+        )
     )
 
 
 def test_run_software_survey_collects_all_programs():
+    conda_env = (FIXTURE_DIR / "conda_prefix_env.txt").read_text()
+    conda_base = (FIXTURE_DIR / "conda_info_base.txt").read_text()
     runner = StubRunner(
         local_results={
             ("type", "module"): _result(
@@ -198,11 +210,11 @@ def test_run_software_survey_collects_all_programs():
             ),
             ("printenv", "CONDA_PREFIX"): _result(
                 "printenv CONDA_PREFIX",
-                "/opt/conda/envs/chemsmart\n",
+                conda_env,
             ),
             ("conda", "info", "--base"): _result(
                 "conda info --base",
-                "/opt/conda\n",
+                conda_base,
             ),
             ("command", "-v", "g16"): _result(
                 "command -v g16", "/apps/bin/g16\n"
@@ -231,8 +243,34 @@ def test_run_software_survey_collects_all_programs():
         kind="lmod",
         version="Lmod 8.7.49",
     )
-    assert survey.conda_base == "/opt/conda"
-    assert survey.conda_env == "/opt/conda/envs/chemsmart"
+    assert survey.conda == CondaEnvSurvey(
+        base="/opt/conda",
+        env_path="/opt/conda/envs/chemsmart",
+        env_name="chemsmart",
+    )
     assert survey.programs["gaussian"].source == "path"
     assert survey.programs["orca"].module_candidates == ["orca/5.0.4"]
     assert survey.programs["nciplot"].module_candidates == ["nciplot/1.0"]
+
+
+def test_discover_conda_returns_source_only_for_base_env():
+    runner = StubRunner(
+        local_results={
+            ("printenv", "CONDA_PREFIX"): _result(
+                "printenv CONDA_PREFIX",
+                "/opt/conda\n",
+            ),
+            ("conda", "info", "--base"): _result(
+                "conda info --base",
+                "/opt/conda\n",
+            ),
+        }
+    )
+
+    assert discover_conda(runner, Topology("A", "localhost", [])) == (
+        CondaEnvSurvey(
+            base="/opt/conda",
+            env_path="/opt/conda",
+            env_name=None,
+        )
+    )

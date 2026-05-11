@@ -132,6 +132,11 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
             "queue_name": lambda value: validate_identifier(value)
         },
     ),
+    "survey.sge.qstat_gc": ProbeSpec(
+        template_id="survey.sge.qstat_gc",
+        argv_template=("qstat", "-g", "c"),
+        slot_validators={},
+    ),
     "survey.sge.qhost": ProbeSpec(
         template_id="survey.sge.qhost",
         argv_template=("qhost",),

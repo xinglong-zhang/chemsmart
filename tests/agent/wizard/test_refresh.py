@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-UTC = timezone.utc
-
 from chemsmart.agent.wizard.cache import CacheEntry, write_cache
 from chemsmart.agent.wizard.parsers import QueueFacts
 from chemsmart.agent.wizard.project import ProjectFinding
 from chemsmart.agent.wizard.refresh import opportunistic_refresh, refresh_cache
 from chemsmart.agent.wizard.scratch import ScratchFinding
 from chemsmart.agent.wizard.software import (
+    CondaEnvSurvey,
     ModuleSystem,
     ProgramFinding,
     SoftwareSurvey,
 )
 from chemsmart.agent.wizard.survey import ScheduleSurvey
+
+UTC = timezone.utc
 
 
 class StubRunner:
@@ -98,8 +99,7 @@ def _software() -> SoftwareSurvey:
                 on_path=False,
             ),
         },
-        conda_base=None,
-        conda_env=None,
+        conda=CondaEnvSurvey(base=None, env_path=None, env_name=None),
     )
 
 

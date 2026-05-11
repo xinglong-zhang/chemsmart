@@ -13,6 +13,7 @@ from chemsmart.agent.wizard.parsers import (
     parse_sge_qconf_sq,
     parse_sge_qconf_sql,
     parse_sge_qhost,
+    parse_sge_qstat_gc,
     parse_slurm_scontrol_partition_oneliner,
     parse_slurm_sinfo_json,
 )
@@ -170,6 +171,8 @@ def _probe_sge(runner, topology: Topology):
         return None
     evidence["qconf -sql"] = "parsed"
 
+    queue_slots = _probe_sge_qstat_gc(runner, topology, evidence)
+
     # Probe qhost once — fallback for mem (h_vmem=INFINITY) and cores (slots=1)
     qhost_mem_gb: int | None = None
     qhost_ncpu: int | None = None
@@ -202,17 +205,21 @@ def _probe_sge(runner, topology: Topology):
         # Fall back to qhost NCPU when slots <= 1 so NUM_CORES reflects reality.
         needs_mem = queue.default_mem_gb is None and qhost_mem_gb is not None
         needs_cpu = (queue.default_cores or 0) <= 1 and qhost_ncpu is not None
-        if needs_mem or needs_cpu:
+        slots_total = queue_slots.get(queue.name, queue.slots_total)
+        if needs_mem or needs_cpu or slots_total != queue.slots_total:
             queue = QueueFacts(
                 name=queue.name,
                 default=queue.default,
                 max_walltime_hours=queue.max_walltime_hours,
                 default_walltime_hours=queue.default_walltime_hours,
-                default_mem_gb=qhost_mem_gb if needs_mem else queue.default_mem_gb,
+                default_mem_gb=(
+                    qhost_mem_gb if needs_mem else queue.default_mem_gb
+                ),
                 default_cores=qhost_ncpu if needs_cpu else queue.default_cores,
                 gpus_per_node=queue.gpus_per_node,
                 enabled=queue.enabled,
                 started=queue.started,
+                slots_total=slots_total,
             )
         queues.append(queue)
         evidence[f"qconf -sq {name}"] = "parsed"
@@ -234,3 +241,24 @@ def _safe_parse(parser, payload):
         return parser(payload)
     except (TypeError, ValueError, KeyError):
         return None
+
+
+def _probe_sge_qstat_gc(
+    runner,
+    topology: Topology,
+    evidence: dict[str, str],
+) -> dict[str, int]:
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.sge.qstat_gc"],
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return {}
+
+    parsed = _safe_parse(parse_sge_qstat_gc, result.stdout)
+    if not parsed:
+        return {}
+
+    evidence["qstat -g c"] = "parsed"
+    return parsed

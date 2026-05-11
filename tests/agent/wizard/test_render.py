@@ -1,6 +1,9 @@
+from pathlib import Path
+
 import yaml
 
 from chemsmart.agent.wizard import (
+    CondaEnvSurvey,
     ModuleSystem,
     ProgramFinding,
     ProjectFinding,
@@ -11,7 +14,10 @@ from chemsmart.agent.wizard import (
     Topology,
     render_server_yaml,
 )
+from chemsmart.agent.wizard.parsers import parse_sge_qconf_sq
 from chemsmart.agent.wizard.probe import ProbeResult
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sge"
 
 
 class StubRunner:
@@ -48,28 +54,34 @@ def _result(command, stdout="", returncode=0):
 
 
 def _schedule_survey():
+    queue = parse_sge_qconf_sq(
+        (FIXTURE_DIR / "qconf_sq_20core.q.txt").read_text()
+    )
     return ScheduleSurvey(
-        scheduler="SLURM",
-        submit_command="sbatch",
+        scheduler="SGE",
+        submit_command="qsub",
         queues=[
             QueueFacts(
-                name="debug",
-                default=True,
-                max_walltime_hours=48,
-                default_walltime_hours=8,
-                default_mem_gb=128,
-                default_cores=32,
-                gpus_per_node=0,
-                enabled=True,
-                started=True,
+                name=queue.name,
+                default=queue.default,
+                max_walltime_hours=queue.max_walltime_hours,
+                default_walltime_hours=queue.default_walltime_hours,
+                default_mem_gb=queue.default_mem_gb,
+                default_cores=queue.default_cores,
+                gpus_per_node=queue.gpus_per_node,
+                enabled=queue.enabled,
+                started=queue.started,
+                slots_total=100,
             )
         ],
-        chosen_queue="debug",
-        evidence={"scontrol show partition --oneliner": "parsed"},
+        chosen_queue="20core.q",
+        evidence={"qconf -sq 20core.q": "parsed"},
     )
 
 
 def _software_survey():
+    conda_base = (FIXTURE_DIR / "conda_info_base.txt").read_text().strip()
+    conda_env = (FIXTURE_DIR / "conda_prefix_env.txt").read_text().strip()
     return SoftwareSurvey(
         module_system=ModuleSystem(kind="lmod", version="Lmod 8.7.49"),
         programs={
@@ -95,8 +107,11 @@ def _software_survey():
                 on_path=True,
             ),
         },
-        conda_base="/opt/conda",
-        conda_env="/opt/conda/envs/chemsmart",
+        conda=CondaEnvSurvey(
+            base=conda_base,
+            env_path=conda_env,
+            env_name="chemsmart",
+        ),
     )
 
 
@@ -130,12 +145,19 @@ def test_render_server_yaml_mode_a_applies_required_decisions():
 
     assert plan.server_block["HOST"] == "localhost"
     assert parsed["SERVER"]["HOST"] == "localhost"
+    assert parsed["SERVER"]["QUEUE_NAME"] == "20core.q"
+    assert parsed["SERVER"]["SUBMIT_COMMAND"] == "qsub"
     assert plan.server_block["PROJECT"] == "chem-123"
     assert parsed["SERVER"]["PROJECT"] == "chem-123"
     assert plan.program_blocks["GAUSSIAN"]["SCRATCH"] is False
     assert parsed["GAUSSIAN"]["SCRATCH"] is False
     assert plan.program_blocks["GAUSSIAN"]["EXEFOLDER"] == "/apps/gaussian"
     assert plan.program_blocks["GAUSSIAN"]["MODULES"] == ""
+    assert (
+        plan.program_blocks["GAUSSIAN"]["CONDA_ENV"]
+        == "source /opt/conda/etc/profile.d/conda.sh\n"
+        "conda activate chemsmart"
+    )
     assert (
         plan.server_block["EXTRA_COMMANDS"]
         == "export PATH=/opt/chemsmart/bin:$PATH"
@@ -225,3 +247,33 @@ def test_render_server_yaml_comments_groups_project_in_text():
 
     assert "## PROJECT: chem-group" in plan.text
     assert "PROJECT" not in parsed["SERVER"]
+
+
+def test_render_server_yaml_omits_conda_env_without_conda_base():
+    survey = _software_survey()
+    survey = SoftwareSurvey(
+        module_system=survey.module_system,
+        programs=survey.programs,
+        conda=CondaEnvSurvey(base=None, env_path=None, env_name=None),
+    )
+
+    plan = render_server_yaml(
+        Topology(mode="B", host="cluster", evidence=[]),
+        _schedule_survey(),
+        survey,
+        ScratchFinding(
+            path="/scratch/user",
+            source="env:SCRATCH",
+            writable=True,
+            candidates=[("env:SCRATCH", "/scratch/user")],
+        ),
+        ProjectFinding(
+            project="chem-123",
+            source="sacctmgr",
+            candidates=["chem-123"],
+        ),
+    )
+
+    parsed = yaml.safe_load(plan.text)
+
+    assert "CONDA_ENV" not in parsed["GAUSSIAN"]

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import shlex
 from dataclasses import dataclass
+from pathlib import Path
 
 import yaml
 
@@ -27,6 +28,7 @@ from chemsmart.agent.wizard.normalize import (
     normalize_walltime,
 )
 from chemsmart.agent.wizard.probe import ALL_PROBE_SPECS, run_local_probe
+from chemsmart.agent.wizard.software import CondaEnvSurvey
 
 _PROGRAM_NAME_MAP = {
     "gaussian": "GAUSSIAN",
@@ -172,7 +174,7 @@ def _render_program_blocks(
             block_name=block_name,
             finding=finding,
             scratch_writable=scratch_finding.writable,
-            conda_env=software_survey.conda_env,
+            conda=software_survey.conda,
             scratch_dir=scratch_finding.path,
             notes=notes,
         )
@@ -183,7 +185,7 @@ def _render_program_block(
     block_name: str,
     finding,
     scratch_writable: bool,
-    conda_env: str | None,
+    conda: CondaEnvSurvey,
     scratch_dir: str | None,
     notes: list[str],
 ) -> dict[str, object]:
@@ -191,10 +193,12 @@ def _render_program_block(
         "EXEFOLDER": finding.exefolder,
         "LOCAL_RUN": _LOCAL_RUN_DEFAULTS[block_name],
         "SCRATCH": bool(scratch_writable),
-        "CONDA_ENV": conda_env,
         "MODULES": "" if finding.on_path else _render_modules(finding),
         "ENVARS": _render_envars(block_name, finding.exefolder, scratch_dir),
     }
+    conda_env = _render_conda_env(conda)
+    if conda_env is not None:
+        block["CONDA_ENV"] = conda_env
     if block_name == "GAUSSIAN":
         block["SCRIPTS"] = ""
 
@@ -210,6 +214,17 @@ def _render_modules(finding) -> str:
     if not finding.module_candidates:
         return ""
     lines = ["module purge", f"module load {finding.module_candidates[0]}"]
+    return "\n".join(lines)
+
+
+def _render_conda_env(conda: CondaEnvSurvey) -> str | None:
+    if conda.base is None:
+        return None
+
+    conda_sh = Path(conda.base) / "etc" / "profile.d" / "conda.sh"
+    lines = [f"source {shlex.quote(str(conda_sh))}"]
+    if conda.env_name is not None:
+        lines.append(f"conda activate {shlex.quote(conda.env_name)}")
     return "\n".join(lines)
 
 

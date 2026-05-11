@@ -120,3 +120,50 @@ def test_run_schedule_survey_raises_on_ambiguous_scheduler():
 
     with pytest.raises(AmbiguousSchedulerError):
         run_schedule_survey(runner, Topology("A", "localhost", []))
+
+
+def test_run_schedule_survey_merges_sge_total_slots():
+    runner = StubRunner(
+        local_results={
+            ("qconf", "-sql"): _result(
+                "qconf -sql",
+                "all.q\n20core.q\n40core.q\n",
+            ),
+            ("qstat", "-g", "c"): _result(
+                "qstat -g c",
+                "CLUSTER QUEUE                   CQLOAD   USED   RES  AVAIL  TOTAL "
+                "aoACDS  cdsuE\n"
+                "--------------------------------------------------------------------------------\n"
+                "all.q                            0.00      0     0      0      0      0      0\n"
+                "20core.q                         0.10     70     0     30    100      0      0\n"
+                "40core.q                         0.20    320     0    240    560      0      0\n",
+            ),
+            ("qhost",): _result("qhost", returncode=1, stdout=""),
+            ("qconf", "-sq", "all.q"): _result(
+                "qconf -sq all.q",
+                "qname all.q\nslots 1\nh_rt 86400\nh_vmem INFINITY\n"
+                "state enabled\n",
+            ),
+            ("qconf", "-sq", "20core.q"): _result(
+                "qconf -sq 20core.q",
+                "qname 20core.q\nslots 20\nh_rt 86400\nh_vmem 62.7G\n"
+                "state enabled\n",
+            ),
+            ("qconf", "-sq", "40core.q"): _result(
+                "qconf -sq 40core.q",
+                "qname 40core.q\nslots 40\nh_rt 86400\nh_vmem 187.4G\n"
+                "state enabled\n",
+            ),
+        }
+    )
+
+    survey = run_schedule_survey(runner, Topology("A", "localhost", []))
+
+    assert survey.scheduler == "SGE"
+    assert survey.chosen_queue == "20core.q"
+    assert survey.evidence["qstat -g c"] == "parsed"
+    assert {queue.name: queue.slots_total for queue in survey.queues} == {
+        "all.q": 0,
+        "20core.q": 100,
+        "40core.q": 560,
+    }

@@ -8,6 +8,7 @@ from chemsmart.agent.wizard.project import ProjectFinding
 from chemsmart.agent.wizard.render import ServerYamlPlan
 from chemsmart.agent.wizard.scratch import ScratchFinding
 from chemsmart.agent.wizard.software import (
+    CondaEnvSurvey,
     ModuleSystem,
     ProgramFinding,
     SoftwareSurvey,
@@ -48,8 +49,7 @@ def _stub_surveys():
                 on_path=True,
             )
         },
-        conda_base=None,
-        conda_env=None,
+        conda=CondaEnvSurvey(base=None, env_path=None, env_name=None),
     )
     scratch = ScratchFinding(
         path="/scratch/user",
