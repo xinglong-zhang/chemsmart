@@ -1,0 +1,17 @@
+NodeName=chemnode2 Arch=x86_64 CoresPerSocket=1 
+   CPUAlloc=0 CPUEfctv=2 CPUTot=2 CPULoad=0.80
+   AvailableFeatures=(null)
+   ActiveFeatures=(null)
+   Gres=(null)
+   NodeAddr=chemnode2 NodeHostName=chemnode2 Version=22.05.9
+   OS=Linux 5.14.0-611.47.1.el9_7.x86_64 #1 SMP PREEMPT_DYNAMIC Wed Apr 8 12:18:23 UTC 2026 
+   RealMemory=3000 AllocMem=0 FreeMem=1694 Sockets=2 Boards=1
+   State=IDLE ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A
+   Partitions=workq 
+   BootTime=2026-05-11T14:39:42 SlurmdStartTime=2026-05-11T14:57:29
+   LastBusyTime=2026-05-11T14:57:29
+   CfgTRES=cpu=2,mem=3000M,billing=2
+   AllocTRES=
+   CapWatts=n/a
+   CurrentWatts=0 AveWatts=0
+   ExtSensorsJoules=n/s ExtSensorsWatts=0 ExtSensorsTemp=n/s

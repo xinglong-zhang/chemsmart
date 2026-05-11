@@ -11,6 +11,7 @@ from chemsmart.agent.wizard.parsers import (
     parse_sge_qconf_sql,
     parse_sge_qstat_gc,
     parse_slurm_scontrol_partition_oneliner,
+    parse_slurm_scontrol_show_node_cpus,
     parse_slurm_scontrol_show_node_real_memory,
     parse_slurm_sinfo_json,
 )
@@ -77,6 +78,12 @@ def test_parse_slurm_scontrol_show_node_real_memory(
     assert parse_slurm_scontrol_show_node_real_memory(payload) == (
         expected_mem_mb
     )
+
+
+def test_parse_slurm_scontrol_show_node_cpus():
+    payload = (FIXTURE_DIR / "scontrol_show_node_chemnode2.txt").read_text()
+
+    assert parse_slurm_scontrol_show_node_cpus(payload) == 2
 
 
 def test_parse_pbs_qstat_qf_json():

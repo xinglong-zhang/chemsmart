@@ -121,6 +121,20 @@ def parse_slurm_scontrol_show_node_real_memory(payload: str) -> int | None:
     return value
 
 
+def parse_slurm_scontrol_show_node_cpus(payload: str) -> int | None:
+    """Parse ``scontrol show node`` output and return node CPU count."""
+
+    fields = dict(re.findall(r"\b(CPUTot|CPUEfctv|CPUs)=(\d+)\b", payload))
+    value = _first_int(
+        fields.get("CPUTot"),
+        fields.get("CPUEfctv"),
+        fields.get("CPUs"),
+    )
+    if value is None:
+        raise ValueError("Slurm node output is missing CPU totals.")
+    return value
+
+
 def parse_pbs_qstat_qf_json(payload: str) -> list[QueueFacts]:
     """Parse queues from ``qstat -Q -f -F json`` output."""
 

@@ -181,3 +181,52 @@ def test_run_schedule_survey_merges_sge_total_slots():
         "20core.q": 100,
         "40core.q": 560,
     }
+
+
+def test_run_schedule_survey_slurm_uses_node_cpus_when_sinfo_json_fails():
+    node_payload = (
+        SLURM_FIXTURE_DIR / "scontrol_show_node_chemnode2.txt"
+    ).read_text()
+    runner = StubRunner(
+        local_results={
+            ("sinfo", "--json"): _result(
+                "sinfo --json",
+                "",
+                returncode=1,
+            ),
+            ("scontrol", "show", "partition", "--oneliner"): _result(
+                "scontrol show partition --oneliner",
+                "PartitionName=workq Default=YES MaxTime=1-00:00:00 "
+                "MaxCPUsPerNode=UNLIMITED TotalCPUs=2 Nodes=chemnode2 "
+                "State=UP TRES=cpu=2,mem=3000M,node=1\n",
+            ),
+            ("scontrol", "show", "node", "chemnode2"): _result(
+                "scontrol show node chemnode2",
+                node_payload,
+            ),
+        }
+    )
+
+    survey = run_schedule_survey(runner, Topology("A", "localhost", []))
+
+    assert survey.scheduler == "SLURM"
+    assert survey.chosen_queue == "workq"
+    assert survey.evidence == {
+        "scontrol show partition --oneliner": "parsed",
+        "scontrol show node chemnode2": "parsed",
+    }
+    assert survey.queues == [
+        QueueFacts(
+            name="workq",
+            default=True,
+            max_walltime_hours=24,
+            default_walltime_hours=None,
+            default_mem_gb=None,
+            default_cores=2,
+            gpus_per_node=None,
+            enabled=True,
+            started=True,
+            slots_total=None,
+            mem_mb=3000,
+        )
+    ]
