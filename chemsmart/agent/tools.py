@@ -480,6 +480,13 @@ def validate_runtime(
         remote_unknown.extend(_REMOTE_UNKNOWN_SERVER_FIELDS)
         return _runtime_validation_result(local_issues, remote_unknown)
 
+    if not isinstance(server, Server):
+        try:
+            server = _coerce_server(server)
+        except Exception as exc:
+            local_issues.append(f"server.config invalid: {exc}")
+            return _runtime_validation_result(local_issues, remote_unknown)
+
     server_config = getattr(server, "config", None)
     if not isinstance(server_config, dict):
         local_issues.append("server.config invalid")
@@ -491,11 +498,11 @@ def validate_runtime(
 
     if not _is_non_empty_string(queue_name):
         local_issues.append("server.queue missing")
+    # account/project is optional for SGE/PBS — only flag as remote_unknown
     if not _is_non_empty_string(account_name):
-        local_issues.append("server.account missing")
-    if scratch_value is None:
-        local_issues.append("server.scratch_dir missing")
-    elif not isinstance(scratch_value, str):
+        remote_unknown.append(_REMOTE_UNKNOWN_ACCOUNT)
+    # null SCRATCH_DIR means use system default — not a hard failure
+    if scratch_value is not None and not isinstance(scratch_value, str):
         local_issues.append("server.scratch_dir invalid")
 
     runner = None

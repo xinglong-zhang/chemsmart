@@ -73,12 +73,22 @@ def find_program(
     key: str,
     exe_names: list[str],
     module_patterns: list[str],
+    verify_qchem: bool = False,
 ) -> ProgramFinding:
-    """Find a program on PATH first, then via module availability."""
+    """Find a program on PATH first, then via module availability.
+
+    verify_qchem=True runs ``<exe> --version`` and requires "orca" +
+    "version"/"release" in the output — this filters out the Linux
+    accessibility tool ``/usr/bin/orca`` which shares the same name.
+    """
 
     for exe_name in exe_names:
         resolved = _resolve_executable(runner, topology, exe_name)
         if resolved is not None:
+            if verify_qchem and not _verify_orca_qchem(
+                runner, topology, resolved
+            ):
+                continue
             return ProgramFinding(
                 program=key,
                 exefolder=str(Path(resolved).parent),
@@ -144,6 +154,7 @@ def run_software_survey(runner, topology: Topology) -> SoftwareSurvey:
             "orca",
             ["orca"],
             ["orca"],
+            verify_qchem=True,
         ),
         "nciplot": find_program(
             runner,
@@ -284,3 +295,34 @@ def _normalize_shell_value(value: str | None) -> str | None:
     if not stripped or stripped.startswith("$"):
         return None
     return stripped
+
+
+def _verify_orca_qchem(runner, topology: Topology, exe_path: str) -> bool:
+    """Return True only if exe_path is the quantum chemistry ORCA.
+
+    The Linux screen reader (/usr/bin/orca) emits PyGI/GTK import warnings
+    on stderr.  ORCA QChem prints "Program Version X.X.X - RELEASE -" or
+    similar.  We reject any binary whose combined output contains the GTK
+    screen-reader fingerprint.
+    """
+    try:
+        import subprocess as _sp
+        r = _sp.run(
+            [exe_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        combined = r.stdout + r.stderr
+        # Fingerprint of the Linux accessibility screen reader
+        if "PyGIWarning" in combined or "require_version" in combined:
+            return False
+        output_lower = combined.lower()
+        # ORCA QChem version output contains "program version" or "release"
+        return "orca" in output_lower and (
+            "program version" in output_lower
+            or "release" in output_lower
+            or bool(__import__("re").search(r"\d+\.\d+\.\d+", combined))
+        )
+    except Exception:
+        return False

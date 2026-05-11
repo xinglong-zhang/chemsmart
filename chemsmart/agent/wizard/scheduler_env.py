@@ -56,6 +56,33 @@ _PBS_BIN_CANDIDATES: list[str] = [
     "/cm/shared/apps/torque/current/bin",
 ]
 
+_GAUSSIAN_BIN_CANDIDATES: list[str] = [
+    "/opt/gaussian/g16",
+    "/opt/gaussian/g09",
+    "/opt/g16",
+    "/opt/g09",
+    "/usr/local/gaussian/g16",
+    "/usr/local/gaussian/g09",
+    "/usr/local/g16",
+    "/usr/local/g09",
+    "/cm/shared/apps/gaussian/g16",
+    "/cm/shared/apps/gaussian/g09",
+    "/apps/gaussian/g16",
+    "/apps/gaussian/g09",
+    "/software/gaussian/g16",
+    "/software/gaussian/g09",
+]
+
+_ORCA_BIN_CANDIDATES: list[str] = [
+    "/opt/orca",
+    "/opt/orca/bin",
+    "/usr/local/orca",
+    "/usr/local/orca/bin",
+    "/cm/shared/apps/orca/current",
+    "/apps/orca",
+    "/software/orca",
+]
+
 
 # --------------------------------------------------------------------------- #
 # SGE helpers                                                                  #
@@ -235,6 +262,74 @@ def _build_pbs_env(base: dict[str, str]) -> dict[str, str]:
         logger.debug("scheduler_env: PBS bin at %s prepended to PATH", pbs_bin)
     return env
 
+# --------------------------------------------------------------------------- #
+# Gaussian helpers                                                             #
+# --------------------------------------------------------------------------- #
+
+def _find_gaussian_bin() -> str | None:
+    for directory in _GAUSSIAN_BIN_CANDIDATES:
+        for exe in ("g16", "g09"):
+            if (Path(directory) / exe).exists():
+                return directory
+    return None
+
+
+def _build_gaussian_env(base: dict[str, str]) -> dict[str, str]:
+    env = dict(base)
+    gauss_bin = _find_gaussian_bin()
+    if not gauss_bin:
+        return env
+    current_path = env.get("PATH", "")
+    if gauss_bin not in current_path.split(":"):
+        env["PATH"] = gauss_bin + ":" + current_path
+        gauss_root = str(Path(gauss_bin).parent)
+        env.setdefault("g16root", gauss_root)
+        env.setdefault("g09root", gauss_root)
+        env.setdefault("GAUSS_SCRDIR", "/tmp")
+        logger.debug(
+            "scheduler_env: Gaussian bin at %s prepended to PATH", gauss_bin
+        )
+    return env
+
+
+# --------------------------------------------------------------------------- #
+# ORCA (quantum chemistry) helpers                                             #
+# --------------------------------------------------------------------------- #
+
+def _find_orca_qchem_bin() -> str | None:
+    """Find ORCA quantum chemistry binary (distinct from Linux orca screen reader)."""
+    for directory in _ORCA_BIN_CANDIDATES:
+        candidate = Path(directory) / "orca"
+        if not candidate.exists():
+            continue
+        try:
+            r = subprocess.run(
+                [str(candidate), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            output = (r.stdout + r.stderr).lower()
+            if "orca" in output and ("version" in output or "release" in output):
+                return directory
+        except Exception:
+            pass
+    return None
+
+
+def _build_orca_qchem_env(base: dict[str, str]) -> dict[str, str]:
+    env = dict(base)
+    orca_bin = _find_orca_qchem_bin()
+    if not orca_bin:
+        return env
+    current_path = env.get("PATH", "")
+    if orca_bin not in current_path.split(":"):
+        env["PATH"] = orca_bin + ":" + current_path
+        logger.debug(
+            "scheduler_env: ORCA (qchem) bin at %s prepended to PATH", orca_bin
+        )
+    return env
+
 
 # --------------------------------------------------------------------------- #
 # Public API                                                                   #
@@ -242,14 +337,15 @@ def _build_pbs_env(base: dict[str, str]) -> dict[str, str]:
 
 @lru_cache(maxsize=1)
 def build_scheduler_env() -> dict[str, str]:
-    """Return os.environ augmented with any auto-detected scheduler paths.
+    """Return os.environ augmented with any auto-detected scheduler/program paths.
 
     Cached after the first call — safe to call repeatedly from probes.
-    The detection order is SGE → SLURM → PBS; all detected schedulers are
-    included (a head node may have multiple schedulers' tools installed).
+    Detection order: SGE → SLURM → PBS → Gaussian → ORCA.
     """
     env = dict(os.environ)
     env = _build_sge_env(env)
     env = _build_slurm_env(env)
     env = _build_pbs_env(env)
+    env = _build_gaussian_env(env)
+    env = _build_orca_qchem_env(env)
     return env
