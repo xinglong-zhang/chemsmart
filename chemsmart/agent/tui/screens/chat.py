@@ -282,16 +282,42 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         from chemsmart.agent.transport import SshQsubTransport
 
         self.active_resume_id = session_id
+        session_dir = self.session_root / session_id
         if (
             self.active_agent_session is None
             or str(self.active_agent_session.session_dir)
-            != str(self.session_root / session_id)
+            != str(session_dir)
         ):
             self.active_agent_session = AgentSession.load(
                 session_id,
                 session_root=str(self.session_root),
             )
         session = self.active_agent_session
+
+        ctx = _extract_execute_context(session_dir)
+        job_handle_id = ctx.get("job_handle_id")
+        if job_handle_id:
+            parts = [
+                "The dry-run has been reviewed and approved by the user.",
+                f"The job is stored as handle '{job_handle_id}'.",
+            ]
+            if ctx.get("inputfile"):
+                parts.append(
+                    f"The input file is at '{ctx['inputfile']}'."
+                )
+            if ctx.get("server_name"):
+                parts.append(f"Server name: '{ctx['server_name']}'.")
+            parts.append(
+                f"Please call submit_hpc with job='{job_handle_id}'."
+            )
+            execute_request = " ".join(parts)
+        else:
+            execute_request = (
+                "The dry-run and all pre-flight checks have been reviewed "
+                "and approved by the user. Please submit the job to the "
+                "HPC scheduler now."
+            )
+
         original_registry = session.registry
         session.registry = _ExecuteOverrideRegistry(
             original_registry, SshQsubTransport()
@@ -304,9 +330,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
         try:
             result = session.run_loop(
-                "The dry-run and all pre-flight checks have been reviewed "
-                "and approved by the user. Please submit the job to the "
-                "HPC scheduler now.",
+                execute_request,
                 policy=policy,
                 approver=lambda req: ApprovalDecision.ALLOW_ONCE,
             )
@@ -2182,6 +2206,50 @@ class _ExecuteOverrideRegistry:
         if tool_name == "submit_hpc":
             args = {**args, "execute": True, "transport": self._transport}
         return self._base.call(tool_name, args)
+
+
+def _extract_execute_context(session_dir: Path) -> dict[str, str | None]:
+    """Read the session decision log and pull out the job handle and inputfile.
+
+    Returns a dict with 'job_handle_id', 'inputfile', and 'server_name'.
+    All values may be None if not found.
+    """
+    log_path = session_dir / "decision_log.jsonl"
+    job_handle_id: str | None = None
+    inputfile: str | None = None
+    server_name: str | None = None
+    if not log_path.exists():
+        return {
+            "job_handle_id": job_handle_id,
+            "inputfile": inputfile,
+            "server_name": server_name,
+        }
+    try:
+        for raw in log_path.read_text(encoding="utf-8").splitlines():
+            if not raw.strip():
+                continue
+            entry = json.loads(raw)
+            kind = entry.get("kind")
+            payload = entry.get("payload") or {}
+            if kind == "tool_use_result" and isinstance(payload, dict):
+                tool = payload.get("tool")
+                if tool == "build_job" and payload.get("status") == "ok":
+                    job_handle_id = str(payload["handle_id"])
+                elif tool == "dry_run_input" and payload.get("status") == "ok":
+                    inner = payload.get("payload") or {}
+                    summary = inner.get("summary") or {}
+                    inputfile = summary.get("inputfile") or None
+            elif kind == "tool_use_request" and isinstance(payload, dict):
+                if payload.get("tool") == "submit_hpc":
+                    args = payload.get("args") or {}
+                    server_name = args.get("server_name") or server_name
+    except Exception:
+        pass
+    return {
+        "job_handle_id": job_handle_id,
+        "inputfile": inputfile,
+        "server_name": server_name,
+    }
 
 
 def _tool_use_payload_summary(payload: object) -> str | None:
