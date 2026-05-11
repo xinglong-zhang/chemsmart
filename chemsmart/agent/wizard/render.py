@@ -15,6 +15,7 @@ Canonical wizard schema mirrors the normalized server templates under
 
 from __future__ import annotations
 
+import math
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,7 +86,7 @@ def render_server_yaml(
             if queue is not None
             else FALLBACK_NUM_HOURS
         ),
-        "MEM_GB": resources["mem_gb"],
+        "MEM_GB": _render_server_mem_gb(queue, resources["mem_gb"]),
         "NUM_CORES": resources["cores"],
         "NUM_GPUS": resources["gpus"],
         "NUM_THREADS": resources["threads"],
@@ -179,6 +180,15 @@ def _render_program_blocks(
             notes=notes,
         )
     return program_blocks
+
+
+def _render_server_mem_gb(
+    queue,
+    default_mem_gb: int | None,
+) -> int | None:
+    if queue is not None and queue.mem_mb is not None:
+        return max(1, math.ceil(queue.mem_mb / 1024))
+    return default_mem_gb
 
 
 def _render_program_block(

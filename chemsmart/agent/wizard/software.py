@@ -15,6 +15,15 @@ from chemsmart.agent.wizard.probe import (
 )
 from chemsmart.agent.wizard.topology import Topology
 
+_WELL_KNOWN_CONDA_PATHS = (
+    "~/miniforge3/bin/conda",
+    "/opt/miniforge3/bin/conda",
+    "~/anaconda3/bin/conda",
+    "/opt/anaconda3/bin/conda",
+    "~/miniconda3/bin/conda",
+    "/opt/conda/bin/conda",
+)
+
 
 @dataclass(frozen=True)
 class ModuleSystem:
@@ -133,14 +142,16 @@ def discover_conda(
     """Discover the active conda env and base path, if available."""
 
     env_value = _probe_env_values(runner, topology, ["CONDA_PREFIX"])[0]
-    base_result = _run_probe(
-        runner,
-        topology,
-        ALL_PROBE_SPECS["software.conda_base"],
-    )
-    base_value = _first_nonempty_line(base_result.stdout)
-    base = _normalize_shell_value(base_value)
+    conda_path = _resolve_conda_executable(runner, topology)
+    base = None
     env_path = env_value
+    if conda_path is not None:
+        base = _probe_conda_base(runner, topology, conda_path)
+        if env_path is None:
+            env_path = _select_conda_env_path(
+                base=base,
+                envs=_probe_conda_env_list(runner, topology, conda_path),
+            )
     return CondaEnvSurvey(
         base=base,
         env_path=env_path,
@@ -222,6 +233,25 @@ def _resolve_executable(
     return resolved or path_value
 
 
+def _resolve_conda_executable(runner, topology: Topology) -> str | None:
+    resolved = _resolve_executable(runner, topology, "conda")
+    if resolved is not None:
+        return resolved
+
+    home = _probe_env_values(runner, topology, ["HOME"])[0]
+    for candidate in _WELL_KNOWN_CONDA_PATHS:
+        expanded = _expand_home_path(candidate, home=home, topology=topology)
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["software.test_executable"],
+            path=expanded,
+        )
+        if result.returncode == 0:
+            return expanded
+    return None
+
+
 def _find_module_candidates(
     runner,
     topology: Topology,
@@ -274,6 +304,115 @@ def _probe_env_values(
             value = _normalize_shell_value(os.environ.get(name))
         values.append(value)
     return values
+
+
+def _probe_conda_base(
+    runner,
+    topology: Topology,
+    conda_path: str,
+) -> str | None:
+    spec_name = (
+        "software.conda_base"
+        if conda_path == "conda"
+        else "software.conda_base_at_path"
+    )
+    slots = {} if conda_path == "conda" else {"conda_path": conda_path}
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS[spec_name],
+        **slots,
+    )
+    return _normalize_shell_value(_first_nonempty_line(result.stdout))
+
+
+def _probe_conda_env_list(
+    runner,
+    topology: Topology,
+    conda_path: str,
+) -> list[tuple[str | None, str, bool]]:
+    if conda_path == "conda":
+        return []
+
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["software.conda_env_list_at_path"],
+        conda_path=conda_path,
+    )
+    merged_output = _merge_output(result)
+    if result.returncode != 0 or not merged_output.strip():
+        return []
+    return _parse_conda_env_list(merged_output)
+
+
+def _parse_conda_env_list(payload: str) -> list[tuple[str | None, str, bool]]:
+    envs: list[tuple[str | None, str, bool]] = []
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = raw_line.split()
+        if not parts:
+            continue
+        path_index = next(
+            (
+                index
+                for index, value in enumerate(parts)
+                if value.startswith(("/", "~"))
+            ),
+            None,
+        )
+        if path_index is None:
+            continue
+        path = _normalize_shell_value(parts[path_index])
+        if path is None:
+            continue
+        prefix = parts[:path_index]
+        active = "*" in prefix
+        names = [value for value in prefix if value != "*"]
+        name = names[0] if names else None
+        envs.append((name, path, active))
+    return envs
+
+
+def _select_conda_env_path(
+    base: str | None,
+    envs: list[tuple[str | None, str, bool]],
+) -> str | None:
+    non_base = [entry for entry in envs if entry[1] != base]
+    active_non_base = [path for _, path, active in non_base if active]
+    if active_non_base:
+        return active_non_base[0]
+
+    named_chemsmart = [
+        path for name, path, _ in non_base if name == "chemsmart"
+    ]
+    if named_chemsmart:
+        return named_chemsmart[0]
+
+    if len(non_base) == 1:
+        return non_base[0][1]
+
+    active_base = [path for _, path, active in envs if active]
+    if active_base:
+        return active_base[0]
+
+    return None
+
+
+def _expand_home_path(
+    path: str,
+    home: str | None,
+    topology: Topology,
+) -> str:
+    if not path.startswith("~/"):
+        return path
+    if home:
+        return str(Path(home) / path[2:])
+    if topology.mode == "A":
+        return str(Path.home() / path[2:])
+    return path
 
 
 def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):

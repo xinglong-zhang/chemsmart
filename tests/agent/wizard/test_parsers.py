@@ -1,3 +1,7 @@
+from pathlib import Path
+
+import pytest
+
 from chemsmart.agent.wizard.parsers import (
     QueueFacts,
     parse_lsf_bqueues_l,
@@ -7,8 +11,11 @@ from chemsmart.agent.wizard.parsers import (
     parse_sge_qconf_sql,
     parse_sge_qstat_gc,
     parse_slurm_scontrol_partition_oneliner,
+    parse_slurm_scontrol_show_node_real_memory,
     parse_slurm_sinfo_json,
 )
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "slurm"
 
 
 def test_parse_slurm_sinfo_json():
@@ -50,6 +57,26 @@ def test_parse_slurm_scontrol_partition_oneliner():
             slots_total=None,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "expected_mem_mb"),
+    [
+        ("scontrol_show_node_768.txt", 768),
+        ("scontrol_show_node_23552.txt", 23552),
+        ("scontrol_show_node_512M.txt", 512),
+        ("scontrol_show_node_23G.txt", 23 * 1024),
+    ],
+)
+def test_parse_slurm_scontrol_show_node_real_memory(
+    fixture_name,
+    expected_mem_mb,
+):
+    payload = (FIXTURE_DIR / fixture_name).read_text()
+
+    assert parse_slurm_scontrol_show_node_real_memory(payload) == (
+        expected_mem_mb
+    )
 
 
 def test_parse_pbs_qstat_qf_json():

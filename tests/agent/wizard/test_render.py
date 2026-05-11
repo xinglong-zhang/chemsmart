@@ -277,3 +277,50 @@ def test_render_server_yaml_omits_conda_env_without_conda_base():
     parsed = yaml.safe_load(plan.text)
 
     assert "CONDA_ENV" not in parsed["GAUSSIAN"]
+
+
+def test_render_server_yaml_uses_slurm_real_memory_when_partition_lacks_mem():
+    schedule_survey = ScheduleSurvey(
+        scheduler="SLURM",
+        submit_command="sbatch",
+        queues=[
+            QueueFacts(
+                name="debug",
+                default=True,
+                max_walltime_hours=2,
+                default_walltime_hours=1,
+                default_mem_gb=None,
+                default_cores=1,
+                gpus_per_node=0,
+                enabled=True,
+                started=True,
+                mem_mb=768,
+            )
+        ],
+        chosen_queue="debug",
+        evidence={
+            "scontrol show partition --oneliner": "parsed",
+            "scontrol show node chemslurm1": "parsed",
+        },
+    )
+
+    plan = render_server_yaml(
+        Topology(mode="B", host="chemslurm1", evidence=[]),
+        schedule_survey,
+        _software_survey(),
+        ScratchFinding(
+            path="/home/ubuntu/scratch",
+            source="home",
+            writable=True,
+            candidates=[("home", "/home/ubuntu/scratch")],
+        ),
+        ProjectFinding(
+            project=None,
+            source="none",
+            candidates=[],
+        ),
+    )
+
+    parsed = yaml.safe_load(plan.text)
+
+    assert parsed["SERVER"]["MEM_GB"] == 1
