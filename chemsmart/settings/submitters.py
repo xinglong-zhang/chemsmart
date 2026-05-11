@@ -784,3 +784,50 @@ class FUGAKUSubmitter(Submitter):
             f: File handle for writing directory change command.
         """
         f.write("cd $PJM_O_WORKDIR\n\n")
+
+
+class SGESubmitter(Submitter):
+    """Sun/Univa Grid Engine (SGE/UGE) job submitter.
+
+    Creates SGE-specific submission scripts using #$ directives.
+    The parallel environment name is taken from server config key
+    ``SGE_PE`` (default ``"smp"``).
+    """
+
+    NAME = "SGE"
+
+    def __init__(self, name="SGE", job=None, server=None, **kwargs):
+        super().__init__(name=name, job=job, server=server, **kwargs)
+
+    def _write_scheduler_options(self, f):
+        f.write(f"#$ -N {self.job.label}\n")
+        f.write(f"#$ -o {self.job.label}.sgeout\n")
+        f.write(f"#$ -e {self.job.label}.sgeerr\n")
+        f.write("#$ -cwd\n")
+        f.write("#$ -V\n")
+        if self.server.queue_name:
+            f.write(f"#$ -q {self.server.queue_name}\n")
+        num_cores = self.server.num_cores or 1
+        if num_cores > 1:
+            sge_pe = None
+            server_kwargs = getattr(self.server, "kwargs", {}) or {}
+            sge_pe = server_kwargs.get("SGE_PE") or "smp"
+            f.write(f"#$ -pe {sge_pe} {num_cores}\n")
+        mem_gb = self.server.mem_gb or 4
+        f.write(f"#$ -l h_vmem={mem_gb}G\n")
+        if self.server.num_hours:
+            h = int(self.server.num_hours)
+            f.write(f"#$ -l h_rt={h:02d}:00:00\n")
+        if self.server.num_gpus and self.server.num_gpus > 0:
+            f.write(f"#$ -l gpu={self.server.num_gpus}\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#$ -P {user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#$ -M {user_settings.data['EMAIL']}\n")
+                f.write("#$ -m abe\n")
+        f.write("\n")
+
+    def _write_change_to_job_directory(self, f):
+        # #$ -cwd already sets the working directory; explicit cd is harmless
+        f.write("# working directory set by #$ -cwd\n\n")

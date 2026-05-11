@@ -408,6 +408,11 @@ def build_job(
     jobrunner=None,
 ) -> Job:
     """Instantiate a chemsmart job object for a canonical agent job kind."""
+    # jobrunner must be a proper runner object; reject strings/dicts passed by mistake
+    from chemsmart.jobs.runner import JobRunner
+    if jobrunner is not None and not isinstance(jobrunner, JobRunner):
+        jobrunner = None
+
     normalized_kind = (kind or "").strip().lower()
     normalized_kind = _JOB_KIND_ALIASES.get(normalized_kind, normalized_kind)
     job_class = _JOB_CLASS_BY_KIND.get(normalized_kind)
