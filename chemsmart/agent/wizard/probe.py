@@ -95,6 +95,13 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         ),
         slot_validators={},
     ),
+    "survey.slurm.scontrol_show_node": ProbeSpec(
+        template_id="survey.slurm.scontrol_show_node",
+        argv_template=("scontrol", "show", "node", "{node_name}"),
+        slot_validators={
+            "node_name": lambda value: validate_identifier(value)
+        },
+    ),
     "survey.pbs.qstat_json": ProbeSpec(
         template_id="survey.pbs.qstat_json",
         argv_template=("qstat", "-Q", "-f", "-F", "json"),
@@ -192,14 +199,23 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         argv_template=("conda", "info", "--base"),
         slot_validators={},
     ),
-    "software.conda_base_path": ProbeSpec(
-        template_id="software.conda_base_path",
-        argv_template=("{path}", "info", "--base"),
-        slot_validators={"path": lambda value: validate_path_slot(value)},
+    "software.conda_base_at_path": ProbeSpec(
+        template_id="software.conda_base_at_path",
+        argv_template=("{conda_path}", "info", "--base"),
+        slot_validators={
+            "conda_path": lambda value: validate_path_slot(value)
+        },
     ),
-    "software.test_dir_exists": ProbeSpec(
-        template_id="software.test_dir_exists",
-        argv_template=("test", "-d", "{path}"),
+    "software.conda_env_list_at_path": ProbeSpec(
+        template_id="software.conda_env_list_at_path",
+        argv_template=("{conda_path}", "env", "list"),
+        slot_validators={
+            "conda_path": lambda value: validate_path_slot(value)
+        },
+    ),
+    "software.test_executable": ProbeSpec(
+        template_id="software.test_executable",
+        argv_template=("test", "-x", "{path}"),
         slot_validators={"path": lambda value: validate_path_slot(value)},
     ),
     "scratch.test_dir_writable": ProbeSpec(

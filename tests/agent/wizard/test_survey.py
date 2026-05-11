@@ -12,6 +12,7 @@ from chemsmart.agent.wizard.parsers import QueueFacts
 from chemsmart.agent.wizard.probe import ProbeResult
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
+SLURM_FIXTURE_DIR = FIXTURE_DIR / "slurm"
 
 
 class StubRunner:
@@ -64,6 +65,9 @@ def _result(command, stdout, returncode=0, mode="local", host=None):
 
 
 def test_run_schedule_survey_slurm_only_path():
+    node_payload = (
+        SLURM_FIXTURE_DIR / "scontrol_show_node_768.txt"
+    ).read_text()
     runner = StubRunner(
         local_results={
             ("sinfo", "--json"): _result(
@@ -75,7 +79,12 @@ def test_run_schedule_survey_slurm_only_path():
                 "scontrol show partition --oneliner",
                 "PartitionName=debug Default=YES MaxTime=02:00:00 "
                 "DefaultTime=01:00:00 DefMemPerNode=65536 "
-                "MaxCPUsPerNode=32 State=UP TRES=cpu=32,gres/gpu=0\n",
+                "MaxCPUsPerNode=32 Nodes=chemslurm1 "
+                "State=UP TRES=cpu=32,gres/gpu=0\n",
+            ),
+            ("scontrol", "show", "node", "chemslurm1"): _result(
+                "scontrol show node chemslurm1",
+                node_payload,
             ),
         }
     )
@@ -96,12 +105,14 @@ def test_run_schedule_survey_slurm_only_path():
                 gpus_per_node=0,
                 enabled=True,
                 started=True,
+                mem_mb=768,
             )
         ],
         chosen_queue="debug",
         evidence={
             "sinfo --json": "parsed",
             "scontrol show partition --oneliner": "parsed",
+            "scontrol show node chemslurm1": "parsed",
         },
     )
 

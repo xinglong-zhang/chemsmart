@@ -14,6 +14,7 @@ from chemsmart.agent.wizard.probe import ProbeResult
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sge"
 PBS_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "pbs"
+SOFTWARE_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "software"
 
 
 class StubRunner:
@@ -181,8 +182,16 @@ def test_discover_conda_returns_env_and_base():
                 "printenv CONDA_PREFIX",
                 conda_env,
             ),
-            ("conda", "info", "--base"): _result(
-                "conda info --base",
+            ("command", "-v", "conda"): _result(
+                "command -v conda",
+                "/opt/conda/bin/conda\n",
+            ),
+            ("readlink", "-f", "/opt/conda/bin/conda"): _result(
+                "readlink -f /opt/conda/bin/conda",
+                "/opt/conda/bin/conda\n",
+            ),
+            ("/opt/conda/bin/conda", "info", "--base"): _result(
+                "/opt/conda/bin/conda info --base",
                 conda_base,
             ),
         }
@@ -213,8 +222,16 @@ def test_run_software_survey_collects_all_programs():
                 "printenv CONDA_PREFIX",
                 conda_env,
             ),
-            ("conda", "info", "--base"): _result(
-                "conda info --base",
+            ("command", "-v", "conda"): _result(
+                "command -v conda",
+                "/opt/conda/bin/conda\n",
+            ),
+            ("readlink", "-f", "/opt/conda/bin/conda"): _result(
+                "readlink -f /opt/conda/bin/conda",
+                "/opt/conda/bin/conda\n",
+            ),
+            ("/opt/conda/bin/conda", "info", "--base"): _result(
+                "/opt/conda/bin/conda info --base",
                 conda_base,
             ),
             ("command", "-v", "g16"): _result(
@@ -261,8 +278,16 @@ def test_discover_conda_returns_source_only_for_base_env():
                 "printenv CONDA_PREFIX",
                 "/opt/conda\n",
             ),
-            ("conda", "info", "--base"): _result(
-                "conda info --base",
+            ("command", "-v", "conda"): _result(
+                "command -v conda",
+                "/opt/conda/bin/conda\n",
+            ),
+            ("readlink", "-f", "/opt/conda/bin/conda"): _result(
+                "readlink -f /opt/conda/bin/conda",
+                "/opt/conda/bin/conda\n",
+            ),
+            ("/opt/conda/bin/conda", "info", "--base"): _result(
+                "/opt/conda/bin/conda info --base",
                 "/opt/conda\n",
             ),
         }
@@ -277,25 +302,44 @@ def test_discover_conda_returns_source_only_for_base_env():
     )
 
 
-def test_discover_conda_falls_back_to_absolute_miniforge_path(monkeypatch):
-    conda_base = (PBS_FIXTURE_DIR / "conda_info_base.txt").read_text()
+def test_discover_conda_falls_back_to_well_known_miniforge_path(
+    monkeypatch,
+):
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
+    conda_base = (
+        SOFTWARE_FIXTURE_DIR / "conda_info_base_miniforge.txt"
+    ).read_text()
+    conda_env_list = (
+        SOFTWARE_FIXTURE_DIR / "conda_env_list_miniforge.txt"
+    ).read_text()
     runner = StubRunner(
         local_results={
             ("printenv", "CONDA_PREFIX"): _result(
                 "printenv CONDA_PREFIX",
                 returncode=1,
             ),
-            ("conda", "info", "--base"): _result(
-                "conda info --base",
-                returncode=127,
+            ("command", "-v", "conda"): _result(
+                "command -v conda",
+                returncode=1,
+            ),
+            ("which", "conda"): _result(
+                "which conda",
+                returncode=1,
+            ),
+            ("printenv", "HOME"): _result(
+                "printenv HOME",
+                "/home/ubuntu\n",
+            ),
+            ("test", "-x", "/opt/miniforge3/bin/conda"): _result(
+                "test -x /opt/miniforge3/bin/conda"
             ),
             ("/opt/miniforge3/bin/conda", "info", "--base"): _result(
                 "/opt/miniforge3/bin/conda info --base",
                 conda_base,
             ),
-            ("test", "-d", "/opt/miniforge3/envs/chemsmart"): _result(
-                "test -d /opt/miniforge3/envs/chemsmart"
+            ("/opt/miniforge3/bin/conda", "env", "list"): _result(
+                "/opt/miniforge3/bin/conda env list",
+                conda_env_list,
             ),
         }
     )

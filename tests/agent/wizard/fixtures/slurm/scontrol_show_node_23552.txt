@@ -1,0 +1,2 @@
+NodeName=compute001 Arch=x86_64 CoresPerSocket=12
+   RealMemory=23552 AllocMem=0 FreeMem=20480 Sockets=1 Boards=1

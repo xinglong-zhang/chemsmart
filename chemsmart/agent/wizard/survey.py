@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 
 from chemsmart.agent.wizard.normalize import SCHEDULER_SUBMIT, choose_queue
 from chemsmart.agent.wizard.parsers import (
@@ -19,6 +20,7 @@ from chemsmart.agent.wizard.parsers import (
     parse_sge_qhost,
     parse_sge_qstat_gc,
     parse_slurm_scontrol_partition_oneliner,
+    parse_slurm_scontrol_show_node_real_memory,
     parse_slurm_sinfo_json,
 )
 from chemsmart.agent.wizard.probe import (
@@ -106,6 +108,22 @@ def _probe_slurm(runner, topology: Topology):
         if parsed:
             queues = parsed
             evidence["scontrol show partition --oneliner"] = "parsed"
+            mem_by_queue = _probe_slurm_node_memory(
+                runner,
+                topology,
+                scontrol.stdout,
+                parsed,
+                evidence,
+            )
+            if mem_by_queue:
+                queues = [
+                    (
+                        replace(queue, mem_mb=mem_by_queue.get(queue.name))
+                        if queue.name in mem_by_queue
+                        else queue
+                    )
+                    for queue in queues
+                ]
     if queues:
         return "SLURM", queues, evidence
     return None
@@ -364,6 +382,7 @@ def _merge_queue(primary: QueueFacts, secondary: QueueFacts) -> QueueFacts:
             primary.slots_total,
             secondary.slots_total,
         ),
+        mem_mb=_prefer_value(primary.mem_mb, secondary.mem_mb),
     )
 
 
@@ -388,6 +407,7 @@ def _enrich_pbs_queues(
             enabled=queue.enabled,
             started=queue.started,
             slots_total=queue.slots_total,
+            mem_mb=queue.mem_mb,
         )
         for queue in queues
     ]
@@ -426,3 +446,81 @@ def _enrich_pbs_cores(
 
 def _prefer_value(primary, secondary):
     return primary if primary is not None else secondary
+
+
+def _probe_slurm_node_memory(
+    runner,
+    topology: Topology,
+    payload: str,
+    queues: list[QueueFacts],
+    evidence: dict[str, str],
+) -> dict[str, int]:
+    node_by_queue = _parse_slurm_partition_nodes(payload)
+    mem_by_queue: dict[str, int] = {}
+    for queue in queues:
+        node_name = node_by_queue.get(queue.name)
+        if node_name is None:
+            continue
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["survey.slurm.scontrol_show_node"],
+            node_name=node_name,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            continue
+        mem_mb = _safe_parse(
+            parse_slurm_scontrol_show_node_real_memory,
+            result.stdout,
+        )
+        if mem_mb is None:
+            continue
+        mem_by_queue[queue.name] = mem_mb
+        evidence[f"scontrol show node {node_name}"] = "parsed"
+    return mem_by_queue
+
+
+def _parse_slurm_partition_nodes(payload: str) -> dict[str, str]:
+    node_by_queue: dict[str, str] = {}
+    for line in payload.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        fields = dict(re.findall(r"(\w+)=([^\s]+)", line))
+        name = fields.get("PartitionName")
+        if not name:
+            continue
+        node_name = _first_slurm_node_name(fields.get("Nodes"))
+        if node_name is not None:
+            node_by_queue[name] = node_name
+    return node_by_queue
+
+
+def _first_slurm_node_name(nodelist: str | None) -> str | None:
+    if nodelist is None:
+        return None
+    text = nodelist.strip()
+    if not text or text in {"(null)", "ALL", "N/A"}:
+        return None
+
+    token_chars: list[str] = []
+    depth = 0
+    for char in text:
+        if char == "," and depth == 0:
+            break
+        if char == "[":
+            depth += 1
+        elif char == "]" and depth > 0:
+            depth -= 1
+        token_chars.append(char)
+
+    token = "".join(token_chars).strip()
+    if "[" not in token:
+        return token or None
+
+    prefix, remainder = token.split("[", 1)
+    inner = remainder.split("]", 1)[0]
+    first_inner = inner.split(",", 1)[0].split("-", 1)[0].strip()
+    if not prefix or not first_inner:
+        return None
+    return f"{prefix}{first_inner}"

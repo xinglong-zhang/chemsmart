@@ -1,0 +1,2 @@
+NodeName=chemslurm1 Arch=x86_64 CoresPerSocket=1
+   RealMemory=768 AllocMem=0 FreeMem=512 Sockets=1 Boards=1

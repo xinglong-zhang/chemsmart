@@ -20,6 +20,7 @@ class QueueFacts:
     enabled: bool
     started: bool
     slots_total: int | None = None
+    mem_mb: int | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,19 @@ def parse_slurm_scontrol_partition_oneliner(payload: str) -> list[QueueFacts]:
             )
         )
     return queues
+
+
+def parse_slurm_scontrol_show_node_real_memory(payload: str) -> int | None:
+    """Parse ``scontrol show node`` output and return ``RealMemory`` in MB."""
+
+    match = re.search(r"\bRealMemory=(\d+)([MG])?\b", payload, re.I)
+    if match is None:
+        raise ValueError("Slurm node output is missing RealMemory.")
+    value = int(match.group(1))
+    unit = (match.group(2) or "M").upper()
+    if unit == "G":
+        return value * 1024
+    return value
 
 
 def parse_pbs_qstat_qf_json(payload: str) -> list[QueueFacts]:
