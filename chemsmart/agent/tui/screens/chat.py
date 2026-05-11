@@ -150,6 +150,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._cancelled_job_ids: set[str] = set()
         self._active_server_name = self._default_active_server_name()
         self._latest_wizard_probe: dict[str, object] | None = None
+        self._last_dry_run_session_id: str | None = None
 
     def compose(self) -> ComposeResult:
         yield ChemsmartHeader(id="chat-header")
@@ -278,16 +279,41 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         name="agent-execute",
     )
     def execute_agent_session(self, session_id: str) -> dict[str, object]:
+        from chemsmart.agent.transport import SshQsubTransport
+
         self.active_resume_id = session_id
-        self.active_agent_session = AgentSession.load(
-            session_id,
-            session_root=str(self.session_root),
+        if (
+            self.active_agent_session is None
+            or str(self.active_agent_session.session_dir)
+            != str(self.session_root / session_id)
+        ):
+            self.active_agent_session = AgentSession.load(
+                session_id,
+                session_root=str(self.session_root),
+            )
+        session = self.active_agent_session
+        original_registry = session.registry
+        session.registry = _ExecuteOverrideRegistry(
+            original_registry, SshQsubTransport()
         )
-        return self.active_agent_session.continue_loaded_session(
-            dry_submit=False,
-            pause_before_risky=False,
-            rerender_plan=False,
+        policy = PermissionPolicy(
+            mode=PermissionMode.DRIVING,
+            yolo=False,
+            session_allow=set(),
+            driving_denylist=set(),
         )
+        try:
+            result = session.run_loop(
+                "The dry-run and all pre-flight checks have been reviewed "
+                "and approved by the user. Please submit the job to the "
+                "HPC scheduler now.",
+                policy=policy,
+                approver=lambda req: ApprovalDecision.ALLOW_ONCE,
+            )
+        finally:
+            session.registry = original_registry
+        result["session_allow_tools"] = []
+        return result
 
     def _load_agent_session(
         self,
@@ -510,6 +536,16 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._session_allow_tools = set(
                 result.get("session_allow_tools") or []
             )
+            is_execute = event.worker.name == "agent-execute"
+            if not is_execute:
+                session_id = result.get("session_id")
+                advisory = result.get("advisory_only", False)
+                chitchat = result.get("is_chitchat", False)
+                blocked = result.get("blocked", False)
+                if session_id and not blocked and not advisory and not chitchat:
+                    self._last_dry_run_session_id = str(session_id)
+                else:
+                    self._last_dry_run_session_id = None
             if result.get("blocked"):
                 self.query_one(FooterWidget).set_hint("Execution blocked")
             elif (
@@ -518,6 +554,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ):
                 self.query_one(FooterWidget).set_phase(Phase.IDLE)
                 self.query_one(FooterWidget).set_hint("Ready")
+            elif is_execute:
+                self._last_dry_run_session_id = None
+                self.query_one(FooterWidget).set_phase(Phase.FINISHED)
+                self.query_one(FooterWidget).set_hint(
+                    "Submitted to HPC — /jobs to track"
+                )
+            elif self._last_dry_run_session_id:
+                self.query_one(FooterWidget).set_phase(Phase.FINISHED)
+                self.query_one(FooterWidget).set_hint(
+                    "Dry-run complete — /execute to submit for real"
+                )
             else:
                 self.query_one(FooterWidget).set_phase(Phase.FINISHED)
                 self.query_one(FooterWidget).set_hint("Session complete")
@@ -1223,6 +1270,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 )
                 return
             self._set_yolo(argument)
+        elif command == "/execute":
+            self._handle_execute_command(argument)
         elif command == "/submit":
             if argument and self._handle_inline_approval(argument):
                 return
@@ -1585,6 +1634,62 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         table.add_row("last_error", str(result.get("last_error") or "-"))
         return table
 
+    def _handle_execute_command(self, argument: str) -> None:
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before submitting.",
+            )
+            return
+        if not self._last_dry_run_session_id:
+            self.post_error(
+                "No dry-run to execute",
+                "Run a workflow dry-run first, then use /execute to submit "
+                "for real.",
+            )
+            return
+        if argument.strip().lower() in {"yes", "y"}:
+            self._start_execute(self._last_dry_run_session_id)
+            return
+        if self.app.plain:
+            self.post_error(
+                "Confirmation required",
+                "Use /execute yes to confirm real HPC submission.",
+            )
+            return
+        session_id = self._last_dry_run_session_id
+        self.app.push_screen(
+            TextPromptOverlay(
+                title="Submit to HPC",
+                prompt=(
+                    f"Session: {session_id}\n\n"
+                    "This will submit real jobs to the HPC scheduler.\n"
+                    "Type 'yes' to confirm."
+                ),
+            ),
+            lambda value: self._handle_execute_confirmation(session_id, value),
+        )
+
+    def _handle_execute_confirmation(
+        self, session_id: str, value: str | None
+    ) -> None:
+        if (value or "").strip().lower() not in {"y", "yes"}:
+            return
+        self._start_execute(session_id)
+
+    def _start_execute(self, session_id: str) -> None:
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.RUNNING)
+        footer.set_hint("Submitting to HPC…")
+        session_dir = self.session_root / session_id
+        if session_dir.exists() and not (
+            self._tailer_path
+            and self._tailer_path.parent == session_dir
+        ):
+            self._stop_tailer()
+            self._attach_tailer(session_dir / "decision_log.jsonl")
+        self._current_worker = self.execute_agent_session(session_id)
+
     def _show_help(self) -> None:
         table = Table(show_header=True, box=None, padding=(0, 1))
         table.add_column("Phase", style="dim", no_wrap=True)
@@ -1608,6 +1713,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ("[A]", "/deny", "deny the focused tool request"),
             ("[A]", "/permissions", "toggle permission/driving mode"),
             ("[A]", "/yolo on|off", "toggle risky-tool autonomy"),
+            ("[F]", "/execute [yes]", "submit the dry-run to HPC for real"),
             ("[D]", "/submit", "backward-compatible submit approval"),
             ("[D]", "/run", "backward-compatible local-run approval"),
             ("[P,D]", "/critic", "show the current critic verdict"),
@@ -1910,6 +2016,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.active_agent_session = None
             self.active_resume_id = None
             self._session_allow_tools.clear()
+            self._last_dry_run_session_id = None
         self._current_request = None
         self._current_plan = None
         self._current_plan_text = None
@@ -2055,6 +2162,26 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         except Exception:
             return None
         return next(iter(names), None) if len(names) == 1 else None
+
+
+class _ExecuteOverrideRegistry:
+    """Wraps ToolRegistry to inject execute=True + transport into submit_hpc.
+
+    Used by execute_agent_session so the LLM does not need to know about the
+    internal execute flag — the framework injects it transparently.
+    """
+
+    def __init__(self, base, transport) -> None:
+        self._base = base
+        self._transport = transport
+
+    def __getattr__(self, name: str):
+        return getattr(self._base, name)
+
+    def call(self, tool_name: str, args: dict) -> object:
+        if tool_name == "submit_hpc":
+            args = {**args, "execute": True, "transport": self._transport}
+        return self._base.call(tool_name, args)
 
 
 def _tool_use_payload_summary(payload: object) -> str | None:

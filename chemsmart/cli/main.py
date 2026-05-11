@@ -241,6 +241,9 @@ entry_point.add_command(
             "resume": "Resume an agent session.",
             "sessions": "List saved agent sessions.",
             "tools": "List registered agent tools.",
+            "wizard": "Probe a target server and render or write a wizard YAML config.",
+            "wizard-verify": "Verify wizard/server transport wiring for an existing YAML.",
+            "wizard-refresh": "Refresh or reuse the wizard node sidecar cache for a server.",
         },
         use_placeholder_for_help=True,
     )
