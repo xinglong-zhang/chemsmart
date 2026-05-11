@@ -12,6 +12,7 @@ from chemsmart.agent.wizard.parsers import (
     parse_pbs_qstat_qf_text,
     parse_sge_qconf_sq,
     parse_sge_qconf_sql,
+    parse_sge_qhost,
     parse_slurm_scontrol_partition_oneliner,
     parse_slurm_sinfo_json,
 )
@@ -168,6 +169,22 @@ def _probe_sge(runner, topology: Topology):
     if not names:
         return None
     evidence["qconf -sql"] = "parsed"
+
+    # Probe qhost once — fallback for mem (h_vmem=INFINITY) and cores (slots=1)
+    qhost_mem_gb: int | None = None
+    qhost_ncpu: int | None = None
+    qhost_result = _run_probe(
+        runner, topology, ALL_PROBE_SPECS["survey.sge.qhost"]
+    )
+    if qhost_result.returncode == 0 and qhost_result.stdout.strip():
+        parsed = _safe_parse(parse_sge_qhost, qhost_result.stdout)
+        if parsed is not None:
+            qhost_mem_gb, qhost_ncpu = parsed
+            if qhost_mem_gb is not None:
+                evidence["qhost mem_total"] = f"{qhost_mem_gb}G"
+            if qhost_ncpu is not None:
+                evidence["qhost ncpu"] = str(qhost_ncpu)
+
     queues: list[QueueFacts] = []
     for name in names:
         result = _run_probe(
@@ -181,6 +198,22 @@ def _probe_sge(runner, topology: Topology):
         queue = _safe_parse(parse_sge_qconf_sq, result.stdout)
         if queue is None:
             continue
+        # SGE slots=1 means "1 slot per serial job", not physical core count.
+        # Fall back to qhost NCPU when slots <= 1 so NUM_CORES reflects reality.
+        needs_mem = queue.default_mem_gb is None and qhost_mem_gb is not None
+        needs_cpu = (queue.default_cores or 0) <= 1 and qhost_ncpu is not None
+        if needs_mem or needs_cpu:
+            queue = QueueFacts(
+                name=queue.name,
+                default=queue.default,
+                max_walltime_hours=queue.max_walltime_hours,
+                default_walltime_hours=queue.default_walltime_hours,
+                default_mem_gb=qhost_mem_gb if needs_mem else queue.default_mem_gb,
+                default_cores=qhost_ncpu if needs_cpu else queue.default_cores,
+                gpus_per_node=queue.gpus_per_node,
+                enabled=queue.enabled,
+                started=queue.started,
+            )
         queues.append(queue)
         evidence[f"qconf -sq {name}"] = "parsed"
     if queues:

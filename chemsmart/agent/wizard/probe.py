@@ -10,9 +10,11 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
+from chemsmart.agent.wizard.scheduler_env import build_scheduler_env
+
 TRUNCATION_MARKER = "…[truncated]"
 MAX_OUTPUT_BYTES = 1024 * 1024
-_IDENTIFIER_PATTERN = re.compile(r"^[\w\-]+$")
+_IDENTIFIER_PATTERN = re.compile(r"^[\w\-\.]+$")
 _ENV_VAR_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _PATH_PATTERN = re.compile(r"^[/~][\w\-./@:+]*$")
 _FORBIDDEN_SLOT_CHARS = set(";&|`$(){}<>!\\'\"*\n\r\t")
@@ -130,6 +132,11 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
             "queue_name": lambda value: validate_identifier(value)
         },
     ),
+    "survey.sge.qhost": ProbeSpec(
+        template_id="survey.sge.qhost",
+        argv_template=("qhost",),
+        slot_validators={},
+    ),
     "software.type_module": ProbeSpec(
         template_id="software.type_module",
         argv_template=("type", "module"),
@@ -223,6 +230,7 @@ class ProbeRunner:
             mode="local",
             host=None,
             timeout_s=timeout_s,
+            env=build_scheduler_env(),
         )
 
     @classmethod
@@ -266,6 +274,7 @@ class ProbeRunner:
         mode: str,
         host: str | None,
         timeout_s: int,
+        env: dict[str, str] | None = None,
     ) -> ProbeResult:
         start = time.monotonic()
         try:
@@ -275,6 +284,7 @@ class ProbeRunner:
                 text=True,
                 timeout=timeout_s,
                 check=False,
+                env=env,
             )
             stdout = cls._coerce_text(result.stdout)
             stderr = cls._coerce_text(result.stderr)

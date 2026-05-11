@@ -232,6 +232,37 @@ def parse_lsf_bqueues_l(payload: str) -> list[QueueFacts]:
     return queues
 
 
+def parse_sge_qhost(payload: str) -> tuple[int | None, int | None]:
+    """Parse ``qhost`` output and return (min_mem_gb, min_ncpu).
+
+    Column layout (1-based):
+      1=HOSTNAME 2=ARCH 3=NCPU 4=NSOC 5=NCOR 6=NTHR 7=LOAD 8=MEMTOT ...
+
+    Returns the minimum values across all nodes so that the rendered YAML is
+    conservative and safe for every queue / node type.
+    """
+    mem_values: list[int] = []
+    cpu_values: list[int] = []
+    for line in payload.splitlines():
+        parts = line.split()
+        # data rows have at least 8 columns; skip header and global
+        if len(parts) < 8:
+            continue
+        hostname = parts[0]
+        if hostname in ("HOSTNAME", "global", "-"):
+            continue
+        ncpu_raw = parts[2]
+        mem_raw = parts[7]
+        if ncpu_raw.isdigit():
+            cpu_values.append(int(ncpu_raw))
+        parsed_mem = _parse_mem_gb(mem_raw)
+        if parsed_mem is not None:
+            mem_values.append(parsed_mem)
+    min_mem = min(mem_values) if mem_values else None
+    min_cpu = min(cpu_values) if cpu_values else None
+    return min_mem, min_cpu
+
+
 def parse_sge_qconf_sql(payload: str) -> list[str]:
     """Parse queue names from ``qconf -sql`` output."""
 

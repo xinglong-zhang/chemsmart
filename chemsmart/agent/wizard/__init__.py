@@ -65,10 +65,12 @@ from chemsmart.agent.wizard.verify import (
     VerifyResult,
     verify_server_yaml,
 )
+from chemsmart.agent.wizard.scheduler_env import build_scheduler_env
 from chemsmart.agent.wizard.write import write_server_yaml
 
 __all__ = [
     "ALL_PROBE_SPECS",
+    "build_scheduler_env",
     "CacheEntry",
     "AmbiguousSchedulerError",
     "ModuleSystem",

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+UTC = timezone.utc
 from pathlib import Path
 from typing import Literal
 

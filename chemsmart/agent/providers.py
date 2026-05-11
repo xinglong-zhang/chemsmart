@@ -163,9 +163,17 @@ def get_provider(
     """
     env_path = _resolve_api_env_path(env_path)
 
+    # Load api.env first so AI_PROVIDER and ai_api_key can both come from the
+    # file — the user should not need to export AI_PROVIDER in their shell.
+    if env_path is not None:
+        load_dotenv(env_path, override=False)
+
     provider_name = os.environ.get("AI_PROVIDER")
     if not provider_name or not provider_name.strip():
-        raise ProviderError("AI_PROVIDER env var is not set")
+        raise ProviderError(
+            "AI_PROVIDER is not set. "
+            "Add AI_PROVIDER=openai to api.env or export it in your shell."
+        )
     provider_name = provider_name.strip()
 
     if provider_name not in _SUPPORTED:
@@ -174,8 +182,6 @@ def get_provider(
             f"supported: {sorted(_SUPPORTED)}"
         )
 
-    if env_path is not None:
-        load_dotenv(env_path, override=True)
     api_key = os.environ.get("ai_api_key", "").strip()
     if not api_key:
         raise ProviderError("api.env: ai_api_key is empty or missing")

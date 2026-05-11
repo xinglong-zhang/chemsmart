@@ -200,6 +200,7 @@ def test_doctor_empty_api_key(monkeypatch, tmp_path):
 
     monkeypatch.setenv("AI_PROVIDER", "anthropic")
     monkeypatch.setenv("CHEMSMART_API_ENV", str(env_file))
+    monkeypatch.delenv("ai_api_key", raising=False)
 
     runner = CliRunner()
     result = runner.invoke(agent, ["doctor"])

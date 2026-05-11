@@ -9,7 +9,9 @@ import subprocess
 import traceback
 from concurrent.futures import Future
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+
+UTC = timezone.utc
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any

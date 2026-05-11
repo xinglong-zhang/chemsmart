@@ -13,7 +13,7 @@ from pydantic import (
     TypeAdapter,
     create_model,
 )
-from pydantic.errors import PydanticInvalidForJsonSchema
+from pydantic.errors import PydanticInvalidForJsonSchema, PydanticSchemaGenerationError
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +259,7 @@ def _schema_friendly_annotation(
 ) -> Any:
     try:
         TypeAdapter(annotation).json_schema()
-    except (PydanticInvalidForJsonSchema, TypeError):
+    except (PydanticInvalidForJsonSchema, PydanticSchemaGenerationError, TypeError):
         logger.warning(
             "Falling back to Any for tool schema field %s.%s with annotation %r",
             tool_name,
