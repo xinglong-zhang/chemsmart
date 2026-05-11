@@ -36,6 +36,11 @@ _SGE_ROOT_CANDIDATES: list[str] = [
     "/N/soft/sge",
     "/N/u/sge",
     "/scratch/sge",
+    "/cm/local/apps/uge/current",
+    "/cm/local/apps/sge/current",
+    "/cm/shared/apps/uge/current",
+    "/cm/shared/apps/sge/current",
+    "/opt/gridengine",
 ]
 
 _SLURM_BIN_CANDIDATES: list[str] = [
@@ -45,6 +50,9 @@ _SLURM_BIN_CANDIDATES: list[str] = [
     "/opt/slurm/bin",
     "/cm/shared/apps/slurm/current/bin",
     "/apps/slurm/bin",
+    "/cm/local/apps/slurm/current/bin",
+    "/opt/slurm/current/bin",
+    "/opt/ohpc/pub/apps/slurm/current/bin",
 ]
 
 _PBS_BIN_CANDIDATES: list[str] = [
@@ -54,6 +62,9 @@ _PBS_BIN_CANDIDATES: list[str] = [
     "/opt/torque/bin",
     "/usr/local/pbs/bin",
     "/cm/shared/apps/torque/current/bin",
+    "/opt/pbs/default/bin",
+    "/var/spool/pbs/bin",
+    "/cm/local/apps/pbspro/current/bin",
 ]
 
 _GAUSSIAN_BIN_CANDIDATES: list[str] = [
