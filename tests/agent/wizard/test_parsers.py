@@ -1,6 +1,12 @@
+from pathlib import Path
+
 from chemsmart.agent.wizard.parsers import (
+    PbsNodeFacts,
+    PbsServerFacts,
     QueueFacts,
     parse_lsf_bqueues_l,
+    parse_pbs_pbsnodes_av,
+    parse_pbs_qmgr_list_server,
     parse_pbs_qstat_qf_json,
     parse_pbs_qstat_qf_text,
     parse_sge_qconf_sq,
@@ -9,6 +15,8 @@ from chemsmart.agent.wizard.parsers import (
     parse_slurm_scontrol_partition_oneliner,
     parse_slurm_sinfo_json,
 )
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
 
 def test_parse_slurm_sinfo_json():
@@ -101,6 +109,44 @@ def test_parse_pbs_qstat_qf_text():
             slots_total=None,
         )
     ]
+
+
+def test_parse_pbs_qstat_qf_text_accepts_openpbs_queue_colon_header():
+    assert parse_pbs_qstat_qf_text(
+        (FIXTURE_DIR / "pbs" / "qstat_qf_text.txt").read_text()
+    ) == [
+        QueueFacts(
+            name="workq",
+            default=False,
+            max_walltime_hours=None,
+            default_walltime_hours=None,
+            default_mem_gb=None,
+            default_cores=None,
+            gpus_per_node=None,
+            enabled=True,
+            started=True,
+            slots_total=None,
+        )
+    ]
+
+
+def test_parse_pbs_qmgr_list_server():
+    assert parse_pbs_qmgr_list_server(
+        (FIXTURE_DIR / "pbs" / "qmgr_list_server.txt").read_text()
+    ) == PbsServerFacts(
+        default_queue="workq",
+        default_mem_gb=None,
+        default_cores=1,
+    )
+
+
+def test_parse_pbs_pbsnodes_av():
+    assert parse_pbs_pbsnodes_av(
+        (FIXTURE_DIR / "pbs" / "pbsnodes_av.txt").read_text()
+    ) == PbsNodeFacts(
+        min_mem_gb=3,
+        min_ncpus=2,
+    )
 
 
 def test_parse_lsf_bqueues_l():

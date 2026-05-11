@@ -15,6 +15,14 @@ from chemsmart.agent.wizard.probe import (
 )
 from chemsmart.agent.wizard.topology import Topology
 
+_CONDA_EXE_CANDIDATES = [
+    "/opt/miniforge3/bin/conda",
+    "/opt/conda/bin/conda",
+    "/opt/anaconda3/bin/conda",
+    "/usr/local/miniforge3/bin/conda",
+]
+_CONDA_ENV_NAME_CANDIDATES = ["chemsmart"]
+
 
 @dataclass(frozen=True)
 class ModuleSystem:
@@ -133,14 +141,12 @@ def discover_conda(
     """Discover the active conda env and base path, if available."""
 
     env_value = _probe_env_values(runner, topology, ["CONDA_PREFIX"])[0]
-    base_result = _run_probe(
+    base = _discover_conda_base(runner, topology)
+    env_path = env_value or _discover_named_conda_env(
         runner,
         topology,
-        ALL_PROBE_SPECS["software.conda_base"],
+        base,
     )
-    base_value = _first_nonempty_line(base_result.stdout)
-    base = _normalize_shell_value(base_value)
-    env_path = env_value
     return CondaEnvSurvey(
         base=base,
         env_path=env_path,
@@ -274,6 +280,50 @@ def _probe_env_values(
             value = _normalize_shell_value(os.environ.get(name))
         values.append(value)
     return values
+
+
+def _discover_conda_base(runner, topology: Topology) -> str | None:
+    base_result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["software.conda_base"],
+    )
+    base = _normalize_shell_value(_first_nonempty_line(base_result.stdout))
+    if base is not None:
+        return base
+
+    for candidate in _CONDA_EXE_CANDIDATES:
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["software.conda_base_path"],
+            path=candidate,
+        )
+        base = _normalize_shell_value(_first_nonempty_line(result.stdout))
+        if base is not None:
+            return base
+    return None
+
+
+def _discover_named_conda_env(
+    runner,
+    topology: Topology,
+    base: str | None,
+) -> str | None:
+    if base is None:
+        return None
+
+    for env_name in _CONDA_ENV_NAME_CANDIDATES:
+        candidate = str(Path(base) / "envs" / env_name)
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["software.test_dir_exists"],
+            path=candidate,
+        )
+        if result.returncode == 0:
+            return candidate
+    return None
 
 
 def _run_probe(runner, topology: Topology, spec: ProbeSpec, **slots: str):

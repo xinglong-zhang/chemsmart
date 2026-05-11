@@ -13,6 +13,7 @@ from chemsmart.agent.wizard import (
 from chemsmart.agent.wizard.probe import ProbeResult
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sge"
+PBS_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "pbs"
 
 
 class StubRunner:
@@ -272,5 +273,37 @@ def test_discover_conda_returns_source_only_for_base_env():
             base="/opt/conda",
             env_path="/opt/conda",
             env_name=None,
+        )
+    )
+
+
+def test_discover_conda_falls_back_to_absolute_miniforge_path(monkeypatch):
+    conda_base = (PBS_FIXTURE_DIR / "conda_info_base.txt").read_text()
+    monkeypatch.delenv("CONDA_PREFIX", raising=False)
+    runner = StubRunner(
+        local_results={
+            ("printenv", "CONDA_PREFIX"): _result(
+                "printenv CONDA_PREFIX",
+                returncode=1,
+            ),
+            ("conda", "info", "--base"): _result(
+                "conda info --base",
+                returncode=127,
+            ),
+            ("/opt/miniforge3/bin/conda", "info", "--base"): _result(
+                "/opt/miniforge3/bin/conda info --base",
+                conda_base,
+            ),
+            ("test", "-d", "/opt/miniforge3/envs/chemsmart"): _result(
+                "test -d /opt/miniforge3/envs/chemsmart"
+            ),
+        }
+    )
+
+    assert discover_conda(runner, Topology("A", "localhost", [])) == (
+        CondaEnvSurvey(
+            base="/opt/miniforge3",
+            env_path="/opt/miniforge3/envs/chemsmart",
+            env_name="chemsmart",
         )
     )

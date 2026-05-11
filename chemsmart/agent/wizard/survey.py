@@ -6,8 +6,12 @@ from dataclasses import dataclass
 
 from chemsmart.agent.wizard.normalize import SCHEDULER_SUBMIT, choose_queue
 from chemsmart.agent.wizard.parsers import (
+    PbsNodeFacts,
+    PbsServerFacts,
     QueueFacts,
     parse_lsf_bqueues_l,
+    parse_pbs_pbsnodes_av,
+    parse_pbs_qmgr_list_server,
     parse_pbs_qstat_qf_json,
     parse_pbs_qstat_qf_text,
     parse_sge_qconf_sq,
@@ -118,7 +122,7 @@ def _probe_pbs(runner, topology: Topology):
     if qstat_json.returncode == 0 and qstat_json.stdout.strip():
         parsed = _safe_parse(parse_pbs_qstat_qf_json, qstat_json.stdout)
         if parsed:
-            queues = parsed
+            queues = _merge_queue_lists(queues, parsed)
             evidence["qstat -Q -f -F json"] = "parsed"
     qstat_text = _run_probe(
         runner,
@@ -128,10 +132,16 @@ def _probe_pbs(runner, topology: Topology):
     if qstat_text.returncode == 0 and qstat_text.stdout.strip():
         parsed = _safe_parse(parse_pbs_qstat_qf_text, qstat_text.stdout)
         if parsed:
-            queues = parsed
+            queues = _merge_queue_lists(queues, parsed)
             evidence["qstat -Q -f"] = "parsed"
+    server_facts = _probe_pbs_server_facts(runner, topology, evidence)
+    node_facts = _probe_pbs_node_facts(runner, topology, evidence)
     if queues:
-        return "PBS", queues, evidence
+        return (
+            "PBS",
+            _enrich_pbs_queues(queues, server_facts, node_facts),
+            evidence,
+        )
     return None
 
 
@@ -262,3 +272,157 @@ def _probe_sge_qstat_gc(
 
     evidence["qstat -g c"] = "parsed"
     return parsed
+
+
+def _probe_pbs_server_facts(
+    runner,
+    topology: Topology,
+    evidence: dict[str, str],
+) -> PbsServerFacts | None:
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.pbs.qmgr_server"],
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+
+    parsed = _safe_parse(parse_pbs_qmgr_list_server, result.stdout)
+    if parsed is None:
+        return None
+
+    evidence['qmgr -c "list server"'] = "parsed"
+    return parsed
+
+
+def _probe_pbs_node_facts(
+    runner,
+    topology: Topology,
+    evidence: dict[str, str],
+) -> PbsNodeFacts | None:
+    result = _run_probe(
+        runner,
+        topology,
+        ALL_PROBE_SPECS["survey.pbs.pbsnodes_text"],
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+
+    parsed = _safe_parse(parse_pbs_pbsnodes_av, result.stdout)
+    if parsed is None:
+        return None
+
+    evidence["pbsnodes -av"] = "parsed"
+    return parsed
+
+
+def _merge_queue_lists(
+    existing: list[QueueFacts],
+    incoming: list[QueueFacts],
+) -> list[QueueFacts]:
+    if not existing:
+        return list(incoming)
+
+    merged = {queue.name: queue for queue in existing}
+    order = [queue.name for queue in existing]
+    for queue in incoming:
+        if queue.name in merged:
+            merged[queue.name] = _merge_queue(merged[queue.name], queue)
+            continue
+        merged[queue.name] = queue
+        order.append(queue.name)
+    return [merged[name] for name in order]
+
+
+def _merge_queue(primary: QueueFacts, secondary: QueueFacts) -> QueueFacts:
+    return QueueFacts(
+        name=primary.name,
+        default=primary.default or secondary.default,
+        max_walltime_hours=_prefer_value(
+            primary.max_walltime_hours,
+            secondary.max_walltime_hours,
+        ),
+        default_walltime_hours=_prefer_value(
+            primary.default_walltime_hours,
+            secondary.default_walltime_hours,
+        ),
+        default_mem_gb=_prefer_value(
+            primary.default_mem_gb,
+            secondary.default_mem_gb,
+        ),
+        default_cores=_prefer_value(
+            primary.default_cores,
+            secondary.default_cores,
+        ),
+        gpus_per_node=_prefer_value(
+            primary.gpus_per_node,
+            secondary.gpus_per_node,
+        ),
+        enabled=primary.enabled and secondary.enabled,
+        started=primary.started and secondary.started,
+        slots_total=_prefer_value(
+            primary.slots_total,
+            secondary.slots_total,
+        ),
+    )
+
+
+def _enrich_pbs_queues(
+    queues: list[QueueFacts],
+    server_facts: PbsServerFacts | None,
+    node_facts: PbsNodeFacts | None,
+) -> list[QueueFacts]:
+    return [
+        QueueFacts(
+            name=queue.name,
+            default=queue.default
+            or (
+                server_facts is not None
+                and server_facts.default_queue == queue.name
+            ),
+            max_walltime_hours=queue.max_walltime_hours,
+            default_walltime_hours=queue.default_walltime_hours,
+            default_mem_gb=_enrich_pbs_mem_gb(queue, server_facts, node_facts),
+            default_cores=_enrich_pbs_cores(queue, server_facts, node_facts),
+            gpus_per_node=queue.gpus_per_node,
+            enabled=queue.enabled,
+            started=queue.started,
+            slots_total=queue.slots_total,
+        )
+        for queue in queues
+    ]
+
+
+def _enrich_pbs_mem_gb(
+    queue: QueueFacts,
+    server_facts: PbsServerFacts | None,
+    node_facts: PbsNodeFacts | None,
+) -> int | None:
+    if queue.default_mem_gb is not None:
+        return queue.default_mem_gb
+    if server_facts is not None and server_facts.default_mem_gb is not None:
+        return server_facts.default_mem_gb
+    if node_facts is not None:
+        return node_facts.min_mem_gb
+    return None
+
+
+def _enrich_pbs_cores(
+    queue: QueueFacts,
+    server_facts: PbsServerFacts | None,
+    node_facts: PbsNodeFacts | None,
+) -> int | None:
+    cores = queue.default_cores
+    if cores is None and server_facts is not None:
+        cores = server_facts.default_cores
+    if (
+        node_facts is not None
+        and node_facts.min_ncpus is not None
+        and (cores is None or cores <= 1)
+    ):
+        return node_facts.min_ncpus
+    return cores
+
+
+def _prefer_value(primary, secondary):
+    return primary if primary is not None else secondary

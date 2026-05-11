@@ -105,6 +105,16 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         argv_template=("qstat", "-Q", "-f"),
         slot_validators={},
     ),
+    "survey.pbs.qmgr_server": ProbeSpec(
+        template_id="survey.pbs.qmgr_server",
+        argv_template=("qmgr", "-c", "list server"),
+        slot_validators={},
+    ),
+    "survey.pbs.pbsnodes_text": ProbeSpec(
+        template_id="survey.pbs.pbsnodes_text",
+        argv_template=("pbsnodes", "-av"),
+        slot_validators={},
+    ),
     "survey.lsf.bqueues_json": ProbeSpec(
         template_id="survey.lsf.bqueues_json",
         argv_template=(
@@ -181,6 +191,16 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         template_id="software.conda_base",
         argv_template=("conda", "info", "--base"),
         slot_validators={},
+    ),
+    "software.conda_base_path": ProbeSpec(
+        template_id="software.conda_base_path",
+        argv_template=("{path}", "info", "--base"),
+        slot_validators={"path": lambda value: validate_path_slot(value)},
+    ),
+    "software.test_dir_exists": ProbeSpec(
+        template_id="software.test_dir_exists",
+        argv_template=("test", "-d", "{path}"),
+        slot_validators={"path": lambda value: validate_path_slot(value)},
     ),
     "scratch.test_dir_writable": ProbeSpec(
         template_id="scratch.test_dir_writable",
