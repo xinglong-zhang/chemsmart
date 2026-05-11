@@ -20,6 +20,7 @@ from chemsmart.agent.wizard.parsers import (
     parse_sge_qhost,
     parse_sge_qstat_gc,
     parse_slurm_scontrol_partition_oneliner,
+    parse_slurm_scontrol_show_node_cpus,
     parse_slurm_scontrol_show_node_real_memory,
     parse_slurm_sinfo_json,
 )
@@ -108,18 +109,32 @@ def _probe_slurm(runner, topology: Topology):
         if parsed:
             queues = parsed
             evidence["scontrol show partition --oneliner"] = "parsed"
-            mem_by_queue = _probe_slurm_node_memory(
+            node_resources = _probe_slurm_node_resources(
                 runner,
                 topology,
                 scontrol.stdout,
                 parsed,
                 evidence,
             )
-            if mem_by_queue:
+            if node_resources:
                 queues = [
                     (
-                        replace(queue, mem_mb=mem_by_queue.get(queue.name))
-                        if queue.name in mem_by_queue
+                        replace(
+                            queue,
+                            default_cores=_node_resource(
+                                node_resources,
+                                queue.name,
+                                "cores",
+                                queue.default_cores,
+                            ),
+                            mem_mb=_node_resource(
+                                node_resources,
+                                queue.name,
+                                "mem_mb",
+                                queue.mem_mb,
+                            ),
+                        )
+                        if queue.name in node_resources
                         else queue
                     )
                     for queue in queues
@@ -448,15 +463,15 @@ def _prefer_value(primary, secondary):
     return primary if primary is not None else secondary
 
 
-def _probe_slurm_node_memory(
+def _probe_slurm_node_resources(
     runner,
     topology: Topology,
     payload: str,
     queues: list[QueueFacts],
     evidence: dict[str, str],
-) -> dict[str, int]:
+) -> dict[str, dict[str, int]]:
     node_by_queue = _parse_slurm_partition_nodes(payload)
-    mem_by_queue: dict[str, int] = {}
+    resources_by_queue: dict[str, dict[str, int]] = {}
     for queue in queues:
         node_name = node_by_queue.get(queue.name)
         if node_name is None:
@@ -469,15 +484,33 @@ def _probe_slurm_node_memory(
         )
         if result.returncode != 0 or not result.stdout.strip():
             continue
+        resources: dict[str, int] = {}
+        cores = _safe_parse(
+            parse_slurm_scontrol_show_node_cpus,
+            result.stdout,
+        )
+        if cores is not None:
+            resources["cores"] = cores
         mem_mb = _safe_parse(
             parse_slurm_scontrol_show_node_real_memory,
             result.stdout,
         )
-        if mem_mb is None:
+        if mem_mb is not None:
+            resources["mem_mb"] = mem_mb
+        if not resources:
             continue
-        mem_by_queue[queue.name] = mem_mb
+        resources_by_queue[queue.name] = resources
         evidence[f"scontrol show node {node_name}"] = "parsed"
-    return mem_by_queue
+    return resources_by_queue
+
+
+def _node_resource(
+    resources_by_queue: dict[str, dict[str, int]],
+    queue_name: str,
+    key: str,
+    fallback: int | None,
+) -> int | None:
+    return resources_by_queue.get(queue_name, {}).get(key, fallback)
 
 
 def _parse_slurm_partition_nodes(payload: str) -> dict[str, str]:
