@@ -79,6 +79,7 @@ def test_ssh_qsub_transport_uses_exact_remote_command(
                 "capture_output": True,
                 "text": True,
                 "check": False,
+                "env": None,
                 "cwd": None,
             },
         )

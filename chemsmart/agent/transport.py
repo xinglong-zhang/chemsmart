@@ -42,11 +42,13 @@ class SshQsubTransport(SubmitTransport):
             working_dir=working_dir,
             server=server,
         )
+        env = _sge_env(command)
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
             check=False,
+            env=env,
             cwd=None if command[0] == "ssh" else os.path.abspath(working_dir),
         )
         output = "\n".join(
@@ -141,4 +143,29 @@ def _parse_job_id(output: str) -> str | None:
     first_token = output.strip().split()
     if first_token:
         return first_token[0]
+    return None
+
+
+def _sge_env(command: list[str]) -> dict[str, str] | None:
+    """Return an env dict with SGE_ROOT set when running qsub locally.
+
+    qsub requires SGE_ROOT to be set. When the submit_command is an absolute
+    path like /opt/sge/bin/lx-amd64/qsub and SGE_ROOT is missing from the
+    current environment, infer it from the path (3 levels up from the binary).
+    """
+    if command and command[0] == "ssh":
+        return None
+    submit_cmd = command[0] if command else ""
+    if "SGE_ROOT" in os.environ or "qsub" not in os.path.basename(submit_cmd):
+        return None
+    if not os.path.isabs(submit_cmd):
+        return None
+    from pathlib import Path
+    parents = Path(submit_cmd).resolve().parents
+    if len(parents) >= 3:
+        inferred_root = str(parents[2])
+        env = os.environ.copy()
+        env["SGE_ROOT"] = inferred_root
+        env.setdefault("SGE_CELL", "default")
+        return env
     return None
