@@ -34,11 +34,13 @@ from chemsmart.agent.wizard.render import (
     ServerYamlPlan,
     render_server_yaml,
 )
+from chemsmart.agent.wizard.scheduler_env import build_scheduler_env
 from chemsmart.agent.wizard.scratch import (
     ScratchFinding,
     discover_scratch,
 )
 from chemsmart.agent.wizard.software import (
+    CondaEnvSurvey,
     ModuleSystem,
     ProgramFinding,
     SoftwareSurvey,
@@ -65,7 +67,6 @@ from chemsmart.agent.wizard.verify import (
     VerifyResult,
     verify_server_yaml,
 )
-from chemsmart.agent.wizard.scheduler_env import build_scheduler_env
 from chemsmart.agent.wizard.write import write_server_yaml
 
 __all__ = [
@@ -74,6 +75,7 @@ __all__ = [
     "CacheEntry",
     "AmbiguousSchedulerError",
     "ModuleSystem",
+    "CondaEnvSurvey",
     "NoTargetError",
     "ProbeError",
     "ProbeResult",

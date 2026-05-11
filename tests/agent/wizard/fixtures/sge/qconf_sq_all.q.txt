@@ -1,0 +1,5 @@
+qname all.q
+slots 1
+h_rt 86400
+h_vmem INFINITY
+state enabled

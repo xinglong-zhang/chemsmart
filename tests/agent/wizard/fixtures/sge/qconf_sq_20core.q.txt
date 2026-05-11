@@ -1,0 +1,5 @@
+qname 20core.q
+slots 20
+h_rt 86400
+h_vmem 62.7G
+state enabled

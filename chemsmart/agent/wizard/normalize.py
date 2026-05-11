@@ -27,6 +27,7 @@ def choose_queue(queues: list[QueueFacts]) -> str | None:
         if queue.enabled
         and queue.started
         and (queue.gpus_per_node is None or queue.gpus_per_node <= 0)
+        and (queue.slots_total is None or queue.slots_total > 0)
     ]
     if not candidates:
         return None

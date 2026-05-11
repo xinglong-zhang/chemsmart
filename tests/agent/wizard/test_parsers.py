@@ -5,6 +5,7 @@ from chemsmart.agent.wizard.parsers import (
     parse_pbs_qstat_qf_text,
     parse_sge_qconf_sq,
     parse_sge_qconf_sql,
+    parse_sge_qstat_gc,
     parse_slurm_scontrol_partition_oneliner,
     parse_slurm_sinfo_json,
 )
@@ -25,6 +26,7 @@ def test_parse_slurm_sinfo_json():
             gpus_per_node=None,
             enabled=True,
             started=True,
+            slots_total=None,
         )
     ]
 
@@ -45,6 +47,7 @@ def test_parse_slurm_scontrol_partition_oneliner():
             gpus_per_node=0,
             enabled=True,
             started=True,
+            slots_total=None,
         )
     ]
 
@@ -69,6 +72,7 @@ def test_parse_pbs_qstat_qf_json():
             gpus_per_node=0,
             enabled=True,
             started=True,
+            slots_total=None,
         )
     ]
 
@@ -94,6 +98,7 @@ def test_parse_pbs_qstat_qf_text():
             gpus_per_node=None,
             enabled=True,
             started=True,
+            slots_total=None,
         )
     ]
 
@@ -118,6 +123,7 @@ def test_parse_lsf_bqueues_l():
             gpus_per_node=0,
             enabled=True,
             started=True,
+            slots_total=None,
         )
     ]
 
@@ -147,4 +153,16 @@ def test_parse_sge_qconf_sq():
         gpus_per_node=2,
         enabled=True,
         started=True,
+        slots_total=None,
     )
+
+
+def test_parse_sge_qstat_gc():
+    assert parse_sge_qstat_gc(
+        "CLUSTER QUEUE                   CQLOAD   USED   RES  AVAIL  TOTAL "
+        "aoACDS  cdsuE\n"
+        "--------------------------------------------------------------------------------\n"
+        "all.q                            0.00      0     0      0      0      0      0\n"
+        "20core.q                         0.10     70     0     30    100      0      0\n"
+        "40core.q                         0.20    320     0    240    560      0      0\n"
+    ) == {"all.q": 0, "20core.q": 100, "40core.q": 560}

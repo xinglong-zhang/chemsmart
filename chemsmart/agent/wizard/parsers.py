@@ -19,6 +19,7 @@ class QueueFacts:
     gpus_per_node: int | None
     enabled: bool
     started: bool
+    slots_total: int | None = None
 
 
 def parse_slurm_sinfo_json(payload: str) -> list[QueueFacts]:
@@ -58,6 +59,7 @@ def parse_slurm_sinfo_json(payload: str) -> list[QueueFacts]:
                 ),
                 enabled=_is_active_state(state),
                 started=_is_active_state(state),
+                slots_total=None,
             )
         )
     return queues
@@ -99,6 +101,7 @@ def parse_slurm_scontrol_partition_oneliner(payload: str) -> list[QueueFacts]:
                 ),
                 enabled=_is_active_state(state),
                 started=_is_active_state(state),
+                slots_total=None,
             )
         )
     return queues
@@ -139,6 +142,7 @@ def parse_pbs_qstat_qf_json(payload: str) -> list[QueueFacts]:
                 ),
                 enabled=_as_bool(fields.get("enabled"), default=True),
                 started=_as_bool(fields.get("started"), default=True),
+                slots_total=None,
             )
         )
     return queues
@@ -185,6 +189,7 @@ def parse_pbs_qstat_qf_text(payload: str) -> list[QueueFacts]:
                 ),
                 enabled=_as_bool(fields.get("enabled"), default=True),
                 started=_as_bool(fields.get("started"), default=True),
+                slots_total=None,
             )
         )
     return queues
@@ -227,6 +232,7 @@ def parse_lsf_bqueues_l(payload: str) -> list[QueueFacts]:
                 gpus_per_node=_parse_gpu_count(block),
                 enabled=enabled,
                 started=started,
+                slots_total=None,
             )
         )
     return queues
@@ -303,7 +309,46 @@ def parse_sge_qconf_sq(payload: str) -> QueueFacts:
         gpus_per_node=_parse_gpu_count(complex_values),
         enabled="disabled" not in state.lower(),
         started="disabled" not in state.lower(),
+        slots_total=None,
     )
+
+
+def parse_sge_qstat_gc(payload: str) -> dict[str, int]:
+    """Parse ``qstat -g c`` output into queue -> total slots."""
+
+    total_index: int | None = None
+    totals: dict[str, int] = {}
+
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line or set(line) == {"-"}:
+            continue
+
+        fields = raw_line.split()
+        if not fields:
+            continue
+
+        if "TOTAL" in fields:
+            header_fields = list(fields)
+            if header_fields[:2] == ["CLUSTER", "QUEUE"]:
+                header_fields = ["CLUSTER_QUEUE", *header_fields[2:]]
+            try:
+                total_index = header_fields.index("TOTAL")
+            except ValueError:
+                total_index = None
+            continue
+
+        if fields[0] in {"CLUSTER", "QUEUE"} or total_index is None:
+            continue
+        if len(fields) <= total_index:
+            continue
+
+        total = _parse_int(fields[total_index])
+        if total is None:
+            continue
+        totals[fields[0]] = total
+
+    return totals
 
 
 def _as_bool(value, default: bool = False) -> bool:

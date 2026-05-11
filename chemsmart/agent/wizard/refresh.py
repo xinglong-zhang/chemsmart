@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict
 from datetime import datetime, timezone
-
-UTC = timezone.utc
 from pathlib import Path
 
 import yaml
@@ -25,6 +23,7 @@ from chemsmart.agent.wizard.software import run_software_survey
 from chemsmart.agent.wizard.survey import run_schedule_survey
 from chemsmart.agent.wizard.topology import Topology
 
+UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
 _LOCAL_HOSTS = {"", "localhost", "local"}
@@ -178,7 +177,7 @@ def _build_source_commands(scheduler: str) -> dict[str, str]:
         "SLURM": "sinfo --json; scontrol show partition --oneliner",
         "PBS": "qstat -Q -f -F json; qstat -Q -f",
         "LSF": "bqueues -o 'queue_name status runlimit memlimit prolimit' -json; bqueues -l",
-        "SGE": "qconf -sql; qconf -sq <queue>",
+        "SGE": "qconf -sql; qstat -g c; qconf -sq <queue>; qhost",
     }
     if scheduler_name in scheduler_commands:
         commands["scheduler"] = scheduler_commands[scheduler_name]
@@ -246,8 +245,9 @@ def _build_program_candidates(software_survey) -> dict:
             "version": software_survey.module_system.version,
         },
         "conda": {
-            "base": software_survey.conda_base,
-            "env": software_survey.conda_env,
+            "base": software_survey.conda.base,
+            "env": software_survey.conda.env_path,
+            "env_name": software_survey.conda.env_name,
         },
         **{
             name: {
