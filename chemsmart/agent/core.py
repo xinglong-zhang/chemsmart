@@ -9,8 +9,6 @@ import subprocess
 import time
 import uuid
 from datetime import datetime, timezone
-
-UTC = timezone.utc
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -24,6 +22,11 @@ from chemsmart.agent.permissions import (
     PermissionMode,
     PermissionPolicy,
 )
+from chemsmart.agent.prompts import load_prompt
+from chemsmart.agent.prompts.identity import (
+    build_system_prompt,
+    ensure_system_message,
+)
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.providers import (
     DEFAULT_TIMEOUT_S,
@@ -32,6 +35,8 @@ from chemsmart.agent.providers import (
 )
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.services.conversation_memory import ConversationMemory
+
+UTC = timezone.utc
 
 _RISKY_TOOLS = {"run_local", "submit_hpc"}
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#\s*\S+", re.MULTILINE)
@@ -329,25 +334,10 @@ class AgentSession:
         self._log_loop_mode(policy)
         if messages is None:
             messages = [{"role": "user", "content": request}]
-            if (
-                self.state.turn_index > 1
-                and self.conversation_history is not None
-            ):
-                ctx = self.conversation_history.prompt_context(
-                    current_turn_index=self.state.turn_index
-                )
-                recent = ctx.get("recent_turns") or []
-                older = ctx.get("older_turn_summary") or []
-                if recent or older:
-                    ctx_text = json.dumps(ctx, ensure_ascii=False)
-                    messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                "Previous turns in this session:\n" + ctx_text
-                            ),
-                        }
-                    ] + messages
+        messages = ensure_system_message(
+            messages,
+            self._tool_loop_system_prompt(policy),
+        )
         if budgets is None:
             budgets = ToolLoopBudgets(
                 log_provider_turn_raw=log_raw_provider_turns
@@ -712,7 +702,14 @@ class AgentSession:
 
     def _planner_call(self, request: str) -> Plan:
         current_turn_index = self.state.turn_index if self.state else None
-        prompt = _load_prompt("planner.md")
+        prompt = build_system_prompt(
+            registry=self.registry,
+            stage_instructions=load_prompt("planner.md"),
+            session_meta=self._prompt_session_meta(stage="planner"),
+            conversation_context=self.conversation_history.prompt_context(
+                current_turn_index=current_turn_index
+            ),
+        )
         tool_defs = self.registry.openai_tool_defs()
         plan = self._llm_json_call(
             stage="planner",
@@ -746,7 +743,19 @@ class AgentSession:
         dry_run_results: list[dict[str, Any]],
         dry_submit: bool,
     ) -> CriticVerdict:
-        prompt = _load_prompt("critic.md")
+        prompt = build_system_prompt(
+            registry=self.registry,
+            stage_instructions=load_prompt("critic.md"),
+            session_meta=self._prompt_session_meta(
+                stage="critic",
+                submission_mode="dry-submit" if dry_submit else "execute",
+            ),
+            conversation_context=self.conversation_history.prompt_context(
+                current_turn_index=(
+                    self.state.turn_index if self.state else None
+                )
+            ),
+        )
         return self._llm_json_call(
             stage="critic",
             messages=[
@@ -1266,6 +1275,41 @@ class AgentSession:
             self.decision_log.read_all()
         )
 
+    def _prompt_session_meta(self, **extra: Any) -> dict[str, Any]:
+        meta: dict[str, Any] = dict(extra)
+        if self.state is None:
+            return meta
+
+        meta.update(
+            {
+                "session_id": self.state.session_id,
+                "turn_index": self.state.turn_index,
+                "request_intent": self.state.request_intent,
+            }
+        )
+        if self._loop_mode_state is not None:
+            meta["approval_mode"] = self._loop_mode_state[0]
+            meta["yolo"] = self._loop_mode_state[1]
+        return meta
+
+    def _tool_loop_system_prompt(
+        self,
+        policy: PermissionPolicy,
+    ) -> str:
+        current_turn_index = self.state.turn_index if self.state else None
+        return build_system_prompt(
+            registry=self.registry,
+            stage_instructions=load_prompt("tool_loop.md"),
+            session_meta=self._prompt_session_meta(
+                stage="tool_loop",
+                approval_mode=policy.mode.value,
+                yolo=policy.yolo,
+            ),
+            conversation_context=self.conversation_history.prompt_context(
+                current_turn_index=current_turn_index
+            ),
+        )
+
     def _current_turn_entries(self) -> list[dict[str, Any]]:
         if self.decision_log is None or self.state is None:
             return []
@@ -1626,11 +1670,6 @@ def _is_chitchat_request(request: str) -> bool:
         and len(tokens) <= 3
         and set(tokens).issubset(_CHITCHAT_TOKENS)
     )
-
-
-def _load_prompt(name: str) -> str:
-    prompt_path = Path(__file__).with_name("prompts") / name
-    return prompt_path.read_text(encoding="utf-8")
 
 
 def _elapsed_ms(
