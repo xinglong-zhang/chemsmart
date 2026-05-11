@@ -189,10 +189,10 @@ integration with chemical drawing tools.
 Chemsmart Database Files (.db)
 ==============================
 
-Chemsmart ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble``
-(see :doc:`database-assemble`). When a chemsmart database is used as molecular input, chemsmart first selects
-the requested record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to
-Gaussian, ORCA, or PyMOL (see :doc:`database-workflow`).
+Chemsmart ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
+:doc:`database-assemble`). When a chemsmart database is used as molecular input, chemsmart first selects the requested
+record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
+(see :doc:`database-workflow`).
 
 .. tip::
 
