@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,17 @@ _WELL_KNOWN_CONDA_PATHS = (
     "/opt/anaconda3/bin/conda",
     "~/miniconda3/bin/conda",
     "/opt/conda/bin/conda",
+)
+_MODULE_ENVVAR_PREFERENCES = {
+    "gaussian": ("g16root", "GAUSS_EXEDIR"),
+    "orca": ("ORCA_ROOT",),
+    "nciplot": ("NCIPLOT_HOME",),
+}
+_LMOD_SETENV_PATTERN = re.compile(
+    r'setenv\{\s*"(?P<name>[^"]+)"\s*,\s*"(?P<value>[^"]*)"\s*\}'
+)
+_LMOD_PREPEND_PATH_PATTERN = re.compile(
+    r'prepend_path\{\s*"PATH"\s*,\s*"(?P<value>[^"]+)"'
 )
 
 
@@ -118,9 +130,15 @@ def find_program(
         module_patterns,
     )
     if module_candidates:
+        exefolder = _probe_module_exefolder(
+            runner,
+            topology,
+            key,
+            module_candidates,
+        )
         return ProgramFinding(
             program=key,
-            exefolder=None,
+            exefolder=exefolder,
             source="module",
             module_candidates=module_candidates,
             on_path=False,
@@ -283,7 +301,103 @@ def _normalize_module_line(line: str) -> str | None:
         return None
     if candidate.lower().startswith(("where:", "modulepath", 'use "module')):
         return None
-    return candidate.split()[0]
+    candidate = candidate.split()[0]
+    if candidate.endswith("/"):
+        return None
+    return candidate
+
+
+def _probe_module_exefolder(
+    runner,
+    topology: Topology,
+    program: str,
+    module_candidates: list[str],
+) -> str | None:
+    for module_name in module_candidates:
+        result = _run_probe(
+            runner,
+            topology,
+            ALL_PROBE_SPECS["software.module_show"],
+            module_name=module_name,
+        )
+        if result.returncode != 0:
+            continue
+        exefolder = _extract_exefolder_from_module_show(
+            program=program,
+            payload=_merge_output(result),
+        )
+        if exefolder is not None:
+            return exefolder
+    return None
+
+
+def _extract_exefolder_from_module_show(
+    program: str,
+    payload: str,
+) -> str | None:
+    env_values, path_entries = _parse_module_show(payload)
+    for env_name in _MODULE_ENVVAR_PREFERENCES.get(program, ()):
+        value = _normalize_shell_value(env_values.get(env_name))
+        if value is not None:
+            return value
+    for entry in path_entries:
+        value = _normalize_shell_value(entry)
+        if value is not None:
+            return value
+    return None
+
+
+def _parse_module_show(payload: str) -> tuple[dict[str, str], list[str]]:
+    env_values: dict[str, str] = {}
+    path_entries: list[str] = []
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        lmod_env_match = _LMOD_SETENV_PATTERN.search(line)
+        if lmod_env_match is not None:
+            env_values[lmod_env_match.group("name")] = lmod_env_match.group(
+                "value"
+            )
+            continue
+
+        lmod_path_match = _LMOD_PREPEND_PATH_PATTERN.search(line)
+        if lmod_path_match is not None:
+            path_entries.append(lmod_path_match.group("value"))
+            continue
+
+        parsed = _parse_tcl_module_show_line(line)
+        if parsed is None:
+            continue
+
+        directive, args = parsed
+        if directive == "setenv" and len(args) >= 2:
+            env_values[args[0]] = args[1]
+            continue
+
+        if (
+            directive in {"prepend-path", "prepend_path"}
+            and len(args) >= 2
+            and args[0] == "PATH"
+        ):
+            path_entries.append(args[1])
+
+    return env_values, path_entries
+
+
+def _parse_tcl_module_show_line(
+    line: str,
+) -> tuple[str, list[str]] | None:
+    if not line.startswith(("setenv ", "prepend-path ", "prepend_path ")):
+        return None
+    try:
+        parts = shlex.split(line, posix=True)
+    except ValueError:
+        return None
+    if not parts:
+        return None
+    return parts[0], parts[1:]
 
 
 def _probe_env_values(

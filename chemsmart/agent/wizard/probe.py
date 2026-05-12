@@ -16,6 +16,7 @@ TRUNCATION_MARKER = "…[truncated]"
 MAX_OUTPUT_BYTES = 1024 * 1024
 _IDENTIFIER_PATTERN = re.compile(r"^[\w\-\.]+$")
 _ENV_VAR_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+_MODULE_NAME_PATTERN = re.compile(r"^[\w.+-]+(?:/[\w.+-]+)*$")
 _PATH_PATTERN = re.compile(r"^[/~][\w\-./@:+]*$")
 _FORBIDDEN_SLOT_CHARS = set(";&|`$(){}<>!\\'\"*\n\r\t")
 
@@ -193,6 +194,13 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         template_id="software.module_avail",
         argv_template=("module", "-t", "avail"),
         slot_validators={},
+    ),
+    "software.module_show": ProbeSpec(
+        template_id="software.module_show",
+        argv_template=("module", "show", "{module_name}"),
+        slot_validators={
+            "module_name": lambda value: validate_module_name(value)
+        },
     ),
     "software.conda_base": ProbeSpec(
         template_id="software.conda_base",
@@ -444,6 +452,14 @@ def validate_env_var_name(value: str) -> None:
     _validate_slot_chars(value)
     if not _ENV_VAR_PATTERN.fullmatch(value):
         raise ProbeError(f"Invalid env var slot value: {value!r}")
+
+
+def validate_module_name(value: str) -> None:
+    """Validate a module-name slot value."""
+
+    _validate_slot_chars(value)
+    if not _MODULE_NAME_PATTERN.fullmatch(value):
+        raise ProbeError(f"Invalid module name slot value: {value!r}")
 
 
 def validate_path_slot(value: str) -> None:

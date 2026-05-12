@@ -1,0 +1,10 @@
+----------------------------------------------------------------------------
+   /opt/ohpc/pub/modulefiles/gaussian/16:
+----------------------------------------------------------------------------
+whatis("Gaussian 16")
+setenv{"g16root","/opt/fake/gaussian/g16"}
+setenv{"GAUSS_EXEDIR","/opt/fake/gaussian/g16"}
+prepend_path{"PATH","/opt/fake/gaussian/g16",delim=":",priority="0"}
+help([[Gaussian 16 (P0 #6 wizard test fixture)
+]])
+
