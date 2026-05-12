@@ -148,6 +148,29 @@ def parse_slurm_scontrol_show_node_cpus(payload: str) -> int | None:
     return value
 
 
+def parse_slurm_squeue_job_line(payload: str) -> dict[str, str]:
+    """Parse one ``squeue -o`` record into a field dict."""
+
+    for line in payload.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) != 8:
+            raise ValueError("Slurm squeue record has an unexpected shape.")
+        return {
+            "job_id": parts[0],
+            "name": parts[1],
+            "state": parts[2],
+            "user": parts[3],
+            "queue": parts[4],
+            "runtime": parts[5],
+            "limit": parts[6],
+            "node_or_reason": parts[7],
+        }
+    raise ValueError("Slurm squeue output is empty.")
+
+
 def parse_pbs_qstat_qf_json(payload: str) -> list[QueueFacts]:
     """Parse queues from ``qstat -Q -f -F json`` output."""
 
@@ -434,6 +457,29 @@ def parse_sge_qconf_sq(payload: str) -> QueueFacts:
     )
 
 
+def parse_sge_qstat_job(payload: str) -> dict[str, str]:
+    """Parse ``qstat -j`` key/value output into a field dict."""
+
+    fields: dict[str, str] = {}
+    current_key: str | None = None
+    for raw_line in payload.splitlines():
+        line = raw_line.rstrip()
+        if not line:
+            continue
+        if ":" in line:
+            key, value = line.split(":", 1)
+            current_key = key.strip()
+            fields[current_key] = value.strip()
+            continue
+        if current_key is not None and raw_line[:1].isspace():
+            fields[current_key] = (
+                f"{fields[current_key]} {line.strip()}".strip()
+            )
+    if not fields:
+        raise ValueError("SGE qstat -j output is empty.")
+    return fields
+
+
 def parse_sge_qstat_gc(payload: str) -> dict[str, int]:
     """Parse ``qstat -g c`` output into queue -> total slots."""
 
@@ -561,6 +607,38 @@ def _parse_hours(value) -> int | None:
         return max(1, math.ceil(float(text[:-1])))
     if re.fullmatch(r"\d+", text):
         return int(text)
+    return None
+
+
+def parse_duration_seconds(value) -> int | None:
+    """Parse scheduler duration text into seconds."""
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    upper = text.upper()
+    if upper in {"UNLIMITED", "INFINITE", "INFINITY", "NOT_SET", "NONE", "-"}:
+        return None
+    if re.fullmatch(r"\d+", text):
+        return int(text)
+    if re.fullmatch(r"\d+-\d{2}:\d{2}:\d{2}", text):
+        days, remainder = text.split("-", 1)
+        hours, minutes, seconds = map(int, remainder.split(":"))
+        return int(days) * 24 * 3600 + hours * 3600 + minutes * 60 + seconds
+    if re.fullmatch(r"\d{1,3}:\d{2}:\d{2}", text):
+        hours, minutes, seconds = map(int, text.split(":"))
+        return hours * 3600 + minutes * 60 + seconds
+    if re.fullmatch(r"\d{1,3}:\d{2}", text):
+        minutes, seconds = map(int, text.split(":"))
+        return minutes * 60 + seconds
+    if re.fullmatch(r"\d+(?:\.\d+)?\s*h", text, re.I):
+        return int(math.ceil(float(text.split()[0]) * 3600))
+    if re.fullmatch(r"\d+(?:\.\d+)?\s*m", text, re.I):
+        return int(math.ceil(float(text.split()[0]) * 60))
+    if re.fullmatch(r"\d+(?:\.\d+)?\s*s", text, re.I):
+        return int(math.ceil(float(text.split()[0])))
     return None
 
 

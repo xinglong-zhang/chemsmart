@@ -115,6 +115,17 @@ class ToolRegistry:
                 ),
             ),
             (
+                "scheduler_query",
+                "chemsmart.agent.tools_hpc",
+                "Inspect HPC scheduler state — queue/partition aggregates (job_id omitted) or per-job status (with job_id). slurm/pbs/sge/lsf. Read-only.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template=(
+                        "Scheduler query {scheduler} on {server}"
+                    ),
+                ),
+            ),
+            (
                 "extract_optimized_geometry",
                 "chemsmart.agent.tools",
                 None,

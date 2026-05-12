@@ -11,12 +11,17 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
+from chemsmart.agent.wizard.parsers import (
+    parse_sge_qstat_job,
+    parse_slurm_squeue_job_line,
+)
 from chemsmart.agent.wizard.scheduler_env import build_scheduler_env
 
 TRUNCATION_MARKER = "…[truncated]"
 MAX_OUTPUT_BYTES = 1024 * 1024
 _IDENTIFIER_PATTERN = re.compile(r"^[\w\-\.]+$")
 _ENV_VAR_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.\[\]-]{1,64}$")
 _MODULE_NAME_PATTERN = re.compile(r"^[\w.+-]+(?:/[\w.+-]+)*$")
 _PATH_PATTERN = re.compile(r"^[/~][\w\-./@:+]*$")
 _FORBIDDEN_SLOT_CHARS = set(";&|`$(){}<>!\\'\"*\n\r\t")
@@ -117,6 +122,19 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
             "node_name": lambda value: validate_identifier(value)
         },
     ),
+    "query.slurm.squeue_job": ProbeSpec(
+        template_id="query.slurm.squeue_job",
+        argv_template=(
+            "squeue",
+            "-h",
+            "-j",
+            "{job_id}",
+            "-o",
+            "%A|%j|%T|%u|%P|%M|%l|%R",
+        ),
+        slot_validators={"job_id": lambda value: validate_job_id(value)},
+        parser=parse_slurm_squeue_job_line,
+    ),
     "survey.pbs.qstat_json": ProbeSpec(
         template_id="survey.pbs.qstat_json",
         argv_template=("qstat", "-Q", "-f", "-F", "json"),
@@ -138,6 +156,12 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         argv_template=("pbsnodes", "-av"),
         slot_validators={},
     ),
+    "query.pbs.qstat_job_json": ProbeSpec(
+        template_id="query.pbs.qstat_job_json",
+        argv_template=("qstat", "-f", "-F", "json", "{job_id}"),
+        slot_validators={"job_id": lambda value: validate_job_id(value)},
+        parser=json.loads,
+    ),
     "survey.lsf.bqueues_json": ProbeSpec(
         template_id="survey.lsf.bqueues_json",
         argv_template=(
@@ -153,6 +177,12 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         template_id="survey.lsf.bqueues_text",
         argv_template=("bqueues", "-l"),
         slot_validators={},
+    ),
+    "query.lsf.bjobs_job_json": ProbeSpec(
+        template_id="query.lsf.bjobs_job_json",
+        argv_template=("bjobs", "-json", "-l", "{job_id}"),
+        slot_validators={"job_id": lambda value: validate_job_id(value)},
+        parser=json.loads,
     ),
     "survey.sge.qconf_sql": ProbeSpec(
         template_id="survey.sge.qconf_sql",
@@ -175,6 +205,12 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         template_id="survey.sge.qhost",
         argv_template=("qhost",),
         slot_validators={},
+    ),
+    "query.sge.qstat_job": ProbeSpec(
+        template_id="query.sge.qstat_job",
+        argv_template=("qstat", "-j", "{job_id}"),
+        slot_validators={"job_id": lambda value: validate_job_id(value)},
+        parser=parse_sge_qstat_job,
     ),
     "software.type_module": ProbeSpec(
         template_id="software.type_module",
@@ -468,6 +504,14 @@ def validate_env_var_name(value: str) -> None:
     _validate_slot_chars(value)
     if not _ENV_VAR_PATTERN.fullmatch(value):
         raise ProbeError(f"Invalid env var slot value: {value!r}")
+
+
+def validate_job_id(value: str) -> None:
+    """Validate a scheduler job-id slot value."""
+
+    _validate_slot_chars(value)
+    if not _JOB_ID_PATTERN.fullmatch(value):
+        raise ProbeError(f"Invalid job id slot value: {value!r}")
 
 
 def validate_module_name(value: str) -> None:
