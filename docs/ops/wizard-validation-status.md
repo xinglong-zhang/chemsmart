@@ -2,21 +2,24 @@
 
 Snapshot of which HPC environments the `chemsmart agent wizard` has been live-validated against, what remains untested, and how to reproduce each verdict.
 
-Captured: 2026-05-12 against `fork/main` HEAD `93f4d923`.
+Captured: 2026-05-12 against `fork/main` HEAD `d7c922ab`.
 
 ## Summary
 
-- **Live-validated schedulers**: SGE/SoGE 8.1.8, OpenPBS 23.06, SLURM 22.05 (single-node + simulated multi-node).
-- **Audit gaps closed by live runs**: 2 of 8 P0 items.
-- **Audit gaps still open**: 6 P0, 10 P1, 3 P2 — none have a live cluster yet.
-- **Regression coverage**: 99 unit tests + 1 end-to-end PBS round-trip; SLURM/PBS/SGE node-overlay paths locked in pytest.
+- **Live-validated schedulers**: SGE/SoGE 8.1.8, OpenPBS 23.06 (including `nodes:ppn` legacy + `select=` modern resource defaults), SLURM 22.05 (single-node + simulated multi-node).
+- **Audit gaps closed by live runs**: 4 of 8 P0 items.
+- **Audit gaps still open**: 4 P0, 10 P1, 3 P2 — none have a live cluster yet.
+- **Regression coverage**: 104 wizard tests including end-to-end PBS round-trip + 4 PBS-resource-overlay rows; SLURM/PBS/SGE node-overlay paths locked in pytest.
 
 ## Validated environments
 
 | Environment | OS / Packaging | Scheduler | Mode | Result | Evidence |
 |---|---|---|---|---|---|
 | Cluster #1 (external) | CentOS 7 | SoGE 8.1.8 (qconf/qstat) | A: orchestrator runs on submit host | PASS | PR #81, PR #86 |
-| chemnode1 (GCP) | Rocky 8 / OpenHPC | OpenPBS 23.06.06 | B: orchestrator → SSH login node | PASS | PR #90, locked by `tests/agent/wizard/test_e2e.py::test_mode_b_openpbs_round_trip_uses_node_overlay_and_conda_fallback` (PR #93) |
+| chemnode1 (GCP) | Rocky 8 / OpenHPC | OpenPBS 23.06.06 (queue empty defaults) | B: orchestrator → SSH login node | PASS | PR #90, locked by `tests/agent/wizard/test_e2e.py::test_mode_b_openpbs_round_trip_uses_node_overlay_and_conda_fallback` (PR #93) |
+| chemnode1 (GCP) | Rocky 8 / OpenHPC | OpenPBS 23.06 with `resources_default.select = 2:ncpus=4:mem=8gb` | B | PASS — `select=` string parser ignored, node facts win | live verify 2026-05-12 |
+| chemnode1 (GCP) | Rocky 8 / OpenHPC | OpenPBS 23.06 with `resources_default.nodes = 1:ppn=4` (Torque legacy) | B | PASS — auto-translated `ncpus=4` overridden by node overlay | PR #95 fixtures (`qstat_qf_workq_nodes_ppn.txt`) + live verify |
+| chemnode1 (GCP) | Rocky 8 / OpenHPC | OpenPBS 23.06 with `resources_default.ncpus = 4` (direct queue default) | B | PASS — queue default overridden by node overlay | PR #95 fixtures (`qstat_qf_workq_ncpus4.txt`) + live verify |
 | chemnode2 (GCP) | Rocky 9 / EPEL | SLURM 22.05.9 single-node | B | PASS | PR #91 fixtures (`scontrol_show_node_chemnode2.txt`) |
 | chemnode2 (GCP) | Rocky 9 / EPEL | SLURM 22.05.9 multi-node (3 nodes via `State=FUTURE`) | B | PASS — host-node facts win over partition aggregates | cs-96 live run; partition `TotalCPUs=18 TRES=cpu=18,mem=35000M,node=3`, wizard YAML `NUM_CORES=2 MEM_GB=3` |
 
@@ -43,14 +46,14 @@ The reproducibility audit from cs-95 (PR #92) enumerated wizard correctness gaps
 | ID | Gap | Closure |
 |---|---|---|
 | P0 #1 | SLURM partition-aggregate over-estimation on multi-node | Audited via FUTURE-node injection; node overlay always wins (cs-96) |
+| P0 #2 | PBS `select=N:ncpus=M:mem=…` chunk spec on `resources_default` | Live-injected on chemnode1 2026-05-12; parser ignores `select=` string, node overlay wins. No code change required. |
+| P0 #2b | PBS legacy `nodes=N:ppn=M` (Torque-style) on `resources_default` | Fixed by PR #95 (`parsers.py` + `survey.py` PBS node overlay parallel to PR #91 SLURM). PBS auto-translated `ncpus=M` from `ppn=M` no longer wins over node `pbsnodes` facts. |
 | P0 #3 | SLURM `NUM_CORES` from partition `TotalCPUs` instead of host node | Fixed by PR #91 (`survey.py:112-142` node CPU override) |
 
 ### Still open (no live exposure yet)
 
 | ID | Gap | Why it matters | Next step |
 |---|---|---|---|
-| P0 #2 | PBS `select=N:ncpus=M:mem=…` chunk spec on `resources_default` | Wizard may extract chunk-local `ncpus` as `NUM_CORES` | Inject `select=` default on chemnode1 queue and re-run |
-| P0 #2b | PBS legacy `nodes=N:ppn=M` (Torque-style) on `resources_default` | Same parser surface, different syntax | Inject on chemnode1 queue |
 | P0 #4 | LSF parser bugs (no live cluster) | `bqueues -l` / `bhosts` extraction may be wrong | Defer — LSF licensing |
 | P0 #5 | SGE node state `alarm` / `suspend` / `subordinate` not filtered as unusable | Wizard could pick a queue that won't dispatch | New GCE SoGE cluster, force state via `qmod -d` |
 | P0 #6 | `module` / `Lmod` false negative → reports "software absent" | EXEFOLDER set to `null` when Gaussian/ORCA are installed via modules | Add module-available chemnode |
@@ -101,7 +104,28 @@ ssh chemsmart@35.189.152.165 'sudo cp /etc/slurm/slurm.conf.pre-multinode /etc/s
 ```bash
 cd /Users/hongjiseung/developer/chemsmart  # at fork/main
 AI_PROVIDER=openai python -m pytest -v tests/agent/wizard/
-# Expected: 99 passed
+# Expected: 104 passed
+```
+
+### PBS resource-default audit (re-runnable, 0₩)
+
+To re-verify P0 #2 / P0 #2b closure on chemnode1:
+
+```bash
+# A1 modern select= (expect NUM_CORES=2)
+ssh chemsmart@34.146.86.156 'sudo /opt/pbs/bin/qmgr -c "set queue workq resources_default.select = 2:ncpus=4:mem=8gb"'
+AI_PROVIDER=openai python -m chemsmart.cli.main agent wizard scratchA1 --host chemsmart@34.146.86.156
+
+# A2 Torque legacy nodes:ppn (expect NUM_CORES=2 after PR #95)
+ssh chemsmart@34.146.86.156 'sudo /opt/pbs/bin/qmgr -c "unset queue workq resources_default.select" && sudo /opt/pbs/bin/qmgr -c "set queue workq resources_default.nodes = 1:ppn=4"'
+AI_PROVIDER=openai python -m chemsmart.cli.main agent wizard scratchA2 --host chemsmart@34.146.86.156
+
+# A3 direct ncpus (expect NUM_CORES=2 after PR #95)
+ssh chemsmart@34.146.86.156 'sudo /opt/pbs/bin/qmgr -c "unset queue workq resources_default.nodes" && sudo /opt/pbs/bin/qmgr -c "unset queue workq resources_default.ncpus" && sudo /opt/pbs/bin/qmgr -c "unset queue workq resources_default.nodect" && sudo /opt/pbs/bin/qmgr -c "set queue workq resources_default.ncpus = 4"'
+AI_PROVIDER=openai python -m chemsmart.cli.main agent wizard scratchA3 --host chemsmart@34.146.86.156
+
+# Cleanup (back to empty queue defaults)
+ssh chemsmart@34.146.86.156 'sudo /opt/pbs/bin/qmgr -c "unset queue workq resources_default.ncpus"'
 ```
 
 ## Cluster runtime references
@@ -129,3 +153,5 @@ Both VMs are e2-medium in `asia-northeast1-a`. Each idle hour is roughly ₩45. 
 | #91 | SLURM `NUM_CORES` from node, not partition (closes P0 #3) |
 | #92 | This `docs/ops/` runbooks + `scripts/ops/` canonical provisioning |
 | #93 | End-to-end OpenPBS regression test (locks PR #90 contract) |
+| #94 | This document (initial snapshot) |
+| #95 | PBS node overlay — `pbsnodes` per-host facts override queue `resources_default.ncpus`, closing P0 #2b |
