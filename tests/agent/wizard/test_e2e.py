@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
 from chemsmart.agent.transport import build_submit_invocation
 from chemsmart.agent.wizard.orchestrator import run_wizard
 from chemsmart.agent.wizard.probe import ProbeResult
 from chemsmart.agent.wizard.write import write_server_yaml
 from chemsmart.settings.server import Server
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
+PBS_FIXTURE_DIR = FIXTURE_DIR / "pbs"
+SOFTWARE_FIXTURE_DIR = FIXTURE_DIR / "software"
 
 
 class StubRunner:
@@ -306,6 +314,176 @@ def test_mode_b_round_trip(monkeypatch, tmp_path):
     assert server.kwargs["HOST"] == host
     assert invocation[0] == "ssh"
     assert invocation[1] == host
+
+
+def test_mode_b_openpbs_round_trip_uses_node_overlay_and_conda_fallback(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    host = "chemsmart@34.146.86.156"
+    conda_base = (PBS_FIXTURE_DIR / "conda_info_base.txt").read_text()
+    conda_env_list = (
+        SOFTWARE_FIXTURE_DIR / "conda_env_list_miniforge.txt"
+    ).read_text()
+    runner = StubRunner(
+        local_results={
+            ("printenv",): _result("printenv", stdout="PATH=/usr/bin\n"),
+            ("sinfo",): _result("sinfo", returncode=1),
+            ("qstat",): _result("qstat", returncode=1),
+            ("bqueues",): _result("bqueues", returncode=1),
+            ("qconf",): _result("qconf", returncode=1),
+        },
+        ssh_results={
+            (host, "qstat -Q -f -F json"): _result(
+                "qstat -Q -f -F json",
+                mode="ssh",
+                host=host,
+                stdout=(PBS_FIXTURE_DIR / "qstat_qf_json.txt").read_text(),
+            ),
+            (host, "qstat -Q -f"): _result(
+                "qstat -Q -f",
+                mode="ssh",
+                host=host,
+                stdout=(PBS_FIXTURE_DIR / "qstat_qf_text.txt").read_text(),
+            ),
+            (host, "qmgr -c 'list server'"): _result(
+                "qmgr -c 'list server'",
+                mode="ssh",
+                host=host,
+                stdout=(PBS_FIXTURE_DIR / "qmgr_list_server.txt").read_text(),
+            ),
+            (host, "pbsnodes -av"): _result(
+                "pbsnodes -av",
+                mode="ssh",
+                host=host,
+                stdout=(PBS_FIXTURE_DIR / "pbsnodes_av.txt").read_text(),
+            ),
+            (host, "type module"): _result(
+                "type module",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "which module"): _result(
+                "which module",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "printenv CONDA_PREFIX"): _result(
+                "printenv CONDA_PREFIX",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "command -v conda"): _result(
+                "command -v conda",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "test -x /opt/miniforge3/bin/conda"): _result(
+                "test -x /opt/miniforge3/bin/conda",
+                mode="ssh",
+                host=host,
+            ),
+            (host, "printenv HOME"): _result(
+                "printenv HOME",
+                mode="ssh",
+                host=host,
+                stdout="/home/chemsmart\n",
+            ),
+            (host, "/opt/miniforge3/bin/conda info --base"): _result(
+                "/opt/miniforge3/bin/conda info --base",
+                mode="ssh",
+                host=host,
+                stdout=conda_base,
+            ),
+            (host, "/opt/miniforge3/bin/conda env list"): _result(
+                "/opt/miniforge3/bin/conda env list",
+                mode="ssh",
+                host=host,
+                stdout=conda_env_list,
+            ),
+            (host, "command -v g16"): _result(
+                "command -v g16",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "command -v g09"): _result(
+                "command -v g09",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "command -v orca"): _result(
+                "command -v orca",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "command -v nciplot"): _result(
+                "command -v nciplot",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "module -t avail"): _result(
+                "module -t avail",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "printenv SCRATCH"): _result(
+                "printenv SCRATCH",
+                mode="ssh",
+                host=host,
+                stdout="~/scratch\n",
+            ),
+            (host, "printenv WORK"): _result(
+                "printenv WORK",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "printenv TMPDIR"): _result(
+                "printenv TMPDIR",
+                mode="ssh",
+                host=host,
+                returncode=1,
+            ),
+            (host, "test -w ~/scratch"): _result(
+                "test -w ~/scratch",
+                mode="ssh",
+                host=host,
+            ),
+            (host, "groups"): _result(
+                "groups",
+                mode="ssh",
+                host=host,
+                stdout="chemsmart wheel\n",
+            ),
+        },
+    )
+
+    outcome = run_wizard(
+        runner,
+        server_name="chemnode1",
+        ssh_host_hint=host,
+        write=False,
+    )
+    rendered = yaml.safe_load(outcome.plan.text)
+
+    assert outcome.validation.ok is True
+    assert rendered["SERVER"]["QUEUE_NAME"] == "workq"
+    assert rendered["SERVER"]["MEM_GB"] == 3
+    assert rendered["SERVER"]["NUM_CORES"] == 2
+    for program_key in ["GAUSSIAN", "ORCA", "NCIPLOT"]:
+        assert rendered[program_key]["CONDA_ENV"] == (
+            "source /opt/miniforge3/etc/profile.d/conda.sh\n"
+            "conda activate chemsmart"
+        )
 
 
 def test_legacy_yaml_no_host_falls_to_filename(monkeypatch, tmp_path):
