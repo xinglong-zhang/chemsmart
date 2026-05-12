@@ -62,40 +62,54 @@ logger = logging.getLogger(__name__)
     help="Step size (Bohr^2/Hartree) for internal MECP optimization. Default: 0.1",
 )
 @click.option(
+    "--convergence",
+    type=click.Choice(["standard", "tight"], case_sensitive=False),
+    default="standard",
+    show_default=True,
+    help=(
+        "Convergence preset. 'standard' (default): energy_diff_tol=5e-5 Ha, "
+        "force_max_tol=7e-4 Ha/Bohr, force_rms_tol=5e-4 Ha/Bohr, "
+        "disp_max_tol=4e-3 Bohr, disp_rms_tol=2.5e-3 Bohr, trust_radius=0.3 Bohr. "
+        "'tight': energy_diff_tol=1e-5 Ha, force_max_tol=3e-4 Ha/Bohr, "
+        "force_rms_tol=1e-4 Ha/Bohr, disp_max_tol=2e-3 Bohr, disp_rms_tol=1e-3 Bohr, "
+        "trust_radius=0.1 Bohr. Individual tolerance options override the preset."
+    ),
+)
+@click.option(
     "--trust-radius",
     type=float,
     default=None,
-    help="Maximum Cartesian displacement per atom (Bohr) per step. Default: 0.3",
+    help="Maximum Cartesian displacement per atom (Bohr) per step. Overrides preset. Default (standard): 0.3",
 )
 @click.option(
     "--energy-diff-tol",
     type=float,
     default=None,
-    help="Convergence threshold for |E(A)-E(B)| in Hartree. Default: 5.0e-5",
+    help="Convergence threshold for |E(A)-E(B)| in Hartree. Overrides preset. Default (standard): 5.0e-5",
 )
 @click.option(
     "--force-max-tol",
     type=float,
     default=None,
-    help="Convergence threshold for max effective gradient (Hartree/Bohr). Default: 1.5e-5",
+    help="Convergence threshold for max projected gradient (Hartree/Bohr). Overrides preset. Default (standard): 7.0e-4",
 )
 @click.option(
     "--force-rms-tol",
     type=float,
     default=None,
-    help="Convergence threshold for RMS effective gradient (Hartree/Bohr). Default: 5.0e-4",
+    help="Convergence threshold for RMS projected gradient (Hartree/Bohr). Overrides preset. Default (standard): 5.0e-4",
 )
 @click.option(
     "--disp-max-tol",
     type=float,
     default=None,
-    help="Convergence threshold for max displacement (Bohr). Default: 1.2e-4",
+    help="Convergence threshold for max displacement (Bohr). Overrides preset. Default (standard): 4.0e-3",
 )
 @click.option(
     "--disp-rms-tol",
     type=float,
     default=None,
-    help="Convergence threshold for RMS displacement (Bohr). Default: 3.8e-3",
+    help="Convergence threshold for RMS displacement (Bohr). Overrides preset. Default (standard): 2.5e-3",
 )
 @click.option(
     "--adaptive-step-size/--no-adaptive-step-size",
@@ -137,6 +151,25 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Maximum allowed adaptive step size in Bohr^2/Hartree (default: 1.0).",
 )
+@click.option(
+    "--verify-seam-minimum/--no-verify-seam-minimum",
+    default=False,
+    show_default=True,
+    help=(
+        "After convergence, verify the MECP is a true minimum on the crossing "
+        "seam via an effective Hessian analysis (projects out translations, "
+        "rotations, and the gradient-difference direction). Requires ~4×3N "
+        "additional Gaussian sub-jobs. Results are written to "
+        "<label>_seam_check.log."
+    ),
+)
+@click.option(
+    "--hess-step-size",
+    type=float,
+    default=None,
+    help="Finite-difference step size (Bohr) for the numerical Hessian used in "
+    "--verify-seam-minimum (default: 1e-3).",
+)
 @click.pass_context
 def mecp(
     ctx,
@@ -148,6 +181,7 @@ def mecp(
     title_b,
     max_steps,
     step_size,
+    convergence,
     trust_radius,
     energy_diff_tol,
     force_max_tol,
@@ -160,6 +194,8 @@ def mecp(
     step_size_shrink,
     step_size_min,
     step_size_max,
+    verify_seam_minimum,
+    hess_step_size,
     skip_completed,
     **kwargs,
 ):
@@ -230,10 +266,21 @@ def mecp(
     if title_b is not None:
         mecp_settings.title_b = title_b
 
+    # Apply the convergence preset first (individual options below override it).
+    mecp_settings.convergence_preset = convergence
+    preset_vals = GaussianMECPJobSettings.CONVERGENCE_PRESETS[convergence]
+    mecp_settings.energy_diff_tol = preset_vals["energy_diff_tol"]
+    mecp_settings.force_max_tol = preset_vals["force_max_tol"]
+    mecp_settings.force_rms_tol = preset_vals["force_rms_tol"]
+    mecp_settings.disp_max_tol = preset_vals["disp_max_tol"]
+    mecp_settings.disp_rms_tol = preset_vals["disp_rms_tol"]
+    mecp_settings.trust_radius = preset_vals["trust_radius"]
+
     if max_steps is not None:
         mecp_settings.max_steps = max_steps
     if step_size is not None:
         mecp_settings.step_size = step_size
+    # Individual tolerance overrides (take priority over preset)
     if trust_radius is not None:
         mecp_settings.trust_radius = trust_radius
     if energy_diff_tol is not None:
@@ -258,6 +305,9 @@ def mecp(
         mecp_settings.step_size_min = step_size_min
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
+    mecp_settings.verify_seam_minimum = verify_seam_minimum
+    if hess_step_size is not None:
+        mecp_settings.hess_step_size = hess_step_size
 
     # get molecule
     molecules = ctx.obj[

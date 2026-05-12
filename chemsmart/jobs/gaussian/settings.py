@@ -1100,7 +1100,64 @@ class GaussianIRCJobSettings(GaussianJobSettings):
 
 
 class GaussianMECPJobSettings(GaussianJobSettings):
-    """Specialized settings for Gaussian MECP jobs."""
+    """Specialized settings for Gaussian MECP jobs.
+
+    Two built-in convergence presets are provided via ``convergence_preset``:
+
+    ``"standard"`` (default)
+        Suitable for most MECP searches.  Uses loose-to-medium tolerances
+        comparable to a Gaussian geometry optimisation at the ``Loose``
+        level:
+
+        ==================  ============  =====
+        Parameter           Value         Unit
+        ==================  ============  =====
+        energy_diff_tol     5.0 × 10⁻⁵   Hartree
+        force_max_tol       7.0 × 10⁻⁴   Hartree/Bohr
+        force_rms_tol       5.0 × 10⁻⁴   Hartree/Bohr
+        disp_max_tol        4.0 × 10⁻³   Bohr
+        disp_rms_tol        2.5 × 10⁻³   Bohr
+        trust_radius        0.3           Bohr
+        ==================  ============  =====
+
+    ``"tight"``
+        Publication-quality refinement.  Use for final geometry confirmation:
+
+        ==================  ============  =====
+        Parameter           Value         Unit
+        ==================  ============  =====
+        energy_diff_tol     1.0 × 10⁻⁵   Hartree
+        force_max_tol       3.0 × 10⁻⁴   Hartree/Bohr
+        force_rms_tol       1.0 × 10⁻⁴   Hartree/Bohr
+        disp_max_tol        2.0 × 10⁻³   Bohr
+        disp_rms_tol        1.0 × 10⁻³   Bohr
+        trust_radius        0.1           Bohr
+        ==================  ============  =====
+
+    Individual tolerance options (``energy_diff_tol`` etc.) always override
+    the preset values.
+    """
+
+    #: Predefined convergence thresholds.  Keys are preset names; values are
+    #: dicts mapping setting attribute names to their values.
+    CONVERGENCE_PRESETS = {
+        "standard": {
+            "energy_diff_tol": 5.0e-5,  # Hartree
+            "force_max_tol": 7.0e-4,  # Hartree/Bohr
+            "force_rms_tol": 5.0e-4,  # Hartree/Bohr
+            "disp_max_tol": 4.0e-3,  # Bohr
+            "disp_rms_tol": 2.5e-3,  # Bohr
+            "trust_radius": 0.3,  # Bohr
+        },
+        "tight": {
+            "energy_diff_tol": 1.0e-5,  # Hartree
+            "force_max_tol": 3.0e-4,  # Hartree/Bohr
+            "force_rms_tol": 1.0e-4,  # Hartree/Bohr
+            "disp_max_tol": 2.0e-3,  # Bohr
+            "disp_rms_tol": 1.0e-3,  # Bohr
+            "trust_radius": 0.1,  # Bohr
+        },
+    }
 
     def __init__(
         self,
@@ -1112,12 +1169,16 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         title_b="Second",
         max_steps=500,
         step_size=0.1,  # Bohr^2/Hartree
-        trust_radius=0.3,  # Bohr
-        energy_diff_tol=5.0e-5,  # Hartree
-        force_max_tol=1.5e-5,  # Hartree/Bohr
-        force_rms_tol=5.0e-4,  # Hartree/Bohr
-        disp_max_tol=1.2e-4,  # Bohr
-        disp_rms_tol=3.8e-3,  # Bohr
+        # Convergence preset: "standard" or "tight".  Individual tolerance
+        # kwargs below override the preset values when set explicitly.
+        convergence_preset="standard",
+        # Standard convergence defaults (overridden by preset if not supplied)
+        energy_diff_tol=None,  # Hartree   – None means "use preset"
+        force_max_tol=None,  # Hartree/Bohr
+        force_rms_tol=None,  # Hartree/Bohr
+        disp_max_tol=None,  # Bohr
+        disp_rms_tol=None,  # Bohr
+        trust_radius=None,  # Bohr
         adaptive_step_size=True,
         step_size_method="bb",  # algorithm: "bb" (Barzilai-Borwein) or "grow_shrink"
         step_size_grow=1.2,  # dimensionless multiplier; grow × shrink = 0.84 (mild damping per cycle)
@@ -1128,6 +1189,9 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         use_link=False,
         stable="opt",  # stability analysis for link mode
         guess="mix",  # initial guess for link mode (e.g. "mix" to break α/β symmetry)
+        # seam-minimum verification via effective Hessian analysis
+        verify_seam_minimum=False,
+        hess_step_size=1.0e-3,  # Bohr; finite-difference displacement for numerical Hessian
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1139,12 +1203,23 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.title_b = title_b
         self.max_steps = max_steps
         self.step_size = step_size
-        self.trust_radius = trust_radius
-        self.energy_diff_tol = energy_diff_tol
-        self.force_max_tol = force_max_tol
-        self.force_rms_tol = force_rms_tol
-        self.disp_max_tol = disp_max_tol
-        self.disp_rms_tol = disp_rms_tol
+
+        # Resolve convergence parameters: preset first, then explicit overrides.
+        if convergence_preset not in self.CONVERGENCE_PRESETS:
+            raise ValueError(
+                f"Unknown convergence_preset={convergence_preset!r}. "
+                f"Choose from: {list(self.CONVERGENCE_PRESETS)}"
+            )
+        self.convergence_preset = convergence_preset
+        preset = self.CONVERGENCE_PRESETS[convergence_preset]
+
+        self.energy_diff_tol = energy_diff_tol if energy_diff_tol is not None else preset["energy_diff_tol"]
+        self.force_max_tol = force_max_tol if force_max_tol is not None else preset["force_max_tol"]
+        self.force_rms_tol = force_rms_tol if force_rms_tol is not None else preset["force_rms_tol"]
+        self.disp_max_tol = disp_max_tol if disp_max_tol is not None else preset["disp_max_tol"]
+        self.disp_rms_tol = disp_rms_tol if disp_rms_tol is not None else preset["disp_rms_tol"]
+        self.trust_radius = trust_radius if trust_radius is not None else preset["trust_radius"]
+
         self.adaptive_step_size = adaptive_step_size
         self.step_size_method = step_size_method
         self.step_size_grow = step_size_grow
@@ -1154,6 +1229,8 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.use_link = use_link
         self.stable = stable
         self.guess = guess
+        self.verify_seam_minimum = verify_seam_minimum
+        self.hess_step_size = hess_step_size
 
     @classmethod
     def from_settings(cls, settings):
