@@ -36,6 +36,7 @@ class ToolSpec:
     name: str
     func: Any
     input_schema: type[ToolInputModel]
+    description: str | None = None
     accepts_kwargs: bool = False
     schema_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
     metadata: RuntimeToolMetadata = field(default_factory=RuntimeToolMetadata)
@@ -46,7 +47,9 @@ class ToolSpec:
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": inspect.getdoc(self.func) or self.name,
+                "description": self.description
+                or inspect.getdoc(self.func)
+                or self.name,
                 "parameters": schema,
             },
         }
@@ -54,7 +57,9 @@ class ToolSpec:
     def anthropic_tool_def(self) -> dict[str, Any]:
         return {
             "name": self.name,
-            "description": inspect.getdoc(self.func) or self.name,
+            "description": self.description
+            or inspect.getdoc(self.func)
+            or self.name,
             "input_schema": self._schema_with_overrides(),
         }
 
@@ -82,28 +87,45 @@ class ToolRegistry:
     @classmethod
     def default(cls) -> "ToolRegistry":
         tool_sources = [
-            ("build_molecule", "chemsmart.agent.tools"),
-            ("recommend_method", "chemsmart.agent.tools"),
-            ("build_gaussian_settings", "chemsmart.agent.tools"),
-            ("build_orca_settings", "chemsmart.agent.tools"),
-            ("build_job", "chemsmart.agent.tools"),
-            ("dry_run_input", "chemsmart.agent.tools"),
-            ("validate_runtime", "chemsmart.agent.tools"),
-            ("run_local", "chemsmart.agent.tools"),
-            ("extract_optimized_geometry", "chemsmart.agent.tools"),
-            ("submit_hpc", "chemsmart.agent.tools"),
-            ("wizard_probe", "chemsmart.agent.wizard.tools"),
-            ("wizard_refresh", "chemsmart.agent.wizard.tools"),
-            ("wizard_verify", "chemsmart.agent.wizard.tools"),
-            ("wizard_write", "chemsmart.agent.wizard.tools"),
+            ("build_molecule", "chemsmart.agent.tools", None, None),
+            ("recommend_method", "chemsmart.agent.tools", None, None),
+            ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
+            ("build_orca_settings", "chemsmart.agent.tools", None, None),
+            ("build_job", "chemsmart.agent.tools", None, None),
+            ("dry_run_input", "chemsmart.agent.tools", None, None),
+            ("validate_runtime", "chemsmart.agent.tools", None, None),
+            ("run_local", "chemsmart.agent.tools", None, None),
+            (
+                "read",
+                "chemsmart.agent.tools_fs",
+                "Read a local text file with 1-based line numbers. Use start_line/limit to page large files.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Read {path} L{start_line}-{end_line}",
+                    side_effect=None,
+                ),
+            ),
+            (
+                "extract_optimized_geometry",
+                "chemsmart.agent.tools",
+                None,
+                None,
+            ),
+            ("submit_hpc", "chemsmart.agent.tools", None, None),
+            ("wizard_probe", "chemsmart.agent.wizard.tools", None, None),
+            ("wizard_refresh", "chemsmart.agent.wizard.tools", None, None),
+            ("wizard_verify", "chemsmart.agent.wizard.tools", None, None),
+            ("wizard_write", "chemsmart.agent.wizard.tools", None, None),
         ]
         return cls(
             [
                 _build_tool_spec(
                     _load_agent_tool(name, module_name),
                     registered_name=name,
+                    description=description,
+                    metadata=metadata,
                 )
-                for name, module_name in tool_sources
+                for name, module_name, description, metadata in tool_sources
             ]
         )
 
@@ -172,7 +194,7 @@ class ToolRegistry:
         tool = self.get_tool(name)
         if tool is None:
             return name
-        doc = inspect.getdoc(tool.func) or name
+        doc = tool.description or inspect.getdoc(tool.func) or name
         return doc.splitlines()[0].strip()
 
     def call(self, name: str, args: dict[str, Any] | None = None) -> Any:
@@ -216,6 +238,8 @@ class ToolRegistry:
 def _build_tool_spec(
     func: Any,
     registered_name: str | None = None,
+    description: str | None = None,
+    metadata: RuntimeToolMetadata | None = None,
 ) -> ToolSpec:
     fields: dict[str, Any] = {}
     schema_overrides: dict[str, dict[str, Any]] = {}
@@ -258,8 +282,10 @@ def _build_tool_spec(
         name=registered_name or func.__name__,
         func=func,
         input_schema=model,
+        description=description,
         accepts_kwargs=accepts_kwargs,
         schema_overrides=schema_overrides,
+        metadata=metadata or RuntimeToolMetadata(),
     )
 
 

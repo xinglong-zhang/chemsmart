@@ -105,13 +105,22 @@ def test_registry_exposes_machine_readable_tool_descriptions():
     assert "Load one molecule" in build_molecule_def["function"]["description"]
 
 
-def test_registry_default_registration_uses_empty_runtime_metadata():
+def test_registry_default_registration_sets_read_tool_metadata():
     registry = ToolRegistry.default()
 
-    tools = registry.list_tools()
+    read_tool = registry.get_tool("read")
 
-    assert tools
-    assert all(tool.metadata == RuntimeToolMetadata() for tool in tools)
+    assert read_tool is not None
+    assert read_tool.metadata == RuntimeToolMetadata(
+        read_only=True,
+        ui_summary_template="Read {path} L{start_line}-{end_line}",
+        side_effect=None,
+    )
+    assert all(
+        tool.metadata == RuntimeToolMetadata()
+        for tool in registry.list_tools()
+        if tool.name != "read"
+    )
 
 
 def test_assemble_tool_pool_plan_mode_returns_empty_list():
