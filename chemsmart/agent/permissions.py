@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from chemsmart.agent.provider_adapter import ToolRequest
 
@@ -35,6 +37,22 @@ ALWAYS_REQUIRE_APPROVAL = {"wizard_write"}
 READ_ONLY_TOOLS = {"read", "ssh_probe", "scheduler_query", "log_tail"}
 EDIT_SAFE_TOOLS = {"edit", "write"}
 PLAN_MODE_REASON = "plan mode active"
+NEVER_AUTO_ALLOW_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("pip_install", re.compile(r"\bpip3?\s+(install|uninstall)\b")),
+    ("apt_install", re.compile(r"\bapt(-get)?\s+install\b")),
+    ("brew_install", re.compile(r"\bbrew\s+install\b")),
+    (
+        "npm_install_global",
+        re.compile(r"\bnpm\s+install\s+(-g|--global)\b"),
+    ),
+    ("sudo", re.compile(r"\bsudo\b")),
+    ("rm_root", re.compile(r"\brm\s+-[rf]+\s+/(?:\s|$)")),
+    (
+        "curl_pipe_shell",
+        re.compile(r"\b(curl|wget)\b[^|]*\|\s*(bash|sh|zsh)\b"),
+    ),
+    ("chmod_777", re.compile(r"\bchmod\s+(-R\s+)?777\b")),
+]
 
 PermissionPolicyMode = PermissionMode | RuntimePermissionMode
 
@@ -85,6 +103,33 @@ def legacy_to_runtime(mode: PermissionMode) -> RuntimePermissionMode:
     }[mode]
 
 
+def _matches_never_auto_allow(
+    req: ToolRequest,
+) -> tuple[str, str] | None:
+    def iter_string_values(value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            return [
+                nested
+                for item in value.values()
+                for nested in iter_string_values(item)
+            ]
+        if isinstance(value, list):
+            return [
+                nested for item in value for nested in iter_string_values(item)
+            ]
+        return []
+
+    string_values = iter_string_values(req.arguments)
+    for pattern_id, pattern in NEVER_AUTO_ALLOW_PATTERNS:
+        for value in string_values:
+            match = pattern.search(value)
+            if match is not None:
+                return pattern_id, match.group(0)
+    return None
+
+
 def resolve(
     req: ToolRequest,
     mode: PermissionPolicyMode,
@@ -93,6 +138,14 @@ def resolve(
     session_allow: set[str] | None = None,
     driving_denylist: set[str] | None = None,
 ) -> ResolvedPermission:
+    never_auto_allow_match = _matches_never_auto_allow(req)
+    if never_auto_allow_match is not None:
+        pattern_id, _ = never_auto_allow_match
+        return ResolvedPermission(
+            decision=ResolvedDecision.NEEDS_USER,
+            reason=f"never_auto_allow:{pattern_id}",
+        )
+
     if isinstance(mode, RuntimePermissionMode):
         tool = req.name
         if mode == RuntimePermissionMode.BYPASS:
