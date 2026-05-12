@@ -53,8 +53,17 @@ class ConversationTurn(BaseModel):
         return _truncate(" — ".join(parts), _MAX_RESULT_CHARS)
 
 
+class EntityMemory(BaseModel):
+    last_server: str | None = None
+    last_scheduler: Literal["slurm", "pbs", "sge", "lsf"] | None = None
+    last_job_id: str | None = None
+    last_log_path: str | None = None
+    last_probe_error: str | None = None
+
+
 class ConversationMemory(BaseModel):
     turns: list[ConversationTurn] = Field(default_factory=list)
+    entities: EntityMemory = Field(default_factory=EntityMemory)
 
     @classmethod
     def from_entries(
@@ -62,6 +71,7 @@ class ConversationMemory(BaseModel):
         entries: list[dict[str, Any]],
     ) -> "ConversationMemory":
         turns: list[ConversationTurn] = []
+        entities = EntityMemory()
         current_turn: ConversationTurn | None = None
         tool_calls: dict[int, dict[str, Any]] = {}
 
@@ -86,9 +96,11 @@ class ConversationMemory(BaseModel):
                 continue
 
             if kind == "plan":
-                current_turn.plan_rationale = _string_value(
-                    payload.get("rationale")
-                ) or _string_value(entry.get("rationale"))
+                current_turn.plan_rationale = (
+                    _string_value(payload.get("rationale"))
+                    or _string_value(entry.get("rationale"))
+                    or ""
+                )
                 current_turn.intent = _normalize_intent(payload.get("intent"))
                 continue
 
@@ -100,12 +112,18 @@ class ConversationMemory(BaseModel):
 
             if kind == "tool_result":
                 step_index = _coerce_int(payload.get("step_index"))
+                req = (
+                    tool_calls.get(step_index)
+                    if step_index is not None
+                    else None
+                )
                 summary = _summarize_tool_result(
                     payload,
-                    tool_calls.get(step_index),
+                    req,
                 )
                 if summary:
                     current_turn.reusable_results.append(summary)
+                _apply_mva_entity_updates(payload, req, entities)
                 continue
 
             # run_loop path: tool_use_request carries args; tool_use_result
@@ -122,6 +140,7 @@ class ConversationMemory(BaseModel):
                 summary = _summarize_tool_use_result(payload, req)
                 if summary:
                     current_turn.reusable_results.append(summary)
+                _apply_mva_entity_updates(payload, req, entities)
                 continue
 
             if kind == "session_summary":
@@ -130,7 +149,7 @@ class ConversationMemory(BaseModel):
                 if isinstance(blocked, bool):
                     current_turn.blocked = blocked
 
-        return cls(turns=turns)
+        return cls(turns=turns, entities=entities)
 
     def prompt_context(
         self,
@@ -139,6 +158,7 @@ class ConversationMemory(BaseModel):
         recent_turn_limit: int = _DEFAULT_RECENT_TURN_LIMIT,
         token_budget: int = _DEFAULT_TOKEN_BUDGET,
     ) -> dict[str, Any]:
+        entities_payload = self.entities.model_dump(exclude_none=True)
         eligible_turns = [
             turn
             for turn in self.turns
@@ -149,11 +169,14 @@ class ConversationMemory(BaseModel):
             )
         ]
         if not eligible_turns:
-            return {
+            context = {
                 "recent_turns": [],
                 "older_turn_summary": [],
                 "approx_token_budget": token_budget,
             }
+            if entities_payload:
+                context["entities"] = entities_payload
+            return context
 
         recent_turns = eligible_turns[-recent_turn_limit:]
         older_turns = eligible_turns[: -len(recent_turns)]
@@ -164,6 +187,8 @@ class ConversationMemory(BaseModel):
             ],
             "approx_token_budget": token_budget,
         }
+        if entities_payload:
+            context["entities"] = entities_payload
         _trim_context_to_budget(context, token_budget)
         return context
 
@@ -338,6 +363,133 @@ def _coerce_int(value: Any) -> int | None:
     return None
 
 
+def _normalize_scheduler_literal(
+    value: Any,
+) -> Literal["slurm", "pbs", "sge", "lsf"] | None:
+    normalized = _string_value(value)
+    if normalized is None:
+        return None
+    lowered = normalized.lower()
+    if lowered == "slurm":
+        return "slurm"
+    if lowered == "pbs":
+        return "pbs"
+    if lowered == "sge":
+        return "sge"
+    if lowered == "lsf":
+        return "lsf"
+    return None
+
+
+def _summarize_entity_error(value: Any) -> str | None:
+    if isinstance(value, dict):
+        message = _string_value(value.get("message"))
+        if message:
+            return _truncate(message, 120)
+        error_type = _string_value(value.get("type"))
+        if error_type:
+            return _truncate(error_type, 120)
+        return None
+    if isinstance(value, list):
+        for item in value:
+            summary = _summarize_entity_error(item)
+            if summary:
+                return summary
+        return None
+    summary = _string_value(value)
+    if summary:
+        return _truncate(summary, 120)
+    return None
+
+
+def _looks_like_log_path(path: str) -> bool:
+    lowered = path.lower()
+    return (
+        lowered.endswith((".log", ".err", ".out"))
+        or "stdin.o" in lowered
+        or "stdin.e" in lowered
+    )
+
+
+def _apply_mva_entity_updates(
+    payload: dict[str, Any],
+    req: dict[str, Any] | None,
+    entities: EntityMemory,
+) -> None:
+    tool = _string_value(payload.get("tool"))
+    if tool is None:
+        return
+
+    args = req.get("args") if isinstance(req, dict) else {}
+    if not isinstance(args, dict):
+        args = {}
+
+    result = payload.get("payload")
+    if not isinstance(result, dict):
+        result = {}
+
+    server = _string_value(args.get("server"))
+    if tool == "ssh_probe":
+        if server:
+            entities.last_server = server
+
+        probe_name = _string_value(args.get("probe_name")) or _string_value(
+            result.get("probe")
+        )
+        scheduler = _normalize_scheduler_literal(result.get("scheduler"))
+        if probe_name and probe_name.startswith("scheduler.") and scheduler:
+            entities.last_scheduler = scheduler
+
+        if payload.get("status") != "ok":
+            error_summary = _summarize_entity_error(result.get("error"))
+            if error_summary is None:
+                error_summary = _summarize_entity_error(
+                    payload.get("reason")
+                ) or _summarize_entity_error(result)
+            if error_summary:
+                entities.last_probe_error = error_summary
+        return
+
+    if tool == "scheduler_query":
+        if server:
+            entities.last_server = server
+
+        scheduler = _normalize_scheduler_literal(result.get("scheduler"))
+        if scheduler:
+            entities.last_scheduler = scheduler
+
+        job_id = _string_value(result.get("job_id")) or _string_value(
+            args.get("job_id")
+        )
+        if job_id:
+            entities.last_job_id = str(job_id)
+        return
+
+    if tool == "log_tail":
+        if server:
+            entities.last_server = server
+
+        path = _string_value(args.get("path"))
+        if path:
+            entities.last_log_path = path
+
+        errors = result.get("errors")
+        if isinstance(errors, list) and errors:
+            error_summary = _summarize_entity_error(
+                errors[0].get("line")
+                if isinstance(errors[0], dict)
+                else errors[0]
+            )
+            if error_summary:
+                entities.last_probe_error = error_summary
+        return
+
+    if tool == "read":
+        path = _string_value(args.get("path"))
+        if path and _looks_like_log_path(path):
+            entities.last_log_path = path
+
+
 def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
@@ -426,7 +578,9 @@ def _summarize_tool_use_result(
         formula = None
         if isinstance(inner, dict):
             s = inner.get("summary")
-            repr_str = _string_value(s.get("repr") if isinstance(s, dict) else None)
+            repr_str = _string_value(
+                s.get("repr") if isinstance(s, dict) else None
+            )
             if repr_str:
                 m = _MOLECULE_REPR_RE.search(repr_str)
                 if m:
@@ -462,7 +616,9 @@ def _summarize_tool_use_result(
         label = _string_value(args.get("label"))
         if not label and isinstance(inner, dict):
             s = inner.get("summary")
-            repr_str = _string_value(s.get("repr") if isinstance(s, dict) else None)
+            repr_str = _string_value(
+                s.get("repr") if isinstance(s, dict) else None
+            )
             if repr_str:
                 m = re.search(r"label=([^,>]+)", repr_str)
                 if m:
@@ -475,13 +631,13 @@ def _summarize_tool_use_result(
         return " ".join(pieces) + "."
 
     if tool == "dry_run_input":
-        summary: dict[str, Any] = {}
+        input_summary: dict[str, Any] = {}
         if isinstance(inner, dict):
             s = inner.get("summary")
             if isinstance(s, dict):
-                summary = s
-        inputfile = _string_value(summary.get("inputfile"))
-        route = _extract_route_line(summary.get("content"))
+                input_summary = s
+        inputfile = _string_value(input_summary.get("inputfile"))
+        route = _extract_route_line(input_summary.get("content"))
         pieces = ["dry_run_input wrote"]
         if inputfile:
             pieces.append(inputfile)
@@ -493,7 +649,9 @@ def _summarize_tool_use_result(
         formula = None
         if isinstance(inner, dict):
             s = inner.get("summary")
-            repr_str = _string_value(s.get("repr") if isinstance(s, dict) else None)
+            repr_str = _string_value(
+                s.get("repr") if isinstance(s, dict) else None
+            )
             if repr_str:
                 m = _MOLECULE_REPR_RE.search(repr_str)
                 if m:
@@ -515,5 +673,99 @@ def _summarize_tool_use_result(
         if ok_val and ok_val != "ok":
             return f"validate_runtime reported {ok_val}."
         return None
+
+    if tool == "ssh_probe":
+        inner_dict = inner if isinstance(inner, dict) else {}
+        server = _string_value(args.get("server"))
+        probe_name = _string_value(args.get("probe_name")) or (
+            _string_value(inner_dict.get("probe"))
+        )
+        scheduler_or_status = None
+        scheduler_or_status = _string_value(inner_dict.get("scheduler"))
+        if scheduler_or_status is None:
+            scheduler_or_status = _string_value(status)
+
+        pieces = ["ssh_probe"]
+        if probe_name:
+            pieces.append(probe_name)
+        if server:
+            pieces.append(f"on {server}")
+        summary_line = " ".join(pieces)
+        if scheduler_or_status:
+            summary_line += f" → {scheduler_or_status}"
+        return summary_line
+
+    if tool == "scheduler_query":
+        server = _string_value(args.get("server"))
+        inner_dict = inner if isinstance(inner, dict) else {}
+        pieces = ["scheduler_query"]
+        if server:
+            pieces.append(f"on {server}:")
+        else:
+            pieces[-1] += ":"
+
+        scheduler_details: list[str] = []
+        job_id = _string_value(inner_dict.get("job_id")) or _string_value(
+            args.get("job_id")
+        )
+        state = _string_value(inner_dict.get("state"))
+        queue = _string_value(inner_dict.get("queue")) or _string_value(
+            inner_dict.get("partition_or_queue")
+        )
+        if job_id:
+            scheduler_details.append(f"job {job_id}")
+        if state:
+            scheduler_details.append(f"state={state}")
+        if queue:
+            scheduler_details.append(f"queue={queue}")
+        if scheduler_details:
+            return " ".join([*pieces, *scheduler_details])
+        return " ".join(pieces).rstrip(":")
+
+    if tool == "log_tail":
+        inner_dict = inner if isinstance(inner, dict) else {}
+        path = _string_value(args.get("path")) or (
+            _string_value(inner_dict.get("path"))
+        )
+        lines_returned = _coerce_int(inner_dict.get("lines_returned"))
+        errors = inner_dict.get("errors")
+        error_count = len(errors) if isinstance(errors, list) else 0
+        top_kind = None
+        if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+            top_kind = _string_value(errors[0].get("kind"))
+
+        log_tail_details: list[str] = []
+        if lines_returned is not None:
+            log_tail_details.append(f"{lines_returned}L")
+        log_tail_details.append(f"{error_count} errors")
+        if top_kind:
+            log_tail_details[-1] += f": {top_kind}"
+
+        summary_line = "log_tail"
+        if path:
+            summary_line += f" {path}"
+        if log_tail_details:
+            summary_line += f" ({', '.join(log_tail_details)})"
+        return summary_line
+
+    if tool == "read":
+        inner_dict = inner if isinstance(inner, dict) else {}
+        path = _string_value(args.get("path")) or _string_value(
+            inner_dict.get("path")
+        )
+        start_line = _coerce_int(inner_dict.get("start_line"))
+        end_line = _coerce_int(inner_dict.get("end_line"))
+        total_lines = _coerce_int(inner_dict.get("total_lines"))
+
+        summary_line = "read"
+        if path:
+            summary_line += f" {path}"
+        if (
+            start_line is not None
+            and end_line is not None
+            and total_lines is not None
+        ):
+            summary_line += f" L{start_line}-{end_line}/{total_lines}"
+        return summary_line
 
     return None
