@@ -272,18 +272,43 @@ def parse_pbs_pbsnodes_av(payload: str) -> PbsNodeFacts:
 
     mem_values: list[int] = []
     cpu_values: list[int] = []
+    current_mem_gb: int | None = None
+    current_ncpus: int | None = None
+
+    def flush_node() -> None:
+        if current_mem_gb is not None:
+            mem_values.append(current_mem_gb)
+        if current_ncpus is not None:
+            cpu_values.append(current_ncpus)
+
     for line in payload.splitlines():
+        if line and not line[:1].isspace():
+            flush_node()
+            current_mem_gb = None
+            current_ncpus = None
+            continue
+
         mem_match = re.match(r"\s*resources_available\.mem\s*=\s*(.+)", line)
         if mem_match:
             parsed_mem = _parse_mem_gb(mem_match.group(1))
             if parsed_mem is not None:
-                mem_values.append(parsed_mem)
+                current_mem_gb = parsed_mem
             continue
+
+        pcpus_match = re.match(r"\s*pcpus\s*=\s*(.+)", line)
+        if pcpus_match and current_ncpus is None:
+            parsed_pcpus = _parse_int(pcpus_match.group(1))
+            if parsed_pcpus is not None:
+                current_ncpus = parsed_pcpus
+            continue
+
         cpu_match = re.match(r"\s*resources_available\.ncpus\s*=\s*(.+)", line)
         if cpu_match:
             parsed_cpu = _parse_int(cpu_match.group(1))
             if parsed_cpu is not None:
-                cpu_values.append(parsed_cpu)
+                current_ncpus = parsed_cpu
+
+    flush_node()
 
     return PbsNodeFacts(
         min_mem_gb=min(mem_values) if mem_values else None,

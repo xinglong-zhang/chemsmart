@@ -279,3 +279,71 @@ def test_run_schedule_survey_pbs_openpbs_live_shape_uses_node_resources():
             slots_total=None,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "qstat_text",
+    [
+        pytest.param(
+            (FIXTURE_DIR / "pbs" / "qstat_qf_text.txt").read_text(),
+            id="empty-defaults",
+        ),
+        pytest.param(
+            "Queue: workq\n"
+            "    queue_type = Execution\n"
+            "    total_jobs = 0\n"
+            "    state_count = Transit:0 Queued:0 Held:0 Waiting:0 Running:"
+            "0 Exiting:0 Begun\n"
+            "\t:0\n"
+            "    resources_default.select = 2:ncpus=4:mem=8gb\n"
+            "    enabled = True\n"
+            "    started = True\n",
+            id="select-default",
+        ),
+        pytest.param(
+            (FIXTURE_DIR / "pbs" / "qstat_qf_workq_nodes_ppn.txt").read_text(),
+            id="nodes-ppn-default",
+        ),
+        pytest.param(
+            (FIXTURE_DIR / "pbs" / "qstat_qf_workq_ncpus4.txt").read_text(),
+            id="direct-ncpus-default",
+        ),
+    ],
+)
+def test_run_schedule_survey_pbs_node_overlay_beats_queue_defaults(
+    qstat_text,
+):
+    runner = StubRunner(
+        local_results={
+            ("qstat", "-Q", "-f", "-F", "json"): _result(
+                "qstat -Q -f -F json",
+                (FIXTURE_DIR / "pbs" / "qstat_qf_json.txt").read_text(),
+            ),
+            ("qstat", "-Q", "-f"): _result("qstat -Q -f", qstat_text),
+            ("qmgr", "-c", "list server"): _result(
+                'qmgr -c "list server"',
+                (FIXTURE_DIR / "pbs" / "qmgr_list_server.txt").read_text(),
+            ),
+            ("pbsnodes", "-av"): _result(
+                "pbsnodes -av",
+                (FIXTURE_DIR / "pbs" / "pbsnodes_av.txt").read_text(),
+            ),
+        }
+    )
+
+    survey = run_schedule_survey(runner, Topology("A", "localhost", []))
+
+    assert survey.queues == [
+        QueueFacts(
+            name="workq",
+            default=True,
+            max_walltime_hours=None,
+            default_walltime_hours=None,
+            default_mem_gb=3,
+            default_cores=2,
+            gpus_per_node=None,
+            enabled=True,
+            started=True,
+            slots_total=None,
+        )
+    ]

@@ -86,7 +86,9 @@ def test_parse_slurm_scontrol_show_node_real_memory(
 
 
 def test_parse_slurm_scontrol_show_node_cpus():
-    payload = (SLURM_FIXTURE_DIR / "scontrol_show_node_chemnode2.txt").read_text()
+    payload = (
+        SLURM_FIXTURE_DIR / "scontrol_show_node_chemnode2.txt"
+    ).read_text()
 
     assert parse_slurm_scontrol_show_node_cpus(payload) == 2
 
@@ -177,6 +179,17 @@ def test_parse_pbs_pbsnodes_av():
     ) == PbsNodeFacts(
         min_mem_gb=3,
         min_ncpus=2,
+    )
+
+
+def test_parse_pbs_pbsnodes_av_falls_back_to_pcpus():
+    assert parse_pbs_pbsnodes_av(
+        "chemnode1\n"
+        "    pcpus = 4\n"
+        "    resources_available.mem = 4096mb\n"
+    ) == PbsNodeFacts(
+        min_mem_gb=4,
+        min_ncpus=4,
     )
 
 

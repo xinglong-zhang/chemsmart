@@ -433,12 +433,12 @@ def _enrich_pbs_mem_gb(
     server_facts: PbsServerFacts | None,
     node_facts: PbsNodeFacts | None,
 ) -> int | None:
+    if node_facts is not None and node_facts.min_mem_gb is not None:
+        return node_facts.min_mem_gb
     if queue.default_mem_gb is not None:
         return queue.default_mem_gb
     if server_facts is not None and server_facts.default_mem_gb is not None:
         return server_facts.default_mem_gb
-    if node_facts is not None:
-        return node_facts.min_mem_gb
     return None
 
 
@@ -447,16 +447,13 @@ def _enrich_pbs_cores(
     server_facts: PbsServerFacts | None,
     node_facts: PbsNodeFacts | None,
 ) -> int | None:
-    cores = queue.default_cores
-    if cores is None and server_facts is not None:
-        cores = server_facts.default_cores
-    if (
-        node_facts is not None
-        and node_facts.min_ncpus is not None
-        and (cores is None or cores <= 1)
-    ):
+    if node_facts is not None and node_facts.min_ncpus is not None:
         return node_facts.min_ncpus
-    return cores
+    if queue.default_cores is not None:
+        return queue.default_cores
+    if server_facts is not None:
+        return server_facts.default_cores
+    return None
 
 
 def _prefer_value(primary, secondary):
