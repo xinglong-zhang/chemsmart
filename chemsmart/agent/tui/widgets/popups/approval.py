@@ -65,6 +65,7 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
         *,
         action: str | None = None,
         request: str | None = None,
+        active_mode: str = "",
         tool_name: str = "",
         description: str = "",
         arguments: dict | None = None,
@@ -85,6 +86,7 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
         self.tool_name = tool_name
         self.description = description
         self.arguments = arguments
+        self.active_mode = active_mode or "UNKNOWN"
         self.risk_badge = risk_badge
         self.side_effect_summary = side_effect_summary
         self.session_rule_active = session_rule_active
@@ -122,7 +124,9 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
             yield Static(summary, id="approval-summary")
 
     def on_mount(self) -> None:
-        self.query_one("#approval-summary", Static).border_title = "Approval"
+        self.query_one("#approval-summary", Static).border_title = (
+            f"Approval · Mode: {self.active_mode}"
+        )
 
     def on_key(self, event: events.Key) -> None:
         if event.key == "y":
@@ -227,6 +231,7 @@ class PermissionModeOverlay(ModalScreen[PermissionModeResult | None]):
 
 def build_approval_overlay(
     *,
+    active_mode: str = "",
     tool_name: str,
     description: str,
     arguments: dict,
@@ -236,6 +241,7 @@ def build_approval_overlay(
 ) -> ApprovalOverlay:
     risk_badge, _ = tool_risk_badge(tool_name)
     return ApprovalOverlay(
+        active_mode=active_mode,
         tool_name=tool_name,
         description=description,
         arguments=arguments,

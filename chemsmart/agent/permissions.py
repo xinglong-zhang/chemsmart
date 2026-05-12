@@ -11,6 +11,13 @@ class PermissionMode(str, Enum):
     DRIVING = "driving"
 
 
+class RuntimePermissionMode(str, Enum):
+    READ_ONLY = "read_only"
+    ACCEPT_EDITS = "accept_edits"
+    BYPASS = "bypass"
+    PLAN = "plan"
+
+
 class ApprovalDecision(str, Enum):
     ALLOW_ONCE = "allow_once"
     ALLOW_SESSION = "allow_session"
@@ -25,6 +32,11 @@ class ResolvedDecision(str, Enum):
 
 DRIVING_DEFAULT_DENY = {"run_local", "submit_hpc", "remote_probe"}
 ALWAYS_REQUIRE_APPROVAL = {"wizard_write"}
+READ_ONLY_TOOLS = {"read", "ssh_probe", "scheduler_query", "log_tail"}
+EDIT_SAFE_TOOLS = {"edit", "write"}
+PLAN_MODE_REASON = "plan mode active"
+
+PermissionPolicyMode = PermissionMode | RuntimePermissionMode
 
 
 @dataclass(frozen=True)
@@ -35,7 +47,7 @@ class ResolvedPermission:
 
 @dataclass
 class PermissionPolicy:
-    mode: PermissionMode
+    mode: PermissionPolicyMode
     yolo: bool = False
     session_allow: set[str] = field(default_factory=set)
     driving_denylist: set[str] = field(
@@ -43,38 +55,12 @@ class PermissionPolicy:
     )
 
     def resolve(self, req: ToolRequest) -> ResolvedPermission:
-        tool = req.name
-        if tool in ALWAYS_REQUIRE_APPROVAL:
-            return ResolvedPermission(
-                decision=ResolvedDecision.NEEDS_USER,
-                reason="always_require_approval",
-            )
-
-        decision_keys = _decision_keys(req)
-        if self.mode == PermissionMode.DRIVING:
-            if self.driving_denylist.intersection(decision_keys):
-                if self.yolo:
-                    return ResolvedPermission(
-                        decision=ResolvedDecision.AUTO_ALLOW,
-                        reason="yolo",
-                    )
-                return ResolvedPermission(
-                    decision=ResolvedDecision.AUTO_DENY,
-                    reason="missing_yolo",
-                )
-            return ResolvedPermission(
-                decision=ResolvedDecision.AUTO_ALLOW,
-                reason="driving_mode",
-            )
-
-        if tool in self.session_allow:
-            return ResolvedPermission(
-                decision=ResolvedDecision.AUTO_ALLOW,
-                reason="session_rule",
-            )
-        return ResolvedPermission(
-            decision=ResolvedDecision.NEEDS_USER,
-            reason="needs_user",
+        return resolve(
+            req,
+            mode=self.mode,
+            yolo=self.yolo,
+            session_allow=self.session_allow,
+            driving_denylist=self.driving_denylist,
         )
 
     def record(self, tool: str, decision: ApprovalDecision) -> None:
@@ -90,3 +76,86 @@ def _decision_keys(req: ToolRequest) -> set[str]:
         ssh_host_hint = req.arguments.get("ssh_host_hint")
         keys.add("remote_probe" if ssh_host_hint else "local_probe")
     return keys
+
+
+def legacy_to_runtime(mode: PermissionMode) -> RuntimePermissionMode:
+    return {
+        PermissionMode.PERMISSION: RuntimePermissionMode.READ_ONLY,
+        PermissionMode.DRIVING: RuntimePermissionMode.ACCEPT_EDITS,
+    }[mode]
+
+
+def resolve(
+    req: ToolRequest,
+    mode: PermissionPolicyMode,
+    *,
+    yolo: bool = False,
+    session_allow: set[str] | None = None,
+    driving_denylist: set[str] | None = None,
+) -> ResolvedPermission:
+    if isinstance(mode, RuntimePermissionMode):
+        tool = req.name
+        if mode == RuntimePermissionMode.BYPASS:
+            return ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="bypass_mode",
+            )
+        if mode == RuntimePermissionMode.PLAN:
+            return ResolvedPermission(
+                decision=ResolvedDecision.AUTO_DENY,
+                reason=PLAN_MODE_REASON,
+            )
+        if tool in READ_ONLY_TOOLS:
+            return ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="read_only_tool",
+            )
+        if (
+            mode == RuntimePermissionMode.ACCEPT_EDITS
+            and tool in READ_ONLY_TOOLS | EDIT_SAFE_TOOLS
+        ):
+            return ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="edit_safe_tool",
+            )
+        return ResolvedPermission(
+            decision=ResolvedDecision.NEEDS_USER,
+            reason="needs_user",
+        )
+
+    tool = req.name
+    if tool in ALWAYS_REQUIRE_APPROVAL:
+        return ResolvedPermission(
+            decision=ResolvedDecision.NEEDS_USER,
+            reason="always_require_approval",
+        )
+
+    decision_keys = _decision_keys(req)
+    denylist = (
+        DRIVING_DEFAULT_DENY if driving_denylist is None else driving_denylist
+    )
+    if mode == PermissionMode.DRIVING:
+        if denylist.intersection(decision_keys):
+            if yolo:
+                return ResolvedPermission(
+                    decision=ResolvedDecision.AUTO_ALLOW,
+                    reason="yolo",
+                )
+            return ResolvedPermission(
+                decision=ResolvedDecision.AUTO_DENY,
+                reason="missing_yolo",
+            )
+        return ResolvedPermission(
+            decision=ResolvedDecision.AUTO_ALLOW,
+            reason="driving_mode",
+        )
+
+    if tool in (session_allow or set()):
+        return ResolvedPermission(
+            decision=ResolvedDecision.AUTO_ALLOW,
+            reason="session_rule",
+        )
+    return ResolvedPermission(
+        decision=ResolvedDecision.NEEDS_USER,
+        reason="needs_user",
+    )
