@@ -24,6 +24,7 @@ _ENV_VAR_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.\[\]-]{1,64}$")
 _MODULE_NAME_PATTERN = re.compile(r"^[\w.+-]+(?:/[\w.+-]+)*$")
 _PATH_PATTERN = re.compile(r"^[/~][\w\-./@:+]*$")
+_TAIL_LINES_PATTERN = re.compile(r"^[0-9]{1,6}$")
 _FORBIDDEN_SLOT_CHARS = set(";&|`$(){}<>!\\'\"*\n\r\t")
 
 SlotValidator = Callable[[str], None]
@@ -211,6 +212,18 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         argv_template=("qstat", "-j", "{job_id}"),
         slot_validators={"job_id": lambda value: validate_job_id(value)},
         parser=parse_sge_qstat_job,
+    ),
+    "query.log.tail": ProbeSpec(
+        template_id="query.log.tail",
+        argv_template=("tail", "-n", "{lines}", "{path}"),
+        slot_validators={
+            "lines": lambda value: validate_probe_slot_pattern(
+                value,
+                pattern=_TAIL_LINES_PATTERN,
+                label="lines",
+            ),
+            "path": lambda value: validate_path_slot(value),
+        },
     ),
     "software.type_module": ProbeSpec(
         template_id="software.type_module",
@@ -528,6 +541,19 @@ def validate_path_slot(value: str) -> None:
     _validate_slot_chars(value)
     if not _PATH_PATTERN.fullmatch(value):
         raise ProbeError(f"Invalid path slot value: {value!r}")
+
+
+def validate_probe_slot_pattern(
+    value: str,
+    *,
+    pattern: re.Pattern[str],
+    label: str,
+) -> None:
+    """Validate a generic probe slot against a compiled regex pattern."""
+
+    _validate_slot_chars(value)
+    if not pattern.fullmatch(value):
+        raise ProbeError(f"Invalid {label} slot value: {value!r}")
 
 
 def _validate_slot_chars(value: str) -> None:

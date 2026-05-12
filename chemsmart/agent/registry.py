@@ -126,6 +126,15 @@ class ToolRegistry:
                 ),
             ),
             (
+                "log_tail",
+                "chemsmart.agent.tools_hpc",
+                "Tail a remote log file with optional grep filter. Returns last N lines + summary of detected error signatures (OOM, walltime, missing module, node failure, scheduler reject, segfault). Read-only.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template=("Tail {path} on {server} ({lines}L)"),
+                ),
+            ),
+            (
                 "extract_optimized_geometry",
                 "chemsmart.agent.tools",
                 None,
