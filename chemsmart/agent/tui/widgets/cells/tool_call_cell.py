@@ -7,6 +7,8 @@ from rich.text import Text
 
 from chemsmart.agent.tui.tool_meta import (
     pretty_tool_args,
+    render_tool_result_detail,
+    render_tool_result_summary,
     tool_risk_badge,
     tool_side_effect_summary,
     tool_status_style,
@@ -27,6 +29,7 @@ class ToolCallCell(BaseCell):
         queue_index: int | None = None,
         queue_total: int | None = None,
         session_rule_active: bool = False,
+        result: dict | None = None,
     ) -> None:
         self.tool = tool
         self.status = status
@@ -36,6 +39,7 @@ class ToolCallCell(BaseCell):
         self.queue_index = queue_index
         self.queue_total = queue_total
         self.session_rule_active = session_rule_active
+        self.result = dict(result) if isinstance(result, dict) else None
         super().__init__(
             self._build_renderable(),
             title="Tool use",
@@ -77,4 +81,24 @@ class ToolCallCell(BaseCell):
         if self.arguments:
             details.append(Text(""))
             details.append(Text(pretty_tool_args(self.arguments), style="dim"))
+        if self.result is not None:
+            result_summary = render_tool_result_summary(self.tool, self.result)
+            result_detail = render_tool_result_detail(self.tool, self.result)
+            if result_summary is not None or result_detail is not None:
+                details.append(Text(""))
+                result_style = (
+                    "error" if self.result.get("error") is not None else "dim"
+                )
+                if result_summary is not None:
+                    details.append(
+                        Text.assemble(
+                            ("Result", "bold"),
+                            (" · ", "dim"),
+                            (result_summary, result_style),
+                        )
+                    )
+                else:
+                    details.append(Text("Result", style="bold"))
+                if result_detail is not None:
+                    details.extend(result_detail)
         return Group(heading, *details)

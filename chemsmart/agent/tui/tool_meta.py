@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from rich.text import Text
+
 from chemsmart.agent.registry import ToolRegistry
 
 _TOOL_META = {
@@ -92,6 +94,30 @@ _TOOL_META = {
         "style": "error",
         "summary": "writes a server YAML config",
     },
+    "read": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "reads local file lines",
+    },
+    "ssh_probe": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "runs a remote inspection probe",
+    },
+    "scheduler_query": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "inspects remote scheduler state",
+    },
+    "log_tail": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "tails remote logs for diagnostics",
+    },
 }
 
 _STATUS_STYLE = {
@@ -140,3 +166,213 @@ def tool_status_style(status: str) -> str:
 def pretty_tool_args(arguments: dict[str, Any] | None) -> str:
     payload = arguments or {}
     return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def render_tool_result_summary(
+    tool_name: str,
+    result: dict[str, Any] | None,
+) -> str | None:
+    payload = result or {}
+    if not isinstance(payload, dict) or not payload:
+        return None
+
+    error = _result_error_summary(payload)
+    if error is not None:
+        return error
+
+    if tool_name == "read":
+        return _render_read_summary(payload)
+    if tool_name == "ssh_probe":
+        return _render_ssh_probe_summary(payload)
+    if tool_name == "scheduler_query":
+        return _render_scheduler_query_summary(payload)
+    if tool_name == "log_tail":
+        return _render_log_tail_summary(payload)
+    return None
+
+
+def render_tool_result_detail(
+    tool_name: str,
+    result: dict[str, Any] | None,
+) -> list[Text] | None:
+    payload = result or {}
+    if not isinstance(payload, dict) or not payload:
+        return None
+
+    if payload.get("error") is not None:
+        lines = []
+        message = _string_or_none(payload.get("message"))
+        if message is not None:
+            lines.append(Text(message, style="error"))
+        elif _string_or_none(payload.get("path")) is not None:
+            lines.append(
+                Text(
+                    f"path: {_string_or_none(payload.get('path'))}",
+                    style="dim",
+                )
+            )
+        return lines or None
+
+    if tool_name == "read":
+        return _render_read_detail(payload)
+    if tool_name == "ssh_probe":
+        return _render_ssh_probe_detail(payload)
+    if tool_name == "scheduler_query":
+        return _render_scheduler_query_detail(payload)
+    if tool_name == "log_tail":
+        return _render_log_tail_detail(payload)
+    return None
+
+
+def _render_read_summary(payload: dict[str, Any]) -> str | None:
+    start_line = payload.get("start_line")
+    end_line = payload.get("end_line")
+    total_lines = payload.get("total_lines")
+    if start_line is None or end_line is None or total_lines is None:
+        return None
+    summary = f"L{start_line}-{end_line} of {total_lines}"
+    if payload.get("truncated"):
+        summary += ", truncated"
+    return summary
+
+
+def _render_ssh_probe_summary(payload: dict[str, Any]) -> str | None:
+    returncode = payload.get("returncode")
+    duration_s = payload.get("duration_s")
+    if returncode is None or duration_s is None:
+        return None
+    return f"rc={returncode} in {float(duration_s):.2f}s"
+
+
+def _render_scheduler_query_summary(payload: dict[str, Any]) -> str | None:
+    scheduler = _string_or_none(payload.get("scheduler")) or "scheduler"
+    state = _string_or_none(payload.get("state"))
+    if state is not None:
+        return f"{scheduler}: {state}"
+
+    partition = _string_or_none(payload.get("partition_or_queue")) or "?"
+    nodes = _string_or_none(payload.get("nodes")) or "?"
+    total_cpus = _string_or_none(payload.get("total_cpus")) or "?"
+    return f"{scheduler}: {partition} {nodes}n/{total_cpus}cpu"
+
+
+def _render_log_tail_summary(payload: dict[str, Any]) -> str | None:
+    lines_returned = payload.get("lines_returned")
+    if lines_returned is None:
+        return None
+
+    errors = payload.get("errors") or []
+    kinds: list[str] = []
+    for item in errors[:3]:
+        if not isinstance(item, dict):
+            continue
+        kind = _string_or_none(item.get("kind"))
+        if kind is not None:
+            kinds.append(kind)
+    top_kinds = ", ".join(kinds) if kinds else "none"
+    return f"{lines_returned}L, {len(errors)} errors: {top_kinds}"
+
+
+def _render_read_detail(payload: dict[str, Any]) -> list[Text] | None:
+    content = str(payload.get("content") or "")
+    if not content:
+        return None
+    lines = [Text(line, style="dim") for line in content.splitlines()[:5]]
+    truncated = bool(payload.get("truncated")) or len(content.splitlines()) > 5
+    return _finalize_detail_lines(lines, truncated=truncated)
+
+
+def _render_ssh_probe_detail(payload: dict[str, Any]) -> list[Text] | None:
+    lines: list[Text] = []
+    server = _string_or_none(payload.get("server"))
+    probe = _string_or_none(payload.get("probe") or payload.get("probe_name"))
+    if server is not None:
+        lines.append(Text(f"server: {server}", style="dim"))
+    if probe is not None:
+        lines.append(Text(f"probe: {probe}", style="dim"))
+
+    output_lines = _nonempty_lines(payload.get("stdout_truncated"))
+    lines.extend(Text(line, style="dim") for line in output_lines[:3])
+
+    stderr_lines = _nonempty_lines(payload.get("stderr_truncated"))
+    if stderr_lines:
+        lines.append(Text(stderr_lines[0], style="error"))
+
+    truncated = len(output_lines) > 3 or len(stderr_lines) > 1
+    return _finalize_detail_lines(lines, truncated=truncated)
+
+
+def _render_scheduler_query_detail(
+    payload: dict[str, Any],
+) -> list[Text] | None:
+    if payload.get("state") is not None:
+        field_pairs = [
+            ("job", payload.get("job_id")),
+            ("state", payload.get("state")),
+            ("queue", payload.get("queue")),
+            ("user", payload.get("user")),
+            ("node", payload.get("node")),
+        ]
+    else:
+        field_pairs = [
+            ("scheduler", payload.get("scheduler")),
+            ("queue", payload.get("partition_or_queue")),
+            ("nodes", payload.get("nodes")),
+            ("cpus", payload.get("total_cpus")),
+        ]
+
+    lines = [
+        Text(f"{label}: {value}", style="dim")
+        for label, value in field_pairs
+        if value is not None
+    ]
+    return _finalize_detail_lines(lines)
+
+
+def _render_log_tail_detail(payload: dict[str, Any]) -> list[Text] | None:
+    errors = payload.get("errors") or []
+    if not errors:
+        return [Text("No error signatures found.", style="dim")]
+
+    lines = []
+    for item in errors[:3]:
+        if not isinstance(item, dict):
+            continue
+        kind = _string_or_none(item.get("kind")) or "error"
+        line = _string_or_none(item.get("line")) or "(no line)"
+        line_no = _string_or_none(item.get("line_no")) or "?"
+        lines.append(Text(f"L{line_no} {kind}: {line}", style="error"))
+    return _finalize_detail_lines(lines, truncated=len(errors) > 3)
+
+
+def _finalize_detail_lines(
+    lines: list[Text],
+    *,
+    truncated: bool = False,
+) -> list[Text] | None:
+    if truncated and (not lines or lines[-1].plain != "… truncated"):
+        lines = [*lines, Text("… truncated", style="dim")]
+    if len(lines) > 6:
+        return [*lines[:5], Text("… truncated", style="dim")]
+    return lines or None
+
+
+def _result_error_summary(payload: dict[str, Any]) -> str | None:
+    error = _string_or_none(payload.get("error"))
+    if error is None:
+        return None
+    return f"error: {error}"
+
+
+def _nonempty_lines(value: Any) -> list[str]:
+    text = _string_or_none(value)
+    if text is None:
+        return []
+    return [line for line in text.splitlines() if line.strip()]
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
