@@ -21,6 +21,7 @@ def test_approval_overlay_accepts_arbitrary_tool_and_args(tmp_path):
             await pilot.pause()
             app.push_screen(
                 build_approval_overlay(
+                    active_mode="READ_ONLY",
                     tool_name="build_orca_settings",
                     description="Build validated ORCA job settings.",
                     arguments={"functional": "wb97x-d", "charge": 0},
@@ -36,6 +37,7 @@ def test_approval_overlay_accepts_arbitrary_tool_and_args(tmp_path):
             assert "build_orca_settings" in text
             assert '"charge": 0' in text
             assert "1 of 2" in text
+            assert summary.border_title == "Approval · Mode: READ_ONLY"
             await pilot.press("y")
             await pilot.pause()
 
@@ -55,6 +57,7 @@ def test_approval_overlay_session_and_deny_shortcuts_map_to_decisions(
             await pilot.pause()
             app.push_screen(
                 build_approval_overlay(
+                    active_mode="ACCEPT_EDITS",
                     tool_name="dry_run_input",
                     description="Render an input file.",
                     arguments={"job": "job_1"},
@@ -68,6 +71,7 @@ def test_approval_overlay_session_and_deny_shortcuts_map_to_decisions(
 
             app.push_screen(
                 build_approval_overlay(
+                    active_mode="BYPASS",
                     tool_name="run_local",
                     description="Execute a local run.",
                     arguments={"job": "job_1"},

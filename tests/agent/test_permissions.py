@@ -5,10 +5,17 @@ import pytest
 from chemsmart.agent.permissions import (
     ALWAYS_REQUIRE_APPROVAL,
     DRIVING_DEFAULT_DENY,
+    EDIT_SAFE_TOOLS,
+    PLAN_MODE_REASON,
+    READ_ONLY_TOOLS,
     ApprovalDecision,
     PermissionMode,
     PermissionPolicy,
     ResolvedDecision,
+    ResolvedPermission,
+    RuntimePermissionMode,
+    legacy_to_runtime,
+    resolve,
 )
 from chemsmart.agent.provider_adapter import ToolRequest
 
@@ -143,3 +150,217 @@ def test_wizard_write_always_requires_explicit_approval():
     assert resolved.decision == ResolvedDecision.NEEDS_USER
     assert resolved.reason == "always_require_approval"
     assert "wizard_write" not in policy.session_allow
+
+
+@pytest.mark.parametrize(
+    ("mode", "tool", "expected"),
+    [
+        (
+            RuntimePermissionMode.READ_ONLY,
+            "read",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="read_only_tool",
+            ),
+        ),
+        (
+            RuntimePermissionMode.READ_ONLY,
+            "edit",
+            ResolvedPermission(
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="needs_user",
+            ),
+        ),
+        (
+            RuntimePermissionMode.READ_ONLY,
+            "run_local",
+            ResolvedPermission(
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="needs_user",
+            ),
+        ),
+        (
+            RuntimePermissionMode.ACCEPT_EDITS,
+            "read",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="read_only_tool",
+            ),
+        ),
+        (
+            RuntimePermissionMode.ACCEPT_EDITS,
+            "edit",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="edit_safe_tool",
+            ),
+        ),
+        (
+            RuntimePermissionMode.ACCEPT_EDITS,
+            "run_local",
+            ResolvedPermission(
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="needs_user",
+            ),
+        ),
+        (
+            RuntimePermissionMode.BYPASS,
+            "read",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="bypass_mode",
+            ),
+        ),
+        (
+            RuntimePermissionMode.BYPASS,
+            "edit",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="bypass_mode",
+            ),
+        ),
+        (
+            RuntimePermissionMode.BYPASS,
+            "run_local",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="bypass_mode",
+            ),
+        ),
+        (
+            RuntimePermissionMode.PLAN,
+            "read",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_DENY,
+                reason=PLAN_MODE_REASON,
+            ),
+        ),
+        (
+            RuntimePermissionMode.PLAN,
+            "edit",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_DENY,
+                reason=PLAN_MODE_REASON,
+            ),
+        ),
+        (
+            RuntimePermissionMode.PLAN,
+            "run_local",
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_DENY,
+                reason=PLAN_MODE_REASON,
+            ),
+        ),
+    ],
+)
+def test_runtime_permission_mode_matrix(mode, tool, expected):
+    resolved = resolve(make_request(tool), mode=mode)
+
+    assert resolved == expected
+
+
+def test_plan_mode_uses_expected_deny_reason():
+    resolved = resolve(
+        make_request("submit_hpc"),
+        mode=RuntimePermissionMode.PLAN,
+    )
+
+    assert resolved.decision == ResolvedDecision.AUTO_DENY
+    assert resolved.reason == "plan mode active"
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        (PermissionMode.PERMISSION, RuntimePermissionMode.READ_ONLY),
+        (PermissionMode.DRIVING, RuntimePermissionMode.ACCEPT_EDITS),
+    ],
+)
+def test_legacy_to_runtime_mapping(mode, expected):
+    assert legacy_to_runtime(mode) == expected
+
+
+@pytest.mark.parametrize(
+    ("tool", "expected"),
+    [
+        (
+            "recommend_method",
+            ResolvedPermission(
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="needs_user",
+            ),
+        ),
+        (
+            "wizard_write",
+            ResolvedPermission(
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="always_require_approval",
+            ),
+        ),
+    ],
+)
+def test_legacy_permission_regression_snapshot(tool, expected):
+    resolved = resolve(
+        make_request(tool),
+        mode=PermissionMode.PERMISSION,
+        session_allow={"dry_run_input"},
+    )
+
+    assert resolved == expected
+
+
+@pytest.mark.parametrize(
+    ("tool", "yolo", "expected"),
+    [
+        (
+            "recommend_method",
+            False,
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="driving_mode",
+            ),
+        ),
+        (
+            "run_local",
+            False,
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_DENY,
+                reason="missing_yolo",
+            ),
+        ),
+        (
+            "run_local",
+            True,
+            ResolvedPermission(
+                decision=ResolvedDecision.AUTO_ALLOW,
+                reason="yolo",
+            ),
+        ),
+        (
+            "wizard_write",
+            True,
+            ResolvedPermission(
+                decision=ResolvedDecision.NEEDS_USER,
+                reason="always_require_approval",
+            ),
+        ),
+    ],
+)
+def test_legacy_driving_regression_snapshot(tool, yolo, expected):
+    resolved = resolve(
+        make_request(tool),
+        mode=PermissionMode.DRIVING,
+        yolo=yolo,
+    )
+
+    assert resolved == expected
+
+
+def test_runtime_permission_mode_placeholders_are_stable():
+    assert READ_ONLY_TOOLS == {
+        "read",
+        "ssh_probe",
+        "scheduler_query",
+        "log_tail",
+    }
+    assert EDIT_SAFE_TOOLS == {"edit", "write"}

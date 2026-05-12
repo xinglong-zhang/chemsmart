@@ -1898,6 +1898,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             return
         self.app.push_screen(
             build_approval_overlay(
+                active_mode=self._permission_mode.value.upper(),
                 tool_name=pending.name,
                 description=(
                     self._pending_approval_description
