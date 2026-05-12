@@ -15,6 +15,7 @@ from chemsmart.agent.wizard.probe import ProbeResult
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sge"
 PBS_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "pbs"
 SOFTWARE_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "software"
+MODULE_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "modules"
 
 
 class StubRunner:
@@ -169,6 +170,126 @@ def test_find_program_sorts_multiple_module_candidates_by_length_then_name():
         exefolder=None,
         source="module",
         module_candidates=["nci", "nciplot/1.0", "chem/nciplot"],
+        on_path=False,
+    )
+
+
+def test_find_program_preserves_versioned_module_name_and_g16root():
+    module_show = (
+        MODULE_FIXTURE_DIR / "lmod_module_show_gaussian_16.txt"
+    ).read_text()
+    runner = StubRunner(
+        local_results={
+            ("command", "-v", "g16"): _result(
+                "command -v g16",
+                returncode=1,
+            ),
+            ("which", "g16"): _result("which g16", returncode=1),
+            ("command", "-v", "g09"): _result(
+                "command -v g09",
+                returncode=1,
+            ),
+            ("which", "g09"): _result("which g09", returncode=1),
+            ("module", "-t", "avail"): _result(
+                "module -t avail",
+                stdout=(
+                    "/opt/ohpc/pub/modulefiles:\n"
+                    "gaussian/\n"
+                    "gaussian/16\n"
+                ),
+            ),
+            ("module", "show", "gaussian/16"): _result(
+                "module show gaussian/16",
+                stderr=module_show,
+            ),
+        }
+    )
+
+    assert find_program(
+        runner,
+        Topology("A", "localhost", []),
+        "gaussian",
+        ["g16", "g09"],
+        ["gaussian", "g16", "g09"],
+    ) == ProgramFinding(
+        program="gaussian",
+        exefolder="/opt/fake/gaussian/g16",
+        source="module",
+        module_candidates=["gaussian/16"],
+        on_path=False,
+    )
+
+
+def test_find_program_uses_path_fallback_when_module_show_has_no_envvar():
+    runner = StubRunner(
+        local_results={
+            ("command", "-v", "orca"): _result(
+                "command -v orca",
+                returncode=1,
+            ),
+            ("which", "orca"): _result("which orca", returncode=1),
+            ("module", "-t", "avail"): _result(
+                "module -t avail",
+                stderr="orca/6.0.1\n",
+            ),
+            ("module", "show", "orca/6.0.1"): _result(
+                "module show orca/6.0.1",
+                stderr=(
+                    'prepend_path{"PATH","/apps/orca/6.0.1",'
+                    'delim=":",priority="0"}\n'
+                ),
+            ),
+        }
+    )
+
+    assert find_program(
+        runner,
+        Topology("A", "localhost", []),
+        "orca",
+        ["orca"],
+        ["orca"],
+    ) == ProgramFinding(
+        program="orca",
+        exefolder="/apps/orca/6.0.1",
+        source="module",
+        module_candidates=["orca/6.0.1"],
+        on_path=False,
+    )
+
+
+def test_find_program_leaves_exefolder_none_without_relevant_module_data():
+    runner = StubRunner(
+        local_results={
+            ("command", "-v", "nciplot"): _result(
+                "command -v nciplot",
+                returncode=1,
+            ),
+            ("which", "nciplot"): _result(
+                "which nciplot",
+                returncode=1,
+            ),
+            ("module", "-t", "avail"): _result(
+                "module -t avail",
+                stderr="nciplot/1.0\n",
+            ),
+            ("module", "show", "nciplot/1.0"): _result(
+                "module show nciplot/1.0",
+                stderr='setenv{"UNRELATED","1"}\n',
+            ),
+        }
+    )
+
+    assert find_program(
+        runner,
+        Topology("A", "localhost", []),
+        "nciplot",
+        ["nciplot"],
+        ["nciplot", "nci"],
+    ) == ProgramFinding(
+        program="nciplot",
+        exefolder=None,
+        source="module",
+        module_candidates=["nciplot/1.0"],
         on_path=False,
     )
 

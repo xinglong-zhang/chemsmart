@@ -195,6 +195,50 @@ def test_render_server_yaml_keeps_program_scratch_true_when_writable():
     assert not any("SCRATCH set to False" in note for note in plan.notes)
 
 
+def test_render_server_yaml_preserves_versioned_module_load():
+    survey = _software_survey()
+    survey = SoftwareSurvey(
+        module_system=survey.module_system,
+        programs={
+            **survey.programs,
+            "gaussian": ProgramFinding(
+                program="gaussian",
+                exefolder="/opt/fake/gaussian/g16",
+                source="module",
+                module_candidates=["gaussian/16"],
+                on_path=False,
+            ),
+        },
+        conda=survey.conda,
+    )
+
+    plan = render_server_yaml(
+        Topology(mode="B", host="cluster", evidence=[]),
+        _schedule_survey(),
+        survey,
+        ScratchFinding(
+            path="/scratch/user",
+            source="env:SCRATCH",
+            writable=True,
+            candidates=[("env:SCRATCH", "/scratch/user")],
+        ),
+        ProjectFinding(
+            project="chem-123",
+            source="sacctmgr",
+            candidates=["chem-123"],
+        ),
+    )
+
+    assert (
+        plan.program_blocks["GAUSSIAN"]["MODULES"]
+        == "module purge\nmodule load gaussian/16"
+    )
+    assert (
+        plan.program_blocks["GAUSSIAN"]["EXEFOLDER"]
+        == "/opt/fake/gaussian/g16"
+    )
+
+
 def test_render_server_yaml_sets_all_program_scratch_false_when_unwritable():
     plan = render_server_yaml(
         Topology(mode="B", host="cluster", evidence=[]),
