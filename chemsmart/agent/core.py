@@ -21,6 +21,7 @@ from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
     PermissionPolicy,
+    RuntimePermissionMode,
 )
 from chemsmart.agent.prompts import load_prompt
 from chemsmart.agent.prompts.identity import (
@@ -329,8 +330,17 @@ class AgentSession:
 
         provider = self._provider_instance()
         provider_name = getattr(provider, "name", None) or "openai"
-        tool_defs = self._tool_defs_for_provider(provider_name)
         policy = policy or PermissionPolicy(mode=PermissionMode.DRIVING)
+        runtime_mode = (
+            policy.mode
+            if isinstance(policy.mode, RuntimePermissionMode)
+            else None
+        )
+        tool_defs = (
+            None
+            if runtime_mode is not None
+            else self._tool_defs_for_provider(provider_name)
+        )
         self._log_loop_mode(policy)
         if messages is None:
             messages = [{"role": "user", "content": request}]
@@ -366,7 +376,11 @@ class AgentSession:
             policy=policy,
             approver=approver,
         )
-        loop_result = loop.run_turn(messages=messages, tool_defs=tool_defs)
+        loop_result = loop.run_turn(
+            messages=messages,
+            tool_defs=tool_defs,
+            mode=runtime_mode,
+        )
 
         tool_requests = loop_result["tool_requests"]
         tool_outcomes = loop_result["tool_outcomes"]

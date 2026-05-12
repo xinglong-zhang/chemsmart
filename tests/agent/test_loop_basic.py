@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from pydantic import create_model
+
 from chemsmart.agent.core import DecisionLog
 from chemsmart.agent.handles import HandleStore
 from chemsmart.agent.loop import ToolLoop
+from chemsmart.agent.permissions import RuntimePermissionMode
+from chemsmart.agent.registry import ToolInputModel, ToolRegistry, ToolSpec
+from chemsmart.agent.tool_protocol import RuntimeToolMetadata
 
 from ._agent_session_helpers import FakeProvider
 from ._loop_helpers import (
@@ -59,4 +64,95 @@ def test_tool_loop_runs_single_tool_then_final_assistant(tmp_path):
     assert provider.calls[0]["tools"] == registry.openai_tool_defs()
     assert any(
         message["role"] == "tool" for message in provider.calls[1]["messages"]
+    )
+
+
+def test_tool_loop_mode_none_keeps_static_tool_schema(tmp_path):
+    provider = FakeProvider(
+        [{"__raw_response__": openai_final_response("No tools needed.")}]
+    )
+    registry = ToolRegistry(
+        [
+            _make_tool_spec(
+                "read_only_tool",
+                metadata=RuntimeToolMetadata(read_only=True),
+            ),
+            _make_tool_spec(
+                "edit_safe_tool",
+                metadata=RuntimeToolMetadata(edit_safe=True),
+            ),
+        ]
+    )
+    loop = ToolLoop(
+        provider=provider,
+        registry=registry,
+        handle_store=HandleStore(tmp_path),
+        decision_log=DecisionLog(tmp_path / "decision_log.jsonl"),
+    )
+
+    tool_defs = registry.openai_tool_defs()
+    result = loop.run_turn(
+        messages=[{"role": "user", "content": "Just answer."}],
+        tool_defs=tool_defs,
+        mode=None,
+    )
+
+    assert result["assistant_text"] == "No tools needed."
+    assert provider.calls[0]["tools"] == tool_defs
+    assert provider.calls[0]["tools"] == registry.openai_tool_defs()
+
+
+def test_tool_loop_read_only_mode_filters_to_read_safe_tools(tmp_path):
+    provider = FakeProvider(
+        [{"__raw_response__": openai_final_response("Read-only answer.")}]
+    )
+    registry = ToolRegistry(
+        [
+            _make_tool_spec(
+                "read_only_tool",
+                metadata=RuntimeToolMetadata(read_only=True),
+            ),
+            _make_tool_spec(
+                "edit_safe_tool",
+                metadata=RuntimeToolMetadata(edit_safe=True),
+            ),
+        ]
+    )
+    loop = ToolLoop(
+        provider=provider,
+        registry=registry,
+        handle_store=HandleStore(tmp_path),
+        decision_log=DecisionLog(tmp_path / "decision_log.jsonl"),
+    )
+
+    loop.run_turn(
+        messages=[{"role": "user", "content": "Stay read only."}],
+        mode=RuntimePermissionMode.READ_ONLY,
+    )
+
+    tool_names = [
+        tool_def["function"]["name"] for tool_def in provider.calls[0]["tools"]
+    ]
+    assert tool_names == ["read_only_tool"]
+
+
+def _make_tool_spec(
+    name: str,
+    *,
+    metadata: RuntimeToolMetadata,
+) -> ToolSpec:
+    def tool() -> dict[str, str]:
+        """Test tool."""
+
+        return {"tool": name}
+
+    schema = create_model(
+        f"{name.title().replace('_', '')}Input",
+        __base__=ToolInputModel,
+    )
+    return ToolSpec(
+        name=name,
+        func=tool,
+        input_schema=schema,
+        metadata=metadata,
     )

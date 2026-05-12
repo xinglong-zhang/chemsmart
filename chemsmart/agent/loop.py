@@ -13,6 +13,7 @@ from chemsmart.agent.permissions import (
     PermissionMode,
     PermissionPolicy,
     ResolvedDecision,
+    RuntimePermissionMode,
 )
 from chemsmart.agent.provider_adapter import (
     ToolOutcome,
@@ -58,9 +59,14 @@ class ToolLoop:
     def run_turn(
         self,
         messages: list[dict[str, Any]],
-        tool_defs: list[dict[str, Any]],
+        tool_defs: list[dict[str, Any]] | None = None,
+        mode: RuntimePermissionMode | None = None,
     ) -> dict[str, Any]:
         provider_name = getattr(self.provider, "name", None) or "openai"
+        if mode is not None:
+            tool_defs = self._tool_defs_for_mode(provider_name, mode)
+        elif tool_defs is None:
+            tool_defs = self._tool_defs_for_provider(provider_name)
         history = [deepcopy(message) for message in messages]
         assistant_text = ""
         stop_reason = None
@@ -550,6 +556,33 @@ class ToolLoop:
         if hasattr(self.registry, "describe_tool"):
             return self.registry.describe_tool(tool_name)
         return tool_name
+
+    def _tool_defs_for_mode(
+        self,
+        provider_name: str,
+        mode: RuntimePermissionMode,
+    ) -> list[dict[str, Any]]:
+        if hasattr(self.registry, "assemble_tool_pool"):
+            tool_pool = self.registry.assemble_tool_pool(mode)
+            if hasattr(self.registry, "tool_defs_for_provider"):
+                try:
+                    return self.registry.tool_defs_for_provider(
+                        provider_name, tool_pool
+                    )
+                except TypeError:
+                    pass
+            if provider_name == "anthropic":
+                return [tool.anthropic_tool_def() for tool in tool_pool]
+            return [tool.openai_tool_def() for tool in tool_pool]
+        return self._tool_defs_for_provider(provider_name)
+
+    def _tool_defs_for_provider(
+        self,
+        provider_name: str,
+    ) -> list[dict[str, Any]]:
+        if hasattr(self.registry, "tool_defs_for_provider"):
+            return self.registry.tool_defs_for_provider(provider_name)
+        return self.registry.openai_tool_defs()
 
     def _store_result_handle(
         self,
