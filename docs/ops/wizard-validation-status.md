@@ -2,14 +2,15 @@
 
 Snapshot of which HPC environments the `chemsmart agent wizard` has been live-validated against, what remains untested, and how to reproduce each verdict.
 
-Captured: 2026-05-12 against `fork/main` HEAD `d7c922ab`.
+Captured: 2026-05-12 against `fork/main` HEAD `8ef92261`.
 
 ## Summary
 
 - **Live-validated schedulers**: SGE/SoGE 8.1.8, OpenPBS 23.06 (including `nodes:ppn` legacy + `select=` modern resource defaults), SLURM 22.05 (single-node + simulated multi-node).
-- **Audit gaps closed by live runs**: 4 of 8 P0 items.
-- **Audit gaps still open**: 4 P0, 10 P1, 3 P2 — none have a live cluster yet.
-- **Regression coverage**: 104 wizard tests including end-to-end PBS round-trip + 4 PBS-resource-overlay rows; SLURM/PBS/SGE node-overlay paths locked in pytest.
+- **Live-validated module systems**: Lmod 8.7 (tcl modulefile, lua `module show` output).
+- **Audit gaps closed by live runs**: 5 of 8 P0 items.
+- **Audit gaps still open**: 3 P0, 10 P1, 3 P2 — none have a live cluster yet.
+- **Regression coverage**: 108 wizard tests including end-to-end PBS round-trip + 4 PBS-resource-overlay rows + 4 module-extract rows; SLURM/PBS/SGE node-overlay and Lmod setenv/path-extract paths locked in pytest.
 
 ## Validated environments
 
@@ -22,6 +23,7 @@ Captured: 2026-05-12 against `fork/main` HEAD `d7c922ab`.
 | chemnode1 (GCP) | Rocky 8 / OpenHPC | OpenPBS 23.06 with `resources_default.ncpus = 4` (direct queue default) | B | PASS — queue default overridden by node overlay | PR #95 fixtures (`qstat_qf_workq_ncpus4.txt`) + live verify |
 | chemnode2 (GCP) | Rocky 9 / EPEL | SLURM 22.05.9 single-node | B | PASS | PR #91 fixtures (`scontrol_show_node_chemnode2.txt`) |
 | chemnode2 (GCP) | Rocky 9 / EPEL | SLURM 22.05.9 multi-node (3 nodes via `State=FUTURE`) | B | PASS — host-node facts win over partition aggregates | cs-96 live run; partition `TotalCPUs=18 TRES=cpu=18,mem=35000M,node=3`, wizard YAML `NUM_CORES=2 MEM_GB=3` |
+| chemnode1 (GCP) | Rocky 8 / OpenHPC | OpenPBS 23.06 + Lmod 8.7 with fake `gaussian/16` modulefile (`setenv g16root`, `setenv GAUSS_EXEDIR`, `prepend-path PATH`) | B | PASS — version `16` preserved in `MODULES`, `EXEFOLDER=/opt/fake/gaussian/g16` extracted from setenv, `g16root`/`GAUSS_EXEDIR` propagated to `ENVARS` | PR #97 fixtures (`lmod_module_show_gaussian_16.txt`, `lmod_module_avail_with_gaussian.txt`) + live verify |
 
 Every "PASS" above means the full `SERVER` block validated and `CONDA_ENV` multi-line activation rendered for `GAUSSIAN`/`ORCA`/`NCIPLOT`.
 
@@ -49,6 +51,7 @@ The reproducibility audit from cs-95 (PR #92) enumerated wizard correctness gaps
 | P0 #2 | PBS `select=N:ncpus=M:mem=…` chunk spec on `resources_default` | Live-injected on chemnode1 2026-05-12; parser ignores `select=` string, node overlay wins. No code change required. |
 | P0 #2b | PBS legacy `nodes=N:ppn=M` (Torque-style) on `resources_default` | Fixed by PR #95 (`parsers.py` + `survey.py` PBS node overlay parallel to PR #91 SLURM). PBS auto-translated `ncpus=M` from `ppn=M` no longer wins over node `pbsnodes` facts. |
 | P0 #3 | SLURM `NUM_CORES` from partition `TotalCPUs` instead of host node | Fixed by PR #91 (`survey.py:112-142` node CPU override) |
+| P0 #6 | `module` / `Lmod` false negative → EXEFOLDER `null` + version stripped from `module load` line | Fixed by PR #97 (`software.py` setenv/path extraction parallel to Lmod lua + tcl modulefile formats; `_normalize_module_line` rejects family-stub `gaussian/`). Closes both sub-bugs (#6a version-strip, #6b EXEFOLDER not extracted). |
 
 ### Still open (no live exposure yet)
 
@@ -56,7 +59,6 @@ The reproducibility audit from cs-95 (PR #92) enumerated wizard correctness gaps
 |---|---|---|---|
 | P0 #4 | LSF parser bugs (no live cluster) | `bqueues -l` / `bhosts` extraction may be wrong | Defer — LSF licensing |
 | P0 #5 | SGE node state `alarm` / `suspend` / `subordinate` not filtered as unusable | Wizard could pick a queue that won't dispatch | New GCE SoGE cluster, force state via `qmod -d` |
-| P0 #6 | `module` / `Lmod` false negative → reports "software absent" | EXEFOLDER set to `null` when Gaussian/ORCA are installed via modules | Add module-available chemnode |
 | P0 #7 | Spack-only sites — no `module`, conda discovery alone misses Gaussian | Same symptom as #6 from different cause | Future Spack chemnode |
 | P1 (multiple) | Bright/xCAT vendor paths (`/cm/local/apps/*/current`), Cray PALS/ALPS, tcsh/zsh login shells, mixed-scheduler gateway nodes, remote Mode B over jumphost | Each blocks at probe execution layer | Defer until a real site appears |
 | P2 | Cosmetic YAML ordering, comment style | No semantic effect | Tracked, not blocking |
@@ -104,7 +106,7 @@ ssh chemsmart@35.189.152.165 'sudo cp /etc/slurm/slurm.conf.pre-multinode /etc/s
 ```bash
 cd /Users/hongjiseung/developer/chemsmart  # at fork/main
 AI_PROVIDER=openai python -m pytest -v tests/agent/wizard/
-# Expected: 104 passed
+# Expected: 108 passed
 ```
 
 ### PBS resource-default audit (re-runnable, 0₩)
@@ -155,3 +157,5 @@ Both VMs are e2-medium in `asia-northeast1-a`. Each idle hour is roughly ₩45. 
 | #93 | End-to-end OpenPBS regression test (locks PR #90 contract) |
 | #94 | This document (initial snapshot) |
 | #95 | PBS node overlay — `pbsnodes` per-host facts override queue `resources_default.ncpus`, closing P0 #2b |
+| #96 | Doc update (this file) reflecting PRs #94/#95 |
+| #97 | Module `setenv`/`prepend-path` extraction + version preservation — closes P0 #6 (Lmod lua + tcl modulefile formats) |
