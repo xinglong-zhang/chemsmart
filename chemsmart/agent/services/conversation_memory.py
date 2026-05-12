@@ -126,6 +126,18 @@ class ConversationMemory(BaseModel):
                 _apply_mva_entity_updates(payload, req, entities)
                 continue
 
+            if kind == "ask_user":
+                summary = _summarize_ask_user(payload)
+                if summary:
+                    current_turn.reusable_results.append(summary)
+                continue
+
+            if kind == "ask_user_answer":
+                summary = _summarize_ask_user_answer(payload)
+                if summary:
+                    current_turn.reusable_results.append(summary)
+                continue
+
             # run_loop path: tool_use_request carries args; tool_use_result
             # carries the handle-wrapped result. Both are keyed by step number.
             if kind == "tool_use_request":
@@ -769,3 +781,32 @@ def _summarize_tool_use_result(
         return summary_line
 
     return None
+
+
+def _summarize_ask_user(payload: dict[str, Any]) -> str | None:
+    question = _string_value(payload.get("question"))
+    if question is None:
+        return None
+    options = payload.get("options")
+    option_list = (
+        [
+            option.strip()
+            for option in options
+            if isinstance(option, str) and option.strip()
+        ]
+        if isinstance(options, list)
+        else []
+    )
+    if option_list:
+        return (
+            f"ask_user requested clarification: {question} "
+            f"Options: {', '.join(option_list[:4])}."
+        )
+    return f"ask_user requested clarification: {question}."
+
+
+def _summarize_ask_user_answer(payload: dict[str, Any]) -> str | None:
+    answer = _string_value(payload.get("answer"))
+    if answer is None:
+        return None
+    return f"User answered clarification: {answer}."

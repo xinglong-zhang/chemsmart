@@ -8,6 +8,7 @@ import re
 import subprocess
 import time
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -16,7 +17,11 @@ from typing import Any, Callable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from chemsmart.agent.handles import HandleStore, is_handle_id
-from chemsmart.agent.loop import ToolLoop, ToolLoopBudgets
+from chemsmart.agent.loop import (
+    ToolLoop,
+    ToolLoopBudgets,
+    with_virtual_tool_defs,
+)
 from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
@@ -141,6 +146,8 @@ class SessionState(BaseModel):
     total_steps_planned: int = 0
     current_step_index: int = 0
     plan: Plan | None = None
+    pending_ask_user: dict[str, Any] | None = None
+    pending_messages: list[dict[str, Any]] | None = None
     request: str | None = None
     env_snapshot: dict[str, str | None] = Field(default_factory=dict)
 
@@ -316,16 +323,22 @@ class AgentSession:
         self._llm_stats = []
         if self.state is None or self.session_dir is None:
             self._start_new_session(request)
+            continuing_ask_user = False
+        elif self._has_pending_ask_user():
+            self._resume_pending_ask_user(request)
+            continuing_ask_user = True
         else:
             self._start_new_turn(request)
+            continuing_ask_user = False
         assert self.state is not None
         assert self.decision_log is not None
         assert self.handle_store is not None
 
         self._save_state()
-        self.decision_log.write(
-            "request", {"request": request}, rationale=request
-        )
+        if not continuing_ask_user:
+            self.decision_log.write(
+                "request", {"request": request}, rationale=request
+            )
         self._refresh_conversation_history()
 
         provider = self._provider_instance()
@@ -343,7 +356,13 @@ class AgentSession:
         )
         self._log_loop_mode(policy)
         if messages is None:
-            messages = [{"role": "user", "content": request}]
+            if continuing_ask_user:
+                messages = [
+                    *deepcopy(self.state.pending_messages or []),
+                    {"role": "user", "content": request},
+                ]
+            else:
+                messages = [{"role": "user", "content": request}]
         messages = ensure_system_message(
             messages,
             self._tool_loop_system_prompt(policy),
@@ -391,6 +410,7 @@ class AgentSession:
                 else outcome.result
             )
             for outcome in tool_outcomes
+            if outcome.status != "ask_user"
         ]
         synthetic_plan = _synthetic_plan_from_tool_requests(tool_requests)
         dry_run_results = [
@@ -410,15 +430,22 @@ class AgentSession:
             ),
             None,
         )
+        intent_request = (
+            self.state.request
+            if continuing_ask_user and self.state.request is not None
+            else request
+        )
 
         self.state.plan = synthetic_plan
         self.state.request_intent = (
             "chitchat"
-            if _is_chitchat_request(request) and not tool_requests
+            if _is_chitchat_request(intent_request) and not tool_requests
             else "workflow" if tool_requests else "advisory"
         )
         self.state.total_steps_planned = len(tool_requests)
         self.state.current_step_index = len(results)
+        self.state.pending_messages = loop_result.get("messages")
+        self.state.pending_ask_user = loop_result.get("ask_user")
         self._save_state()
 
         self._llm_stats = [
@@ -433,13 +460,62 @@ class AgentSession:
                 "success": True,
             }
         ]
+        if loop_result.get("ask_user"):
+            self._refresh_conversation_history()
+            return {
+                "session_id": self.state.session_id,
+                "session_dir": str(self.session_dir),
+                "plan": synthetic_plan,
+                "plan_text": render_plan(synthetic_plan),
+                "critic_verdict": None,
+                "completed_steps": self.state.current_step_index,
+                "blocked": False,
+                "dry_run_result": _primary_dry_run_result(dry_run_results),
+                "dry_run_results": dry_run_results,
+                "runtime_result": runtime_result,
+                "preview_submit": None,
+                "results": results,
+                "assistant_output": loop_result["assistant_text"],
+                "tool_requests": tool_requests,
+                "tool_outcomes": tool_outcomes,
+                "loop_state": {
+                    "stop_reason": loop_result["stop_reason"],
+                    "model_steps": loop_result["model_steps"],
+                    "tool_calls": len(
+                        [
+                            outcome
+                            for outcome in tool_outcomes
+                            if outcome.status not in {"skipped", "ask_user"}
+                        ]
+                    ),
+                    "limit_reason": loop_result["limit_reason"],
+                },
+                "final_message": loop_result["assistant_text"],
+                "limit_reason": loop_result["limit_reason"],
+                "advisory_only": not tool_requests,
+                "is_chitchat": (
+                    _is_chitchat_request(intent_request) and not tool_requests
+                ),
+                "approval_mode": policy.mode.value,
+                "driving_mode": policy.mode == PermissionMode.DRIVING,
+                "yolo": policy.yolo,
+                "denials_count": loop_result["denials_count"],
+                "approvals_count": loop_result["approvals_count"],
+                "ask_user_question": loop_result["ask_user"],
+            }
+
+        self.state.pending_messages = None
+        self.state.pending_ask_user = None
+        self._save_state()
         self._finalize_session(
             verdict=None,
             blocked=False,
             block_reason=loop_result["limit_reason"],
             dry_run_results=dry_run_results,
             advisory_only=not tool_requests,
-            is_chitchat=(_is_chitchat_request(request) and not tool_requests),
+            is_chitchat=(
+                _is_chitchat_request(intent_request) and not tool_requests
+            ),
             rationale=loop_result["assistant_text"] or "",
         )
         self._refresh_conversation_history()
@@ -467,7 +543,7 @@ class AgentSession:
                     [
                         outcome
                         for outcome in tool_outcomes
-                        if outcome.status != "skipped"
+                        if outcome.status not in {"skipped", "ask_user"}
                     ]
                 ),
                 "limit_reason": loop_result["limit_reason"],
@@ -476,13 +552,14 @@ class AgentSession:
             "limit_reason": loop_result["limit_reason"],
             "advisory_only": not tool_requests,
             "is_chitchat": (
-                _is_chitchat_request(request) and not tool_requests
+                _is_chitchat_request(intent_request) and not tool_requests
             ),
             "approval_mode": policy.mode.value,
             "driving_mode": policy.mode == PermissionMode.DRIVING,
             "yolo": policy.yolo,
             "denials_count": loop_result["denials_count"],
             "approvals_count": loop_result["approvals_count"],
+            "ask_user_question": None,
         }
 
     def _continue_run(
@@ -1209,8 +1286,39 @@ class AgentSession:
         provider_name: str,
     ) -> list[dict[str, Any]]:
         if hasattr(self.registry, "tool_defs_for_provider"):
-            return self.registry.tool_defs_for_provider(provider_name)
-        return self.registry.openai_tool_defs()
+            return with_virtual_tool_defs(
+                provider_name,
+                self.registry.tool_defs_for_provider(provider_name),
+            )
+        return with_virtual_tool_defs(
+            provider_name,
+            self.registry.openai_tool_defs(),
+        )
+
+    def _has_pending_ask_user(self) -> bool:
+        if self.state is None:
+            return False
+        if self._get_logged_summary() is not None:
+            return False
+        return bool(
+            self.state.pending_ask_user and self.state.pending_messages
+        )
+
+    def _resume_pending_ask_user(self, answer: str) -> None:
+        assert self.state is not None
+        assert self.decision_log is not None
+        self.state.cwd = os.path.abspath(os.getcwd())
+        self.state.env_snapshot = _env_snapshot()
+        pending = self.state.pending_ask_user or {}
+        self.decision_log.write(
+            "ask_user_answer",
+            {
+                "question": pending.get("question"),
+                "options": pending.get("options") or [],
+                "answer": answer,
+            },
+            rationale=answer,
+        )
 
     def _log_loop_mode(self, policy: PermissionPolicy) -> None:
         assert self.decision_log is not None

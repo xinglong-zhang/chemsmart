@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 ToolOutcomeStatus = Literal[
     "ok",
+    "ask_user",
     "denied",
     "error",
     "skipped",
@@ -185,7 +186,7 @@ def _response_payload(response: Any) -> dict[str, Any]:
 
 
 def _anthropic_tool_result_block(outcome: ToolOutcome) -> dict[str, Any]:
-    block = {
+    block: dict[str, Any] = {
         "type": "tool_result",
         "tool_use_id": outcome.provider_call_id,
         "content": json.dumps(
@@ -218,6 +219,7 @@ def _outcome_payload(outcome: ToolOutcome) -> Any:
 
 def _default_error_type(status: ToolOutcomeStatus) -> str:
     return {
+        "ask_user": "AskUserRequested",
         "denied": "PermissionDenied",
         "error": "ToolError",
         "skipped": "ToolSkipped",

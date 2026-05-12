@@ -27,6 +27,36 @@ from chemsmart.agent.providers import (
 )
 from chemsmart.agent.registry import ToolRegistry
 
+ASK_USER_TOOL_NAME = "ask_user"
+ASK_USER_TOOL_DEF: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": ASK_USER_TOOL_NAME,
+        "description": (
+            "Ask the user a clarifying question when truly ambiguous "
+            "(no concrete target / multiple candidates / unclear intent)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The clarifying question to ask the user.",
+                },
+                "options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Optional candidate answers to help the user choose."
+                    ),
+                },
+            },
+            "required": ["question"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 @dataclass(frozen=True)
 class ToolLoopBudgets:
@@ -81,6 +111,7 @@ class ToolLoop:
         tool_outcomes: list[ToolOutcome] = []
         approvals_count = 0
         denials_count = 0
+        ask_user_outcome: dict[str, Any] | None = None
 
         while True:
             if model_steps >= self.budgets.max_model_steps_per_turn:
@@ -130,6 +161,7 @@ class ToolLoop:
             history.append(assistant_message)
             step_outcomes: list[ToolOutcome] = []
             should_stop = False
+            asked_user = False
 
             stop_index: int | None = None
             for request_index, request in enumerate(requests):
@@ -148,6 +180,71 @@ class ToolLoop:
                         "raw": request.raw,
                     },
                 )
+
+                if request.name == ASK_USER_TOOL_NAME:
+                    question = request.arguments.get("question")
+                    if not isinstance(question, str):
+                        question = ""
+                    question = question.strip()
+                    raw_options = request.arguments.get("options")
+                    options = (
+                        [
+                            option.strip()
+                            for option in raw_options
+                            if isinstance(option, str) and option.strip()
+                        ]
+                        if isinstance(raw_options, list)
+                        else []
+                    )
+                    self.decision_log.write(
+                        "ask_user",
+                        {
+                            "step": model_steps,
+                            "question": question,
+                            "options": options,
+                            "provider_call_id": request.provider_call_id,
+                        },
+                    )
+                    outcome = ToolOutcome(
+                        request_id=request.request_id,
+                        provider_call_id=request.provider_call_id,
+                        name=request.name,
+                        status="ask_user",
+                        result={
+                            "question": question,
+                            "options": options,
+                        },
+                        display_result={
+                            "question": question,
+                            "options": options,
+                        },
+                        raw_result={
+                            "question": question,
+                            "options": options,
+                        },
+                    )
+                    self.decision_log.write(
+                        "tool_use_result",
+                        {
+                            "step": model_steps,
+                            "provider_call_id": request.provider_call_id,
+                            "tool": request.name,
+                            "status": outcome.status,
+                            "description": self._tool_description(
+                                request.name
+                            ),
+                            "payload": outcome.display_result,
+                            "handle_id": None,
+                        },
+                    )
+                    step_outcomes.append(outcome)
+                    tool_outcomes.append(outcome)
+                    ask_user_outcome = {
+                        "question": question,
+                        "options": options,
+                    }
+                    asked_user = True
+                    break
 
                 signature = (request.name, _canonical_args_json(request))
                 signature_counts[signature] += 1
@@ -241,6 +338,9 @@ class ToolLoop:
                     build_tool_result_messages(provider_name, step_outcomes)
                 )
 
+            if asked_user:
+                break
+
             if should_stop:
                 break
 
@@ -266,6 +366,7 @@ class ToolLoop:
             "messages": history,
             "approvals_count": approvals_count,
             "denials_count": denials_count,
+            "ask_user": ask_user_outcome,
         }
 
     def _run_one_request(
@@ -566,14 +667,23 @@ class ToolLoop:
             tool_pool = self.registry.assemble_tool_pool(mode)
             if hasattr(self.registry, "tool_defs_for_provider"):
                 try:
-                    return self.registry.tool_defs_for_provider(
-                        provider_name, tool_pool
+                    return with_virtual_tool_defs(
+                        provider_name,
+                        self.registry.tool_defs_for_provider(
+                            provider_name, tool_pool
+                        ),
                     )
                 except TypeError:
                     pass
             if provider_name == "anthropic":
-                return [tool.anthropic_tool_def() for tool in tool_pool]
-            return [tool.openai_tool_def() for tool in tool_pool]
+                return with_virtual_tool_defs(
+                    provider_name,
+                    [tool.anthropic_tool_def() for tool in tool_pool],
+                )
+            return with_virtual_tool_defs(
+                provider_name,
+                [tool.openai_tool_def() for tool in tool_pool],
+            )
         return self._tool_defs_for_provider(provider_name)
 
     def _tool_defs_for_provider(
@@ -581,8 +691,14 @@ class ToolLoop:
         provider_name: str,
     ) -> list[dict[str, Any]]:
         if hasattr(self.registry, "tool_defs_for_provider"):
-            return self.registry.tool_defs_for_provider(provider_name)
-        return self.registry.openai_tool_defs()
+            return with_virtual_tool_defs(
+                provider_name,
+                self.registry.tool_defs_for_provider(provider_name),
+            )
+        return with_virtual_tool_defs(
+            provider_name,
+            self.registry.openai_tool_defs(),
+        )
 
     def _store_result_handle(
         self,
@@ -624,7 +740,7 @@ def _canonical_args_json(request: ToolRequest) -> str:
 def _display_result(result: Any, *, handle_id: str | None) -> Any:
     if handle_id is None:
         return _json_safe(result)
-    payload = {"handle_id": handle_id}
+    payload: dict[str, Any] = {"handle_id": handle_id}
     summary = _json_safe(result)
     if isinstance(summary, dict):
         payload["summary"] = summary
@@ -639,6 +755,42 @@ def _response_payload(response: Any) -> dict[str, Any]:
         if isinstance(payload, dict):
             return payload
     raise TypeError("Provider response must be a dict-like payload")
+
+
+def with_virtual_tool_defs(
+    provider_name: str,
+    tool_defs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    defs = [deepcopy(tool_def) for tool_def in tool_defs]
+    if any(
+        _tool_def_name(tool_def) == ASK_USER_TOOL_NAME for tool_def in defs
+    ):
+        return defs
+    defs.append(_ask_user_tool_def_for_provider(provider_name))
+    return defs
+
+
+def _ask_user_tool_def_for_provider(provider_name: str) -> dict[str, Any]:
+    if provider_name != "anthropic":
+        return deepcopy(ASK_USER_TOOL_DEF)
+
+    function: dict[str, Any] = ASK_USER_TOOL_DEF.get("function") or {}
+    return {
+        "name": function.get("name"),
+        "description": function.get("description"),
+        "input_schema": deepcopy(function.get("parameters") or {}),
+    }
+
+
+def _tool_def_name(tool_def: dict[str, Any]) -> str | None:
+    if not isinstance(tool_def, dict):
+        return None
+    function = tool_def.get("function")
+    if isinstance(function, dict):
+        name = function.get("name")
+        return name if isinstance(name, str) else None
+    name = tool_def.get("name")
+    return name if isinstance(name, str) else None
 
 
 def _resolve_handles(

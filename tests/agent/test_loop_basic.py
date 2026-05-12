@@ -133,7 +133,7 @@ def test_tool_loop_read_only_mode_filters_to_read_safe_tools(tmp_path):
     tool_names = [
         tool_def["function"]["name"] for tool_def in provider.calls[0]["tools"]
     ]
-    assert tool_names == ["read_only_tool"]
+    assert tool_names == ["read_only_tool", "ask_user"]
 
 
 def _make_tool_spec(
