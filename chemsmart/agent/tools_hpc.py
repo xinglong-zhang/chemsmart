@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import re
 import shlex
+from dataclasses import asdict
 from typing import Any
 
+from chemsmart.agent.error_summary import summarize_log
 from chemsmart.agent.transport import ExecTransport, SshExecTransport
 from chemsmart.agent.wizard.normalize import choose_queue
 from chemsmart.agent.wizard.parsers import (
@@ -22,6 +24,7 @@ from chemsmart.agent.wizard.probe import (
 )
 
 _OUTPUT_LIMIT = 4096
+_LOG_TAIL_OUTPUT_LIMIT = 8192
 _TRANSPORT_FACTORY = SshExecTransport
 _SUPPORTED_SCHEDULERS = ("slurm", "pbs", "sge", "lsf")
 _JOB_QUERY_PROBES = {
@@ -181,8 +184,59 @@ def scheduler_query(
     )
 
 
-def _truncate(text: str) -> str:
-    return text[:_OUTPUT_LIMIT]
+def log_tail(
+    server: str,
+    path: str,
+    lines: int = 200,
+    grep: str | None = None,
+    timeout_s: int = 15,
+) -> dict[str, Any]:
+    """Tail a remote log file and summarize common HPC error signatures."""
+
+    if lines < 1 or lines > 10000:
+        return {"error": "invalid_lines"}
+
+    grep_pattern = _compile_grep(grep)
+    if grep is not None and grep_pattern is None:
+        return {"error": "invalid_grep"}
+
+    transport = _make_transport()
+    outcome = _exec_probe(
+        transport,
+        server,
+        "query.log.tail",
+        timeout_s,
+        lines=str(lines),
+        path=path,
+    )
+    if "error" in outcome:
+        return outcome
+
+    content = outcome["stdout"]
+    filtered_lines = content.splitlines()
+    if grep_pattern is not None:
+        filtered_lines = [
+            line
+            for line in filtered_lines
+            if grep_pattern.search(line) is not None
+        ]
+    filtered_text = "\n".join(filtered_lines)
+
+    return {
+        "server": server,
+        "path": path,
+        "lines_requested": lines,
+        "lines_returned": len(filtered_lines),
+        "content_truncated": _truncate(filtered_text, _LOG_TAIL_OUTPUT_LIMIT),
+        "errors": [
+            asdict(signature) for signature in summarize_log(filtered_text)
+        ],
+        "duration_s": outcome["duration_s"],
+    }
+
+
+def _truncate(text: str, limit: int = _OUTPUT_LIMIT) -> str:
+    return text[:limit]
 
 
 def _normalize_scheduler_name(scheduler: str | None) -> str | None:
@@ -241,7 +295,7 @@ def _exec_probe(
         )
     except ProbeError as exc:
         return {
-            "error": "invalid_job_id" if "job_id" in slots else "probe_error",
+            "error": _probe_slot_error_name(slots, str(exc)),
             "message": str(exc),
             "probe": probe_name,
             "server": server,
@@ -285,7 +339,34 @@ def _exec_probe(
         "returncode": result.returncode,
         "stdout": result.stdout,
         "parsed": parsed,
+        "duration_s": result.duration_s,
     }
+
+
+def _compile_grep(grep: str | None) -> re.Pattern[str] | None:
+    if grep is None:
+        return None
+    if len(grep) > 128 or "\n" in grep or "\r" in grep:
+        return None
+    try:
+        return re.compile(grep, re.IGNORECASE)
+    except re.error:
+        return None
+
+
+def _probe_slot_error_name(
+    slots: dict[str, str],
+    message: str,
+) -> str:
+    lowered = message.lower()
+    for slot_name in slots:
+        if f"{slot_name} slot" in lowered or f"{slot_name!r}" in lowered:
+            return f"invalid_{slot_name}"
+    if len(slots) == 1:
+        return f"invalid_{next(iter(slots))}"
+    if "job_id" in slots:
+        return "invalid_job_id"
+    return "probe_error"
 
 
 def _normalize_job_result(

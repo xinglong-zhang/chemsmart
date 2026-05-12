@@ -111,10 +111,12 @@ def test_registry_default_registration_sets_read_tool_metadata():
     read_tool = registry.get_tool("read")
     ssh_probe_tool = registry.get_tool("ssh_probe")
     scheduler_query_tool = registry.get_tool("scheduler_query")
+    log_tail_tool = registry.get_tool("log_tail")
 
     assert read_tool is not None
     assert ssh_probe_tool is not None
     assert scheduler_query_tool is not None
+    assert log_tail_tool is not None
     assert read_tool.metadata == RuntimeToolMetadata(
         read_only=True,
         ui_summary_template="Read {path} L{start_line}-{end_line}",
@@ -128,10 +130,15 @@ def test_registry_default_registration_sets_read_tool_metadata():
         read_only=True,
         ui_summary_template="Scheduler query {scheduler} on {server}",
     )
+    assert log_tail_tool.metadata == RuntimeToolMetadata(
+        read_only=True,
+        ui_summary_template="Tail {path} on {server} ({lines}L)",
+    )
     assert all(
         tool.metadata == RuntimeToolMetadata()
         for tool in registry.list_tools()
-        if tool.name not in {"read", "ssh_probe", "scheduler_query"}
+        if tool.name
+        not in {"read", "ssh_probe", "scheduler_query", "log_tail"}
     )
 
 
