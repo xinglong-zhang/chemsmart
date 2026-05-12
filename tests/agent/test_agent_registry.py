@@ -109,17 +109,23 @@ def test_registry_default_registration_sets_read_tool_metadata():
     registry = ToolRegistry.default()
 
     read_tool = registry.get_tool("read")
+    ssh_probe_tool = registry.get_tool("ssh_probe")
 
     assert read_tool is not None
+    assert ssh_probe_tool is not None
     assert read_tool.metadata == RuntimeToolMetadata(
         read_only=True,
         ui_summary_template="Read {path} L{start_line}-{end_line}",
         side_effect=None,
     )
+    assert ssh_probe_tool.metadata == RuntimeToolMetadata(
+        read_only=True,
+        ui_summary_template="SSH probe {probe_name} on {server}",
+    )
     assert all(
         tool.metadata == RuntimeToolMetadata()
         for tool in registry.list_tools()
-        if tool.name != "read"
+        if tool.name not in {"read", "ssh_probe"}
     )
 
 
@@ -176,6 +182,26 @@ def test_assemble_tool_pool_runtime_mode_matrix(mode, tool_name, expected):
     names = {tool.name for tool in registry.assemble_tool_pool(mode)}
 
     assert (tool_name in names) is expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_present"),
+    [
+        (RuntimePermissionMode.READ_ONLY, True),
+        (RuntimePermissionMode.ACCEPT_EDITS, True),
+        (RuntimePermissionMode.BYPASS, True),
+        (RuntimePermissionMode.PLAN, False),
+    ],
+)
+def test_default_registry_exposes_ssh_probe_in_runtime_modes(
+    mode,
+    expected_present,
+):
+    registry = ToolRegistry.default()
+
+    names = {tool.name for tool in registry.assemble_tool_pool(mode)}
+
+    assert ("ssh_probe" in names) is expected_present
 
 
 def _make_tool_spec(

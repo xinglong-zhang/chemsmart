@@ -106,6 +106,15 @@ class ToolRegistry:
                 ),
             ),
             (
+                "ssh_probe",
+                "chemsmart.agent.tools_hpc",
+                "Run a predefined read-only probe on a remote HPC server. probe_name must be one of the catalog entries; free-form commands are not allowed.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template=("SSH probe {probe_name} on {server}"),
+                ),
+            ),
+            (
                 "extract_optimized_geometry",
                 "chemsmart.agent.tools",
                 None,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import string
@@ -21,6 +22,7 @@ _PATH_PATTERN = re.compile(r"^[/~][\w\-./@:+]*$")
 _FORBIDDEN_SLOT_CHARS = set(";&|`$(){}<>!\\'\"*\n\r\t")
 
 SlotValidator = Callable[[str], None]
+ProbeParser = Callable[[str], object]
 
 
 class ProbeError(Exception):
@@ -34,6 +36,17 @@ class ProbeSpec:
     template_id: str
     argv_template: tuple[str, ...]
     slot_validators: dict[str, SlotValidator]
+    parser: ProbeParser | None = None
+
+    @property
+    def command(self) -> str:
+        slot_names = _extract_slot_names(self.argv_template)
+        if slot_names:
+            joined = ", ".join(sorted(slot_names))
+            raise ProbeError(
+                f"Probe {self.template_id} requires slots: {joined}"
+            )
+        return shlex.join(self.argv_template)
 
 
 @dataclass(frozen=True)
@@ -85,6 +98,7 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         template_id="survey.slurm.sinfo_json",
         argv_template=("sinfo", "--json"),
         slot_validators={},
+        parser=json.loads,
     ),
     "survey.slurm.scontrol_partition": ProbeSpec(
         template_id="survey.slurm.scontrol_partition",
@@ -107,6 +121,7 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
         template_id="survey.pbs.qstat_json",
         argv_template=("qstat", "-Q", "-f", "-F", "json"),
         slot_validators={},
+        parser=json.loads,
     ),
     "survey.pbs.qstat_text": ProbeSpec(
         template_id="survey.pbs.qstat_text",
@@ -132,6 +147,7 @@ ALL_PROBE_SPECS: dict[str, ProbeSpec] = {
             "-json",
         ),
         slot_validators={},
+        parser=json.loads,
     ),
     "survey.lsf.bqueues_text": ProbeSpec(
         template_id="survey.lsf.bqueues_text",
