@@ -13,7 +13,16 @@ from pydantic import (
     TypeAdapter,
     create_model,
 )
-from pydantic.errors import PydanticInvalidForJsonSchema, PydanticSchemaGenerationError
+from pydantic.errors import (
+    PydanticInvalidForJsonSchema,
+    PydanticSchemaGenerationError,
+)
+
+from chemsmart.agent.permissions import RuntimePermissionMode
+from chemsmart.agent.tool_protocol import (
+    RuntimeToolMetadata,
+    is_allowed_in_mode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +38,7 @@ class ToolSpec:
     input_schema: type[ToolInputModel]
     accepts_kwargs: bool = False
     schema_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    metadata: RuntimeToolMetadata = field(default_factory=RuntimeToolMetadata)
 
     def openai_tool_def(self) -> dict[str, Any]:
         schema = self._schema_with_overrides()
@@ -103,18 +113,40 @@ class ToolRegistry:
     def get_tool(self, name: str) -> ToolSpec | None:
         return self._tools.get(name)
 
-    def openai_tool_defs(self) -> list[dict[str, Any]]:
-        return [tool.openai_tool_def() for tool in self.list_tools()]
+    def openai_tool_defs(
+        self,
+        tools: list[ToolSpec] | None = None,
+    ) -> list[dict[str, Any]]:
+        return [tool.openai_tool_def() for tool in tools or self.list_tools()]
 
-    def anthropic_tool_defs(self) -> list[dict[str, Any]]:
-        return [tool.anthropic_tool_def() for tool in self.list_tools()]
+    def anthropic_tool_defs(
+        self,
+        tools: list[ToolSpec] | None = None,
+    ) -> list[dict[str, Any]]:
+        return [
+            tool.anthropic_tool_def() for tool in tools or self.list_tools()
+        ]
 
     def tool_defs_for_provider(
-        self, provider_name: str
+        self,
+        provider_name: str,
+        tools: list[ToolSpec] | None = None,
     ) -> list[dict[str, Any]]:
         if provider_name == "anthropic":
-            return self.anthropic_tool_defs()
-        return self.openai_tool_defs()
+            return self.anthropic_tool_defs(tools)
+        return self.openai_tool_defs(tools)
+
+    def assemble_tool_pool(
+        self,
+        mode: RuntimePermissionMode,
+        profile: Any = None,
+    ) -> list[ToolSpec]:
+        del profile
+        return [
+            tool
+            for tool in self.list_tools()
+            if is_allowed_in_mode(tool, mode)
+        ]
 
     def normalize_args(
         self,
@@ -259,7 +291,11 @@ def _schema_friendly_annotation(
 ) -> Any:
     try:
         TypeAdapter(annotation).json_schema()
-    except (PydanticInvalidForJsonSchema, PydanticSchemaGenerationError, TypeError):
+    except (
+        PydanticInvalidForJsonSchema,
+        PydanticSchemaGenerationError,
+        TypeError,
+    ):
         logger.warning(
             "Falling back to Any for tool schema field %s.%s with annotation %r",
             tool_name,
