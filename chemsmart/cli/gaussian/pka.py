@@ -14,7 +14,6 @@ backend-independent ``chemsmart run pka`` command.
 """
 
 import logging
-import os
 from pathlib import Path
 
 import click
@@ -142,7 +141,11 @@ def submit(ctx, skip_completed, **kwargs):
     validate_reference_options(shared)
 
     # ── build settings ──
-    from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob, GaussianpKaJob
+    from chemsmart.jobs.gaussian.pka import (
+        GaussianpKaBatchJob,
+        GaussianpKaJob,
+        build_gaussian_pka_settings,
+    )
 
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -150,7 +153,7 @@ def submit(ctx, skip_completed, **kwargs):
     keywords = ctx.obj["keywords"]
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
-    pka_settings = _build_gaussian_pka_settings(
+    pka_settings = build_gaussian_pka_settings(
         proton_index, shared, opt_settings, project_settings.sp_settings()
     )
 
@@ -223,7 +226,11 @@ def batch(ctx, skip_completed, **kwargs):
         )
 
     from chemsmart.io.molecules.structure import Molecule
-    from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob, GaussianpKaJob
+    from chemsmart.jobs.gaussian.pka import (
+        GaussianpKaBatchJob,
+        GaussianpKaJob,
+        build_gaussian_pka_settings,
+    )
     from chemsmart.utils.utils import (
         parse_pka_table,
         validate_pka_table_entries,
@@ -285,7 +292,7 @@ def batch(ctx, skip_completed, **kwargs):
         row_opt_settings.charge = int(entry.charge)
         row_opt_settings.multiplicity = int(entry.multiplicity)
 
-        pka_settings = _build_gaussian_pka_settings(
+        pka_settings = build_gaussian_pka_settings(
             proton_index=int(entry.proton_index),
             shared=shared,
             opt_settings=row_opt_settings,
@@ -311,120 +318,30 @@ def batch(ctx, skip_completed, **kwargs):
     )
 
 
-def _build_gaussian_pka_settings(
-    proton_index, shared, opt_settings, sp_settings=None
-):
-    """Build a GaussianpKaJobSettings from shared options and project."""
-    import inspect
-
-    from chemsmart.jobs.gaussian.settings import (
-        GaussianJobSettings,
-        GaussianpKaJobSettings,
-    )
-
-    cli_only = {"reference_color_code", "skip_completed"}
-    rename = {
-        "reference": "reference_file",
-        "delta_g_proton": "delta_G_proton",
-    }
-
-    pka_kwargs = {}
-    for k, v in shared.items():
-        if k in cli_only:
-            continue
-        pka_kwargs[rename.get(k, k)] = v
-
-    gs_params = {
-        name
-        for name, param in inspect.signature(
-            GaussianJobSettings.__init__
-        ).parameters.items()
-        if name != "self"
-        and param.kind
-        not in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        )
-    }
-    opt_kwargs = {
-        k: v
-        for k, v in vars(opt_settings).items()
-        if k in gs_params and v is not None and k not in pka_kwargs
-    }
-
-    def _first_non_none(*values):
-        for val in values:
-            if val is not None:
-                return val
-        return None
-
-    solvent_model = _first_non_none(
-        pka_kwargs.get("solvent_model"),
-        getattr(opt_settings, "solvent_model", None),
-        getattr(sp_settings, "solvent_model", None) if sp_settings else None,
-        "SMD",
-    )
-    solvent_id = _first_non_none(
-        pka_kwargs.get("solvent_id"),
-        getattr(opt_settings, "solvent_id", None),
-        getattr(sp_settings, "solvent_id", None) if sp_settings else None,
-        "water",
-    )
-
-    pka_kwargs["solvent_model"] = solvent_model
-    pka_kwargs["solvent_id"] = solvent_id
-
-    return GaussianpKaJobSettings(
-        proton_index=proton_index,
-        **pka_kwargs,
-        **opt_kwargs,
-    )
-
-
 def _create_pka_jobs_from_molecules(
     ctx, pka_molecules, shared, skip_completed, **kwargs
 ):
     """Create one GaussianpKaJob per PKaMolecule."""
-    from chemsmart.jobs.gaussian.pka import GaussianpKaBatchJob, GaussianpKaJob
+    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 
     validate_reference_options(shared)
 
     project_settings = ctx.obj["project_settings"]
-    opt_settings = project_settings.opt_settings()
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
-    opt_settings = opt_settings.merge(job_settings, keywords=keywords)
     jobrunner = ctx.obj["jobrunner"]
-    serial_mode = get_serial_mode(jobrunner)
-
     filename = ctx.obj.get("filename", "")
-    base_name = os.path.splitext(os.path.basename(filename))[0]
 
-    jobs = []
-    for idx, pka_mol in enumerate(pka_molecules, start=1):
-        mol_label = f"{base_name}_frag{idx}_pka"
-        pka_settings = _build_gaussian_pka_settings(
-            pka_mol.proton_index,
-            shared,
-            opt_settings,
-            project_settings.sp_settings(),
-        )
-
-        jobs.append(
-            GaussianpKaJob(
-                molecule=pka_mol,
-                settings=pka_settings,
-                label=mol_label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                **kwargs,
-            )
-        )
-
-    return GaussianpKaBatchJob(
-        jobs=jobs,
-        run_in_serial=serial_mode.run_in_serial,
+    return GaussianpKaJob.from_molecules(
+        pka_molecules=pka_molecules,
+        shared=shared,
+        project_settings=project_settings,
+        job_settings=job_settings,
+        keywords=keywords,
         jobrunner=jobrunner,
+        filename=filename,
+        skip_completed=skip_completed,
+        **kwargs,
     )
 
 
