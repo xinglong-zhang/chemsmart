@@ -235,61 +235,94 @@ make clean
 
 ## AI Agent (`chemsmart agent`)
 
-The fork adds an AI planning agent that translates natural-language requests into validated Gaussian/ORCA input files and, optionally, HPC submissions.
+A natural-language agent that plans and executes Gaussian/ORCA workflows and HPC operations. It chains
+chemistry tools (input generation, dry-runs, submissions) with HPC inspection tools (scheduler state,
+job status, log tailing) under a permission model that keeps risky actions auditable.
 
-#### Setup
-
-1. **Copy and fill the credentials file:**
-   ```bash
-   cp api.env.example api.env
-   # Edit api.env: set AI_PROVIDER and the corresponding API key
-   ```
-
-2. **Set the provider when running:**
-   ```bash
-   export AI_PROVIDER=openai   # or: anthropic
-   ```
-
-#### Quick start
+### Setup
 
 ```bash
-# Dry-submit: plan and generate inputs, do not submit to HPC
-AI_PROVIDER=openai chemsmart agent run --dry-submit "optimize examples/h2o.xyz with B3LYP/6-31G*"
-
-# Full run (requires configured HPC server)
-AI_PROVIDER=openai chemsmart agent run "optimize examples/h2o.xyz with B3LYP/6-31G*"
-
-# List supported tools
-chemsmart agent tools
-
-# System health check
-AI_PROVIDER=openai chemsmart agent doctor
+pip install -e ".[agent-tui]"            # interactive TUI extra (Textual/Rich)
+cp api.env.example api.env               # then set ai_api_key=...
+export AI_PROVIDER=openai                # or: anthropic
+chemsmart agent doctor                   # verify provider, SSH, permissions
 ```
 
-#### Supported workflows
+### Entry points
 
-| Request type | Example |
+| Command | Purpose |
 |---|---|
-| Geometry optimization | `"optimize h2o.xyz with B3LYP/6-31G*"` |
-| Opt + frequency | `"optimize and compute frequencies for h2o.xyz"` |
-| Transition state search | `"find the transition state for carbene.xyz"` |
-| IRC | `"run IRC from the TS in carbene.xyz"` |
-| ORCA single-point | `"ORCA DLPNO-CCSD(T)/def2-TZVP single-point on h2o.xyz"` |
-| Cross-program | `"Gaussian opt then ORCA high-level SP on h2o.xyz"` |
-| Solvent | `"optimize h2o.xyz in water with SMD"` |
+| `chemsmart agent` | Launch interactive Textual TUI (`--plain` for inline mode) |
+| `chemsmart agent ask "..."` | One-shot request; print result and exit |
+| `chemsmart agent run --dry-submit "..."` | Plan + generate inputs, skip HPC submit |
+| `chemsmart agent resume <session-id>` | Continue a paused session |
+| `chemsmart agent sessions` | List recent sessions |
+| `chemsmart agent tools` | Show all registered tools |
+| `chemsmart agent doctor` | Provider/SSH/permission health check |
 
-#### Session artifacts
+### Permission modes
 
-Each run writes to `~/.chemsmart/agent/sessions/<timestamp>/`:
-- `decision_log.jsonl` — full plan, tool calls, and critic verdict
-- `session_metadata.json` — summary (intent, timing, critic confidence, blocked status)
-- Generated `.com` / `.inp` input files
+The agent is gated by a runtime permission mode. Pick the mode that matches how much autonomy you want:
 
-#### Notes
+| Mode | Auto-allowed | Requires approval |
+|---|---|---|
+| `read-only` | `read`, `ssh_probe`, `scheduler_query`, `log_tail` | edits, submits, local runs |
+| `accept-edits` | read-only set + `edit`/`write` | `run_local`, `submit_hpc` |
+| `bypass` | everything **except** the `NEVER_AUTO_ALLOW` denylist (`pip install`, `sudo`, `rm -rf /`, `curl | sh`, `chmod 777`, etc.) | dangerous shell commands |
+| `plan` | nothing — planning only, no execution | every tool |
 
-- `--dry-submit` stops before HPC submission; use it to review inputs before committing compute time.
-- Sessions can be resumed: `chemsmart agent resume <session-id>`
-- HPC submission requires a configured server in `~/.chemsmart/`.
+Pass with `--mode read-only` on any CLI command, or toggle inside the TUI.
+
+### Tool catalog
+
+| Group | Tools | What they do |
+|---|---|---|
+| Chemistry | `build_molecule`, `recommend_method`, `build_gaussian_settings`, `build_orca_settings`, `build_job`, `dry_run_input`, `extract_optimized_geometry`, `validate_runtime` | Compose and validate Gaussian/ORCA jobs from natural language |
+| Execution | `run_local`, `submit_hpc`, `wizard_probe`/`wizard_write` | Run jobs locally or submit to HPC; profile new servers interactively |
+| HPC inspection | `read`, `ssh_probe`, `scheduler_query`, `log_tail` | Cat local files, run safelist SSH probes, query SLURM/PBS/SGE/LSF normalized output, tail remote logs with auto error classification |
+| Control flow | `ask_user` (virtual) | Pause loop and ask the user when a structured slot is missing (server, job ID, log path, scheduler kind) |
+
+### How the agent decides
+
+The system prompt enforces guardrails that shape behavior beyond raw tool access:
+
+- **Literal tool-result discipline** — never overclaim past what a tool returned (`Queued:0,Running:2` stays "0 queued, 2 running", not "almost full").
+- **Scope refusal** — off-topic asks (food, weather, jokes) get a fixed refusal pointing back to chemistry/HPC.
+- **Install policy** — the agent never prints `pip install`/`apt install`/`brew install` commands in prose; it points to docs.
+- **Read-only initiative** — when the target is concrete (named server + clear queue/job/log intent), it runs the tool instead of asking.
+- **Advisory protection** — questions like "왜 walltime 자꾸 초과뜨지?" / "why does SCF diverge?" get domain analysis directly, not "which server?".
+- **Structured ambiguity** — missing server/job_id/log_path/scheduler/queue is routed through `ask_user`, not prose clarification.
+- **Conversation memory** — the last server, scheduler kind, job ID, log path, and probe error persist across turns. Follow-ups like "그 job 다시" resolve automatically.
+- **Remote-path precedence** — once `last_server` is known, paths route through `log_tail(server=...)` instead of local `read`.
+
+### Example session
+
+```bash
+$ chemsmart agent --mode read-only
+
+> chemnode1 PBS 큐 상태 봐줘
+[scheduler_query(server="chemnode1", scheduler="pbs") → ok]
+0 queued, 2 running on workq.
+                                    PBS · chemnode1 · conf=high
+
+> 내 job 4.chemnode1 로그 마지막 50줄
+[scheduler_query(job_id="4.chemnode1") → Output_Path=/home/x/STDIN.o4]
+[log_tail(server="chemnode1", path="/home/x/STDIN.o4", lines=50) → ok, 0 errors]
+…(last 50 lines)…
+                                    PBS · chemnode1 · job 4.chemnode1 · log STDIN.o4 · conf=high
+
+> 서버 상태 봐줘
+[ask_user(question="Which server?", options=["chemnode1","chemnode2"])]
+```
+
+### Session artifacts
+
+Every turn writes `~/.chemsmart/agent/sessions/<id>/`:
+- `decision_log.jsonl` — append-only event log: plan, tool requests, tool outcomes, ask/answer pairs, critic verdict
+- `session_metadata.json` — intent, timing, blocked status, model usage
+- Generated `.com` / `.inp` files for submitted jobs
+
+Resume with `chemsmart agent resume <id>` — conversation memory and entity slots reload from the decision log.
 
 ## Testing Installations
 
@@ -304,28 +337,6 @@ to get the current version of CHEMSMART, and
 chemsmart --help
 ```
 to get the options for running CHEMSMART package.
-
-## AI Agent (preview)
-
-CHEMSMART now ships an opt-in natural-language agent layer that can plan Gaussian/ORCA workflows, generate input files, validate runtime prerequisites, and optionally hand off to HPC submission. The interactive TUI is bundled behind the optional `[agent-tui]` extra.
-
-Install the preview layer with:
-
-```bash
-pip install -e ".[agent-tui]"
-export AI_PROVIDER=openai  # anthropic is also supported
-# add ai_api_key=... to api.env
-```
-
-60-second quickstart:
-
-```bash
-AI_PROVIDER=openai chemsmart agent doctor
-AI_PROVIDER=openai chemsmart agent ask "Recommend method/basis for a Cope rearrangement TS"
-AI_PROVIDER=openai chemsmart agent run "single-point on examples/h2o.xyz at B3LYP/6-31G(d) Gaussian" --dry-submit
-```
-
-After a run, inspect `~/.chemsmart/agent/sessions/<id>/decision_log.jsonl` for the audit trail; the dry-run input file path is printed to stdout. For the full golden path, see [docs/agent-quickstart.md](docs/agent-quickstart.md).
 
 ## Usage
 
