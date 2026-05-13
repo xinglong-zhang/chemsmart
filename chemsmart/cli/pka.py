@@ -539,36 +539,6 @@ def validate_analyze_files(
         )
 
 
-def _detect_program_from_outputs(filepaths):
-    detected = {}
-    programs = set()
-    for fp in filepaths:
-        p = get_program_type_from_file(fp)
-        detected[fp] = p
-        if p != "unknown":
-            programs.add(p)
-
-    if not programs:
-        raise click.UsageError(
-            "Could not detect output-file program type from supplied "
-            "files.  Supported: Gaussian and ORCA output files."
-        )
-    if len(programs) > 1:
-        pairs = ", ".join(f"{k}: {v}" for k, v in detected.items())
-        raise click.UsageError(
-            "Supplied files contain mixed program types.  "
-            "Use outputs from a single QC program.\n"
-            f"Detected: {pairs}"
-        )
-    program = next(iter(programs))
-    if program not in {"gaussian", "orca"}:
-        raise click.UsageError(
-            f"Detected unsupported program '{program}'.  "
-            "Only Gaussian and ORCA are supported."
-        )
-    return program
-
-
 def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
     """Infer companion output paths from HA and HRef gas-phase paths.
 
@@ -625,7 +595,7 @@ def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
 
 def _resolve_output_cls(output_files):
     """Return the correct pKa output class for the detected backend."""
-    program = _detect_program_from_outputs(output_files)
+    program = get_program_type_from_file(output_files)
     logger.info(f"Auto-detected output program: {program}")
     if program == "gaussian":
         from chemsmart.io.gaussian.output import Gaussian16pKaOutput
