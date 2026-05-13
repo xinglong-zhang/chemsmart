@@ -119,6 +119,20 @@ class TestRouteString:
         assert r1g.additional_opt_options_in_route is None
         # TODO: TD-DFT route to be specified
 
+    def test_read_route_string_oniom_layer_methods_and_bases(self):
+        s1qmmm = "# oniom(b3lyp/6-31g(d,p):uff) opt"
+        r1qmmm = GaussianRoute(s1qmmm)
+        assert r1qmmm.functional == "b3lyp:uff"
+        assert r1qmmm.basis == "6-31g(d,p):none"
+        s2qmmm = "# oniom(mp2/6-31g:hf/6-31g:am1) geom=connectivity"
+        r2qmmm = GaussianRoute(s2qmmm)
+        assert r2qmmm.functional == "mp2:hf:am1"
+        assert r2qmmm.basis == "6-31g:6-31g:none"
+        s3qmmm = "# oniom(mp2/6-31g:hf/6-31g) geom=connectivity"
+        r3qmmm = GaussianRoute(s3qmmm)
+        assert r3qmmm.functional == "mp2:hf"
+        assert r3qmmm.basis == "6-31g:6-31g"
+
     def test_read_route_string_nonstandard(self):
         s1 = "# pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly"
         r1 = GaussianRoute(s1)

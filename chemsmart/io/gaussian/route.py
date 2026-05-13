@@ -133,6 +133,16 @@ class GaussianRoute:
         """
         Extract semi-empirical method specification.
         """
+        oniom_method, _ = self._get_oniom_layer_methods_and_bases()
+        if oniom_method is not None:
+            high_layer_method = oniom_method.split(":")[0]
+            if any(
+                semiemp.lower() in high_layer_method
+                for semiemp in GAUSSIAN_SEMIEMPIRICAL
+            ):
+                return oniom_method.upper()
+            return None
+
         for each_input in self.route_inputs:
             if any(
                 semiemp.lower() in each_input
@@ -249,12 +259,67 @@ class GaussianRoute:
         """
         Extract ab initio method from route specification.
         """
+        oniom_method, _ = self._get_oniom_layer_methods_and_bases()
+        if oniom_method is not None and any(
+            ab in oniom_method for ab in GAUSSIAN_AB_INITIO
+        ):
+            return oniom_method
         # get ab initio method by looking through the route string
         ab_initio = None
         for each_input in self.route_inputs:
             if any(ab in each_input for ab in GAUSSIAN_AB_INITIO):
                 ab_initio = each_input
         return ab_initio
+
+    def _get_oniom_layer_methods_and_bases(self):
+        """Return layer method/basis stacks from an ONIOM route."""
+        marker = "oniom("
+        start = self.route_string.find(marker)
+        if start == -1:
+            return None, None
+        content = []
+        depth = 0
+        for char in self.route_string[start + len(marker) :]:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            content.append(char)
+        else:
+            return None, None
+        methods = []
+        bases = []
+        for layer in self._split_top_level("".join(content), sep=":"):
+            method_basis = self._split_top_level(layer, sep="/")
+            if method_basis:
+                methods.append(method_basis[0])
+                bases.append(
+                    "/".join(method_basis[1:])
+                    if len(method_basis) > 1
+                    else "none"
+                )
+        if not methods:
+            return None, None
+        return ":".join(methods), ":".join(bases)
+
+    @staticmethod
+    def _split_top_level(text, sep):
+        """Split text on a separator while ignoring nested parentheses."""
+        parts = []
+        start = 0
+        depth = 0
+        for i, char in enumerate(text):
+            if char == "(":
+                depth += 1
+            elif char == ")" and depth > 0:
+                depth -= 1
+            elif char == sep and depth == 0:
+                parts.append(text[start:i].strip())
+                start = i + 1
+        parts.append(text[start:].strip())
+        return [part for part in parts if part]
 
     def get_functional_and_basis(self):
         """
@@ -263,7 +328,15 @@ class GaussianRoute:
         functional = None
         basis = None
         dispersion = None
+        oniom_functional, oniom_basis = (
+            self._get_oniom_layer_methods_and_bases()
+        )
+        if oniom_functional is not None:
+            functional = oniom_functional
+            basis = oniom_basis
         for each_input in self.route_inputs:
+            if oniom_functional is not None and "oniom" in each_input:
+                continue
             # Extract functional and basis from method/basis format
             if "/" in each_input:
                 func_basis = each_input.split(
@@ -279,9 +352,6 @@ class GaussianRoute:
                     # note if the basis set for density fitting is written
                     basis = f"{func_basis[1]}/{func_basis[2]}"
                     # as 'def2tzvp fit', then the job fails to run
-                elif "oniom" in each_input:
-                    functional = func_basis[0].replace("oniom(", "")
-                    basis = func_basis[1].split(":")[0]
             else:  # '/' not in route
                 if any(
                     functional in each_input
@@ -310,7 +380,13 @@ class GaussianRoute:
             }
             for key, suffix in _dispersion_suffix_map.items():
                 if key in dispersion:
-                    functional = f"{functional}-{suffix}"
+                    if ":" in functional:
+                        layers = functional.split(":")
+                        functional = ":".join(
+                            [f"{layers[0]}-{suffix}", *layers[1:]]
+                        )
+                    else:
+                        functional = f"{functional}-{suffix}"
                     break
 
         return functional, basis
