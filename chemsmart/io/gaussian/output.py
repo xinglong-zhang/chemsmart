@@ -2559,7 +2559,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
     # Multi-file pKa thermochemistry support
     # =========================================================================
 
-    @classmethod
     def compute_pka_thermochemistry(
         cls,
         ha_file=None,
@@ -2753,7 +2752,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
 
         return outputs
 
-    @classmethod
     def compute_pka(
         cls,
         ha_gas_file,
@@ -2981,7 +2979,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
             "E_gas_Ref_au": E_gas_Ref_au,
         }
 
-    @classmethod
     def print_pka_summary(
         cls,
         ha_gas_file,
