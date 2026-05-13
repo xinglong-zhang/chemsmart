@@ -6,8 +6,8 @@ from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.jobs.gaussian.settings import (
     GaussianJobSettings,
-    GaussianpKaJobSettings,
     GaussianLinkJobSettings,
+    GaussianpKaJobSettings,
     GaussianQMMMJobSettings,
 )
 from chemsmart.jobs.settings import read_molecular_job_yaml
@@ -1626,7 +1626,7 @@ class TestGaussianpKaJobSettings:
         assert protonated_job.label == "acetic_acid_pka_HA_opt"
         assert conjugate_base_job.label == "acetic_acid_pka_A_opt"
 
-        
+
 class TestGaussianLinkJobSettingsGuess:
     """Tests for guess= formatting in GaussianLinkJobSettings route strings."""
 

@@ -289,31 +289,25 @@ def click_pka_analyze_options(f):
 def build_per_entry_subcommands(
     ctx, filepath, charge, multiplicity, proton_index
 ):
-    """Build a per-entry subcommand list for ``chemsmart sub`` batch mode.
+    """Build per-entry subcommands for batch execution.
 
-    When ``chemsmart sub gaussian … pka … batch`` (or its ORCA equivalent)
-    is used, each submitted cluster job should process **only its own CSV
-    entry**, not re-run the entire batch.  This helper deep-copies the
-    recorded subcommand chain and patches it so the reconstructed CLI
-    becomes the equivalent of::
-
-        chemsmart run gaussian -f <filepath> -c <charge> -m <mult> \\
-            pka -pi <proton_index> <shared pka options…>
-
-    i.e. the single-molecule ``pka`` path (``invoke_without_command``
-    falls through to ``submit``).
+    Generates a submission command for each entry in the .csv file by mapping entry-specific job
+    parameters (file path, charge, multiplicity, proton index) onto the
+    recorded CLI invocation. Each generated subcommand set targets a single
+    molecule, enabling parallel or sequential batch processing without
+    re-running the full input table.
 
     Args:
-        ctx: Click context whose ``ctx.obj["subcommand"]`` contains the
-            full subcommand chain recorded by ``MyGroup``/``MyCommand``.
-        filepath: Per-entry molecule file path.
-        charge: Per-entry charge.
-        multiplicity: Per-entry multiplicity.
-        proton_index: Per-entry proton index.
+        ctx: Click context whose ``ctx.obj["subcommand"]`` stores the recorded
+            command chain for the current invocation.
+        filepath: Path to the entry's structure file.
+        charge: Entry-specific molecular charge.
+        multiplicity: Entry-specific spin multiplicity.
+        proton_index: Entry-specific proton index to remove.
 
     Returns:
         list[dict]: Patched subcommand chain suitable for
-        ``CtxObjArguments.reconstruct_command_line()``.
+            ``CtxObjArguments.reconstruct_command_line()``.
     """
     import copy
 
