@@ -105,13 +105,13 @@ MEM_GB
 
 **Type:** Integer
 
-**Description:** Amount of memory to request in gigabytes (GB). To set this correctly, users should first find out
-their cluster specifications — in particular, the amount of memory available per CPU core on the target partition.
-The value of ``MEM_GB`` should be set to slightly less than ``NUM_CORES * memory_per_core`` to stay within the
-node's memory limit. For example, if a node provides approximately 6 GB per core and you are requesting
-``NUM_CORES: 64``, then ``MEM_GB`` should be set to approximately ``375`` (i.e., slightly less than
-``64 × 6 = 384``). Contact your system administrator or consult your cluster's documentation to determine the
-memory-per-core ratio for the partition you are using.
+**Description:** Amount of memory to request in gigabytes (GB). To set this correctly, users should first find out their
+cluster specifications — in particular, the amount of memory available per CPU core on the target partition. The value
+of ``MEM_GB`` should be set to slightly less than ``NUM_CORES * memory_per_core`` to stay within the node's memory
+limit. For example, if a node provides approximately 6 GB per core and you are requesting ``NUM_CORES: 64``, then
+``MEM_GB`` should be set to approximately ``375`` (i.e., slightly less than ``64 × 6 = 384``). Contact your system
+administrator or consult your cluster's documentation to determine the memory-per-core ratio for the partition you are
+using.
 
 **Examples:**
 
@@ -745,18 +745,25 @@ When customizing server configuration files:
 
 #. **Scheduler-specific settings**: Adjust SCHEDULER, QUEUE_NAME, and SUBMIT_COMMAND based on your cluster's job
    scheduler.
+
 #. **Resource limits**: Set NUM_HOURS, MEM_GB, NUM_CORES to match your cluster's queue limits and job requirements.
-   Determine the memory-per-core ratio for your partition and set ``MEM_GB`` to slightly less than
-   ``NUM_CORES × memory_per_core``. For example, ``NUM_CORES: 64`` with ~6 GB/core → ``MEM_GB: 375``.
+   Determine the memory-per-core ratio for your partition and set ``MEM_GB`` to slightly less than ``NUM_CORES ×
+   memory_per_core``. For example, ``NUM_CORES: 64`` with ~6 GB/core → ``MEM_GB: 375``.
+
 #. **Module system**: Update MODULES sections to load the correct versions of libraries and tools available on your
    system.
+
 #. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. This
    will be automatically updated when configuring CHEMSMART during the configuration phase.
+
 #. **Scratch directories**: Set SCRATCH environment variables to valid paths on your system. Some HPC systems provide
    node-local scratch (e.g., ``/tmp``) while others use network-attached scratch directories.
+
 #. **Conda environments**: Adjust conda activation commands to match your conda installation path and environment names.
+
 #. **Project accounting**: Add or remove PROJECT field based on whether your cluster requires project/account numbers
    for job submission.
+
 #. **MPI configuration**: For ORCA, ensure the MPI library paths are correctly set in ENVARS to match your system's MPI
    installation.
 
