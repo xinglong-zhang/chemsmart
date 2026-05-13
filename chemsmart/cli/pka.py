@@ -380,35 +380,17 @@ def resolve_proton_index(filename, proton_index, color_code):
 def resolve_reference_proton(
     reference, reference_proton_index, reference_color_code
 ):
-    if reference_proton_index is not None:
-        return reference_proton_index
-    if reference is None:
-        return None
+    from chemsmart.io.file import PKaCDXFile
 
-    if reference.endswith((".cdx", ".cdxml")):
-        from chemsmart.io.file import PKaCDXFile
-
-        ref_cdx = PKaCDXFile(filename=reference)
-        try:
-            ref_pka_mol = ref_cdx.get_pka_molecules(
-                index="-1", color_code=reference_color_code
-            )
-            reference_proton_index = ref_pka_mol.proton_index
-            logger.info(
-                f"Detected reference proton index {reference_proton_index} from CDXML colour in {reference}."
-            )
-            return reference_proton_index
-        except ValueError as exc:
-            raise click.UsageError(
-                f"Could not auto-detect reference proton from CDXML colour: {exc}\n"
-                "Use -rpi/--reference-proton-index to specify the proton explicitly."
-            )
-    elif reference_color_code is not None:
-        raise click.UsageError(
-            "-rcc/--reference-color-code can only be used when --reference is a .cdx/.cdxml file."
+    try:
+        return PKaCDXFile.resolve_reference_proton(
+            reference, reference_proton_index, reference_color_code
         )
-
-    return None
+    except ValueError as exc:
+        raise click.UsageError(
+            f"Could not auto-detect reference proton from CDXML colour: {exc}\n"
+            "Use -rpi/--reference-proton-index to specify the proton explicitly."
+        )
 
 
 def validate_reference_options(shared):
@@ -491,7 +473,7 @@ def run_pka_from_output_table(
     elif program == "orca":
         from chemsmart.io.orca.output import ORCApKaOutput as OutputCls
     else:
-        raise ValueError(f"Unknown program: {program}")
+        raise ValueError(f"Unsupported program: {program}")
 
     logger.info(
         f"Computing pKa for {len(entries)} systems "

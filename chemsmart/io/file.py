@@ -593,6 +593,44 @@ class PKaCDXFile(CDXFile):
             "calculations (or use a .cdxml file with a coloured proton)."
         )
 
+    @classmethod
+    def resolve_reference_proton(
+        cls, reference, reference_proton_index, reference_color_code
+    ):
+        """Resolve reference proton index for CDX/CDXML files.
+
+        Args:
+            reference: Reference structure file path.
+            reference_proton_index: 1-based proton index supplied by user.
+            reference_color_code: CDXML color-table index used for detection.
+
+        Returns:
+            int | None: Resolved reference proton index, or None when reference
+                is not provided.
+
+        Raises:
+            ValueError: If CDXML parsing fails or color-code usage is invalid.
+        """
+        if reference_proton_index is not None:
+            return reference_proton_index
+        if reference is None:
+            return None
+
+        if reference.endswith((".cdx", ".cdxml")):
+            ref_cdx = cls(filename=reference)
+            ref_pka_mol = ref_cdx.get_pka_molecules(
+                index="-1", color_code=reference_color_code
+            )
+            return ref_pka_mol.proton_index
+
+        if reference_color_code is not None:
+            raise ValueError(
+                "-rcc/--reference-color-code can only be used when --reference "
+                "is a .cdx/.cdxml file."
+            )
+
+        return None
+
     def parse_cdxml_element_colors(self):
         """Parse the CDXML file and return per-atom colour information.
 
