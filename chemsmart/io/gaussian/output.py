@@ -2559,8 +2559,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
     # Multi-file pKa thermochemistry support
     # =========================================================================
 
+    @staticmethod
     def compute_pka_thermochemistry(
-        cls,
         ha_file=None,
         a_file=None,
         href_file=None,
@@ -2622,7 +2622,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             """Extract thermochemistry for a species."""
             if file_path is None:
                 return None
-            output = cls(filename=file_path, **common_kwargs)
+            output = Gaussian16pKaOutput(filename=file_path, **common_kwargs)
             return {
                 "name": name,
                 "E": output.electronic_energy_in_units,
@@ -2820,10 +2820,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
             pressure (float): Pressure in atm. Default 1.0 atm.
-            cutoff_entropy_grimme (float): Cutoff frequency for entropy
-                in cm^-1 using Grimme's quasi-RRHO method. Default 100.0.
-            cutoff_enthalpy (float): Cutoff frequency for enthalpy
-                in cm^-1 using Head-Gordon's method. Default 100.0.
+            cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
+            cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
 
         Returns:
             dict: Dictionary containing pKa calculation results.
@@ -2979,6 +2977,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             "E_gas_Ref_au": E_gas_Ref_au,
         }
 
+    @classmethod
     def print_pka_summary(
         cls,
         ha_gas_file,
