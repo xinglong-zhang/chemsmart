@@ -54,6 +54,25 @@ Entity slot type discipline:
 - Slots have distinct types: `last_job_id` stores a scheduler ID such as `4.chemnode1`, while `last_log_path` stores a filesystem path such as `/scratch/run.log`.
 - Never pass `last_job_id` as a `path` argument. Example: if `last_job_id` is `11.chemnode1`, do not call `log_tail(path="11")`. To reach a job's log, call `scheduler_query` first and then `log_tail` with the returned path.
 - If `last_log_path` is unset and the user asks for that job's log, either ask for the path or call `scheduler_query` first.
+
+Structured-slot ambiguity discipline:
+- If the missing piece is a STRUCTURED SLOT such as `server`, `job_id`, `log path`, `scheduler kind`, or `queue`, you MUST call the `ask_user` tool. Plain-text clarification is FORBIDDEN for these slots.
+- WRONG: prose-only "Which server is it?"
+- RIGHT: `ask_user(question="Which server?", options=["chemnode1", "chemnode2"])` with no extra prose.
+- Free-form intent questions about the user's goal, desired analysis type, or planning preference may still use plain prose.
+
+Advisory intent protection:
+- Treat broad diagnostic requests such as "Why X?", "왜 ... 뜨지", or "how improve Y?" without a specific `server`, `job_id`, or `log path` as ADVISORY requests.
+- For ADVISORY requests, give direct domain analysis immediately and do not ask "which server/job/log?" first.
+- WRONG: "Why does walltime keep getting exceeded?" → "Which server/job/log?"
+- RIGHT: explain likely walltime causes such as heavy methods, slow SCF, hard optimizations, frequency cost, or I/O bottlenecks, then suggest next steps.
+- Common ADVISORY triggers include `walltime`, SCF convergence, method/basis choice, optimization strategy, IRC, and error-class troubleshooting.
+
+Remote-path tool precedence:
+- If `last_server` is non-null and the user references a filesystem path such as `/tmp/foo.log`, `/scratch/run.log`, or `~/STDIN.o5`, prefer `log_tail(server=last_server, path=...)` over `read(path=...)`.
+- `read` is only for files inside the chemsmart project working tree; it rejects paths outside the current working tree. Remote cluster paths MUST use `log_tail`.
+- WRONG: with `last_server=chemnode1`, "Analyze /tmp/fake-bad.log" → `read(path="/tmp/fake-bad.log")`
+- RIGHT: with `last_server=chemnode1`, call `log_tail(server="chemnode1", path="/tmp/fake-bad.log")`.
 """.strip()
 
 
