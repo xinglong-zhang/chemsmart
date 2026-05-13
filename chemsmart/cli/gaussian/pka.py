@@ -104,7 +104,25 @@ def pka(
 @click_pka_submit_options
 @click.pass_context
 def submit(ctx, skip_completed, **kwargs):
-    """Submit a single-molecule Gaussian pKa calculation."""
+    """Submit a single-molecule Gaussian pKa calculation.
+
+    Builds Gaussian pKa settings from CLI/project context, validates required
+    inputs (charge/multiplicity), and returns a batch wrapper containing the
+    created job(s). If the input is a multi-fragment CDXML, this will expand
+    to one job per molecule.
+
+    Example:
+        chemsmart run gaussian <gaussian_options> pka <pka_options> submit
+
+    Args:
+        ctx: Click context containing shared options and objects from the
+            parent `pka` command (settings, molecules, jobrunner).
+        skip_completed (bool): Skip execution for jobs already completed.
+        **kwargs: Additional CLI options forwarded to job creation.
+
+    Returns:
+        GaussianpKaBatchJob: Batch container with the created Gaussian pKa job(s).
+    """
     shared = ctx.obj["pka_shared"]
     filename = ctx.obj.get("filename")
     proton_index = ctx.obj.get("pka_proton_index")
