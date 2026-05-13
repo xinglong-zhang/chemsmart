@@ -209,16 +209,6 @@ def click_pka_proton_options(f):
     return wrapper
 
 
-def click_pka_submit_options(f):
-    """Options specific to the ``submit`` / ``batch`` subcommand layer."""
-
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper
-
-
 def click_pka_analyze_options(f):
     f = click.option(
         "-rp",

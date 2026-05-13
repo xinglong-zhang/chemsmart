@@ -25,7 +25,6 @@ from chemsmart.cli.pka import (
     build_per_entry_subcommands,
     click_pka_proton_options,
     click_pka_shared_options,
-    click_pka_submit_options,
     resolve_proton_index,
     validate_reference_options,
 )
@@ -44,7 +43,6 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_pka_shared_options
 @click_pka_proton_options
-@click_pka_submit_options
 @click.pass_context
 def pka(
     ctx,
@@ -130,7 +128,6 @@ def pka(
 
 @pka.command("submit", cls=MyCommand)
 @click_job_options
-@click_pka_submit_options
 @click.pass_context
 def submit(ctx, skip_completed, **kwargs):
     """Submit a single-molecule ORCA pKa calculation.
