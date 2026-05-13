@@ -13,4 +13,4 @@ dependencies:
   - python-dotenv>=1
   - pip
   - pip:
-      - -e .[dev,test,docs]   # pulls all Python deps from pyproject.toml
+      - -e .[dev,test,docs,agent-tui]   # pulls all Python deps from pyproject.toml
