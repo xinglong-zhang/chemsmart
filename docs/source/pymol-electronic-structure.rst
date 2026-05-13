@@ -80,7 +80,9 @@ Generate spin density visualizations for open-shell systems.
 
 .. note::
 
-   Requires both ``.log`` and ``.chk`` files in the same folder.
+   Requires both ``.log`` and ``.chk`` files in the same folder. If ``-l/--label`` is provided, Chemsmart still
+   processes files from the source filename basename (for example, ``output.log`` -> ``output.chk``/``output.fchk``),
+   while the final spin output/session filename follows the custom label.
 
 Spin density jobs inherit all visualization options.
 
@@ -98,3 +100,12 @@ With ray tracing:
 .. code:: bash
 
    chemsmart run mol -f radical.log spin -t
+
+With custom output label while still processing source files:
+
+.. code:: bash
+
+   chemsmart run mol -f output.log -l new_name_new_spin_isovalue spin -i 0.1
+
+This command processes ``output.log`` (and related ``output.chk``/``output.fchk``) and writes the spin session as
+``new_name_new_spin_isovalue.pse``.

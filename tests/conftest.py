@@ -333,6 +333,22 @@ def invoke_mol_with_visualize():
     return _invoke
 
 
+@pytest.fixture
+def invoke_mol_cli():
+    """Invoke ``mol`` CLI with provided args."""
+    from chemsmart.cli.mol.mol import mol as mol_group
+
+    def _invoke(cli_args, ctx_obj=None):
+        runner = CliRunner()
+        if ctx_obj is None:
+            ctx_obj = {}
+        return runner.invoke(
+            mol_group, cli_args, obj=ctx_obj, catch_exceptions=False
+        )
+
+    return _invoke
+
+
 @pytest.fixture()
 def chemsmart_templates_config(mocker):
     """

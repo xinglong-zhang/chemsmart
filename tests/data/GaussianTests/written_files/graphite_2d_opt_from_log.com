@@ -1,6 +1,6 @@
 %chk=graphite_2d_opt_from_log.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # opt freq b3lyp empiricaldispersion=gd3bj def2svp
 
 Job prepared from Gaussian file graphite_2d_opt.log

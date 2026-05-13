@@ -371,7 +371,10 @@ def mol(
     ctx.ensure_object(dict)
     # mark this pipeline as not QMMM by default
     ctx.obj.setdefault("qmmm", False)
+    ctx.obj.setdefault("source_basename", None)
+    ctx.obj["label_provided"] = label is not None
     molecules = None
+    source_basename = None
 
     # Normalize empty tuple to None (click's
     # multiple=True returns () when no -f provided)
@@ -453,6 +456,9 @@ def mol(
         else:
             if len(filenames) == 1:
                 filenames = filenames[0]
+                source_basename = os.path.splitext(
+                    os.path.basename(filenames)
+                )[0]
                 molecules = Molecule.from_filepath(
                     filepath=filenames, index=":", return_list=True
                 )
@@ -516,6 +522,7 @@ def mol(
     ctx.obj["directory"] = directory
     ctx.obj["filetype"] = filetype
     ctx.obj["filenames"] = filenames
+    ctx.obj["source_basename"] = source_basename
     ctx.obj["qmmm"] = False
 
 

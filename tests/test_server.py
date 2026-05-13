@@ -12,7 +12,7 @@ class TestServer:
         assert server.scheduler.lower() == "pbs"
         assert server.queue_name == "normal"
         assert server.num_hours == 24
-        assert server.mem_gb == 400
+        assert server.mem_gb == 375
         assert server.num_cores == 64
         assert server.num_gpus == 0
         assert server.num_threads == 64

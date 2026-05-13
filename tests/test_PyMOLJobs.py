@@ -10,12 +10,17 @@ from chemsmart.jobs.mol.irc import PyMOLIRCMovieJob
 from chemsmart.jobs.mol.mo import PyMOLMOJob
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
+from chemsmart.jobs.mol.runner import (
+    PyMOLNCIJobRunner,
+    PyMOLSpinJobRunner,
+)
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
     is_pubchem_network_available,
 )
+from chemsmart.utils.utils import quote_path
 
 
 @pytest.fixture(scope="session")
@@ -751,3 +756,127 @@ class TestPyMOLCLIFolderOptions:
         assert "No such option" not in result.output, result.output
         label = ctx_obj.get("label", "")
         assert "gaussian" in label
+
+
+class TestPyMOLFileProcessingUsesSourceFilename:
+    def test_spin_cli_custom_label_uses_source_basename_and_exact_output_name(
+        self, gaussian_benzene_opt_outfile, invoke_mol_cli
+    ):
+        from unittest.mock import patch
+
+        custom_label = "new_name_new_spin_isovalue"
+        with patch("chemsmart.jobs.mol.spin.PyMOLSpinJob") as mock_spin_job:
+            result = invoke_mol_cli(
+                [
+                    "-f",
+                    gaussian_benzene_opt_outfile,
+                    "-l",
+                    custom_label,
+                    "spin",
+                    "-i",
+                    "0.1",
+                ]
+            )
+
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_spin_job.call_args
+        assert kwargs["source_basename"] == "benzene"
+        assert kwargs["label"] == custom_label
+        assert kwargs["spin_basename"] == custom_label
+
+    def test_generate_fchk_uses_source_basename_not_label(
+        self,
+        tmpdir,
+        gaussian_benzene_opt_outfile,
+        pymol_mo_jobrunner,
+        monkeypatch,
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+        job = PyMOLMOJob(
+            molecules,
+            label="custom_label",
+            source_basename="benzene_opt",
+            homo=True,
+        )
+        job.set_folder(tmpdir)
+
+        with open(os.path.join(tmpdir, "benzene_opt.chk"), "w"):
+            pass
+
+        commands = []
+        monkeypatch.setattr(
+            pymol_mo_jobrunner,
+            "_get_gaussian_executable",
+            lambda _job: "/gaussian",
+        )
+        monkeypatch.setattr(
+            "chemsmart.jobs.mol.runner.run_command",
+            lambda cmd: commands.append(cmd),
+        )
+
+        pymol_mo_jobrunner._generate_fchk_file(job)
+
+        assert commands == ["/gaussian/formchk benzene_opt.chk"]
+
+    def test_spin_cubegen_uses_source_basename_fchk(
+        self, tmpdir, gaussian_benzene_opt_outfile, pbs_server, monkeypatch
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+        job = PyMOLSpinJob(
+            molecules,
+            label="spin_label",
+            source_basename="benzene_opt",
+        )
+        job.set_folder(tmpdir)
+        runner = PyMOLSpinJobRunner(server=pbs_server, scratch=False)
+
+        commands = []
+        monkeypatch.setattr(
+            runner,
+            "_get_gaussian_executable",
+            lambda _job: "/gaussian",
+        )
+        monkeypatch.setattr(
+            "chemsmart.jobs.mol.runner.run_command",
+            lambda cmd: commands.append(cmd),
+        )
+
+        runner._generate_spin_cube_file(job)
+
+        assert commands == [
+            f"/gaussian/cubegen 0 spin benzene_opt.fchk spin_label_spin.cube {job.npts}"
+        ]
+
+    def test_nci_uses_source_basename_for_cube_loading_and_command(
+        self, tmpdir, gaussian_benzene_opt_outfile, pbs_server
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+        job = PyMOLNCIJob(
+            molecules,
+            label="renamed_label",
+            source_basename="benzene_opt",
+            isosurface_value=0.5,
+            color_range=1.0,
+        )
+        job.set_folder(tmpdir)
+        runner = PyMOLNCIJobRunner(server=pbs_server, scratch=False)
+
+        dens_file = os.path.join(tmpdir, "benzene_opt-dens.cube")
+        grad_file = os.path.join(tmpdir, "benzene_opt-grad.cube")
+        with open(dens_file, "w"):
+            pass
+        with open(grad_file, "w"):
+            pass
+
+        command = runner._load_cube_files(job, "cmd")
+        command = runner._run_nci_command(job, command)
+
+        assert f"load {quote_path(dens_file)}" in command
+        assert f"load {quote_path(grad_file)}" in command
+        assert "; nci benzene_opt" in command
