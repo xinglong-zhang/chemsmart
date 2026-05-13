@@ -18,7 +18,7 @@ from textual.screen import Screen
 from textual.worker import Worker, WorkerState
 
 from chemsmart.agent.cli import agent
-from chemsmart.agent.core import AgentSession, CriticVerdict, Plan
+from chemsmart.agent.core import AgentSession, CriticVerdict, DecisionLog, Plan
 from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
@@ -27,6 +27,7 @@ from chemsmart.agent.permissions import (
 )
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.services.conversation_memory import ConversationMemory
 from chemsmart.agent.tui.events import (
     AssistantTurnEvent,
     CriticVerdictEvent,
@@ -64,6 +65,7 @@ from chemsmart.agent.tui.services.job_poller import (
 from chemsmart.agent.tui.services.log_tailer import LogTailer
 from chemsmart.agent.tui.services.session_runner import SessionRunnerMixin
 from chemsmart.agent.tui.tool_meta import (
+    format_assumptions_banner,
     tool_description,
 )
 from chemsmart.agent.tui.widgets.cells import (
@@ -283,11 +285,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
         self.active_resume_id = session_id
         session_dir = self.session_root / session_id
-        if (
-            self.active_agent_session is None
-            or str(self.active_agent_session.session_dir)
-            != str(session_dir)
-        ):
+        if self.active_agent_session is None or str(
+            self.active_agent_session.session_dir
+        ) != str(session_dir):
             self.active_agent_session = AgentSession.load(
                 session_id,
                 session_root=str(self.session_root),
@@ -302,14 +302,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 f"The job is stored as handle '{job_handle_id}'.",
             ]
             if ctx.get("inputfile"):
-                parts.append(
-                    f"The input file is at '{ctx['inputfile']}'."
-                )
+                parts.append(f"The input file is at '{ctx['inputfile']}'.")
             if ctx.get("server_name"):
                 parts.append(f"Server name: '{ctx['server_name']}'.")
-            parts.append(
-                f"Please call submit_hpc with job='{job_handle_id}'."
-            )
+            parts.append(f"Please call submit_hpc with job='{job_handle_id}'.")
             execute_request = " ".join(parts)
         else:
             execute_request = (
@@ -566,7 +562,12 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 advisory = result.get("advisory_only", False)
                 chitchat = result.get("is_chitchat", False)
                 blocked = result.get("blocked", False)
-                if session_id and not blocked and not advisory and not chitchat:
+                if (
+                    session_id
+                    and not blocked
+                    and not advisory
+                    and not chitchat
+                ):
                     self._last_dry_run_session_id = str(session_id)
                 else:
                     self._last_dry_run_session_id = None
@@ -872,6 +873,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 transcript.add_cell(UserMessageCell(event.request))
             footer.set_phase(Phase.PLANNING)
             footer.set_hint("Interpreting your request…")
+            footer.entity_status = format_assumptions_banner(
+                self._current_entity_snapshot(),
+                None,
+            )
         elif isinstance(event, PlanEvent):
             self._current_plan = event.plan
             self._current_plan_text = event.text
@@ -1125,6 +1130,42 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif event.status in {"error", "skipped", "interrupted"}:
             footer.set_phase(Phase.ERROR)
             footer.set_hint("Tool call reported an error")
+
+        if event.status in {
+            "ok",
+            "partial",
+            "error",
+            "denied",
+            "skipped",
+            "ask_user",
+        }:
+            footer.entity_status = format_assumptions_banner(
+                self._current_entity_snapshot(),
+                event.status,
+            )
+
+    def _current_entity_snapshot(self) -> dict[str, object] | None:
+        session_dir = self.current_session_dir()
+        session = self.active_agent_session
+
+        if session_dir is not None:
+            log_path = session_dir / "decision_log.jsonl"
+            if log_path.exists():
+                try:
+                    memory = ConversationMemory.from_entries(
+                        DecisionLog(log_path).read_all()
+                    )
+                    entities = memory.entities.model_dump(exclude_none=True)
+                    return entities or None
+                except Exception:
+                    pass
+
+        if session is None:
+            return None
+        entities = session.conversation_history.entities.model_dump(
+            exclude_none=True
+        )
+        return entities or None
 
     def _handle_slash_command(self, raw: str) -> None:
         command, _, remainder = raw.partition(" ")
@@ -1707,8 +1748,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         footer.set_hint("Submitting to HPC…")
         session_dir = self.session_root / session_id
         if session_dir.exists() and not (
-            self._tailer_path
-            and self._tailer_path.parent == session_dir
+            self._tailer_path and self._tailer_path.parent == session_dir
         ):
             self._stop_tailer()
             self._attach_tailer(session_dir / "decision_log.jsonl")
@@ -2062,6 +2102,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.IDLE)
         footer.set_hint("Enter to submit • /help for commands")
+        footer.entity_status = None
         footer.reset_job_counts()
         if clear_transcript:
             transcript = self.query_one(Transcript)
@@ -2077,7 +2118,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.app.screen.post_message(JobStatusUpdated(job_id, fields))
 
     def _refresh_job_snapshot(self) -> None:
-        from chemsmart.agent.tui.services import job_poller as job_poller_service
+        from chemsmart.agent.tui.services import (
+            job_poller as job_poller_service,
+        )
 
         _ = collect_job_snapshot
         snapshot = (

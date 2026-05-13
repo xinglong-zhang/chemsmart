@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from rich.text import Text
@@ -130,6 +131,15 @@ _STATUS_STYLE = {
     "interrupted": "error",
 }
 
+_ASSUMPTION_CONFIDENCE = {
+    "ok": "high",
+    "partial": "med",
+    "error": "low",
+    "denied": "low",
+    "skipped": "low",
+    "ask_user": "low",
+}
+
 
 def tool_description(
     tool_name: str,
@@ -142,8 +152,10 @@ def tool_description(
 
 
 def tool_side_effect_summary(tool_name: str) -> str:
-    return _TOOL_META.get(tool_name, {}).get(
-        "summary", "may inspect or mutate local state"
+    return str(
+        _TOOL_META.get(tool_name, {}).get(
+            "summary", "may inspect or mutate local state"
+        )
     )
 
 
@@ -161,6 +173,42 @@ def tool_read_only(tool_name: str) -> bool:
 
 def tool_status_style(status: str) -> str:
     return _STATUS_STYLE.get(status, "warning")
+
+
+def format_assumptions_banner(
+    entities: dict[str, Any] | None,
+    recent_tool_status: str | None,
+) -> str | None:
+    if not entities:
+        return None
+
+    scheduler = _string_or_none(entities.get("last_scheduler"))
+    server = _string_or_none(entities.get("last_server"))
+    job_id = _string_or_none(entities.get("last_job_id"))
+    log_path = _string_or_none(entities.get("last_log_path"))
+    if not any((scheduler, server, job_id, log_path)):
+        return None
+
+    parts: list[str] = []
+    if scheduler is not None:
+        parts.append(scheduler.upper())
+    if server is not None:
+        parts.append(server)
+    if job_id is not None:
+        parts.append(f"job {job_id}")
+    if log_path is not None:
+        parts.append(f"log {Path(log_path).name}")
+    confidence = (
+        _ASSUMPTION_CONFIDENCE.get(recent_tool_status, "unknown")
+        if recent_tool_status is not None
+        else "unknown"
+    )
+    parts.append(f"conf={confidence}")
+
+    line = " · ".join(parts)
+    if len(line) > 120:
+        return f"{line[:119]}…"
+    return line
 
 
 def pretty_tool_args(arguments: dict[str, Any] | None) -> str:

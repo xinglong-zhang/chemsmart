@@ -32,6 +32,7 @@ _SPINNER_LABELS = (
 class FooterWidget(Static):
     phase: reactive[Phase] = reactive(Phase.IDLE)
     hint: reactive[str] = reactive("Enter to submit • /help for commands")
+    entity_status: reactive[str | None] = reactive(None)
 
     DEFAULT_CSS = """
     FooterWidget {
@@ -95,6 +96,13 @@ class FooterWidget(Static):
         self._refresh_text()
 
     def watch_hint(self, old: str, new: str) -> None:
+        self._refresh_text()
+
+    def watch_entity_status(
+        self,
+        old: str | None,
+        new: str | None,
+    ) -> None:
         self._refresh_text()
 
     def set_phase(self, phase: Phase) -> None:
@@ -212,4 +220,7 @@ class FooterWidget(Static):
         text.append(self._model, style="dim")
         text.append(" • ", style="dim")
         text.append(f"tok {self._draft_tokens}", style="dim")
+        if self.entity_status:
+            text.append(" | ", style="dim")
+            text.append(self.entity_status, style="dim")
         self.update(text)
