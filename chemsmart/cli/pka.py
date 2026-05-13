@@ -344,42 +344,37 @@ def build_per_entry_subcommands(
 
 
 def resolve_proton_index(filename, proton_index, color_code):
-    if proton_index is not None:
-        return proton_index, None
+    """Resolve the proton index for deprotonation, optionally via CDXML.
 
-    if filename and filename.endswith((".cdx", ".cdxml")):
-        from chemsmart.io.file import PKaCDXFile
+    If a proton index is provided, it is returned directly. For CDX/CDXML
+    inputs, the proton can be auto-detected from a color code; a multi-fragment
+    file yields a list of per-fragment molecules, which is returned as the
+    second tuple element while the proton index is set to ``None`` so callers
+    can branch to per-molecule job creation.
 
-        cdx_file = PKaCDXFile(filename=filename)
-        try:
-            pka_mols = cdx_file.get_pka_molecules(color_code=color_code)
-        except ValueError as exc:
-            raise click.UsageError(
-                f"Could not auto-detect proton from CDXML colour: {exc}\n"
-                "Use -pi/--proton-index to specify the proton explicitly."
-            )
+    Args:
+        filename: Input structure file path, used to detect CDX/CDXML inputs.
+        proton_index: 1-based proton index supplied by the user, if any.
+        color_code: CDXML color-table index used for auto-detection.
 
-        if len(pka_mols) > 1:
-            logger.info(
-                f"Detected {len(pka_mols)} molecules with per-fragment proton auto-detection in {filename}."
-            )
-            return None, pka_mols
+    Returns:
+        tuple[int | None, list | None]:
+            - Proton index when a single molecule is resolved.
+            - ``None`` for the index with a list of per-fragment molecules when
+              multiple molecules are detected in CDX/CDXML.
 
-        proton_index = pka_mols[0].proton_index
-        logger.info(
-            f"Detected proton index {proton_index} from CDXML colour in {filename}."
+    Raises:
+        click.UsageError: If required inputs are missing or inconsistent with
+            the file type.
+    """
+    from chemsmart.io.file import PKaCDXFile
+
+    try:
+        return PKaCDXFile.resolve_proton_index(
+            filename, proton_index, color_code
         )
-        return proton_index, None
-
-    if color_code is not None:
-        raise click.UsageError(
-            "-cc/--color-code can only be used with .cdx/.cdxml files."
-        )
-
-    raise click.UsageError(
-        "-pi/--proton-index is required when launching new pKa "
-        "calculations (or use a .cdxml file with a coloured proton)."
-    )
+    except ValueError as exc:
+        raise click.UsageError(str(exc))
 
 
 def resolve_reference_proton(
