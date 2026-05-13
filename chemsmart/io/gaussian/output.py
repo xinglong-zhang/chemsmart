@@ -2752,8 +2752,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
 
         return outputs
 
+    @staticmethod
     def compute_pka(
-        cls,
         ha_gas_file,
         a_gas_file,
         href_gas_file,
@@ -2822,31 +2822,12 @@ class Gaussian16pKaOutput(Gaussian16Output):
             pressure (float): Pressure in atm. Default 1.0 atm.
             cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
             cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
+            energy_units (str): Energy units for output. Default 'hartree'.
 
         Returns:
             dict: Dictionary containing pKa calculation results.
-                All energies in Hartree (au) unless noted otherwise:
-                - 'pKa': Computed pKa value of target acid HA
-                - 'pKa_reference': Experimental pKa of reference acid HB
-                - 'delta_G_soln_kcal_mol': ΔG_soln in kcal/mol (for pKa calc)
-                - 'delta_G_soln_au': ΔG_soln in Hartree (au)
-                - 'temperature': Temperature in Kelvin
-                - 'G_soln_HA_au': Solution free energy of HA (Hartree)
-                - 'G_soln_A_au': Solution free energy of A⁻ (Hartree)
-                - 'G_soln_HB_au': Solution free energy of HB (Hartree)
-                - 'G_soln_B_au': Solution free energy of B⁻ (Hartree)
-                - 'E_solv_HA_au': Solvent SP energy of HA (Hartree)
-                - 'E_solv_A_au': Solvent SP energy of A⁻ (Hartree)
-                - 'E_solv_HB_au': Solvent SP energy of HB (Hartree)
-                - 'E_solv_B_au': Solvent SP energy of B⁻ (Hartree)
-                - 'G_corr_HA_au': Thermal correction for HA (Hartree)
-                - 'G_corr_A_au': Thermal correction for A⁻ (Hartree)
-                - 'G_corr_HB_au': Thermal correction for HB (Hartree)
-                - 'G_corr_B_au': Thermal correction for B⁻ (Hartree)
-                - 'E_gas_HA_au': Gas-phase electronic energy of HA (Hartree)
-                - 'E_gas_A_au': Gas-phase electronic energy of A⁻ (Hartree)
-                - 'E_gas_HB_au': Gas-phase electronic energy of HB (Hartree)
-                - 'E_gas_B_au': Gas-phase electronic energy of B⁻ (Hartree)
+                All energies in Hartree (au) except ΔG_soln which is
+                shown in kcal/mol as required for the pKa formula.
 
         Example:
             # Calculate pKa of 5PQ_Me_ts1 using collidine as reference (pKa=6.75)
@@ -2874,7 +2855,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             Returns:
                 tuple: (E_gas_au, qh_G_au, G_corr_au) all in Hartree
             """
-            output = cls(
+            output = Gaussian16pKaOutput(
                 filename=gas_file,
                 temperature=temperature,
                 concentration=concentration,

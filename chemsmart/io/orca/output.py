@@ -3725,9 +3725,8 @@ class ORCApKaOutput(ORCAOutput):
             outputs["Ref"] = cls(filename=ref_file, **kw)
         return outputs
 
-    @classmethod
+    @staticmethod
     def compute_pka_thermochemistry(
-        cls,
         ha_file=None,
         a_file=None,
         href_file=None,
@@ -3762,7 +3761,7 @@ class ORCApKaOutput(ORCAOutput):
         def _thermo(fp, name):
             if fp is None:
                 return None
-            out = cls(filename=fp, **kw)
+            out = ORCApKaOutput(filename=fp, **kw)
             return {
                 "name": name,
                 "E": out.electronic_energy_in_units,
