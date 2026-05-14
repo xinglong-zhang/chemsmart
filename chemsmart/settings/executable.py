@@ -238,6 +238,43 @@ class ORCAExecutable(Executable):
             executable_path = os.path.join(self.executable_folder, "orca")
             return executable_path
 
+class GromacsExecutable(Executable):
+    """
+    Executable handler for GROMACS molecular dynamics software.
+
+    This class provides specific implementation for managing GROMACS
+    executable paths and configurations.
+    """
+
+    PROGRAM = "GROMACS"
+
+    def __init__(self, executable_folder=None, executable_name="gmx", **kwargs):
+        """
+        Initialize GromacsExecutable instance.
+
+        Args:
+            executable_folder (str, optional):
+                Path to GROMACS executable directory.
+            executable_name (str):
+                Name of the GROMACS executable. Defaults to "gmx".
+            **kwargs:
+                Additional arguments passed to parent Executable class.
+        """
+        super().__init__(executable_folder=executable_folder, **kwargs)
+        self.executable_name = executable_name
+
+    def get_executable(self):
+        """
+        Get the full path to the GROMACS executable.
+
+        Returns:
+            str: Full path to gmx if executable_folder is set,
+                 otherwise the executable name.
+        """
+        if self.executable_folder is not None:
+            return os.path.join(self.executable_folder, self.executable_name)
+
+        return self.executable_name
 
 class NCIPLOTExecutable(Executable):
     """
