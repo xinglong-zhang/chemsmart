@@ -58,6 +58,26 @@ accurate calculations.
 #. Directly uses the wavefunction data for density calculations
 #. Generates output files without the promolecular suffix
 
+.. warning::
+
+   After the required files have been generated with NCIPLOT, they can be loaded using chemsmart's built-in :doc:`PyMOL
+   visualization commands <pymol-interaction-analysis>`. However, the same molecular structure may yield different NCI
+   plots depending on whether NCIPLOT uses **promolecular density** or **wavefunction density**. See the comparison
+   below:
+
+   .. raw:: html
+
+      <div style="display: flex; justify-content: space-between; gap: 20px; align-items: flex-start;">
+         <div style="flex: 1; text-align: center;">
+            <img src="_images/nci_promolecular_density.jpg" alt="NCI plot using Promolecular Density" style="max-width: 100%; height: auto;">
+            <p><strong>Promolecular Density</strong></p>
+         </div>
+         <div style="flex: 1; text-align: center;">
+            <img src="_images/nci_wavefunction_density.jpg" alt="NCI plot using Wavefunction Density" style="max-width: 100%; height: auto;">
+            <p><strong>Wavefunction Density</strong></p>
+         </div>
+      </div>
+
 ****************
  Usage Examples
 ****************
