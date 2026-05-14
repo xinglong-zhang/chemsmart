@@ -2,6 +2,7 @@ from pathlib import Path
 
 from chemsmart.jobs.job import Job
 
+
 class GromacsJob(Job):
     PROGRAM = "gromacs"
     TYPE = "gromacs"

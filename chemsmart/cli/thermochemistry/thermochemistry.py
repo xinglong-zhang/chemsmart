@@ -122,9 +122,8 @@ def click_thermochemistry_options(f):
         help="Overwrite existing output files if they already exist.",
     )
     @click.option(
-        "-i",
-        "--check-imaginary-frequencies",
-        is_flag=True,
+        "-i/",
+        "--check-imaginary-frequencies/--no-check-imaginary-frequencies",
         default=True,
         show_default=True,
         help="Check for imaginary frequencies in the calculations.",

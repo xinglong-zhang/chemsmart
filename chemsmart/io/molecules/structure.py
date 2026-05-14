@@ -18,7 +18,6 @@ from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.utils.geometry import is_collinear
-from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
 
@@ -431,6 +430,120 @@ class Molecule:
             coords=self.positions, radii=self.vdw_radii_list
         )
 
+    def generate_force_field_from_rdkit(
+        self,
+        rdkit_mol=None,
+        force_field="MMFF94",
+    ):
+        """Generate an RDKit force field (MMFF94 or UFF) in-memory.
+
+        Args:
+        rdkit_mol : rdkit.Chem.Mol, optional
+            If provided, use this RDKit molecule directly.
+        force_field : str, optional
+            "MMFF94" (default), "MMFF94S", or "UFF".
+
+        Returns:
+        rdkit.ForceField.ForceField
+            RDKit force field object for energy/geometry evaluation.
+
+        Raises:
+        TypeError
+            If rdkit_mol is not an rdkit.Chem.Mol instance.
+        ValueError
+            If the molecule has no 3D conformer, lacks parameters, or
+            cannot be sanitized for MMFF/UFF typing.
+        """
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        mol = rdkit_mol if rdkit_mol is not None else self.to_rdkit()
+        if not isinstance(mol, Chem.Mol):
+            raise TypeError("rdkit_mol must be an rdkit.Chem.Mol instance")
+
+        # Validate presence of a 3D conformer before parameterization.
+        if mol.GetNumConformers() == 0 or not mol.GetConformer().Is3D():
+            raise ValueError("RDKit molecule must have a 3D conformer")
+
+        # Ensure sanitization (formal charges, valence) and explicit Hs.
+        try:
+            Chem.SanitizeMol(mol)
+        except Exception as exc:
+            raise ValueError(f"RDKit sanitization failed: {exc}") from exc
+
+        mol = Chem.AddHs(mol, addCoords=True)
+        if mol.GetNumConformers() == 0 or not mol.GetConformer().Is3D():
+            raise ValueError("RDKit molecule must have a 3D conformer")
+
+        ff_key = str(force_field or "").upper()
+        if ff_key in ("MMFF94", "MMFF", "MMFF94S", "MMFFS"):
+            variant = "MMFF94S" if ff_key in ("MMFF94S", "MMFFS") else "MMFF94"
+            try:
+                has_params = AllChem.MMFFHasAllMoleculeParams(
+                    mol, mmffVariant=variant
+                )
+            except Exception:
+                has_params = AllChem.MMFFHasAllMoleculeParams(mol)
+            if not has_params:
+                raise ValueError(
+                    f"MMFF parameters could not be assigned to all atoms (variant={variant})."
+                )
+            try:
+                mmff_props = AllChem.MMFFGetMoleculeProperties(
+                    mol, mmffVariant=variant
+                )
+            except Exception:
+                mmff_props = AllChem.MMFFGetMoleculeProperties(mol)
+            if mmff_props is None:
+                raise ValueError(
+                    "MMFF parameters could not be assigned to all atoms in the molecule."
+                )
+            ff = AllChem.MMFFGetMoleculeForceField(mol, mmff_props)
+            if ff is None:
+                raise ValueError("Failed to construct MMFF force field")
+            return ff
+
+        if ff_key == "UFF":
+            if not AllChem.UFFHasAllMoleculeParams(mol):
+                raise ValueError(
+                    "UFF parameters could not be assigned to all atoms in the molecule."
+                )
+            ff = AllChem.UFFGetMoleculeForceField(mol)
+            if ff is None:
+                raise ValueError("Failed to construct UFF force field")
+            return ff
+
+        raise ValueError(
+            "force_field must be one of: 'MMFF94', 'MMFF94S', or 'UFF'"
+        )
+
+    def generate_force_field_from_ffld(self):
+        """Generate a force field for the molecule using FFLD.
+
+        This method assigns FFLD atom types and parameters to the molecule,
+        creating a force field representation that can be used for energy
+        calculations, geometry optimizations, and molecular dynamics simulations.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the assigned FFLD properties for the molecule.
+
+        Raises
+        ------
+        ValueError
+            If the molecule cannot be processed by FFLD or if parameters
+            cannot be assigned to all atoms.
+        """
+        from chemsmart.utils.ffld import assign_ffld_parameters
+
+        ffld_params = assign_ffld_parameters(self)
+        if ffld_params is None:
+            raise ValueError(
+                "FFLD parameters could not be assigned to all atoms in the molecule."
+            )
+        return ffld_params
+
     @property
     def grid_vdw_volume(self):
         """Calculate the VDW volume using grid-based numerical integration.
@@ -502,9 +615,29 @@ class Molecule:
     def is_aromatic(self):
         """
         Check if molecule is aromatic or not.
+
+        Uses ring membership to validate aromaticity so that bond-order
+        heuristics (which may assign 1.5 to non-ring bonds such as O-H)
+        do not produce false positives.  An atom is only considered
+        aromatic when it both carries the aromatic flag *and* belongs to
+        at least one ring.
+
+        .. note::
+            **Limitations:** Bond orders are inferred from 3D geometry, not
+            from an electronic structure calculation, so this check is
+            model-dependent.  Edge cases such as the cyclopropenyl cation
+            versus the cyclopropenyl radical may not be distinguished
+            correctly.  For borderline or unusual systems the result should
+            be treated as a heuristic estimate.
         """
         mol = self.to_rdkit()
-        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
+        Chem.FastFindRings(mol)
+        ring_info = mol.GetRingInfo()
+        ring_atoms = {idx for ring in ring_info.AtomRings() for idx in ring}
+        return any(
+            atom.GetIsAromatic() and atom.GetIdx() in ring_atoms
+            for atom in mol.GetAtoms()
+        )
 
     @property
     def is_ring(self):
@@ -1747,60 +1880,7 @@ class Molecule:
                     rdkit_mol.AddBond(i, j, bond_type)
         return rdkit_mol
 
-    def _add_bonds_to_rdkit_mol_vectorized(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
-    ):
-        """
-        Add bonds to the RDKit molecule using a
-        vectorized approach to compute bond orders.
-        """
-        num_atoms = len(self.symbols)
-
-        # 1. Build an NxN cutoff matrix
-        cutoff_matrix = np.zeros((num_atoms, num_atoms))
-        for i in range(num_atoms):
-            for j in range(i + 1, num_atoms):
-                # Decide on a pair-specific buffer
-                if adjust_H:
-                    if self.symbols[i] == "H" and self.symbols[j] == "H":
-                        # bond length of H-H is ~0.74 Å
-                        cutoff_buffer_ij = 0.2
-                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
-                        # bond length to H is ~1.0–1.1 Å
-                        cutoff_buffer_ij = 0.1
-                    else:
-                        cutoff_buffer_ij = bond_cutoff_buffer
-                else:
-                    cutoff_buffer_ij = 0.3  # some default if not adjusting H
-
-                cutoff_ij = get_bond_cutoff(
-                    self.symbols[i], self.symbols[j], cutoff_buffer_ij
-                )
-                cutoff_matrix[i, j] = cutoff_ij
-                cutoff_matrix[j, i] = cutoff_ij
-
-        # 2. Vectorized bond order calculation
-        bond_orders = self.determine_bond_order(
-            bond_length=self.distance_matrix,  # NxN distances
-            bond_cutoff=cutoff_matrix,  # NxN cutoffs
-        )
-
-        # 3. Add edges (bonds) for non-zero bond orders
-        bond_type_map = {
-            1.0: Chem.BondType.SINGLE,
-            1.5: Chem.BondType.AROMATIC,
-            2.0: Chem.BondType.DOUBLE,
-            3.0: Chem.BondType.TRIPLE,
-        }
-
-        for i in range(num_atoms):
-            for j in range(i + 1, num_atoms):
-                bo = bond_orders[i, j]
-                if bo > 0:
-                    bond_type = bond_type_map.get(bo, Chem.BondType.SINGLE)
-                    rdkit_mol.AddBond(i, j, bond_type)
-
-        return rdkit_mol
+    _add_bonds_to_rdkit_mol_vectorized = _add_bonds_to_rdkit_mol
 
     @cached_property
     def rdkit_fingerprints(self):
@@ -2318,7 +2398,6 @@ class CoordinateBlock:
                     logger.error(
                         f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
                     )
-
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
@@ -2348,9 +2427,14 @@ class CoordinateBlock:
             try:
                 atomic_number = int(line_elements[0])
             except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
+                # sanitize token similar to _get_symbols to handle annotated tokens
+                token = str(line_elements[0])
+                m = re.match(r"^([A-Za-z][a-z]?)", token)
+                if m:
+                    atomic_symbol = p.to_element(m.group(1))
+                else:
+                    atomic_symbol = p.to_element(str(line_elements[0]))
+                atomic_number = p.to_atomic_number(atomic_symbol)
             atomic_numbers.append(atomic_number)
 
             # Decide how to interpret the second
@@ -2539,44 +2623,6 @@ class CoordinateBlock:
                 return [1, 1, 1]
         else:
             return None
-
-
-class SDFFile(FileMixin):
-    """
-    SDF file object.
-    """
-
-    def __init__(self, filename):
-        self.filename = filename
-
-    @property
-    def molecule(self):
-        return self.get_molecule()
-
-    def get_molecule(self):
-        list_of_symbols = []
-        cart_coords = []
-        # sdf line pattern containing coordinates and element type
-        from chemsmart.utils.repattern import sdf_pattern
-
-        for line in self.contents:
-            match = re.match(sdf_pattern, line)
-            if match:
-                x = float(match.group(1))
-                y = float(match.group(2))
-                z = float(match.group(3))
-                atom_type = str(match.group(4))
-                list_of_symbols.append(atom_type)
-                cart_coords.append((x, y, z))
-
-        cart_coords = np.array(cart_coords)
-
-        if len(list_of_symbols) == 0 or len(cart_coords) == 0:
-            raise ValueError("No coordinates found in the SDF file!")
-
-        return Molecule.from_symbols_and_positions_and_pbc_conditions(
-            list_of_symbols=list_of_symbols, positions=cart_coords
-        )
 
 
 class QMMMMolecule(Molecule):

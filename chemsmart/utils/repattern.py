@@ -158,6 +158,9 @@ element_partition_split_pattern = r"[\s:_-]+"
 element_non_alpha_pattern = r"[^A-Za-z]"
 multiple_spaces_pattern = r"\s+"
 
+# Gaussian TDDFT output
+gaussian_tddft_transition_pattern = r"^\s*(\d+[AB]?)\s*(->|<-)\s*(\d+[AB]?)\s+([-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?)\s*$"
+
 
 # PyMOL strings
 pymol_isosurface_pattern = r"isosurface\s*=\s*[\d\.]+"

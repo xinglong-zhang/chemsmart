@@ -8,6 +8,47 @@ from chemsmart.utils.utils import two_files_have_similar_contents
 
 
 class TestGaussianGenGenECP:
+    def test_genecp_fallback_when_basis_missing_from_bse(self, caplog):
+        genecp_section = GenGenECPSection.from_bse_api(
+            light_elements=["H", "C", "N", "O", "P", "Cl"],
+            light_elements_basis="6-31G*",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="nonexistent-basis-for-test",
+        )
+
+        assert genecp_section.string_list[0] == "H C N O P Cl 0"
+        assert genecp_section.string_list[1] == "6-31g*"
+        assert genecp_section.string_list[2] == "****"
+        assert genecp_section.string_list[3] == "Pd 0"
+        assert genecp_section.string_list[4] == "nonexistent-basis-for-test"
+        assert genecp_section.string_list[5] == "****"
+        assert genecp_section.string_list[6] == ""
+        assert genecp_section.string_list[7] == "Pd 0"
+        assert genecp_section.string_list[8] == "nonexistent-basis-for-test"
+        assert "Falling back to Gaussian basis keyword section format" in str(
+            caplog.messages
+        )
+
+    def test_gen_fallback_when_heavy_element_does_not_require_ecp(
+        self, caplog
+    ):
+        genecp_section = GenGenECPSection.from_bse_api(
+            light_elements=["H", "C", "N", "O"],
+            light_elements_basis="6-311+G**",
+            heavy_elements=["Ni"],
+            heavy_elements_basis="nonexistent-basis-for-test",
+        )
+
+        assert genecp_section.string_list[0] == "H C N O 0"
+        assert genecp_section.string_list[1] == "6-311+g**"
+        assert genecp_section.string_list[2] == "****"
+        assert genecp_section.string_list[3] == "Ni 0"
+        assert genecp_section.string_list[4] == "nonexistent-basis-for-test"
+        assert genecp_section.string_list[5] == "****"
+        assert "Falling back to Gaussian basis keyword section format" in str(
+            caplog.messages
+        )
+
     def test_genecp_from_base_api(
         self, tmpdir, reference_genecp_txt_file_from_api
     ):
