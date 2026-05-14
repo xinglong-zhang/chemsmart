@@ -174,7 +174,7 @@ class GaussianpKaJob(GaussianJob):
         skip_completed=True,
         **kwargs,
     ):
-        """Create a batch job from PKaMolecule inputs.
+        """Create a list of pKa jobs from PKaMolecule inputs.
 
         Args:
             pka_molecules: Iterable of PKaMolecule objects.
@@ -188,13 +188,12 @@ class GaussianpKaJob(GaussianJob):
             **kwargs: Additional job arguments forwarded to GaussianpKaJob.
 
         Returns:
-            GaussianpKaBatchJob: Batch container with created jobs.
+            list[GaussianpKaJob]: List of created pKa jobs (no batch wrapper).
         """
         opt_settings = project_settings.opt_settings()
         if job_settings:
             opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
-        serial_mode = get_serial_mode(jobrunner)
         base_name = os.path.splitext(os.path.basename(filename))[0] or "pka"
 
         jobs = []
@@ -217,11 +216,7 @@ class GaussianpKaJob(GaussianJob):
                 )
             )
 
-        return GaussianpKaBatchJob(
-            jobs=jobs,
-            run_in_serial=serial_mode.run_in_serial,
-            jobrunner=jobrunner,
-        )
+        return jobs
 
     def __init__(
         self,
