@@ -69,11 +69,11 @@ accurate calculations.
 
       <div style="display: flex; justify-content: space-between; gap: 20px; align-items: flex-start;">
          <div style="flex: 1; text-align: center;">
-            <img src="_images/nci_promolecular_density.jpg" alt="NCI plot using Promolecular Density" style="max-width: 100%; height: auto;">
+            <img src="_static/nci_promolecular_density.jpg" alt="NCI plot using Promolecular Density" style="max-width: 100%; height: auto;">
             <p><strong>Promolecular Density</strong></p>
          </div>
          <div style="flex: 1; text-align: center;">
-            <img src="_images/nci_wavefunction_density.jpg" alt="NCI plot using Wavefunction Density" style="max-width: 100%; height: auto;">
+            <img src="_static/nci_wavefunction_density.jpg" alt="NCI plot using Wavefunction Density" style="max-width: 100%; height: auto;">
             <p><strong>Wavefunction Density</strong></p>
          </div>
       </div>
