@@ -58,6 +58,59 @@ accurate calculations.
 #. Directly uses the wavefunction data for density calculations
 #. Generates output files without the promolecular suffix
 
+.. warning::
+
+   After the required files have been generated with NCIPLOT, they can be loaded using chemsmart's built-in :doc:`PyMOL
+   visualization commands <pymol-interaction-analysis>`. However, the same molecular structure may yield different NCI
+   plots depending on whether NCIPLOT uses **promolecular density** or **wavefunction density**.
+
+Workflow (Gaussian → NCIPLOT → PyMOL)
+=====================================
+
+.. code:: text
+
+                               test.log file or test.xyz file
+                                             |
+                                             |
+                         +-------------------+-------------------+
+                         |                                       |
+                         |                     chemsmart sub gaussian -f test.log nci
+                         |                                       |
+                         |                                       v
+                         v                             generate test_nci.wfn
+   +-----------------------------------------+---------------------------------------+
+   | Promolecular (use .log / .xyz)          | Wavefunction (from .wfn/ .wfx)        |
+   +-----------------------------------------+---------------------------------------+
+   |                 test.log                |             test_nci.wfn              |
+   |               (or test.xyz)             |          (or test_nci.wfx)            |
+   |                     |                   |                  |                    |
+   |                     v                   |                  v                    |
+   |    chemsmart sub nciplot -f test.log    | chemsmart sub nciplot -f test_nci.wfn |
+   |                     |                   |                  |                    |
+   |                     v                   |                  v                    |
+   |      test_promolecular-dens.cube        |          test_nci-dens.cube           |
+   |      test_promolecular-grad.cube        |          test_nci-grad.cube           |
+   +-----------------------------------------+---------------------------------------+
+                                             |
+                                             v
+                               chemsmart run mol -f ... nci
+                                             |
+                                             v
+               nci_promolecular_density.pse  /  nci_wavefunction_density.pse
+
+.. raw:: html
+
+   <div style="display:flex;gap:16px;align-items:flex-start;">
+     <div style="flex:1;text-align:center;">
+        <img src="_static/nci_promolecular_density.jpg" alt="NCI plot using Promolecular Density" style="max-width:100%;max-height:280px;width:auto;object-fit:contain;margin-top:6px;" />
+        <p style="margin:6px 0 0 0;"><strong>Promolecular Density</strong></p>
+      </div>
+      <div style="flex:1;text-align:center;">
+        <img src="_static/nci_wavefunction_density.jpg" alt="NCI plot using Wavefunction Density" style="max-width:100%;max-height:280px;width:auto;object-fit:contain;margin-top:6px;" />
+        <p style="margin:6px 0 0 0;"><strong>Wavefunction Density</strong></p>
+      </div>
+    </div>
+
 ****************
  Usage Examples
 ****************
