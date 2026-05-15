@@ -85,11 +85,11 @@ Workflow (Gaussian → NCIPLOT → PyMOL)
    |               (or test.xyz)             |          (or test_nci.wfx)            |
    |                     |                   |                  |                    |
    |                     v                   |                  v                    |
-   | chemsmart sub nciplot -f test_nci.log   | chemsmart sub nciplot -f test_nci.wfn |
+   |    chemsmart sub nciplot -f test.log    | chemsmart sub nciplot -f test_nci.wfn |
    |                     |                   |                  |                    |
    |                     v                   |                  v                    |
    |      test_promolecular-dens.cube        |          test_nci-dens.cube           |
-   |     test_promolecular-grad.cube         |          test_nci-grad.cube           |
+   |      test_promolecular-grad.cube        |          test_nci-grad.cube           |
    +-----------------------------------------+---------------------------------------+
                                              |
                                              v
