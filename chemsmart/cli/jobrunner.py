@@ -54,11 +54,15 @@ def click_jobrunner_options(f):
         "is completed successfully.",
     )
     @click.option(
-        "--run-in-serial/--run-in-parallel",
+        "--run-in-serial",
+        "--no-run-in-parallel/--run-in-parallel",
+        "run_in_serial",
         default=False,
         type=bool,
-        help="If true, run list of jobs in serial (one after another). "
-        "If false, run in parallel when supported.",
+        help=(
+            "If true, disable running jobs in parallel (i.e. run in serial). "
+            "If false, allow parallel execution when supported."
+        ),
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
