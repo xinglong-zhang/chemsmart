@@ -67,16 +67,18 @@ accurate calculations.
 
    .. raw:: html
 
-      <div style="display: flex; justify-content: space-between; gap: 20px; align-items: flex-start;">
-         <div style="flex: 1; text-align: center;">
-            <img src="_static/nci_promolecular_density.jpg" alt="NCI plot using Promolecular Density" style="max-width: 100%; height: auto;">
-            <p><strong>Promolecular Density</strong></p>
+      <div style="display:flex;gap:16px;align-items:flex-start;">
+        <div style="flex:1;text-align:center;">
+          <pre style="margin:0;padding:4px;background:#f8f8f8;border-radius:4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-family:monospace;font-size:88%;">chemsmart sub nciplot -f file.log</pre>
+           <img src="_static/nci_promolecular_density.jpg" alt="NCI plot using Promolecular Density" style="max-width:100%;max-height:220px;width:auto;object-fit:contain;margin-top:6px;" />
+           <p style="margin:6px 0 0 0;"><strong>Promolecular Density</strong></p>
          </div>
-         <div style="flex: 1; text-align: center;">
-            <img src="_static/nci_wavefunction_density.jpg" alt="NCI plot using Wavefunction Density" style="max-width: 100%; height: auto;">
-            <p><strong>Wavefunction Density</strong></p>
+         <div style="flex:1;text-align:center;">
+          <pre style="margin:0;padding:4px;background:#f8f8f8;border-radius:4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-family:monospace;font-size:88%;">chemsmart sub nciplot -f file_nci.wfn</pre>
+           <img src="_static/nci_wavefunction_density.jpg" alt="NCI plot using Wavefunction Density" style="max-width:100%;max-height:220px;width:auto;object-fit:contain;margin-top:6px;" />
+           <p style="margin:6px 0 0 0;"><strong>Wavefunction Density</strong></p>
          </div>
-      </div>
+       </div>
 
 ****************
  Usage Examples
