@@ -53,6 +53,13 @@ def click_jobrunner_options(f):
         help="If job was run in scratch, delete the scratch folder after the job "
         "is completed successfully.",
     )
+    @click.option(
+        "--run-in-serial/--no-run-in-serial",
+        default=False,
+        type=bool,
+        help="If true, run list of jobs in serial (one after another). "
+        "If false, use default behavior.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
