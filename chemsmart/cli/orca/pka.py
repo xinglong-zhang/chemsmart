@@ -355,16 +355,23 @@ def batch(ctx, skip_completed, **kwargs):
             light_elements_basis=opt_settings.light_elements_basis,
         )
 
-        jobs.append(
-            ORCApKaJob(
-                molecule=molecule,
-                settings=pka_settings,
-                label=base_label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                **kwargs,
-            )
+        job = ORCApKaJob(
+            molecule=molecule,
+            settings=pka_settings,
+            label=base_label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
         )
+        # Preserve row-level input so submit-script reconstruction can emit
+        # one-entry commands instead of replaying the full table.
+        job._batch_entry = {
+            "filepath": str(filepath),
+            "proton_index": int(entry.proton_index),
+            "charge": int(entry.charge),
+            "multiplicity": int(entry.multiplicity),
+        }
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
     return jobs

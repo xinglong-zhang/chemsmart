@@ -157,6 +157,56 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             _clean_command_list(ctx.obj["subcommand"])
         return ctx
 
+    def _replace_batch_table_tokens(cli_args, batch_entry):
+        """Rewrite table-mode args to a single-entry invocation.
+
+        For pKa table mode we generated one job per table row. Submission
+        scripts should therefore execute just that row, not the entire table.
+        """
+        if not batch_entry:
+            return cli_args
+
+        args = list(cli_args)
+        table_option_names = {
+            "-f",
+            "--filename",
+        }
+
+        # Replace table filename with row filepath.
+        for idx in range(len(args) - 1):
+            if args[idx] in table_option_names:
+                args[idx + 1] = str(batch_entry["filepath"])
+                break
+
+        # Ensure row-level proton/charge/multiplicity are explicit.
+        option_map = {
+            "--proton-index": str(batch_entry["proton_index"]),
+            "-pi": str(batch_entry["proton_index"]),
+            "--charge": str(batch_entry["charge"]),
+            "-c": str(batch_entry["charge"]),
+            "--multiplicity": str(batch_entry["multiplicity"]),
+            "-m": str(batch_entry["multiplicity"]),
+        }
+
+        def _set_option(tokens, long_opt, short_opt):
+            if long_opt in tokens:
+                pos = tokens.index(long_opt)
+                if pos + 1 < len(tokens):
+                    tokens[pos + 1] = option_map[long_opt]
+                return
+            if short_opt in tokens:
+                pos = tokens.index(short_opt)
+                if pos + 1 < len(tokens):
+                    tokens[pos + 1] = option_map[short_opt]
+                return
+            tokens.extend([short_opt, option_map[short_opt]])
+
+        _set_option(args, "--proton-index", "-pi")
+        _set_option(args, "--charge", "-c")
+        _set_option(args, "--multiplicity", "-m")
+
+        return args
+
     def _reconstruct_cli_args(ctx, job):
         """
         Get cli args that reconstruct the command line.
@@ -169,6 +219,9 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
+        cli_args = _replace_batch_table_tokens(
+            cli_args, getattr(job, "_batch_entry", None)
+        )
 
         if kwargs.get("print_command"):
             print(cli_args)

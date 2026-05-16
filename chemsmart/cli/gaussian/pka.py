@@ -286,16 +286,23 @@ def batch(ctx, skip_completed, **kwargs):
             sp_settings=project_settings.sp_settings(),
         )
 
-        jobs.append(
-            GaussianpKaJob(
-                molecule=molecule,
-                settings=pka_settings,
-                label=label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                **kwargs,
-            )
+        job = GaussianpKaJob(
+            molecule=molecule,
+            settings=pka_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
         )
+        # Preserve row-level input so submit-script reconstruction can emit
+        # one-entry commands instead of replaying the full table.
+        job._batch_entry = {
+            "filepath": str(filepath),
+            "proton_index": int(entry.proton_index),
+            "charge": int(entry.charge),
+            "multiplicity": int(entry.multiplicity),
+        }
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from table")
     return jobs
