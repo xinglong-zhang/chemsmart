@@ -178,6 +178,10 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
                 args[idx + 1] = str(batch_entry["filepath"])
                 break
 
+        # Per-row scripts should run a single pKa submission, not table mode.
+        if "batch" in args:
+            args[args.index("batch")] = "submit"
+
         # Ensure row-level proton/charge/multiplicity are explicit.
         option_map = {
             "--proton-index": str(batch_entry["proton_index"]),
@@ -208,8 +212,8 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
 
         # Proton index belongs to the pka group and must appear before the
-        # "batch" subcommand token.
-        _set_option(args, "--proton-index", "-pi", insert_before="batch")
+        # pka leaf subcommand token (submit after rewrite above).
+        _set_option(args, "--proton-index", "-pi", insert_before="submit")
         # Charge/multiplicity belong to the backend group (gaussian/orca), so
         # they must appear before entering the "pka" group.
         _set_option(args, "--charge", "-c", insert_before="pka")

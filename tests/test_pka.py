@@ -326,9 +326,11 @@ def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
     assert "--charge" in first_args
     assert "--multiplicity" in first_args
     assert "--proton-index" in first_args
+    assert "submit" in first_args
+    assert "batch" not in first_args
     assert first_args.index("--charge") < first_args.index("pka")
     assert first_args.index("--multiplicity") < first_args.index("pka")
-    assert first_args.index("--proton-index") < first_args.index("batch")
+    assert first_args.index("--proton-index") < first_args.index("submit")
 
 
 def test_run_gaussian_pka_help_is_submission_only():
