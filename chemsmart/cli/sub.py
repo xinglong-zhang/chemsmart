@@ -25,16 +25,6 @@ logger = logging.getLogger(__name__)
 @click_jobrunner_options
 @logger_options
 @click.option(
-    "-N",
-    "--num-nodes",
-    type=int,
-    default=None,
-    help="Maximum number of array tasks that may run simultaneously. "
-    "When specified with a list of jobs, submits them as a SLURM array job "
-    "throttled to at most N concurrent tasks (%%N on --array). "
-    "Omit to allow all tasks to run at the same time.",
-)
-@click.option(
     "-t",
     "--time-hours",
     type=float,
@@ -70,7 +60,6 @@ def sub(
     delete_scratch,
     debug,
     stream,
-    num_nodes,
     time_hours,
     queue,
     verbose,
@@ -115,7 +104,6 @@ def sub(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
-    ctx.obj["num_nodes"] = num_nodes  # concurrency throttle for array jobs
 
 
 @sub.result_callback(replace=True)
@@ -155,7 +143,6 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
                 "verbose",
                 "test",
                 "print_command",
-                "num_nodes",
             ]
 
             for keyword in keywords_not_in_run:
@@ -198,41 +185,14 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
-    num_nodes = ctx.obj.get("num_nodes")
     job = args[0]
 
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
-
-        # Use array job submission whenever --num-nodes is given, regardless of
-        # the value. Even --num-nodes=1 is valid: submit as an array but run
-        # only one task at a time. The old `> 1` guard silently fell through to
-        # individual serial submission for --num-nodes=1, which was surprising.
-        if num_nodes is not None:
-            logger.info(
-                f"Submitting {len(job)} jobs as array job "
-                f"(max {num_nodes} concurrent tasks)"
-            )
-
-            # Attach jobrunner to all jobs
-            for single_job in job:
-                single_job.jobrunner = jobrunner
-
-            cli_args = [
-                _reconstruct_cli_args(ctx, single_job) for single_job in job
-            ]
-            server = Server.from_servername(kwargs.get("server"))
-            server.submit_array_job(
-                jobs=job,
-                num_nodes=num_nodes,
-                test=kwargs.get("test"),
-                cli_args=cli_args,
-            )
-        else:
-            for single_job in job:
-                single_job.jobrunner = jobrunner
-                _process_single_job(job=single_job)
+        for single_job in job:
+            single_job.jobrunner = jobrunner
+            _process_single_job(job=single_job)
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)

@@ -118,7 +118,6 @@ def qrc(
     if molecule_indices is None:
         molecule_indices = list(range(1, len(molecules) + 1))
 
-    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.qrc import ORCAQRCJob
 
     if len(molecules) > 1:
@@ -146,11 +145,7 @@ def qrc(
                 )
             )
 
-        return ORCABatchJob(
-            jobs=jobs,
-            label=f"{label}_batch",
-            jobrunner=jobrunner,
-        )
+        return jobs
 
     molecule = molecules[0]
     logger.info(f"Running QRC calculation on molecule: {molecule}")

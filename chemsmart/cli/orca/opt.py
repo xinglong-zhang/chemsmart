@@ -108,7 +108,6 @@ def opt(
     label = ctx.obj["label"]
 
     # Set atoms to freeze for constrained optimization
-    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.opt import ORCAOptJob
     from chemsmart.utils.utils import (
         convert_list_to_gaussian_frozen_list,
@@ -150,10 +149,7 @@ def opt(
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA optimization jobs")
 
-        return ORCABatchJob(
-            jobs=jobs,
-            label=f"{label}_batch",
-        )
+        return jobs
     else:
         # Single molecule case
         molecule = molecules[-1]

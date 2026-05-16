@@ -12,21 +12,15 @@ solvation free energy calculations.
 
 import logging
 import os
-import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
-from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
-from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import SerialMode, decide_phase_transition, run_phase_jobs
+from chemsmart.jobs.runner import decide_phase_transition, run_phase_jobs
 
 logger = logging.getLogger(__name__)
 
-# pKa phases fail-fast on incomplete subjobs (not tied to CLI scheduling flags).
-_PKAPHASE_SERIAL_MODE = SerialMode(run_in_serial=True)
 
 
 def build_gaussian_pka_settings(
@@ -185,7 +179,6 @@ class GaussianpKaJob(GaussianJob):
         label=None,
         jobrunner=None,
         skip_completed=True,
-        parallel=False,
         **kwargs,
     ):
         if not isinstance(settings, GaussianpKaJobSettings):
@@ -202,8 +195,6 @@ class GaussianpKaJob(GaussianJob):
             **kwargs,
         )
 
-        # Opt-in concurrent execution of per-species subjobs on one node.
-        self.parallel = bool(parallel)
 
         self.opt_jobs = []
         self.ref_opt_jobs = []
@@ -299,7 +290,6 @@ class GaussianpKaJob(GaussianJob):
         """Run gas phase optimization jobs."""
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -312,7 +302,6 @@ class GaussianpKaJob(GaussianJob):
             return
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.ref_opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -333,7 +322,6 @@ class GaussianpKaJob(GaussianJob):
 
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.sp_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -355,7 +343,6 @@ class GaussianpKaJob(GaussianJob):
 
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.ref_sp_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -462,245 +449,12 @@ class GaussianpKaJob(GaussianJob):
             )
         return None
 
-    # ------------------------------------------------------------------
-    # Parallel execution helpers
-    # ------------------------------------------------------------------
-
-    def _run_opt_worker(self, job, role, runner, cores, mem):
-        """Run a single opt job and validate its frequencies.
-
-        Returns a dict ``{"role", "label", "success", "error"}``.
-        """
-        result = {
-            "role": role,
-            "label": job.label,
-            "success": False,
-            "error": None,
-        }
-
-        self._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
-        job.run()
-
-        freq_err = self._validate_imaginary_frequencies(job, role)
-        if freq_err:
-            result["error"] = freq_err
-            logger.error(freq_err)
-            return result
-
-        result["success"] = True
-        return result
-
-    @staticmethod
-    def _run_sp_worker(job, role, runner, cores, mem):
-        """Run a single SP job.
-
-        Returns a dict ``{"role", "label", "success", "error"}``.
-        """
-        result = {
-            "role": role,
-            "label": job.label,
-            "success": False,
-            "error": None,
-        }
-
-        Job._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
-        job.run()
-        result["success"] = True
-        return result
-
-    @staticmethod
-    def _collect_futures(future_to_role):
-        """Wait for all futures, collecting successes and failures.
-
-        Returns ``(successes, failures)`` where each element is a list
-        of label strings or error message strings respectively.
-        """
-        successes = []
-        failures = []
-
-        for fut in as_completed(future_to_role):
-            role = future_to_role[fut]
-            try:
-                res = fut.result()
-            except Exception:
-                tb = traceback.format_exc()
-                msg = (
-                    f"[{role}] Worker crashed with unhandled exception:\n{tb}"
-                )
-                logger.error(msg)
-                failures.append(msg)
-            else:
-                if res["success"]:
-                    successes.append(res["label"])
-                else:
-                    failures.append(res["error"])
-
-        return successes, failures
-
-    def _run_parallel(self):
-        """Run pKa workflow in parallel mode.
-
-        Uses ``ThreadPoolExecutor`` so that a crash or validation failure
-        in one worker does **not** prevent other workers from finishing.
-        After all workers complete, a summary is logged and – if any
-        worker failed – a ``RuntimeError`` is raised with every failure
-        message.
-        """
-        # Ensure we have a valid runner
-        runner = self.jobrunner
-        if runner and not isinstance(runner, GaussianJobRunner):
-            # Attempt to upgrade runner if we somehow have a generic one
-            try:
-                server = runner.server
-                runner = GaussianJobRunner(
-                    server=server,
-                    scratch=runner.scratch,
-                    delete_scratch=runner.delete_scratch,
-                    fake=runner.fake,
-                    num_cores=runner.num_cores,
-                    num_gpus=runner.num_gpus,
-                    mem_gb=runner.mem_gb,
-                )
-                logger.info(
-                    f"Upgraded generic runner to GaussianJobRunner: {runner}"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to upgrade runner: {e}")
-
-        # Calculate resources per job to prevent contention
-        total_cores = runner.num_cores if runner and runner.num_cores else 1
-        total_mem = runner.mem_gb if runner and runner.mem_gb else 1
-
-        # ── Phase 1: optimisation jobs ──────────────────────────────────
-        opt_job_specs = list(zip(self.opt_jobs, ("HA_opt", "A_opt")))
-        if self.has_reference_jobs:
-            opt_job_specs.extend(
-                zip(self.ref_opt_jobs, ("HRef_opt", "Ref_opt"))
-            )
-
-        concurrent_opt_jobs = len(opt_job_specs)
-        opt_cores_per_job = max(1, int(total_cores // concurrent_opt_jobs))
-        opt_mem_per_job = max(1, int(total_mem // concurrent_opt_jobs))
-
-        logger.info(
-            f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
-            f"among {concurrent_opt_jobs} concurrent opt jobs "
-            f"({opt_cores_per_job} cores, {opt_mem_per_job}GB each)."
-        )
-
-        successes = []
-        all_failures = []
-        phase_failures = []
-
-        with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
-            future_to_role = {}
-            for job, role in opt_job_specs:
-                fut = executor.submit(
-                    self._run_opt_worker,
-                    job,
-                    role,
-                    runner,
-                    opt_cores_per_job,
-                    opt_mem_per_job,
-                )
-                future_to_role[fut] = role
-
-            phase_successes, phase_failures = self._collect_futures(
-                future_to_role
-            )
-            successes.extend(phase_successes)
-            all_failures.extend(phase_failures)
-
-        opt_transition = decide_phase_transition(
-            phase_name="Optimization",
-            failures=phase_failures,
-        )
-        if not opt_transition.proceed:
-            if opt_transition.should_raise:
-                raise RuntimeError(opt_transition.message)
-            logger.info(opt_transition.message)
-            return
-
-        # ── Phase 2: SP jobs (only if opt phase had no fatal errors) ────
-        # Create SP jobs from optimised geometries
-        self._create_sp_jobs()
-        if self.has_reference_jobs:
-            self._create_ref_sp_jobs()
-
-        sp_job_specs = []
-        if self.sp_jobs:
-            sp_job_specs.extend(zip(self.sp_jobs, ("HA_sp", "A_sp")))
-        if self.has_reference_jobs and self.ref_sp_jobs:
-            sp_job_specs.extend(zip(self.ref_sp_jobs, ("HRef_sp", "Ref_sp")))
-        sp_jobs_to_run = [job for job, _ in sp_job_specs]
-        sp_roles = [role for _, role in sp_job_specs]
-
-        if sp_jobs_to_run:
-            concurrent_sp_jobs = len(sp_jobs_to_run)
-            sp_cores_per_job = max(1, int(total_cores // concurrent_sp_jobs))
-            sp_mem_per_job = max(1, int(total_mem // concurrent_sp_jobs))
-
-            logger.info(
-                f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
-                f"among {concurrent_sp_jobs} concurrent sp jobs "
-                f"({sp_cores_per_job} cores, {sp_mem_per_job}GB each)."
-            )
-
-            with ThreadPoolExecutor(
-                max_workers=concurrent_sp_jobs
-            ) as executor:
-                future_to_role = {}
-                for job, role in zip(sp_jobs_to_run, sp_roles):
-                    fut = executor.submit(
-                        self._run_sp_worker,
-                        job,
-                        role,
-                        runner,
-                        sp_cores_per_job,
-                        sp_mem_per_job,
-                    )
-                    future_to_role[fut] = role
-
-                phase_successes, phase_failures = self._collect_futures(
-                    future_to_role
-                )
-                successes.extend(phase_successes)
-                all_failures.extend(phase_failures)
-
-        # ── Final reporting ─────────────────────────────────────────────
-        total = len(successes) + len(all_failures)
-        logger.info(
-            f"Parallel pKa run complete: "
-            f"{len(successes)}/{total} succeeded, "
-            f"{len(all_failures)}/{total} failed."
-        )
-        for label in successes:
-            logger.info(f"  ✓ {label}")
-        for err in all_failures:
-            logger.error(f"  ✗ {err}")
-
-        if all_failures:
-            summary = (
-                f"{len(all_failures)} of {total} parallel pKa worker(s) failed:\n"
-                + "\n".join(f"  - {e}" for e in all_failures)
-            )
-            raise RuntimeError(summary)
-
     def _run(self, **kwargs):
         """
         Execute the pKa calculation.
 
-        Runs gas phase optimization jobs sequentially by default, then
-        solution phase SP jobs.  Pass ``parallel=True`` to the constructor
-        to enable concurrent execution of per-species jobs on the same node.
+        Runs gas phase optimization jobs followed by solution phase SP jobs.
         """
-        if self.parallel:
-            logger.info(
-                "Running Gaussian pKa calculation in parallel mode (splitting resources)"
-            )
-            self._run_parallel()
-            return
-
         # Default sequential behaviour
         # Run gas phase optimization jobs for target acid (HA, A-)
         self._run_opt_jobs()
@@ -1101,21 +855,4 @@ class GaussianpKaThermoJob(GaussianpKaAnalyzeJob):
 
     TYPE = "g16pka_thermo"
 
-
-class GaussianpKaBatchAnalyzeJob(GaussianpKaBatchJob):
-    """
-    Gaussian job class for batch processing of pKa analysis.
-    """
-
-    def __init__(
-        self, input_file_list, label="batch_analyze", jobrunner=None, **kwargs
-    ):
-        # NOTE: This class assumes the user will populate self.jobs manually
-        # or that the input_file_list is handled elsewhere, as we lack
-        # settings to create proper GaussianpKaAnalyzeJob instances here.
-        # This implementation primarily satisfies the import requirement.
-        super().__init__(
-            jobs=[], label=label, jobrunner=jobrunner, run_in_serial=None
-        )
-        self.input_file_list = input_file_list
 

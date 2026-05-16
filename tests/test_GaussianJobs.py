@@ -159,7 +159,6 @@ class TestGaussianQRCJobs:
     @pytest.fixture
     def mock_jobrunner(self):
         runner = MagicMock(spec=JobRunner)
-        runner.run_in_serial = False
         return runner
 
     def test_init_raises_if_no_vibrations(self, mock_molecule, real_settings):
@@ -167,13 +166,9 @@ class TestGaussianQRCJobs:
         with pytest.raises(ValueError, match="no vibrational modes"):
             GaussianQRCJob(molecule=mock_molecule, settings=real_settings)
 
-    def test_run_both_jobs_uses_batch_parallel(
+    def test_run_both_jobs_runs_forward_and_reverse_jobs(
         self, mock_molecule, real_settings, mock_jobrunner
     ):
-        """
-        Test that _run_both_jobs creates a GaussianBatchJob
-        and runs it with run_in_serial=False (default).
-        """
         job = GaussianQRCJob(
             molecule=mock_molecule,
             settings=real_settings,
@@ -182,54 +177,17 @@ class TestGaussianQRCJobs:
         )
 
         with patch(
-            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
-        ) as MockBatch:
-            batch_instance = MockBatch.return_value
+            "chemsmart.jobs.gaussian.qrc.GaussianGeneralJob"
+        ) as mock_general_job:
+            forward_job = MagicMock()
+            reverse_job = MagicMock()
+            mock_general_job.side_effect = [forward_job, reverse_job]
 
-            # Execute the method under test
             job._run_both_jobs()
 
-            # Verify GaussianBatchJob was initialized correctly
-            MockBatch.assert_called_once()
-            call_kwargs = MockBatch.call_args[1]
-
-            assert call_kwargs["run_in_serial"] is False
-            assert len(call_kwargs["jobs"]) == 2  # Forward and reverse
-            assert call_kwargs["label"] == "test_qrc_batch"
-            assert call_kwargs["jobrunner"] == mock_jobrunner
-
-            # Verify batch job was run
-            batch_instance.run.assert_called_once()
-
-    def test_run_both_jobs_uses_batch_serial(
-        self, mock_molecule, real_settings, mock_jobrunner
-    ):
-        """
-        Test that _run_both_jobs respects jobrunner.run_in_serial=True.
-        """
-        mock_jobrunner.run_in_serial = True
-        job = GaussianQRCJob(
-            molecule=mock_molecule,
-            settings=real_settings,
-            jobrunner=mock_jobrunner,
-            label="test_qrc_serial",
-        )
-
-        with patch(
-            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
-        ) as MockBatch:
-            batch_instance = MockBatch.return_value
-
-            # Execute the method under test
-            job._run_both_jobs()
-
-            # Verify GaussianBatchJob was initialized with serial=True
-            MockBatch.assert_called_once()
-            call_kwargs = MockBatch.call_args[1]
-            assert call_kwargs["run_in_serial"] is True
-
-            # Verify batch job was run
-            batch_instance.run.assert_called_once()
+            assert mock_general_job.call_count == 2
+            forward_job.run.assert_called_once()
+            reverse_job.run.assert_called_once()
 
 
 class TestGaussianlinkIRCJobs:

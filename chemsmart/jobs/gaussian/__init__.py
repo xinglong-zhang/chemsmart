@@ -11,7 +11,6 @@ The module also includes job runners and utilities for managing
 Gaussian calculations in computational workflows.
 """
 
-from .batch import GaussianBatchJob
 from .crest import GaussianCrestJob
 from .custom import GaussianCustomJob
 from .dias import GaussianDIASJob
@@ -39,7 +38,6 @@ jobs = GaussianJob.subclasses()
 
 __all__ = [
     "GaussianCrestJob",
-    "GaussianBatchJob",
     "GaussianCustomJob",
     "GaussianDIASJob",
     "GaussianIRCJob",

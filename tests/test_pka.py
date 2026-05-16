@@ -2,7 +2,6 @@ import importlib
 from pathlib import Path
 from typing import cast
 
-from click.core import BaseCommand
 from click.testing import CliRunner
 
 from chemsmart.cli.run import run
@@ -130,7 +129,7 @@ def test_run_pka_unknown_program_raises(tmp_path):
     ).lower()
 
 
-def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
+def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
     tmp_path, monkeypatch
 ):
     orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -166,7 +165,7 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
     )
     monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-    captured = {}
+    captured = {"submissions": []}
 
     fake_server = Server(name="dummy")
     real_from_filepath = Molecule.from_filepath
@@ -184,17 +183,10 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
             return placeholder
         return real_from_filepath(filepath, *args, **kwargs)
 
-    def _fake_submit_array_job(
-        jobs, num_nodes=None, test=False, cli_args=None, **kwargs
-    ):
-        captured["jobs"] = jobs
-        captured["num_nodes"] = num_nodes
-        captured["test"] = test
-        captured["cli_args"] = cli_args
+    def _fake_submit(job, test=False, cli_args=None, **kwargs):
+        captured["submissions"].append((job, test, cli_args))
 
-    monkeypatch.setattr(
-        fake_server, "submit_array_job", _fake_submit_array_job
-    )
+    monkeypatch.setattr(fake_server, "submit", _fake_submit)
     monkeypatch.setattr(
         "chemsmart.settings.server.Server.from_servername",
         lambda _name: fake_server,
@@ -205,12 +197,10 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
 
     runner = CliRunner()
     result = runner.invoke(
-        cast(BaseCommand, sub),
+        sub,
         [
             "--server",
             "dummy",
-            "--num-nodes",
-            "2",
             "--test",
             "orca",
             "--project",
@@ -225,13 +215,11 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
     )
 
     assert result.exit_code == 0, result.output
-    assert captured["num_nodes"] == 2
-    assert captured["test"] is True
-    assert len(captured["jobs"]) == 2
-    assert len(captured["cli_args"]) == 2
-
-    first_args, second_args = captured["cli_args"]
-
+    assert len(captured["submissions"]) == 2
+    first_job, first_test, first_args = captured["submissions"][0]
+    second_job, second_test, second_args = captured["submissions"][1]
+    assert first_test is True
+    assert second_test is True
     assert isinstance(first_args, list)
     assert isinstance(second_args, list)
     assert "batch" in first_args

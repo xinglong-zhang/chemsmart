@@ -131,14 +131,6 @@ chemsmart run gaussian -f pka_table.csv pka batch
 - **After:** Reads 5 rows → creates 5 jobs → returns as list
 - **Outcome:** Same execution ✅
 
-### Scenario 5: Serial Execution Mode
-```bash
-chemsmart run --run-in-serial gaussian -f pka_table.csv pka batch
-```
-- **Before:** GaussianpKaBatchJob handles serial execution
-- **After:** process_pipeline detects serial mode and iterates jobs
-- **Outcome:** Same serial execution ✅
-
 ### Scenario 6: Parallel Execution Mode
 ```bash
 chemsmart run gaussian -f pka_table.csv pka batch

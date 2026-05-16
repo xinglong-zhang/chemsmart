@@ -266,7 +266,6 @@ def ts(
     # validate charge and multiplicity consistency only for direct ts jobs
     check_charge_and_multiplicity(ts_settings)
 
-    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.ts import ORCATSJob
 
     if len(molecules) > 1:
@@ -287,10 +286,7 @@ def ts(
                 )
             )
 
-        return ORCABatchJob(
-            jobs=jobs,
-            label=f"{label}_batch",
-        )
+        return jobs
 
     molecule = molecules[0]
     logger.info(f"Running TS search on molecule: {molecule}")

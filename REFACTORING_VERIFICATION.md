@@ -262,8 +262,7 @@ python -m py_compile chemsmart/jobs/gaussian/pka.py ✅
 1. Single-molecule submission: `chemsmart run gaussian -f acid.xyz -c 0 -m 1 pka -pi 10 submit`
 2. Multi-fragment CDXML: `chemsmart run gaussian -f molecules.cdxml pka submit`
 3. Batch table: `chemsmart run gaussian -f pka_table.csv pka batch`
-4. Serial execution mode: `chemsmart run --run-in-serial gaussian ... pka ...`
-5. Parallel execution mode: `chemsmart run gaussian ... pka ...`
+4. Parallel execution mode: `chemsmart run gaussian ... pka ...`
 
 ### Regression Tests
 - Verify pKa calculation results unchanged

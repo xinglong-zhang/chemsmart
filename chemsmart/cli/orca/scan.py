@@ -124,7 +124,6 @@ def scan(
 
     if ctx.invoked_subcommand is None:
 
-        from chemsmart.jobs.orca.batch import ORCABatchJob
         from chemsmart.jobs.orca.scan import ORCAScanJob
 
         # validate charge and multiplicity consistency
@@ -153,10 +152,7 @@ def scan(
                 jobs.append(job)
             logger.debug(f"Created {len(jobs)} ORCA scan jobs")
 
-            return ORCABatchJob(
-                jobs=jobs,
-                label=f"{label}_batch",
-            )
+            return jobs
         else:
             # Single molecule case
             molecule = molecules[-1]

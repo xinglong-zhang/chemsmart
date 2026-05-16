@@ -21,13 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class SerialMode:
-    """Simple view of serial-mode flags derived from a jobrunner."""
-
-    run_in_serial: bool
-
-
-@dataclass(frozen=True)
 class PhaseTransitionDecision:
     """Decision payload for moving from one workflow phase to the next."""
 
@@ -36,21 +29,9 @@ class PhaseTransitionDecision:
     message: Optional[str] = None
 
 
-def get_serial_mode(jobrunner) -> SerialMode:
-    """Return serial-mode flags from a jobrunner.
-
-    This helper intentionally does not encode pKa-specific fail-fast rules.
-    """
-    run_in_serial = bool(
-        jobrunner and getattr(jobrunner, "run_in_serial", False)
-    )
-    return SerialMode(run_in_serial=run_in_serial)
-
-
 def run_phase_jobs(
     *,
     parent_runner,
-    serial_mode: SerialMode,
     jobs: Optional[Sequence] = None,
     jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
     stop_on_incomplete: bool = False,
@@ -58,12 +39,11 @@ def run_phase_jobs(
     logger_obj=None,
     phase_label: str = "phase",
 ) -> None:
-    """Shared phase runner wrapper that applies serial-mode policy."""
+    """Shared phase runner wrapper."""
     Job._execute_phase_jobs(
         parent_runner=parent_runner,
         jobs=jobs,
         jobs_factory=jobs_factory,
-        run_in_serial=serial_mode.run_in_serial,
         stop_on_incomplete=stop_on_incomplete,
         before_run=before_run,
         logger_obj=logger_obj,
