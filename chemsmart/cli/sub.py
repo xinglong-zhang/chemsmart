@@ -188,7 +188,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "-m": str(batch_entry["multiplicity"]),
         }
 
-        def _set_option(tokens, long_opt, short_opt):
+        def _set_option(tokens, long_opt, short_opt, insert_before=None):
             if long_opt in tokens:
                 pos = tokens.index(long_opt)
                 if pos + 1 < len(tokens):
@@ -199,11 +199,23 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
                 if pos + 1 < len(tokens):
                     tokens[pos + 1] = option_map[short_opt]
                 return
-            tokens.extend([short_opt, option_map[short_opt]])
 
-        _set_option(args, "--proton-index", "-pi")
-        _set_option(args, "--charge", "-c")
-        _set_option(args, "--multiplicity", "-m")
+            insert_idx = len(tokens)
+            if insert_before in tokens:
+                insert_idx = tokens.index(insert_before)
+            # Prefer long-form options to avoid Click treating multi-char
+            # aliases such as "-pi" as grouped short flags (e.g. "-p -i").
+            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
+
+        # Proton index belongs to the pka group and must appear before the
+        # "batch" subcommand token.
+        _set_option(args, "--proton-index", "-pi", insert_before="batch")
+        # Charge/multiplicity belong to the backend group (gaussian/orca), so
+        # they must appear before entering the "pka" group.
+        _set_option(args, "--charge", "-c", insert_before="pka")
+        _set_option(
+            args, "--multiplicity", "-m", insert_before="pka"
+        )
 
         return args
 

@@ -321,6 +321,14 @@ def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
     assert str(table) not in second_args
     assert str(acid1) in first_args
     assert str(acid2) in second_args
+    # Rewritten row-level options must be placed in the correct command scope:
+    # --charge/--multiplicity on backend command and --proton-index on pka.
+    assert "--charge" in first_args
+    assert "--multiplicity" in first_args
+    assert "--proton-index" in first_args
+    assert first_args.index("--charge") < first_args.index("pka")
+    assert first_args.index("--multiplicity") < first_args.index("pka")
+    assert first_args.index("--proton-index") < first_args.index("batch")
 
 
 def test_run_gaussian_pka_help_is_submission_only():
