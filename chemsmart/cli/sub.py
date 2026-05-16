@@ -182,6 +182,16 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         if "batch" in args:
             args[args.index("batch")] = "submit"
 
+        def _drop_option(tokens, option_names):
+            idx = 0
+            while idx < len(tokens):
+                if tokens[idx] in option_names:
+                    del tokens[idx]
+                    if idx < len(tokens):
+                        del tokens[idx]
+                    continue
+                idx += 1
+
         # Ensure row-level proton/charge/multiplicity are explicit.
         option_map = {
             "--proton-index": str(batch_entry["proton_index"]),
@@ -220,6 +230,37 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         _set_option(
             args, "--multiplicity", "-m", insert_before="pka"
         )
+
+        batch_scheme = batch_entry.get("scheme")
+        if batch_scheme is not None:
+            option_map.update(
+                {
+                    "--scheme": str(batch_scheme),
+                    "-s": str(batch_scheme),
+                }
+            )
+            _set_option(args, "--scheme", "-s", insert_before="submit")
+
+            if batch_scheme == "direct":
+                # Subsequent batch rows run direct mode only; drop all
+                # reference-acid CLI options so click validation does not fail.
+                _drop_option(
+                    args,
+                    {
+                        "--reference",
+                        "-r",
+                        "--reference-proton-index",
+                        "-rpi",
+                        "--reference-color-code",
+                        "-rcc",
+                        "--reference-charge",
+                        "-rc",
+                        "--reference-multiplicity",
+                        "-rm",
+                        "--reference-conjugate-base-charge",
+                        "--reference-conjugate-base-multiplicity",
+                    },
+                )
 
         return args
 

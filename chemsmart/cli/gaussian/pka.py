@@ -270,7 +270,8 @@ def batch(ctx, skip_completed, **kwargs):
     import copy
 
     jobs = []
-    for entry in entries:
+    original_scheme = shared["scheme"]
+    for index, entry in enumerate(entries):
         filepath = entry.get("filepath") or entry.get("path") or entry.filepath
         molecule = Molecule.from_filepath(filepath)
         label = Path(filepath).stem
@@ -279,9 +280,27 @@ def batch(ctx, skip_completed, **kwargs):
         row_opt_settings.charge = int(entry.charge)
         row_opt_settings.multiplicity = int(entry.multiplicity)
 
+        row_shared = copy.copy(shared)
+        row_shared["scheme"] = (
+            original_scheme
+            if index == 0
+            else (
+                "direct"
+                if original_scheme == "proton exchange"
+                else original_scheme
+            )
+        )
+        if row_shared["scheme"] != "proton exchange":
+            row_shared["reference"] = None
+            row_shared["reference_proton_index"] = None
+            row_shared["reference_charge"] = None
+            row_shared["reference_multiplicity"] = None
+            row_shared["reference_conjugate_base_charge"] = None
+            row_shared["reference_conjugate_base_multiplicity"] = None
+
         pka_settings = build_gaussian_pka_settings(
             proton_index=int(entry.proton_index),
-            shared=shared,
+            shared=row_shared,
             opt_settings=row_opt_settings,
             sp_settings=project_settings.sp_settings(),
         )
@@ -301,6 +320,7 @@ def batch(ctx, skip_completed, **kwargs):
             "proton_index": int(entry.proton_index),
             "charge": int(entry.charge),
             "multiplicity": int(entry.multiplicity),
+            "scheme": row_shared["scheme"],
         }
         jobs.append(job)
 
