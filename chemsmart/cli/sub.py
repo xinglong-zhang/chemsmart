@@ -12,7 +12,7 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.runner import JobRunner, get_serial_mode
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
 from chemsmart.utils.logger import create_logger
@@ -68,7 +68,6 @@ def sub(
     fake,
     scratch,
     delete_scratch,
-    run_in_serial,
     debug,
     stream,
     num_nodes,
@@ -105,7 +104,6 @@ def sub(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
-        run_in_serial=run_in_serial,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
@@ -177,40 +175,13 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         Get cli args that reconstruct the command line.
 
         Rebuilds the command-line arguments from the context object
-        for job submission purposes.  When a job carries a
-        ``_batch_subcommands_override`` (set by batch commands),
-        those per-entry subcommands are used instead of the global
-        context, so each submitted script processes only its own entry.
+        for job submission purposes.
         """
-        use_override = (
-            hasattr(job, "_batch_subcommands_override")
-            and job._batch_subcommands_override is not None
-        )
-
-        commands = (
-            job._batch_subcommands_override
-            if use_override
-            else ctx.obj["subcommand"]
-        )
-
-        # Ensure override commands are also cleaned (ctx.obj['subcommand'] is cleaned by _clean_command)
-        if use_override:
-            _clean_command_list(commands)
-
+        commands = ctx.obj["subcommand"]
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
-
-        # Ensure the serial-mode flag is propagated if enabled in jobrunner.
-        # Use the new CLI switch name `--no-run-in-parallel` to indicate
-        # that parallel execution should be disabled for the reconstructed
-        # submission command.
-        if (
-            serial_mode.run_in_serial
-            and "--no-run-in-parallel" not in cli_args
-        ):
-            cli_args.insert(0, "--no-run-in-parallel")
 
         if kwargs.get("print_command"):
             print(cli_args)
@@ -227,7 +198,6 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
-    serial_mode = get_serial_mode(jobrunner)
     num_nodes = ctx.obj.get("num_nodes")
     job = args[0]
 
@@ -239,7 +209,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         # the value. Even --num-nodes=1 is valid: submit as an array but run
         # only one task at a time. The old `> 1` guard silently fell through to
         # individual serial submission for --num-nodes=1, which was surprising.
-        if num_nodes is not None and serial_mode.no_run_in_serial:
+        if num_nodes is not None:
             logger.info(
                 f"Submitting {len(job)} jobs as array job "
                 f"(max {num_nodes} concurrent tasks)"
@@ -249,9 +219,6 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             for single_job in job:
                 single_job.jobrunner = jobrunner
 
-            # Submit as array job using per-job reconstructed CLI args so
-            # entry-specific overrides (for example batch pKa entries) are
-            # preserved in each generated array run script.
             cli_args = [
                 _reconstruct_cli_args(ctx, single_job) for single_job in job
             ]
@@ -263,9 +230,6 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
                 cli_args=cli_args,
             )
         else:
-            # Submit jobs individually (serial or when num_nodes not specified)
-            if serial_mode.run_in_serial:
-                logger.info("Submitting jobs serially (one by one)")
             for single_job in job:
                 single_job.jobrunner = jobrunner
                 _process_single_job(job=single_job)

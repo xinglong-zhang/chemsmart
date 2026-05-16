@@ -20,12 +20,14 @@ from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 from chemsmart.jobs.runner import (
+    SerialMode,
     decide_phase_transition,
-    get_serial_mode,
     run_phase_jobs,
 )
 
 logger = logging.getLogger(__name__)
+
+_PKAPHASE_SERIAL_MODE = SerialMode(run_in_serial=True)
 
 
 class ORCApKaJob(ORCAJob):
@@ -86,15 +88,7 @@ class ORCApKaJob(ORCAJob):
         self._ref_opt_jobs = None
         self._ref_sp_jobs = None
 
-        # parallel support
         self.parallel = bool(parallel)
-        serial_mode = get_serial_mode(self.jobrunner)
-        if serial_mode.run_in_serial:
-            if self.parallel:
-                logger.info(
-                    "Parallel execution disabled due to run_in_serial=True in JobRunner"
-                )
-            self.parallel = False
 
     # ------------------------------------------------------------------
     # Basename helpers for label derivation
@@ -386,7 +380,6 @@ class ORCApKaJob(ORCAJob):
     def _run_opt_jobs(self):
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -398,7 +391,6 @@ class ORCApKaJob(ORCAJob):
             return
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.ref_opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -408,7 +400,6 @@ class ORCApKaJob(ORCAJob):
     def _run_sp_jobs(self):
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=None,
             jobs_factory=lambda: self.sp_jobs,
             stop_on_incomplete=True,
@@ -422,7 +413,6 @@ class ORCApKaJob(ORCAJob):
             return
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=None,
             jobs_factory=lambda: self.ref_sp_jobs,
             stop_on_incomplete=True,
@@ -694,13 +684,11 @@ class ORCApKaJob(ORCAJob):
             self._run_parallel()
             return
 
-        serial_mode = get_serial_mode(self.jobrunner)
-
         self._run_opt_jobs()
 
         opt_transition = decide_phase_transition(
             phase_name="Opt",
-            require_complete=serial_mode.run_in_serial,
+            require_complete=False,
             is_complete=all(j.is_complete() for j in self.opt_jobs),
             stop_message="Opt jobs incomplete, halting serial execution.",
         )
@@ -712,7 +700,7 @@ class ORCApKaJob(ORCAJob):
             self._run_ref_opt_jobs()
             ref_opt_transition = decide_phase_transition(
                 phase_name="Ref Opt",
-                require_complete=serial_mode.run_in_serial,
+                require_complete=False,
                 is_complete=all(j.is_complete() for j in self.ref_opt_jobs),
                 stop_message="Ref Opt jobs incomplete, halting serial execution.",
             )
@@ -728,7 +716,7 @@ class ORCApKaJob(ORCAJob):
 
         sp_transition = decide_phase_transition(
             phase_name="SP",
-            require_complete=serial_mode.run_in_serial,
+            require_complete=False,
             is_complete=all(j.is_complete() for j in self.sp_jobs),
             stop_message="SP jobs incomplete, halting serial execution.",
         )

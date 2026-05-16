@@ -198,19 +198,6 @@ Example ``pka_input_table.csv``:
 For the proton exchange cycle, the reference acid options (``-r``, ``-rpi``, ``-rc``, ``-rm``) are still required on the
 ``pka`` group even in batch mode.
 
-Batch Execution Policy (Serial vs Non-Serial)
----------------------------------------------
-
-Batch execution policy is controlled by the top-level run/sub flag:
-
-.. code:: bash
-
-   chemsmart run --run-in-serial gaussian -p my_project -f molecules.csv pka \
-       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
-
-Use ``--run-in-serial`` to force one-by-one execution of table entries. Use the default ``--run-in-parallel`` for
-non-serial execution.
-
 Computing pKa from Existing Output Files
 ========================================
 

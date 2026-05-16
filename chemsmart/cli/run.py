@@ -9,11 +9,7 @@ from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import (
-    JobRunner,
-    get_serial_mode,
-    get_submitter_worker_count,
-)
+from chemsmart.jobs.runner import JobRunner, get_submitter_worker_count
 from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
@@ -49,7 +45,6 @@ def run(
     fake,
     scratch,
     delete_scratch,
-    run_in_serial,
     debug,
     stream,
 ):
@@ -71,7 +66,6 @@ def run(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
-        run_in_serial=run_in_serial,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
@@ -100,7 +94,10 @@ def process_pipeline(ctx, *args, **kwargs):
     # jobrunner at this stage is an instance of JobRunner class
     jobrunner = ctx.obj["jobrunner"]
 
-    # Get the job
+    # Get the job (some command paths intentionally return no job object)
+    if not args:
+        logger.debug("No pipeline output returned. Skipping job execution.")
+        return None
     job = args[0]
     logger.debug(f"Job to be run: {job}")
 
@@ -115,7 +112,6 @@ def process_pipeline(ctx, *args, **kwargs):
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Running {len(job)} jobs")
-        serial_mode = get_serial_mode(jobrunner)
 
         def _prepare_runner(single_job):
             return jobrunner.from_job(
@@ -124,21 +120,12 @@ def process_pipeline(ctx, *args, **kwargs):
                 scratch=jobrunner.scratch,
                 fake=jobrunner.fake,
                 delete_scratch=jobrunner.delete_scratch,
-                run_in_serial=jobrunner.run_in_serial,
                 num_cores=jobrunner.num_cores,
                 num_gpus=jobrunner.num_gpus,
                 mem_gb=jobrunner.mem_gb,
             )
 
-        if serial_mode.run_in_serial:
-            logger.info("Running jobs in serial mode (one after another)")
-            for single_job in job:
-                logger.info(f"Running job: {single_job.label}")
-                single_job.jobrunner = _prepare_runner(single_job)
-                single_job.run()
-            return None
-
-        logger.info("Running jobs in parallel mode")
+        logger.info("Running jobs with concurrent submitters")
         max_workers = get_submitter_worker_count(jobrunner, len(job))
         logger.info(f"Using up to {max_workers} parallel submitter workers")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -169,7 +156,6 @@ def process_pipeline(ctx, *args, **kwargs):
             scratch=jobrunner.scratch,
             fake=jobrunner.fake,
             delete_scratch=jobrunner.delete_scratch,
-            run_in_serial=jobrunner.run_in_serial,
             num_cores=jobrunner.num_cores,
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,

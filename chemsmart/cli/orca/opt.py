@@ -150,10 +150,8 @@ def opt(
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA optimization jobs")
 
-        run_in_serial = ctx.obj["jobrunner"].run_in_serial
         return ORCABatchJob(
             jobs=jobs,
-            run_in_serial=run_in_serial,
             label=f"{label}_batch",
         )
     else:

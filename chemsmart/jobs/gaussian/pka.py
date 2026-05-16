@@ -15,20 +15,18 @@ import os
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import (
-    decide_phase_transition,
-    get_serial_mode,
-    run_phase_jobs,
-)
+from chemsmart.jobs.runner import SerialMode, decide_phase_transition, run_phase_jobs
 
 logger = logging.getLogger(__name__)
+
+# pKa phases fail-fast on incomplete subjobs (not tied to CLI scheduling flags).
+_PKAPHASE_SERIAL_MODE = SerialMode(run_in_serial=True)
 
 
 def build_gaussian_pka_settings(
@@ -99,44 +97,6 @@ def build_gaussian_pka_settings(
         **pka_kwargs,
         **opt_kwargs,
     )
-
-
-class GaussianpKaBatchJob(GaussianBatchJob):
-    """
-    Gaussian job class for running a batch of pKa calculations.
-
-    Executes a list of GaussianpKaJob instances either serially or in parallel.
-    Inherits from GaussianBatchJob.
-    """
-
-    TYPE = "g16pka"
-    PROGRAM = "gaussian"
-
-    def __init__(
-        self,
-        jobs,
-        run_in_serial=None,
-        label="batch_pka",
-        jobrunner=None,
-        **kwargs,
-    ):
-        """
-        Initialize a Gaussian pKa batch job.
-
-        Args:
-            jobs (list[GaussianpKaJob]): List of pKa jobs to execute.
-            run_in_serial (bool): If True, execute jobs one by one.
-            label (str): Label for the batch job.
-            jobrunner (JobRunner): Execution backend.
-            **kwargs: Additional arguments for the base Job class.
-        """
-        super().__init__(
-            jobs=jobs,
-            run_in_serial=run_in_serial,
-            label=label,
-            jobrunner=jobrunner,
-            **kwargs,
-        )
 
 
 class GaussianpKaJob(GaussianJob):
@@ -242,18 +202,8 @@ class GaussianpKaJob(GaussianJob):
             **kwargs,
         )
 
-        # parallel support – opt-in only, matching ORCApKaJob behaviour.
-        # When False (default), jobs run serially regardless of the jobrunner's
-        # run_in_serial flag, so software that does not support concurrent
-        # processes (e.g. single-licence Gaussian) is never affected.
+        # Opt-in concurrent execution of per-species subjobs on one node.
         self.parallel = bool(parallel)
-        serial_mode = get_serial_mode(self.jobrunner)
-        if serial_mode.run_in_serial:
-            if self.parallel:
-                logger.info(
-                    "Parallel execution disabled due to run_in_serial=True in JobRunner"
-                )
-            self.parallel = False
 
         self.opt_jobs = []
         self.ref_opt_jobs = []
@@ -349,7 +299,7 @@ class GaussianpKaJob(GaussianJob):
         """Run gas phase optimization jobs."""
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
+            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -362,7 +312,7 @@ class GaussianpKaJob(GaussianJob):
             return
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
+            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.ref_opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -383,7 +333,7 @@ class GaussianpKaJob(GaussianJob):
 
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
+            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.sp_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -405,7 +355,7 @@ class GaussianpKaJob(GaussianJob):
 
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
+            serial_mode=_PKAPHASE_SERIAL_MODE,
             jobs=self.ref_sp_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -607,7 +557,6 @@ class GaussianpKaJob(GaussianJob):
                     scratch=runner.scratch,
                     delete_scratch=runner.delete_scratch,
                     fake=runner.fake,
-                    run_in_serial=runner.run_in_serial,
                     num_cores=runner.num_cores,
                     num_gpus=runner.num_gpus,
                     mem_gb=runner.mem_gb,
@@ -1169,3 +1118,4 @@ class GaussianpKaBatchAnalyzeJob(GaussianpKaBatchJob):
             jobs=[], label=label, jobrunner=jobrunner, run_in_serial=None
         )
         self.input_file_list = input_file_list
+

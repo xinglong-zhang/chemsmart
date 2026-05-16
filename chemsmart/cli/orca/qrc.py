@@ -148,7 +148,6 @@ def qrc(
 
         return ORCABatchJob(
             jobs=jobs,
-            run_in_serial=jobrunner.run_in_serial,
             label=f"{label}_batch",
             jobrunner=jobrunner,
         )

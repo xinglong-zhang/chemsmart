@@ -17,7 +17,10 @@ import os
 import click
 
 from chemsmart.utils.cli import MyCommand, MyGroup
-from chemsmart.utils.io import get_program_type_from_file
+from chemsmart.utils.io import (
+    detect_program_type_from_files,
+    get_program_type_from_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -286,63 +289,6 @@ def click_pka_analyze_options(f):
     return f
 
 
-def build_per_entry_subcommands(
-    ctx, filepath, charge, multiplicity, proton_index
-):
-    """Build per-entry subcommands for batch execution.
-
-    Generates a submission command for each entry in the .csv file by mapping entry-specific job
-    parameters (file path, charge, multiplicity, proton index) onto the
-    recorded CLI invocation. Each generated subcommand set targets a single
-    molecule, enabling parallel or sequential batch processing without
-    re-running the full input table.
-
-    Args:
-        ctx: Click context whose ``ctx.obj["subcommand"]`` stores the recorded
-            command chain for the current invocation.
-        filepath: Path to the entry's structure file.
-        charge: Entry-specific molecular charge.
-        multiplicity: Entry-specific spin multiplicity.
-        proton_index: Entry-specific proton index to remove.
-
-    Returns:
-        list[dict]: Patched subcommand chain suitable for
-            ``CtxObjArguments.reconstruct_command_line()``.
-    """
-    import copy
-
-    subcommands = copy.deepcopy(ctx.obj["subcommand"])
-
-    # ── 1. Patch the backend ("gaussian" or "orca") entry ──
-    for cmd in subcommands:
-        if cmd["name"] in ("gaussian", "orca"):
-            kw = cmd["kwargs"]
-            if "filename" in kw:
-                kw["filename"]["value"] = filepath
-            if "charge" in kw:
-                kw["charge"]["value"] = charge
-            if "multiplicity" in kw:
-                kw["multiplicity"]["value"] = multiplicity
-            break
-
-    # ── 2. Patch the "pka" group entry ──
-    for cmd in subcommands:
-        if cmd["name"] == "pka":
-            kw = cmd["kwargs"]
-            if "proton_index" in kw:
-                kw["proton_index"]["value"] = proton_index
-            break
-
-    # ── 3. Replace "batch" with "submit" ──
-    # Explicitly invoke `submit` subcommand.
-    for cmd in subcommands:
-        if cmd["name"] == "batch":
-            cmd["name"] = "submit"
-            break
-
-    return subcommands
-
-
 def resolve_proton_index(filename, proton_index, color_code):
     """Resolve the proton index for deprotonation, optionally via CDXML.
 
@@ -595,7 +541,10 @@ def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
 
 def _resolve_output_cls(output_files):
     """Return the correct pKa output class for the detected backend."""
-    program = get_program_type_from_file(output_files)
+    program = detect_program_type_from_files(
+        output_files,
+        allowed_programs={"gaussian", "orca"},
+    )
     logger.info(f"Auto-detected output program: {program}")
     if program == "gaussian":
         from chemsmart.io.gaussian.output import Gaussian16pKaOutput

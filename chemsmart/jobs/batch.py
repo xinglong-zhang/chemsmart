@@ -25,7 +25,7 @@ from contextlib import suppress
 from typing import Any, Optional, Sequence
 
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import get_serial_mode, get_submitter_worker_count
+from chemsmart.jobs.runner import get_submitter_worker_count
 from chemsmart.utils.mixins import RegistryMeta
 
 logger = logging.getLogger(__name__)
@@ -67,13 +67,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             **kwargs,
         )
         self.jobs: list[Job] = list(jobs) if jobs is not None else []
-        runner_serial_mode = get_serial_mode(jobrunner)
-        # - explicit True/False at call site wins
-        # - None defers to runner policy
-        if run_in_serial is None:
-            self.run_in_serial = runner_serial_mode.run_in_serial
-        else:
-            self.run_in_serial = bool(run_in_serial)
+        self.run_in_serial = False if run_in_serial is None else bool(run_in_serial)
         self.write_outcome_logs = bool(write_outcome_logs)
 
         # Cache completion checks to avoid repeatedly reparsing output files

@@ -22,13 +22,11 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.pka import (
-    build_per_entry_subcommands,
     click_pka_proton_options,
     click_pka_shared_options,
     resolve_proton_index,
     validate_reference_options,
 )
-from chemsmart.jobs.runner import get_serial_mode
 from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
@@ -145,8 +143,6 @@ def submit(ctx, skip_completed, **kwargs):
     proton_index = ctx.obj.get("pka_proton_index")
     color_code = ctx.obj.get("pka_color_code")
     jobrunner = ctx.obj["jobrunner"]
-    serial_mode = get_serial_mode(jobrunner)
-    parallel = serial_mode.no_run_in_serial
 
     proton_index, pka_molecules = resolve_proton_index(
         filename, proton_index, color_code
@@ -154,7 +150,7 @@ def submit(ctx, skip_completed, **kwargs):
 
     if pka_molecules is not None:
         return _create_orca_pka_jobs_from_molecules(
-            ctx, pka_molecules, shared, skip_completed, parallel, **kwargs
+            ctx, pka_molecules, shared, skip_completed, **kwargs
         )
 
     validate_reference_options(shared)
@@ -196,7 +192,6 @@ def submit(ctx, skip_completed, **kwargs):
                 label=f"{base_label}_idx{idx}",
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
-                parallel=parallel,
                 **kwargs,
             )
             for mol, idx in zip(molecules, molecule_indices)
@@ -208,7 +203,6 @@ def submit(ctx, skip_completed, **kwargs):
         label=base_label,
         jobrunner=jobrunner,
         skip_completed=skip_completed,
-        parallel=parallel,
         **kwargs,
     )
 
@@ -235,8 +229,6 @@ def batch(ctx, skip_completed, **kwargs):
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]
-    serial_mode = get_serial_mode(jobrunner)
-    parallel = serial_mode.no_run_in_serial
 
     input_table_path = ctx.obj.get("filename")
     if not input_table_path:
@@ -370,20 +362,8 @@ def batch(ctx, skip_completed, **kwargs):
                 label=base_label,
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
-                parallel=parallel,
                 **kwargs,
             )
-        )
-
-        # Build per-entry subcommand override so that `chemsmart sub`
-        # generates a run script that processes ONLY this entry instead
-        # of re-running the entire batch CSV.
-        jobs[-1]._batch_subcommands_override = build_per_entry_subcommands(
-            ctx,
-            filepath=filepath,
-            charge=int(entry.charge),
-            multiplicity=int(entry.multiplicity),
-            proton_index=int(entry.proton_index),
         )
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
@@ -456,7 +436,7 @@ def _build_orca_pka_settings(proton_index, shared, opt_settings):
 
 
 def _create_orca_pka_jobs_from_molecules(
-    ctx, pka_molecules, shared, skip_completed, parallel, **kwargs
+    ctx, pka_molecules, shared, skip_completed, **kwargs
 ):
     """Create one ``ORCApKaJob`` per ``PKaMolecule``."""
     from chemsmart.jobs.orca.pka import ORCApKaJob
@@ -492,7 +472,6 @@ def _create_orca_pka_jobs_from_molecules(
                 label=mol_label,
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
-                parallel=parallel,
                 **kwargs,
             )
         )

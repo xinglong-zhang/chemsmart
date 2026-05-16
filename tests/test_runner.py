@@ -538,6 +538,15 @@ class TestGaussianPkaReferenceExecution:
             "chemsmart.jobs.gaussian.pka.GaussianSinglePointJob.run"
         )
 
+        def _run_all_phase_jobs(**kwargs):
+            for child_job in kwargs.get("jobs") or []:
+                child_job.run()
+
+        mocker.patch(
+            "chemsmart.jobs.gaussian.pka.run_phase_jobs",
+            side_effect=_run_all_phase_jobs,
+        )
+
         job._run_ref_sp_jobs()
 
         assert len(job.ref_sp_jobs) == 2
@@ -600,7 +609,7 @@ class TestGaussianPkaReferenceExecution:
 
         create_sp_spy.assert_not_called()
 
-    def test_dias_job_uses_batch_parallel_per_stage(
+    def test_dias_job_runs_all_stages_in_sequence(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.dias import GaussianDIASJob
@@ -609,7 +618,6 @@ class TestGaussianPkaReferenceExecution:
         mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
         settings = GaussianJobSettings()
 
-        gaussian_jobrunner_no_scratch.run_in_serial = False
         job = GaussianDIASJob(
             molecules=mock_molecules,
             settings=settings,
@@ -643,31 +651,17 @@ class TestGaussianPkaReferenceExecution:
             return_value=fragment2_jobs,
         )
 
-        mock_batch_cls = mocker.patch(
-            "chemsmart.jobs.gaussian.dias.GaussianBatchJob"
-        )
+        run_molecule_jobs = mocker.patch.object(job, "_run_all_molecules_jobs")
+        run_fragment1_jobs = mocker.patch.object(job, "_run_fragment1_jobs")
+        run_fragment2_jobs = mocker.patch.object(job, "_run_fragment2_jobs")
 
         job._run()
 
-        assert mock_batch_cls.call_count == 3
-        first_call = mock_batch_cls.call_args_list[0][1]
-        second_call = mock_batch_cls.call_args_list[1][1]
-        third_call = mock_batch_cls.call_args_list[2][1]
+        run_molecule_jobs.assert_called_once()
+        run_fragment1_jobs.assert_called_once()
+        run_fragment2_jobs.assert_called_once()
 
-        assert first_call["jobs"] == molecule_jobs
-        assert first_call["label"] == "test_dias_molecules_batch"
-        assert second_call["jobs"] == fragment1_jobs
-        assert second_call["label"] == "test_dias_fragment1_batch"
-        assert third_call["jobs"] == fragment2_jobs
-        assert third_call["label"] == "test_dias_fragment2_batch"
-
-        for call in mock_batch_cls.call_args_list:
-            assert call[1]["run_in_serial"] is False
-            assert call[1]["jobrunner"] == gaussian_jobrunner_no_scratch
-
-        assert mock_batch_cls.return_value.run.call_count == 3
-
-    def test_dias_job_serial_fragment1_stops_on_incomplete(
+    def test_dias_job_fragment1_runs_all_jobs(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.dias import GaussianDIASJob
@@ -676,11 +670,10 @@ class TestGaussianPkaReferenceExecution:
         mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
         settings = GaussianJobSettings()
 
-        gaussian_jobrunner_no_scratch.run_in_serial = True
         job = GaussianDIASJob(
             molecules=mock_molecules,
             settings=settings,
-            label="test_dias_serial",
+            label="test_dias_fragment1",
             jobrunner=gaussian_jobrunner_no_scratch,
             fragment_indices="1",
             every_n_points=1,
@@ -705,7 +698,7 @@ class TestGaussianPkaReferenceExecution:
         job._run_fragment1_jobs()
 
         mock_job1.run.assert_called_once()
-        mock_job2.run.assert_not_called()
+        mock_job2.run.assert_called_once()
 
 
 class TestOrcaQRCBatchExecution:
@@ -829,54 +822,6 @@ class TestOrcaPkaBatchExecution:
 
         run_parallel_spy.assert_called_once()
         run_opt_spy.assert_not_called()
-        run_sp_spy.assert_not_called()
-
-    def test_orca_pka_job_serial_stops_before_sp_when_opt_incomplete(
-        self, pbs_server, orca_jobrunner_no_scratch, mocker
-    ):
-        from chemsmart.jobs.orca.pka import ORCApKaJob
-        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
-
-        mock_molecule = MockMolecule()
-        settings = ORCApKaJobSettings(
-            proton_index=1,
-            scheme="direct",
-            charge=0,
-            multiplicity=1,
-            functional="B3LYP",
-            basis="def2-SVP",
-        )
-
-        orca_jobrunner_no_scratch.run_in_serial = True
-        job = ORCApKaJob(
-            molecule=mock_molecule,
-            settings=settings,
-            label="test_orca_pka_serial",
-            jobrunner=orca_jobrunner_no_scratch,
-            parallel=True,
-        )
-
-        opt_job1 = Mock(label="opt_ha")
-        opt_job1.is_complete.return_value = False
-        opt_job2 = Mock(label="opt_a")
-        opt_job2.is_complete.return_value = True
-
-        mocker.patch.object(
-            type(job),
-            "opt_jobs",
-            new_callable=PropertyMock,
-            return_value=[opt_job1, opt_job2],
-        )
-        run_opt_spy = mocker.patch.object(job, "_run_opt_jobs")
-        run_sp_spy = mocker.patch.object(job, "_run_sp_jobs")
-        run_parallel_spy = mocker.patch.object(job, "_run_parallel")
-
-        job._run()
-
-        # Parallel mode is disabled when run_in_serial=True.
-        assert job.parallel is False
-        run_parallel_spy.assert_not_called()
-        run_opt_spy.assert_called_once()
         run_sp_spy.assert_not_called()
 
     def test_orca_pka_parallel_reference_sp_jobs_use_reference_payloads(
