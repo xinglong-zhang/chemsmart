@@ -7,6 +7,11 @@
 This module provides tools for computing acid dissociation constants (pKa) using Gaussian electronic structure
 calculations with proper thermodynamic cycles.
 
+.. note::
+
+   Gaussian pKa execution uses the shared CLI pipeline. The Gaussian pKa CLI returns a single
+   ``GaussianpKaJob`` or a ``list[GaussianpKaJob]`` and delegates execution to the shared CLI pipeline.
+
 .. contents:: Table of Contents
    :local:
    :depth: 2
@@ -170,6 +175,10 @@ Or with the direct cycle (no reference acid required):
    When a ``.csv`` file is detected, ``gaussian`` defers molecule loading to the ``batch`` subcommand. The ``-c`` /
    ``-m`` options on the parent ``gaussian`` command are **not** required; charge and multiplicity are read from the
    table rows instead.
+
+.. note::
+
+   In batch mode, pKa rows are emitted as independent jobs (one job per table row).
 
 Table Format
 ------------

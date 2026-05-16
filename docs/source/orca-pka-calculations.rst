@@ -7,6 +7,11 @@
 This section describes how to run pKa calculations using ORCA. The command structure mirrors the Gaussian pKa
 calculations for a consistent user experience.
 
+.. note::
+
+   ORCA pKa execution uses the shared CLI pipeline. The ORCA pKa CLI returns a single
+   ``ORCApKaJob`` or a ``list[ORCApKaJob]`` and delegates execution to the shared CLI pipeline.
+
 .. contents:: Table of Contents
    :local:
    :depth: 2
@@ -80,6 +85,10 @@ Or with the direct cycle (no reference acid required):
    When a ``.csv`` file is detected, ``orca`` defers molecule loading to the ``batch`` subcommand. The ``-c`` / ``-m``
    options on the parent ``orca`` command are **not** required; charge and multiplicity are read from the table rows
    instead.
+
+.. note::
+
+   In batch mode, pKa rows are emitted as independent jobs (one job per table row).
 
 Table Format
 ------------
