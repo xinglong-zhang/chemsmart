@@ -151,7 +151,6 @@ def scan(
                 )
                 jobs.append(job)
             logger.debug(f"Created {len(jobs)} ORCA scan jobs")
-
             return jobs
         else:
             # Single molecule case

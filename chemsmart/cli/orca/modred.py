@@ -111,7 +111,6 @@ def modred(
             )
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA modred jobs")
-
         return jobs
     else:
         # Single molecule case

@@ -204,11 +204,10 @@ def neb(
                 job = ORCANEBJob(
                     molecule=molecule,
                     settings=neb_settings,
-                    label=molecule_label,
+                    label=label,
                     **kwargs,
                 )
                 jobs.append(job)
-
             return jobs
         else:
             # Single molecule case

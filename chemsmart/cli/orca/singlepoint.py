@@ -115,7 +115,6 @@ def sp(
             )
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA single point jobs")
-
         return jobs
     else:
         # Single molecule case

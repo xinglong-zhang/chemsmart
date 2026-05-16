@@ -148,7 +148,6 @@ def opt(
             )
             jobs.append(job)
         logger.debug(f"Created {len(jobs)} ORCA optimization jobs")
-
         return jobs
     else:
         # Single molecule case

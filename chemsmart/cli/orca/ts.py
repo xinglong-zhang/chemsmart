@@ -243,15 +243,10 @@ def ts(
 
     logger.debug(f"Final job label: {label}")
 
-    # normalize to list for batch-friendly handling while preserving
-    # single-molecule backwards compatibility.
+    # get molecule from context (use the last molecule if multiple)
     molecules = ctx.obj["molecules"]
-    if not isinstance(molecules, list):
-        molecules = [molecules]
-
-    molecule_indices = ctx.obj.get("molecule_indices")
-    if molecule_indices is None:
-        molecule_indices = list(range(1, len(molecules) + 1))
+    molecule = molecules[-1]  # get last molecule from list of molecules
+    logger.info(f"Running TS search on molecule: {molecule}")
 
     logger.info(f"Final TS job settings: {ts_settings.__dict__}")
 
@@ -268,28 +263,6 @@ def ts(
 
     from chemsmart.jobs.orca.ts import ORCATSJob
 
-    if len(molecules) > 1:
-        logger.info(f"Creating {len(molecules)} ORCA TS jobs")
-        jobs = []
-        for molecule, idx in zip(molecules, molecule_indices):
-            molecule_label = f"{label}_idx{idx}"
-            logger.info(
-                f"Running TS search for molecule {idx}: {molecule} with label {molecule_label}"
-            )
-            jobs.append(
-                ORCATSJob(
-                    molecule=molecule,
-                    settings=ts_settings,
-                    label=molecule_label,
-                    skip_completed=skip_completed,
-                    **kwargs,
-                )
-            )
-
-        return jobs
-
-    molecule = molecules[0]
-    logger.info(f"Running TS search on molecule: {molecule}")
     return ORCATSJob(
         molecule=molecule,
         settings=ts_settings,
