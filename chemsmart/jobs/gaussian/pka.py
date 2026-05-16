@@ -114,6 +114,32 @@ class GaussianpKaJob(GaussianJob):
     """
 
     TYPE = "g16pka"
+    _shared_reference_molecule_cache = {}
+
+    @classmethod
+    def _reference_cache_key(cls, settings):
+        if settings is None or not settings.has_reference_file:
+            return None
+        return (
+            settings.scheme,
+            os.path.abspath(settings.reference_file),
+            settings.reference_proton_index,
+            settings.reference_charge,
+            settings.reference_multiplicity,
+            settings.reference_conjugate_base_charge,
+            settings.reference_conjugate_base_multiplicity,
+        )
+
+    @classmethod
+    def _get_cached_reference_pair(cls, settings):
+        cache_key = cls._reference_cache_key(settings)
+        if cache_key is None:
+            return None
+        if cache_key not in cls._shared_reference_molecule_cache:
+            cls._shared_reference_molecule_cache[cache_key] = (
+                settings.reference_pair_molecules()
+            )
+        return cls._shared_reference_molecule_cache[cache_key]
 
     @classmethod
     def from_molecules(
@@ -256,9 +282,13 @@ class GaussianpKaJob(GaussianJob):
 
     def _prepare_ref_opt_jobs(self):
         """Prepare gas phase optimization jobs for HRef and Ref-."""
-        ref_acid_mol, ref_conjugate_base_mol = (
-            self.settings.reference_pair_molecules()
-        )
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            ref_acid_mol, ref_conjugate_base_mol = (
+                self.settings.reference_pair_molecules()
+            )
+        else:
+            ref_acid_mol, ref_conjugate_base_mol = reference_pair
         ref_acid_settings, ref_conjugate_base_settings = (
             self.settings.reference_pair_job_settings()
         )
@@ -383,9 +413,15 @@ class GaussianpKaJob(GaussianJob):
 
     def _create_ref_sp_jobs(self):
         """Create reference solution phase SP jobs from optimized geometries."""
-        ref_acid_fallback_mol, ref_conjugate_base_fallback_mol = (
-            self.settings.reference_pair_molecules()
-        )
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            ref_acid_fallback_mol, ref_conjugate_base_fallback_mol = (
+                self.settings.reference_pair_molecules()
+            )
+        else:
+            ref_acid_fallback_mol, ref_conjugate_base_fallback_mol = (
+                reference_pair
+            )
         ref_acid_opt_mol = self._optimized_molecule_from_job(
             self.ref_acid_job, ref_acid_fallback_mol
         )

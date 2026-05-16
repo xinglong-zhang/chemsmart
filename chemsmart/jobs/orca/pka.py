@@ -11,6 +11,7 @@ solvation free energy calculations.
 """
 
 import logging
+import os
 
 from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
@@ -43,6 +44,32 @@ class ORCApKaJob(ORCAJob):
     """
 
     TYPE = "orcapka"
+    _shared_reference_molecule_cache = {}
+
+    @classmethod
+    def _reference_cache_key(cls, settings):
+        if settings is None or not settings.has_reference_file:
+            return None
+        return (
+            settings.scheme,
+            os.path.abspath(settings.reference_file),
+            settings.reference_proton_index,
+            settings.reference_charge,
+            settings.reference_multiplicity,
+            settings.reference_conjugate_base_charge,
+            settings.reference_conjugate_base_multiplicity,
+        )
+
+    @classmethod
+    def _get_cached_reference_pair(cls, settings):
+        cache_key = cls._reference_cache_key(settings)
+        if cache_key is None:
+            return None
+        if cache_key not in cls._shared_reference_molecule_cache:
+            cls._shared_reference_molecule_cache[cache_key] = (
+                settings.reference_pair_molecules()
+            )
+        return cls._shared_reference_molecule_cache[cache_key]
 
     def __init__(
         self,
@@ -193,12 +220,18 @@ class ORCApKaJob(ORCAJob):
     @property
     def reference_molecule(self):
         """Get the reference acid molecule (Href)."""
-        return self.settings.get_reference_molecule()
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            return self.settings.get_reference_molecule()
+        return reference_pair[0]
 
     @property
     def reference_conjugate_base_molecule(self):
         """Get the reference conjugate base molecule (Ref-)."""
-        return self.settings.get_reference_conjugate_base_molecule()
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            return self.settings.get_reference_conjugate_base_molecule()
+        return reference_pair[1]
 
     @property
     def ref_opt_jobs(self):
@@ -308,7 +341,11 @@ class ORCApKaJob(ORCAJob):
 
     def _prepare_ref_opt_jobs(self):
         """Create gas phase optimization jobs for Href and Ref-."""
-        ref_acid_mol, ref_cb_mol = self.settings.reference_pair_molecules()
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            ref_acid_mol, ref_cb_mol = self.settings.reference_pair_molecules()
+        else:
+            ref_acid_mol, ref_cb_mol = reference_pair
         ref_acid_settings, ref_cb_settings = (
             self.settings.reference_pair_job_settings()
         )
