@@ -11,21 +11,16 @@ solvation free energy calculations.
 """
 
 import logging
-import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 
-from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
-from chemsmart.jobs.runner import (
-    decide_phase_transition,
-    get_serial_mode,
-    run_phase_jobs,
-)
+from chemsmart.jobs.runner import decide_phase_transition, run_phase_jobs
 
 logger = logging.getLogger(__name__)
+
 
 
 class ORCApKaJob(ORCAJob):
@@ -49,6 +44,32 @@ class ORCApKaJob(ORCAJob):
     """
 
     TYPE = "orcapka"
+    _shared_reference_molecule_cache = {}
+
+    @classmethod
+    def _reference_cache_key(cls, settings):
+        if settings is None or not settings.has_reference_file:
+            return None
+        return (
+            settings.scheme,
+            os.path.abspath(settings.reference_file),
+            settings.reference_proton_index,
+            settings.reference_charge,
+            settings.reference_multiplicity,
+            settings.reference_conjugate_base_charge,
+            settings.reference_conjugate_base_multiplicity,
+        )
+
+    @classmethod
+    def _get_cached_reference_pair(cls, settings):
+        cache_key = cls._reference_cache_key(settings)
+        if cache_key is None:
+            return None
+        if cache_key not in cls._shared_reference_molecule_cache:
+            cls._shared_reference_molecule_cache[cache_key] = (
+                settings.reference_pair_molecules()
+            )
+        return cls._shared_reference_molecule_cache[cache_key]
 
     def __init__(
         self,
@@ -57,7 +78,6 @@ class ORCApKaJob(ORCAJob):
         label=None,
         jobrunner=None,
         skip_completed=True,
-        parallel=False,
         **kwargs,
     ):
         if not isinstance(settings, ORCApKaJobSettings):
@@ -86,15 +106,6 @@ class ORCApKaJob(ORCAJob):
         self._ref_opt_jobs = None
         self._ref_sp_jobs = None
 
-        # parallel support
-        self.parallel = bool(parallel)
-        serial_mode = get_serial_mode(self.jobrunner)
-        if serial_mode.run_in_serial:
-            if self.parallel:
-                logger.info(
-                    "Parallel execution disabled due to run_in_serial=True in JobRunner"
-                )
-            self.parallel = False
 
     # ------------------------------------------------------------------
     # Basename helpers for label derivation
@@ -209,12 +220,18 @@ class ORCApKaJob(ORCAJob):
     @property
     def reference_molecule(self):
         """Get the reference acid molecule (Href)."""
-        return self.settings.get_reference_molecule()
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            return self.settings.get_reference_molecule()
+        return reference_pair[0]
 
     @property
     def reference_conjugate_base_molecule(self):
         """Get the reference conjugate base molecule (Ref-)."""
-        return self.settings.get_reference_conjugate_base_molecule()
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            return self.settings.get_reference_conjugate_base_molecule()
+        return reference_pair[1]
 
     @property
     def ref_opt_jobs(self):
@@ -324,7 +341,11 @@ class ORCApKaJob(ORCAJob):
 
     def _prepare_ref_opt_jobs(self):
         """Create gas phase optimization jobs for Href and Ref-."""
-        ref_acid_mol, ref_cb_mol = self.settings.reference_pair_molecules()
+        reference_pair = self._get_cached_reference_pair(self.settings)
+        if reference_pair is None:
+            ref_acid_mol, ref_cb_mol = self.settings.reference_pair_molecules()
+        else:
+            ref_acid_mol, ref_cb_mol = reference_pair
         ref_acid_settings, ref_cb_settings = (
             self.settings.reference_pair_job_settings()
         )
@@ -386,7 +407,6 @@ class ORCApKaJob(ORCAJob):
     def _run_opt_jobs(self):
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -398,7 +418,6 @@ class ORCApKaJob(ORCAJob):
             return
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=self.ref_opt_jobs,
             stop_on_incomplete=True,
             logger_obj=logger,
@@ -408,7 +427,6 @@ class ORCApKaJob(ORCAJob):
     def _run_sp_jobs(self):
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=None,
             jobs_factory=lambda: self.sp_jobs,
             stop_on_incomplete=True,
@@ -422,7 +440,6 @@ class ORCApKaJob(ORCAJob):
             return
         run_phase_jobs(
             parent_runner=self.jobrunner,
-            serial_mode=get_serial_mode(self.jobrunner),
             jobs=None,
             jobs_factory=lambda: self.ref_sp_jobs,
             stop_on_incomplete=True,
@@ -482,225 +499,12 @@ class ORCApKaJob(ORCAJob):
             )
         return None
 
-    # ------------------------------------------------------------------
-    # Parallel execution helpers
-    # ------------------------------------------------------------------
-
-    def _run_opt_worker(self, job, role, runner, cores, mem):
-        """Run a single opt job and validate its frequencies.
-
-        Returns a dict ``{"role", "label", "success", "error"}``.
-        """
-        result = {
-            "role": role,
-            "label": job.label,
-            "success": False,
-            "error": None,
-        }
-
-        self._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
-        job.run()
-
-        freq_err = self._validate_imaginary_frequencies(job, role)
-        if freq_err:
-            result["error"] = freq_err
-            logger.error(freq_err)
-            return result
-
-        result["success"] = True
-        return result
-
-    @staticmethod
-    def _run_sp_worker(job, role, runner, cores, mem):
-        """Run a single SP job.
-
-        Returns a dict ``{"role", "label", "success", "error"}``.
-        """
-        result = {
-            "role": role,
-            "label": job.label,
-            "success": False,
-            "error": None,
-        }
-
-        Job._propagate_runner(runner, job, num_cores=cores, mem_gb=mem)
-        job.run()
-        result["success"] = True
-        return result
-
-    @staticmethod
-    def _collect_futures(future_to_role):
-        """Wait for all futures, collecting successes and failures.
-
-        Returns ``(successes, failures)`` where each element is a list
-        of label strings or error message strings respectively.
-        """
-        successes = []
-        failures = []
-
-        for fut in as_completed(future_to_role):
-            role = future_to_role[fut]
-            try:
-                res = fut.result()
-            except Exception:
-                tb = traceback.format_exc()
-                msg = (
-                    f"[{role}] Worker crashed with unhandled exception:\n{tb}"
-                )
-                logger.error(msg)
-                failures.append(msg)
-            else:
-                if res["success"]:
-                    successes.append(res["label"])
-                else:
-                    failures.append(res["error"])
-
-        return successes, failures
-
-    def _run_parallel(self):
-        """Run pKa workflow in parallel mode.
-
-        Uses ``ThreadPoolExecutor`` so that a crash or validation failure
-        in one worker does **not** prevent other workers from finishing.
-        After all workers complete, a summary is logged and – if any
-        worker failed – a ``RuntimeError`` is raised with every failure
-        message.
-        """
-        runner = self.jobrunner
-
-        # Calculate resources per job to prevent contention
-        total_cores = runner.num_cores if runner and runner.num_cores else 1
-        total_mem = runner.mem_gb if runner and runner.mem_gb else 1
-
-        # ── Phase 1: optimisation jobs ──────────────────────────────────
-        opt_job_specs = list(zip(self.opt_jobs, ("HA_opt", "A_opt")))
-        if self.has_reference_jobs:
-            opt_job_specs.extend(
-                zip(self.ref_opt_jobs, ("HRef_opt", "Ref_opt"))
-            )
-
-        concurrent_opt_jobs = len(opt_job_specs)
-        opt_cores_per_job = max(1, int(total_cores // concurrent_opt_jobs))
-        opt_mem_per_job = max(1, int(total_mem // concurrent_opt_jobs))
-
-        logger.info(
-            f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
-            f"among {concurrent_opt_jobs} concurrent opt jobs "
-            f"({opt_cores_per_job} cores, {opt_mem_per_job}GB each)."
-        )
-
-        all_successes = []
-        all_failures = []
-        phase_failures = []
-
-        with ThreadPoolExecutor(max_workers=concurrent_opt_jobs) as executor:
-            future_to_role = {}
-            for job, role in opt_job_specs:
-                fut = executor.submit(
-                    self._run_opt_worker,
-                    job,
-                    role,
-                    runner,
-                    opt_cores_per_job,
-                    opt_mem_per_job,
-                )
-                future_to_role[fut] = role
-
-            phase_successes, phase_failures = self._collect_futures(
-                future_to_role
-            )
-            all_successes.extend(phase_successes)
-            all_failures.extend(phase_failures)
-
-        opt_transition = decide_phase_transition(
-            phase_name="Optimization",
-            failures=phase_failures,
-        )
-        if not opt_transition.proceed:
-            if opt_transition.should_raise:
-                raise RuntimeError(opt_transition.message)
-            logger.info(opt_transition.message)
-            return
-
-        # ── Phase 2: SP jobs ────────────────────────────────────────────
-        # Refresh SP jobs so they pick up optimised geometries
-        self._sp_jobs = None
-        if self.has_reference_jobs:
-            self._ref_sp_jobs = None
-
-        sp_job_specs = []
-        if self.sp_jobs:
-            sp_job_specs.extend(zip(self.sp_jobs, ("HA_sp", "A_sp")))
-        if self.has_reference_jobs and self.ref_sp_jobs:
-            sp_job_specs.extend(zip(self.ref_sp_jobs, ("HRef_sp", "Ref_sp")))
-
-        if sp_job_specs:
-            sp_jobs_to_run = [job for job, _ in sp_job_specs]
-            sp_roles = [role for _, role in sp_job_specs]
-
-            concurrent_sp_jobs = len(sp_jobs_to_run)
-            sp_cores_per_job = max(1, int(total_cores // concurrent_sp_jobs))
-            sp_mem_per_job = max(1, int(total_mem // concurrent_sp_jobs))
-
-            logger.info(
-                f"Parallel execution: splitting {total_cores} cores and {total_mem}GB memory "
-                f"among {concurrent_sp_jobs} concurrent sp jobs "
-                f"({sp_cores_per_job} cores, {sp_mem_per_job}GB each)."
-            )
-
-            with ThreadPoolExecutor(
-                max_workers=concurrent_sp_jobs
-            ) as executor:
-                future_to_role = {}
-                for job, role in zip(sp_jobs_to_run, sp_roles):
-                    fut = executor.submit(
-                        self._run_sp_worker,
-                        job,
-                        role,
-                        runner,
-                        sp_cores_per_job,
-                        sp_mem_per_job,
-                    )
-                    future_to_role[fut] = role
-
-                phase_successes, phase_failures = self._collect_futures(
-                    future_to_role
-                )
-                all_successes.extend(phase_successes)
-                all_failures.extend(phase_failures)
-
-        # ── Final reporting ─────────────────────────────────────────────
-        total = len(all_successes) + len(all_failures)
-        logger.info(
-            f"Parallel pKa run complete: "
-            f"{len(all_successes)}/{total} succeeded, "
-            f"{len(all_failures)}/{total} failed."
-        )
-        for label in all_successes:
-            logger.info(f"  ✓ {label}")
-        for err in all_failures:
-            logger.error(f"  ✗ {err}")
-
-        if all_failures:
-            summary = (
-                f"{len(all_failures)} of {total} parallel pKa worker(s) failed:\n"
-                + "\n".join(f"  - {e}" for e in all_failures)
-            )
-            raise RuntimeError(summary)
-
     def _run(self):
-        if self.parallel:
-            logger.info("Running ORCA pKa calculation in parallel mode")
-            self._run_parallel()
-            return
-
-        serial_mode = get_serial_mode(self.jobrunner)
-
         self._run_opt_jobs()
 
         opt_transition = decide_phase_transition(
             phase_name="Opt",
-            require_complete=serial_mode.run_in_serial,
+            require_complete=False,
             is_complete=all(j.is_complete() for j in self.opt_jobs),
             stop_message="Opt jobs incomplete, halting serial execution.",
         )
@@ -712,7 +516,7 @@ class ORCApKaJob(ORCAJob):
             self._run_ref_opt_jobs()
             ref_opt_transition = decide_phase_transition(
                 phase_name="Ref Opt",
-                require_complete=serial_mode.run_in_serial,
+                require_complete=False,
                 is_complete=all(j.is_complete() for j in self.ref_opt_jobs),
                 stop_message="Ref Opt jobs incomplete, halting serial execution.",
             )
@@ -728,7 +532,7 @@ class ORCApKaJob(ORCAJob):
 
         sp_transition = decide_phase_transition(
             phase_name="SP",
-            require_complete=serial_mode.run_in_serial,
+            require_complete=False,
             is_complete=all(j.is_complete() for j in self.sp_jobs),
             stop_message="SP jobs incomplete, halting serial execution.",
         )

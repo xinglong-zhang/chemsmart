@@ -7,6 +7,20 @@
 This module provides tools for computing acid dissociation constants (pKa) using quantum chemistry calculations with
 proper thermodynamic cycles. Both Gaussian and ORCA are supported.
 
+Execution Architecture
+======================
+
+pKa submission is implemented as regular job execution through the shared CLI pipeline.
+
+-  ``chemsmart run/sub ... pka submit`` returns either a single job object or a list of job objects.
+-  ``chemsmart run/sub ... pka batch`` returns a list of per-entry jobs.
+-  Execution is handled by the shared CLI pipeline (``process_pipeline``), which runs one job or iterates job lists.
+
+.. note::
+
+   pKa submission returns a single job object or a list of per-entry jobs, and
+   execution is handled by ``process_pipeline``.
+
 .. toctree::
    :maxdepth: 2
    :caption: pKa Calculations

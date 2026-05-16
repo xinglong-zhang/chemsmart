@@ -186,7 +186,6 @@ def neb(
 
         logger.info(f"NEB job settings from project: {neb_settings.__dict__}")
 
-        from chemsmart.jobs.orca.batch import ORCABatchJob
         from chemsmart.jobs.orca.neb import ORCANEBJob
 
         # Get the original molecule indices from context
@@ -205,17 +204,11 @@ def neb(
                 job = ORCANEBJob(
                     molecule=molecule,
                     settings=neb_settings,
-                    label=molecule_label,
+                    label=label,
                     **kwargs,
                 )
                 jobs.append(job)
-
-            run_in_serial = ctx.obj["jobrunner"].run_in_serial
-            return ORCABatchJob(
-                jobs=jobs,
-                run_in_serial=run_in_serial,
-                label=f"{label}_batch",
-            )
+            return jobs
         else:
             # Single molecule case
             molecule = molecules[-1]

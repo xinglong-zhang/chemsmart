@@ -9,7 +9,6 @@ import logging
 
 import numpy as np
 
-from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 logger = logging.getLogger(__name__)
@@ -149,30 +148,11 @@ class GaussianQRCJob(GaussianJob):
 
     def _run_both_jobs(self):
         """
-        Execute both QRC jobs (forward and reverse).
-        Runs the QRC forward and reverse jobs simultaneously using GaussianBatchJob,
-        unless run_in_serial is requested.
+        Execute both QRC jobs (forward and reverse) sequentially.
+        Runs the QRC forward and reverse jobs for the current molecule.
         """
-        # Determine execution mode
-        run_in_serial = False
-        if self.jobrunner and self.jobrunner.run_in_serial:
-            run_in_serial = True
-
-        logger.info(
-            f"Running QRC jobs (serial={run_in_serial}) for label {self.label}"
-        )
-
-        try:
-            batch_job = GaussianBatchJob(
-                jobs=self.both_qrc_jobs,
-                run_in_serial=run_in_serial,
-                label=f"{self.label}_batch",
-                jobrunner=self.jobrunner,
-            )
-            batch_job.run()
-        except Exception as e:
-            logger.error(f"Error executing QRC batch job: {e}", exc_info=True)
-            raise
+        for job in self.both_qrc_jobs:
+            job.run()
 
     def _run(self):
         """

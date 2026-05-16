@@ -129,7 +129,6 @@ class Job(RegistryMixin):
         parent_runner,
         jobs: Optional[Sequence],
         jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
-        run_in_serial: bool = False,
         stop_on_incomplete: bool = False,
         before_run: Optional[Callable[[], None]] = None,
         logger_obj: Optional[logging.Logger] = None,
@@ -138,7 +137,7 @@ class Job(RegistryMixin):
         """Run a phase of child jobs using shared orchestration semantics.
 
         This centralizes the repeated pattern of optional pre-phase refresh,
-        per-job runner propagation, and serial-mode fail-fast behavior.
+        per-job runner propagation, and fail-fast behavior.
         """
         if before_run is not None:
             before_run()
@@ -154,11 +153,7 @@ class Job(RegistryMixin):
                 logger_obj.info(f"Running {phase_label} job: {child_job}")
             Job._propagate_runner(parent_runner, child_job)
             child_job.run()
-            if (
-                run_in_serial
-                and stop_on_incomplete
-                and not child_job.is_complete()
-            ):
+            if stop_on_incomplete and not child_job.is_complete():
                 if logger_obj is not None:
                     logger_obj.info(
                         f"Job {child_job} incomplete, breaking {phase_label} loop."

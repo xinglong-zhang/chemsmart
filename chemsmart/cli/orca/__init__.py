@@ -13,7 +13,6 @@ from .modred import modred
 from .neb import neb
 from .opt import opt
 from .orca import orca
-from .pka import pka
 
 # from .qmmm import qmmm
 from .qrc import qrc
@@ -25,12 +24,11 @@ __all__ = [
     "inp",
     "irc",
     "modred",
-    "neb",
     "opt",
     "orca",
-    "pka",
     "qrc",
     "scan",
     "sp",
     "ts",
+    "neb",
 ]

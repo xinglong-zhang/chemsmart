@@ -8,7 +8,6 @@ from .link import link
 from .modred import modred
 from .nci import nci
 from .opt import opt
-from .pka import pka
 from .qrc import qrc
 from .resp import resp
 from .scan import scan
@@ -29,7 +28,6 @@ __all__ = [
     "modred",
     "nci",
     "opt",
-    "pka",
     "qrc",
     "resp",
     "scan",

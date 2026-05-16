@@ -53,17 +53,6 @@ def click_jobrunner_options(f):
         help="If job was run in scratch, delete the scratch folder after the job "
         "is completed successfully.",
     )
-    @click.option(
-        "--run-in-serial",
-        "--no-run-in-parallel/--run-in-parallel",
-        "run_in_serial",
-        default=False,
-        type=bool,
-        help=(
-            "If true, disable running jobs in parallel (i.e. run in serial). "
-            "If false, allow parallel execution when supported."
-        ),
-    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)

@@ -2,7 +2,6 @@ import importlib
 from pathlib import Path
 from typing import cast
 
-from click.core import BaseCommand
 from click.testing import CliRunner
 
 from chemsmart.cli.run import run
@@ -113,7 +112,8 @@ def test_run_pka_mixed_programs_raises(tmp_path):
     result = _invoke_pka(runner, files)
 
     assert result.exit_code != 0
-    assert "mixed program types" in result.output
+    assert isinstance(result.exception, ValueError)
+    assert "mixed program types" in str(result.exception).lower()
 
 
 def test_run_pka_unknown_program_raises(tmp_path):
@@ -123,10 +123,13 @@ def test_run_pka_unknown_program_raises(tmp_path):
     result = _invoke_pka(runner, files)
 
     assert result.exit_code != 0
-    assert "Could not detect output-file program type" in result.output
+    assert isinstance(result.exception, ValueError)
+    assert "could not detect output-file program type" in str(
+        result.exception
+    ).lower()
 
 
-def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
+def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
     tmp_path, monkeypatch
 ):
     orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -162,7 +165,7 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
     )
     monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-    captured = {}
+    captured = {"submissions": []}
 
     fake_server = Server(name="dummy")
     real_from_filepath = Molecule.from_filepath
@@ -180,17 +183,10 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
             return placeholder
         return real_from_filepath(filepath, *args, **kwargs)
 
-    def _fake_submit_array_job(
-        jobs, num_nodes=None, test=False, cli_args=None, **kwargs
-    ):
-        captured["jobs"] = jobs
-        captured["num_nodes"] = num_nodes
-        captured["test"] = test
-        captured["cli_args"] = cli_args
+    def _fake_submit(job, test=False, cli_args=None, **kwargs):
+        captured["submissions"].append((job, test, cli_args))
 
-    monkeypatch.setattr(
-        fake_server, "submit_array_job", _fake_submit_array_job
-    )
+    monkeypatch.setattr(fake_server, "submit", _fake_submit)
     monkeypatch.setattr(
         "chemsmart.settings.server.Server.from_servername",
         lambda _name: fake_server,
@@ -201,12 +197,10 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
 
     runner = CliRunner()
     result = runner.invoke(
-        cast(BaseCommand, sub),
+        sub,
         [
             "--server",
             "dummy",
-            "--num-nodes",
-            "2",
             "--test",
             "orca",
             "--project",
@@ -221,40 +215,346 @@ def test_sub_orca_pka_batch_array_reconstructs_per_job_cli_args(
     )
 
     assert result.exit_code == 0, result.output
-    assert captured["num_nodes"] == 2
-    assert captured["test"] is True
-    assert len(captured["jobs"]) == 2
-    assert len(captured["cli_args"]) == 2
-
-    first_args, second_args = captured["cli_args"]
-
+    assert len(captured["submissions"]) == 2
+    first_job, first_test, first_args = captured["submissions"][0]
+    second_job, second_test, second_args = captured["submissions"][1]
+    assert first_test is True
+    assert second_test is True
     assert isinstance(first_args, list)
     assert isinstance(second_args, list)
-    assert first_args != second_args
+    assert "batch" in first_args
+    assert str(table) in first_args
 
+
+def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
+    tmp_path, monkeypatch
+):
+    orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.settings.server import Server
+
+    acid1 = tmp_path / "acid1.xyz"
+    acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    acid2 = tmp_path / "acid2.xyz"
+    acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+    table = tmp_path / "batch.xyz"
+    table.write_text(
+        "filepath proton_index charge multiplicity\n"
+        f"{acid1} 2 0 1\n"
+        f"{acid2} 2 1 2\n"
+    )
+
+    config_root = tmp_path / "chemsmart_cfg"
+    orca_cfg_dir = config_root / "orca"
+    orca_cfg_dir.mkdir(parents=True)
+    (orca_cfg_dir / "test.yaml").write_text(
+        "gas:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "solv:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "  freq: false\n"
+        "  solvent_model: smd\n"
+        "  solvent_id: water\n"
+    )
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    captured = {"submissions": []}
+
+    fake_server = Server(name="dummy")
+    real_from_filepath = Molecule.from_filepath
+
+    def _fake_from_filepath(filepath, *args, **kwargs):
+        if str(filepath) == str(table):
+            placeholder = Molecule(
+                symbols=["C", "H"],
+                positions=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+                charge=0,
+                multiplicity=1,
+            )
+            if kwargs.get("return_list"):
+                return [placeholder]
+            return placeholder
+        return real_from_filepath(filepath, *args, **kwargs)
+
+    def _fake_submit(job, test=False, cli_args=None, **kwargs):
+        captured["submissions"].append((job, test, cli_args))
+
+    monkeypatch.setattr(fake_server, "submit", _fake_submit)
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+    monkeypatch.setattr(
+        orca_cli.Molecule, "from_filepath", _fake_from_filepath
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--server",
+            "dummy",
+            "--test",
+            "orca",
+            "--project",
+            "test",
+            "--filename",
+            str(table),
+            "pka",
+            "--scheme",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["submissions"]) == 2
+
+    first_args = captured["submissions"][0][2]
+    second_args = captured["submissions"][1][2]
+
+    assert str(table) not in first_args
+    assert str(table) not in second_args
     assert str(acid1) in first_args
     assert str(acid2) in second_args
-    assert str(acid2) not in first_args
-    assert str(acid1) not in second_args
-
-    assert "submit" in first_args
-    assert "submit" in second_args
-    assert "batch" not in first_args
-    assert "batch" not in second_args
-
+    # Rewritten row-level options must be placed in the correct command scope:
+    # --charge/--multiplicity on backend command and --proton-index on pka.
     assert "--charge" in first_args
-    assert first_args[first_args.index("--charge") + 1] == "0"
     assert "--multiplicity" in first_args
-    assert first_args[first_args.index("--multiplicity") + 1] == "1"
     assert "--proton-index" in first_args
-    assert first_args[first_args.index("--proton-index") + 1] == "2"
+    assert "submit" in first_args
+    assert "batch" not in first_args
+    assert first_args.index("--charge") < first_args.index("pka")
+    assert first_args.index("--multiplicity") < first_args.index("pka")
+    assert first_args.index("--proton-index") < first_args.index("submit")
 
-    assert "--charge" in second_args
-    assert second_args[second_args.index("--charge") + 1] == "1"
-    assert "--multiplicity" in second_args
-    assert second_args[second_args.index("--multiplicity") + 1] == "2"
-    assert "--proton-index" in second_args
-    assert second_args[second_args.index("--proton-index") + 1] == "2"
+
+def test_sub_orca_pka_batch_shared_reference_loaded_once(tmp_path, monkeypatch):
+    orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+    from chemsmart.settings.server import Server
+
+    acid1 = tmp_path / "acid1.xyz"
+    acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    acid2 = tmp_path / "acid2.xyz"
+    acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    reference = tmp_path / "ref.xyz"
+    reference.write_text("2\nref\nO 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+    table = tmp_path / "batch.xyz"
+    table.write_text(
+        "filepath proton_index charge multiplicity\n"
+        f"{acid1} 2 0 1\n"
+        f"{acid2} 2 1 2\n"
+    )
+
+    config_root = tmp_path / "chemsmart_cfg"
+    orca_cfg_dir = config_root / "orca"
+    orca_cfg_dir.mkdir(parents=True)
+    (orca_cfg_dir / "test.yaml").write_text(
+        "gas:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "solv:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "  freq: false\n"
+        "  solvent_model: smd\n"
+        "  solvent_id: water\n"
+    )
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    captured = {"submissions": []}
+    reference_pair_call_count = {"count": 0}
+
+    fake_server = Server(name="dummy")
+    real_from_filepath = Molecule.from_filepath
+    real_reference_pair_molecules = ORCApKaJobSettings.reference_pair_molecules
+
+    def _fake_from_filepath(filepath, *args, **kwargs):
+        if str(filepath) == str(table):
+            placeholder = Molecule(
+                symbols=["C", "H"],
+                positions=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+                charge=0,
+                multiplicity=1,
+            )
+            if kwargs.get("return_list"):
+                return [placeholder]
+            return placeholder
+        return real_from_filepath(filepath, *args, **kwargs)
+
+    def _counting_reference_pair(self):
+        reference_pair_call_count["count"] += 1
+        return real_reference_pair_molecules(self)
+
+    def _fake_submit(job, test=False, cli_args=None, **kwargs):
+        captured["submissions"].append((job, test, cli_args))
+
+    monkeypatch.setattr(fake_server, "submit", _fake_submit)
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+    monkeypatch.setattr(
+        orca_cli.Molecule, "from_filepath", _fake_from_filepath
+    )
+    monkeypatch.setattr(
+        ORCApKaJobSettings,
+        "reference_pair_molecules",
+        _counting_reference_pair,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--server",
+            "dummy",
+            "--test",
+            "orca",
+            "--project",
+            "test",
+            "--filename",
+            str(table),
+            "pka",
+            "--scheme",
+            "proton exchange",
+            "--reference",
+            str(reference),
+            "--reference-proton-index",
+            "2",
+            "--reference-charge",
+            "0",
+            "--reference-multiplicity",
+            "1",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["submissions"]) == 2
+    assert reference_pair_call_count["count"] == 1
+
+
+def test_sub_orca_pka_batch_first_exchange_rest_direct(tmp_path, monkeypatch):
+    orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.settings.server import Server
+
+    acid1 = tmp_path / "acid1.xyz"
+    acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    acid2 = tmp_path / "acid2.xyz"
+    acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    reference = tmp_path / "ref.xyz"
+    reference.write_text("2\nref\nO 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+    table = tmp_path / "batch.xyz"
+    table.write_text(
+        "filepath proton_index charge multiplicity\n"
+        f"{acid1} 2 0 1\n"
+        f"{acid2} 2 1 2\n"
+    )
+
+    config_root = tmp_path / "chemsmart_cfg"
+    orca_cfg_dir = config_root / "orca"
+    orca_cfg_dir.mkdir(parents=True)
+    (orca_cfg_dir / "test.yaml").write_text(
+        "gas:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "solv:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "  freq: false\n"
+        "  solvent_model: smd\n"
+        "  solvent_id: water\n"
+    )
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    captured = {"submissions": []}
+
+    fake_server = Server(name="dummy")
+    real_from_filepath = Molecule.from_filepath
+
+    def _fake_from_filepath(filepath, *args, **kwargs):
+        if str(filepath) == str(table):
+            placeholder = Molecule(
+                symbols=["C", "H"],
+                positions=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+                charge=0,
+                multiplicity=1,
+            )
+            if kwargs.get("return_list"):
+                return [placeholder]
+            return placeholder
+        return real_from_filepath(filepath, *args, **kwargs)
+
+    def _fake_submit(job, test=False, cli_args=None, **kwargs):
+        captured["submissions"].append((job, test, cli_args))
+
+    monkeypatch.setattr(fake_server, "submit", _fake_submit)
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+    monkeypatch.setattr(
+        orca_cli.Molecule, "from_filepath", _fake_from_filepath
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--server",
+            "dummy",
+            "--test",
+            "orca",
+            "--project",
+            "test",
+            "--filename",
+            str(table),
+            "pka",
+            "--scheme",
+            "proton exchange",
+            "--reference",
+            str(reference),
+            "--reference-proton-index",
+            "2",
+            "--reference-charge",
+            "0",
+            "--reference-multiplicity",
+            "1",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["submissions"]) == 2
+
+    first_job, _, first_args = captured["submissions"][0]
+    second_job, _, second_args = captured["submissions"][1]
+
+    assert first_job.settings.scheme == "proton exchange"
+    assert second_job.settings.scheme == "direct"
+
+    assert "--scheme" in first_args
+    assert first_args[first_args.index("--scheme") + 1] == "proton exchange"
+    assert "--reference" in first_args
+
+    assert "--scheme" in second_args
+    assert second_args[second_args.index("--scheme") + 1] == "direct"
+    assert "--reference" not in second_args
+    assert "--reference-proton-index" not in second_args
+    assert "--reference-charge" not in second_args
+    assert "--reference-multiplicity" not in second_args
 
 
 def test_run_gaussian_pka_help_is_submission_only():

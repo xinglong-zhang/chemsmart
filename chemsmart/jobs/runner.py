@@ -21,14 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class SerialMode:
-    """Simple view of serial-mode flags derived from a jobrunner."""
-
-    run_in_serial: bool
-    no_run_in_serial: bool
-
-
-@dataclass(frozen=True)
 class PhaseTransitionDecision:
     """Decision payload for moving from one workflow phase to the next."""
 
@@ -37,24 +29,9 @@ class PhaseTransitionDecision:
     message: Optional[str] = None
 
 
-def get_serial_mode(jobrunner) -> SerialMode:
-    """Return serial-mode flags from a jobrunner.
-
-    This helper intentionally does not encode pKa-specific fail-fast rules.
-    """
-    run_in_serial = bool(
-        jobrunner and getattr(jobrunner, "run_in_serial", False)
-    )
-    return SerialMode(
-        run_in_serial=run_in_serial,
-        no_run_in_serial=not run_in_serial,
-    )
-
-
 def run_phase_jobs(
     *,
     parent_runner,
-    serial_mode: SerialMode,
     jobs: Optional[Sequence] = None,
     jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
     stop_on_incomplete: bool = False,
@@ -62,12 +39,11 @@ def run_phase_jobs(
     logger_obj=None,
     phase_label: str = "phase",
 ) -> None:
-    """Shared phase runner wrapper that applies serial-mode policy."""
+    """Shared phase runner wrapper."""
     Job._execute_phase_jobs(
         parent_runner=parent_runner,
         jobs=jobs,
         jobs_factory=jobs_factory,
-        run_in_serial=serial_mode.run_in_serial,
         stop_on_incomplete=stop_on_incomplete,
         before_run=before_run,
         logger_obj=logger_obj,
@@ -181,9 +157,6 @@ class JobRunner(RegistryMixin):
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
-        run_in_serial (bool): Whether to run list of jobs in serial.
-            If True, jobs in a list are run one after another.
-            If False, use default behavior. Defaults to False.
         **kwargs: Additional keyword arguments.
     """
 
@@ -198,7 +171,6 @@ class JobRunner(RegistryMixin):
         scratch_dir=None,  # Explicit scratch directory
         delete_scratch=False,
         fake=False,
-        run_in_serial=False,
         num_cores=None,
         num_gpus=None,
         mem_gb=None,
@@ -219,7 +191,6 @@ class JobRunner(RegistryMixin):
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
-        self.run_in_serial = run_in_serial
 
         if self.scratch:
             self._set_scratch()

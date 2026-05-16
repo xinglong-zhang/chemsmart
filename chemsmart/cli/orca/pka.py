@@ -22,13 +22,11 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.pka import (
-    build_per_entry_subcommands,
     click_pka_proton_options,
     click_pka_shared_options,
     resolve_proton_index,
     validate_reference_options,
 )
-from chemsmart.jobs.runner import get_serial_mode
 from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
@@ -145,8 +143,6 @@ def submit(ctx, skip_completed, **kwargs):
     proton_index = ctx.obj.get("pka_proton_index")
     color_code = ctx.obj.get("pka_color_code")
     jobrunner = ctx.obj["jobrunner"]
-    serial_mode = get_serial_mode(jobrunner)
-    parallel = serial_mode.no_run_in_serial
 
     proton_index, pka_molecules = resolve_proton_index(
         filename, proton_index, color_code
@@ -154,7 +150,7 @@ def submit(ctx, skip_completed, **kwargs):
 
     if pka_molecules is not None:
         return _create_orca_pka_jobs_from_molecules(
-            ctx, pka_molecules, shared, skip_completed, parallel, **kwargs
+            ctx, pka_molecules, shared, skip_completed, **kwargs
         )
 
     validate_reference_options(shared)
@@ -196,7 +192,6 @@ def submit(ctx, skip_completed, **kwargs):
                 label=f"{base_label}_idx{idx}",
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
-                parallel=parallel,
                 **kwargs,
             )
             for mol, idx in zip(molecules, molecule_indices)
@@ -208,7 +203,6 @@ def submit(ctx, skip_completed, **kwargs):
         label=base_label,
         jobrunner=jobrunner,
         skip_completed=skip_completed,
-        parallel=parallel,
         **kwargs,
     )
 
@@ -235,8 +229,6 @@ def batch(ctx, skip_completed, **kwargs):
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]
-    serial_mode = get_serial_mode(jobrunner)
-    parallel = serial_mode.no_run_in_serial
 
     input_table_path = ctx.obj.get("filename")
     if not input_table_path:
@@ -300,11 +292,22 @@ def batch(ctx, skip_completed, **kwargs):
         opt_settings = opt_settings.merge(job_settings, keywords=kw)
 
     jobs = []
-    for entry in entries:
+    original_scheme = shared["scheme"]
+    for index, entry in enumerate(entries):
         filepath = entry.get("filepath") or entry.get("path") or entry.filepath
         molecule = Molecule.from_filepath(filepath)
         label = Path(filepath).stem
         base_label = label if label.endswith("_pka") else f"{label}_pka"
+
+        row_scheme = (
+            original_scheme
+            if index == 0
+            else (
+                "direct"
+                if original_scheme == "proton exchange"
+                else original_scheme
+            )
+        )
 
         solvent_model = shared["solvent_model"]
         if solvent_model is None:
@@ -325,17 +328,35 @@ def batch(ctx, skip_completed, **kwargs):
 
         pka_settings = ORCApKaJobSettings(
             proton_index=int(entry.proton_index),
-            scheme=shared["scheme"],
-            reference_file=shared["reference"],
-            reference_proton_index=shared["reference_proton_index"],
-            reference_charge=shared["reference_charge"],
-            reference_multiplicity=shared["reference_multiplicity"],
-            reference_conjugate_base_charge=shared[
-                "reference_conjugate_base_charge"
-            ],
-            reference_conjugate_base_multiplicity=shared[
-                "reference_conjugate_base_multiplicity"
-            ],
+            scheme=row_scheme,
+            reference_file=(
+                shared["reference"] if row_scheme == "proton exchange" else None
+            ),
+            reference_proton_index=(
+                shared["reference_proton_index"]
+                if row_scheme == "proton exchange"
+                else None
+            ),
+            reference_charge=(
+                shared["reference_charge"]
+                if row_scheme == "proton exchange"
+                else None
+            ),
+            reference_multiplicity=(
+                shared["reference_multiplicity"]
+                if row_scheme == "proton exchange"
+                else None
+            ),
+            reference_conjugate_base_charge=(
+                shared["reference_conjugate_base_charge"]
+                if row_scheme == "proton exchange"
+                else None
+            ),
+            reference_conjugate_base_multiplicity=(
+                shared["reference_conjugate_base_multiplicity"]
+                if row_scheme == "proton exchange"
+                else None
+            ),
             delta_G_proton=shared["delta_g_proton"],
             conjugate_base_charge=shared["conjugate_base_charge"],
             conjugate_base_multiplicity=shared["conjugate_base_multiplicity"],
@@ -363,28 +384,24 @@ def batch(ctx, skip_completed, **kwargs):
             light_elements_basis=opt_settings.light_elements_basis,
         )
 
-        jobs.append(
-            ORCApKaJob(
-                molecule=molecule,
-                settings=pka_settings,
-                label=base_label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                parallel=parallel,
-                **kwargs,
-            )
+        job = ORCApKaJob(
+            molecule=molecule,
+            settings=pka_settings,
+            label=base_label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
         )
-
-        # Build per-entry subcommand override so that `chemsmart sub`
-        # generates a run script that processes ONLY this entry instead
-        # of re-running the entire batch CSV.
-        jobs[-1]._batch_subcommands_override = build_per_entry_subcommands(
-            ctx,
-            filepath=filepath,
-            charge=int(entry.charge),
-            multiplicity=int(entry.multiplicity),
-            proton_index=int(entry.proton_index),
-        )
+        # Preserve row-level input so submit-script reconstruction can emit
+        # one-entry commands instead of replaying the full table.
+        job._batch_entry = {
+            "filepath": str(filepath),
+            "proton_index": int(entry.proton_index),
+            "charge": int(entry.charge),
+            "multiplicity": int(entry.multiplicity),
+            "scheme": row_scheme,
+        }
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
     return jobs
@@ -456,7 +473,7 @@ def _build_orca_pka_settings(proton_index, shared, opt_settings):
 
 
 def _create_orca_pka_jobs_from_molecules(
-    ctx, pka_molecules, shared, skip_completed, parallel, **kwargs
+    ctx, pka_molecules, shared, skip_completed, **kwargs
 ):
     """Create one ``ORCApKaJob`` per ``PKaMolecule``."""
     from chemsmart.jobs.orca.pka import ORCApKaJob
@@ -492,7 +509,6 @@ def _create_orca_pka_jobs_from_molecules(
                 label=mol_label,
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
-                parallel=parallel,
                 **kwargs,
             )
         )

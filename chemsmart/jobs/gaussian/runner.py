@@ -74,7 +74,6 @@ class GaussianJobRunner(JobRunner):
         "g16irc",
         "g16modred",
         "g16nci",
-        "g16pka",
         "g16qrc",
         "g16resp",
         "g16traj",

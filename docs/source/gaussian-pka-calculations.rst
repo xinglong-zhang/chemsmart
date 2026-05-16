@@ -7,6 +7,11 @@
 This module provides tools for computing acid dissociation constants (pKa) using Gaussian electronic structure
 calculations with proper thermodynamic cycles.
 
+.. note::
+
+   Gaussian pKa execution uses the shared CLI pipeline. The Gaussian pKa CLI returns a single
+   ``GaussianpKaJob`` or a ``list[GaussianpKaJob]`` and delegates execution to the shared CLI pipeline.
+
 .. contents:: Table of Contents
    :local:
    :depth: 2
@@ -171,6 +176,10 @@ Or with the direct cycle (no reference acid required):
    ``-m`` options on the parent ``gaussian`` command are **not** required; charge and multiplicity are read from the
    table rows instead.
 
+.. note::
+
+   In batch mode, pKa rows are emitted as independent jobs (one job per table row).
+
 Table Format
 ------------
 
@@ -197,19 +206,6 @@ Example ``pka_input_table.csv``:
 
 For the proton exchange cycle, the reference acid options (``-r``, ``-rpi``, ``-rc``, ``-rm``) are still required on the
 ``pka`` group even in batch mode.
-
-Batch Execution Policy (Serial vs Non-Serial)
----------------------------------------------
-
-Batch execution policy is controlled by the top-level run/sub flag:
-
-.. code:: bash
-
-   chemsmart run --run-in-serial gaussian -p my_project -f molecules.csv pka \
-       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
-
-Use ``--run-in-serial`` to force one-by-one execution of table entries. Use the default ``--run-in-parallel`` for
-non-serial execution.
 
 Computing pKa from Existing Output Files
 ========================================
