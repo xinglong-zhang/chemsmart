@@ -32,7 +32,7 @@ where :math:`R` is the gas constant and :math:`T` is the temperature.
 Thermodynamic Cycles
 ====================
 
-CHEMSMART supports two thermodynamic cycles for pKa calculations:
+Currently, CHEMSMART supports two thermodynamic cycles for pKa calculations:
 
 **1. Proton Exchange (Isodesmic) Cycle** (Default, Recommended)
 
