@@ -316,17 +316,20 @@ def irc(
 
     # batch mode is requested only when parallel execution is explicitly enabled
     run_in_parallel = bool(getattr(job_settings, "run_in_parallel", False))
-    batch_requested = run_in_parallel
+    job_targets = (
+        list(zip(molecules, molecule_indices))
+        if molecule_indices is not None
+        else [(molecules[-1], None)]
+    )
+    batch_requested = run_in_parallel and len(job_targets) > 1
 
     from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.irc import ORCAIRCJob
 
-    if len(molecules) > 1 and batch_requested:
-        if molecule_indices is None:
-            molecule_indices = list(range(1, len(molecules) + 1))
-        logger.info(f"Creating {len(molecules)} ORCA IRC jobs")
+    if batch_requested:
+        logger.info(f"Creating {len(job_targets)} ORCA IRC jobs")
         jobs = []
-        for molecule, idx in zip(molecules, molecule_indices):
+        for molecule, idx in job_targets:
             molecule_label = f"{label}_idx{idx}"
             logger.info(
                 f"Running IRC for molecule {idx}: {molecule} with label {molecule_label}"
