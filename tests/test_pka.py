@@ -123,9 +123,10 @@ def test_run_pka_unknown_program_raises(tmp_path):
 
     assert result.exit_code != 0
     assert isinstance(result.exception, ValueError)
-    assert "could not detect output-file program type" in str(
-        result.exception
-    ).lower()
+    assert (
+        "could not detect output-file program type"
+        in str(result.exception).lower()
+    )
 
 
 def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
@@ -332,7 +333,9 @@ def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
     assert first_args.index("--proton-index") < first_args.index("submit")
 
 
-def test_sub_orca_pka_batch_shared_reference_loaded_once(tmp_path, monkeypatch):
+def test_sub_orca_pka_batch_shared_reference_loaded_once(
+    tmp_path, monkeypatch
+):
     orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
     from chemsmart.io.molecules.structure import Molecule

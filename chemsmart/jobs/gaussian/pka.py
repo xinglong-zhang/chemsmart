@@ -22,7 +22,6 @@ from chemsmart.jobs.runner import decide_phase_transition, run_phase_jobs
 logger = logging.getLogger(__name__)
 
 
-
 def build_gaussian_pka_settings(
     proton_index, shared, opt_settings, sp_settings=None
 ):
@@ -220,7 +219,6 @@ class GaussianpKaJob(GaussianJob):
             skip_completed=skip_completed,
             **kwargs,
         )
-
 
         self.opt_jobs = []
         self.ref_opt_jobs = []
@@ -890,5 +888,3 @@ class GaussianpKaThermoJob(GaussianpKaAnalyzeJob):
     """
 
     TYPE = "g16pka_thermo"
-
-

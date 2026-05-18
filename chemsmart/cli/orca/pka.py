@@ -330,7 +330,9 @@ def batch(ctx, skip_completed, **kwargs):
             proton_index=int(entry.proton_index),
             scheme=row_scheme,
             reference_file=(
-                shared["reference"] if row_scheme == "proton exchange" else None
+                shared["reference"]
+                if row_scheme == "proton exchange"
+                else None
             ),
             reference_proton_index=(
                 shared["reference_proton_index"]

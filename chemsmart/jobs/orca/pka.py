@@ -22,7 +22,6 @@ from chemsmart.jobs.runner import decide_phase_transition, run_phase_jobs
 logger = logging.getLogger(__name__)
 
 
-
 class ORCApKaJob(ORCAJob):
     """
     ORCA job class for pKa calculations using the dual-level proton exchange cycle.
@@ -105,7 +104,6 @@ class ORCApKaJob(ORCAJob):
         self._sp_jobs = None
         self._ref_opt_jobs = None
         self._ref_sp_jobs = None
-
 
     # ------------------------------------------------------------------
     # Basename helpers for label derivation

@@ -1874,6 +1874,7 @@ class GaussianpKaJobSettings(GaussianJobSettings):
 
         return protonated_sp_settings, conjugate_base_sp_settings
 
+
 class GaussianIRCJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian IRC (Intrinsic Reaction Coordinate) jobs.

@@ -227,9 +227,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         # Charge/multiplicity belong to the backend group (gaussian/orca), so
         # they must appear before entering the "pka" group.
         _set_option(args, "--charge", "-c", insert_before="pka")
-        _set_option(
-            args, "--multiplicity", "-m", insert_before="pka"
-        )
+        _set_option(args, "--multiplicity", "-m", insert_before="pka")
 
         batch_scheme = batch_entry.get("scheme")
         if batch_scheme is not None:

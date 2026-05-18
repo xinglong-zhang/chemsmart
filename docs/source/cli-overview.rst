@@ -83,8 +83,6 @@ Execution Control Options
 
    Use ``-R`` at the end of the command to rerun a completed job.
 
-.. note::
-
 Debugging and Logging Options
 =============================
 
