@@ -44,15 +44,15 @@ Options
       -  string
       -  Directory for batch processing (mutually exclusive with ``-f``)
 
-    -  -  ``-p, --program``
-       -  string
-       -  Program that produced the output files: ``gaussian`` or ``orca``. Use this when parsing depends on program
-          identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
+   -  -  ``-p, --program``
+      -  string
+      -  Program that produced the output files: ``gaussian`` or ``orca``. Use this when parsing depends on program
+         identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
 
-    -  -  ``-t, --filetype``
-       -  string
-       -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Use this when selection is purely
-          suffix-based, regardless of which program generated the files.
+   -  -  ``-t, --filetype``
+      -  string
+      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Use this when selection is purely
+         suffix-based, regardless of which program generated the files.
 
    -  -  ``-f, --filenames``
       -  string
