@@ -13,6 +13,14 @@ group and :mod:`unittest.mock` to intercept the job constructor so that
 the merged settings can be inspected without running an actual calculation.
 """
 
+from unittest.mock import MagicMock, patch
+
+from click.testing import CliRunner
+
+from chemsmart.cli.main import entry_point
+from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.settings import ORCAJobSettings
+
 
 class TestORCASolventCLISpCommand:
     """CLI solvent options propagated to the ``sp`` subcommand."""
@@ -568,3 +576,143 @@ class TestORCACpcmBlockOptions:
         assert result.exit_code == 0, result.output
         assert settings is not None
         assert settings.solventfilename == str(sf)
+
+
+class TestORCARunSubNoParallelIntegration:
+    """Integration-style tests for `run/sub --no-run-in-parallel` on ORCA."""
+
+    def test_run_no_run_in_parallel_builds_serial_batch_job(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`run --no-run-in-parallel` builds ORCA batch with serial execution."""
+
+        class DummyBatchJob(Job):
+            TYPE = "orcajob"
+
+            def run(self, **kwargs):
+                return None
+
+        job_settings = ORCAJobSettings.default()
+        job_settings.run_in_parallel = True
+
+        runner = CliRunner()
+        dummy_batch_job = DummyBatchJob(
+            molecule=None,
+            label="orca_opt_batch",
+            jobrunner=None,
+        )
+        with (
+            patch(
+                "chemsmart.cli.run.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.orca.settings.ORCAJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls,
+            patch(
+                "chemsmart.jobs.orca.batch.ORCABatchJob",
+                return_value=dummy_batch_job,
+            ) as mock_batch_cls,
+            patch.object(dummy_batch_job, "run") as mock_batch_run,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "run",
+                    "-s",
+                    "PBS",
+                    "-N",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--no-scratch",
+                    "orca",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert mock_batch_cls.call_count == 1
+        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+        assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
+        assert mock_batch_run.call_count == 1
+
+    def test_sub_no_run_in_parallel_submits_serial_batch_job(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`sub --no-run-in-parallel` submits ORCA batch with serial flag."""
+        job_settings = ORCAJobSettings.default()
+        job_settings.run_in_parallel = True
+
+        runner = CliRunner()
+        mock_batch_job = MagicMock()
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.orca.settings.ORCAJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls,
+            patch(
+                "chemsmart.jobs.orca.batch.ORCABatchJob",
+                return_value=mock_batch_job,
+            ) as mock_batch_cls,
+            patch("chemsmart.settings.server.Server.submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-N",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--test",
+                    "orca",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert mock_batch_cls.call_count == 1
+        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+        assert mock_submit.call_count == 1
+        assert mock_submit.call_args.kwargs["test"] is True
+        assert (
+            "--no-run-in-parallel" in mock_submit.call_args.kwargs["cli_args"]
+        )
