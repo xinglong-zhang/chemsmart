@@ -9,8 +9,8 @@ calculations with proper thermodynamic cycles.
 
 .. note::
 
-   Gaussian pKa execution uses the shared CLI pipeline. The Gaussian pKa CLI returns a single
-   ``GaussianpKaJob`` or a ``list[GaussianpKaJob]`` and delegates execution to the shared CLI pipeline.
+   Gaussian pKa execution uses the shared CLI pipeline. The Gaussian pKa CLI returns a single ``GaussianpKaJob`` or a
+   ``list[GaussianpKaJob]`` and delegates execution to the shared CLI pipeline.
 
 .. contents:: Table of Contents
    :local:

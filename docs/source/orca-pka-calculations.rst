@@ -9,8 +9,8 @@ calculations for a consistent user experience.
 
 .. note::
 
-   ORCA pKa execution uses the shared CLI pipeline. The ORCA pKa CLI returns a single
-   ``ORCApKaJob`` or a ``list[ORCApKaJob]`` and delegates execution to the shared CLI pipeline.
+   ORCA pKa execution uses the shared CLI pipeline. The ORCA pKa CLI returns a single ``ORCApKaJob`` or a
+   ``list[ORCApKaJob]`` and delegates execution to the shared CLI pipeline.
 
 .. contents:: Table of Contents
    :local:

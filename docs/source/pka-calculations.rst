@@ -7,8 +7,9 @@
 This module provides tools for computing acid dissociation constants (pKa) using quantum chemistry calculations with
 proper thermodynamic cycles. Both Gaussian and ORCA are supported.
 
-Execution Architecture
-======================
+************************
+ Execution Architecture
+************************
 
 pKa submission is implemented as regular job execution through the shared CLI pipeline.
 
@@ -18,8 +19,8 @@ pKa submission is implemented as regular job execution through the shared CLI pi
 
 .. note::
 
-   pKa submission returns a single job object or a list of per-entry jobs, and
-   execution is handled by ``process_pipeline``.
+   pKa submission returns a single job object or a list of per-entry jobs, and execution is handled by
+   ``process_pipeline``.
 
 .. toctree::
    :maxdepth: 2
@@ -32,9 +33,8 @@ pKa submission is implemented as regular job execution through the shared CLI pi
    :local:
    :depth: 2
 
-********
- Theory
-********
+Theory
+======
 
 The pKa of an acid HA in aqueous solution is defined by the equilibrium:
 
@@ -50,8 +50,9 @@ The pKa is related to the standard Gibbs free energy change by:
 
 where :math:`R` is the gas constant and :math:`T` is the temperature.
 
-Thermodynamic Cycles
-====================
+**********************
+ Thermodynamic Cycles
+**********************
 
 CHEMSMART supports two thermodynamic cycles for pKa calculations:
 
@@ -85,8 +86,9 @@ Uses the absolute free energy of a proton in water:
 
 Default value: :math:`\Delta G^{\circ}(\text{H}^{+})_{\text{aq}} = -265.9` kcal/mol (Tissandier et al., 1998).
 
-Dual-Level Approach
-===================
+*********************
+ Dual-Level Approach
+*********************
 
 CHEMSMART implements a dual-level approach for accurate solvation free energies:
 
@@ -111,9 +113,8 @@ CHEMSMART implements a dual-level approach for accurate solvation free energies:
    All internal energies are stored in Hartree (au). Only :math:`\Delta G_{\text{soln}}` is converted to kcal/mol for
    the pKa formula (1 Hartree = 627.5094740631 kcal/mol).
 
-**********************************
- Batch Processing of Output Files
-**********************************
+Batch Processing of Output Files
+================================
 
 You can parse a table of pre-computed output files to calculate pKa values in batch.
 
@@ -156,9 +157,8 @@ is ``.log`` or ``.out``).
 
 The results, including the computed pKa for each entry, will be saved to the file specified by ``--output-results``.
 
-*********************************
- Computing pKa from Output Files
-*********************************
+Computing pKa from Output Files
+===============================
 
 If you have already completed output files for a single acid, you can compute the pKa directly without resubmitting
 jobs. This is the recommended way to get the pKa value after your calculations are done.
@@ -190,8 +190,9 @@ The program will automatically detect whether the output files are from Gaussian
 
    Override any auto-discovered path with the corresponding flag.
 
-Output File Options
-===================
+*********************
+ Output File Options
+*********************
 
 **Gas-Phase Optimization + Frequency Files:**
 
@@ -245,8 +246,9 @@ Output File Options
       -  ``--ref-solv``
       -  Ref⁻ solvent single-point output.
 
-Thermochemistry Options
-=======================
+*************************
+ Thermochemistry Options
+*************************
 
 .. list-table::
    :header-rows: 1
@@ -276,9 +278,8 @@ Thermochemistry Options
       -  ``--reference-pka``
       -  Experimental pKa of HRef. Required for output file parsing mode.
 
-***************
- Output Format
-***************
+Output Format
+=============
 
 When computing pKa from output files, CHEMSMART prints a detailed summary:
 
@@ -330,16 +331,14 @@ When computing pKa from output files, CHEMSMART prints a detailed summary:
      *** Computed pKa(HA) = 52.70 ***
    ==============================================================================
 
-************
- References
-************
+References
+==========
 
 #. Tissandier, M. D. et al. (1998). *J. Phys. Chem. A*, 102, 7787. (Absolute proton solvation energy)
 #. Grimme, S. (2012). *Chem. Eur. J.*, 18, 9955. (Quasi-RRHO method)
 #. Marenich, A. V.; Cramer, C. J.; Truhlar, D. G. (2009). *J. Phys. Chem. B*, 113, 6378. (SMD solvation model)
 
-**********
- See Also
-**********
+See Also
+========
 
 -  :doc:`thermochemistry-analysis`
