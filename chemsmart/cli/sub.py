@@ -55,6 +55,7 @@ def sub(
     num_cores,
     num_gpus,
     mem_gb,
+    num_nodes,
     fake,
     scratch,
     delete_scratch,
@@ -85,6 +86,8 @@ def sub(
         server = Server.from_servername(server)
         if time_hours is not None:
             server.num_hours = time_hours
+        if num_nodes is not None:
+            server.num_nodes = num_nodes
         if queue is not None:
             server.queue_name = queue
 
@@ -93,9 +96,11 @@ def sub(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
+        run_in_serial=not kwargs.get("run_in_parallel", True),
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
+        num_nodes=num_nodes,
     )
 
     # Log the scratch value for debugging purposes

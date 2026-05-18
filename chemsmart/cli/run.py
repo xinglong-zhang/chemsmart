@@ -46,10 +46,11 @@ def run(
     num_cores,
     num_gpus,
     mem_gb,
+    num_nodes,
     fake,
     scratch,
     delete_scratch,
-    run_in_serial,
+    run_in_parallel,
     debug,
     stream,
 ):
@@ -71,10 +72,11 @@ def run(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
-        run_in_serial=run_in_serial,
+        run_in_serial=not run_in_parallel,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
+        num_nodes=num_nodes,
     )
 
     # Log the scratch value for debugging purposes
@@ -128,6 +130,7 @@ def process_pipeline(ctx, *args, **kwargs):
                 num_cores=jobrunner.num_cores,
                 num_gpus=jobrunner.num_gpus,
                 mem_gb=jobrunner.mem_gb,
+                num_nodes=getattr(jobrunner, "num_nodes", None),
             )
 
         if serial_mode.run_in_serial:
@@ -173,6 +176,7 @@ def process_pipeline(ctx, *args, **kwargs):
             num_cores=jobrunner.num_cores,
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,
+            num_nodes=getattr(jobrunner, "num_nodes", None),
         )
 
         # Attach jobrunner to job and run the job with the jobrunner

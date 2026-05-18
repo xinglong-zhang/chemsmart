@@ -37,20 +37,6 @@ class PhaseTransitionDecision:
     message: Optional[str] = None
 
 
-def get_serial_mode(jobrunner) -> SerialMode:
-    """Return serial-mode flags from a jobrunner.
-
-    This helper intentionally does not encode pKa-specific fail-fast rules.
-    """
-    run_in_serial = bool(
-        jobrunner and getattr(jobrunner, "run_in_serial", False)
-    )
-    return SerialMode(
-        run_in_serial=run_in_serial,
-        no_run_in_serial=not run_in_serial,
-    )
-
-
 def run_phase_jobs(
     *,
     parent_runner,
@@ -62,7 +48,7 @@ def run_phase_jobs(
     logger_obj=None,
     phase_label: str = "phase",
 ) -> None:
-    """Shared phase runner wrapper that applies serial-mode policy."""
+    """Shared phase runner wrapper."""
     Job._execute_phase_jobs(
         parent_runner=parent_runner,
         jobs=jobs,
@@ -72,6 +58,17 @@ def run_phase_jobs(
         before_run=before_run,
         logger_obj=logger_obj,
         phase_label=phase_label,
+    )
+
+
+def get_serial_mode(jobrunner) -> SerialMode:
+    """Return serial-mode flags from a jobrunner."""
+    run_in_serial = bool(
+        jobrunner and getattr(jobrunner, "run_in_serial", False)
+    )
+    return SerialMode(
+        run_in_serial=run_in_serial,
+        no_run_in_serial=not run_in_serial,
     )
 
 
@@ -181,9 +178,6 @@ class JobRunner(RegistryMixin):
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
-        run_in_serial (bool): Whether to run list of jobs in serial.
-            If True, jobs in a list are run one after another.
-            If False, use default behavior. Defaults to False.
         **kwargs: Additional keyword arguments.
     """
 
@@ -200,6 +194,7 @@ class JobRunner(RegistryMixin):
         fake=False,
         run_in_serial=False,
         num_cores=None,
+        num_nodes=None,
         num_gpus=None,
         mem_gb=None,
         **kwargs,
@@ -230,6 +225,11 @@ class JobRunner(RegistryMixin):
             self.num_cores = num_cores
         else:
             self.num_cores = self.server.num_cores
+
+        if num_nodes is not None:
+            self.num_nodes = num_nodes
+        else:
+            self.num_nodes = getattr(self.server, "num_nodes", 1)
 
         if num_gpus is not None:
             self.num_gpus = num_gpus

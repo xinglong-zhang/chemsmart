@@ -46,6 +46,7 @@ class Server(RegistryMixin):
         self.kwargs = kwargs
         self._num_hours = self.kwargs.get("NUM_HOURS", None)
         self._queue_name = self.kwargs.get("QUEUE_NAME", None)
+        self._num_nodes = self.kwargs.get("NUM_NODES", 1)
 
     def __str__(self):
         """
@@ -168,6 +169,29 @@ class Server(RegistryMixin):
             value (int): Number of hours for job time limit.
         """
         self._num_hours = value
+
+    @property
+    def num_nodes(self):
+        """
+        Get or set the number of nodes for job allocation.
+
+        Returns:
+            int: Number of nodes for job submission.
+        """
+        return self._num_nodes
+
+    @num_nodes.setter
+    def num_nodes(self, value):
+        """
+        Set the number of nodes for job allocation.
+
+        Args:
+            value (int): Number of nodes.
+        """
+        if value is None:
+            self._num_nodes = 1
+            return
+        self._num_nodes = int(value)
 
     @cached_property
     def mem_gb(self):

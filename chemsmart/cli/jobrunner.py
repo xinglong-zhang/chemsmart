@@ -35,6 +35,14 @@ def click_jobrunner_options(f):
         "-m", "--mem-gb", type=int, default=None, help="Memory in GB."
     )
     @click.option(
+        "-N",
+        "--num-nodes",
+        "--number-of-nodes",
+        type=int,
+        default=None,
+        help="Number of nodes to request for each job.",
+    )
+    @click.option(
         "--fake/--no-fake",
         default=False,
         type=bool,
@@ -54,11 +62,11 @@ def click_jobrunner_options(f):
         "is completed successfully.",
     )
     @click.option(
-        "--run-in-serial/--run-in-parallel",
-        default=False,
+        "--run-in-parallel/--no-run-in-parallel",
+        default=True,
         type=bool,
-        help="If true, run list of jobs in serial (one after another). "
-        "If false, run in parallel when supported.",
+        help="If true, run list of jobs in parallel when supported. "
+        "If false, run in serial (one after another).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
