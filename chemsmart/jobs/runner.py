@@ -3,10 +3,13 @@ import logging
 import os
 from abc import abstractmethod
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from shutil import rmtree
+from typing import Callable, Optional, Sequence
 
+from chemsmart.jobs.job import Job
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -15,6 +18,157 @@ user_settings = ChemsmartUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SerialMode:
+    """Simple view of serial-mode flags derived from a jobrunner."""
+
+    run_in_serial: bool
+    no_run_in_serial: bool
+
+
+@dataclass(frozen=True)
+class PhaseTransitionDecision:
+    """Decision payload for moving from one workflow phase to the next."""
+
+    proceed: bool
+    should_raise: bool
+    message: Optional[str] = None
+
+
+def get_serial_mode(jobrunner) -> SerialMode:
+    """Return serial-mode flags from a jobrunner.
+
+    This helper intentionally does not encode pKa-specific fail-fast rules.
+    """
+    run_in_serial = bool(
+        jobrunner and getattr(jobrunner, "run_in_serial", False)
+    )
+    return SerialMode(
+        run_in_serial=run_in_serial,
+        no_run_in_serial=not run_in_serial,
+    )
+
+
+def run_phase_jobs(
+    *,
+    parent_runner,
+    serial_mode: SerialMode,
+    jobs: Optional[Sequence] = None,
+    jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+    stop_on_incomplete: bool = False,
+    before_run: Optional[Callable[[], None]] = None,
+    logger_obj=None,
+    phase_label: str = "phase",
+) -> None:
+    """Shared phase runner wrapper that applies serial-mode policy."""
+    Job._execute_phase_jobs(
+        parent_runner=parent_runner,
+        jobs=jobs,
+        jobs_factory=jobs_factory,
+        run_in_serial=serial_mode.run_in_serial,
+        stop_on_incomplete=stop_on_incomplete,
+        before_run=before_run,
+        logger_obj=logger_obj,
+        phase_label=phase_label,
+    )
+
+
+def _positive_int_or_none(value) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def get_configured_max_submitters(jobrunner=None) -> int:
+    """Return configured submitter concurrency limit.
+
+    Resolution order:
+    1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
+    2. ``jobrunner.max_submitters`` (if present)
+    3. ``jobrunner.server.max_submitters`` (if present)
+    4. ``jobrunner.num_cores``
+    5. ``jobrunner.server.num_cores``
+    6. ``os.cpu_count()``
+    """
+    env_value = _positive_int_or_none(
+        os.environ.get("CHEMSMART_MAX_SUBMITTERS")
+    )
+    if env_value is not None:
+        return env_value
+
+    runner_value = _positive_int_or_none(
+        getattr(jobrunner, "max_submitters", None)
+    )
+    if runner_value is not None:
+        return runner_value
+
+    server = getattr(jobrunner, "server", None)
+    server_value = _positive_int_or_none(
+        getattr(server, "max_submitters", None)
+    )
+    if server_value is not None:
+        return server_value
+
+    cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
+    if cores_value is not None:
+        return cores_value
+
+    server_cores_value = _positive_int_or_none(
+        getattr(server, "num_cores", None)
+    )
+    if server_cores_value is not None:
+        return server_cores_value
+
+    cpu_count = _positive_int_or_none(os.cpu_count())
+    return cpu_count if cpu_count is not None else 1
+
+
+def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
+    """Return bounded worker count for batch/list submitter threads."""
+    if num_jobs <= 0:
+        return 1
+    configured_max_submitters = get_configured_max_submitters(jobrunner)
+    return max(1, min(num_jobs, configured_max_submitters))
+
+
+def decide_phase_transition(
+    *,
+    phase_name: str,
+    failures: Optional[Sequence[str]] = None,
+    require_complete: bool = False,
+    is_complete: Optional[bool] = None,
+    stop_message: Optional[str] = None,
+) -> PhaseTransitionDecision:
+    """Return a shared decision for whether a workflow should enter next phase."""
+    phase_failures = [f for f in (failures or []) if f]
+    if phase_failures:
+        summary = (
+            f"{phase_name} phase failed in {len(phase_failures)} worker(s):\n"
+            + "\n".join(f"  - {item}" for item in phase_failures)
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=True,
+            message=summary,
+        )
+
+    if require_complete and is_complete is False:
+        message = (
+            stop_message or f"{phase_name} jobs incomplete, halting execution."
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=False,
+            message=message,
+        )
+
+    return PhaseTransitionDecision(proceed=True, should_raise=False)
 
 
 class JobRunner(RegistryMixin):
@@ -27,6 +181,9 @@ class JobRunner(RegistryMixin):
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
+        run_in_serial (bool): Whether to run list of jobs in serial.
+            If True, jobs in a list are run one after another.
+            If False, use default behavior. Defaults to False.
         **kwargs: Additional keyword arguments.
     """
 
@@ -41,6 +198,7 @@ class JobRunner(RegistryMixin):
         scratch_dir=None,  # Explicit scratch directory
         delete_scratch=False,
         fake=False,
+        run_in_serial=False,
         num_cores=None,
         num_gpus=None,
         mem_gb=None,
@@ -61,6 +219,7 @@ class JobRunner(RegistryMixin):
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
+        self.run_in_serial = run_in_serial
 
         if self.scratch:
             self._set_scratch()

@@ -105,16 +105,56 @@ def qrc(
     # validate charge and multiplicity consistency only for direct qrc jobs
     check_charge_and_multiplicity(qrc_settings)
 
-    # get molecule from context (use the last molecule if multiple)
-    molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running QRC calculation on molecule: {molecule}")
-
     # get label for the job output files
     label = ctx.obj["label"]
     logger.debug(f"Job label: {label}")
 
+    # normalize input to list for batch-friendly handling
+    molecules = ctx.obj["molecules"]
+    if not isinstance(molecules, list):
+        molecules = [molecules]
+
+    molecule_indices = ctx.obj.get("molecule_indices")
+    if molecule_indices is None:
+        molecule_indices = list(range(1, len(molecules) + 1))
+
+    from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.qrc import ORCAQRCJob
+
+    if len(molecules) > 1:
+        logger.info(f"Creating {len(molecules)} ORCA QRC jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running QRC for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+            jobs.append(
+                ORCAQRCJob(
+                    molecule=molecule,
+                    settings=qrc_settings,
+                    label=molecule_label,
+                    jobrunner=jobrunner,
+                    mode_idx=mode_idx,
+                    amp=amp,
+                    nframes=nframes,
+                    phase=phase,
+                    normalize=normalize,
+                    return_xyz=return_xyz,
+                    skip_completed=skip_completed,
+                    **kwargs,
+                )
+            )
+
+        return ORCABatchJob(
+            jobs=jobs,
+            run_in_serial=jobrunner.run_in_serial,
+            label=f"{label}_batch",
+            jobrunner=jobrunner,
+        )
+
+    molecule = molecules[0]
+    logger.info(f"Running QRC calculation on molecule: {molecule}")
 
     return ORCAQRCJob(
         molecule=molecule,
