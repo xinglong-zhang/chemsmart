@@ -95,12 +95,19 @@ def sp(
 
     # Get the original molecule indices from context
     molecule_indices = ctx.obj["molecule_indices"]
+    job_targets = (
+        list(zip(molecules, molecule_indices))
+        if molecule_indices is not None
+        else [(molecules[-1], None)]
+    )
+    run_in_parallel = bool(getattr(job_settings, "run_in_parallel", False))
+    batch_requested = run_in_parallel and len(job_targets) > 1
 
     # Handle multiple molecules: create one job per molecule
-    if len(molecules) > 1 and molecule_indices is not None:
-        logger.info(f"Creating {len(molecules)} ORCA single point jobs")
+    if batch_requested:
+        logger.info(f"Creating {len(job_targets)} ORCA single point jobs")
         jobs = []
-        for molecule, idx in zip(molecules, molecule_indices):
+        for molecule, idx in job_targets:
             molecule_label = f"{label}_idx{idx}"
             final_label = create_sp_label(molecule_label, sp_settings)
             logger.info(

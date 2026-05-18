@@ -250,8 +250,13 @@ def ts(
         molecules = [molecules]
 
     molecule_indices = ctx.obj.get("molecule_indices")
-    if molecule_indices is None:
-        molecule_indices = list(range(1, len(molecules) + 1))
+    job_targets = (
+        list(zip(molecules, molecule_indices))
+        if molecule_indices is not None
+        else [(molecules[-1], None)]
+    )
+    run_in_parallel = bool(getattr(job_settings, "run_in_parallel", False))
+    batch_requested = run_in_parallel and len(job_targets) > 1
 
     logger.info(f"Final TS job settings: {ts_settings.__dict__}")
 
@@ -269,10 +274,10 @@ def ts(
     from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.ts import ORCATSJob
 
-    if len(molecules) > 1:
-        logger.info(f"Creating {len(molecules)} ORCA TS jobs")
+    if batch_requested:
+        logger.info(f"Creating {len(job_targets)} ORCA TS jobs")
         jobs = []
-        for molecule, idx in zip(molecules, molecule_indices):
+        for molecule, idx in job_targets:
             molecule_label = f"{label}_idx{idx}"
             logger.info(
                 f"Running TS search for molecule {idx}: {molecule} with label {molecule_label}"
@@ -293,7 +298,7 @@ def ts(
             label=f"{label}_batch",
         )
 
-    molecule = molecules[0]
+    molecule = molecules[-1]
     logger.info(f"Running TS search on molecule: {molecule}")
     return ORCATSJob(
         molecule=molecule,
