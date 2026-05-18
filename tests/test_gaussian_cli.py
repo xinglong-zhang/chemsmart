@@ -17,6 +17,15 @@ the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
 can be inspected without running an actual calculation.
 """
 
+from unittest.mock import MagicMock, patch
+
+import pytest
+from click.testing import CliRunner
+
+from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.main import entry_point
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
 
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""
@@ -625,6 +634,254 @@ class TestGaussianCLIScanCommand:
         )
         assert result.exit_code == 0, result.output
         assert settings.basis == "def2svp"
+
+
+class TestGaussianBatchTriggeringGate:
+    """Regression tests for Gaussian batch trigger gating."""
+
+    @pytest.mark.parametrize(
+        "subcommand,job_class_path,extra_args",
+        [
+            ("opt", "chemsmart.jobs.gaussian.opt.GaussianOptJob", []),
+            (
+                "sp",
+                "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+                [],
+            ),
+        ],
+    )
+    def test_fanout_when_parallel_and_multiple_indices(
+        self,
+        subcommand,
+        job_class_path,
+        extra_args,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        """Multiple selected targets fan out only when parallel is enabled."""
+        job_settings = GaussianJobSettings.default()
+        job_settings.run_in_parallel = True
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch(job_class_path) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    subcommand,
+                    *extra_args,
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+
+    @pytest.mark.parametrize(
+        "subcommand,job_class_path,extra_args",
+        [
+            ("opt", "chemsmart.jobs.gaussian.opt.GaussianOptJob", []),
+            (
+                "sp",
+                "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+                [],
+            ),
+        ],
+    )
+    def test_no_fanout_when_parallel_disabled(
+        self,
+        subcommand,
+        job_class_path,
+        extra_args,
+        multiple_molecules_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        """Multiple selected targets do not fan out when parallel is disabled."""
+        job_settings = GaussianJobSettings.default()
+        job_settings.run_in_parallel = False
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch(job_class_path) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    subcommand,
+                    *extra_args,
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 1
+
+
+class TestGaussianRunSubNoParallelIntegration:
+    """Integration-style tests for `run/sub --no-run-in-parallel`."""
+
+    def test_run_no_run_in_parallel_executes_fanout_jobs_serially(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`run --no-run-in-parallel` keeps fan-out but executes jobs serially."""
+        job_settings = GaussianJobSettings.default()
+        job_settings.run_in_parallel = True
+
+        runner = CliRunner()
+        job1 = MagicMock(label="opt_idx1")
+        job2 = MagicMock(label="opt_idx2")
+        job1.TYPE = "g16opt"
+        job2.TYPE = "g16opt"
+        with (
+            patch(
+                "chemsmart.cli.run.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                side_effect=[job1, job2],
+            ) as mock_job_cls,
+            patch("chemsmart.cli.run.ThreadPoolExecutor") as mock_executor,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "run",
+                    "-s",
+                    "PBS",
+                    "-N",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--no-scratch",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert job1.run.call_count == 1
+        assert job2.run.call_count == 1
+        assert mock_executor.call_count == 0
+
+    def test_sub_no_run_in_parallel_submits_each_fanout_job(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`sub --no-run-in-parallel` submits each selected job target."""
+        job_settings = GaussianJobSettings.default()
+        job_settings.run_in_parallel = True
+
+        runner = CliRunner()
+        job1 = MagicMock(label="opt_idx1")
+        job2 = MagicMock(label="opt_idx2")
+        job1.TYPE = "g16opt"
+        job2.TYPE = "g16opt"
+
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
+                return_value=job_settings,
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                side_effect=[job1, job2],
+            ) as mock_job_cls,
+            patch("chemsmart.settings.server.Server.submit") as mock_submit,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-N",
+                    "1",
+                    "--no-run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        assert mock_submit.call_count == 2
+        for call in mock_job_cls.call_args_list:
+            assert call.kwargs["jobrunner"].no_run_in_parallel is True
+        for call in mock_submit.call_args_list:
+            assert call.kwargs["test"] is True
+            assert "--no-run-in-parallel" in call.kwargs["cli_args"]
 
     def test_scan_settings_from_project(
         self,
