@@ -151,21 +151,21 @@ class GaussianQRCJob(GaussianJob):
         """
         Execute both QRC jobs (forward and reverse).
         Runs the QRC forward and reverse jobs simultaneously using GaussianBatchJob,
-        unless run_in_serial is requested.
+        unless no_run_in_parallel is requested.
         """
         # Determine execution mode
-        run_in_serial = False
-        if self.jobrunner and self.jobrunner.run_in_serial:
-            run_in_serial = True
+        no_run_in_parallel = False
+        if self.jobrunner and self.jobrunner.no_run_in_parallel:
+            no_run_in_parallel = True
 
         logger.info(
-            f"Running QRC jobs (serial={run_in_serial}) for label {self.label}"
+            f"Running QRC jobs (serial={no_run_in_parallel}) for label {self.label}"
         )
 
         try:
             batch_job = GaussianBatchJob(
                 jobs=self.both_qrc_jobs,
-                run_in_serial=run_in_serial,
+                no_run_in_parallel=no_run_in_parallel,
                 label=f"{self.label}_batch",
                 jobrunner=self.jobrunner,
             )

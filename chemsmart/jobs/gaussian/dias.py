@@ -353,7 +353,7 @@ class GaussianDIASJob(GaussianJob):
         jobs_to_run = self.all_molecules_jobs
 
         # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.run_in_serial:
+        if self.jobrunner and self.jobrunner.no_run_in_parallel:
             logger.info(
                 "Running molecule jobs in serial mode (one after another)"
             )
@@ -370,7 +370,7 @@ class GaussianDIASJob(GaussianJob):
             logger.info("Running molecule jobs using GaussianBatchJob")
             batch_job = GaussianBatchJob(
                 jobs=jobs_to_run,
-                run_in_serial=False,
+                no_run_in_parallel=False,
                 label=f"{self.label}_molecules_batch",
                 jobrunner=self.jobrunner,
             )
@@ -387,7 +387,7 @@ class GaussianDIASJob(GaussianJob):
         jobs_to_run = self.fragment1_jobs
 
         # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.run_in_serial:
+        if self.jobrunner and self.jobrunner.no_run_in_parallel:
             logger.info(
                 "Running fragment 1 jobs in serial mode (one after another)"
             )
@@ -404,7 +404,7 @@ class GaussianDIASJob(GaussianJob):
             logger.info("Running fragment 1 jobs using GaussianBatchJob")
             batch_job = GaussianBatchJob(
                 jobs=jobs_to_run,
-                run_in_serial=False,
+                no_run_in_parallel=False,
                 label=f"{self.label}_fragment1_batch",
                 jobrunner=self.jobrunner,
             )
@@ -421,7 +421,7 @@ class GaussianDIASJob(GaussianJob):
         jobs_to_run = self.fragment2_jobs
 
         # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.run_in_serial:
+        if self.jobrunner and self.jobrunner.no_run_in_parallel:
             logger.info(
                 "Running fragment 2 jobs in serial mode (one after another)"
             )
@@ -438,7 +438,7 @@ class GaussianDIASJob(GaussianJob):
             logger.info("Running fragment 2 jobs using GaussianBatchJob")
             batch_job = GaussianBatchJob(
                 jobs=jobs_to_run,
-                run_in_serial=False,
+                no_run_in_parallel=False,
                 label=f"{self.label}_fragment2_batch",
                 jobrunner=self.jobrunner,
             )

@@ -129,7 +129,7 @@ class Job(RegistryMixin):
         parent_runner,
         jobs: Optional[Sequence],
         jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
-        run_in_serial: bool = False,
+        no_run_in_parallel: bool = False,
         stop_on_incomplete: bool = False,
         before_run: Optional[Callable[[], None]] = None,
         logger_obj: Optional[logging.Logger] = None,
@@ -155,7 +155,7 @@ class Job(RegistryMixin):
             Job._propagate_runner(parent_runner, child_job)
             child_job.run()
             if (
-                run_in_serial
+                no_run_in_parallel
                 and stop_on_incomplete
                 and not child_job.is_complete()
             ):

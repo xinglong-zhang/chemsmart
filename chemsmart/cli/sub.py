@@ -96,7 +96,7 @@ def sub(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
-        run_in_serial=not kwargs.get("run_in_parallel", True),
+        no_run_in_parallel=not kwargs.get("run_in_parallel", True),
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,

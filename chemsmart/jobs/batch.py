@@ -54,7 +54,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     def __init__(
         self,
         jobs: Optional[Sequence[Job]],
-        run_in_serial: Optional[bool] = None,
+        no_run_in_parallel: Optional[bool] = None,
         write_outcome_logs: bool = False,
         label: str = "batch_job",
         jobrunner: Any = None,
@@ -70,10 +70,10 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         runner_serial_mode = get_serial_mode(jobrunner)
         # - explicit True/False at call site wins
         # - None defers to runner policy
-        if run_in_serial is None:
-            self.run_in_serial = runner_serial_mode.run_in_serial
+        if no_run_in_parallel is None:
+            self.no_run_in_parallel = runner_serial_mode.no_run_in_parallel
         else:
-            self.run_in_serial = bool(run_in_serial)
+            self.no_run_in_parallel = bool(no_run_in_parallel)
         self.write_outcome_logs = bool(write_outcome_logs)
 
         # Cache completion checks to avoid repeatedly reparsing output files
@@ -103,7 +103,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
         if nodes and len(nodes) > 1:
             outcomes = self._run_multi_node(nodes, **kwargs)
-        elif self.run_in_serial:
+        elif self.no_run_in_parallel:
             logger.info(f"Running batch of {len(self.jobs)} jobs serially.")
             outcomes = self._run_jobs_serially(self.jobs, **kwargs)
         else:

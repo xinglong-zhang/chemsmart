@@ -1,6 +1,6 @@
-"""Tests for JobRunner class and run_in_serial flag."""
+"""Tests for JobRunner class and no_run_in_parallel flag."""
 
-from unittest.mock import Mock, PropertyMock
+from unittest.mock import Mock
 
 import pytest
 
@@ -27,21 +27,25 @@ class MockMolecule(Molecule):
 class TestJobRunner:
     """Test JobRunner functionality."""
 
-    def test_jobrunner_default_run_in_serial(self, pbs_server):
-        """Test that run_in_serial defaults to False."""
+    def test_jobrunner_default_no_run_in_parallel(self, pbs_server):
+        """Test that no_run_in_parallel defaults to False."""
         runner = JobRunner(server=pbs_server, fake=True)
-        assert hasattr(runner, "run_in_serial")
-        assert runner.run_in_serial is False
+        assert hasattr(runner, "no_run_in_parallel")
+        assert runner.no_run_in_parallel is False
 
-    def test_jobrunner_run_in_serial_true(self, pbs_server):
-        """Test that run_in_serial can be set to True."""
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
-        assert runner.run_in_serial is True
+    def test_jobrunner_no_run_in_parallel_true(self, pbs_server):
+        """Test that no_run_in_parallel can be set to True."""
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        assert runner.no_run_in_parallel is True
 
-    def test_jobrunner_run_in_serial_false(self, pbs_server):
-        """Test that run_in_serial can be set to False."""
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
-        assert runner.run_in_serial is False
+    def test_jobrunner_no_run_in_parallel_false(self, pbs_server):
+        """Test that no_run_in_parallel can be set to False."""
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
+        assert runner.no_run_in_parallel is False
 
     def test_submitter_worker_count_uses_policy_cap(self, pbs_server):
         runner = JobRunner(server=pbs_server, fake=True)
@@ -71,8 +75,8 @@ class TestSerialExecution:
         # Create settings
         settings = GaussianJobSettings()
 
-        # Create job with run_in_serial=True
-        gaussian_jobrunner_no_scratch.run_in_serial = True
+        # Create job with no_run_in_parallel=True
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
         job = GaussianCrestJob(
             molecules=mock_molecules,
             settings=settings,
@@ -125,45 +129,53 @@ class TestBatchJobRefactor:
     def test_batch_serial_mode_when_unset(self, pbs_server):
         """Test that BatchJob runs all jobs when they are unset."""
         dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
 
         batch = dummy_batch_cls(
             jobs=[],
             jobrunner=runner,
         )
 
-        assert batch.run_in_serial is True
+        assert batch.no_run_in_parallel is True
 
     def test_batch_serial_mode_keeps_explicit_false(self, pbs_server):
         """Test that BatchJob runs all jobs when they are unset."""
         dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
 
         batch = dummy_batch_cls(
             jobs=[],
-            run_in_serial=False,
+            no_run_in_parallel=False,
             jobrunner=runner,
         )
 
-        assert batch.run_in_serial is False
+        assert batch.no_run_in_parallel is False
 
     def test_batch_serial_mode_keeps_explicit_true(self, pbs_server):
         dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
 
         batch = dummy_batch_cls(
             jobs=[],
-            run_in_serial=True,
+            no_run_in_parallel=True,
             jobrunner=runner,
         )
 
-        assert batch.run_in_serial is True
+        assert batch.no_run_in_parallel is True
 
     def test_batch_writes_success_and_failed_logs(self, pbs_server, tmp_path):
         from chemsmart.jobs.batch import BatchExecutionError
 
         dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
 
         success_job = Mock()
         success_job.label = "success_job"
@@ -177,7 +189,7 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[success_job, fail_job],
-            run_in_serial=False,
+            no_run_in_parallel=False,
             write_outcome_logs=True,
             jobrunner=runner,
             label="batch_logs_test",
@@ -199,7 +211,9 @@ class TestBatchJobRefactor:
         from chemsmart.jobs.batch import BatchExecutionError
 
         dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=True)
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
 
         fail_job = Mock()
         fail_job.label = "fail_job"
@@ -208,7 +222,7 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[fail_job],
-            run_in_serial=True,
+            no_run_in_parallel=True,
             jobrunner=runner,
             label="batch_raise_test",
         )
@@ -221,7 +235,9 @@ class TestBatchJobRefactor:
         self, pbs_server, mocker
     ):
         dummy_batch_cls = self._dummy_batch_cls()
-        runner = JobRunner(server=pbs_server, fake=True, run_in_serial=False)
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
 
         job1 = Mock()
         job1.label = "job1"
@@ -230,7 +246,7 @@ class TestBatchJobRefactor:
 
         batch = dummy_batch_cls(
             jobs=[job1, job2],
-            run_in_serial=False,
+            no_run_in_parallel=False,
             jobrunner=runner,
             label="batch_node_future_failure",
         )
@@ -276,7 +292,7 @@ class TestGaussianBatchDelegation:
         mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
         settings = GaussianJobSettings()
 
-        gaussian_jobrunner_no_scratch.run_in_serial = False
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
         job = GaussianCrestJob(
             molecules=mock_molecules,
             settings=settings,
@@ -297,7 +313,7 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args[1]
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["run_in_serial"] is False
+        assert call_kwargs["no_run_in_parallel"] is False
         assert call_kwargs["label"] == "test_crest_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
         mock_batch.run.assert_called_once()
@@ -311,7 +327,7 @@ class TestGaussianBatchDelegation:
         mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
         settings = GaussianJobSettings()
 
-        gaussian_jobrunner_no_scratch.run_in_serial = False
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
         job = GaussianTrajJob(
             molecules=mock_molecules,
             settings=settings,
@@ -333,7 +349,7 @@ class TestGaussianBatchDelegation:
         mock_batch_cls.assert_called_once()
         call_kwargs = mock_batch_cls.call_args[1]
         assert call_kwargs["jobs"] == mock_jobs
-        assert call_kwargs["run_in_serial"] is False
+        assert call_kwargs["no_run_in_parallel"] is False
         assert call_kwargs["label"] == "test_traj_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
         mock_batch.run.assert_called_once()
@@ -347,7 +363,7 @@ class TestGaussianBatchDelegation:
         mock_molecules = [MockMolecule(), MockMolecule(), MockMolecule()]
         settings = GaussianJobSettings()
 
-        gaussian_jobrunner_no_scratch.run_in_serial = True
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
         job = GaussianTrajJob(
             molecules=mock_molecules,
             settings=settings,

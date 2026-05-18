@@ -151,11 +151,11 @@ class ORCAQRCJob(ORCAJob):
         """
         Execute both QRC jobs (forward and reverse).
 
-        When ``run_in_serial`` is requested on the jobrunner, preserve the
+        When ``no_run_in_parallel`` is requested on the jobrunner, preserve the
         existing stop-on-incomplete serial behavior. Otherwise, delegate to the
         shared batch-job orchestration for parallel fault-tolerant execution.
         """
-        if self.jobrunner and self.jobrunner.run_in_serial:
+        if self.jobrunner and self.jobrunner.no_run_in_parallel:
             logger.info("Running QRC jobs in serial mode (one after another)")
             for job in self.both_qrc_jobs:
                 job.run()
@@ -170,7 +170,7 @@ class ORCAQRCJob(ORCAJob):
             logger.info("Running QRC jobs using OrcaBatchJob")
             batch_job = OrcaBatchJob(
                 jobs=self.both_qrc_jobs,
-                run_in_serial=False,
+                no_run_in_parallel=False,
                 label=f"{self.label}_batch",
                 jobrunner=self.jobrunner,
             )

@@ -314,21 +314,12 @@ def irc(
 
     molecule_indices = ctx.obj.get("molecule_indices")
 
-    # batch mode is requested only when job settings explicitly opt in
-    run_in_serial_setting = getattr(job_settings, "run_in_serial", None)
-    run_in_parallel_setting = getattr(job_settings, "run_in_parallel", None)
-    batch_requested = bool(run_in_serial_setting) or bool(
-        run_in_parallel_setting
-    )
+    # batch mode is requested only when parallel execution is explicitly enabled
+    run_in_parallel = bool(getattr(job_settings, "run_in_parallel", False))
+    batch_requested = run_in_parallel
 
     from chemsmart.jobs.orca.batch import ORCABatchJob
     from chemsmart.jobs.orca.irc import ORCAIRCJob
-
-    run_in_serial = (
-        bool(run_in_serial_setting)
-        if run_in_serial_setting is not None
-        else False
-    )
 
     if len(molecules) > 1 and batch_requested:
         if molecule_indices is None:
@@ -352,7 +343,7 @@ def irc(
 
         return ORCABatchJob(
             jobs=jobs,
-            run_in_serial=run_in_serial,
+            no_run_in_parallel=not run_in_parallel,
             label=f"{label}_batch",
         )
 

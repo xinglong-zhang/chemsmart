@@ -72,7 +72,7 @@ def run(
         scratch=scratch,
         delete_scratch=delete_scratch,
         fake=fake,
-        run_in_serial=not run_in_parallel,
+        no_run_in_parallel=not run_in_parallel,
         num_cores=num_cores,
         num_gpus=num_gpus,
         mem_gb=mem_gb,
@@ -126,14 +126,14 @@ def process_pipeline(ctx, *args, **kwargs):
                 scratch=jobrunner.scratch,
                 fake=jobrunner.fake,
                 delete_scratch=jobrunner.delete_scratch,
-                run_in_serial=jobrunner.run_in_serial,
+                no_run_in_parallel=jobrunner.no_run_in_parallel,
                 num_cores=jobrunner.num_cores,
                 num_gpus=jobrunner.num_gpus,
                 mem_gb=jobrunner.mem_gb,
                 num_nodes=getattr(jobrunner, "num_nodes", None),
             )
 
-        if serial_mode.run_in_serial:
+        if serial_mode.no_run_in_parallel:
             logger.info("Running jobs in serial mode (one after another)")
             for single_job in job:
                 logger.info(f"Running job: {single_job.label}")
@@ -172,7 +172,7 @@ def process_pipeline(ctx, *args, **kwargs):
             scratch=jobrunner.scratch,
             fake=jobrunner.fake,
             delete_scratch=jobrunner.delete_scratch,
-            run_in_serial=jobrunner.run_in_serial,
+            no_run_in_parallel=jobrunner.no_run_in_parallel,
             num_cores=jobrunner.num_cores,
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,

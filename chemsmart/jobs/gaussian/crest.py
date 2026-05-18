@@ -235,7 +235,7 @@ class GaussianCrestJob(GaussianJob):
         jobs_to_run = self.all_conformers_jobs[: self.num_confs_to_opt]
 
         # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.run_in_serial:
+        if self.jobrunner and self.jobrunner.no_run_in_parallel:
             logger.info(
                 "Running conformer jobs in serial mode (one after another)"
             )
@@ -252,7 +252,7 @@ class GaussianCrestJob(GaussianJob):
             logger.info("Running conformer jobs using GaussianBatchJob")
             batch_job = GaussianBatchJob(
                 jobs=jobs_to_run,
-                run_in_serial=False,
+                no_run_in_parallel=False,
                 label=f"{self.label}_batch",
                 jobrunner=self.jobrunner,
             )

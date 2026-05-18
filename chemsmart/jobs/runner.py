@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 class SerialMode:
     """Simple view of serial-mode flags derived from a jobrunner."""
 
-    run_in_serial: bool
-    no_run_in_serial: bool
+    no_run_in_parallel: bool
+    run_in_parallel: bool
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ def run_phase_jobs(
         parent_runner=parent_runner,
         jobs=jobs,
         jobs_factory=jobs_factory,
-        run_in_serial=serial_mode.run_in_serial,
+        no_run_in_parallel=serial_mode.no_run_in_parallel,
         stop_on_incomplete=stop_on_incomplete,
         before_run=before_run,
         logger_obj=logger_obj,
@@ -63,12 +63,12 @@ def run_phase_jobs(
 
 def get_serial_mode(jobrunner) -> SerialMode:
     """Return serial-mode flags from a jobrunner."""
-    run_in_serial = bool(
-        jobrunner and getattr(jobrunner, "run_in_serial", False)
+    no_run_in_parallel = bool(
+        jobrunner and getattr(jobrunner, "no_run_in_parallel", False)
     )
     return SerialMode(
-        run_in_serial=run_in_serial,
-        no_run_in_serial=not run_in_serial,
+        no_run_in_parallel=no_run_in_parallel,
+        run_in_parallel=not no_run_in_parallel,
     )
 
 
@@ -192,7 +192,7 @@ class JobRunner(RegistryMixin):
         scratch_dir=None,  # Explicit scratch directory
         delete_scratch=False,
         fake=False,
-        run_in_serial=False,
+        no_run_in_parallel=False,
         num_cores=None,
         num_nodes=None,
         num_gpus=None,
@@ -214,7 +214,7 @@ class JobRunner(RegistryMixin):
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
-        self.run_in_serial = run_in_serial
+        self.no_run_in_parallel = no_run_in_parallel
 
         if self.scratch:
             self._set_scratch()
