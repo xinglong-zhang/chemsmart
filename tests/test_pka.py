@@ -578,7 +578,9 @@ def test_sub_orca_pka_batch_first_exchange_rest_direct(tmp_path, monkeypatch):
     assert "--reference-multiplicity" not in second_args
 
 
-def test_run_gaussian_pka_help_is_submission_only():
+def test_run_gaussian_pka_help_is_submission_only(
+    single_molecule_xyz_file,
+):
     _require_backend_pka_subcommand(run, "gaussian")
     runner = CliRunner()
     result = runner.invoke(
@@ -590,7 +592,7 @@ def test_run_gaussian_pka_help_is_submission_only():
             "-p",
             "test",
             "-f",
-            "tests/data/StructuresTests/xyz/crest_best.xyz",
+            single_molecule_xyz_file,
             "pka",
             "--help",
         ],
@@ -604,7 +606,9 @@ def test_run_gaussian_pka_help_is_submission_only():
     assert "\n  batch-analyze" not in result.output
 
 
-def test_run_orca_pka_help_is_submission_only():
+def test_run_orca_pka_help_is_submission_only(
+    single_molecule_xyz_file,
+):
     _require_backend_pka_subcommand(run, "orca")
     runner = CliRunner()
     result = runner.invoke(
@@ -616,7 +620,7 @@ def test_run_orca_pka_help_is_submission_only():
             "-p",
             "test",
             "-f",
-            "tests/data/StructuresTests/xyz/crest_best.xyz",
+            single_molecule_xyz_file,
             "pka",
             "--help",
         ],
