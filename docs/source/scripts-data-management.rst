@@ -42,9 +42,9 @@ Options
       -  string
       -  Excel file with metadata (required)
 
-    -  -  ``-t, --filetype``
-       -  string
-       -  File extension to organize (default: log). This is suffix-based only; the script does not parse file content.
+   -  -  ``-t, --filetype``
+      -  string
+      -  File extension to organize (default: log). This is suffix-based only; the script does not parse file content.
 
    -  -  ``-n, --name``
       -  string
@@ -120,14 +120,14 @@ Options
       -  string
       -  Directory for batch conversion (mutually exclusive with -f)
 
-    -  -  ``-t, --filetype``
-       -  string
-       -  Input file type: log, com, gjf, out, inp, xyz, sdf. This filters files by extension.
+   -  -  ``-t, --filetype``
+      -  string
+      -  Input file type: log, com, gjf, out, inp, xyz, sdf. This filters files by extension.
 
-    -  -  ``-p, --program``
-       -  choice
-       -  Program that produced the files: ``gaussian`` or ``orca``. Use this when conversion depends on program
-          identity, such as ``.out`` files where Gaussian and ORCA share the same extension.
+   -  -  ``-p, --program``
+      -  choice
+      -  Program that produced the files: ``gaussian`` or ``orca``. Use this when conversion depends on program
+         identity, such as ``.out`` files where Gaussian and ORCA share the same extension.
 
    -  -  ``-f, --filename``
       -  string
