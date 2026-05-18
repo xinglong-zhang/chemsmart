@@ -15,6 +15,7 @@ from .opt import opt
 from .orca import orca
 
 # from .qmmm import qmmm
+from .pka import pka
 from .qrc import qrc
 from .scan import scan
 from .singlepoint import sp
@@ -26,6 +27,7 @@ __all__ = [
     "modred",
     "opt",
     "orca",
+    "pka",
     "qrc",
     "scan",
     "sp",

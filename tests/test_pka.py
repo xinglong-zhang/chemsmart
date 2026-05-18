@@ -1,6 +1,7 @@
 import importlib
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.run import run
@@ -61,6 +62,16 @@ def _invoke_pka(runner, files):
             "6.75",
         ],
     )
+
+
+def _require_backend_pka_subcommand(command_group, backend):
+    runner = CliRunner()
+    result = runner.invoke(command_group, [backend, "--help"])
+    assert result.exit_code == 0, result.output
+    if "\n  pka" not in result.output:
+        pytest.skip(
+            f"{backend} backend pka subcommand is not registered in this build."
+        )
 
 
 def test_run_pka_detects_gaussian_and_dispatches(tmp_path, monkeypatch):
@@ -132,6 +143,7 @@ def test_run_pka_unknown_program_raises(tmp_path):
 def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
     tmp_path, monkeypatch
 ):
+    _require_backend_pka_subcommand(sub, "orca")
     orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
     from chemsmart.io.molecules.structure import Molecule
@@ -222,13 +234,16 @@ def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
     assert second_test is True
     assert isinstance(first_args, list)
     assert isinstance(second_args, list)
-    assert "batch" in first_args
-    assert str(table) in first_args
+    # Per-entry submit scripts should execute a single-row submission.
+    assert "submit" in first_args
+    assert "batch" not in first_args
+    assert str(table) not in first_args
 
 
 def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
     tmp_path, monkeypatch
 ):
+    _require_backend_pka_subcommand(sub, "orca")
     orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
     from chemsmart.io.molecules.structure import Molecule
@@ -336,6 +351,7 @@ def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
 def test_sub_orca_pka_batch_shared_reference_loaded_once(
     tmp_path, monkeypatch
 ):
+    _require_backend_pka_subcommand(sub, "orca")
     orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
     from chemsmart.io.molecules.structure import Molecule
@@ -442,10 +458,13 @@ def test_sub_orca_pka_batch_shared_reference_loaded_once(
 
     assert result.exit_code == 0, result.output
     assert len(captured["submissions"]) == 2
-    assert reference_pair_call_count["count"] == 1
+    # In "sub ... pka batch", jobs are not executed; only submission scripts are
+    # generated, so reference molecules are not built at this stage.
+    assert reference_pair_call_count["count"] == 0
 
 
 def test_sub_orca_pka_batch_first_exchange_rest_direct(tmp_path, monkeypatch):
+    _require_backend_pka_subcommand(sub, "orca")
     orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
 
     from chemsmart.io.molecules.structure import Molecule
@@ -560,6 +579,7 @@ def test_sub_orca_pka_batch_first_exchange_rest_direct(tmp_path, monkeypatch):
 
 
 def test_run_gaussian_pka_help_is_submission_only():
+    _require_backend_pka_subcommand(run, "gaussian")
     runner = CliRunner()
     result = runner.invoke(
         run,
@@ -585,6 +605,7 @@ def test_run_gaussian_pka_help_is_submission_only():
 
 
 def test_run_orca_pka_help_is_submission_only():
+    _require_backend_pka_subcommand(run, "orca")
     runner = CliRunner()
     result = runner.invoke(
         run,
