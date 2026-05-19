@@ -377,36 +377,16 @@ def run_pka_from_output_table(
     cutoff_enthalpy,
     program="gaussian",
 ):
-    from chemsmart.utils.utils import (
-        compute_pka_from_output_table,
-        export_pka_results_table,
-        parse_pka_output_table,
-        resolve_pka_output_references,
-    )
+    from chemsmart.utils.utils import PKaOutputTable
 
     logger.info(f"Reading pKa output table: {output_table}")
     try:
-        entries = parse_pka_output_table(output_table)
+        pka_table = PKaOutputTable.from_file(output_table)
+        pka_table.prepare(check_file_exists=True)
     except (FileNotFoundError, ValueError) as e:
         raise click.UsageError(str(e))
 
-    logger.info(f"Found {len(entries)} entries in output table")
-
-    try:
-        resolve_pka_output_references(entries)
-    except ValueError as e:
-        raise click.UsageError(str(e))
-
-    all_errors = []
-    for entry in entries:
-        try:
-            entry.validate(check_file_exists=True)
-        except ValueError as e:
-            all_errors.append(str(e))
-    if all_errors:
-        raise click.UsageError(
-            "Output table validation failed:\n" + "\n".join(all_errors)
-        )
+    logger.info(f"Found {len(pka_table)} entries in output table")
 
     if program == "gaussian":
         from chemsmart.io.gaussian.output import (
@@ -418,11 +398,10 @@ def run_pka_from_output_table(
         raise ValueError(f"Unsupported program: {program}")
 
     logger.info(
-        f"Computing pKa for {len(entries)} systems "
+        f"Computing pKa for {len(pka_table)} systems "
         f"(T={temperature}K, program={program})"
     )
-    results = compute_pka_from_output_table(
-        entries=entries,
+    results = pka_table.run_pka(
         output_cls=OutputCls,
         temperature=temperature,
         concentration=concentration,
@@ -431,7 +410,7 @@ def run_pka_from_output_table(
     )
 
     if output_results is not None:
-        export_pka_results_table(entries, results, output_results)
+        pka_table.export_results(output_results, results)
         click.echo(f"pKa results written to {output_results}")
     else:
         click.echo("=" * 78)
@@ -440,7 +419,7 @@ def run_pka_from_output_table(
         click.echo(f"Temperature: {temperature} K")
         click.echo(f"{'basename':<30} {'pKa':>10} {'ΔG_soln (kcal/mol)':>20}")
         click.echo("-" * 78)
-        for entry, result in zip(entries, results):
+        for entry, result in zip(pka_table, results):
             click.echo(
                 f"{entry['basename']:<30} "
                 f"{result['pKa']:>10.2f} "

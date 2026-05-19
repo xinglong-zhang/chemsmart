@@ -3024,6 +3024,84 @@ def export_pka_results_table(
     logger.info(f"pKa results table written to {output_path}")
 
 
+class PKaOutputTable:
+    """Parsed pKa output table with reference resolution and pKa execution.
+
+    The table object keeps the parsed rows together so callers can pass it
+    between workflow classes instead of repeatedly passing raw table paths and
+    entry lists.
+    """
+
+    def __init__(self, entries: list, source_path: str = None):
+        self.entries = list(entries)
+        self.source_path = source_path
+        self.results = None
+
+    @classmethod
+    def from_file(cls, table_path: str, delimiter: str = None):
+        """Parse an output table file into a ``PKaOutputTable`` object."""
+        entries = parse_pka_output_table(table_path, delimiter=delimiter)
+        return cls(entries=entries, source_path=table_path)
+
+    def __len__(self):
+        return len(self.entries)
+
+    def __iter__(self):
+        return iter(self.entries)
+
+    def resolve_references(self):
+        """Fill blank reference-acid columns by carrying previous values."""
+        resolve_pka_output_references(self.entries)
+        return self
+
+    def validate(self, check_file_exists: bool = True):
+        """Validate all rows in the table."""
+        all_errors = []
+        for entry in self.entries:
+            try:
+                entry.validate(check_file_exists=check_file_exists)
+            except ValueError as exc:
+                all_errors.append(str(exc))
+        if all_errors:
+            raise ValueError(
+                "Output table validation failed:\n" + "\n".join(all_errors)
+            )
+        return self
+
+    def prepare(self, check_file_exists: bool = True):
+        """Resolve shared references and validate the table."""
+        return self.resolve_references().validate(
+            check_file_exists=check_file_exists
+        )
+
+    def run_pka(
+        self,
+        output_cls,
+        temperature: float = 298.15,
+        concentration: float = 1.0,
+        cutoff_entropy_grimme: float = 100.0,
+        cutoff_enthalpy: float = 100.0,
+    ) -> list:
+        """Compute pKa for every row using the supplied output class."""
+        self.results = compute_pka_from_output_table(
+            entries=self.entries,
+            output_cls=output_cls,
+            temperature=temperature,
+            concentration=concentration,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+        )
+        return self.results
+
+    def export_results(self, output_path: str, results: list = None) -> None:
+        """Export computed pKa results for this table."""
+        export_pka_results_table(
+            self.entries,
+            self.results if results is None else results,
+            output_path,
+        )
+
+
 def validate_pka_table_entries(
     entries: list,
     check_file_exists: bool = True,

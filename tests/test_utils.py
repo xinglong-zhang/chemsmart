@@ -2097,3 +2097,58 @@ class TestPKaTableParsing:
         # Validate all entries
         for entry in entries:
             entry.validate(check_file_exists=True)
+
+    def test_pka_output_table_run_pka(self, tmp_path):
+        """PKaOutputTable owns parsing, validation, and pKa execution."""
+        from chemsmart.utils.utils import PKaOutputTable
+
+        for name in [
+            "ha.log",
+            "a.log",
+            "href.log",
+            "ref.log",
+            "ha_sp.log",
+            "a_sp.log",
+            "href_sp.log",
+            "ref_sp.log",
+        ]:
+            (tmp_path / name).write_text("dummy")
+
+        table_file = tmp_path / "outputs.csv"
+        table_file.write_text(
+            "basename,ha_gas,a_gas,href_gas,ref_gas,ha_sp,a_sp,href_sp,ref_sp,pka_ref\n"
+            f"sys1,{tmp_path}/ha.log,{tmp_path}/a.log,"
+            f"{tmp_path}/href.log,{tmp_path}/ref.log,"
+            f"{tmp_path}/ha_sp.log,{tmp_path}/a_sp.log,"
+            f"{tmp_path}/href_sp.log,{tmp_path}/ref_sp.log,6.75\n"
+        )
+
+        class FakeOutput:
+            @classmethod
+            def compute_pka(cls, **kwargs):
+                assert kwargs["ha_gas_file"] == f"{tmp_path}/ha.log"
+                assert kwargs["pka_reference"] == 6.75
+                return {
+                    "pKa": 7.12,
+                    "delta_G_soln_kcal_mol": 1.23,
+                }
+
+        pka_table = PKaOutputTable.from_file(str(table_file))
+        pka_table.prepare(check_file_exists=True)
+        results = pka_table.run_pka(
+            output_cls=FakeOutput,
+            temperature=300.0,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        assert len(pka_table) == 1
+        assert pka_table.results is results
+        assert results == [
+            {
+                "pKa": 7.12,
+                "delta_G_soln_kcal_mol": 1.23,
+                "basename": "sys1",
+            }
+        ]
