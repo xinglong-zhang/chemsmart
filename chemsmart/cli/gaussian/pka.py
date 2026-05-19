@@ -32,6 +32,76 @@ from chemsmart.utils.cli import MyCommand, MyGroup
 logger = logging.getLogger(__name__)
 
 
+def _build_gaussian_pka_settings(
+    proton_index, shared, opt_settings, sp_settings=None
+):
+    """Build ``GaussianpKaJobSettings`` from CLI and project settings."""
+    import inspect
+
+    from chemsmart.jobs.gaussian.settings import (
+        GaussianJobSettings,
+        GaussianpKaJobSettings,
+    )
+
+    cli_only = {"reference_color_code", "skip_completed"}
+    rename = {
+        "reference": "reference_file",
+        "delta_g_proton": "delta_G_proton",
+    }
+
+    pka_kwargs = {}
+    for key, value in shared.items():
+        if key in cli_only:
+            continue
+        pka_kwargs[rename.get(key, key)] = value
+
+    gs_params = {
+        name
+        for name, param in inspect.signature(
+            GaussianJobSettings.__init__
+        ).parameters.items()
+        if name != "self"
+        and param.kind
+        not in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        )
+    }
+    opt_kwargs = {
+        key: value
+        for key, value in vars(opt_settings).items()
+        if key in gs_params and value is not None and key not in pka_kwargs
+    }
+
+    def _first_non_none(*values):
+        for val in values:
+            if val is not None:
+                return val
+        return None
+
+    solvent_model = _first_non_none(
+        pka_kwargs.get("solvent_model"),
+        getattr(opt_settings, "solvent_model", None),
+        getattr(sp_settings, "solvent_model", None) if sp_settings else None,
+        "SMD",
+    )
+    solvent_id = _first_non_none(
+        pka_kwargs.get("solvent_id"),
+        getattr(opt_settings, "solvent_id", None),
+        getattr(sp_settings, "solvent_id", None) if sp_settings else None,
+        "water",
+    )
+
+    pka_kwargs["solvent_model"] = solvent_model
+    pka_kwargs["solvent_id"] = solvent_id
+
+    return GaussianpKaJobSettings(
+        proton_index=proton_index,
+        **pka_kwargs,
+        **opt_kwargs,
+    )
+
+
 @gaussian.group("pka", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_pka_shared_options
@@ -142,10 +212,7 @@ def submit(ctx, skip_completed, **kwargs):
     validate_reference_options(shared)
 
     # ── build settings ──
-    from chemsmart.jobs.gaussian.pka import (
-        GaussianpKaJob,
-        build_gaussian_pka_settings,
-    )
+    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -153,7 +220,7 @@ def submit(ctx, skip_completed, **kwargs):
     keywords = ctx.obj["keywords"]
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
-    pka_settings = build_gaussian_pka_settings(
+    pka_settings = _build_gaussian_pka_settings(
         proton_index, shared, opt_settings, project_settings.sp_settings()
     )
 
@@ -216,10 +283,7 @@ def batch(ctx, skip_completed, **kwargs):
         )
 
     from chemsmart.io.molecules.structure import Molecule
-    from chemsmart.jobs.gaussian.pka import (
-        GaussianpKaJob,
-        build_gaussian_pka_settings,
-    )
+    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.utils.utils import (
         parse_pka_table,
         validate_pka_table_entries,
@@ -300,7 +364,7 @@ def batch(ctx, skip_completed, **kwargs):
             row_shared["reference_conjugate_base_charge"] = None
             row_shared["reference_conjugate_base_multiplicity"] = None
 
-        pka_settings = build_gaussian_pka_settings(
+        pka_settings = _build_gaussian_pka_settings(
             proton_index=int(entry.proton_index),
             shared=row_shared,
             opt_settings=row_opt_settings,
@@ -334,10 +398,7 @@ def _create_pka_jobs_from_molecules(
     ctx, pka_molecules, shared, skip_completed, **kwargs
 ):
     """Create one GaussianpKaJob per PKaMolecule."""
-    from chemsmart.jobs.gaussian.pka import (
-        GaussianpKaJob,
-        build_gaussian_pka_settings,
-    )
+    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 
     validate_reference_options(shared)
 
@@ -356,7 +417,7 @@ def _create_pka_jobs_from_molecules(
     jobs = []
     for idx, pka_mol in enumerate(pka_molecules, start=1):
         label = f"{base_name}_frag{idx}_pka"
-        pka_settings = build_gaussian_pka_settings(
+        pka_settings = _build_gaussian_pka_settings(
             pka_mol.proton_index,
             shared,
             opt_settings,
