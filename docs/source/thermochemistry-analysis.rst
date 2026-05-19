@@ -12,9 +12,8 @@ output files.
 The ``thermochemistry`` command parses output files and calculates thermochemical properties including enthalpy,
 entropy, and Gibbs free energy.
 
-When processing a directory, use ``-p/--program`` when chemsmart needs to identify Gaussian versus ORCA output from
-the file content, and use ``-t/--filetype`` when you only want to filter by filename suffix such as ``.log`` or
-``.out``.
+When processing a directory, use ``-p/--program`` when chemsmart needs to identify Gaussian versus ORCA output from the
+file content, and use ``-t/--filetype`` when you only want to filter by filename suffix such as ``.log`` or ``.out``.
 
 Usage
 =====
