@@ -392,6 +392,33 @@ class FileMixin:
         else:
             return None
 
+    def validate_imaginary_frequencies(self, role=None, label=None):
+        """Check whether an optimisation output contains imaginary frequencies.
+
+        Returns:
+            None if validation passes or is skipped; an error message string
+            otherwise.
+        """
+        if not getattr(self, "normal_termination", False):
+            return None
+
+        freqs = getattr(self, "vibrational_frequencies", None)
+        if freqs is None:
+            return None
+
+        imaginary = [f for f in freqs if f < 0.0]
+        if not imaginary:
+            return None
+
+        display_label = label or getattr(self, "filename", "output")
+        role_prefix = f"[{role}] " if role else ""
+        return (
+            f"{role_prefix}Imaginary frequency check FAILED for "
+            f"{display_label}: found {len(imaginary)} imaginary "
+            f"mode(s) {imaginary}. The optimised geometry is not a "
+            f"true minimum – please re-optimise."
+        )
+
 
 class GaussianFileMixin(FileMixin):
     """

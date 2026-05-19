@@ -463,40 +463,6 @@ class ORCApKaJob(ORCAJob):
         )
         return sp_job
 
-    # ------------------------------------------------------------------
-    # Imaginary frequency validation
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _validate_imaginary_frequencies(job, role):
-        """Check for imaginary frequencies after an optimisation job.
-
-        Returns:
-            None if validation passes; an error message string otherwise.
-        """
-        out = job._output()
-        if out is None:
-            return (
-                f"[{role}] Optimisation produced no output – "
-                f"cannot validate frequencies for {job.label}."
-            )
-        if not out.normal_termination:
-            return None  # abnormal termination handled separately
-
-        freqs = getattr(out, "vibrational_frequencies", None)
-        if freqs is None:
-            return None  # no frequency data – skip
-
-        imaginary = [f for f in freqs if f < 0.0]
-        if imaginary:
-            return (
-                f"[{role}] Imaginary frequency check FAILED for "
-                f"{job.label}: found {len(imaginary)} imaginary "
-                f"mode(s) {imaginary}. The optimised geometry is not a "
-                f"true minimum – please re-optimise."
-            )
-        return None
-
     def _run(self):
         self._run_opt_jobs()
 

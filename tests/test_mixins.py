@@ -36,6 +36,30 @@ class TestFileMixin:
         assert dummy.num_energies == 2
 
 
+class TestValidateImaginaryFrequencies:
+    def test_skips_when_not_normally_terminated(self):
+        dummy = DummyFile("test.log")
+        dummy.normal_termination = False
+        assert dummy.validate_imaginary_frequencies() is None
+
+    def test_passes_with_real_frequencies(self, gaussian_co2_opt_outfile):
+        from chemsmart.io.gaussian.output import Gaussian16Output
+
+        out = Gaussian16Output(filename=gaussian_co2_opt_outfile)
+        assert (
+            out.validate_imaginary_frequencies(role="HA", label="test") is None
+        )
+
+    def test_fails_with_imaginary_frequencies(self):
+        dummy = DummyFile("opt.log")
+        dummy.normal_termination = True
+        dummy.vibrational_frequencies = [500.0, -120.5]
+        msg = dummy.validate_imaginary_frequencies(role="HA", label="mol1")
+        assert "Imaginary frequency check FAILED" in msg
+        assert "mol1" in msg
+        assert "[HA]" in msg
+
+
 class DummyGaussianFile(GaussianFileMixin):
     def __init__(self, filename):
         self.filename = filename
