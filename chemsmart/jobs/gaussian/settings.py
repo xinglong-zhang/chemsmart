@@ -912,7 +912,9 @@ class GaussianJobSettings(MolecularJobSettings):
             # Return light elements basis if available,
             # otherwise return original basis
             if self.light_elements_basis is not None:
-                return self._light_elements_basis_for_gaussian_keyword()
+                # Remove hyphens for Gaussian compatibility
+                # (def2-SVP -> def2svp)
+                return self.light_elements_basis.replace("-", "").lower()
             return self.basis
 
         # Check if any heavy element requires ECP (atomic number > 36)
@@ -929,14 +931,6 @@ class GaussianJobSettings(MolecularJobSettings):
             f"using 'gen'"
         )
         return "gen"
-
-    def _light_elements_basis_for_gaussian_keyword(self):
-        light_elements_basis = self.light_elements_basis.lower()
-        if "def2-" in light_elements_basis:
-            light_elements_basis = light_elements_basis.replace(
-                "def2-", "def2"
-            )
-        return light_elements_basis
 
     def _check_solvent(self, solvent_model):
         """

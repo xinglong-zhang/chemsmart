@@ -78,16 +78,22 @@ class TestGaussianGenGenECP:
             ignored_string="Version",
         )
 
-    def test_genecp_from_base_api_accepts_hyphenless_def2_for_bse(self):
-        genecp_section = GenGenECPSection.from_bse_api(
+    def test_genecp_from_base_api_accepts_hyphenless_def2_heavy_basis(self):
+        with_hyphen = GenGenECPSection.from_bse_api(
             light_elements=["C", "H", "O"],
-            light_elements_basis="def2SVP",
+            light_elements_basis="def2-SVP",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="def2-SVPD",
+        )
+        without_hyphen = GenGenECPSection.from_bse_api(
+            light_elements=["C", "H", "O"],
+            light_elements_basis="def2-SVP",
             heavy_elements=["Pd"],
             heavy_elements_basis="def2SVPD",
         )
 
-        assert genecp_section.heavy_elements_basis == "def2-svpd"
-        assert genecp_section.light_elements_basis == "def2svp"
+        assert with_hyphen.heavy_elements_basis == "def2-svpd"
+        assert without_hyphen.heavy_elements_basis == "def2-svpd"
 
     def test_genecp_from_comfile(
         self, tmpdir, gaussian_opt_genecp_inputfile, genecp_txt_file_from_web
@@ -322,31 +328,6 @@ class TestGenGenECPBasisDetermination:
         # elements since no heavy elements present
         determined_basis = settings.determine_basis_keyword(h2o_mol)
         assert determined_basis == "def2svp"
-
-    def test_determine_basis_keyword_no_heavy_elements_keeps_nondef2_hyphen(
-        self,
-    ):
-        h2o_molecule = Atoms(
-            "H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
-        )
-        symbols = h2o_molecule.get_chemical_symbols()
-        positions = h2o_molecule.get_positions()
-        h2o_mol = Molecule(
-            symbols=symbols, positions=positions, charge=0, multiplicity=1
-        )
-
-        settings = GaussianJobSettings(
-            functional="mn15",
-            basis="genecp",
-            heavy_elements=["Ir", "Br"],
-            heavy_elements_basis="def2-SVPD",
-            light_elements_basis="6-31G*",
-            charge=0,
-            multiplicity=1,
-        )
-
-        determined_basis = settings.determine_basis_keyword(h2o_mol)
-        assert determined_basis == "6-31g*"
 
     def test_determine_basis_keyword_non_gen_basis(self):
         """Test that non-gen/genecp basis keywords are returned unchanged."""

@@ -195,9 +195,14 @@ class GaussianInputWriter(InputWriter):
                 # returns empty list if no heavy elements found in structure
                 # (heavy elements specified in settings)
             ):
-                # def2 basis names require hyphens in BSE but not in Gaussian
+                # first remove any '-' in light_elements_basis
+                # this is because '-' is needed by bse package to get the right
+                # basis set from
+                # https://www.basissetexchange.org/, eg, def2-SVP
+                # but this is not needed in Gaussian input file
+                # (will cause error when run), eg, def2svp
                 light_elements_basis = (
-                    self.settings._light_elements_basis_for_gaussian_keyword()
+                    self.settings.light_elements_basis.replace("-", "").lower()
                 )
 
                 route_string = replace_word(
