@@ -122,6 +122,8 @@ Computing pKa from Existing Output Files
 
 If you already have completed ORCA output files, compute pKa directly using the backend-independent command:
 
+**Proton exchange (default)**
+
 .. code:: bash
 
    chemsmart run pka analyze \
@@ -136,8 +138,19 @@ If you already have completed ORCA output files, compute pKa directly using the 
        -rp 6.75 \
        -T 298.15
 
-The program automatically detects ORCA output files. See :ref:`pka-calculations` for the full list of ``chemsmart run
-pka`` options.
+**Direct dissociation**
+
+.. code:: bash
+
+   chemsmart run pka -s direct -dG -265.9 analyze \
+       -ha acid_opt.out \
+       -a conjugate_base_opt.out \
+       -has acid_sp_cpcm.out \
+       -as conjugate_base_sp_cpcm.out \
+       -T 298.15
+
+The program automatically detects ORCA output files. See :ref:`pka-calculations` for analysis scheme options,
+batch-analyze, and the full list of ``chemsmart run pka`` options.
 
 ************
  Parameters
@@ -204,7 +217,7 @@ The parameters for ORCA pKa calculations mirror those for Gaussian. The key diff
 
    -  -  ``-rp``
       -  ``--reference-pka``
-      -  Experimental pKa of HRef. Required for output file parsing mode.
+      -  Experimental pKa of HRef. Required for proton exchange output analysis (``chemsmart run pka analyze``).
 
    -  -  ``-T``
       -  ``--temperature``
@@ -224,7 +237,8 @@ The parameters for ORCA pKa calculations mirror those for Gaussian. The key diff
 
    -  -  ``-dG``
       -  ``--delta-g-proton``
-      -  Absolute free energy of H+ in kcal/mol for direct cycle. Default: ``-265.9``.
+      -  Absolute free energy of H+ in kcal/mol for direct cycle submission. Default: ``-265.9``. For output analysis,
+         ``-dG`` must be passed explicitly with ``-s direct`` (see :ref:`pka-calculations`).
 
 **********
  Examples
@@ -273,8 +287,8 @@ Example 3: Batch Submission from CSV
 In this example, ``charge`` and ``multiplicity`` for each molecule are read from the CSV file rather than from the CLI.
 The parent ``orca`` command does not require ``-c`` / ``-m``.
 
-Example 4: Extract pKa from Completed ORCA Calculations
-=======================================================
+Example 4: Extract pKa from Completed ORCA Calculations (Proton Exchange)
+=========================================================================
 
 .. code:: bash
 
@@ -288,6 +302,20 @@ Example 4: Extract pKa from Completed ORCA Calculations
        -hrs collidine_H_sp_cpcm.out \
        -rs collidine_sp_cpcm.out \
        -rp 6.75 \
+       -T 298.15 \
+       -csg 100 \
+       -ch 100
+
+Example 5: Extract pKa from Completed ORCA Calculations (Direct Cycle)
+======================================================================
+
+.. code:: bash
+
+   chemsmart run pka -s direct -dG -265.9 analyze \
+       -ha phenol_opt.out \
+       -a phenolate_opt.out \
+       -has phenol_sp_cpcm.out \
+       -as phenolate_sp_cpcm.out \
        -T 298.15 \
        -csg 100 \
        -ch 100

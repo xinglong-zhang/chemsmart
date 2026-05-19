@@ -212,6 +212,8 @@ Computing pKa from Existing Output Files
 
 If you already have completed Gaussian output files, compute pKa directly:
 
+**Proton exchange (default)**
+
 .. code:: bash
 
    chemsmart run pka analyze \
@@ -226,10 +228,21 @@ If you already have completed Gaussian output files, compute pKa directly:
        -rp 6.75 \
        -T 298.15
 
+**Direct dissociation**
+
+.. code:: bash
+
+   chemsmart run pka -s direct -dG -265.9 analyze \
+       -ha acid_opt.log \
+       -a conjugate_base_opt.log \
+       -has acid_sp_smd.log \
+       -as conjugate_base_sp_smd.log \
+       -T 298.15
+
 .. note::
 
-   Output file analysis is backend-independent. See :ref:`pka-calculations` for the full list of ``chemsmart run pka``
-   options.
+   Output file analysis is backend-independent. See :ref:`pka-calculations` for analysis scheme options, batch-analyze,
+   and the full list of ``chemsmart run pka`` options.
 
 ************
  Parameters
@@ -299,7 +312,7 @@ Reference Acid Options (Proton Exchange Cycle)
 
    -  -  ``-rp``
       -  ``--reference-pka``
-      -  Experimental pKa of HRef. Required for output file parsing mode.
+      -  Experimental pKa of HRef. Required for proton exchange output analysis (``chemsmart run pka analyze``).
 
 Solvent Options
 ===============
@@ -348,8 +361,12 @@ Thermochemistry Options
       -  Cutoff frequency (cm⁻¹) for enthalpy using Head-Gordon's method. Default: ``100.0``.
 
    -  -  ``-dG``
+
       -  ``--delta-g-proton``
-      -  :math:`\Delta G^{\circ}(\text{H}^{+})_{\text{aq}}` in kcal/mol for direct cycle. Default: ``-265.9``.
+
+      -  :math:`\Delta G^{\circ}(\text{H}^{+})_{\text{aq}}` in kcal/mol for direct cycle submission. Default:
+         ``-265.9``. For output analysis, ``-dG`` must be passed explicitly with ``-s direct`` (see
+         :ref:`pka-calculations`).
 
 **********
  Examples
@@ -397,8 +414,8 @@ Example 3: Batch Submission from CSV
 
 In this example, ``charge`` and ``multiplicity`` for each molecule are read from the CSV file rather than from the CLI.
 
-Example 4: Extract pKa from Completed Calculations
-==================================================
+Example 4: Extract pKa from Completed Calculations (Proton Exchange)
+====================================================================
 
 .. code:: bash
 
@@ -416,11 +433,28 @@ Example 4: Extract pKa from Completed Calculations
        -csg 100 \
        -ch 100
 
+Example 5: Extract pKa from Completed Calculations (Direct Cycle)
+=================================================================
+
+.. code:: bash
+
+   chemsmart run pka -s direct -dG -265.9 analyze \
+       -ha phenol_opt.log \
+       -a phenolate_opt.log \
+       -has phenol_sp_smd.log \
+       -as phenolate_sp_smd.log \
+       -T 298.15 \
+       -csg 100 \
+       -ch 100
+
 ***************
  Output Format
 ***************
 
-When computing pKa from output files, CHEMSMART prints a detailed summary:
+When computing pKa from output files, CHEMSMART prints a detailed summary. The format depends on the analysis scheme;
+see :ref:`pka-calculations` for proton exchange and direct dissociation examples.
+
+**Proton exchange**
 
 .. code:: text
 

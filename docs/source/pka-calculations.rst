@@ -110,19 +110,32 @@ CHEMSMART implements a dual-level approach for accurate solvation free energies:
 
 .. note::
 
-   All internal energies are stored in Hartree (au). Only :math:`\Delta G_{\text{soln}}` is converted to kcal/mol for
-   the pKa formula (1 Hartree = 627.5094740631 kcal/mol).
+   All internal energies are stored in Hartree (au). :math:`\Delta G_{\text{soln}}` (proton exchange) and :math:`\Delta
+   G_{\text{diss}}` (direct dissociation) are converted to kcal/mol for the pKa formula (1 Hartree = 627.5094740631
+   kcal/mol).
 
 Batch Processing of Output Files
 ================================
 
-You can parse a table of pre-computed output files to calculate pKa values in batch.
+You can parse a table of pre-computed output files to calculate pKa values in batch using ``batch-analyze``.
+
+**Proton exchange (default)**
 
 .. code:: bash
 
    chemsmart run pka batch-analyze \
        -o pka_output_table.csv \
        -O computed_pka.csv
+
+**Direct dissociation**
+
+Both ``-s direct`` and ``-dG`` are required for direct-cycle analysis:
+
+.. code:: bash
+
+   chemsmart run pka -s direct -dG -265.9 batch-analyze \
+       -o pka_output_table_direct.csv \
+       -O computed_pka_direct.csv
 
 The output table (e.g., ``pka_output_table.csv``) must contain at least a ``basename`` column. Other file paths are
 auto-discovered if omitted.
@@ -131,7 +144,7 @@ auto-discovered if omitted.
 
 -  ``basename``: A unique identifier for each acid. Used for file auto-discovery.
 
-**Optional File Columns (Auto-Discovered):**
+**Target-Acid File Columns (Both Schemes)**
 
 If these columns are omitted, CHEMSMART automatically looks for files named ``<basename>_suffix.<ext>`` (where ``<ext>``
 is ``.log`` or ``.out``).
@@ -141,27 +154,37 @@ is ``.log`` or ``.out``).
 -  ``ha_sp``: HA solvent single-point output. Auto-discovery suffix: ``_pka_sp``
 -  ``a_sp``: A⁻ solvent single-point output. Auto-discovery suffix: ``_pka_cb_sp``
 
-**Reference Acid Columns (Optional):**
+**Reference Acid Columns (Proton Exchange Only)**
+
+These columns are required for the proton exchange cycle and are ignored for direct dissociation:
 
 -  ``href_gas``: Path to the gas-phase optimization output for the reference acid HRef.
 -  ``ref_gas`` (optional): Path to the gas-phase optimization output for Ref⁻.
 -  ``href_sp`` (optional): Path to the solvent single-point output for HRef.
 -  ``ref_sp`` (optional): Path to the solvent single-point output for Ref⁻.
--  ``pka_ref`` (optional): The pKa of the reference acid.
+-  ``pka_ref``: The experimental pKa of the reference acid.
 
 .. note::
 
-   If reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values from the most
-   recently defined reference acid in a previous row will be used. The ``pka_ref`` can also be provided via the ``-rp``
-   command-line option.
+   For proton exchange, if reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values
+   from the most recently defined reference acid in a previous row will be used.
 
-The results, including the computed pKa for each entry, will be saved to the file specified by ``--output-results``.
+The results, including the computed pKa for each entry, are written to the file specified by ``-O`` /
+``--output-results`` or printed to stdout if omitted. The appended ΔG column depends on the analysis scheme:
+
+-  Proton exchange: ``delta_G_soln_kcal_mol``
+-  Direct dissociation: ``delta_G_diss_kcal_mol``
 
 Computing pKa from Output Files
 ===============================
 
-If you have already completed output files for a single acid, you can compute the pKa directly without resubmitting
-jobs. This is the recommended way to get the pKa value after your calculations are done.
+If you have already completed output files for a single acid, you can compute the pKa directly without resubmitting jobs
+using ``analyze``. This is the recommended way to get the pKa value after your calculations are done.
+
+**Proton exchange (default)**
+
+Only ``-ha`` and ``-hr`` are strictly required; the remaining six companion files are auto-discovered from the naming
+convention (see note below). ``-rp`` / ``--reference-pka`` is required.
 
 .. code:: bash
 
@@ -177,18 +200,67 @@ jobs. This is the recommended way to get the pKa value after your calculations a
        -rp 6.75 \
        -T 298.15
 
+**Direct dissociation**
+
+Four output files are required (HA, A⁻, and their solvent single-points). Both ``-s direct`` and ``-dG`` must be
+specified explicitly on the ``pka`` group **before** the ``analyze`` subcommand:
+
+.. code:: bash
+
+   chemsmart run pka -s direct -dG -265.9 analyze \
+       -ha acid_opt.log \
+       -a conjugate_base_opt.log \
+       -has acid_sp_smd.log \
+       -as conjugate_base_sp_smd.log \
+       -T 298.15
+
 The program will automatically detect whether the output files are from Gaussian or ORCA.
 
 .. note::
 
-   Only ``-ha`` and ``-hr`` are strictly required. The remaining six companion files are auto-discovered from the naming
-   convention:
+   For proton exchange, only ``-ha`` and ``-hr`` are strictly required. The remaining six companion files are
+   auto-discovered from the naming convention:
 
    -  ``<basename>_cb.<ext>`` — conjugate base
    -  ``<basename>_sp.<ext>`` — solvent single-point
    -  ``<basename>_cb_sp.<ext>`` — conjugate base solvent SP
 
    Override any auto-discovered path with the corresponding flag.
+
+   For direct dissociation, only ``-ha`` is strictly required; ``-a``, ``-has``, and ``-as`` are auto-discovered from
+   the same suffix convention when omitted.
+
+*************************
+ Analysis Scheme Options
+*************************
+
+These options apply to ``chemsmart run pka`` (``analyze`` and ``batch-analyze``). They are separate from the submission
+options on ``chemsmart run/sub gaussian ... pka`` and ``chemsmart run/sub orca ... pka``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 70
+
+   -  -  Short
+      -  Long
+      -  Description
+
+   -  -  ``-s``
+      -  ``--scheme``
+      -  Thermodynamic cycle for analysis: ``direct`` or ``proton exchange``. Default: ``proton exchange`` when omitted.
+
+   -  -  ``-dG``
+
+      -  ``--delta-g-proton``
+
+      -  :math:`G_{\text{soln}}(\text{H}^{+})` in kcal/mol for the direct cycle. **Required** when ``-s direct`` is
+         specified. Has no default for analysis; if ``-dG`` is given without ``-s direct``, it is ignored with a log
+         message.
+
+.. note::
+
+   For job submission, ``-dG`` defaults to ``-265.9`` kcal/mol (Tissandier et al., 1998). For output analysis, you must
+   pass ``-dG`` explicitly whenever ``-s direct`` is used.
 
 *********************
  Output File Options
@@ -276,12 +348,14 @@ The program will automatically detect whether the output files are from Gaussian
 
    -  -  ``-rp``
       -  ``--reference-pka``
-      -  Experimental pKa of HRef. Required for output file parsing mode.
+      -  Experimental pKa of HRef. Required for proton exchange output analysis.
 
 Output Format
 =============
 
-When computing pKa from output files, CHEMSMART prints a detailed summary:
+When computing pKa from output files, CHEMSMART prints a detailed summary. The format depends on the analysis scheme.
+
+**Proton exchange**
 
 .. code:: text
 
@@ -330,6 +404,72 @@ When computing pKa from output files, CHEMSMART prints a detailed summary:
 
      *** Computed pKa(HA) = 52.70 ***
    ==============================================================================
+
+**Direct dissociation**
+
+.. code:: text
+
+   ==============================================================================
+   pKa Calculation - Direct Dissociation Scheme
+   ==============================================================================
+   Reaction: HA -> A- + H+
+   Temperature: 298.15 K
+
+   Method:
+     G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)
+     G_soln = E_solv + G_corr  (solution free energy)
+     DG_diss = G_soln(A-) + G_soln(H+) - G_soln(HA)
+     pKa = DG_diss / (2.303 * R * T)
+   ------------------------------------------------------------------------------
+
+   Gas-Phase Electronic Energies (E_gas, au):
+     HA:  -345.7419436500
+     A-:  -344.9153986020
+
+   Thermal Corrections (G_corr = qh-G - E_gas, au):
+     HA:  0.0931931305
+     A-:  0.0758935969
+
+   Solvent Single-Point Energies (E_solv, au):
+     HA:  -346.4882221850
+     A-:  -345.8989956310
+
+   Solution Free Energies (G_soln = E_solv + G_corr, au):
+     HA:  -346.3950290545
+     A-:  -345.8231020341
+   ------------------------------------------------------------------------------
+
+   pKa Calculation:
+     G_soln(H+) = -265.9000 kcal/mol
+     DG_diss = 0.1250349015 au
+             = 78.4606 kcal/mol
+
+     *** Computed pKa(HA) = 52.70 ***
+   ==============================================================================
+
+**Batch analyze (stdout)**
+
+When ``-O`` / ``--output-results`` is omitted, ``batch-analyze`` prints a compact table whose ΔG column header matches
+the scheme:
+
+.. code:: text
+
+   ==============================================================================
+   Batch pKa Results (Dual-level Proton Exchange)
+   ==============================================================================
+   Temperature: 298.15 K
+   Pressure: 1.0 atm
+   basename                              pKa     DG_soln (kcal/mol)
+   ------------------------------------------------------------------------------
+   phenol                               10.12              13.4567
+   benzoic_acid                          4.20               5.7890
+   ==============================================================================
+
+For direct dissociation, the header reads ``Batch pKa Results (Direct Dissociation)`` and the column is labeled
+``DG_diss (kcal/mol)``.
+
+Use ``-p gaussian`` or ``-p orca`` with ``batch-analyze`` when auto-detection from the output table fails (default:
+``auto``).
 
 References
 ==========
