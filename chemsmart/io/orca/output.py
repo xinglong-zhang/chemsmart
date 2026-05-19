@@ -3791,31 +3791,58 @@ class ORCApKaOutput(ORCAOutput):
         cls,
         ha_gas_file,
         a_gas_file,
-        href_gas_file,
-        ref_gas_file,
-        ha_solv_file,
-        a_solv_file,
-        href_solv_file,
-        ref_solv_file,
-        pka_reference,
+        href_gas_file=None,
+        ref_gas_file=None,
+        ha_solv_file=None,
+        a_solv_file=None,
+        href_solv_file=None,
+        ref_solv_file=None,
+        pka_reference=None,
         temperature=298.15,
         concentration=1.0,
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
+        scheme="proton exchange",
+        delta_G_proton=None,
     ):
-        """
-        Compute pKa using the Dual-level Proton Exchange scheme.
-
-        HA + Ref⁻ → A⁻ + HRef
-
-        Steps:
-            G_corr = qh-G(T) - E_gas
-            G_soln = E_solv + G_corr
-            ΔG_soln = [G(A⁻) + G(HRef)] - [G(HA) + G(Ref⁻)]
-            pKa = pKa_ref + ΔG_soln / (RT ln10)
-        """
+        """Compute pKa using a dual-level thermodynamic cycle."""
         from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL
+
+        if scheme == "direct":
+            if delta_G_proton is None:
+                raise ValueError(
+                    "delta_G_proton is required when scheme='direct'."
+                )
+        elif pka_reference is None:
+            raise ValueError(
+                "pka_reference is required when scheme='proton exchange'."
+            )
+        else:
+            missing = [
+                name
+                for name, value in (
+                    ("href_gas_file", href_gas_file),
+                    ("ref_gas_file", ref_gas_file),
+                    ("ha_solv_file", ha_solv_file),
+                    ("a_solv_file", a_solv_file),
+                    ("href_solv_file", href_solv_file),
+                    ("ref_solv_file", ref_solv_file),
+                )
+                if value is None
+            ]
+            if missing:
+                raise ValueError(
+                    "Missing required files for proton exchange scheme: "
+                    + ", ".join(missing)
+                )
+
+        if scheme == "direct" and (
+            ha_solv_file is None or a_solv_file is None
+        ):
+            raise ValueError(
+                "ha_solv_file and a_solv_file are required for scheme='direct'."
+            )
 
         def _gas(fp):
             out = cls(
@@ -3828,7 +3855,7 @@ class ORCApKaOutput(ORCAOutput):
             )
             E = out.electronic_energy_in_units
             G = out.qh_gibbs_free_energy
-            return E, G, G - E
+            return E, G - E
 
         def _solv(fp):
             out = ORCAOutput(filename=fp)
@@ -3839,30 +3866,55 @@ class ORCApKaOutput(ORCAOutput):
                 )
             return e[-1]
 
-        E_gas_HA, _, G_corr_HA = _gas(ha_gas_file)
-        E_gas_A, _, G_corr_A = _gas(a_gas_file)
-        E_gas_HRef, _, G_corr_HRef = _gas(href_gas_file)
-        E_gas_Ref, _, G_corr_Ref = _gas(ref_gas_file)
-
+        E_gas_HA, G_corr_HA = _gas(ha_gas_file)
+        E_gas_A, G_corr_A = _gas(a_gas_file)
         E_solv_HA = _solv(ha_solv_file)
         E_solv_A = _solv(a_solv_file)
-        E_solv_HRef = _solv(href_solv_file)
-        E_solv_Ref = _solv(ref_solv_file)
-
         G_soln_HA = E_solv_HA + G_corr_HA
         G_soln_A = E_solv_A + G_corr_A
+
+        R_kcal = 0.001987204
+        ln10 = 2.302585093
+
+        if scheme == "direct":
+            G_soln_HA_kcal = G_soln_HA * HARTREE_TO_KCAL_MOL
+            G_soln_A_kcal = G_soln_A * HARTREE_TO_KCAL_MOL
+            delta_G_diss_kcal = G_soln_A_kcal + delta_G_proton - G_soln_HA_kcal
+            delta_G_diss_au = delta_G_diss_kcal / HARTREE_TO_KCAL_MOL
+            pka = delta_G_diss_kcal / (R_kcal * temperature * ln10)
+            return {
+                "pKa": pka,
+                "scheme": "direct",
+                "delta_G_proton_kcal_mol": delta_G_proton,
+                "delta_G_diss_kcal_mol": delta_G_diss_kcal,
+                "delta_G_diss_au": delta_G_diss_au,
+                "delta_G_soln_kcal_mol": delta_G_diss_kcal,
+                "delta_G_soln_au": delta_G_diss_au,
+                "temperature": temperature,
+                "G_soln_HA_au": G_soln_HA,
+                "G_soln_A_au": G_soln_A,
+                "E_solv_HA_au": E_solv_HA,
+                "E_solv_A_au": E_solv_A,
+                "G_corr_HA_au": G_corr_HA,
+                "G_corr_A_au": G_corr_A,
+                "E_gas_HA_au": E_gas_HA,
+                "E_gas_A_au": E_gas_A,
+            }
+
+        E_gas_HRef, G_corr_HRef = _gas(href_gas_file)
+        E_gas_Ref, G_corr_Ref = _gas(ref_gas_file)
+        E_solv_HRef = _solv(href_solv_file)
+        E_solv_Ref = _solv(ref_solv_file)
         G_soln_HRef = E_solv_HRef + G_corr_HRef
         G_soln_Ref = E_solv_Ref + G_corr_Ref
 
         dG_au = (G_soln_A + G_soln_HRef) - (G_soln_HA + G_soln_Ref)
         dG_kcal = dG_au * HARTREE_TO_KCAL_MOL
-
-        R_kcal = 0.001987204
-        ln10 = 2.302585093
         pka = pka_reference + dG_kcal / (R_kcal * temperature * ln10)
 
         return {
             "pKa": pka,
+            "scheme": "proton exchange",
             "pKa_reference": pka_reference,
             "delta_G_soln_kcal_mol": dG_kcal,
             "delta_G_soln_au": dG_au,
@@ -3902,8 +3954,10 @@ class ORCApKaOutput(ORCAOutput):
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
+        scheme="proton exchange",
+        delta_G_proton=None,
     ):
-        """Print formatted pKa summary (Dual-level Proton Exchange)."""
+        """Print formatted pKa summary."""
         r = cls.compute_pka(
             ha_gas_file=ha_gas_file,
             a_gas_file=a_gas_file,
@@ -3919,7 +3973,51 @@ class ORCApKaOutput(ORCAOutput):
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
         )
+
+        if scheme == "direct":
+            print("=" * 78)
+            print("pKa Calculation - Direct Dissociation Scheme (ORCA)")
+            print("=" * 78)
+            print("Reaction: HA → A⁻ + H⁺")
+            print(f"Temperature: {temperature} K")
+            print()
+            print("Method:")
+            print(
+                "  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)"
+            )
+            print("  G_soln = E_solv + G_corr  (solution free energy)")
+            print("  ΔG_diss = G_soln(A⁻) + G_soln(H⁺) - G_soln(HA)")
+            print("  pKa = ΔG_diss / (2.303 × R × T)")
+            print("-" * 78)
+            print()
+            print("Gas-Phase Electronic Energies (E_gas, au):")
+            print(f"  HA:  {r['E_gas_HA_au']:.10f}")
+            print(f"  A⁻:  {r['E_gas_A_au']:.10f}")
+            print()
+            print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
+            print(f"  HA:  {r['G_corr_HA_au']:.10f}")
+            print(f"  A⁻:  {r['G_corr_A_au']:.10f}")
+            print()
+            print("Solvent Single-Point Energies (E_solv, au):")
+            print(f"  HA:  {r['E_solv_HA_au']:.10f}")
+            print(f"  A⁻:  {r['E_solv_A_au']:.10f}")
+            print()
+            print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
+            print(f"  HA:  {r['G_soln_HA_au']:.10f}")
+            print(f"  A⁻:  {r['G_soln_A_au']:.10f}")
+            print("-" * 78)
+            print()
+            print("pKa Calculation:")
+            print(f"  G_soln(H⁺) = {delta_G_proton:.4f} kcal/mol")
+            print(f"  ΔG_diss = {r['delta_G_diss_au']:.10f} au")
+            print(f"         = {r['delta_G_diss_kcal_mol']:.4f} kcal/mol")
+            print()
+            print(f"  *** Computed pKa(HA) = {r['pKa']:.2f} ***")
+            print("=" * 78)
+            return
 
         print("=" * 78)
         print("pKa Calculation - Dual-level Proton Exchange Scheme (ORCA)")

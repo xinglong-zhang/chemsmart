@@ -200,6 +200,143 @@ def click_pka_proton_options(f):
     return wrapper
 
 
+def click_pka_analysis_scheme_options(f):
+    """Scheme and proton solvation options for pKa output analysis."""
+
+    @click.option(
+        "-s",
+        "--scheme",
+        "scheme",
+        type=click.Choice(["direct", "proton exchange"]),
+        default=None,
+        help=(
+            "Thermodynamic cycle for analysis. 'direct' requires -dG. "
+            "Default: proton exchange when omitted."
+        ),
+    )
+    @click.option(
+        "-dG",
+        "--delta-g-proton",
+        "delta_g_proton",
+        type=float,
+        default=None,
+        help=(
+            "G_soln(H+) in kcal/mol for the direct cycle (e.g. -265.9 for water). "
+            "Used only when both this flag and --scheme direct are specified."
+        ),
+    )
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
+def _resolve_pka_analysis_scheme(scheme, delta_g_proton):
+    """Validate CLI options and return the active analysis scheme."""
+    if scheme is None:
+        scheme = "proton exchange"
+
+    if scheme == "direct" and delta_g_proton is None:
+        raise click.UsageError(
+            "-dG/--delta-g-proton is required when --scheme direct is specified."
+        )
+    if delta_g_proton is not None and scheme != "direct":
+        logger.info(
+            "Ignoring -dG/--delta-g-proton because --scheme direct was not "
+            "specified; using proton exchange analysis."
+        )
+    return scheme
+
+
+def _scheme_batch_header(scheme):
+    if scheme is None:
+        return "Batch pKa Results"
+    headers = {
+        "direct": "Batch pKa Results (Direct Dissociation)",
+        "proton exchange": "Batch pKa Results (Dual-level Proton Exchange)",
+    }
+    return headers.get(scheme, f"Batch pKa Results ({scheme})")
+
+
+def _scheme_delta_g_label(scheme):
+    labels = {
+        "direct": "ΔG_diss (kcal/mol)",
+        "proton exchange": "ΔG_soln (kcal/mol)",
+    }
+    return labels.get(scheme, "ΔG (kcal/mol)")
+
+
+def _scheme_display_name(scheme):
+    names = {
+        "direct": "Direct Dissociation",
+        "proton exchange": "Proton Exchange",
+    }
+    return names.get(scheme, scheme)
+
+
+def validate_direct_analyze_files(ha, a, ha_solv, a_solv):
+    """Validate required files for direct-cycle pKa analysis."""
+    required = [
+        ("ha", ha),
+        ("a", a),
+        ("ha-solv", ha_solv),
+        ("a-solv", a_solv),
+    ]
+    missing = [name for name, path in required if path is None]
+    if missing:
+        raise click.UsageError(
+            "For direct-cycle pKa analysis all four output files are required.\n"
+            f"Missing: {', '.join(f'--{name}' for name in missing)}"
+        )
+    for name, path in required:
+        if not os.path.isfile(path):
+            raise click.UsageError(f"File not found for --{name}: {path}")
+
+
+def _auto_discover_direct_pka_files(ha_gas_path, program=None):
+    """Infer A- and solvent SP paths from the HA gas-phase output path."""
+    if program is None:
+        program = get_program_type_from_file(ha_gas_path)
+
+    extensions = get_program_output_extensions(program)
+
+    def _find(directory, stem):
+        for ext in extensions:
+            candidate = os.path.join(directory, stem + ext)
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
+    def _derive(gas_path, suffix):
+        dirpath = os.path.dirname(gas_path) or "."
+        stem = os.path.splitext(os.path.basename(gas_path))[0]
+        found = _find(dirpath, f"{stem}{suffix}")
+        if found is not None:
+            return found
+        return os.path.join(dirpath, f"{stem}{suffix}{extensions[0]}")
+
+    results = {
+        "a": _derive(ha_gas_path, "_cb"),
+        "ha_solv": _derive(ha_gas_path, "_sp"),
+        "a_solv": _derive(ha_gas_path, "_cb_sp"),
+    }
+
+    missing = [
+        f"  {k}: {v}" for k, v in results.items() if not os.path.isfile(v)
+    ]
+    if missing:
+        raise click.UsageError(
+            "Auto-discovery could not find some companion output files.\n"
+            "Missing files:\n" + "\n".join(missing) + "\n\n"
+            "Provide them explicitly or ensure output files follow:\n"
+            "  <basename>_cb.<ext>     (conjugate base)\n"
+            "  <basename>_sp.<ext>     (solvent single-point)\n"
+            "  <basename>_cb_sp.<ext>  (conjugate base solvent SP)"
+        )
+    return results
+
+
 def click_pka_analyze_options(f):
     f = click.option(
         "-rp",
@@ -373,30 +510,39 @@ def _resolve_batch_output_cls(program):
         raise ValueError(f"Unsupported program: {program}")
 
 
-def _echo_pka_output_table_results(
+def echo_pka_output_table_results(
     pka_table,
     results,
     output_results,
     temperature,
     pressure,
+    scheme=None,
 ):
+    from chemsmart.utils.utils import pka_scheme_delta_g_value
+
+    display_scheme = scheme
+    if display_scheme is None and results:
+        display_scheme = results[0].get("scheme")
+
     if output_results is not None:
-        pka_table.export_results(output_results, results)
+        pka_table.export_results(output_results, results, scheme=scheme)
         click.echo(f"pKa results written to {output_results}")
         return
 
     click.echo("=" * 78)
-    click.echo("Batch pKa Results (Dual-level Proton Exchange)")
+    click.echo(_scheme_batch_header(display_scheme))
     click.echo("=" * 78)
     click.echo(f"Temperature: {temperature} K")
     click.echo(f"Pressure: {pressure} atm")
-    click.echo(f"{'basename':<30} {'pKa':>10} {'ΔG_soln (kcal/mol)':>20}")
+    dg_label = _scheme_delta_g_label(display_scheme)
+    click.echo(f"{'basename':<30} {'pKa':>10} {dg_label:>20}")
     click.echo("-" * 78)
     for entry, result in zip(pka_table, results):
+        dg_value = pka_scheme_delta_g_value(result, scheme)
         click.echo(
             f"{entry['basename']:<30} "
             f"{result['pKa']:>10.2f} "
-            f"{result['delta_G_soln_kcal_mol']:>20.4f}"
+            f"{dg_value:>20.4f}"
         )
     click.echo("=" * 78)
 
@@ -518,6 +664,7 @@ def _resolve_output_cls(output_files):
 
 @click.group(name="pka", cls=MyGroup)
 @click_pka_thermochemistry_options
+@click_pka_analysis_scheme_options
 @click.pass_context
 def pka(
     ctx,
@@ -526,6 +673,8 @@ def pka(
     pressure,
     cutoff_entropy_grimme,
     cutoff_enthalpy,
+    scheme,
+    delta_g_proton,
 ):
     """Backend-independent pKa output analysis."""
     ctx.ensure_object(dict)
@@ -535,6 +684,8 @@ def pka(
         pressure=pressure,
         cutoff_entropy_grimme=cutoff_entropy_grimme,
         cutoff_enthalpy=cutoff_enthalpy,
+        scheme=scheme,
+        delta_g_proton=delta_g_proton,
     )
 
 
@@ -587,6 +738,46 @@ def analyze(
           -rp 6.75 -T 298.15
     """
     shared = ctx.obj["pka_shared"]
+    scheme = _resolve_pka_analysis_scheme(
+        shared.get("scheme"), shared.get("delta_g_proton")
+    )
+
+    if scheme == "direct":
+        if ha is None:
+            raise click.UsageError(
+                "-ha/--ha is required for direct-cycle pKa analysis."
+            )
+        optional = {"a": a, "ha_solv": ha_solv, "a_solv": a_solv}
+        if any(v is None for v in optional.values()):
+            discovered = _auto_discover_direct_pka_files(ha)
+            for key in optional:
+                if optional[key] is None:
+                    optional[key] = discovered[key]
+                    logger.info(f"Auto-discovered {key}: {discovered[key]}")
+            a = optional["a"]
+            ha_solv = optional["ha_solv"]
+            a_solv = optional["a_solv"]
+
+        validate_direct_analyze_files(ha, a, ha_solv, a_solv)
+
+        output_files = [ha, a, ha_solv, a_solv]
+        output_cls = _resolve_output_cls(output_files)
+
+        logger.info("Computing pKa (Direct Dissociation)...")
+        output_cls.print_pka_summary(
+            ha_gas_file=ha,
+            a_gas_file=a,
+            ha_solv_file=ha_solv,
+            a_solv_file=a_solv,
+            scheme="direct",
+            delta_G_proton=shared["delta_g_proton"],
+            temperature=shared["temperature"],
+            concentration=shared["concentration"],
+            pressure=shared["pressure"],
+            cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
+            cutoff_enthalpy=shared["cutoff_enthalpy"],
+        )
+        return None
 
     # Auto-discover missing companion files when at least -ha and -hr given
     if ha is not None and href is not None:
@@ -618,7 +809,7 @@ def analyze(
     output_files = [ha, a, href, ref, ha_solv, a_solv, href_solv, ref_solv]
     output_cls = _resolve_output_cls(output_files)
 
-    logger.info("Computing pKa (Dual-level Proton Exchange)...")
+    logger.info(f"Computing pKa ({_scheme_display_name(scheme)})...")
     output_cls.print_pka_summary(
         ha_gas_file=ha,
         a_gas_file=a,
@@ -629,6 +820,7 @@ def analyze(
         href_solv_file=href_solv,
         ref_solv_file=ref_solv,
         pka_reference=reference_pka,
+        scheme=scheme,
         temperature=shared["temperature"],
         concentration=shared["concentration"],
         pressure=shared["pressure"],
@@ -679,13 +871,16 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
       chemsmart run pka batch-analyze -o outputs.csv -O results.csv
     """
     shared = ctx.obj["pka_shared"]
+    scheme = _resolve_pka_analysis_scheme(
+        shared.get("scheme"), shared.get("delta_g_proton")
+    )
 
     from chemsmart.utils.utils import PKaOutputTable
 
     logger.info(f"Reading pKa output table: {output_table}")
     try:
         pka_output_table = PKaOutputTable.from_file(output_table)
-        pka_output_table.prepare(check_file_exists=True)
+        pka_output_table.prepare(check_file_exists=True, scheme=scheme)
     except (FileNotFoundError, ValueError) as e:
         raise click.UsageError(str(e))
 
@@ -704,7 +899,8 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
 
     output_cls = _resolve_batch_output_cls(program)
     logger.info(
-        f"Computing pKa for {len(pka_output_table)} systems "
+        f"Computing pKa ({_scheme_display_name(scheme)}) "
+        f"for {len(pka_output_table)} systems "
         f"(T={shared['temperature']}K, program={program})"
     )
     results = pka_output_table.run_pka(
@@ -714,13 +910,16 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
         pressure=shared["pressure"],
         cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
         cutoff_enthalpy=shared["cutoff_enthalpy"],
+        scheme=scheme,
+        delta_G_proton=shared.get("delta_g_proton"),
     )
-    _echo_pka_output_table_results(
+    echo_pka_output_table_results(
         pka_table=pka_output_table,
         results=results,
         output_results=output_results,
         temperature=shared["temperature"],
         pressure=shared["pressure"],
+        scheme=scheme,
     )
 
     return None

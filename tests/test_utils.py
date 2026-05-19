@@ -2009,6 +2009,46 @@ class TestPKaTableParsing:
         assert len(df) == 1
         assert abs(df["pka"].iloc[0] - 12.34) < 0.01
 
+    def test_export_pka_results_table_direct_scheme(self, tmp_path):
+        """Direct-cycle export writes delta_G_diss_kcal_mol, not delta_G_soln."""
+        import pandas as pd
+
+        from chemsmart.utils.utils import (
+            PKaOutputTableEntry,
+            export_pka_results_table,
+        )
+
+        entries = [
+            PKaOutputTableEntry(
+                {
+                    "basename": "sys1",
+                    "ha_gas": "a.log",
+                    "a_gas": "b.log",
+                    "ha_sp": "e.log",
+                    "a_sp": "f.log",
+                }
+            ),
+        ]
+        results = [
+            {
+                "pKa": 4.5,
+                "scheme": "direct",
+                "delta_G_diss_kcal_mol": 6.1,
+                "delta_G_soln_kcal_mol": 6.1,
+                "basename": "sys1",
+            }
+        ]
+
+        out_path = tmp_path / "results_direct.csv"
+        export_pka_results_table(
+            entries, results, str(out_path), scheme="direct"
+        )
+
+        df = pd.read_csv(str(out_path))
+        assert "delta_G_diss_kcal_mol" in df.columns
+        assert "delta_G_soln_kcal_mol" not in df.columns
+        assert abs(df["delta_G_diss_kcal_mol"].iloc[0] - 6.1) < 0.01
+
     def test_export_pka_results_table_txt(self, tmp_path):
         """Test that export writes tab-delimited TXT for non-.csv extension."""
         import pandas as pd
@@ -2151,6 +2191,49 @@ class TestPKaTableParsing:
             {
                 "pKa": 7.12,
                 "delta_G_soln_kcal_mol": 1.23,
+                "basename": "sys1",
+            }
+        ]
+
+    def test_pka_output_table_run_pka_direct(self, tmp_path):
+        """PKaOutputTable supports direct-cycle batch analysis."""
+        from chemsmart.utils.utils import PKaOutputTable
+
+        for name in ["ha.log", "a.log", "ha_sp.log", "a_sp.log"]:
+            (tmp_path / name).write_text("dummy")
+
+        table_file = tmp_path / "outputs_direct.csv"
+        table_file.write_text(
+            "basename,ha_gas,a_gas,ha_sp,a_sp\n"
+            f"sys1,{tmp_path}/ha.log,{tmp_path}/a.log,"
+            f"{tmp_path}/ha_sp.log,{tmp_path}/a_sp.log\n"
+        )
+
+        class FakeOutput:
+            @classmethod
+            def compute_pka(cls, **kwargs):
+                assert kwargs["ha_gas_file"] == f"{tmp_path}/ha.log"
+                assert kwargs["scheme"] == "direct"
+                assert kwargs["delta_G_proton"] == -265.9
+                return {
+                    "pKa": 4.5,
+                    "delta_G_diss_kcal_mol": 6.1,
+                    "delta_G_soln_kcal_mol": 6.1,
+                }
+
+        pka_table = PKaOutputTable.from_file(str(table_file))
+        pka_table.prepare(check_file_exists=True, scheme="direct")
+        results = pka_table.run_pka(
+            output_cls=FakeOutput,
+            scheme="direct",
+            delta_G_proton=-265.9,
+        )
+
+        assert results == [
+            {
+                "pKa": 4.5,
+                "delta_G_diss_kcal_mol": 6.1,
+                "delta_G_soln_kcal_mol": 6.1,
                 "basename": "sys1",
             }
         ]

@@ -36,6 +36,28 @@ def _build_outputs(tmp_path: Path, program: str):
     return files
 
 
+def _invoke_pka_direct(runner, files, delta_g_proton=-265.9):
+    return runner.invoke(
+        run,
+        [
+            "pka",
+            "-s",
+            "direct",
+            "-dG",
+            str(delta_g_proton),
+            "analyze",
+            "-ha",
+            files["ha.log"],
+            "-a",
+            files["a.log"],
+            "-has",
+            files["has.log"],
+            "-as",
+            files["as.log"],
+        ],
+    )
+
+
 def _invoke_pka(runner, files):
     return runner.invoke(
         run,
@@ -93,6 +115,50 @@ def test_run_pka_detects_gaussian_and_dispatches(tmp_path, monkeypatch):
     assert called["kwargs"]["ha_gas_file"] == files["ha.log"]
     assert called["kwargs"]["a_solv_file"] == files["as.log"]
     assert called["kwargs"]["pka_reference"] == 6.75
+
+
+def test_run_pka_direct_analyze_dispatches(tmp_path, monkeypatch):
+    files = _build_outputs(tmp_path, "gaussian")
+    called = {}
+
+    def _fake_print(*args, **kwargs):
+        called["kwargs"] = kwargs
+
+    from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+    monkeypatch.setattr(Gaussian16pKaOutput, "print_pka_summary", _fake_print)
+
+    runner = CliRunner()
+    result = _invoke_pka_direct(runner, files, delta_g_proton=-270.0)
+
+    assert result.exit_code == 0
+    assert called["kwargs"]["ha_gas_file"] == files["ha.log"]
+    assert called["kwargs"]["delta_G_proton"] == -270.0
+    assert called["kwargs"]["scheme"] == "direct"
+
+
+def test_run_pka_direct_requires_delta_g_proton(tmp_path):
+    files = _build_outputs(tmp_path, "gaussian")
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        [
+            "pka",
+            "-s",
+            "direct",
+            "analyze",
+            "-ha",
+            files["ha.log"],
+            "-a",
+            files["a.log"],
+            "-has",
+            files["has.log"],
+            "-as",
+            files["as.log"],
+        ],
+    )
+    assert result.exit_code != 0
+    assert "-dG/--delta-g-proton is required" in result.output
 
 
 def test_run_pka_detects_orca_and_dispatches(tmp_path, monkeypatch):

@@ -2698,6 +2698,36 @@ class TestGaussian16pKaOutput:
 
         assert np.isclose(result["pKa"], 52.7025859, rtol=1e-6)
 
+    def test_compute_pka_direct_scheme(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+    ):
+        """Test direct dissociation via unified compute_pka(scheme='direct')."""
+        delta_G_proton = -265.9
+        temperature = 373.15
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            scheme="direct",
+            delta_G_proton=delta_G_proton,
+            temperature=temperature,
+        )
+
+        HARTREE_TO_KCAL = 627.5094740631
+        G_soln_HA_kcal = result["G_soln_HA_au"] * HARTREE_TO_KCAL
+        G_soln_A_kcal = result["G_soln_A_au"] * HARTREE_TO_KCAL
+        expected_delta_G_diss = G_soln_A_kcal + delta_G_proton - G_soln_HA_kcal
+
+        assert result["scheme"] == "direct"
+        assert np.isclose(
+            result["delta_G_diss_kcal_mol"], expected_delta_G_diss, rtol=1e-6
+        )
+
     def test_compute_pka_energy_values(
         self,
         gaussian_pKa_HA_optimization_outputfile,

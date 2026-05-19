@@ -2780,7 +2780,7 @@ class PKaOutputTableEntry:
         )
         return out
 
-    def validate(self, check_file_exists=True):
+    def validate(self, check_file_exists=True, scheme="proton exchange"):
         """Validate that all required file paths are present and non-empty."""
         errors = []
         row_info = f" (row {self.row_number})" if self.row_number else ""
@@ -2792,31 +2792,44 @@ class PKaOutputTableEntry:
         if self.basename:
             self._resolve_filenames()
 
-        required_files = [
-            ("ha_gas", self.ha_gas),
-            ("a_gas", self.a_gas),
-            ("href_gas", self.href_gas),
-            ("ref_gas", self.ref_gas),
-            ("ha_sp", self.ha_sp),
-            ("a_sp", self.a_sp),
-            ("href_sp", self.href_sp),
-            ("ref_sp", self.ref_sp),
-        ]
+        if scheme == "direct":
+            required_files = [
+                ("ha_gas", self.ha_gas),
+                ("a_gas", self.a_gas),
+                ("ha_sp", self.ha_sp),
+                ("a_sp", self.a_sp),
+            ]
+        elif scheme == "proton exchange":
+            required_files = [
+                ("ha_gas", self.ha_gas),
+                ("a_gas", self.a_gas),
+                ("href_gas", self.href_gas),
+                ("ref_gas", self.ref_gas),
+                ("ha_sp", self.ha_sp),
+                ("a_sp", self.a_sp),
+                ("href_sp", self.href_sp),
+                ("ref_sp", self.ref_sp),
+            ]
+        else:
+            raise ValueError(f"Unsupported pKa analysis scheme: {scheme!r}")
         for col, val in required_files:
             if val is None or (isinstance(val, float) and np.isnan(val)):
                 errors.append(f"Missing {col}{row_info}")
             elif check_file_exists and not os.path.exists(str(val)):
                 errors.append(f"File not found for {col}: {val}{row_info}")
 
-        if self.pka_ref is None or (
-            isinstance(self.pka_ref, float) and np.isnan(self.pka_ref)
-        ):
-            errors.append(f"Missing pka_ref{row_info}")
-        else:
-            try:
-                float(self.pka_ref)
-            except (TypeError, ValueError):
-                errors.append(f"Invalid pka_ref: {self.pka_ref!r}{row_info}")
+        if scheme == "proton exchange":
+            if self.pka_ref is None or (
+                isinstance(self.pka_ref, float) and np.isnan(self.pka_ref)
+            ):
+                errors.append(f"Missing pka_ref{row_info}")
+            else:
+                try:
+                    float(self.pka_ref)
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Invalid pka_ref: {self.pka_ref!r}{row_info}"
+                    )
 
         if errors:
             raise ValueError("; ".join(errors))
@@ -2947,6 +2960,8 @@ def compute_pka_from_output_table(
     pressure: float = 1.0,
     cutoff_entropy_grimme: float = 100.0,
     cutoff_enthalpy: float = 100.0,
+    scheme: str = "proton exchange",
+    delta_G_proton: float = None,
 ) -> list:
     """Compute pKa for every row in a parsed output table.
 
@@ -2963,44 +2978,79 @@ def compute_pka_from_output_table(
         pressure: Pressure in atm.
         cutoff_entropy_grimme: Grimme quasi-RRHO entropy cutoff (cm⁻¹).
         cutoff_enthalpy: Head-Gordon enthalpy cutoff (cm⁻¹).
+        scheme: Thermodynamic cycle ('direct' or 'proton exchange').
+        delta_G_proton: G_soln(H⁺) in kcal/mol for the direct cycle.
 
     Returns:
         list[dict]: One result dict per entry, each containing the
         ``compute_pka()`` output plus the ``basename`` key.
     """
+    if scheme == "direct" and delta_G_proton is None:
+        raise ValueError("delta_G_proton is required when scheme='direct'.")
+
     results = []
     for entry in entries:
-        pka_result = output_cls.compute_pka(
+        pka_kwargs = dict(
             ha_gas_file=entry["ha_gas"],
             a_gas_file=entry["a_gas"],
-            href_gas_file=entry["href_gas"],
-            ref_gas_file=entry["ref_gas"],
             ha_solv_file=entry["ha_sp"],
             a_solv_file=entry["a_sp"],
-            href_solv_file=entry["href_sp"],
-            ref_solv_file=entry["ref_sp"],
-            pka_reference=float(entry["pka_ref"]),
             temperature=temperature,
             concentration=concentration,
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
+            scheme=scheme,
         )
+        if scheme == "direct":
+            pka_kwargs["delta_G_proton"] = delta_G_proton
+        elif scheme == "proton exchange":
+            pka_kwargs.update(
+                href_gas_file=entry["href_gas"],
+                ref_gas_file=entry["ref_gas"],
+                href_solv_file=entry["href_sp"],
+                ref_solv_file=entry["ref_sp"],
+                pka_reference=float(entry["pka_ref"]),
+            )
+        else:
+            raise ValueError(f"Unsupported pKa analysis scheme: {scheme!r}")
+        pka_result = output_cls.compute_pka(**pka_kwargs)
         pka_result["basename"] = entry["basename"]
         results.append(pka_result)
     return results
+
+
+def pka_scheme_delta_g_key(scheme):
+    """Return the result-dict key for a scheme-specific ΔG value."""
+    keys = {
+        "direct": "delta_G_diss_kcal_mol",
+        "proton exchange": "delta_G_soln_kcal_mol",
+    }
+    if scheme is None:
+        return None
+    return keys.get(scheme)
+
+
+def pka_scheme_delta_g_value(result, scheme=None):
+    """Return the ΔG value appropriate for the analysis scheme."""
+    resolved_scheme = scheme or result.get("scheme")
+    key = pka_scheme_delta_g_key(resolved_scheme)
+    if key is not None:
+        return result[key]
+    return result.get("delta_G_diss_kcal_mol", result["delta_G_soln_kcal_mol"])
 
 
 def export_pka_results_table(
     entries: list,
     results: list,
     output_path: str,
+    scheme: str = None,
 ) -> None:
     """Export a table with original columns plus computed pKa values.
 
     Writes a CSV or whitespace-delimited file (inferred from extension)
-    that appends ``pka`` and ``delta_G_soln_kcal_mol`` columns to the
-    original entry data.
+    that appends ``pka`` and a scheme-specific ΔG column to the original
+    entry data.
 
     Args:
         entries: The parsed output-table entries.
@@ -3008,14 +3058,20 @@ def export_pka_results_table(
             :func:`compute_pka_from_output_table`.
         output_path: Destination file path (``.csv`` → comma-delimited,
             otherwise whitespace-delimited).
+        scheme: Thermodynamic cycle ('direct' or 'proton exchange'). When
+            omitted, inferred from the first result dict if available.
     """
     import pandas as pd
+
+    if scheme is None and results:
+        scheme = results[0].get("scheme")
+    delta_g_column = pka_scheme_delta_g_key(scheme) or "delta_G_soln_kcal_mol"
 
     rows = []
     for entry, result in zip(entries, results):
         row = entry.to_dict()
         row["pka"] = result["pKa"]
-        row["delta_G_soln_kcal_mol"] = result["delta_G_soln_kcal_mol"]
+        row[delta_g_column] = pka_scheme_delta_g_value(result, scheme)
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -3057,12 +3113,16 @@ class PKaOutputTable:
         resolve_pka_output_references(self.entries)
         return self
 
-    def validate(self, check_file_exists: bool = True):
+    def validate(
+        self, check_file_exists: bool = True, scheme: str = "proton exchange"
+    ):
         """Validate all rows in the table."""
         all_errors = []
         for entry in self.entries:
             try:
-                entry.validate(check_file_exists=check_file_exists)
+                entry.validate(
+                    check_file_exists=check_file_exists, scheme=scheme
+                )
             except ValueError as exc:
                 all_errors.append(str(exc))
         if all_errors:
@@ -3071,10 +3131,16 @@ class PKaOutputTable:
             )
         return self
 
-    def prepare(self, check_file_exists: bool = True):
+    def prepare(
+        self, check_file_exists: bool = True, scheme: str = "proton exchange"
+    ):
         """Resolve shared references and validate the table."""
+        if scheme == "direct":
+            return self.validate(
+                check_file_exists=check_file_exists, scheme=scheme
+            )
         return self.resolve_references().validate(
-            check_file_exists=check_file_exists
+            check_file_exists=check_file_exists, scheme=scheme
         )
 
     def run_pka(
@@ -3085,6 +3151,8 @@ class PKaOutputTable:
         pressure: float = 1.0,
         cutoff_entropy_grimme: float = 100.0,
         cutoff_enthalpy: float = 100.0,
+        scheme: str = "proton exchange",
+        delta_G_proton: float = None,
     ) -> list:
         """Compute pKa for every row using the supplied output class."""
         self.results = compute_pka_from_output_table(
@@ -3095,15 +3163,20 @@ class PKaOutputTable:
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
         )
         return self.results
 
-    def export_results(self, output_path: str, results: list = None) -> None:
+    def export_results(
+        self, output_path: str, results: list = None, scheme: str = None
+    ) -> None:
         """Export computed pKa results for this table."""
         export_pka_results_table(
             self.entries,
             self.results if results is None else results,
             output_path,
+            scheme=scheme,
         )
 
 
