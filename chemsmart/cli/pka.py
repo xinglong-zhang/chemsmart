@@ -360,69 +360,60 @@ def validate_reference_options(shared):
         )
 
 
-def run_pka_from_output_table(
-    output_table,
-    output_results,
-    temperature,
-    concentration,
-    pressure,
-    cutoff_entropy_grimme,
-    cutoff_enthalpy,
-    program="gaussian",
-):
-    from chemsmart.utils.utils import PKaOutputTable
-
-    logger.info(f"Reading pKa output table: {output_table}")
-    try:
-        pka_table = PKaOutputTable.from_file(output_table)
-        pka_table.prepare(check_file_exists=True)
-    except (FileNotFoundError, ValueError) as e:
-        raise click.UsageError(str(e))
-
-    logger.info(f"Found {len(pka_table)} entries in output table")
-
+def _resolve_batch_output_cls(program):
     if program == "gaussian":
-        from chemsmart.io.gaussian.output import (
-            Gaussian16pKaOutput as OutputCls,
-        )
+        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+
+        return Gaussian16pKaOutput
     elif program == "orca":
-        from chemsmart.io.orca.output import ORCApKaOutput as OutputCls
+        from chemsmart.io.orca.output import ORCApKaOutput
+
+        return ORCApKaOutput
     else:
         raise ValueError(f"Unsupported program: {program}")
 
-    logger.info(
-        f"Computing pKa for {len(pka_table)} systems "
-        f"(T={temperature}K, program={program})"
-    )
-    results = pka_table.run_pka(
-        output_cls=OutputCls,
-        temperature=temperature,
-        concentration=concentration,
-        pressure=pressure,
-        cutoff_entropy_grimme=cutoff_entropy_grimme,
-        cutoff_enthalpy=cutoff_enthalpy,
-    )
 
+def _echo_pka_output_table_results(
+    pka_table,
+    results,
+    output_results,
+    temperature,
+    pressure,
+):
     if output_results is not None:
         pka_table.export_results(output_results, results)
         click.echo(f"pKa results written to {output_results}")
-    else:
-        click.echo("=" * 78)
-        click.echo("Batch pKa Results (Dual-level Proton Exchange)")
-        click.echo("=" * 78)
-        click.echo(f"Temperature: {temperature} K")
-        click.echo(f"Pressure: {pressure} atm")
-        click.echo(f"{'basename':<30} {'pKa':>10} {'ΔG_soln (kcal/mol)':>20}")
-        click.echo("-" * 78)
-        for entry, result in zip(pka_table, results):
-            click.echo(
-                f"{entry['basename']:<30} "
-                f"{result['pKa']:>10.2f} "
-                f"{result['delta_G_soln_kcal_mol']:>20.4f}"
-            )
-        click.echo("=" * 78)
+        return
 
-    return results
+    click.echo("=" * 78)
+    click.echo("Batch pKa Results (Dual-level Proton Exchange)")
+    click.echo("=" * 78)
+    click.echo(f"Temperature: {temperature} K")
+    click.echo(f"Pressure: {pressure} atm")
+    click.echo(f"{'basename':<30} {'pKa':>10} {'ΔG_soln (kcal/mol)':>20}")
+    click.echo("-" * 78)
+    for entry, result in zip(pka_table, results):
+        click.echo(
+            f"{entry['basename']:<30} "
+            f"{result['pKa']:>10.2f} "
+            f"{result['delta_G_soln_kcal_mol']:>20.4f}"
+        )
+    click.echo("=" * 78)
+
+
+def _first_output_file_from_table(pka_table):
+    """Return the first existing output path from a prepared pKa table.
+
+    This supports backend auto-detection without re-reading the raw table file.
+    """
+    first_entry = next(iter(pka_table), None)
+    if first_entry is None:
+        raise click.UsageError("Output table is empty.")
+    for col in ["ha_gas", "a_gas", "href_gas", "ref_gas"]:
+        val = first_entry.get(col)
+        if val and os.path.isfile(val):
+            return val
+    return None
 
 
 def validate_analyze_files(
@@ -689,19 +680,21 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
     """
     shared = ctx.obj["pka_shared"]
 
-    if program == "auto":
-        import csv
+    from chemsmart.utils.utils import PKaOutputTable
 
-        with open(output_table) as fh:
-            reader = csv.DictReader(fh)
-            first_row = next(reader, None)
-        if first_row is None:
-            raise click.UsageError("Output table is empty.")
-        for col in ["ha_gas", "a_gas", "href_gas", "ref_gas"]:
-            val = first_row.get(col)
-            if val and os.path.isfile(val):
-                program = get_program_type_from_file(val)
-                break
+    logger.info(f"Reading pKa output table: {output_table}")
+    try:
+        pka_output_table = PKaOutputTable.from_file(output_table)
+        pka_output_table.prepare(check_file_exists=True)
+    except (FileNotFoundError, ValueError) as e:
+        raise click.UsageError(str(e))
+
+    logger.info(f"Found {len(pka_output_table)} entries in output table")
+
+    if program == "auto":
+        output_file = _first_output_file_from_table(pka_output_table)
+        if output_file is not None:
+            program = get_program_type_from_file(output_file)
         if program == "auto" or program == "unknown":
             raise click.UsageError(
                 "Could not auto-detect QC program from output table.  "
@@ -709,15 +702,25 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
             )
         logger.info(f"Auto-detected program: {program}")
 
-    run_pka_from_output_table(
-        output_table=output_table,
-        output_results=output_results,
+    output_cls = _resolve_batch_output_cls(program)
+    logger.info(
+        f"Computing pKa for {len(pka_output_table)} systems "
+        f"(T={shared['temperature']}K, program={program})"
+    )
+    results = pka_output_table.run_pka(
+        output_cls=output_cls,
         temperature=shared["temperature"],
         concentration=shared["concentration"],
         pressure=shared["pressure"],
         cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
         cutoff_enthalpy=shared["cutoff_enthalpy"],
-        program=program,
+    )
+    _echo_pka_output_table_results(
+        pka_table=pka_output_table,
+        results=results,
+        output_results=output_results,
+        temperature=shared["temperature"],
+        pressure=shared["pressure"],
     )
 
     return None
