@@ -399,18 +399,17 @@ class FileMixin:
             None if validation passes or is skipped; an error message string
             otherwise.
         """
-        if not getattr(self, "normal_termination", False):
+        if not self.normal_termination:
             return None
 
-        freqs = getattr(self, "vibrational_frequencies", None)
-        if freqs is None:
+        if not self.vibrational_frequencies:
             return None
 
-        imaginary = [f for f in freqs if f < 0.0]
+        imaginary = [f for f in self.vibrational_frequencies if f < 0.0]
         if not imaginary:
             return None
 
-        display_label = label or getattr(self, "filename", "output")
+        display_label = label or self.filename
         role_prefix = f"[{role}] " if role else ""
         return (
             f"{role_prefix}Imaginary frequency check FAILED for "

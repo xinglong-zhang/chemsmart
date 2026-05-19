@@ -40,14 +40,16 @@ class TestValidateImaginaryFrequencies:
     def test_skips_when_not_normally_terminated(self):
         dummy = DummyFile("test.log")
         dummy.normal_termination = False
+        dummy.vibrational_frequencies = []
         assert dummy.validate_imaginary_frequencies() is None
 
     def test_passes_with_real_frequencies(self, gaussian_co2_opt_outfile):
         from chemsmart.io.gaussian.output import Gaussian16Output
 
-        out = Gaussian16Output(filename=gaussian_co2_opt_outfile)
+        output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
         assert (
-            out.validate_imaginary_frequencies(role="HA", label="test") is None
+            output.validate_imaginary_frequencies(role="HA", label="test")
+            is None
         )
 
     def test_fails_with_imaginary_frequencies(self):
