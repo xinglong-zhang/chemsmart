@@ -12,6 +12,10 @@ output files.
 The ``thermochemistry`` command parses output files and calculates thermochemical properties including enthalpy,
 entropy, and Gibbs free energy.
 
+When processing a directory, use ``-p/--program`` when chemsmart needs to identify Gaussian versus ORCA output from
+the file content, and use ``-t/--filetype`` when you only want to filter by filename suffix such as ``.log`` or
+``.out``.
+
 Usage
 =====
 
@@ -42,13 +46,13 @@ Options
 
    -  -  ``-p, --program``
       -  string
-      -  Program that produced the output files: ``gaussian`` or ``orca``. Used with ``-d`` to process all output files
-         from that program.
+      -  Program that produced the output files: ``gaussian`` or ``orca``. Use this when parsing depends on program
+         identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
 
    -  -  ``-t, --filetype``
       -  string
-      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Used with ``-d`` to process all files of
-         that type regardless of program.
+      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Use this when selection is purely
+         suffix-based, regardless of which program generated the files.
 
    -  -  ``-f, --filenames``
       -  string
@@ -169,6 +173,12 @@ Output:
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -d . -p gaussian -o thermo.dat
+
+Select files by extension only:
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -d . -t log -o thermo_logs.dat
 
 **Batch processing with custom pressure:**
 
