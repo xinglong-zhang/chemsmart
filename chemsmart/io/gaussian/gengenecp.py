@@ -196,6 +196,20 @@ class GenGenECPSection:
             + f"{heavy_elements_basis}\n"
         )
 
+    @staticmethod
+    def _basis_name_for_gaussian_keyword(basis_name: str) -> str:
+        basis_name = basis_name.lower()
+        if "def2-" in basis_name:
+            basis_name = basis_name.replace("def2-", "def2")
+        return basis_name
+
+    @staticmethod
+    def _basis_name_for_bse_lookup(basis_name: str) -> str:
+        basis_name = basis_name.lower()
+        if "def2" in basis_name and "def2-" not in basis_name:
+            basis_name = basis_name.replace("def2", "def2-")
+        return basis_name
+
     @classmethod
     def from_bse_api(
         cls,
@@ -235,22 +249,20 @@ class GenGenECPSection:
             list_of_elements=heavy_elements
         )
         heavy_elements_basis_input = heavy_elements_basis
-        heavy_elements_basis = heavy_elements_basis.lower()
+        heavy_elements_basis = cls._basis_name_for_bse_lookup(
+            heavy_elements_basis
+        )
 
         genecp_string = ""
 
         # Write light atoms and their basis set specification
         if len(light_elements) > 0:
             light_elements = pt.sorted_periodic_table_list(light_elements)
-            light_elements_basis = light_elements_basis.lower()
+            light_elements_basis = cls._basis_name_for_gaussian_keyword(
+                light_elements_basis
+            )
             light_atoms_string = " ".join(light_elements) + " 0\n"
             genecp_string += light_atoms_string
-
-            # Handle def2- basis set naming convention
-            if "def2-" in light_elements_basis:
-                light_elements_basis = light_elements_basis.replace(
-                    "def2-", "def2"
-                )
 
             genecp_string += light_elements_basis + "\n"
             # separate light atoms basis from
@@ -259,13 +271,6 @@ class GenGenECPSection:
 
         if len(heavy_elements) == 0:
             return cls(string=genecp_string)
-
-        # Generate heavy atom basis set content from BSE API
-        # Handle def2 basis set naming convention
-        if "def2" in heavy_elements_basis and "-" not in heavy_elements_basis:
-            heavy_elements_basis = heavy_elements_basis.replace(
-                "def2", "def2-"
-            )
 
         if heavy_elements_basis not in bse_all_bases:
             logger.warning(
