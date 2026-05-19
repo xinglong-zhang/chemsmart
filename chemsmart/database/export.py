@@ -90,14 +90,14 @@ class DatabaseExporter:
         columns = list(CSV_DEFAULT_COLUMNS)
         if self.parsed_keys:
             columns.extend(self.parsed_keys)
-        rows = [self._record_to_csv_row(rec, columns) for rec in records]
+        rows = [self.record_to_csv_row(rec, columns) for rec in records]
         with open(self.output, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=columns, restval="NaN")
             writer.writeheader()
             writer.writerows(rows)
 
     @staticmethod
-    def _record_to_csv_row(record, columns):
+    def record_to_csv_row(record, columns):
         """Flatten a record dict into a CSV row using the last structure
         as molecule/structure context."""
         meta = record.get("meta", {}) or {}
@@ -140,7 +140,7 @@ class DatabaseExporter:
             )
 
         if self.molecule_id is not None:
-            frames = self._frames_from_molecule_id()
+            frames = self.frames_from_molecule_id()
         elif self.structure_id is not None:
             frames = self._frames_from_structure_id()
         else:
@@ -233,7 +233,7 @@ class DatabaseExporter:
             }
         ]
 
-    def _frames_from_molecule_id(self):
+    def frames_from_molecule_id(self):
         """Build frames from --mid (all conformers of a molecule).
         Frames are sorted by energy at the most frequently available
         (method, basis) key.
@@ -260,10 +260,10 @@ class DatabaseExporter:
                     "energies": energies,
                 }
             )
-        return self._sort_frames_by_energy(frames)
+        return self.sort_frames_by_energy(frames)
 
     @staticmethod
-    def _sort_frames_by_energy(frames):
+    def sort_frames_by_energy(frames):
         """Sort frames ascending by energy at the most-covered (method,
         basis); frames missing that key go to the end (sorted by their
         own lowest available energy)."""
