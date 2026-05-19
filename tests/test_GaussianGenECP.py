@@ -93,7 +93,9 @@ class TestGaussianGenGenECP:
         )
 
         assert with_hyphen.heavy_elements_basis == "def2-svpd"
+        assert with_hyphen.light_elements_basis == "def2svp"
         assert without_hyphen.heavy_elements_basis == "def2-svpd"
+        assert without_hyphen.light_elements_basis == "def2svp"
 
     def test_genecp_from_comfile(
         self, tmpdir, gaussian_opt_genecp_inputfile, genecp_txt_file_from_web
