@@ -2944,6 +2944,7 @@ def compute_pka_from_output_table(
     output_cls,
     temperature: float = 298.15,
     concentration: float = 1.0,
+    pressure: float = 1.0,
     cutoff_entropy_grimme: float = 100.0,
     cutoff_enthalpy: float = 100.0,
 ) -> list:
@@ -2959,6 +2960,7 @@ def compute_pka_from_output_table(
             (e.g. ``Gaussian16pKaOutput`` or ``ORCApKaOutput``).
         temperature: Temperature in Kelvin.
         concentration: Concentration in mol/L.
+        pressure: Pressure in atm.
         cutoff_entropy_grimme: Grimme quasi-RRHO entropy cutoff (cm⁻¹).
         cutoff_enthalpy: Head-Gordon enthalpy cutoff (cm⁻¹).
 
@@ -2980,6 +2982,7 @@ def compute_pka_from_output_table(
             pka_reference=float(entry["pka_ref"]),
             temperature=temperature,
             concentration=concentration,
+            pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
         )
@@ -3079,6 +3082,7 @@ class PKaOutputTable:
         output_cls,
         temperature: float = 298.15,
         concentration: float = 1.0,
+        pressure: float = 1.0,
         cutoff_entropy_grimme: float = 100.0,
         cutoff_enthalpy: float = 100.0,
     ) -> list:
@@ -3088,6 +3092,7 @@ class PKaOutputTable:
             output_cls=output_cls,
             temperature=temperature,
             concentration=concentration,
+            pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
         )

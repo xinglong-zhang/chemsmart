@@ -2128,6 +2128,7 @@ class TestPKaTableParsing:
             def compute_pka(cls, **kwargs):
                 assert kwargs["ha_gas_file"] == f"{tmp_path}/ha.log"
                 assert kwargs["pka_reference"] == 6.75
+                assert kwargs["pressure"] == 1.5
                 return {
                     "pKa": 7.12,
                     "delta_G_soln_kcal_mol": 1.23,
@@ -2139,6 +2140,7 @@ class TestPKaTableParsing:
             output_cls=FakeOutput,
             temperature=300.0,
             concentration=1.0,
+            pressure=1.5,
             cutoff_entropy_grimme=100.0,
             cutoff_enthalpy=100.0,
         )

@@ -16,6 +16,10 @@ import os
 
 import click
 
+from chemsmart.cli.thermochemistry.thermochemistry import (
+    thermochemistry_cutoff_options,
+    thermochemistry_temp_pressure_conc_options,
+)
 from chemsmart.utils.cli import MyCommand, MyGroup
 from chemsmart.utils.io import (
     detect_program_type_from_files,
@@ -29,7 +33,27 @@ logger = logging.getLogger(__name__)
 # ── helpers moved from cli/pka_helpers.py ──────────────────────────────
 
 
+def click_pka_thermochemistry_options(f):
+    """Thermochemistry options reused by pKa submission and analysis."""
+    f = thermochemistry_temp_pressure_conc_options(
+        f,
+        temperature_required=False,
+        temperature_default=298.15,
+        concentration_default=1.0,
+        pressure_default=1.0,
+        concentration_short="-conc",
+    )
+    return thermochemistry_cutoff_options(
+        f,
+        entropy_grimme_default=100.0,
+        enthalpy_default=100.0,
+        include_truhlar=False,
+    )
+
+
 def click_pka_shared_options(f):
+    f = click_pka_thermochemistry_options(f)
+
     @click.option(
         "-s",
         "--scheme",
@@ -133,38 +157,6 @@ def click_pka_shared_options(f):
         type=str,
         default=None,
         help="Solvent ID for solution phase SP (default: project setting or water).",
-    )
-    @click.option(
-        "-T",
-        "--temperature",
-        type=float,
-        default=298.15,
-        help="Temperature in Kelvin (default: 298.15 K).",
-    )
-    @click.option(
-        "-conc",
-        "--concentration",
-        type=float,
-        default=1.0,
-        help="Concentration in mol/L (default: 1.0 mol/L).",
-    )
-    @click.option(
-        "-csg",
-        "--cutoff-entropy-grimme",
-        type=float,
-        default=100.0,
-        help=(
-            "Cutoff frequency for entropy (cm^-1) using Grimme's quasi-RRHO method (default: 100)."
-        ),
-    )
-    @click.option(
-        "-ch",
-        "--cutoff-enthalpy",
-        type=float,
-        default=100.0,
-        help=(
-            "Cutoff frequency for enthalpy (cm^-1) using Head-Gordon's method (default: 100)."
-        ),
     )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
@@ -373,6 +365,7 @@ def run_pka_from_output_table(
     output_results,
     temperature,
     concentration,
+    pressure,
     cutoff_entropy_grimme,
     cutoff_enthalpy,
     program="gaussian",
@@ -405,6 +398,7 @@ def run_pka_from_output_table(
         output_cls=OutputCls,
         temperature=temperature,
         concentration=concentration,
+        pressure=pressure,
         cutoff_entropy_grimme=cutoff_entropy_grimme,
         cutoff_enthalpy=cutoff_enthalpy,
     )
@@ -417,6 +411,7 @@ def run_pka_from_output_table(
         click.echo("Batch pKa Results (Dual-level Proton Exchange)")
         click.echo("=" * 78)
         click.echo(f"Temperature: {temperature} K")
+        click.echo(f"Pressure: {pressure} atm")
         click.echo(f"{'basename':<30} {'pKa':>10} {'ΔG_soln (kcal/mol)':>20}")
         click.echo("-" * 78)
         for entry, result in zip(pka_table, results):
@@ -531,47 +526,22 @@ def _resolve_output_cls(output_files):
 
 
 @click.group(name="pka", cls=MyGroup)
-@click.option(
-    "-T",
-    "--temperature",
-    type=float,
-    default=298.15,
-    show_default=True,
-    help="Temperature in Kelvin.",
-)
-@click.option(
-    "-conc",
-    "--concentration",
-    type=float,
-    default=1.0,
-    show_default=True,
-    help="Concentration in mol/L.",
-)
-@click.option(
-    "-csg",
-    "--cutoff-entropy-grimme",
-    type=float,
-    default=100.0,
-    show_default=True,
-    help="Cutoff frequency (cm^-1) for entropy (Grimme quasi-RRHO).",
-)
-@click.option(
-    "-ch",
-    "--cutoff-enthalpy",
-    type=float,
-    default=100.0,
-    show_default=True,
-    help="Cutoff frequency (cm^-1) for enthalpy (Head-Gordon).",
-)
+@click_pka_thermochemistry_options
 @click.pass_context
 def pka(
-    ctx, temperature, concentration, cutoff_entropy_grimme, cutoff_enthalpy
+    ctx,
+    temperature,
+    concentration,
+    pressure,
+    cutoff_entropy_grimme,
+    cutoff_enthalpy,
 ):
     """Backend-independent pKa output analysis."""
     ctx.ensure_object(dict)
     ctx.obj["pka_shared"] = dict(
         temperature=temperature,
         concentration=concentration,
+        pressure=pressure,
         cutoff_entropy_grimme=cutoff_entropy_grimme,
         cutoff_enthalpy=cutoff_enthalpy,
     )
@@ -670,6 +640,7 @@ def analyze(
         pka_reference=reference_pka,
         temperature=shared["temperature"],
         concentration=shared["concentration"],
+        pressure=shared["pressure"],
         cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
         cutoff_enthalpy=shared["cutoff_enthalpy"],
     )
@@ -743,6 +714,7 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
         output_results=output_results,
         temperature=shared["temperature"],
         concentration=shared["concentration"],
+        pressure=shared["pressure"],
         cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
         cutoff_enthalpy=shared["cutoff_enthalpy"],
         program=program,
@@ -752,6 +724,8 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
 
 
 def click_pka_thermo_options(f):
+    f = click_pka_thermochemistry_options(f)
+
     @click.option(
         "-ha",
         "--ha-file",
@@ -779,34 +753,6 @@ def click_pka_thermo_options(f):
         type=click.Path(exists=True),
         default=None,
         help="Path to Ref- (reference conjugate base) optimization output file.",
-    )
-    @click.option(
-        "-T",
-        "--temperature",
-        type=float,
-        default=298.15,
-        help="Temperature in Kelvin (default: 298.15 K).",
-    )
-    @click.option(
-        "-conc",
-        "--concentration",
-        type=float,
-        default=1.0,
-        help="Concentration in mol/L (default: 1.0 mol/L).",
-    )
-    @click.option(
-        "-csg",
-        "--cutoff-entropy-grimme",
-        type=float,
-        default=100.0,
-        help="Cutoff for entropy (cm^-1), Grimme method (default: 100).",
-    )
-    @click.option(
-        "-ch",
-        "--cutoff-enthalpy",
-        type=float,
-        default=100.0,
-        help="Cutoff for enthalpy (cm^-1), Head-Gordon method (default: 100).",
     )
     @click.option(
         "-u",
@@ -838,6 +784,7 @@ def format_thermo_results(results, energy_units):
         "=" * 78,
         f"Temperature: {results['settings']['temperature']} K",
         f"Concentration: {results['settings']['concentration']} mol/L",
+        f"Pressure: {results['settings'].get('pressure', 1.0)} atm",
         f"Entropy cutoff (Grimme): "
         f"{results['settings']['cutoff_entropy_grimme']} cm⁻¹",
         f"Enthalpy cutoff (Head-Gordon): "

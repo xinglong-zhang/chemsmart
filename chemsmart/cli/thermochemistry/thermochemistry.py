@@ -1,4 +1,3 @@
-import functools
 import logging
 
 import click
@@ -21,71 +20,98 @@ from chemsmart.utils.io import (
 logger = logging.getLogger(__name__)
 
 
-def click_thermochemistry_options(f):
-    """
-    Common click options for Thermochemistry.
-    """
-
-    @click.option(
+def thermochemistry_cutoff_options(
+    f,
+    entropy_grimme_default=None,
+    entropy_truhlar_default=None,
+    enthalpy_default=None,
+    include_truhlar=True,
+):
+    """Reusable quasi-RRHO cutoff options."""
+    f = click.option(
         "-csg",
         "--cutoff-entropy-grimme",
-        default=None,
+        default=entropy_grimme_default,
         type=float,
         show_default=True,
         help="Cutoff frequency for entropy in wavenumbers, using Grimme's "
         "quasi-RRHO method.",
-    )
-    @click.option(
-        "-cst",
-        "--cutoff-entropy-truhlar",
-        default=None,
-        type=float,
-        show_default=True,
-        help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
-        "quasi-RRHO method.",
-    )
-    @click.option(
+    )(f)
+    if include_truhlar:
+        f = click.option(
+            "-cst",
+            "--cutoff-entropy-truhlar",
+            default=entropy_truhlar_default,
+            type=float,
+            show_default=True,
+            help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
+            "quasi-RRHO method.",
+        )(f)
+    f = click.option(
         "-ch",
         "--cutoff-enthalpy",
-        default=None,
+        default=enthalpy_default,
         type=float,
         show_default=True,
         help="Cutoff frequency for enthalpy in wavenumbers, using "
         "Head-Gordon's quasi-RRHO method.",
-    )
-    @click.option(
-        "-c",
+    )(f)
+    return f
+
+
+def thermochemistry_temp_pressure_conc_options(
+    f,
+    temperature_required=True,
+    temperature_default=None,
+    concentration_default=None,
+    pressure_default=1.0,
+    include_pressure=True,
+    concentration_short="-c",
+):
+    """Reusable temperature, pressure, and concentration options."""
+    f = click.option(
+        concentration_short,
         "--concentration",
-        default=None,
+        default=concentration_default,
         type=float,
         show_default=True,
         help="Concentration in mol/L.",
-    )
-    @click.option(
-        "-P",
-        "--pressure",
-        default=1.0,
-        type=float,
-        show_default=True,
-        help="Pressure in atm.",
-    )
-    @click.option(
+    )(f)
+    if include_pressure:
+        f = click.option(
+            "-P",
+            "--pressure",
+            default=pressure_default,
+            type=float,
+            show_default=True,
+            help="Pressure in atm.",
+        )(f)
+    f = click.option(
         "-T",
         "--temperature",
-        required=True,
-        default=None,
+        required=temperature_required,
+        default=temperature_default,
         type=float,
         help="Temperature in Kelvin.",
-    )
-    @click.option(
+    )(f)
+    return f
+
+
+def click_thermochemistry_options(f):
+    """
+    Common click options for Thermochemistry.
+    """
+    f = thermochemistry_temp_pressure_conc_options(f)
+    f = thermochemistry_cutoff_options(f)
+    f = click.option(
         "-a",
         "--alpha",
         default=4,
         type=int,
         show_default=True,
         help="Interpolator exponent used in the quasi-RRHO approximation.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-w/",
         "--weighted/--no-weighted",
         default=True,
@@ -93,8 +119,8 @@ def click_thermochemistry_options(f):
         help="Use natural abundance weighted masses (True) or use most abundant "
         "masses (False, via --no-weighted).\nDefault to True, i.e., use natural "
         "abundance weighted masses, which is the real world scenario.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-u",
         "--energy-units",
         default="hartree",
@@ -103,8 +129,8 @@ def click_thermochemistry_options(f):
             ["hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
         ),
         help="Units of energetic values.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-o",
         "--outputfile",
         default=None,
@@ -112,27 +138,22 @@ def click_thermochemistry_options(f):
         help="Output file to save the thermochemistry results. Defaults to "
         "None, which will save results to file_basename.dat.\nIf "
         "specified, it will save all thermochemistry results to this file.",
-    )
-    @click.option(
+    )(f)
+    f = click.option(
         "-O",
         "--overwrite",
         is_flag=True,
         default=False,
         show_default=True,
         help="Overwrite existing output files if they already exist.",
-    )
-    @click.option(
+    )(f)
+    return click.option(
         "-i/",
         "--check-imaginary-frequencies/--no-check-imaginary-frequencies",
         default=True,
         show_default=True,
         help="Check for imaginary frequencies in the calculations.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
+    )(f)
 
 
 # use MyGroup to allow potential subcommands in the future
