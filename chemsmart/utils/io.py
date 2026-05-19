@@ -68,8 +68,18 @@ SUPPORTED_PROGRAMS = set(PROGRAM_INFO.keys())
 ALL_SUFFIXES = tuple(
     suffix for info in PROGRAM_INFO.values() for suffix in info["suffixes"]
 )
+PROGRAM_OUTPUT_EXTENSIONS = {
+    "gaussian": tuple(PROGRAM_INFO["gaussian"]["suffixes"]),
+    # ORCA outputs are conventionally .out, but some workflows use .log.
+    "orca": (".out", ".log"),
+}
 # Folder-level detection is currently supported only for these programs
 PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
+
+
+def get_program_output_extensions(program, default=(".log", ".out")):
+    """Return preferred output-file extensions for a detected program."""
+    return PROGRAM_OUTPUT_EXTENSIONS.get(program, default)
 
 
 def create_molecule_list(

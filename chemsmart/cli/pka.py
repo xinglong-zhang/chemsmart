@@ -19,15 +19,11 @@ import click
 from chemsmart.utils.cli import MyCommand, MyGroup
 from chemsmart.utils.io import (
     detect_program_type_from_files,
+    get_program_output_extensions,
     get_program_type_from_file,
 )
 
 logger = logging.getLogger(__name__)
-
-_EXT_MAP = {
-    "gaussian": [".log", ".out"],
-    "orca": [".out", ".log"],
-}
 
 
 # ── helpers moved from cli/pka_helpers.py ──────────────────────────────
@@ -329,8 +325,8 @@ def resolve_reference_proton(
     from chemsmart.io.file import PKaCDXFile
 
     try:
-        return PKaCDXFile.resolve_reference_proton(
-            reference, reference_proton_index, reference_color_code
+        return PKaCDXFile.from_filename(reference).resolve_reference_proton(
+            color_code=reference_color_code
         )
     except ValueError as exc:
         raise click.UsageError(
@@ -498,7 +494,7 @@ def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
     if program is None:
         program = get_program_type_from_file(ha_gas_path)
 
-    extensions = _EXT_MAP.get(program, [".log", ".out"])
+    extensions = get_program_output_extensions(program)
 
     def _find(directory, stem):
         for ext in extensions:
