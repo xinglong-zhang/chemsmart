@@ -388,8 +388,55 @@ class Gaussian16Output(GaussianFileMixin):
 
     @property
     def custom_solvent(self):
-        """TODO"""
-        return None
+        """
+        Parse custom/generic solvent parameters from the verbose Gaussian
+        PCM/SMD section into a structured dictionary with standardized keys.
+        Returns a stuctured representation of the custom/generic solvent
+        parameters:
+            {
+                "SolventName": "1,1,1,3,3,3-hexafluoropropan-2-ol",
+                "Eps": 16.7,
+                "EpsInf": 1.625625,
+                "HbondAcidity": 0.77,
+                "HbondBasicity": 0.1,
+                "SurfaceTensionAtInterface": 23.23,
+                "CarbonAromaticity": 0.0,
+                "ElectronegativeHalogenicity": 0.6,
+            }
+            or None if no custom solvent section is found.
+        """
+        non_standard_marker = "Using the following non-standard input for PCM:"
+        if not any(
+            line.startswith(non_standard_marker) for line in self.contents
+        ):
+            return None
+        key_map = [
+            ("Eps(infinity)", "EpsInf"),
+            ("Eps ", "Eps"),
+            ("Hydrogen bond acidity", "HbondAcidity"),
+            ("Hydrogen bond basicity", "HbondBasicity"),
+            ("Surface tension at interface", "SurfaceTensionAtInterface"),
+            ("Carbon aromaticity", "CarbonAromaticity"),
+            ("Electronegative halogenicity", "ElectronegativeHalogenicity"),
+        ]
+        params = {}
+        inside = False
+        for line in self.contents:
+            if line.startswith("Solvent") and ":" in line:
+                name = line.split(":", 1)[1].strip().rstrip(",").strip()
+                params["SolventName"] = name
+                inside = True
+                continue
+            if not inside:
+                continue
+            if line.startswith("---"):
+                break
+            for prefix, key in key_map:
+                if line.startswith(prefix):
+                    value_str = line.split("=", 1)[1].strip().split()[0]
+                    params[key] = float(value_str)
+                    break
+        return params if params else None
 
     @cached_property
     def num_steps(self):

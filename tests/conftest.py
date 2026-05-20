@@ -466,6 +466,15 @@ def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
     return gaussian_hirshfeld_outfile
 
 
+# Gaussian output file with custom (generic) SMD solvent
+@pytest.fixture()
+def gaussian_smd_generic_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "benzoic_acid_opt_sp_smd_generic.log",
+    )
+
+
 @pytest.fixture()
 def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
     gaussian_ozone_opt_outfile = os.path.join(

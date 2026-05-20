@@ -2118,6 +2118,22 @@ class TestGaussian16Output:
             g16_pm6.semiempirical == "PM6"
         )  # changed to upper case in route_object.semiempirical
 
+    def test_custom_solvent_smd_generic(self, gaussian_smd_generic_outfile):
+        g16_generic = Gaussian16Output(filename=gaussian_smd_generic_outfile)
+        assert g16_generic.normal_termination
+        custom_solvent = g16_generic.custom_solvent
+        assert (
+            custom_solvent["SolventName"]
+            == "1,1,1,3,3,3-HEXAFLUOROPROPAN-2-OL"
+        )
+        assert custom_solvent["Eps"] == 16.7
+        assert custom_solvent["EpsInf"] == 1.625625
+        assert custom_solvent["HbondAcidity"] == 0.77
+        assert custom_solvent["HbondBasicity"] == 0.10
+        assert custom_solvent["SurfaceTensionAtInterface"] == 23.23
+        assert custom_solvent["CarbonAromaticity"] == 0.0
+        assert custom_solvent["ElectronegativeHalogenicity"] == 0.60
+
 
 class TestGaussianWBIOutput:
     def test_normal_termination_with_forces_and_frequencies(
