@@ -20,6 +20,7 @@ from chemsmart.cli.thermochemistry.thermochemistry import (
     thermochemistry_cutoff_options,
     thermochemistry_temp_pressure_conc_options,
 )
+from chemsmart.io.file import PKaCDXFile
 from chemsmart.utils.cli import MyCommand, MyGroup
 from chemsmart.utils.io import (
     detect_program_type_from_files,
@@ -415,51 +416,58 @@ def click_pka_analyze_options(f):
 
 
 def resolve_proton_index(filename, proton_index, color_code):
-    """Resolve the proton index for deprotonation, optionally via CDXML.
-
-    If a proton index is provided, it is returned directly. For CDX/CDXML
-    inputs, the proton can be auto-detected from a color code; a multi-fragment
-    file yields a list of per-fragment molecules, which is returned as the
-    second tuple element while the proton index is set to ``None`` so callers
-    can branch to per-molecule job creation.
-
-    Args:
-        filename: Input structure file path, used to detect CDX/CDXML inputs.
-        proton_index: 1-based proton index supplied by the user, if any.
-        color_code: CDXML color-table index used for auto-detection.
-
-    Returns:
-        tuple[int | None, list | None]:
-            - Proton index when a single molecule is resolved.
-            - ``None`` for the index with a list of per-fragment molecules when
-              multiple molecules are detected in CDX/CDXML.
-
-    Raises:
-        click.UsageError: If required inputs are missing or inconsistent with
-            the file type.
-    """
-    from chemsmart.io.file import PKaCDXFile
-
-    try:
-        return PKaCDXFile.resolve_proton_index(
-            filename, proton_index, color_code
+    """Resolve proton index from filename, explicit index, or color code."""
+    pka_molecules = None
+    if (
+        proton_index is None
+        and filename is not None
+        and filename.lower().endswith((".cdx", ".cdxml"))
+    ):
+        logger.info(
+            "Attempting to auto-detect proton index from multi-fragment CDXML"
         )
-    except ValueError as exc:
-        raise click.UsageError(str(exc))
+        try:
+            pka_file = PKaCDXFile(filename)
+            pka_molecules = pka_file.get_pka_molecules(
+                color_code=color_code, index=":"
+            )
+            proton_index = [mol.proton_index for mol in pka_molecules]
+        except (ValueError, FileNotFoundError) as e:
+            logger.warning(f"Could not auto-detect proton from CDXML: {e}")
+
+    if proton_index is None:
+        raise click.UsageError(
+            "Proton index (-pi) or color code (-cc) must be specified, "
+            "or auto-detection must succeed with a .cdxml file."
+        )
+    if isinstance(proton_index, list):
+        if len(proton_index) > 1:
+            raise click.UsageError(
+                "Multiple protons detected in CDXML. Specify -pi/-cc to select one."
+            )
+        proton_index = proton_index[0]
+    return proton_index, pka_molecules
 
 
 def resolve_reference_proton(
     reference, reference_proton_index, reference_color_code
 ):
-    from chemsmart.io.file import PKaCDXFile
+    """Resolve reference proton index, handling CDXML auto-detection."""
+    if reference_proton_index is not None:
+        return reference_proton_index
+    if not reference or not reference.lower().endswith((".cdx", ".cdxml")):
+        return None
 
     try:
-        return PKaCDXFile.from_filename(reference).resolve_reference_proton(
-            color_code=reference_color_code
+        pka_file = PKaCDXFile(reference)
+        # Assuming a single molecule/fragment for the reference
+        pka_mol = pka_file.get_pka_molecules(
+            color_code=reference_color_code, index="-1"
         )
-    except ValueError as exc:
+        return pka_mol.proton_index
+    except (ValueError, FileNotFoundError) as exc:
         raise click.UsageError(
-            f"Could not auto-detect reference proton from CDXML colour: {exc}\n"
+            f"Could not auto-detect reference proton from CDXML: {exc}\n"
             "Use -rpi/--reference-proton-index to specify the proton explicitly."
         )
 
