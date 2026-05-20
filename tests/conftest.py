@@ -404,6 +404,22 @@ def gaussian_ts_genecp_outfile(gaussian_outputs_test_directory):
     return gaussian_ts_genecp_output
 
 
+@pytest.fixture()
+def gaussian_full_gen_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "bromochloromethane_full_gen.log",
+    )
+
+
+@pytest.fixture()
+def gaussian_full_genecp_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "silver_chloride_full_genecp.log",
+    )
+
+
 # Gaussian output file for frozen coordinates
 @pytest.fixture()
 def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):

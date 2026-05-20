@@ -1471,6 +1471,145 @@ class TestGaussian16Output:
             mol3.positions[29], [-2.505441, 2.147201, 0.152904], rtol=1e-4
         )
 
+    def test_read_full_gen_outputfile(self, gaussian_full_gen_outfile):
+        assert os.path.exists(gaussian_full_gen_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_gen_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "gen"
+        # Light elements use named basis
+        assert g16.light_elements == ["H", "C"]
+        assert g16.light_elements_basis == "6-31g(d)"
+        # Heavy elements has explicit orbital basis
+        assert g16.heavy_elements == ["Cl", "Br"]
+        heavy_basis = g16.heavy_elements_basis
+
+        cl_shells = heavy_basis["Cl"]
+        assert [shell["shell"] for shell in cl_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+        ]
+        cl_first_shell = cl_shells[0]
+        assert cl_first_shell["shell"] == "S"
+        assert len(cl_first_shell["primitives"]) == 6
+        cl_first_exp, cl_first_coeff = cl_first_shell["primitives"][0]
+        assert np.isclose(cl_first_exp, 1.0581900000e05)
+        assert np.isclose(cl_first_coeff, 7.3800000000e-04)
+        cl_last_shell = cl_shells[-1]
+        assert cl_last_shell["shell"] == "P"
+        assert len(cl_last_shell["primitives"]) == 1
+        cl_last_exp, cl_last_coeff = cl_last_shell["primitives"][0]
+        assert np.isclose(cl_last_exp, 1.0943700000e-01)
+        assert np.isclose(cl_last_coeff, 1.0000000000e00)
+
+        br_shells = heavy_basis["Br"]
+        assert [shell["shell"] for shell in br_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+        ]
+        br_first_shell = br_shells[0]
+        assert br_first_shell["shell"] == "S"
+        assert len(br_first_shell["primitives"]) == 6
+        br_first_exp, br_first_coeff = br_first_shell["primitives"][0]
+        assert np.isclose(br_first_exp, 4.3970000000e05)
+        assert np.isclose(br_first_coeff, 8.1300000000e-04)
+        br_last_shell = br_shells[-1]
+        assert br_last_shell["shell"] == "D"
+        assert len(br_last_shell["primitives"]) == 1
+        br_last_exp, br_last_coeff = br_last_shell["primitives"][0]
+        assert np.isclose(br_last_exp, 1.5350000000e00)
+        assert np.isclose(br_last_coeff, 1.0000000000e00)
+
+    def test_read_full_genecp_outputfile(self, gaussian_full_genecp_outfile):
+        assert os.path.exists(gaussian_full_genecp_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_genecp_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "genecp"
+        # Light element (Cl) uses named basis
+        assert g16.light_elements == ["Cl"]
+        assert g16.light_elements_basis == "def2svp"
+        # Heavy element (Ag) has explicit orbital basis
+        assert g16.heavy_elements == ["Ag"]
+
+        ag_shells = g16.heavy_elements_basis["Ag"]
+        assert [s["shell"] for s in ag_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+            "D",
+            "F",
+        ]
+        ag_first_shell = ag_shells[0]
+        assert ag_first_shell["shell"] == "S"
+        assert len(ag_first_shell["primitives"]) == 2
+        ag_first_exp, ag_first_coef = ag_first_shell["primitives"][0]
+        assert np.isclose(ag_first_exp, 1.9000000000e01)
+        assert np.isclose(ag_first_coef, -1.6600104141e-01)
+        ag_last_shell = ag_shells[-1]
+        assert ag_last_shell["shell"] == "F"
+        assert len(ag_last_shell["primitives"]) == 1
+        ag_last_exp, ag_last_coeff = ag_last_shell["primitives"][0]
+        assert np.isclose(ag_last_exp, 1.3971100000e00)
+        assert np.isclose(ag_last_coeff, 1.0000000000e00)
+
+        ecp = g16.heavy_elements_ecp
+        ag_ecp = ecp["Ag"]
+        assert ag_ecp["n_valence_electrons"] == 19
+        channel_names = [ch["name"] for ch in ag_ecp["channels"]]
+        assert channel_names == ["F and up", "S - F", "P - F", "D - F"]
+        ag_first_channel = ag_ecp["channels"][0]
+        assert ag_first_channel["name"] == "F and up"
+        assert len(ag_first_channel["terms"]) == 2
+        r_pow, ag_first_exp, ag_first_coef, spin_orbit_coef = ag_first_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_first_exp, 14.22)
+        assert np.isclose(ag_first_coef, -33.68992012)
+        assert np.isclose(spin_orbit_coef, 0.0)
+        ag_last_channel = ag_ecp["channels"][-1]
+        assert ag_last_channel["name"] == "D - F"
+        assert len(ag_last_channel["terms"]) == 4
+        r_pow, ag_last_exp, ag_last_coef, spin_orbit_coef = ag_last_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_last_exp, 10.21)
+        assert np.isclose(ag_last_coef, 73.71926087)
+        assert np.isclose(spin_orbit_coef, 0.0)
+
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
         g16_frozen = Gaussian16Output(

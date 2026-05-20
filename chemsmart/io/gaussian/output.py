@@ -16,6 +16,10 @@ from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
+    basis_primitive_line_pattern,
+    basis_shell_header_pattern,
+    ecp_center_header_pattern,
+    ecp_term_pattern,
     eV_pattern,
     f_pattern,
     float_pattern,
@@ -91,23 +95,296 @@ class Gaussian16Output(GaussianFileMixin):
 
     @property
     def heavy_elements(self):
-        """TODO"""
-        return None
+        """List of element symbols that use an explicitly defined basis set
+        in the gen/genecp section.
+        """
+        return self._genecp_info["heavy_elements"]
 
     @property
     def heavy_elements_basis(self):
-        """TODO"""
-        return None
+        """
+        Structured basis specification for heavy elements.
+        When the route string starts with #p, Gaussian prints the expanded
+        orbital exponents and coefficients for elements that use an explicitly
+        defined gen/genecp basis.  This property parses that information into
+        a dict keyed by element symbol, where each value is an ordered list of
+        shell dicts:
+            {
+                'Br': [
+                    {'shell': 'S', 'primitives': [(exp, coef), ...]},
+                    ...
+                    {'shell': 'F', 'primitives': [(exp, coef)]},
+                ],
+            }
+        Returns None when the information is unavailable.
+        """
+        return self._genecp_info["heavy_elements_basis"]
+
+    @property
+    def heavy_elements_ecp(self):
+        """
+        ECP (effective core potential) specification for heavy elements.
+        Only available for genecp calculations with #p verbose output.
+        Returns a dict keyed by element symbol:
+            {
+                'Ag': {
+                    'n_valence_electrons': 19,
+                    'channels': [
+                        {
+                            'name': 'F and up',
+                            'terms': [(r_power, exponent, coefficient, so_coefficient), ...],
+                        },
+                        ...
+                    ],
+                }
+            }
+        Returns None when not a genecp calculation or information is unavailable.
+        """
+        return self._genecp_info["heavy_elements_ecp"]
 
     @property
     def light_elements(self):
-        """TODO"""
-        return None
+        """List of element symbols that use a standard basis set
+        in the gen/genecp section.
+        """
+        return self._genecp_info["light_elements"]
 
     @property
     def light_elements_basis(self):
-        """TODO"""
-        return None
+        """Basis set used for light elements."""
+        return self._genecp_info["light_elements_basis"]
+
+    @cached_property
+    def _genecp_info(self):
+        """
+        Parse gen/genecp basis set information from the output file.
+        Only available when the route string starts with #p.
+        """
+        result = {
+            "light_elements": None,
+            "light_elements_basis": None,
+            "heavy_elements": None,
+            "heavy_elements_basis": None,
+            "heavy_elements_ecp": None,
+        }
+        if self.gen_genecp is None:
+            return result
+        try:
+            atom_symbols = self.symbols
+        except Exception:
+            return result
+        if not atom_symbols:
+            return result
+        shell_header = re.compile(basis_shell_header_pattern)
+        light_elements_set = set()
+        light_elements_basis = None
+        heavy_basis_by_element: dict[str, list[dict]] = {}
+
+        for i, line in enumerate(self.contents):
+            if not line.startswith("General basis read from cards:"):
+                continue
+            j = i + 1
+            while j < len(self.contents):
+                line_j = self.contents[j].strip()
+                if not line_j:
+                    j += 1
+                    continue
+                if not line_j.startswith("Centers:"):
+                    break
+                # Parse "Centers: N1 N2 ..." -> list of 1-based center indices
+                center_nums = []
+                for token in line_j.split()[1:]:
+                    try:
+                        center_nums.append(int(token))
+                    except ValueError:
+                        pass
+                j += 1
+                # Skip blank lines
+                while j < len(self.contents) and not self.contents[j].strip():
+                    j += 1
+                if j >= len(self.contents):
+                    break
+                content_line = self.contents[j].strip()
+                if shell_header.match(content_line):
+                    # Explicit orbital specification -> heavy element
+                    # Collect every line of this block up to "****"
+                    block_lines = []
+                    while (
+                        j < len(self.contents)
+                        and self.contents[j].strip() != "****"
+                    ):
+                        block_lines.append(self.contents[j].strip())
+                        j += 1
+                    shells = self._parse_explicit_basis_block(block_lines)
+                    for cn in center_nums:
+                        if 1 <= cn <= len(atom_symbols):
+                            sym = atom_symbols[cn - 1]
+                            heavy_basis_by_element[sym] = shells
+                else:
+                    # Named basis set -> light element
+                    basis_name = content_line
+                    if light_elements_basis is None:
+                        light_elements_basis = basis_name
+                    for cn in center_nums:
+                        if 1 <= cn <= len(atom_symbols):
+                            light_elements_set.add(atom_symbols[cn - 1])
+                    # Advance to the next "****" separator
+                    while (
+                        j < len(self.contents)
+                        and self.contents[j].strip() != "****"
+                    ):
+                        j += 1
+                j += 1  # move past "****"
+            break
+
+        if light_elements_set:
+            result["light_elements"] = p.sorted_periodic_table_list(
+                list(light_elements_set)
+            )
+            result["light_elements_basis"] = light_elements_basis
+        if heavy_basis_by_element:
+            result["heavy_elements"] = p.sorted_periodic_table_list(
+                list(heavy_basis_by_element.keys())
+            )
+            result["heavy_elements_basis"] = heavy_basis_by_element
+        ecp = self._parse_pseudopotential_section()
+        if ecp:
+            result["heavy_elements_ecp"] = ecp
+
+        return result
+
+    @staticmethod
+    def _parse_explicit_basis_block(block_lines):
+        """
+        Parse lines of an explicitly printed Gaussian basis block into a
+        list of shell dictionaries.
+        Each dict has the keys:
+            shell – angular-momentum letter ('S', 'P', 'D', 'F', 'H')
+            primitives – list of (exponent, coefficient) float tuples
+        """
+        shell_header = re.compile(basis_shell_header_pattern)
+        primitive_line = re.compile(basis_primitive_line_pattern)
+        shells = []
+        current_shell = None
+        for raw in block_lines:
+            line = raw.strip()
+            m_shell = shell_header.match(line)
+            m_prim = primitive_line.search(line)
+            if m_shell:
+                if current_shell is not None:
+                    shells.append(current_shell)
+                current_shell = {"shell": m_shell.group(1), "primitives": []}
+            elif m_prim and current_shell is not None:
+                exp = float(m_prim.group(1).upper().replace("D", "E"))
+                coef = float(m_prim.group(2).upper().replace("D", "E"))
+                current_shell["primitives"].append((exp, coef))
+        if current_shell is not None:
+            shells.append(current_shell)
+        return shells
+
+    def _parse_pseudopotential_section(self):
+        """
+        Parse the Pseudopotential Parameters section into an element ->
+        ECP information dictionary.
+        Each ECP dict has the keys:
+            n_valence_electrons – number of explicitly treated valence electrons
+            channels – list of ECP channel dictionaries
+        Each channel dict has the keys:
+            name – channel label (e.g. 'F and up', 'S - F')
+            terms – list of
+                (r_power, exponent, coefficient, spin_orbit_coefficient)
+                float tuples
+        Elements with "No pseudopotential on this center." are omitted.
+        Returns an empty dict if the section is not found.
+        """
+        try:
+            atom_symbols = self.symbols
+        except Exception:
+            return {}
+        center_re = re.compile(ecp_center_header_pattern)
+        term_re = re.compile(ecp_term_pattern)
+        result = {}
+        eq_count = 0
+        current = None
+
+        def _flush_channel():
+            if (
+                current
+                and current["_channel_name"]
+                and current["_channel_terms"]
+            ):
+                current["channels"].append(
+                    {
+                        "name": current["_channel_name"],
+                        "terms": current["_channel_terms"],
+                    }
+                )
+            if current:
+                current["_channel_name"] = None
+                current["_channel_terms"] = []
+
+        def _flush_center():
+            nonlocal current
+            if current and current["channels"]:
+                sym = atom_symbols[current["center_num"] - 1]
+                result[sym] = {
+                    "n_valence_electrons": current["n_valence_electrons"],
+                    "channels": current["channels"],
+                }
+            current = None
+
+        for line in self.contents:
+            if not line:
+                continue
+            if "Pseudopotential Parameters" in line:
+                eq_count = 0
+                continue
+            if line.startswith("="):
+                eq_count += 1
+                if eq_count == 3:
+                    _flush_channel()
+                    _flush_center()
+                    break
+                continue
+            if eq_count < 2:
+                continue
+
+            tokens = line.split()
+            is_center = len(tokens) in (2, 3) and all(
+                t.isdigit() for t in tokens
+            )
+            is_term = (
+                len(tokens) == 4 and tokens[0].isdigit() and "." in tokens[1]
+            )
+            if is_center:
+                _flush_channel()
+                _flush_center()
+                current = {
+                    "center_num": int(tokens[0]),
+                    "n_valence_electrons": (
+                        int(tokens[2]) if len(tokens) == 3 else None
+                    ),
+                    "channels": [],
+                    "_channel_name": None,
+                    "_channel_terms": [],
+                }
+            elif "No pseudopotential on this center" in line:
+                pass  # light element, skip
+            elif is_term and current is not None:
+                r_power = int(tokens[0])
+                exp = float(tokens[1].upper().replace("D", "E"))
+                coef = float(tokens[2].upper().replace("D", "E"))
+                so_coef = float(tokens[3].upper().replace("D", "E"))
+                current["_channel_terms"].append((r_power, exp, coef, so_coef))
+            elif (
+                current is not None
+                and not center_re.match(line)
+                and not term_re.match(line)
+            ):
+                _flush_channel()
+                current["_channel_name"] = line
+                current["_channel_terms"] = []
+        return result
 
     @property
     def custom_solvent(self):
