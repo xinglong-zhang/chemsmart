@@ -189,7 +189,7 @@ class DatabaseInspector:
         lines.append("")
         lines.append(separator("Programs"))
         for prog, cnt in stats["programs"]:
-            lines.append(f"  {prog or '(unknown)':<28}: {cnt}")
+            lines.append(f"  {prog or '(unknown)':<30}: {cnt}")
 
         # Functionals & Basis sets
         lines.append("")
@@ -226,7 +226,7 @@ class DatabaseInspector:
         lines.append("")
         lines.append(separator("Job Types"))
         for jt, cnt in stats["jobtypes"]:
-            lines.append(f"  {jt or '(unknown)':<28}: {cnt}")
+            lines.append(f"  {jt or '(unknown)':<30}: {cnt}")
 
         # Calculation data
         lines.append("")
@@ -278,12 +278,71 @@ class DatabaseInspector:
         )
         lines.append(format_kv("Method", meta.get("method")))
         lines.append(format_kv("Basis Set", meta.get("basis")))
+        custom_basis = meta.get("custom_basis") or {}
+        custom_solvent = meta.get("custom_solvent") or {}
+        if meta.get("basis") == "customized_basis":
+            has_detail = any(
+                custom_basis.get(k) is not None
+                for k in (
+                    "light_elements",
+                    "light_elements_basis",
+                    "heavy_elements",
+                    "heavy_elements_basis",
+                )
+            )
+            if not has_detail:
+                lines.append(
+                    format_kv(
+                        "  Basis Detail",
+                        "unavailable (use #p in route to print expanded Gen/GenECP basis)",
+                    )
+                )
+        if custom_basis:
+            light_elems = custom_basis.get("light_elements")
+            light_basis = custom_basis.get("light_elements_basis")
+            heavy_elems = custom_basis.get("heavy_elements")
+            heavy_basis = custom_basis.get("heavy_elements_basis")
+            heavy_ecp = custom_basis.get("heavy_elements_ecp")
+            if light_elems:
+                light_str = ", ".join(light_elems)
+                if light_basis:
+                    light_str += f"  [{light_basis}]"
+                lines.append(format_kv("  Light Elements", light_str))
+            if heavy_elems:
+                lines.append(
+                    format_kv("  Heavy Elements", ", ".join(heavy_elems))
+                )
+            if heavy_basis:
+                for elem, shells in heavy_basis.items():
+                    shell_types = ", ".join(s["shell"] for s in shells)
+                    lines.append(format_kv(f"    {elem} Shells", shell_types))
+            if heavy_ecp:
+                ecp_elems = ", ".join(heavy_ecp.keys())
+                lines.append(format_kv("  Heavy Elements ECP", ecp_elems))
         lines.append(format_kv("Spin Type", meta.get("spin")))
         lines.append(format_kv("Job Type", meta.get("jobtype")))
         lines.append(format_kv("Solvent", bool_to_str(meta.get("solvent_on"))))
         if meta.get("solvent_on"):
             lines.append(format_kv("Solvent Model", meta.get("solvent_model")))
             lines.append(format_kv("Solvent ID", meta.get("solvent_id")))
+            if custom_solvent:
+                solvent_name = custom_solvent.get("SolventName")
+                if solvent_name and solvent_name.strip().lower() != "generic":
+                    lines.append(
+                        format_kv("  Custom Solvent Name", solvent_name)
+                    )
+                for key in (
+                    "Eps",
+                    "EpsInf",
+                    "HbondAcidity",
+                    "HbondBasicity",
+                    "SurfaceTensionAtInterface",
+                    "CarbonAromaticity",
+                    "ElectronegativeHalogenicity",
+                ):
+                    val = custom_solvent.get(key)
+                    if val is not None:
+                        lines.append(format_kv(f"  {key}", val))
         lines.append(format_kv("Route String", meta.get("route_string")))
 
         # Results — electronic

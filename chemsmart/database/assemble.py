@@ -261,6 +261,14 @@ class GaussianAssembler(BaseAssembler):
         )
         if self.output.modredundant_group is not None:
             meta_data["modredundant_group"] = self.output.modredundant_group
+        if is_custom_basis(self.output.basis):
+            meta_data["custom_basis"] = {
+                "heavy_elements": self.output.heavy_elements,
+                "heavy_elements_basis": self.output.heavy_elements_basis,
+                "heavy_elements_ecp": self.output.heavy_elements_ecp,
+                "light_elements": self.output.light_elements,
+                "light_elements_basis": self.output.light_elements_basis,
+            }
         return meta_data
 
     def get_calculation_results(self):

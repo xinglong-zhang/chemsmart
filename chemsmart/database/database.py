@@ -91,6 +91,7 @@ class Database:
                     solvent_model TEXT,
                     solvent_id TEXT,
                     custom_solvent TEXT,
+                    custom_basis_json TEXT,
                     temperature_in_K REAL,
                     pressure_in_atm REAL,
                     -- Results fields
@@ -277,6 +278,7 @@ class Database:
                 record_id, program,
                 method, basis, num_basis_functions, spin, jobtype,
                 solvent_on, route_string, solvent_model, solvent_id, custom_solvent,
+                custom_basis_json,
                 temperature_in_K, pressure_in_atm,
                 total_energy, num_unpaired_electrons,
                 homo_energy, lumo_energy, alpha_homo_energy, beta_homo_energy,
@@ -297,7 +299,7 @@ class Database:
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -313,7 +315,8 @@ class Database:
                 meta.get("route_string"),
                 meta.get("solvent_model"),
                 meta.get("solvent_id"),
-                meta.get("custom_solvent"),
+                to_json(meta.get("custom_solvent")),
+                to_json(meta.get("custom_basis")),
                 meta.get("temperature_in_K"),
                 meta.get("pressure_in_atm"),
                 # Results
@@ -636,7 +639,9 @@ class Database:
         if meta["solvent_on"]:
             meta["solvent_model"] = row.get("solvent_model")
             meta["solvent_id"] = row.get("solvent_id")
-            meta["custom_solvent"] = row.get("custom_solvent")
+            meta["custom_solvent"] = from_json(row.get("custom_solvent"))
+        if row.get("custom_basis_json") is not None:
+            meta["custom_basis"] = from_json(row.get("custom_basis_json"))
         if row.get("temperature_in_K") is not None:
             meta["temperature_in_K"] = row.get("temperature_in_K")
             meta["pressure_in_atm"] = row.get("pressure_in_atm")

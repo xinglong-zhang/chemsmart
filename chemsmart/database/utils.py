@@ -12,7 +12,7 @@ LINE_WIDTH = 100
 CUSTOM_BASIS_KEYWORDS = {"gen", "genecp"}
 
 # Keywords that indicate a custom (inline) solvent
-CUSTOM_SOLVENT_KEYWORDS = {"generic,read"}
+CUSTOM_SOLVENT_KEYWORDS = {"generic,read", "generic"}
 
 
 def is_chemsmart_database(filepath):
@@ -159,7 +159,7 @@ def separator(title=""):
     return "=" * LINE_WIDTH
 
 
-def format_kv(key, value, key_width=28):
+def format_kv(key, value, key_width=30):
     """Format a key-value pair for terminal display."""
     if value is None:
         return f"  {key:<{key_width}}: NULL"
