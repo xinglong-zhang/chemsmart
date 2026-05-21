@@ -527,7 +527,6 @@ class PKaCDXFile(CDXFile):
     ionizable sites and their associated protons can be identified reliably.
     """
 
-    @classmethod
     def resolve_proton_index(cls, filename, proton_index, color_code):
         """Resolve the proton index for deprotonation, optionally via CDXML.
 
@@ -593,7 +592,6 @@ class PKaCDXFile(CDXFile):
             "calculations (or use a .cdxml file with a coloured proton)."
         )
 
-    @classmethod
     def resolve_reference_proton(
         cls, reference, reference_proton_index, reference_color_code
     ):
