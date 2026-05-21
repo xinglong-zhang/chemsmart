@@ -370,15 +370,33 @@ class GaussianRoute:
         if functional is not None and functional.startswith("#"):
             functional = functional[1:]
 
+        # Strip spin prefix (u/r/ro) from DFT functional for consistency
+        # across QM packages (e.g., Gaussian um062x -> m062x like ORCA)
+        if functional is not None:
+            parts = (
+                functional.split(":") if ":" in functional else [functional]
+            )
+            stripped_parts = []
+            for part in parts:
+                stripped = part
+                for prefix in ("ro", "u", "r"):
+                    if part.startswith(prefix) and any(
+                        f in part[len(prefix) :] for f in GAUSSIAN_FUNCTIONALS
+                    ):
+                        stripped = part[len(prefix) :]
+                        break
+                stripped_parts.append(stripped)
+            functional = ":".join(stripped_parts)
+
         # Merge empirical dispersion into functional shorthand
         # e.g., b3lyp + empiricaldispersion=gd3bj -> b3lyp-d3bj
         if functional is not None and dispersion is not None:
-            _dispersion_suffix_map = {
+            dispersion_suffix_map = {
                 "gd3bj": "d3bj",
                 "gd3": "d3",
                 "gd2": "d2",
             }
-            for key, suffix in _dispersion_suffix_map.items():
+            for key, suffix in dispersion_suffix_map.items():
                 if key in dispersion:
                     if ":" in functional:
                         layers = functional.split(":")

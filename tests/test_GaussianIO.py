@@ -397,7 +397,7 @@ class TestGaussian16Input:
         )
         assert g16_link_opt.additional_opt_options_in_route is None
         assert g16_link_opt.jobtype == "opt"
-        assert g16_link_opt.functional == "um062x"
+        assert g16_link_opt.functional == "m062x"
         assert g16_link_opt.basis == "def2svp"
         assert g16_link_opt.molecule.frozen_atoms is None
 
@@ -415,7 +415,7 @@ class TestGaussian16Input:
         )
         assert g16_link_ts.additional_opt_options_in_route is None
         assert g16_link_ts.jobtype == "ts"
-        assert g16_link_ts.functional == "um062x"
+        assert g16_link_ts.functional == "m062x"
         assert g16_link_ts.basis == "def2svp"
         assert g16_link_ts.molecule.frozen_atoms is None
 
@@ -433,7 +433,7 @@ class TestGaussian16Input:
         )
         assert g16_link_sp.additional_opt_options_in_route is None
         assert g16_link_sp.jobtype == "sp"
-        assert g16_link_sp.functional == "um062x"
+        assert g16_link_sp.functional == "m062x"
         assert g16_link_sp.basis == "def2tzvp"
         assert g16_link_sp.molecule.frozen_atoms is None
 
