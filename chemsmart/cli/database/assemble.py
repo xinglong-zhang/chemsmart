@@ -31,6 +31,13 @@ logger = logging.getLogger(__name__)
     show_default=True,
     help="Output database file (.db extension). ",
 )
+@click.option(
+    "--include-failed",
+    is_flag=True,
+    default=False,
+    help="Include records from calculations that did not terminate normally. "
+    "Partial data (e.g. intermediate geometries) will be assembled when available.",
+)
 @click.pass_context
 def assemble(
     ctx,
@@ -38,6 +45,7 @@ def assemble(
     program,
     index,
     output,
+    include_failed,
 ):
     """Assemble calculation output files into a chemsmart database.
 
@@ -96,7 +104,9 @@ def assemble(
     rows = []
     for file in files:
         try:
-            assembler = SingleFileAssembler(filename=file, index=index)
+            assembler = SingleFileAssembler(
+                filename=file, index=index, include_failed=include_failed
+            )
             data = assembler.assemble_data
             if data:
                 rows.append(data)

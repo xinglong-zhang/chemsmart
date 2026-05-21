@@ -49,6 +49,7 @@ TARGET_CONFIG = {
             "jobtype": "r.jobtype",
             "solvent_on": "r.solvent_on",
             "solvent_model": "r.solvent_model",
+            "normal_termination": "r.normal_termination",
             "total_energy": "r.total_energy",
             "homo_energy": "r.homo_energy",
             "lumo_energy": "r.lumo_energy",
@@ -63,6 +64,7 @@ TARGET_CONFIG = {
             SELECT DISTINCT
                 r.record_index, r.record_id, r.program, r.method,
                 r.basis, r.jobtype, r.total_energy, r.source_file,
+                r.normal_termination,
                 m.chemical_formula, m.molecule_id
             {_RECORDS_JOIN}
         """,
@@ -76,21 +78,21 @@ TARGET_CONFIG = {
             ("Idx", "record_index", 4, ">"),
             ("Record ID", "record_id", 12, "<"),
             ("File", "source_file", 22, "<"),
-            ("Job", "jobtype", 6, "<"),
             ("Program", "program", 8, "<"),
+            ("Job", "jobtype", 6, "<"),
+            ("Status", "normal_termination", 6, "<"),
             ("Method", "method", 12, "<"),
             ("Basis", "basis", 16, "<"),
             ("Formula", "chemical_formula", 20, "<"),
-            ("Molecule ID", "molecule_id", 16, "<"),
             ("Energy (Eh)", "total_energy", 11, ">"),
         ],
         "value_formatters": {
             "record_id": lambda v, w: str(v)[:w],
-            "molecule_id": lambda v, w: str(v)[:w],
             "source_file": lambda v, w: os.path.basename(str(v))[:w],
             "total_energy": lambda v, w: (
                 format_float(v, 2) if isinstance(v, (int, float)) else str(v)
             ),
+            "normal_termination": lambda v, w: "normal" if v else "failed",
         },
     },
     "molecules": {

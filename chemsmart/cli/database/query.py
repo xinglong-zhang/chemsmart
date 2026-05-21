@@ -69,9 +69,9 @@ def query(ctx, file, target, query, limit):
     \b
       -t records (default):
         Query calculation records.
-        Fields: source_file, jobtype, program, functional, basis, total_energy,
-        solvent_on, solvent_model, homo_energy, lumo_energy, fmo_gap,
-        zero_point_energy, enthalpy, entropy, gibbs_free_energy,
+        Fields: source_file, jobtype, program, method, basis, total_energy,
+        solvent_on, solvent_model, normal_termination, homo_energy, lumo_energy,
+        fmo_gap, zero_point_energy, enthalpy, entropy, gibbs_free_energy,
 
     \b
       -t molecules:

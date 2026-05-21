@@ -44,6 +44,7 @@ def build_provenance(filename, output):
         "parser": output.__class__.__name__,
         "chemsmart_version": chemsmart_version,
         "assembled_at": utcnow_iso(),
+        "normal_termination": output.normal_termination,
     }
 
 
@@ -51,9 +52,10 @@ class BaseAssembler:
     OUTPUT_CLASS = None  # To be defined in subclasses
     PROGRAM = "unknown"  # To be defined in subclasses
 
-    def __init__(self, filename, index=":"):
+    def __init__(self, filename, index=":", include_failed=False):
         self.filename = filename
         self.index = index
+        self.include_failed = include_failed
         self.output = self.OUTPUT_CLASS(filename)
 
     @property
@@ -64,10 +66,16 @@ class BaseAssembler:
 
     def assemble(self):
         if not self.output.normal_termination:
-            logger.warning(
-                f"Calculation in {self.filename} did not terminate normally, skip assembling..."
-            )
-            return None
+            if not self.include_failed:
+                logger.warning(
+                    f"Calculation in {self.filename} did not terminate normally, skip assembling..."
+                )
+                return None
+            else:
+                logger.warning(
+                    f"Calculation in {self.filename} did not terminate normally, "
+                    f"assembling partial data..."
+                )
         if not self.molecules_list:
             logger.error(f"No molecules parsed from {self.filename}.")
             return None
@@ -311,9 +319,10 @@ class ORCAAssembler(BaseAssembler):
 class SingleFileAssembler:
     """Auto-detect program type and delegate to the appropriate assembler."""
 
-    def __init__(self, filename, index=":"):
+    def __init__(self, filename, index=":", include_failed=False):
         self.filename = filename
         self.index = index
+        self.include_failed = include_failed
 
     @cached_property
     def assemble_data(self):
@@ -328,9 +337,13 @@ class SingleFileAssembler:
     def _get_assembler(self, file):
         program = get_program_type_from_file(self.filename)
         if program == "gaussian":
-            assembler = GaussianAssembler(file, index=self.index)
+            assembler = GaussianAssembler(
+                file, index=self.index, include_failed=self.include_failed
+            )
         elif program == "orca":
-            assembler = ORCAAssembler(file, index=self.index)
+            assembler = ORCAAssembler(
+                file, index=self.index, include_failed=self.include_failed
+            )
         else:
             raise ValueError(
                 "Unsupported format. Only 'gaussian' and 'orca' are supported."

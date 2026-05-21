@@ -138,7 +138,8 @@ class Database:
                     program_version TEXT,
                     parser TEXT,
                     chemsmart_version TEXT,
-                    assembled_at TEXT
+                    assembled_at TEXT,
+                    normal_termination INTEGER
                 )
             """)
 
@@ -295,11 +296,12 @@ class Database:
                 translational_entropy, entropy, entropy_times_temperature,
                 gibbs_free_energy,
                 source_file, source_file_hash, source_file_size, source_file_date,
-                program_version, parser, chemsmart_version, assembled_at
+                program_version, parser, chemsmart_version, assembled_at,
+                normal_termination
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -363,6 +365,7 @@ class Database:
                 provenance.get("parser"),
                 provenance.get("chemsmart_version"),
                 provenance.get("assembled_at"),
+                1 if provenance.get("normal_termination") else 0,
             ),
         )
 
@@ -715,7 +718,7 @@ class Database:
     @staticmethod
     def _extract_provenance(row):
         """Extract provenance fields from record row."""
-        return {
+        provenance = {
             "source_file": row.get("source_file"),
             "source_file_hash": row.get("source_file_hash"),
             "source_file_size": row.get("source_file_size"),
@@ -726,6 +729,11 @@ class Database:
             "chemsmart_version": row.get("chemsmart_version"),
             "assembled_at": row.get("assembled_at"),
         }
+        if row.get("normal_termination") is not None:
+            provenance["normal_termination"] = bool(
+                row.get("normal_termination")
+            )
+        return provenance
 
     @staticmethod
     def _record_structure_row_to_dict(row):

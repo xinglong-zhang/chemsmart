@@ -495,6 +495,13 @@ class DatabaseInspector:
             format_kv("Source File Date", provenance.get("source_file_date"))
         )
         lines.append(format_kv("Assembled At", provenance.get("assembled_at")))
+        if provenance.get("normal_termination") is not None:
+            lines.append(
+                format_kv(
+                    "Normal Termination",
+                    bool_to_str(provenance.get("normal_termination")),
+                )
+            )
 
         # Structure summary table
         if molecules:
