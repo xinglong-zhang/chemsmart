@@ -117,9 +117,9 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     scheduler system.
     """
 
-    def _clean_command(ctx):
+    def _clean_command_list(commands):
         """
-        Remove keywords used in sub.py but not in run.py.
+        Remove keywords used in sub.py but not in run.py from a command list.
 
         Specifically: Some keywords/options (like queue, verbose, etc.)
         are only relevant to sub.py and not applicable to run.py.
@@ -128,28 +128,139 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         command = next(
             (
                 subcommand
-                for subcommand in ctx.obj["subcommand"]
+                for subcommand in commands
                 if subcommand["name"] == "sub"
             ),
             None,
         )
-        if not command:
-            raise ValueError("No 'sub' command found in context.")
 
-        # Find the keywords that are valid in sub.py
-        # but should not be passed to run.py and remove those
-        keywords_not_in_run = [
-            "time_hours",
-            "queue",
-            "verbose",
-            "test",
-            "print_command",
-        ]
+        if command:
+            # Find the keywords that are valid in sub.py
+            # but should not be passed to run.py and remove those
+            keywords_not_in_run = [
+                "time_hours",
+                "queue",
+                "verbose",
+                "test",
+                "print_command",
+            ]
 
-        for keyword in keywords_not_in_run:
-            # Remove keyword if it exists
-            command["kwargs"].pop(keyword, None)
+            for keyword in keywords_not_in_run:
+                # Remove keyword if it exists
+                command["kwargs"].pop(keyword, None)
+
+    def _clean_command(ctx):
+        """
+        Remove keywords used in sub.py but not in run.py.
+        """
+        if "subcommand" in ctx.obj:
+            _clean_command_list(ctx.obj["subcommand"])
         return ctx
+
+    def _replace_batch_table_tokens(cli_args, batch_entry):
+        """Rewrite table-mode args to a single-entry invocation.
+
+        For pKa table mode we generated one job per table row. Submission
+        scripts should therefore execute just that row, not the entire table.
+        """
+        if not batch_entry:
+            return cli_args
+
+        args = list(cli_args)
+        table_option_names = {
+            "-f",
+            "--filename",
+        }
+
+        # Replace table filename with row filepath.
+        for idx in range(len(args) - 1):
+            if args[idx] in table_option_names:
+                args[idx + 1] = str(batch_entry["filepath"])
+                break
+
+        # Per-row scripts should run a single pKa submission, not table mode.
+        if "batch" in args:
+            args[args.index("batch")] = "submit"
+
+        def _drop_option(tokens, option_names):
+            idx = 0
+            while idx < len(tokens):
+                if tokens[idx] in option_names:
+                    del tokens[idx]
+                    if idx < len(tokens):
+                        del tokens[idx]
+                    continue
+                idx += 1
+
+        # Ensure row-level proton/charge/multiplicity are explicit.
+        option_map = {
+            "--proton-index": str(batch_entry["proton_index"]),
+            "-pi": str(batch_entry["proton_index"]),
+            "--charge": str(batch_entry["charge"]),
+            "-c": str(batch_entry["charge"]),
+            "--multiplicity": str(batch_entry["multiplicity"]),
+            "-m": str(batch_entry["multiplicity"]),
+        }
+
+        def _set_option(tokens, long_opt, short_opt, insert_before=None):
+            if long_opt in tokens:
+                pos = tokens.index(long_opt)
+                if pos + 1 < len(tokens):
+                    tokens[pos + 1] = option_map[long_opt]
+                return
+            if short_opt in tokens:
+                pos = tokens.index(short_opt)
+                if pos + 1 < len(tokens):
+                    tokens[pos + 1] = option_map[short_opt]
+                return
+
+            insert_idx = len(tokens)
+            if insert_before in tokens:
+                insert_idx = tokens.index(insert_before)
+            # Prefer long-form options to avoid Click treating multi-char
+            # aliases such as "-pi" as grouped short flags (e.g. "-p -i").
+            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
+
+        # Proton index belongs to the pka group and must appear before the
+        # pka leaf subcommand token (submit after rewrite above).
+        _set_option(args, "--proton-index", "-pi", insert_before="submit")
+        # Charge/multiplicity belong to the backend group (gaussian/orca), so
+        # they must appear before entering the "pka" group.
+        _set_option(args, "--charge", "-c", insert_before="pka")
+        _set_option(args, "--multiplicity", "-m", insert_before="pka")
+
+        batch_scheme = batch_entry.get("scheme")
+        if batch_scheme is not None:
+            option_map.update(
+                {
+                    "--scheme": str(batch_scheme),
+                    "-s": str(batch_scheme),
+                }
+            )
+            _set_option(args, "--scheme", "-s", insert_before="submit")
+
+            if batch_scheme == "direct":
+                # Subsequent batch rows run direct mode only; drop all
+                # reference-acid CLI options so click validation does not fail.
+                _drop_option(
+                    args,
+                    {
+                        "--reference",
+                        "-r",
+                        "--reference-proton-index",
+                        "-rpi",
+                        "--reference-color-code",
+                        "-rcc",
+                        "--reference-charge",
+                        "-rc",
+                        "--reference-multiplicity",
+                        "-rm",
+                        "--reference-conjugate-base-charge",
+                        "--reference-conjugate-base-multiplicity",
+                    },
+                )
+
+        return args
 
     def _reconstruct_cli_args(ctx, job):
         """
@@ -159,11 +270,14 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         for job submission purposes.
         """
         commands = ctx.obj["subcommand"]
-
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
+        cli_args = _replace_batch_table_tokens(
+            cli_args, getattr(job, "_batch_entry", None)
+        )
+
         if kwargs.get("print_command"):
             print(cli_args)
         return cli_args
