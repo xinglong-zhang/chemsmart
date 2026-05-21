@@ -67,12 +67,14 @@ class Thermochemistry:
         h_freq_cutoff=None,
         energy_units="hartree",
         check_imaginary_frequencies=True,
+        check_ts_reaction_coordinate=False,
         **kwargs,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
+        self.check_ts_reaction_coordinate = check_ts_reaction_coordinate
         # Keep original cm^-1 values for replacing imaginary frequencies
         self.s_freq_cutoff_cm = s_freq_cutoff
         self.h_freq_cutoff_cm = h_freq_cutoff
@@ -248,6 +250,12 @@ class Thermochemistry:
         ]
 
         if not imaginary_indices:
+            if self.jobtype == "ts" and self.check_imaginary_frequencies:
+                raise ValueError(
+                    f"!! ERROR: No imaginary frequency detected in TS "
+                    f"calculation for {self.filename}. A valid TS must have "
+                    "exactly one imaginary frequency."
+                )
             return frequencies
 
         # IMPORTANT:
@@ -1031,29 +1039,70 @@ class Thermochemistry:
 
     def check_frequencies(self):
         """Check for imaginary frequencies and raise an error if found."""
-        if self.imaginary_frequencies:
-            if self.jobtype == "ts":
-                if len(self.imaginary_frequencies) == 1:
-                    logger.info(
-                        f"Correct Transition State detected: only 1 imaginary "
-                        f"frequency\nImaginary frequency excluded for "
-                        f"thermochemistry calculation in {self.filename}."
-                    )
-                else:
-                    raise ValueError(
-                        f"Invalid number of imaginary frequencies for "
-                        f"{self.filename}. Expected 0 for optimization or 1 "
-                        f"for TS, but found "
-                        f"{len(self.imaginary_frequencies)} for job: "
-                        f"{self.jobtype}!"
-                    )
-            else:
+        imaginary_frequencies = self.imaginary_frequencies or []
+
+        if self.jobtype == "ts":
+            if len(imaginary_frequencies) != 1:
                 raise ValueError(
-                    f"Invalid geometry optimization for {self.filename}. "
-                    f"A valid optimized geometry should not contain "
-                    f"imaginary frequencies. Please re-optimize the geometry "
-                    f"to locate a true minimum."
+                    f"Invalid number of imaginary frequencies for "
+                    f"{self.filename}. Expected exactly 1 for TS, but found "
+                    f"{len(imaginary_frequencies)}."
                 )
+            logger.info(
+                f"Correct Transition State detected: only 1 imaginary "
+                f"frequency\nImaginary frequency excluded for "
+                f"thermochemistry calculation in {self.filename}."
+            )
+            if self.check_ts_reaction_coordinate:
+                self._validate_ts_reaction_coordinate()
+            return
+
+        if imaginary_frequencies:
+            raise ValueError(
+                f"Invalid geometry optimization for {self.filename}. "
+                f"A valid optimized geometry should not contain "
+                f"imaginary frequencies. Please re-optimize the geometry "
+                f"to locate a true minimum."
+            )
+
+    def _validate_ts_reaction_coordinate(self):
+        """Validate that TS imaginary mode changes connectivity when displaced."""
+        imaginary_indices = [
+            i
+            for i, freq in enumerate(self.vibrational_frequencies or [])
+            if freq < 0.0
+        ]
+        if len(imaginary_indices) != 1:
+            return
+
+        mode_index = imaginary_indices[0]
+        modes = self.molecule.vibrational_modes
+        if not modes or mode_index >= len(modes):
+            raise ValueError(
+                f"Unable to validate TS reaction coordinate for "
+                f"{self.filename}: missing vibrational normal mode vectors."
+            )
+
+        forward_mol = self.molecule.vibrationally_displaced(
+            mode_idx=mode_index + 1, amp=0.8, normalize=True
+        )
+        reverse_mol = self.molecule.vibrationally_displaced(
+            mode_idx=mode_index + 1, amp=-0.8, normalize=True
+        )
+
+        forward_bonds = {
+            tuple(sorted((i, j))) for i, j in forward_mol.to_graph().edges()
+        }
+        reverse_bonds = {
+            tuple(sorted((i, j))) for i, j in reverse_mol.to_graph().edges()
+        }
+        changed_bonds = forward_bonds.symmetric_difference(reverse_bonds)
+        if not changed_bonds:
+            raise ValueError(
+                f"Imaginary mode in {self.filename} does not change molecular "
+                "connectivity between + and - displacements. This TS may not "
+                "correspond to the expected reaction coordinate."
+            )
 
     def convert_energy_units(self):
         """Convert all energies to the specified units."""
