@@ -133,8 +133,6 @@ A typical chemsmart database workflow is:
 
 -  **Supported programs.** Only Gaussian and ORCA output files are currently parsed. Files from other programs are
    skipped during ``assemble``.
--  **Failed calculations.** Output files whose calculation did not terminate normally are skipped with a warning and are
-   not stored in the database.
 -  **Idempotent assembly.** Re-running ``assemble`` on the same directory will not duplicate records. Entries with the
    same ``record_id`` are replaced, and the number of replaced duplicates is reported.
 -  **Database validation.** Every database operation first verifies that the input is a valid chemsmart database with

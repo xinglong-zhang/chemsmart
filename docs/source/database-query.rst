@@ -86,9 +86,9 @@ quoted with single quotes. Conditions can be combined with the case-insensitive 
 
    -  -  ``records``
 
-      -  ``program``, ``method``, ``basis``, ``jobtype``, ``solvent_on``, ``solvent_model``, ``total_energy``,
-         ``homo_energy``, ``lumo_energy``, ``fmo_gap``, ``zero_point_energy``, ``enthalpy``, ``entropy``,
-         ``gibbs_free_energy``, ``source_file``
+      -  ``program``, ``method``, ``basis``, ``jobtype``, ``solvent_on``, ``solvent_model``, ``normal_termination``,
+         ``total_energy``, ``homo_energy``, ``lumo_energy``, ``fmo_gap``, ``zero_point_energy``, ``enthalpy``,
+         ``entropy``, ``gibbs_free_energy``, ``source_file``
 
    -  -  ``molecules``
       -  ``chemical_formula``, ``smiles``, ``inchi``, ``number_of_atoms``, ``mass``
@@ -126,6 +126,15 @@ quoted with single quotes. Conditions can be combined with the case-insensitive 
 .. code:: bash
 
    chemsmart run database query -f chemsmart.db -q "source_file ~ 'benzene'"
+
+**Filter records by calculation termination status:**
+
+.. code:: bash
+
+   # To list only normally terminated calculations, use:
+   chemsmart run database query -f chemsmart.db -q "normal_termination = 1"
+   # To list failed calculations instead, use:
+   chemsmart run database query -f chemsmart.db -q "normal_termination = 0"
 
 **List all unique molecules:**
 

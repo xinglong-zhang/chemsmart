@@ -17,7 +17,7 @@ existing output files have been updated.
 .. code:: text
 
    chemsmart run database assemble [-d path/to/directory] [-p gaussian|orca]
-                                   [-i index] [-o outfile.db]
+                                   [-i index] [-o outfile.db] [--include-failed]
 
 *********
  Options
@@ -49,6 +49,11 @@ existing output files have been updated.
       -  string
       -  Output database filename. The ``.db`` extension is appended automatically if it is not provided. Defaults to
          ``database.db``.
+
+   -  -  ``--include-failed``
+      -  flag
+      -  Include parseable partial data from failed calculations, which are skipped by default and marked by termination
+         status in the database.
 
 **********
  Examples
