@@ -15,8 +15,10 @@ from chemsmart.database.utils import (
     format_kv,
     human_size,
     separator,
+    sort_structure_dicts_by_energy,
     truncate_iso,
 )
+from chemsmart.utils.constants import energy_conversion
 
 logger = logging.getLogger(__name__)
 
@@ -819,21 +821,75 @@ class DatabaseInspector:
 
         # Structures (conformers) table
         lines.append("")
-        lines.append(separator(f"Conformers: {len(structures)}"))
+        lines.append(separator(f"Structures: {len(structures)}"))
         if structures:
-            lines.append(f"  {'Structure ID':<12}  {'Charge':>6}  {'Mult':>4}")
-            lines.append(f"  {'------------':<12}  {'------':>6}  {'----':>4}")
-            for s in sorted(
-                structures,
-                key=lambda x: (
-                    x.get("charge") or 0,
-                    x.get("multiplicity") or 0,
-                ),
-            ):
+            sorted_structures = sort_structure_dicts_by_energy(
+                self.db_file, structures
+            )
+            # Determine the primary (method, basis) label for the column header
+            primary_mb = None
+            if sorted_structures:
+                primary_mb = sorted_structures[0].get("primary_method_basis")
+            if primary_mb is not None:
+                mb_label = "/".join(x for x in primary_mb if x) or "energy"
+                energy_header = f"Energy[{mb_label}] (Eh)"
+            else:
+                energy_header = "Energy (Eh)"
+
+            # Check if all conformers share the same electronic state
+            charges = {s.get("charge") for s in sorted_structures}
+            multiplicities = {s.get("multiplicity") for s in sorted_structures}
+            mixed_states = len(charges) > 1 or len(multiplicities) > 1
+
+            # Reference energy for ΔE: only meaningful for uniform electronic states
+            if not mixed_states:
+                primary_energies = [
+                    s.get("primary_energy")
+                    for s in sorted_structures
+                    if s.get("primary_energy") is not None
+                ]
+                e_ref = min(primary_energies) if primary_energies else None
+            else:
+                e_ref = None  # cannot compare energies across different charge/spin states
+
+            delta_header = "ΔE (—)" if mixed_states else "ΔE (kcal/mol)"
+            lines.append(
+                f"  {'Structure ID':<12}  {'Charge':>6}  {'Mult':>4}"
+                f"  {energy_header:>32}  {delta_header:>14}"
+            )
+            lines.append(
+                f"  {'------------':<12}  {'------':>6}  {'----':>4}"
+                f"  {'--------------------------------':>32}  {'--------------':>14}"
+            )
+            for s in sorted_structures:
                 sid = str(s.get("structure_id", ""))[:12]
                 charge = s.get("charge", "")
                 mult = s.get("multiplicity", "")
-                lines.append(f"  {sid:<12}  {charge:>6}  {mult:>4}")
+                primary_e = s.get("primary_energy")
+                energy_str = (
+                    format_energy(primary_e)
+                    if primary_e is not None
+                    else "N/A"
+                )
+                if primary_e is not None and e_ref is not None:
+                    delta_str = f"{energy_conversion('hartree', 'kcal/mol', primary_e - e_ref):.2f}"
+                elif mixed_states:
+                    delta_str = (
+                        "—"  # mixed charge/multiplicity -> ΔE is meaningless
+                    )
+                else:
+                    delta_str = "N/A"  # uniform state but missing energy
+                lines.append(
+                    f"  {sid:<12}  {charge:>6}  {mult:>4}"
+                    f"  {energy_str:>32}  {delta_str:>14}"
+                )
+
+            if mixed_states:
+                lines.append("")
+                lines.append(
+                    "  Note: Mixed electronic states detected "
+                    "(different charge or multiplicity). ΔE is not applicable."
+                )
         else:
             lines.append("  (none)")
 

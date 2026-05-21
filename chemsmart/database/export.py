@@ -11,10 +11,13 @@ import csv
 import json
 import logging
 import os
-import sqlite3
 
 from chemsmart.database.database import Database
-from chemsmart.database.utils import convert_numpy
+from chemsmart.database.utils import (
+    collect_energies_for_structure,
+    convert_numpy,
+    sort_frames_by_energy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +227,7 @@ class DatabaseExporter:
 
         db_file = DatabaseFile(filename=self.db_file)
         molecule = db_file.build_molecule_from_database(struct)
-        energies = self._collect_energies_for_structure(full_sid)
+        energies = collect_energies_for_structure(self.db_file, full_sid)
         return [
             {
                 "molecule": molecule,
@@ -252,7 +255,7 @@ class DatabaseExporter:
         for struct in struct_dicts:
             sid = struct.get("structure_id")
             molecule = db_file.build_molecule_from_database(struct)
-            energies = self._collect_energies_for_structure(sid)
+            energies = collect_energies_for_structure(self.db_file, sid)
             frames.append(
                 {
                     "molecule": molecule,
@@ -260,78 +263,7 @@ class DatabaseExporter:
                     "energies": energies,
                 }
             )
-        return self.sort_frames_by_energy(frames)
-
-    @staticmethod
-    def sort_frames_by_energy(frames):
-        """Sort frames ascending by energy at the most-covered (method,
-        basis); frames missing that key go to the end (sorted by their
-        own lowest available energy)."""
-        # 1) Count (method, basis) coverage across all frames
-        counts = {}
-        for frame in frames:
-            for method, basis, _ in frame.get("energies", []):
-                key = (method, basis)
-                counts[key] = counts.get(key, 0) + 1
-        if not counts:
-            return frames  # nothing to sort by
-
-        # 2) Pick the most frequent (method, basis) as primary key
-        primary = max(counts.items(), key=lambda kv: kv[1])[0]
-        logger.info(
-            f"Sorting {len(frames)} frame(s) by energy at "
-            f"{primary[0]}/{primary[1]}; frames missing it go to the end."
-        )
-
-        def sort_key(frame):
-            energies = frame.get("energies", [])
-            primary_e = next(
-                (e for m, b, e in energies if (m, b) == primary), None
-            )
-            sid = str(frame.get("structure_id") or "")
-            if primary_e is not None:
-                # Bucket 0: has primary key -> sort by its energy
-                return (0, primary_e, sid)
-            # Bucket 1: missing primary key -> sort by lowest available
-            fallback = min((e for _, _, e in energies), default=float("inf"))
-            return (1, fallback, sid)
-
-        sorted_frames = sorted(frames, key=sort_key)
-
-        # 3) Within each frame, move the primary (method, basis) entry
-        #    to the front so the comment line shows it first.
-        for frame in sorted_frames:
-            energies = frame.get("energies", [])
-            head = [(m, b, e) for (m, b, e) in energies if (m, b) == primary]
-            tail = [(m, b, e) for (m, b, e) in energies if (m, b) != primary]
-            frame["energies"] = head + tail
-        return sorted_frames
-
-    def _collect_energies_for_structure(self, structure_id):
-        """Return list of (method, basis, energy) for every record
-        that references the given structure_id."""
-        conn = sqlite3.connect(self.db_file)
-        conn.row_factory = sqlite3.Row
-        try:
-            cursor = conn.execute(
-                """
-                SELECT r.method AS method, r.basis AS basis,
-                       rs.energy AS energy
-                FROM record_structures rs
-                JOIN records r ON rs.record_id = r.record_id
-                WHERE rs.structure_id = ?
-                ORDER BY r.record_index
-                """,
-                (structure_id,),
-            )
-            rows = cursor.fetchall()
-        finally:
-            conn.close()
-        return [
-            (r["method"], r["basis"], r["energy"])
-            for r in rows
-            if r["energy"] is not None
-        ]
+        return sort_frames_by_energy(frames)
 
     def _write_xyz_frame(self, f, frame):
         """Write a single XYZ frame with a custom comment line."""

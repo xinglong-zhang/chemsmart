@@ -23,6 +23,8 @@ from chemsmart.database.utils import (
     is_custom_basis,
     is_custom_solvent,
     resolve_record,
+    sort_frames_by_energy,
+    sort_structure_dicts_by_energy,
     standardize_basis_set,
     to_json,
     truncate_iso,
@@ -142,7 +144,7 @@ class TestDatabaseUtilities:
     def test_format(self):
         assert format_kv("Energy", None, 10) == "  Energy    : NULL"
         assert format_kv("Mass", 12.3456789, 10) == "  Mass      : 12.3456789"
-        assert format_energy(-100.123456789) == "-100.1234567890"
+        assert format_energy(-100.1234567800) == "-100.12345678"
         assert format_energy(None) == "NULL"
         assert format_float(1.23456789) == "1.234568"
         assert format_float(1.23456789, decimals=2) == "1.23"
@@ -159,6 +161,45 @@ class TestDatabaseUtilities:
         assert standardize_basis_set("def2-svp") == "def2svp"
         assert standardize_basis_set("def2-tzvp") == "def2tzvp"
         assert standardize_basis_set("6-31g") == "6-31g"
+
+    def test_sort_frames_by_energy(self):
+        frames = [
+            # Majority bucket: B3LYP/def2svp => sorted first, ascending energy.
+            {"structure_id": "c", "energies": [("B3LYP", "def2svp", -1.0)]},
+            {"structure_id": "a", "energies": [("B3LYP", "def2svp", -3.0)]},
+            {"structure_id": "b", "energies": [("B3LYP", "def2svp", -2.0)]},
+            # Minority bucket: no B3LYP/def2svp energy => pushed to the end.
+            {"structure_id": "e", "energies": [("PBE0", "def2svp", -10.0)]},
+            {"structure_id": "d", "energies": [("M062X", "def2svp", -20.0)]},
+        ]
+        sorted_frames = sort_frames_by_energy(frames)
+        # bucket 0 (ascending B3LYP): a(-3.0) -> b(-2.0) -> c(-1.0)
+        # bucket 1 (ascending fallback): d(-20.0) -> e(-10.0)
+        assert [f["structure_id"] for f in sorted_frames] == [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+        ]
+        # Primary (method, basis) entry must be moved to the front within each frame.
+        assert sorted_frames[0]["energies"][0] == ("B3LYP", "def2svp", -3.0)
+
+        # No-energy case: original order preserved, no IndexError.
+        empty_frames = [{"structure_id": "x", "energies": []}]
+        assert sort_frames_by_energy(empty_frames) == empty_frames
+
+    def test_sort_structure_dicts_no_energy(self, tmp_path):
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        no_energy_dicts = [
+            {"structure_id": "aaaa"},
+            {"structure_id": "bbbb"},
+        ]
+        result = sort_structure_dicts_by_energy(db.db_file, no_energy_dicts)
+        assert [s["structure_id"] for s in result] == ["aaaa", "bbbb"]
+        assert result[0]["primary_energy"] is None
+        assert result[0]["primary_method_basis"] is None
 
     def test_resolve_record_helpers(
         self,
@@ -335,7 +376,7 @@ class TestDatabaseSchemaAndInsertion:
         failed = SingleFileAssembler(
             gaussian_link_failed_outfile
         ).assemble_data
-        assert failed is None  # error-terminated log → assembler skips it
+        assert failed is None  # error-terminated log -> assembler skips it
 
         db = Database(str(tmp_path / "partial_insert.db"))
         db.create()
@@ -621,27 +662,6 @@ class TestDatabaseExport:
             "chemical_formula": None,
             "method": None,
         }
-        # Test sort_frames_by_energy helper.
-        exporter = DatabaseExporter(db.db_file, str(tmp_path / "output.xyz"))
-        frames = [
-            # Majority bucket: B3LYP/def2svp. These should be sorted first.
-            {"structure_id": "c", "energies": [("B3LYP", "def2svp", -1.0)]},
-            {"structure_id": "a", "energies": [("B3LYP", "def2svp", -3.0)]},
-            {"structure_id": "b", "energies": [("B3LYP", "def2svp", -2.0)]},
-            # Minority bucket: pushed after the majority bucket.
-            {"structure_id": "e", "energies": [("PBE0", "def2svp", -10.0)]},
-            {"structure_id": "d", "energies": [("M062X", "def2svp", -20.0)]},
-        ]
-        sorted_frames = exporter.sort_frames_by_energy(frames)
-        # bucket 0 first (ascending B3LYP energy): a(-3.0) → b(-2.0) → c(-1.0)
-        # bucket 1 last (ascending fallback energy): d(-20.0) → e(-10.0)
-        assert [f["structure_id"] for f in sorted_frames] == [
-            "a",
-            "b",
-            "c",
-            "d",
-            "e",
-        ]
 
     def test_xyz_export_selectors(
         self,

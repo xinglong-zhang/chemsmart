@@ -1,9 +1,13 @@
 import hashlib
 import json
+import logging
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # Width of the separator lines
 LINE_WIDTH = 100
@@ -170,7 +174,7 @@ def format_energy(val):
     """Format an energy value (Hartree) for display."""
     if val is None:
         return "NULL"
-    return f"{val:.10f}"
+    return f"{val:.8f}"
 
 
 def format_float(val, decimals=6):
@@ -198,6 +202,120 @@ def standardize_basis_set(basis):
     if basis.startswith("def2-"):
         return basis.replace("def2-", "def2", 1)
     return basis
+
+
+def collect_energies_for_structure(db_file, structure_id):
+    """Return list of (method, basis, energy) for every record that references
+    the given structure_id, ordered by record_index.
+    """
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.execute(
+            """
+            SELECT r.method AS method, r.basis AS basis,
+                   rs.energy AS energy
+            FROM record_structures rs
+            JOIN records r ON rs.record_id = r.record_id
+            WHERE rs.structure_id = ?
+            ORDER BY r.record_index
+            """,
+            (structure_id,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+    return [
+        (r["method"], r["basis"], r["energy"])
+        for r in rows
+        if r["energy"] is not None
+    ]
+
+
+def sort_frames_by_energy(frames):
+    """Sort frames ascending by energy at the most-covered (method, basis);
+    frames missing that key go to the end (sorted by their own lowest
+    available energy).
+    """
+    # 1) Count (method, basis) coverage across all frames
+    counts = {}
+    for frame in frames:
+        for method, basis, _ in frame.get("energies", []):
+            key = (method, basis)
+            counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return frames  # nothing to sort by
+
+    # 2) Pick the most frequent (method, basis) as primary key
+    primary = max(counts.items(), key=lambda kv: kv[1])[0]
+    logger.info(
+        f"Sorting {len(frames)} frame(s) by energy at "
+        f"{primary[0]}/{primary[1]}; frames missing it go to the end."
+    )
+
+    def sort_key(frame):
+        energies = frame.get("energies", [])
+        primary_e = next(
+            (e for m, b, e in energies if (m, b) == primary), None
+        )
+        sid = str(frame.get("structure_id") or "")
+        if primary_e is not None:
+            return (0, primary_e, sid)
+        fallback = min((e for _, _, e in energies), default=float("inf"))
+        return (1, fallback, sid)
+
+    sorted_frames = sorted(frames, key=sort_key)
+
+    # 3) Within each frame, move the primary (method, basis) entry to the
+    #    front so comment lines / display shows it first.
+    for frame in sorted_frames:
+        energies = frame.get("energies", [])
+        head = [(m, b, e) for (m, b, e) in energies if (m, b) == primary]
+        tail = [(m, b, e) for (m, b, e) in energies if (m, b) != primary]
+        frame["energies"] = head + tail
+
+    return sorted_frames
+
+
+def sort_structure_dicts_by_energy(db_file, struct_dicts):
+    """Sort a list of structure dicts ascending by energy at the most-covered
+    (method, basis) pair.
+    """
+    if not struct_dicts:
+        return struct_dicts
+    frames = [
+        {
+            "structure_id": s.get("structure_id"),
+            "energies": (
+                collect_energies_for_structure(db_file, s.get("structure_id"))
+                if s.get("structure_id") is not None
+                else []
+            ),
+            "struct_dict": s,
+        }
+        for s in struct_dicts
+    ]
+    sorted_frames = sort_frames_by_energy(frames)
+    if sorted_frames:
+        first_energies = sorted_frames[0].get("energies", [])
+        primary = first_energies[0] if first_energies else None
+        primary_mb = (primary[0], primary[1]) if primary else None
+    else:
+        primary_mb = None
+    sorted_dicts = []
+    for frame in sorted_frames:
+        s = dict(frame["struct_dict"])
+        energies = frame.get("energies", [])
+        if primary_mb is not None:
+            primary_e = next(
+                (e for m, b, e in energies if (m, b) == primary_mb), None
+            )
+        else:
+            primary_e = None
+        s["primary_energy"] = primary_e
+        s["primary_method_basis"] = primary_mb
+        sorted_dicts.append(s)
+    return sorted_dicts
 
 
 def resolve_record(db, record_index=None, record_id=None, return_list=True):

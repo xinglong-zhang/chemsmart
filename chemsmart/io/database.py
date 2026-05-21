@@ -1,7 +1,10 @@
 import numpy as np
 
 from chemsmart.database.database import Database
-from chemsmart.database.utils import resolve_record
+from chemsmart.database.utils import (
+    resolve_record,
+    sort_structure_dicts_by_energy,
+)
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import string2index_1based
 
@@ -76,6 +79,9 @@ class DatabaseFile(FileMixin):
             raise ValueError(
                 f"No structures found for molecule '{molecule_id}'."
             )
+        struct_dicts = sort_structure_dicts_by_energy(
+            self.filename, struct_dicts
+        )
         molecules = [
             self.build_molecule_from_database(struct)
             for struct in struct_dicts
