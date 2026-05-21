@@ -1,5 +1,6 @@
 import os.path
 from shutil import copyfile
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -3469,6 +3470,17 @@ class TestCleanedFrequencies:
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == [100.0, 200.0]
 
+    def test_ts_zero_imaginary_strict_raises(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
+            vibrational_frequencies=[100.0, 200.0, 300.0],
+            jobtype="ts",
+            check_imaginary_frequencies=True,
+        )
+        with pytest.raises(ValueError, match="No imaginary frequency"):
+            Thermochemistry.cleaned_frequencies.fget(mock)
+
     def test_ts_multiple_imaginary_strict_raises(
         self, make_thermochemistry_mock
     ):
@@ -3547,6 +3559,34 @@ class TestCleanedFrequencies:
             Thermochemistry.cleaned_frequencies.fget(mock)
 
 
+class TestCheckFrequencies:
+    """Unit tests for Thermochemistry.check_frequencies."""
+
+    def test_ts_zero_imaginary_raises(self):
+        mock = MagicMock(spec=Thermochemistry)
+        mock.jobtype = "ts"
+        mock.filename = "dummy.log"
+        mock.imaginary_frequencies = []
+        mock.check_ts_reaction_coordinate = False
+
+        with pytest.raises(
+            ValueError, match="Expected exactly 1 for TS, but found 0"
+        ):
+            Thermochemistry.check_frequencies(mock)
+
+    def test_ts_reaction_coordinate_check_called_when_enabled(self):
+        mock = MagicMock(spec=Thermochemistry)
+        mock.jobtype = "ts"
+        mock.filename = "dummy.log"
+        mock.imaginary_frequencies = [-400.0]
+        mock.check_ts_reaction_coordinate = True
+        mock._validate_ts_reaction_coordinate = MagicMock()
+
+        Thermochemistry.check_frequencies(mock)
+
+        mock._validate_ts_reaction_coordinate.assert_called_once()
+
+
 class TestThermochemistryCLI:
     """CLI option-propagation tests for the thermochemistry command."""
 
@@ -3597,6 +3637,30 @@ class TestThermochemistryCLI:
         assert result.exit_code == 0, result.output
         assert settings is not None
         assert settings.check_imaginary_frequencies is False
+
+    def test_check_ts_reaction_coordinate_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--check-ts-reaction-coordinate"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.check_ts_reaction_coordinate is True
+
+    def test_no_check_ts_reaction_coordinate_flag_propagated(
+        self,
+        run_thermochemistry_and_capture_settings,
+    ):
+        result, settings = run_thermochemistry_and_capture_settings(
+            extra_args=["--no-check-ts-reaction-coordinate"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+        assert settings.check_ts_reaction_coordinate is False
 
 
 class TestThermochemistryCLIFolderOptions:

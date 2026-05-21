@@ -305,6 +305,9 @@ class ThermochemistryJob(Job):
                 check_imaginary_frequencies=(
                     self.settings.check_imaginary_frequencies
                 ),
+                check_ts_reaction_coordinate=(
+                    self.settings.check_ts_reaction_coordinate
+                ),
             )
             (
                 structure,
