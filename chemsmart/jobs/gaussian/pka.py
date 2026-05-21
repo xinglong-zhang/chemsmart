@@ -45,7 +45,6 @@ class GaussianpKaJob(GaussianJob):
     TYPE = "g16pka"
     _shared_reference_molecule_cache = {}
 
-    @classmethod
     def _reference_cache_key(cls, settings):
         if settings is None or not settings.has_reference_file:
             return None
@@ -59,7 +58,6 @@ class GaussianpKaJob(GaussianJob):
             settings.reference_conjugate_base_multiplicity,
         )
 
-    @classmethod
     def _get_cached_reference_pair(cls, settings):
         cache_key = cls._reference_cache_key(settings)
         if cache_key is None:
