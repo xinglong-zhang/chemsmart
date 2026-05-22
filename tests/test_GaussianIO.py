@@ -1957,6 +1957,16 @@ class TestGaussian16Output:
         assert g16_output.symbols == ["Pd", "H"]
         assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
 
+    def test_pd_insertion_ts_r_logfile(self, gaussian_pd_insertion_ts_r_outfile):
+        g16_output = Gaussian16Output(
+            filename=gaussian_pd_insertion_ts_r_outfile
+        )
+        assert g16_output.normal_termination
+        assert g16_output.charge == 0
+        assert g16_output.multiplicity == 1
+        assert "Pd" in g16_output.symbols
+        assert "Pd" in g16_output.molecule.chemical_symbols
+
     def test_energy_extraction_from_gaussian_output_file(
         self, gaussian_quintet_opt_outfile
     ):

@@ -874,6 +874,16 @@ class TestGaussianJobFromLogFile:
         assert settings.charge == 0
         assert settings.multiplicity == 1
 
+    def test_reads_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        settings = GaussianJobSettings.from_logfile(
+            gaussian_pd_insertion_ts_r_outfile
+        )
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+        assert settings.functional == "b3lyp"
+
 
 class TestGaussianPBCJob:
     def test_writes_gaussian_input_from_pbc_comfile(
