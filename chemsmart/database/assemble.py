@@ -16,6 +16,8 @@ from functools import cached_property
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
+    canonical_json_hash,
+    compute_trajectory_id,
     file_size,
     get_record_id,
     is_custom_basis,
@@ -87,15 +89,22 @@ class BaseAssembler:
         for i, mol in enumerate(self.molecules_list):
             mol_entry = {"index": i + 1, **self.get_molecule_info(mol)}
             molecules.append(mol_entry)
-
-        # Use the last molecule (typically the optimized structure) for the ID
-        ref_mol = self.molecules_list[-1]
+        trajectory_id = compute_trajectory_id(
+            [m.structure_id for m in self.molecules_list]
+        )
+        meta = {**meta, "trajectory_id": trajectory_id}
+        custom_basis_hash = canonical_json_hash(meta.get("custom_basis"))
+        custom_solvent_hash = canonical_json_hash(meta.get("custom_solvent"))
         record_id = get_record_id(
-            structure_id=ref_mol.structure_id,
-            program=provenance.get("program", "unknown"),
-            method=meta.get("method", ""),
-            basis=meta.get("basis", ""),
-            jobtype=meta.get("jobtype", ""),
+            program=provenance.get("program") or None,
+            method=meta.get("method") or None,
+            basis=meta.get("basis") or None,
+            jobtype=meta.get("jobtype") or None,
+            trajectory_id=trajectory_id,
+            custom_basis_hash=custom_basis_hash,
+            solvent_model=meta.get("solvent_model"),
+            solvent_id=meta.get("solvent_id"),
+            custom_solvent_hash=custom_solvent_hash,
         )
 
         return AssembledRecord(

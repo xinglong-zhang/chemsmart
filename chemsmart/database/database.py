@@ -24,14 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def record_to_dict(record):
-    """Convert AssembledRecord to dictionary.
-
-    Args:
-        record: An AssembledRecord instance or dictionary.
-
-    Returns:
-        Dictionary representation of the record.
-    """
+    """Convert AssembledRecord to dictionary."""
     if isinstance(record, AssembledRecord):
         return {
             "record_id": record.record_id,
@@ -45,7 +38,6 @@ def record_to_dict(record):
 
 class Database:
     """SQLite database for storing assembled calculation records.
-
     This class provides methods for creating, populating, and managing
     a database of assembled calculation records. Uses four tables:
     - records: calculation-level data (one row per record)
@@ -65,7 +57,6 @@ class Database:
 
     def create(self):
         """Create the database with the required schema.
-
         Tables:
         - records: One row per calculation record (meta, results, provenance)
         - molecules: One row per chemical species (molecule-level identity)
@@ -92,6 +83,7 @@ class Database:
                     solvent_id TEXT,
                     custom_solvent TEXT,
                     custom_basis_json TEXT,
+                    trajectory_id TEXT,
                     temperature_in_K REAL,
                     pressure_in_atm REAL,
                     -- Results fields
@@ -233,6 +225,9 @@ class Database:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_rs_structure_id ON record_structures(structure_id)"
             )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_records_trajectory_id ON records(trajectory_id)"
+            )
             conn.commit()
             logger.debug(f"Created database at {self.db_file}.")
         finally:
@@ -243,12 +238,7 @@ class Database:
         record,
         conn=None,
     ):
-        """Insert a single record into the database.
-
-        Args:
-            record: The record to insert (AssembledRecord or dict).
-            conn: Optional existing database connection.
-        """
+        """Insert a single record into the database."""
         record_dict = record_to_dict(record)
         record_dict = convert_numpy(record_dict)
 
@@ -280,6 +270,7 @@ class Database:
                 method, basis, num_basis_functions, spin, jobtype,
                 solvent_on, route_string, solvent_model, solvent_id, custom_solvent,
                 custom_basis_json,
+                trajectory_id,
                 temperature_in_K, pressure_in_atm,
                 total_energy, num_unpaired_electrons,
                 homo_energy, lumo_energy, alpha_homo_energy, beta_homo_energy,
@@ -301,7 +292,7 @@ class Database:
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -319,6 +310,7 @@ class Database:
                 meta.get("solvent_id"),
                 to_json(meta.get("custom_solvent")),
                 to_json(meta.get("custom_basis")),
+                meta.get("trajectory_id"),
                 meta.get("temperature_in_K"),
                 meta.get("pressure_in_atm"),
                 # Results
@@ -371,7 +363,6 @@ class Database:
 
     def _insert_related_rows(self, conn, record_dict):
         """Insert rows into molecules, structures, and record_structures tables.
-
         For each Molecule entry in the record, splits its data into:
         1. INSERT OR IGNORE into molecules (species dedup by molecule_id)
         2. INSERT OR IGNORE into structures (geometry dedup by structure_id)
@@ -483,14 +474,7 @@ class Database:
             )
 
     def insert_records(self, records):
-        """Insert multiple records into the database.
-
-        Args:
-            records: List of records to insert.
-
-        Returns:
-            Number of records successfully inserted.
-        """
+        """Insert multiple records into the database."""
         conn = sqlite3.connect(self.db_file)
         count = 0
         try:
@@ -506,19 +490,11 @@ class Database:
         return count
 
     def get_connection(self):
-        """Get a database connection.
-
-        Returns:
-            SQLite connection object.
-        """
+        """Get a database connection."""
         return sqlite3.connect(self.db_file)
 
     def count_records(self):
-        """Count the number of records in the database.
-
-        Returns:
-            Number of records.
-        """
+        """Count the number of records in the database."""
         conn = sqlite3.connect(self.db_file)
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM records")
@@ -527,23 +503,11 @@ class Database:
             conn.close()
 
     def exists(self):
-        """Check if the database file exists.
-
-        Returns:
-            True if database file exists.
-        """
+        """Check if the database file exists."""
         return Path(self.db_file).exists()
 
     def get_record(self, record_index=None, record_id=None):
-        """Get a full record with structures from the database.
-
-        Args:
-            record_index: Record index (1-based).
-            record_id: Record ID string.
-
-        Returns:
-            Full record dictionary with meta, results, structures, provenance.
-        """
+        """Get a full record with structures from the database."""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
@@ -569,11 +533,7 @@ class Database:
             conn.close()
 
     def get_all_records(self):
-        """Get all records from the database.
-
-        Returns:
-            List of full record dictionaries.
-        """
+        """Get all records from the database."""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
@@ -587,7 +547,6 @@ class Database:
 
     def _row_to_full_record(self, conn, record_row):
         """Convert a record row to full record dictionary with structures.
-
         Joins record_structures, structures, and molecules tables to
         reconstruct the full structure data for each entry in the record.
         """
@@ -645,6 +604,8 @@ class Database:
             meta["custom_solvent"] = from_json(row.get("custom_solvent"))
         if row.get("custom_basis_json") is not None:
             meta["custom_basis"] = from_json(row.get("custom_basis_json"))
+        if row.get("trajectory_id") is not None:
+            meta["trajectory_id"] = row.get("trajectory_id")
         if row.get("temperature_in_K") is not None:
             meta["temperature_in_K"] = row.get("temperature_in_K")
             meta["pressure_in_atm"] = row.get("pressure_in_atm")
@@ -738,7 +699,6 @@ class Database:
     @staticmethod
     def _record_structure_row_to_dict(row):
         """Convert a joined record_structures+structures+molecules row to dict.
-
         Produces a flat dict representing one structure entry within a record,
         combining per-calculation data (from record_structures), geometry data
         (from structures), and species identity (from molecules).
@@ -814,18 +774,8 @@ class Database:
 
     def get_record_by_partial_id(self, partial_id):
         """Resolve a partial record ID to the full record ID.
-
         Matches record IDs that start with the given prefix. Requires
         exactly one match; raises ValueError otherwise.
-
-        Args:
-            partial_id: Prefix of a record ID (at least 12 characters recommended).
-
-        Returns:
-            Full record ID string.
-
-        Raises:
-            ValueError: If zero or multiple records match the prefix.
         """
         conn = sqlite3.connect(self.db_file)
         try:
@@ -935,7 +885,6 @@ class Database:
 
     def get_structures_for_record(self, record_id):
         """Get all structure entries for a specific record.
-
         Returns the full joined record_structures + structures + molecules
         data for each structure entry in the record.
         """
@@ -1032,7 +981,6 @@ class Database:
 
     def get_structure(self, structure_id):
         """Get a structure (conformer) by structure_id.
-
         Returns structure fields joined with parent molecule info for
         convenient display.
         """
@@ -1075,7 +1023,6 @@ class Database:
 
     def get_structure_by_partial_id(self, partial_id):
         """Resolve a partial structure ID to the full structure_id.
-
         Matches structure IDs that start with the given prefix. Requires
         exactly one match; raises ValueError otherwise.
         """
@@ -1133,8 +1080,7 @@ class Database:
 
     def get_records_for_molecule(self, molecule_id):
         """Get all record summaries that reference a given molecule.
-
-        Traverses: molecules → structures → record_structures → records.
+        Traverses: molecules -> structures -> record_structures -> records.
         """
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
@@ -1159,8 +1105,7 @@ class Database:
 
     def get_records_for_structure(self, structure_id):
         """Get all record summaries that reference a given structure.
-
-        Traverses: record_structures → records.
+        Traverses: record_structures -> records.
         """
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
@@ -1185,7 +1130,6 @@ class Database:
     @staticmethod
     def _molecule_row_to_dict(row):
         """Convert a molecules table row to a clean dictionary.
-
         Deserializes JSON fields and converts boolean integers to Python
         bools.
         """
@@ -1215,7 +1159,6 @@ class Database:
     def _structure_row_to_dict(row):
         """Convert a structures table row (joined with molecules) to a
         clean dictionary.
-
         Deserializes JSON fields (chemical_symbols, positions, etc.) and
         includes molecule-level convenience fields when present in the row.
         """

@@ -12,6 +12,7 @@ from chemsmart.database.query import DatabaseQuery
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
     bool_to_str,
+    compute_trajectory_id,
     convert_numpy,
     format_energy,
     format_float,
@@ -34,16 +35,14 @@ from chemsmart.database.utils import (
 INCHIKEY_H2O = "XLYOFNOQVPJJNP-UHFFFAOYSA-N"
 INCHIKEY_HE = "SWQJXJOGLNCZEY-UHFFFAOYSA-N"
 INCHIKEY_CO2 = "CURLTUGMZLYLDI-UHFFFAOYSA-N"
-
 # Known stable record ID: Gaussian MP2/aug-cc-pVTZ geometry optimisation of water
 RECORD_ID_GAUSSIAN_MP2_WATER = (
-    "7df38a2c7dde3465694b2be76dd8bde7f15876af973a2f891fd61edde4d5e454"
+    "f9b9f1b79a7bff9a29ba999e0f625875f8ec3bc4162260ccf2a8117a9403e726"
 )
 # Known stable record ID: ORCA M062X/def2-SVP geometry optimisation of water
 RECORD_ID_ORCA_M062X_WATER = (
-    "20b8d04a1d3ae83b6310b2dd14337071e38a0a67a82ed3025d5fd9e8cb637121"
+    "57efe22eb7c24111c0e06f4b8ae3c6b8c38c7b916ba8375225d2cdd33a043a7e"
 )
-
 # Known stable structure ID: He atom at origin (0,0,0)
 STRUCTURE_ID_ORIGIN_HE = (
     "4054373538ed8c659cd165de0c57822be13073206e4305ddc5dc6937fb2cd65b"
@@ -72,30 +71,168 @@ class TestDatabaseUtilities:
         assert not is_custom_solvent(None)
 
     def test_get_record_id(self):
+        id0 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+        )
+        # different program -> different record
         id1 = get_record_id(
-            structure_id="abc",
-            program="gaussian",
-            method="b3lyp",
-            basis="6-31g",
-            jobtype="opt",
-        )
-        id2 = get_record_id(
-            structure_id="abc",
-            program="gaussian",
-            method="b3lyp",
-            basis="6-31g",
-            jobtype="opt",
-        )
-        id3 = get_record_id(
-            structure_id="abc",
             program="orca",
             method="b3lyp",
             basis="6-31g",
-            jobtype="opt",
+            jobtype="sp",
+            trajectory_id="traj_abc",
         )
-        assert id1 == id2
-        assert id1 != id3
-        assert len(id1) == len(id2) == len(id3) == 64
+        assert id0 != id1
+        # different job type -> different record
+        id2 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="opt",
+            trajectory_id="traj_abc",
+        )
+        assert id0 != id2
+        # different trajectory_id -> different record
+        id3 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_adc",
+        )
+        assert id0 != id3
+        # different basis -> different record
+        id4 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="def2svp",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+        )
+        assert id0 != id4
+        # different basis (custom) -> different record
+        id4_cb = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="customized_basis",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            custom_basis_hash="a" * 64,
+        )
+        assert id4 != id4_cb
+        # different custom_basis_hash -> different record
+        id4_cb2 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="customized_basis",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            custom_basis_hash="b" * 64,
+        )
+        assert id4_cb != id4_cb2
+        # no solvent vs with solvent -> different record
+        id5 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            solvent_model="pcm",
+            solvent_id="water",
+        )
+        assert id0 != id5
+        # different solvent model -> different record
+        id5_sm = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            solvent_model="smd",
+            solvent_id="water",
+        )
+        assert id5 != id5_sm
+        # different solvent id -> different record
+        id5_si = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            solvent_model="pcm",
+            solvent_id="toluene",
+        )
+        assert id5 != id5_si
+        # different solvent id (custom) -> different record
+        id5_cs = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            solvent_model="pcm",
+            solvent_id="customized_solvent",
+            custom_solvent_hash="c" * 64,
+        )
+        assert id5 != id5_cs
+        # different custom_solvent_hash -> different record
+        id5_cs2 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            solvent_model="pcm",
+            solvent_id="customized_solvent",
+            custom_solvent_hash="d" * 64,
+        )
+        assert id5_cs != id5_cs2
+        # idempotency: same inputs always produce the same id
+        id0_repeat = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+        )
+        assert id0 == id0_repeat
+
+        assert all(
+            len(i) == 64
+            for i in [
+                id0,
+                id1,
+                id2,
+                id3,
+                id4,
+                id4_cb,
+                id4_cb2,
+                id5,
+                id5_sm,
+                id5_si,
+                id5_cs,
+                id5_cs2,
+                id0_repeat,
+            ]
+        )
+
+    def test_compute_trajectory_id(self):
+        sid_a = "a" * 64
+        sid_b = "b" * 64
+        sid_c = "c" * 64
+        t1 = compute_trajectory_id([sid_a, sid_b])
+        # different structure_ids -> different trajectory
+        t2 = compute_trajectory_id([sid_a, sid_c])
+        assert t1 != t2
+        # order matters: [A, B] != [B, A]
+        t_reversed = compute_trajectory_id([sid_b, sid_a])
+        assert t1 != t_reversed
+        # idempotency: same inputs always yield the same id
+        assert compute_trajectory_id([sid_a, sid_b]) == t1
 
     def test_truncate_iso(self):
         assert (

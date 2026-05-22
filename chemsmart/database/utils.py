@@ -58,37 +58,69 @@ def is_custom_solvent(solvent_id):
     return solvent_id.strip().lower() in CUSTOM_SOLVENT_KEYWORDS
 
 
-def get_record_id(structure_id, program, method, basis, jobtype):
-    """Generate a stable record ID from molecular identity and calculation fields.
-
-    The hash is computed from the molecule's ``structure_id`` (which already
-    encodes canonical geometry, charge and multiplicity) together with the
-    computational method descriptors.  This ensures that:
-
-    * The same structure computed with the same method and job type always
-      produces the same ``record_id``.
-    * Different structures, methods or job types always produce different IDs.
-
+def get_record_id(
+    *,
+    program,
+    method,
+    basis,
+    jobtype,
+    trajectory_id,
+    custom_basis_hash=None,
+    solvent_model=None,
+    solvent_id=None,
+    custom_solvent_hash=None,
+):
+    """Generate a stable record ID for one full QM calculation.
+    The record_id uniquely identifies a single source file's worth of work:
+    a specific (program, method, basis, jobtype, solvent setup) applied to
+    a specific trajectory of structures.
     Args:
-        structure_id: SHA-256 hex digest of the canonical geometry, charge
-            and multiplicity (from ``Molecule.structure_id``).
         program: Computational chemistry program name (e.g. "gaussian").
-        method: DFT functional or method.
-        basis: Basis set.
-        jobtype: Job type specification.
-
+        method: DFT functional / method (e.g. "b3lyp").
+        basis: Basis set name (e.g. "def2svp"); for inline custom basis,
+            pass the literal keyword (e.g. "gen") and provide the actual
+            basis content hash via custom_basis_hash.
+        jobtype: Job type label (e.g. "opt", "ts", "freq", "sp").
+        trajectory_id: SHA-256 hash of the ordered list of structure_ids
+            visited in this calculation.
+        custom_basis_hash: SHA-256 of canonical-JSON of the custom basis
+            definition (heavy_elements / ECP / light_elements / ...) or
+            None when no custom basis is used.
+        solvent_model: Solvent model name (e.g. "pcm", "smd") or None.
+        solvent_id: Solvent identifier (e.g. "water", "toluene") or None.
+        custom_solvent_hash: SHA-256 of canonical-JSON of the custom-solvent
+            parameters block, or None.
     Returns:
         SHA-256 hex digest string.
     """
     components = [
-        str(structure_id),
-        str(program),
-        str(method),
-        str(basis),
-        str(jobtype),
+        program,
+        method,
+        basis,
+        jobtype,
+        trajectory_id,
+        custom_basis_hash,
+        solvent_model,
+        solvent_id,
+        custom_solvent_hash,
     ]
-    payload = "|".join(components)
-    return hashlib.sha256(payload.encode()).hexdigest()
+    payload = "|".join("" if c is None else str(c) for c in components)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def canonical_json_hash(obj):
+    """SHA-256 of canonical JSON of a dict/list object."""
+    if not obj:
+        return None
+    payload = json.dumps(
+        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def compute_trajectory_id(structure_ids):
+    """Compute a trajectory ID from an ordered list of structure_id."""
+    return hashlib.sha256("|".join(structure_ids).encode("utf-8")).hexdigest()
 
 
 def utcnow_iso():
