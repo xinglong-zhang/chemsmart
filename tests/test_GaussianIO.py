@@ -1945,7 +1945,7 @@ class TestGaussian16Output:
                     ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
                     " Charge =  0 Multiplicity = 1",
                     " Redundant internal coordinates found in file.  (old form).",
-                    " 46,0,0.000000,0.000000,0.000000",
+                    " 46.0,0,0.000000,0.000000,0.000000",
                     " H,0,0.000000,0.000000,1.000000",
                     " Recover connectivity data from disk.",
                     " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
@@ -1955,6 +1955,7 @@ class TestGaussian16Output:
         )
         g16_output = Gaussian16Output(filename=str(outputfile))
         assert g16_output.symbols == ["Pd", "H"]
+        assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
 
     def test_energy_extraction_from_gaussian_output_file(
         self, gaussian_quintet_opt_outfile

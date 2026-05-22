@@ -2348,17 +2348,24 @@ class CoordinateBlock:
                 # line of QM/MM coordinate block
                 continue
 
+            token = str(line_elements[0]).strip()
             try:
-                atomic_number = int(line_elements[0])
+                atomic_number = int(token)
             except ValueError:
-                # sanitize token similar to _get_symbols to handle annotated tokens
-                token = str(line_elements[0])
-                m = re.match(r"^([A-Za-z][a-z]?)", token)
-                if m:
-                    atomic_symbol = p.to_element(m.group(1))
-                else:
-                    atomic_symbol = p.to_element(str(line_elements[0]))
-                atomic_number = p.to_atomic_number(atomic_symbol)
+                try:
+                    float_token = float(token)
+                    if float_token.is_integer():
+                        atomic_number = int(float_token)
+                    else:
+                        raise ValueError
+                except ValueError:
+                    # sanitize token similar to _get_symbols to handle annotated tokens
+                    m = re.match(r"^([A-Za-z][a-z]?)", token)
+                    if m:
+                        atomic_symbol = p.to_element(m.group(1))
+                    else:
+                        atomic_symbol = p.to_element(token)
+                    atomic_number = p.to_atomic_number(atomic_symbol)
             atomic_numbers.append(atomic_number)
 
             # Decide how to interpret the second
