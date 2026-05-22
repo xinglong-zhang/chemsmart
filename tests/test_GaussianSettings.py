@@ -856,6 +856,7 @@ class TestGaussianJobFromLogFile:
                     " ----------------------------------------------------------------------",
                     " # opt b3lyp/gen",
                     " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
                     " Charge =  0 Multiplicity = 1",
                     " Redundant internal coordinates found in file.  (old form).",
                     " 46,0,0.000000,0.000000,0.000000",
