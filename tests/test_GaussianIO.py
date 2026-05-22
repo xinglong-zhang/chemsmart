@@ -1919,6 +1919,21 @@ class TestGaussian16Output:
             g16_pm6.semiempirical == "PM6"
         )  # changed to upper case in route_object.semiempirical
 
+    def test_normal_termination_with_trailing_blank_lines(
+        self, gaussian_ts_genecp_outfile, tmp_path
+    ):
+        with open(gaussian_ts_genecp_outfile, "r") as f:
+            contents = f.read()
+
+        output_with_trailing_blanks = tmp_path / "pd_genecp_ts_trailing.log"
+        with open(output_with_trailing_blanks, "w") as f:
+            f.write(contents + "\n\n")
+
+        g16_output = Gaussian16Output(
+            filename=str(output_with_trailing_blanks)
+        )
+        assert g16_output.normal_termination
+
     def test_energy_extraction_from_gaussian_output_file(
         self, gaussian_quintet_opt_outfile
     ):

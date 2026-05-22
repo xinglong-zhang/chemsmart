@@ -75,10 +75,13 @@ class Gaussian16Output(GaussianFileMixin):
         if len(contents) == 0:
             return False
 
-        last_line = contents[-1]
-        if "Normal termination of Gaussian" in last_line:
-            logger.debug(f"File {self.filename} terminated normally.")
-            return True
+        for line in reversed(contents):
+            if not line:
+                continue
+            if "Normal termination of Gaussian" in line:
+                logger.debug(f"File {self.filename} terminated normally.")
+                return True
+            break
 
         logger.debug(f"File {self.filename} has error termination.")
         return False
