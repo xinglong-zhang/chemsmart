@@ -1964,6 +1964,7 @@ class TestGaussian16Output:
         assert g16_output.normal_termination
         assert g16_output.charge == 0
         assert g16_output.multiplicity == 1
+        assert len(g16_output.symbols) == g16_output.molecule.num_atoms
         assert "Pd" in g16_output.symbols
         assert "Pd" in g16_output.molecule.chemical_symbols
 

@@ -227,6 +227,8 @@ class Gaussian16Output(GaussianFileMixin):
                         # elif j_line.startswith("TV"):
                         # we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
+                if len(coordinates_block_lines_list) > 0:
+                    break
             elif "Redundant internal coordinates found in file." in line:
                 for j_line in self.contents[i + 1 :]:
                     if len(j_line) == 0:
@@ -242,6 +244,8 @@ class Gaussian16Output(GaussianFileMixin):
                         )
                     elif len(coordinates_block_lines_list) > 0:
                         break
+                if len(coordinates_block_lines_list) > 0:
+                    break
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
 
