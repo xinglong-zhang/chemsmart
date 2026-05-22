@@ -882,7 +882,7 @@ class TestGaussianJobFromLogFile:
         )
         assert settings.charge == 0
         assert settings.multiplicity == 1
-        assert settings.functional == "b3lyp"
+        assert settings.functional == "b3lyp empiricaldispersion=gd3"
 
 
 class TestGaussianPBCJob:
