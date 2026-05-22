@@ -75,10 +75,13 @@ class Gaussian16Output(GaussianFileMixin):
         if len(contents) == 0:
             return False
 
-        last_line = contents[-1]
-        if "Normal termination of Gaussian" in last_line:
-            logger.debug(f"File {self.filename} terminated normally.")
-            return True
+        for line in reversed(contents):
+            if not line:
+                continue
+            if "Normal termination of Gaussian" in line:
+                logger.debug(f"File {self.filename} terminated normally.")
+                return True
+            break
 
         logger.debug(f"File {self.filename} has error termination.")
         return False
@@ -178,6 +181,36 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain the coordinate block from the
         input that is printed in the outputfile."""
         coordinates_block_lines_list = []
+
+        def _is_oldform_coordinate_line(line):
+            elements = [element.strip() for element in line.split(",")]
+            if len(elements) < 5:
+                return False
+
+            atom = elements[0]
+            if atom in p.PERIODIC_TABLE:
+                pass
+            else:
+                try:
+                    atom_float = float(atom)
+                    if not atom_float.is_integer():
+                        return False
+                except ValueError:
+                    return False
+
+            try:
+                float(elements[2])
+                float(elements[3])
+                float(elements[4])
+            except ValueError:
+                return False
+
+            return True
+
+        def _normalize_oldform_coordinate_line(line):
+            elements = [element.strip() for element in line.split(",")]
+            return f"{elements[0]} {elements[2]} {elements[3]} {elements[4]}"
+
         for i, line in enumerate(self.contents):
             if line.startswith("Symbolic Z-matrix:"):
                 for j_line in self.contents[i + 2 :]:
@@ -194,6 +227,25 @@ class Gaussian16Output(GaussianFileMixin):
                         # elif j_line.startswith("TV"):
                         # we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
+                if len(coordinates_block_lines_list) > 0:
+                    break
+            elif "Redundant internal coordinates found in file." in line:
+                for j_line in self.contents[i + 1 :]:
+                    if len(j_line) == 0:
+                        if len(coordinates_block_lines_list) > 0:
+                            break
+                        continue
+                    if j_line.startswith("Charge ="):
+                        logger.debug(f"Skipping line: {j_line}")
+                        continue
+                    if _is_oldform_coordinate_line(j_line):
+                        coordinates_block_lines_list.append(
+                            _normalize_oldform_coordinate_line(j_line)
+                        )
+                    elif len(coordinates_block_lines_list) > 0:
+                        break
+                if len(coordinates_block_lines_list) > 0:
+                    break
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
 

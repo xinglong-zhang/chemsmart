@@ -1919,6 +1919,57 @@ class TestGaussian16Output:
             g16_pm6.semiempirical == "PM6"
         )  # changed to upper case in route_object.semiempirical
 
+    def test_normal_termination_with_trailing_blank_lines(
+        self, gaussian_ts_genecp_outfile, tmp_path
+    ):
+        with open(gaussian_ts_genecp_outfile, "r") as f:
+            contents = f.read()
+
+        output_with_trailing_blanks = tmp_path / "pd_genecp_ts_trailing.log"
+        with open(output_with_trailing_blanks, "w") as f:
+            f.write(contents + "\n\n")
+
+        g16_output = Gaussian16Output(
+            filename=str(output_with_trailing_blanks)
+        )
+        assert g16_output.normal_termination
+
+    def test_oldform_redundant_coordinates_atomic_numbers(self, tmp_path):
+        outputfile = tmp_path / "old_form_numeric_coords.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt b3lyp/gen",
+                    " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
+                    " Charge =  0 Multiplicity = 1",
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " H,0,0.000000,0.000000,1.000000",
+                    " Recover connectivity data from disk.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16_output = Gaussian16Output(filename=str(outputfile))
+        assert g16_output.symbols == ["Pd", "H"]
+        assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
+
+    def test_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        g16_output = Gaussian16Output(
+            filename=gaussian_pd_insertion_ts_r_outfile
+        )
+        assert g16_output.normal_termination
+        assert g16_output.charge == 0
+        assert g16_output.multiplicity == 1
+        assert len(g16_output.symbols) == g16_output.molecule.num_atoms
+        assert "Pd" in g16_output.symbols
+        assert "Pd" in g16_output.molecule.chemical_symbols
+
     def test_energy_extraction_from_gaussian_output_file(
         self, gaussian_quintet_opt_outfile
     ):
