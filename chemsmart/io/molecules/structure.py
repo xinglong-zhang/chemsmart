@@ -2267,6 +2267,26 @@ class CoordinateBlock:
 
     def _get_symbols(self):
         symbols = []
+
+        def _token_to_symbol(token):
+            token = str(token).strip()
+            try:
+                return p.to_symbol(atomic_number=int(token))
+            except ValueError:
+                pass
+
+            try:
+                float_token = float(token)
+                if float_token.is_integer():
+                    return p.to_symbol(atomic_number=int(float_token))
+            except ValueError:
+                pass
+
+            m = re.match(r"^([A-Za-z][a-z]?)", token)
+            if m:
+                return p.to_element(element_str=m.group(1))
+            return p.to_element(element_str=token)
+
         for line in self.coordinate_block:
             line_elements = line.split()
             # assert len(line_elements) == 4, (
@@ -2297,46 +2317,11 @@ class CoordinateBlock:
                 continue
 
             try:
-                logger.debug(
-                    f"Converting atomic number {line_elements[0]} to symbol."
-                )
-                atomic_number = int(
-                    line_elements[0]
-                )  # Could raise ValueError if not an integer
-                chemical_symbol = p.to_symbol(
-                    atomic_number=atomic_number
-                )  # Could raise KeyError or similar
-                logger.debug(
-                    f"Successfully converted {line_elements[0]} to {chemical_symbol}."
-                )
-                symbols.append(chemical_symbol)
-            except ValueError:
-                # Handle case where line_elements[0] isn’t a valid integer
-                logger.debug(
-                    f"{line_elements[0]} is not a valid atomic number; treating as symbol."
-                )
-                try:
-                    symbols.append(
-                        p.to_element(element_str=str(line_elements[0]))
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to convert {line_elements[0]} to element: {str(e)}"
-                    )
+                symbols.append(_token_to_symbol(line_elements[0]))
             except Exception as e:
-                # Catch any other unexpected errors
                 logger.error(
                     f"Unexpected error processing {line_elements[0]}: {str(e)}"
                 )
-                try:
-                    # Fallback attempt
-                    symbols.append(
-                        p.to_element(element_str=str(line_elements[0]))
-                    )
-                except Exception as fallback_e:
-                    logger.error(
-                        f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
-                    )
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
