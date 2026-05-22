@@ -1955,6 +1955,8 @@ class TestGaussian16Output:
         )
         g16_output = Gaussian16Output(filename=str(outputfile))
         assert g16_output.symbols == ["Pd", "H"]
+        assert g16_output.all_structures == []
+        assert g16_output.last_structure.chemical_symbols == ["Pd", "H"]
         assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
 
     def test_pd_insertion_ts_r_logfile(

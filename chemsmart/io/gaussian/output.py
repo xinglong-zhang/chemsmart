@@ -462,7 +462,9 @@ class Gaussian16Output(GaussianFileMixin):
         completed successfully. Useful for analyzing partially converged
         optimizations or error cases.
         """
-        return self.all_structures[-1]
+        if self.all_structures:
+            return self.all_structures[-1]
+        return self.input_coordinates_block.molecule
 
     @property
     def molecule(self):
