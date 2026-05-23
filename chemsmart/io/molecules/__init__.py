@@ -4,6 +4,73 @@ Data for molecules
 
 from ase.data import atomic_numbers, covalent_radii
 
+# Common chemical abbreviations and their SMILES representations
+# Used for expanding abbreviations in chemical structure images
+CHEMICAL_ABBREVIATIONS = {
+    "Ad": "C1C2CC3CC1CC(C2)C3",  # Adamantyl (1-adamantyl)
+    "Ph": "c1ccccc1",  # Phenyl
+    "Me": "C",  # Methyl
+    "Et": "CC",  # Ethyl
+    "nPr": "CCC",  # n-Propyl
+    "iPr": "C(C)C",  # Isopropyl
+    "Bu": "CCCC",  # Butyl
+    "nBu": "CCCC",  # n-Butyl
+    "iBu": "CC(C)C",  # Isobutyl
+    "sBu": "C(C)CC",  # sec-Butyl
+    "tBu": "C(C)(C)C",  # tert-Butyl
+    "nPent": "CCCCC",  # n-Pentyl
+    "nHex": "CCCCCC",  # n-Hexyl
+    "Bn": "Cc1ccccc1",  # Benzyl
+    "Ac": "C(=O)C",  # Acetyl
+    "Bz": "C(=O)c1ccccc1",  # Benzoyl
+    "Ts": "S(=O)(=O)c1ccc(C)cc1",  # Tosyl
+    "Ms": "S(=O)(=O)C",  # Mesyl
+    "Tf": "S(=O)(=O)C(F)(F)F",  # Triflyl
+    "Cy": "C1CCCCC1",  # Cyclohexyl
+    "OMe": "OC",  # Methoxy
+    "OEt": "OCC",  # Ethoxy
+    "NMe2": "N(C)C",  # Dimethylamino
+    "CF3": "C(F)(F)F",  # Trifluoromethyl
+    "NO2": "N(=O)=O",  # Nitro
+    "CHO": "C=O",  # Formyl
+    "CO2H": "C(=O)O",  # Carboxylic acid
+    "CO2Me": "C(=O)OC",  # Methyl ester
+    "CO2Et": "C(=O)OCC",  # Ethyl ester
+    "CN": "C#N",  # Cyano
+    "N3": "[N-]=[N+]=N",  # Azido
+    "Vinyl": "C=C",  # Vinyl
+    "Allyl": "CC=C",  # Allyl
+    "Propargyl": "CC#C",  # Propargyl
+    "Piv": "C(=O)C(C)(C)C",  # Pivaloyl
+    "OMs": "OS(=O)(=O)C",  # Mesylate
+    "OTs": "OS(=O)(=O)c1ccc(C)cc1",  # Tosylate
+    "OTf": "OS(=O)(=O)C(F)(F)F",  # Triflate
+    "Boc": "C(=O)OC(C)(C)C",  # tert-Butoxycarbonyl
+    "Cbz": "C(=O)OCc1ccccc1",  # Benzyloxycarbonyl
+    "Alloc": "C(=O)OCC=C",  # Allyloxycarbonyl
+    "Fmoc": "C(=O)OCC1c2ccccc2-c2ccccc21",  # Fluorenylmethyloxycarbonyl
+    "MOM": "COC",  # Methoxymethyl
+    "TMS": "[Si](C)(C)C",  # Trimethylsilyl
+    "TBDMS": "[Si](C)(C)C(C)(C)C",  # tert-Butyldimethylsilyl
+    "TBDPS": "[Si](c1ccccc1)(c1ccccc1)C(C)(C)C",  # tert-Butyldiphenylsilyl
+    "Trt": "C(c1ccccc1)(c1ccccc1)c1ccccc1",  # Trityl
+}
+
+# Dash characters commonly used in chemical drawings
+DASH_CHARACTERS = ["-", "–", "—"]  # hyphen, en-dash, em-dash
+
+# Minimum length for a valid SMILES string
+MIN_VALID_SMILES_LENGTH = 3
+
+# Mapping of functional group text to SMILES atom
+SUBSTITUENT_MAPPING = {
+    "SH": "S",  # Thiol
+    "OH": "O",  # Hydroxyl
+    "NH2": "N",  # Amine
+    "NH₂": "N",  # Amine (with subscript)
+}
+
+
 # Default buffer for bond cutoff calculations in Angstroms
 DEFAULT_BUFFER = 0.3
 
