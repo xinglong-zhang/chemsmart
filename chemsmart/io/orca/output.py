@@ -144,8 +144,13 @@ class ORCAOutput(ORCAFileMixin):
         Obtain a list of energies for each geometry optimization point.
         """
         energies = []
-        for i, line in enumerate(self.contents):
+        for line in self.contents:
             if "FINAL SINGLE POINT ENERGY" in line:
+                # Skip COSMORS-specific energy lines which have parenthetical
+                # labels, e.g. "FINAL SINGLE POINT ENERGY (Solute-gas-phase)"
+                remainder = line.split("FINAL SINGLE POINT ENERGY")[-1].strip()
+                if remainder.startswith("("):
+                    continue
                 energy = float(line.split()[-1])
                 energies.append(energy)
         return energies
@@ -776,15 +781,32 @@ class ORCAOutput(ORCAFileMixin):
         )
         return all_structures
 
+    def _get_cosmors_section_start_index(self):
+        """Return the line index where the OPENCOSMO-RS CALCULATION section
+        begins, or None if this is not a COSMORS output file."""
+        for i, line in enumerate(self.contents):
+            if "OPENCOSMO-RS CALCULATION" in line:
+                return i
+        return None
+
     def _get_all_orientations(self):
         """
         Extract all Cartesian coordinate blocks from the ORCA output.
+        Coordinate blocks that appear inside the OPENCOSMO-RS CALCULATION
+        section (solute/solvent information blocks) are skipped because they
+        are informational printouts, not SCF output geometries.
         """
         orientations = []
-        for i, line in enumerate(self.contents):
+        cosmors_start = self._get_cosmors_section_start_index()
+        contents = (
+            self.contents[:cosmors_start]
+            if cosmors_start is not None
+            else self.contents
+        )
+        for i, line in enumerate(contents):
             if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
                 coordinate_lines = []
-                for line_j in self.contents[i + 2 :]:  # Skip header lines
+                for line_j in contents[i + 2 :]:  # Skip header lines
                     if (
                         not line_j.strip() or "----" in line_j
                     ):  # End of coordinate block
@@ -808,12 +830,22 @@ class ORCAOutput(ORCAFileMixin):
 
     def _get_all_structures(self):
         """Extract all Cartesian coordinate blocks from the ORCA output.
-        This does not however include energy and forces."""
+        This does not however include energy and forces.
+        Coordinate blocks that appear inside the OPENCOSMO-RS CALCULATION
+        section (solute/solvent information blocks) are skipped because they
+        are informational printouts, not SCF output geometries.
+        """
         structures = []
-        for i, line in enumerate(self.contents):
+        cosmors_start = self._get_cosmors_section_start_index()
+        contents = (
+            self.contents[:cosmors_start]
+            if cosmors_start is not None
+            else self.contents
+        )
+        for i, line in enumerate(contents):
             if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
                 coordinate_lines = []
-                for line_j in self.contents[i:]:
+                for line_j in contents[i:]:
                     pattern = re.compile(standard_coord_pattern)
                     if len(line_j) == 0:
                         break
