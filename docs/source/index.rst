@@ -81,6 +81,12 @@ chemistry software.
 
 .. toctree::
    :maxdepth: 2
+   :caption: pKa Calculations
+
+   pka-calculations
+
+.. toctree::
+   :maxdepth: 2
    :caption: Thermochemistry
 
    thermochemistry-analysis

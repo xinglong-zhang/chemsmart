@@ -485,6 +485,13 @@ def orca(
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
+    elif filename.endswith(
+        (".cdx", ".cdxml", ".pdb", ".mol", ".mol2", ".sdf", ".cif")
+    ):
+        job_settings = ORCAJobSettings.default()
+        logger.info(
+            f"Using default ORCA settings for structure file: {filename}"
+        )
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain ORCAJobSettings"

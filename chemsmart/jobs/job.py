@@ -6,7 +6,7 @@ import shutil
 import time
 from abc import abstractmethod
 from contextlib import suppress
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -83,6 +83,87 @@ class Job(RegistryMixin):
             logger.info(f"{self} is already complete, not running.")
             return
         self._run(**kwargs)
+
+    @staticmethod
+    def _propagate_runner(
+        runner, job, *, num_cores=None, mem_gb=None, num_gpus=None
+    ):
+        """Copy *runner* onto *job*, optionally patching resource fields.
+
+        This is the **single, centralised** mechanism for propagating a
+        runner to a child job.  Every call site that needs to hand a runner
+        to a child should use this helper rather than assigning directly, so
+        that:
+
+        * The child always receives its own ``.copy()`` — no shared-reference
+          mutations between siblings.
+        * Resource overrides (e.g. splitting cores across parallel workers)
+          are applied in one place, making future additions (``num_gpus``,
+          ``mem_per_cpu``, …) a single-line change.
+
+        Args:
+            runner: The parent runner to propagate, or ``None``.
+            job (Job): The child job that will receive the runner copy.
+            num_cores (int, optional): Override ``runner.num_cores`` on the copy.
+            mem_gb (int, optional): Override ``runner.mem_gb`` on the copy.
+            num_gpus (int, optional): Override ``runner.num_gpus`` on the copy.
+
+        Returns:
+            The runner copy that was assigned, or ``None`` if *runner* was falsy.
+        """
+        if not runner:
+            return None
+        child_runner = runner.copy()
+        if num_cores is not None:
+            child_runner.num_cores = num_cores
+        if mem_gb is not None:
+            child_runner.mem_gb = mem_gb
+        if num_gpus is not None:
+            child_runner.num_gpus = num_gpus
+        job.jobrunner = child_runner
+        return child_runner
+
+    @staticmethod
+    def _execute_phase_jobs(
+        *,
+        parent_runner,
+        jobs: Optional[Sequence],
+        jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+        run_in_serial: bool = False,
+        stop_on_incomplete: bool = False,
+        before_run: Optional[Callable[[], None]] = None,
+        logger_obj: Optional[logging.Logger] = None,
+        phase_label: str = "phase",
+    ) -> None:
+        """Run a phase of child jobs using shared orchestration semantics.
+
+        This centralizes the repeated pattern of optional pre-phase refresh,
+        per-job runner propagation, and serial-mode fail-fast behavior.
+        """
+        if before_run is not None:
+            before_run()
+
+        if jobs_factory is not None:
+            jobs = jobs_factory()
+
+        if not jobs:
+            return
+
+        for child_job in jobs:
+            if logger_obj is not None:
+                logger_obj.info(f"Running {phase_label} job: {child_job}")
+            Job._propagate_runner(parent_runner, child_job)
+            child_job.run()
+            if (
+                run_in_serial
+                and stop_on_incomplete
+                and not child_job.is_complete()
+            ):
+                if logger_obj is not None:
+                    logger_obj.info(
+                        f"Job {child_job} incomplete, breaking {phase_label} loop."
+                    )
+                break
 
     @abstractmethod
     def _run(self, **kwargs):
