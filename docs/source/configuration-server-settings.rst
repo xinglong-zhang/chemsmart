@@ -3,7 +3,7 @@
 #################
 
 Configure server-specific settings for your HPC cluster or local machine. Server configuration files are YAML files
-stored in the ``~/.chemsmart/server/`` directory that define how Chemsmart submits and executes computational chemistry
+stored in the ``~/.chemsmart/server/`` directory that define how CHEMSMART submits and executes computational chemistry
 jobs. This folder is created automatically when configuring CHEMSMART. Users can access and freely modify the contents
 in this folder without affecting the CHEMSMART codes.
 
@@ -774,7 +774,7 @@ After creating a custom server configuration file:
 
 #. Save it in ``~/.chemsmart/server/`` with a descriptive name (e.g., ``myserver.yaml``)
 
-#. Use it with Chemsmart commands via the ``-s`` flag:
+#. Use it with chemsmart commands via the ``-s`` flag:
 
    .. code:: bash
 

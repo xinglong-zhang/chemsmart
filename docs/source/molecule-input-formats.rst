@@ -2,7 +2,7 @@
  Molecule Input Formats
 ########################
 
-Chemsmart provides flexible molecule input capabilities, supporting multiple file formats and molecular representations.
+CHEMSMART provides flexible molecule input capabilities, supporting multiple file formats and molecular representations.
 This page describes the various ways you can create molecules for use in quantum chemistry calculations.
 
 .. note::
@@ -100,7 +100,7 @@ Gaussian input files contain route, charge, multiplicity, and coordinates:
 
 .. tip::
 
-   Chemsmart reads the existing charge and multiplicity from ``.com`` files. Override with ``-c`` and ``-m`` if needed.
+   CHEMSMART reads the existing charge and multiplicity from ``.com`` files. Override with ``-c`` and ``-m`` if needed.
 
 Gaussian Output Files (.log, .out)
 ----------------------------------
@@ -142,7 +142,7 @@ ChemDraw Files
 ChemDraw XML (.cdxml) and Binary (.cdx) Files
 ---------------------------------------------
 
-Chemsmart supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
+CHEMSMART supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
 with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 .. code:: bash
@@ -231,7 +231,7 @@ Use structures from ASE database or trajectory files:
  Python Object Integration
 ***************************
 
-Chemsmart's ``Molecule`` class provides seamless integration with popular Python chemistry libraries:
+CHEMSMART's ``Molecule`` class provides seamless integration with popular Python chemistry libraries:
 
 From ASE Atoms
 ==============
@@ -244,7 +244,7 @@ From ASE Atoms
    # Create ASE Atoms object
    atoms = Atoms('H2O', positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
 
-   # Convert to Chemsmart Molecule
+   # Convert to CHEMSMART Molecule
    molecule = Molecule.from_ase_atoms(atoms)
 
 From RDKit Mol
@@ -260,7 +260,7 @@ From RDKit Mol
    rdkit_mol = Chem.MolFromSmiles('CCO')
    AllChem.EmbedMolecule(rdkit_mol)
 
-   # Convert to Chemsmart Molecule
+   # Convert to CHEMSMART Molecule
    molecule = Molecule.from_rdkit_mol(rdkit_mol)
 
 Aromaticity Detection (``is_aromatic``)
@@ -292,19 +292,19 @@ acyclic molecules (e.g. H₂O, MgI₂) that can arise when the geometry-based bo
 From Pymatgen
 =============
 
-Chemsmart molecules can be converted to and from Pymatgen format:
+CHEMSMART molecules can be converted to and from Pymatgen format:
 
 .. code:: python
 
    from chemsmart.io.molecules.structure import Molecule
 
-   # Convert Chemsmart Molecule to Pymatgen
+   # Convert CHEMSMART Molecule to Pymatgen
    molecule = Molecule.from_filepath('input.xyz')
    pymatgen_mol = molecule.to_pymatgen()
 
 .. note::
 
-   For converting Pymatgen molecules to Chemsmart, you can use the ASE Atoms adaptor as an intermediate format.
+   For converting Pymatgen molecules to CHEMSMART, you can use the ASE Atoms adaptor as an intermediate format.
 
 ****************
  Best Practices
@@ -338,12 +338,12 @@ For multi-structure files, use ``-i`` to select a specific structure:
 
 .. warning::
 
-   Chemsmart uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
+   CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
 
 File Format Auto-Detection
 ==========================
 
-Chemsmart automatically detects file formats based on extensions:
+CHEMSMART automatically detects file formats based on extensions:
 
 -  ``.xyz`` → XYZ format
 -  ``.sdf`` → SDF format
@@ -356,10 +356,10 @@ Chemsmart automatically detects file formats based on extensions:
 
 .. note::
 
-   For ``.out`` files, Chemsmart automatically detects whether the file is from ORCA or Gaussian by examining the file
+   For ``.out`` files, CHEMSMART automatically detects whether the file is from ORCA or Gaussian by examining the file
    header. If detection fails, an error will be raised indicating the unsupported format.
 
-For unsupported extensions, Chemsmart falls back to ASE's file reading capabilities.
+For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilities.
 
 **********
  See Also

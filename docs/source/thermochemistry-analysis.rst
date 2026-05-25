@@ -2,7 +2,7 @@
  Thermochemistry Analysis
 ##########################
 
-Chemsmart provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
+CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
 output files.
 
 *******************************
