@@ -127,6 +127,7 @@ def pka(
     concentration,
     pressure,
     cutoff_entropy_grimme,
+    cutoff_entropy_truhlar,
     cutoff_enthalpy,
     proton_index,
     color_code,
@@ -138,6 +139,11 @@ def pka(
       chemsmart run pka analyze ...
       chemsmart run pka batch-analyze ...
     """
+    from chemsmart.cli.pka import resolve_pka_entropy_cutoff
+
+    s_freq_cutoff, entropy_method = resolve_pka_entropy_cutoff(
+        cutoff_entropy_grimme, cutoff_entropy_truhlar
+    )
     shared = dict(
         scheme=scheme,
         reference=reference,
@@ -155,8 +161,9 @@ def pka(
         temperature=temperature,
         concentration=concentration,
         pressure=pressure,
-        cutoff_entropy_grimme=cutoff_entropy_grimme,
+        cutoff_entropy_grimme=s_freq_cutoff,
         cutoff_enthalpy=cutoff_enthalpy,
+        entropy_method=entropy_method,
         skip_completed=skip_completed,
     )
     ctx.ensure_object(dict)

@@ -3508,6 +3508,7 @@ class ORCApKaOutput(ORCAOutput):
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
+        entropy_method="grimme",
         energy_units="hartree",
     ):
         super().__init__(filename=filename)
@@ -3516,6 +3517,7 @@ class ORCApKaOutput(ORCAOutput):
         self.pressure = pressure
         self.cutoff_entropy_grimme = cutoff_entropy_grimme
         self.cutoff_enthalpy = cutoff_enthalpy
+        self.entropy_method = entropy_method
         self.energy_units = energy_units.lower()
         self._thermochemistry = None
 
@@ -3533,7 +3535,7 @@ class ORCApKaOutput(ORCAOutput):
                 use_weighted_mass=False,
                 alpha=4,
                 s_freq_cutoff=self.cutoff_entropy_grimme,
-                entropy_method="grimme",
+                entropy_method=self.entropy_method,
                 h_freq_cutoff=self.cutoff_enthalpy,
                 energy_units=self.energy_units,
                 check_imaginary_frequencies=True,
@@ -3803,6 +3805,7 @@ class ORCApKaOutput(ORCAOutput):
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
+        entropy_method="grimme",
         scheme="proton exchange",
         delta_G_proton=None,
     ):
@@ -3852,6 +3855,7 @@ class ORCApKaOutput(ORCAOutput):
                 pressure=pressure,
                 cutoff_entropy_grimme=cutoff_entropy_grimme,
                 cutoff_enthalpy=cutoff_enthalpy,
+                entropy_method=entropy_method,
             )
             E = out.electronic_energy_in_units
             G = out.qh_gibbs_free_energy
@@ -3954,6 +3958,7 @@ class ORCApKaOutput(ORCAOutput):
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
+        entropy_method="grimme",
         scheme="proton exchange",
         delta_G_proton=None,
     ):
@@ -3973,6 +3978,7 @@ class ORCApKaOutput(ORCAOutput):
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
             scheme=scheme,
             delta_G_proton=delta_G_proton,
         )

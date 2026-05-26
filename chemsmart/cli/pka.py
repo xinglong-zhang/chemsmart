@@ -17,6 +17,7 @@ import os
 import click
 
 from chemsmart.cli.thermochemistry.thermochemistry import (
+    resolve_entropy_cutoff,
     thermochemistry_cutoff_options,
     thermochemistry_temp_pressure_conc_options,
 )
@@ -34,6 +35,16 @@ logger = logging.getLogger(__name__)
 # ── helpers moved from cli/pka_helpers.py ──────────────────────────────
 
 
+def resolve_pka_entropy_cutoff(cutoff_entropy_grimme, cutoff_entropy_truhlar):
+    """Resolve pKa entropy cutoff; default to Grimme 100 cm⁻¹ when unset."""
+    s_freq_cutoff, entropy_method = resolve_entropy_cutoff(
+        cutoff_entropy_grimme, cutoff_entropy_truhlar
+    )
+    if s_freq_cutoff is None:
+        return 100.0, "grimme"
+    return s_freq_cutoff, entropy_method
+
+
 def click_pka_thermochemistry_options(f):
     """Thermochemistry options reused by pKa submission and analysis."""
     f = thermochemistry_temp_pressure_conc_options(
@@ -46,9 +57,7 @@ def click_pka_thermochemistry_options(f):
     )
     return thermochemistry_cutoff_options(
         f,
-        entropy_grimme_default=100.0,
         enthalpy_default=100.0,
-        include_truhlar=False,
     )
 
 
@@ -680,18 +689,24 @@ def pka(
     concentration,
     pressure,
     cutoff_entropy_grimme,
+    cutoff_entropy_truhlar,
     cutoff_enthalpy,
     scheme,
     delta_g_proton,
 ):
     """Backend-independent pKa output analysis."""
+    s_freq_cutoff, entropy_method = resolve_pka_entropy_cutoff(
+        cutoff_entropy_grimme, cutoff_entropy_truhlar
+    )
+
     ctx.ensure_object(dict)
     ctx.obj["pka_shared"] = dict(
         temperature=temperature,
         concentration=concentration,
         pressure=pressure,
-        cutoff_entropy_grimme=cutoff_entropy_grimme,
+        cutoff_entropy_grimme=s_freq_cutoff,
         cutoff_enthalpy=cutoff_enthalpy,
+        entropy_method=entropy_method,
         scheme=scheme,
         delta_g_proton=delta_g_proton,
     )
@@ -784,6 +799,7 @@ def analyze(
             pressure=shared["pressure"],
             cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
             cutoff_enthalpy=shared["cutoff_enthalpy"],
+            entropy_method=shared["entropy_method"],
         )
         return None
 
@@ -834,6 +850,7 @@ def analyze(
         pressure=shared["pressure"],
         cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
         cutoff_enthalpy=shared["cutoff_enthalpy"],
+        entropy_method=shared["entropy_method"],
     )
 
     # Return None so process_pipeline skips jobrunner execution.
@@ -918,6 +935,7 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
         pressure=shared["pressure"],
         cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
         cutoff_enthalpy=shared["cutoff_enthalpy"],
+        entropy_method=shared["entropy_method"],
         scheme=scheme,
         delta_G_proton=shared.get("delta_g_proton"),
     )

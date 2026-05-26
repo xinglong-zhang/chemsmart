@@ -2277,6 +2277,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
+        entropy_method="grimme",
         energy_units="hartree",
     ):
         """
@@ -2291,6 +2292,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 in cm^-1 using Grimme's quasi-RRHO method. Default 100.0.
             cutoff_enthalpy (float): Cutoff frequency for enthalpy
                 in cm^-1 using Head-Gordon's method. Default 100.0.
+            entropy_method (str): Entropy quasi-RRHO method ('grimme' or
+                'truhlar'). Default 'grimme'.
             energy_units (str): Energy units for output values.
                 Options: 'hartree', 'eV', 'kcal/mol', 'kJ/mol'. Default 'hartree'.
         """
@@ -2300,6 +2303,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
         self.pressure = pressure
         self.cutoff_entropy_grimme = cutoff_entropy_grimme
         self.cutoff_enthalpy = cutoff_enthalpy
+        self.entropy_method = entropy_method
         self.energy_units = energy_units.lower()
         self._thermochemistry = None
 
@@ -2325,7 +2329,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 use_weighted_mass=False,
                 alpha=4,
                 s_freq_cutoff=self.cutoff_entropy_grimme,
-                entropy_method="grimme",
+                entropy_method=self.entropy_method,
                 h_freq_cutoff=self.cutoff_enthalpy,
                 energy_units=self.energy_units,
                 check_imaginary_frequencies=True,
@@ -2768,6 +2772,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
         pressure=1.0,
         cutoff_entropy_grimme=100.0,
         cutoff_enthalpy=100.0,
+        entropy_method="grimme",
         scheme="proton exchange",
         delta_G_proton=None,
     ):
@@ -2826,6 +2831,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 pressure=pressure,
                 cutoff_entropy_grimme=cutoff_entropy_grimme,
                 cutoff_enthalpy=cutoff_enthalpy,
+                entropy_method=entropy_method,
             )
             E_gas_au = output.electronic_energy_in_units
             G_corr_au = output.qh_gibbs_free_energy - E_gas_au
@@ -2833,6 +2839,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
 
         def get_solvent_energy(solv_file):
             output = Gaussian16Output(filename=solv_file)
+            # Get the last SCF energy (solvent SP) in Hartree
             E_solv_au = output.energies[-1] if output.energies else None
             if E_solv_au is None:
                 raise ValueError(
@@ -2934,6 +2941,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
         pressure: float = 1.0,
         cutoff_entropy_grimme: float = 100.0,
         cutoff_enthalpy: float = 100.0,
+        entropy_method: str = "grimme",
         scheme="proton exchange",
         delta_G_proton=None,
     ):
@@ -2952,6 +2960,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
             concentration=concentration,
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
+            entropy_method=entropy_method,
             cutoff_enthalpy=cutoff_enthalpy,
             scheme=scheme,
             delta_G_proton=delta_G_proton,

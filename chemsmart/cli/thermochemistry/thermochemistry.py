@@ -25,7 +25,6 @@ def thermochemistry_cutoff_options(
     entropy_grimme_default=None,
     entropy_truhlar_default=None,
     enthalpy_default=None,
-    include_truhlar=True,
 ):
     """Reusable quasi-RRHO cutoff options."""
     f = click.option(
@@ -37,16 +36,15 @@ def thermochemistry_cutoff_options(
         help="Cutoff frequency for entropy in wavenumbers, using Grimme's "
         "quasi-RRHO method.",
     )(f)
-    if include_truhlar:
-        f = click.option(
-            "-cst",
-            "--cutoff-entropy-truhlar",
-            default=entropy_truhlar_default,
-            type=float,
-            show_default=True,
-            help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
-            "quasi-RRHO method.",
-        )(f)
+    f = click.option(
+        "-cst",
+        "--cutoff-entropy-truhlar",
+        default=entropy_truhlar_default,
+        type=float,
+        show_default=True,
+        help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
+        "quasi-RRHO method.",
+    )(f)
     f = click.option(
         "-ch",
         "--cutoff-enthalpy",
@@ -57,6 +55,23 @@ def thermochemistry_cutoff_options(
         "Head-Gordon's quasi-RRHO method.",
     )(f)
     return f
+
+
+def resolve_entropy_cutoff(cutoff_entropy_grimme, cutoff_entropy_truhlar):
+    """Resolve entropy cutoff and method from CLI options."""
+    if (
+        cutoff_entropy_grimme is not None
+        and cutoff_entropy_truhlar is not None
+    ):
+        raise ValueError(
+            "Cannot specify both --cutoff-entropy-grimme and "
+            "--cutoff-entropy-truhlar. Please choose one."
+        )
+    if cutoff_entropy_truhlar is not None:
+        return cutoff_entropy_truhlar, "truhlar"
+    if cutoff_entropy_grimme is not None:
+        return cutoff_entropy_grimme, "grimme"
+    return None, None
 
 
 def thermochemistry_temp_pressure_conc_options(
@@ -215,22 +230,9 @@ def thermochemistry(
     if program:
         check_program_availability_in_chemsmart(program)
 
-    if cutoff_entropy_grimme and cutoff_entropy_truhlar:
-        raise ValueError(
-            "Cannot specify both --cutoff-entropy-grimme and "
-            "--cutoff-entropy-truhlar. Please choose one."
-        )
-
-    # choose entropy cutoff
-    if cutoff_entropy_grimme is not None:
-        cutoff_entropy = cutoff_entropy_grimme
-        entropy_method = "grimme"
-    elif cutoff_entropy_truhlar is not None:
-        cutoff_entropy = cutoff_entropy_truhlar
-        entropy_method = "truhlar"
-    else:
-        cutoff_entropy = None
-        entropy_method = None
+    cutoff_entropy, entropy_method = resolve_entropy_cutoff(
+        cutoff_entropy_grimme, cutoff_entropy_truhlar
+    )
 
     # Create job settings
     job_settings = ThermochemistryJobSettings(

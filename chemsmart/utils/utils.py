@@ -2941,6 +2941,7 @@ class PKaOutputTable:
         pressure: float = 1.0,
         cutoff_entropy_grimme: float = 100.0,
         cutoff_enthalpy: float = 100.0,
+        entropy_method: str = "grimme",
         scheme: str = "proton exchange",
         delta_G_proton: float = None,
     ) -> list:
@@ -2962,6 +2963,7 @@ class PKaOutputTable:
                 pressure=pressure,
                 cutoff_entropy_grimme=cutoff_entropy_grimme,
                 cutoff_enthalpy=cutoff_enthalpy,
+                entropy_method=entropy_method,
                 scheme=scheme,
             )
             if scheme == "direct":
@@ -3088,6 +3090,7 @@ class PKaOutputTable:
         pressure: float = 1.0,
         cutoff_entropy_grimme: float = 100.0,
         cutoff_enthalpy: float = 100.0,
+        entropy_method: str = "grimme",
         scheme: str = "proton exchange",
         delta_G_proton: float = None,
     ) -> list:
@@ -3100,6 +3103,7 @@ class PKaOutputTable:
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
             cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
             scheme=scheme,
             delta_G_proton=delta_G_proton,
         )
