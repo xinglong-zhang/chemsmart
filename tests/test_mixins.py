@@ -36,30 +36,90 @@ class TestFileMixin:
         assert dummy.num_energies == 2
 
 
-class TestValidateImaginaryFrequencies:
-    def test_skips_when_not_normally_terminated(self):
+class TestFrequencyValidation:
+    def test_opt_job_no_imaginary_freqs_is_valid(self):
         dummy = DummyFile("test.log")
-        dummy.normal_termination = False
-        dummy.vibrational_frequencies = []
-        assert dummy.validate_imaginary_frequencies() is None
+        dummy.vibrational_frequencies = [100.0, 200.0]
+        dummy.jobtype = "opt"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "OPT"
+        assert report["total_imaginary_frequencies"] == 0
+        assert report["is_valid_minimum"] is True
+        assert report["is_valid_ts"] is False
 
-    def test_passes_with_real_frequencies(self, gaussian_co2_opt_outfile):
-        from chemsmart.io.gaussian.output import Gaussian16Output
+    def test_opt_job_with_imaginary_freqs_is_invalid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-50.0, 200.0]
+        dummy.jobtype = "opt"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "OPT"
+        assert report["total_imaginary_frequencies"] == 1
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
 
-        output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
-        assert (
-            output.validate_imaginary_frequencies(role="HA", label="test")
-            is None
-        )
+    def test_ts_job_one_imaginary_freq_is_valid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-150.0, 200.0, 300.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "TS"
+        assert report["total_imaginary_frequencies"] == 1
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is True
 
-    def test_fails_with_imaginary_frequencies(self):
-        dummy = DummyFile("opt.log")
-        dummy.normal_termination = True
-        dummy.vibrational_frequencies = [500.0, -120.5]
-        msg = dummy.validate_imaginary_frequencies(role="HA", label="mol1")
-        assert "Imaginary frequency check FAILED" in msg
-        assert "mol1" in msg
-        assert "[HA]" in msg
+    def test_ts_job_no_imaginary_freqs_is_invalid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [100.0, 200.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "TS"
+        assert report["total_imaginary_frequencies"] == 0
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
+
+    def test_ts_job_multiple_imaginary_freqs_is_invalid(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-100.0, -200.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "TS"
+        assert report["total_imaginary_frequencies"] == 2
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
+
+    def test_no_frequencies_returns_valid_for_opt(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = None
+        dummy.jobtype = "opt"
+        report = dummy.validate_frequencies()
+        assert report["is_valid_minimum"] is True
+        assert report["total_imaginary_frequencies"] == 0
+
+    def test_ignore_threshold(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-10.0, -20.0]
+        dummy.jobtype = "ts"
+        report = dummy.validate_frequencies(ignore_threshold=-15.0)
+        assert report["total_imaginary_frequencies"] == 1
+        assert report["is_valid_ts"] is True
+
+    def test_unknown_job_type(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-50.0]
+        dummy.jobtype = "sp"
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "SP"
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
+
+    def test_none_job_type(self):
+        dummy = DummyFile("test.log")
+        dummy.vibrational_frequencies = [-50.0]
+        dummy.jobtype = None
+        report = dummy.validate_frequencies()
+        assert report["detected_job_type"] == "UNKNOWN"
+        assert report["is_valid_minimum"] is False
+        assert report["is_valid_ts"] is False
 
 
 class DummyGaussianFile(GaussianFileMixin):

@@ -392,31 +392,54 @@ class FileMixin:
         else:
             return None
 
-    def validate_imaginary_frequencies(self, role=None, label=None):
-        """Check whether an optimisation output contains imaginary frequencies.
+    def validate_frequencies(self, ignore_threshold=-15.0):
+        """
+        Validate vibrational frequencies based on the job type and return a report.
+
+        - For an "OPT" job, it checks for zero imaginary frequencies.
+        - For a "TS" job, it checks for exactly one imaginary frequency.
+        - For other job types, validation is not performed.
+
+        Args:
+            ignore_threshold (float): Frequencies above this threshold are ignored.
 
         Returns:
-            None if validation passes or is skipped; an error message string
-            otherwise.
+            dict: A dictionary containing the validation results.
         """
-        if not self.normal_termination:
-            return None
+        imaginary_freqs = []
+        if self.vibrational_frequencies is not None:
+            imaginary_freqs = [
+                freq
+                for freq in self.vibrational_frequencies
+                if freq < ignore_threshold
+            ]
 
-        if not self.vibrational_frequencies:
-            return None
+        num_imaginary = len(imaginary_freqs)
+        job_type = self.jobtype.upper() if self.jobtype else ""
 
-        imaginary = [f for f in self.vibrational_frequencies if f < 0.0]
-        if not imaginary:
-            return None
+        is_valid_minimum = False
+        is_valid_ts = False
+        detected_job_type = "UNKNOWN"
 
-        display_label = label or self.filename
-        role_prefix = f"[{role}] " if role else ""
-        return (
-            f"{role_prefix}Imaginary frequency check FAILED for "
-            f"{display_label}: found {len(imaginary)} imaginary "
-            f"mode(s) {imaginary}. The optimised geometry is not a "
-            f"true minimum – please re-optimise."
-        )
+        if "OPT" in job_type:
+            is_valid_minimum = num_imaginary == 0
+            detected_job_type = "OPT"
+        elif "TS" in job_type:
+            is_valid_ts = num_imaginary == 1
+            detected_job_type = "TS"
+        elif self.jobtype:
+            detected_job_type = self.jobtype.upper()
+
+        if self.vibrational_frequencies is None and "OPT" in job_type:
+            is_valid_minimum = True
+
+        return {
+            "detected_job_type": detected_job_type,
+            "total_imaginary_frequencies": num_imaginary,
+            "imaginary_frequencies_list": imaginary_freqs,
+            "is_valid_minimum": is_valid_minimum,
+            "is_valid_ts": is_valid_ts,
+        }
 
 
 class GaussianFileMixin(FileMixin):
