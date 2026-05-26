@@ -74,11 +74,23 @@ def click_export_options(f):
         ),
     )
     @click.option(
+        "-x",
+        "--method-basis",
+        "method_basis",
+        type=str,
+        default=None,
+        help=(
+            "Filter --sid/--mid XYZ/extXYZ export by 'method/basis' "
+            "(e.g. 'MN15/def2tzvp'). For XYZ, structures must have energy "
+            "at this level; for extXYZ, structures must have both energy and forces."
+        ),
+    )
+    @click.option(
         "-o",
         "--output",
         type=str,
         required=True,
-        help="Output file path. Format inferred from extension (.json, .csv, .xyz).",
+        help="Output file path. Format inferred from extension (.json, .csv, .xyz, .extxyz).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -99,6 +111,7 @@ def export(
     structure_id,
     molecule_id,
     keys,
+    method_basis,
     output,
 ):
     """Export records from a chemsmart database.
@@ -109,10 +122,11 @@ def export(
       .json  - Full structured database content
       .csv   - Scalar properties table
       .xyz   - Cartesian coordinates of selected structure(s)
+      .extxyz - Extended XYZ with per-frame energy and per-atom forces
 
     \b
     JSON and CSV always export the entire database; selection options
-    (--ri/--rid/--si/--sid/--mid) are accepted only for XYZ.
+    (--ri/--rid/--si/--sid/--mid) are accepted only for XYZ/extXYZ.
 
     \b
     Default CSV columns: record_index, record_id, chemical_formula.
@@ -131,8 +145,8 @@ def export(
         chemsmart run database export -f my.db --rid a1b2c3d45e6f -o final.xyz
         chemsmart run database export -f my.db --ri 2 --si 3 -o step3.xyz
         chemsmart run database export -f my.db --ri 2 --si ':' -o traj.xyz
-        chemsmart run database export -f my.db --sid 0df6b2ea4bdc -o struct.xyz
-        chemsmart run database export -f my.db --mid BLQJIBCZHWBKSL-U -o conformers.xyz
+        chemsmart run database export -f my.db --sid 0df6b2ea4bdc -o struct.extxyz
+        chemsmart run database export -f my.db --mid BLQJIBCZHWBKSL-U -x 'MN15/def2tzvp' -o conformers.extxyz
     """
     # Validate input database
     file = os.path.abspath(file)
@@ -163,11 +177,15 @@ def export(
             raise click.UsageError(
                 f"{ext} export always covers the entire database; "
                 f"selection options {', '.join(used_selectors)} are not "
-                "allowed. They are only valid for .xyz exports."
+                "allowed. They are only valid for .xyz/.extxyz exports."
             )
         if ext == ".json" and keys is not None:
             raise click.UsageError("-k/--keys is only valid for .csv exports.")
-    elif ext == ".xyz":
+        if method_basis is not None:
+            raise click.UsageError(
+                "-x/--method-basis is only valid for .xyz/.extxyz exports."
+            )
+    elif ext in (".xyz", ".extxyz"):
         if keys is not None:
             raise click.UsageError("-k/--keys is only valid for .csv exports.")
         # Mutual exclusivity among record/structure/molecule selectors
@@ -180,7 +198,7 @@ def export(
         primary_used = [name for name, val in primary if val is not None]
         if len(primary_used) == 0:
             raise click.UsageError(
-                "XYZ export requires exactly one of "
+                f"{ext} export requires exactly one of "
                 "--ri/--record-index, --rid/--record-id, "
                 "--sid/--structure-id, or --mid/--molecule-id."
             )
@@ -197,6 +215,18 @@ def export(
                 "--si/--structure-index can only be used together with "
                 "--ri/--record-index or --rid/--record-id."
             )
+        if method_basis is not None and not (
+            structure_id is not None or molecule_id is not None
+        ):
+            raise click.UsageError(
+                "-x/--method-basis can only be used together with "
+                "--sid/--structure-id or --mid/--molecule-id."
+            )
+
+    # Parse and validate -x/--method-basis against the database.
+    method = basis = None
+    if method_basis is not None:
+        method, basis = _parse_method_basis(file, method_basis)
 
     exporter = DatabaseExporter(
         db_file=file,
@@ -207,9 +237,39 @@ def export(
         structure_id=structure_id,
         molecule_id=molecule_id,
         keys=keys,
+        method=method,
+        basis=basis,
     )
 
-    exporter.export()
+    try:
+        exporter.export()
+    except ValueError as e:
+        raise click.ClickException(str(e))
     logger.info(f"Exported to {os.path.basename(output)}.")
 
     return None
+
+
+def _parse_method_basis(db_file, raw):
+    """Translate a user-supplied 'method/basis' string into a canonical
+    (method, basis) tuple resolved against the database."""
+    from chemsmart.database.database import Database
+
+    if "/" not in raw:
+        raise click.UsageError(
+            f"-x/--method-basis must be given as 'method/basis' "
+            f"(got '{raw}'). Example: 'MN15/def2tzvp'."
+        )
+    method_raw, basis_raw = (s.strip() for s in raw.split("/", 1))
+    if not method_raw or not basis_raw:
+        raise click.UsageError(
+            f"-x/--method-basis must be given as 'method/basis' with "
+            f"both parts non-empty (got '{raw}')."
+        )
+
+    resolved = Database(db_file).resolve_method_basis(method_raw, basis_raw)
+    if resolved is None:
+        raise click.UsageError(
+            f"-x/--method-basis '{raw}' is not present in the database."
+        )
+    return resolved

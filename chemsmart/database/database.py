@@ -1057,6 +1057,132 @@ class Database:
         finally:
             conn.close()
 
+    def pick_primary_forces_method_basis(self, structure_ids):
+        """Pick a single (method, basis) to use for forces export across a
+        set of structures.
+        Chooses the force-bearing (method, basis) that covers the most distinct
+        structures. Ties are broken by the number of matching force rows, then
+        by the most recent record_index.
+        Returns:
+            tuple: (method, basis), or (None, None) if no forces exist.
+        """
+        sids = list(structure_ids)
+        if not sids:
+            return None, None
+        placeholders = ",".join("?" for _ in sids)
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                f"""
+                SELECT r.method AS method, r.basis AS basis,
+                       COUNT(DISTINCT rs.structure_id) AS n_structs,
+                       COUNT(*) AS n_rows,
+                       MAX(r.record_index) AS max_idx
+                FROM record_structures rs
+                JOIN records r ON rs.record_id = r.record_id
+                WHERE rs.structure_id IN ({placeholders})
+                  AND rs.forces_json IS NOT NULL
+                  AND rs.energy IS NOT NULL
+                GROUP BY r.method, r.basis
+                ORDER BY n_structs DESC, n_rows DESC, max_idx DESC
+                LIMIT 1
+                """,
+                sids,
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None, None
+        return row["method"], row["basis"]
+
+    def resolve_method_basis(self, method, basis):
+        """Case-insensitively resolve a (method, basis) pair to the canonical
+        casing stored in the records table."""
+        if method is None or basis is None:
+            return None
+        conn = sqlite3.connect(self.db_file)
+        try:
+            cursor = conn.execute(
+                "SELECT method, basis FROM records "
+                "WHERE LOWER(method) = ? AND LOWER(basis) = ? LIMIT 1",
+                (method.lower(), basis.lower()),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return row[0], row[1]
+
+    def get_forces_for_structure_at(self, structure_id, method, basis):
+        """Return (forces, energy) for a structure at a specific (method, basis).
+        Forces and energy are read from the same record_structures row, so they
+        come from the same calculation. If multiple records match, the latest
+        record_index is used.
+        Returns:
+            tuple: (forces, energy), or (None, None) if no matching forces exist.
+        """
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                """
+                SELECT rs.forces_json AS forces_json,
+                       rs.energy      AS energy
+                FROM record_structures rs
+                JOIN records r ON rs.record_id = r.record_id
+                WHERE rs.structure_id = ?
+                  AND rs.forces_json IS NOT NULL
+                  AND rs.energy IS NOT NULL
+                  AND r.method IS ?
+                  AND r.basis  IS ?
+                ORDER BY r.record_index DESC
+                LIMIT 1
+                """,
+                (structure_id, method, basis),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None, None
+        return from_json(row["forces_json"]), row["energy"]
+
+    def get_forces_for_record_structure_at(
+        self, record_id, structure_id, method, basis
+    ):
+        """Return (forces, energy) for a structure within a specific record.
+        Returns:
+            tuple: (forces, energy), or (None, None) if no matching data exists.
+        """
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                """
+                SELECT rs.forces_json AS forces_json,
+                       rs.energy      AS energy
+                FROM record_structures rs
+                JOIN records r ON rs.record_id = r.record_id
+                WHERE r.record_id = ?
+                  AND rs.structure_id = ?
+                  AND rs.forces_json IS NOT NULL
+                  AND rs.energy IS NOT NULL
+                  AND r.method IS ?
+                  AND r.basis  IS ?
+                LIMIT 1
+                """,
+                (record_id, structure_id, method, basis),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None, None
+        return from_json(row["forces_json"]), row["energy"]
+
     def get_structures_for_molecule(self, molecule_id):
         """Get all structures (conformers) belonging to a molecule."""
         conn = sqlite3.connect(self.db_file)

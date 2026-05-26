@@ -1487,6 +1487,8 @@ class Molecule:
         """
         if format.lower() == "xyz":
             self.write_xyz(filename, mode=mode, **kwargs)
+        elif format.lower() == "extxyz":
+            self.write_extxyz(filename, mode=mode, **kwargs)
         elif format.lower() == "com":
             self.write_com(filename, **kwargs)
         # elif format.lower() == "mol":
@@ -1519,6 +1521,53 @@ class Molecule:
             f.write(f"{self.num_atoms}\n")
             f.write(f"{xyz_info}\n")
             self._write_orca_coordinates(f)
+
+    def write_extxyz(self, filename, mode="w", **kwargs):
+        """Write molecule to extended-XYZ format file.
+
+        Args:
+            filename (str): Output file path.
+            mode (str): File write mode. Default 'w'.
+            **kwargs: Additional keyword arguments (unused).
+        """
+        # Validate forces shape when present.
+        forces_list = None
+        if self.forces is not None:
+            try:
+                forces_arr = np.asarray(self.forces, dtype=float)
+                if forces_arr.ndim == 2 and forces_arr.shape == (
+                    self.num_atoms,
+                    3,
+                ):
+                    forces_list = forces_arr.tolist()
+            except (TypeError, ValueError):
+                pass
+        properties = "species:S:1:pos:R:3"
+        if forces_list is not None:
+            properties += ":forces:R:3"
+        parts = [f"Properties={properties}"]
+        if self.energy is not None:
+            parts.append(f"energy={float(self.energy):.10f}")
+            parts.append('energy_units="Hartree"')
+        if forces_list is not None:
+            parts.append('forces_units="Hartree/Bohr"')
+        header = " ".join(parts)
+
+        logger.info(f"Writing extended XYZ to {filename}")
+        with open(filename, mode) as f:
+            f.write(f"{self.num_atoms}\n")
+            f.write(f"{header}\n")
+            if forces_list is None:
+                self._write_orca_coordinates(f)
+            else:
+                for i, (s, (x, y, z)) in enumerate(
+                    zip(self.chemical_symbols, self.positions)
+                ):
+                    fx, fy, fz = forces_list[i]
+                    f.write(
+                        f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f} "
+                        f"{fx:15.10f} {fy:15.10f} {fz:15.10f}\n"
+                    )
 
     def write_com(
         self,

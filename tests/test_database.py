@@ -309,10 +309,10 @@ class TestDatabaseUtilities:
             {"structure_id": "e", "energies": [("PBE0", "def2svp", -10.0)]},
             {"structure_id": "d", "energies": [("M062X", "def2svp", -20.0)]},
         ]
-        sorted_frames = sort_frames_by_energy(frames)
+        sorted_frames_auto = sort_frames_by_energy(frames)
         # bucket 0 (ascending B3LYP): a(-3.0) -> b(-2.0) -> c(-1.0)
         # bucket 1 (ascending fallback): d(-20.0) -> e(-10.0)
-        assert [f["structure_id"] for f in sorted_frames] == [
+        assert [f["structure_id"] for f in sorted_frames_auto] == [
             "a",
             "b",
             "c",
@@ -320,7 +320,21 @@ class TestDatabaseUtilities:
             "e",
         ]
         # Primary (method, basis) entry must be moved to the front within each frame.
-        assert sorted_frames[0]["energies"][0] == ("B3LYP", "def2svp", -3.0)
+        assert sorted_frames_auto[0]["energies"][0] == (
+            "B3LYP",
+            "def2svp",
+            -3.0,
+        )
+        sorted_frames_specified = sort_frames_by_energy(
+            frames, primary=("M062X", "def2svp")
+        )
+        assert [f["structure_id"] for f in sorted_frames_specified] == [
+            "d",
+            "e",
+            "a",
+            "b",
+            "c",
+        ]
 
         # No-energy case: original order preserved, no IndexError.
         empty_frames = [{"structure_id": "x", "energies": []}]

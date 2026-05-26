@@ -264,26 +264,31 @@ def collect_energies_for_structure(db_file, structure_id):
     ]
 
 
-def sort_frames_by_energy(frames):
-    """Sort frames ascending by energy at the most-covered (method, basis);
+def sort_frames_by_energy(frames, primary=None):
+    """Sort frames ascending by energy at a chosen (method, basis) key;
     frames missing that key go to the end (sorted by their own lowest
     available energy).
     """
-    # 1) Count (method, basis) coverage across all frames
-    counts = {}
-    for frame in frames:
-        for method, basis, _ in frame.get("energies", []):
-            key = (method, basis)
-            counts[key] = counts.get(key, 0) + 1
-    if not counts:
-        return frames  # nothing to sort by
-
-    # 2) Pick the most frequent (method, basis) as primary key
-    primary = max(counts.items(), key=lambda kv: kv[1])[0]
-    logger.info(
-        f"Sorting {len(frames)} frame(s) by energy at "
-        f"{primary[0]}/{primary[1]}; frames missing it go to the end."
-    )
+    if primary is None:
+        # 1) Count (method, basis) coverage across all frames
+        counts = {}
+        for frame in frames:
+            for method, basis, _ in frame.get("energies", []):
+                key = (method, basis)
+                counts[key] = counts.get(key, 0) + 1
+        if not counts:
+            return frames  # nothing to sort by
+        # 2) Pick the most-covered (method, basis) as the primary sorting key
+        primary = max(counts.items(), key=lambda kv: kv[1])[0]
+        logger.info(
+            f"Sorting {len(frames)} frame(s) by energy at "
+            f"{primary[0]}/{primary[1]}; frames missing it go to the end."
+        )
+    else:
+        logger.info(
+            f"Sorting {len(frames)} frame(s) by specified energy at "
+            f"{primary[0]}/{primary[1]}; frames missing it go to the end."
+        )
 
     def sort_key(frame):
         energies = frame.get("energies", [])
