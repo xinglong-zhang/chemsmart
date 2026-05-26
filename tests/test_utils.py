@@ -1391,7 +1391,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_txt(self, tmp_path):
         """Test parsing a whitespace-delimited .txt table file."""
-        from chemsmart.utils.utils import parse_pka_table
+        from chemsmart.utils.utils import PKaTableEntry
 
         table_file = tmp_path / "molecules.txt"
         table_file.write_text(
@@ -1402,7 +1402,7 @@ class TestPKaTableParsing:
             "mol3.xyz 8 -1 1\n"
         )
 
-        entries = parse_pka_table(str(table_file))
+        entries = PKaTableEntry.parse_pka_table(str(table_file))
         assert len(entries) == 3
         assert entries[0].filepath == "mol1.xyz"
         assert entries[0].proton_index == 10
@@ -1419,7 +1419,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_csv(self, tmp_path):
         """Test parsing a comma-delimited .csv table file."""
-        from chemsmart.utils.utils import parse_pka_table
+        from chemsmart.utils.utils import PKaTableEntry
 
         table_file = tmp_path / "molecules.csv"
         table_file.write_text(
@@ -1428,7 +1428,7 @@ class TestPKaTableParsing:
             "path/to/mol2.xyz,12,-2,3\n"
         )
 
-        entries = parse_pka_table(str(table_file))
+        entries = PKaTableEntry.parse_pka_table(str(table_file))
         assert len(entries) == 2
         assert entries[0].filepath == "path/to/mol1.xyz"
         assert entries[0].proton_index == 5
@@ -1441,7 +1441,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_skip_comments_and_empty_lines(self, tmp_path):
         """Test that comments and empty lines are skipped."""
-        from chemsmart.utils.utils import parse_pka_table
+        from chemsmart.utils.utils import PKaTableEntry
 
         table_file = tmp_path / "molecules.txt"
         table_file.write_text(
@@ -1454,12 +1454,12 @@ class TestPKaTableParsing:
             "mol2.xyz 2 0 1\n"
         )
 
-        entries = parse_pka_table(str(table_file))
+        entries = PKaTableEntry.parse_pka_table(str(table_file))
         assert len(entries) == 2
 
     def test_parse_pka_table_invalid_column_count(self, tmp_path):
         """Test that invalid column count raises ValueError."""
-        from chemsmart.utils.utils import parse_pka_table
+        from chemsmart.utils.utils import PKaTableEntry
 
         table_file = tmp_path / "bad.txt"
         table_file.write_text(
@@ -1468,11 +1468,11 @@ class TestPKaTableParsing:
         )
 
         with pytest.raises(ValueError, match="expected 4 columns"):
-            parse_pka_table(str(table_file))
+            PKaTableEntry.parse_pka_table(str(table_file))
 
     def test_parse_pka_table_invalid_integer(self, tmp_path):
         """Test that invalid integer values raise ValueError."""
-        from chemsmart.utils.utils import parse_pka_table
+        from chemsmart.utils.utils import PKaTableEntry
 
         table_file = tmp_path / "bad.txt"
         table_file.write_text(
@@ -1481,24 +1481,24 @@ class TestPKaTableParsing:
         )
 
         with pytest.raises(ValueError, match="not an integer"):
-            parse_pka_table(str(table_file))
+            PKaTableEntry.parse_pka_table(str(table_file))
 
     def test_parse_pka_table_empty_raises(self, tmp_path):
         """Test that empty table raises ValueError."""
-        from chemsmart.utils.utils import parse_pka_table
+        from chemsmart.utils.utils import PKaTableEntry
 
         table_file = tmp_path / "empty.txt"
         table_file.write_text("# Only comments\n")
 
         with pytest.raises(ValueError, match="No valid entries"):
-            parse_pka_table(str(table_file))
+            PKaTableEntry.parse_pka_table(str(table_file))
 
     def test_parse_pka_table_file_not_found(self):
         """Test that missing file raises FileNotFoundError."""
-        from chemsmart.utils.utils import parse_pka_table
+        from chemsmart.utils.utils import PKaTableEntry
 
         with pytest.raises(FileNotFoundError):
-            parse_pka_table("/nonexistent/path/molecules.txt")
+            PKaTableEntry.parse_pka_table("/nonexistent/path/molecules.txt")
 
     def test_pka_table_entry_validate_missing_file(self, tmp_path):
         """Test PKaTableEntry validation catches missing files."""
