@@ -28,8 +28,8 @@ amu_to_kg = 1 * units._amu  # 1 amu = 1.66053906660e-27 kg
 hartree_to_joules = 4.35974434e-18  # 1 Hartree = 4.35974434 × 10^-18 Joules
 cal_to_joules = 4.184  # 1 Calorie = 4.184 Joules
 
-# Direct conversion factor: 1 Hartree = 627.5094740631 kcal/mol
-hartree_to_kcal_mol = 627.5094740631
+# Energy conversion factors derived from ase.units for consistency
+hartree_to_kcal_mol = units.Hartree / (units.kcal / units.mol)
 HARTREE_TO_KCAL_MOL = hartree_to_kcal_mol
 
 # Conversion factors for energy units
