@@ -104,8 +104,8 @@ A typical chemsmart database workflow is:
 #. **Query** database entries, with or without structured filters, using ``chemsmart run database query`` (see
    :doc:`database-query`).
 #. **Inspect** selected entries in detail using ``chemsmart run database inspect`` (see :doc:`database-inspect`).
-#. **Export** selected content as JSON, CSV, or XYZ for downstream analysis using ``chemsmart run database export`` (see
-   :doc:`database-export`).
+#. **Export** selected content as JSON, CSV, XYZ, or extended XYZ (with per-atom forces) for downstream analysis using
+   ``chemsmart run database export`` (see :doc:`database-export`).
 #. **Reuse** database entries in downstream chemsmart workflows (see :doc:`database-workflow`).
 
 *****************
@@ -125,7 +125,7 @@ A typical chemsmart database workflow is:
    -  -  ``query``
       -  Filter records, molecules, or structures using a structured query expression.
    -  -  ``export``
-      -  Export the database or selected entries to JSON, CSV, or XYZ.
+      -  Export the database or selected entries to JSON, CSV, XYZ, or extended XYZ.
 
 *************
  Usage Notes
