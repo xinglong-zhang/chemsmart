@@ -2416,105 +2416,108 @@ class PKaTableEntry:
         if errors:
             raise ValueError("; ".join(errors))
 
-
-def parse_pka_table(
-    table_path: str,
-    delimiter: str = None,
-    skip_header: bool = True,
-) -> list:
-    """Thin pKa adapter on top of the generic tabular parser layer."""
-    dataset = TabularDataset.parse_table(
-        table_path=table_path,
-        delimiter=delimiter,
-        comment="#",
-    )
-
-    try:
-        file_col = TabularDataset.resolve_column(
-            dataset.columns,
-            PKaTableEntry._ALIASES["filepath"],
+    def parse_pka_table(
+        table_path: str,
+        delimiter: str = None,
+        skip_header: bool = True,
+    ) -> list:
+        """Thin pKa adapter on top of the generic tabular parser layer."""
+        dataset = TabularDataset.parse_table(
+            table_path=table_path,
+            delimiter=delimiter,
+            comment="#",
         )
-        proton_col = TabularDataset.resolve_column(
-            dataset.columns,
-            PKaTableEntry._ALIASES["proton_index"],
-        )
-        charge_col = TabularDataset.resolve_column(
-            dataset.columns,
-            PKaTableEntry._ALIASES["charge"],
-        )
-        mult_col = TabularDataset.resolve_column(
-            dataset.columns,
-            PKaTableEntry._ALIASES["multiplicity"],
-        )
-    except ValueError:
-        raise ValueError(
-            "Invalid table format: expected 4 columns "
-            "(filepath, proton_index, charge, multiplicity)."
-        )
-
-    # Canonicalize selected columns for generic validation/entry materialization.
-    canonical_df = dataset.dataframe.rename(
-        columns={
-            file_col: "filepath",
-            proton_col: "proton_index",
-            charge_col: "charge",
-            mult_col: "multiplicity",
-        }
-    )[["filepath", "proton_index", "charge", "multiplicity"]]
-
-    canonical_dataset = TabularDataset(canonical_df, source_path=table_path)
-    canonical_dataset.validate(
-        required_columns=[
-            "filepath",
-            "proton_index",
-            "charge",
-            "multiplicity",
-        ],
-        integer_columns=[],
-        positive_integer_columns=[],
-        path_columns=[],
-        check_file_exists=False,
-    )
-
-    entries = canonical_dataset.to_entries(
-        entry_cls=PKaTableEntry, row_offset=2
-    )
-
-    # Coerce numeric fields to preserve historical parse_pka_table behavior.
-    for entry in entries:
-        line_num = entry.row_number if entry.row_number is not None else 0
 
         try:
-            entry["proton_index"] = int(entry["proton_index"])
-        except (TypeError, ValueError):
+            file_col = TabularDataset.resolve_column(
+                dataset.columns,
+                PKaTableEntry._ALIASES["filepath"],
+            )
+            proton_col = TabularDataset.resolve_column(
+                dataset.columns,
+                PKaTableEntry._ALIASES["proton_index"],
+            )
+            charge_col = TabularDataset.resolve_column(
+                dataset.columns,
+                PKaTableEntry._ALIASES["charge"],
+            )
+            mult_col = TabularDataset.resolve_column(
+                dataset.columns,
+                PKaTableEntry._ALIASES["multiplicity"],
+            )
+        except ValueError:
             raise ValueError(
-                f"Invalid proton_index at line {line_num}: "
-                f"{entry['proton_index']!r} is not an integer"
+                "Invalid table format: expected 4 columns "
+                "(filepath, proton_index, charge, multiplicity)."
             )
 
-        try:
-            entry["charge"] = int(entry["charge"])
-        except (TypeError, ValueError):
+        # Canonicalize selected columns for generic validation/entry materialization.
+        canonical_df = dataset.dataframe.rename(
+            columns={
+                file_col: "filepath",
+                proton_col: "proton_index",
+                charge_col: "charge",
+                mult_col: "multiplicity",
+            }
+        )[["filepath", "proton_index", "charge", "multiplicity"]]
+
+        canonical_dataset = TabularDataset(
+            canonical_df, source_path=table_path
+        )
+        canonical_dataset.validate(
+            required_columns=[
+                "filepath",
+                "proton_index",
+                "charge",
+                "multiplicity",
+            ],
+            integer_columns=[],
+            positive_integer_columns=[],
+            path_columns=[],
+            check_file_exists=False,
+        )
+
+        entries = canonical_dataset.to_entries(
+            entry_cls=PKaTableEntry, row_offset=2
+        )
+
+        # Coerce numeric fields to preserve historical parse_pka_table behavior.
+        for entry in entries:
+            line_num = entry.row_number if entry.row_number is not None else 0
+
+            try:
+                entry["proton_index"] = int(entry["proton_index"])
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"Invalid proton_index at line {line_num}: "
+                    f"{entry['proton_index']!r} is not an integer"
+                )
+
+            try:
+                entry["charge"] = int(entry["charge"])
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"Invalid charge at line {line_num}: "
+                    f"{entry['charge']!r} is not an integer"
+                )
+
+            try:
+                entry["multiplicity"] = int(entry["multiplicity"])
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"Invalid multiplicity at line {line_num}: "
+                    f"{entry['multiplicity']!r} is not an integer"
+                )
+
+        if skip_header and len(entries) >= 0:
+            pass
+
+        if not entries:
             raise ValueError(
-                f"Invalid charge at line {line_num}: "
-                f"{entry['charge']!r} is not an integer"
+                f"No valid entries found in pKa table: {table_path}"
             )
 
-        try:
-            entry["multiplicity"] = int(entry["multiplicity"])
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Invalid multiplicity at line {line_num}: "
-                f"{entry['multiplicity']!r} is not an integer"
-            )
-
-    if skip_header and len(entries) >= 0:
-        pass
-
-    if not entries:
-        raise ValueError(f"No valid entries found in pKa table: {table_path}")
-
-    return entries
+        return entries
 
 
 # ---------------------------------------------------------------------------
@@ -2835,254 +2838,6 @@ class PKaOutputTableEntry:
             raise ValueError("; ".join(errors))
 
 
-def parse_pka_output_table(table_path: str, delimiter: str = None) -> list:
-    """Parse an output-table file into a list of :class:`PKaOutputTableEntry`.
-
-    The table must contain a header row. Columns are resolved by
-    normalised aliases. At minimum, the ``basename`` column is required.
-    Output file columns (``ha_gas``, ``a_gas``, ``ha_sp``, ``a_sp``) are
-    optional; if omitted, they are auto-discovered by appending standard
-    suffixes (``_pka``, ``_pka_cb``, ``_pka_sp``, ``_pka_cb_sp``) to the
-    basename.
-
-    Args:
-        table_path: Path to the ``.txt`` / ``.csv`` table file.
-        delimiter: Explicit delimiter (auto-detected if *None*).
-
-    Returns:
-        list[PKaOutputTableEntry]: One entry per data row, with column
-        names canonicalised to the first alias in each alias list.
-
-    Raises:
-        FileNotFoundError: If *table_path* does not exist.
-        ValueError: If the table is empty or required columns are missing.
-    """
-    import pandas as pd
-
-    dataset = TabularDataset.parse_table(
-        table_path=table_path,
-        delimiter=delimiter,
-        comment="#",
-    )
-
-    # Resolve physical→canonical column mapping.
-    rename_map = {}
-    for canonical, aliases in PKaOutputTableEntry._ALIASES.items():
-        resolved = TabularDataset.resolve_column(
-            dataset.columns,
-            aliases,
-            required=False,
-        )
-        if resolved is not None:
-            rename_map[resolved] = canonical
-
-    # Ensure at least ``basename`` is present.
-    # Other file columns are optional and will be auto-discovered if missing.
-    if "basename" not in rename_map.values():
-        raise ValueError(
-            "Output table is missing required column: basename. "
-            f"Accepted aliases: {PKaOutputTableEntry._ALIASES['basename']}"
-        )
-
-    canonical_df = dataset.dataframe.rename(columns=rename_map)
-
-    # Keep only canonical columns that were found.
-    canonical_cols = [
-        c for c in PKaOutputTableEntry._ALIASES if c in canonical_df.columns
-    ]
-    canonical_df = canonical_df[canonical_cols]
-
-    # Replace NaN with None for cleaner downstream handling.
-    canonical_df = canonical_df.where(pd.notnull(canonical_df), None)
-
-    canonical_dataset = TabularDataset(canonical_df, source_path=table_path)
-    entries = canonical_dataset.to_entries(
-        entry_cls=PKaOutputTableEntry,
-        row_offset=2,
-    )
-
-    if not entries:
-        raise ValueError(
-            f"No valid entries found in pKa output table: {table_path}"
-        )
-
-    return entries
-
-
-def resolve_pka_output_references(entries: list) -> list:
-    """Fill blank reference-acid columns by carrying forward from earlier rows.
-
-    For each row, if any of the reference-acid columns
-    (``hb_gas``, ``b_gas``, ``hb_sp``, ``b_sp``, ``pka_ref``) are blank
-    (*None*), the value from the most recently defined non-blank row is
-    used.  This allows users to specify the reference acid only once when
-    the same reference is shared across multiple target species.
-
-    Args:
-        entries: List of :class:`PKaOutputTableEntry` (mutated in place).
-
-    Returns:
-        list[PKaOutputTableEntry]: The same list, for chaining.
-
-    Raises:
-        ValueError: If the first row contains blank reference columns
-            (nothing to carry forward from).
-    """
-    ref_cols = PKaOutputTableEntry._REFERENCE_COLUMNS
-    last_ref = {}
-
-    for entry in entries:
-        for col in ref_cols:
-            val = entry.get(col)
-            if val is not None and not (
-                isinstance(val, float) and np.isnan(val)
-            ):
-                # Current row has a value → remember it.
-                last_ref[col] = val
-            else:
-                # Blank → carry forward.
-                if col not in last_ref:
-                    raise ValueError(
-                        f"Reference column '{col}' is blank in row "
-                        f"{entry.row_number} and no previous value exists "
-                        f"to carry forward."
-                    )
-                entry[col] = last_ref[col]
-
-    return entries
-
-
-def compute_pka_from_output_table(
-    entries: list,
-    output_cls,
-    temperature: float = 298.15,
-    concentration: float = 1.0,
-    pressure: float = 1.0,
-    cutoff_entropy_grimme: float = 100.0,
-    cutoff_enthalpy: float = 100.0,
-    scheme: str = "proton exchange",
-    delta_G_proton: float = None,
-) -> list:
-    """Compute pKa for every row in a parsed output table.
-
-    This is a thin orchestration layer that calls
-    ``output_cls.compute_pka()`` (either ``Gaussian16pKaOutput`` or
-    ``ORCApKaOutput``) for each :class:`PKaOutputTableEntry`.
-
-    Args:
-        entries: Validated & reference-resolved output-table entries.
-        output_cls: The pKa output class with a ``compute_pka`` classmethod
-            (e.g. ``Gaussian16pKaOutput`` or ``ORCApKaOutput``).
-        temperature: Temperature in Kelvin.
-        concentration: Concentration in mol/L.
-        pressure: Pressure in atm.
-        cutoff_entropy_grimme: Grimme quasi-RRHO entropy cutoff (cm⁻¹).
-        cutoff_enthalpy: Head-Gordon enthalpy cutoff (cm⁻¹).
-        scheme: Thermodynamic cycle ('direct' or 'proton exchange').
-        delta_G_proton: G_soln(H⁺) in kcal/mol for the direct cycle.
-
-    Returns:
-        list[dict]: One result dict per entry, each containing the
-        ``compute_pka()`` output plus the ``basename`` key.
-    """
-    if scheme == "direct" and delta_G_proton is None:
-        raise ValueError("delta_G_proton is required when scheme='direct'.")
-
-    results = []
-    for entry in entries:
-        pka_kwargs = dict(
-            ha_gas_file=entry["ha_gas"],
-            a_gas_file=entry["a_gas"],
-            ha_solv_file=entry["ha_sp"],
-            a_solv_file=entry["a_sp"],
-            temperature=temperature,
-            concentration=concentration,
-            pressure=pressure,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            scheme=scheme,
-        )
-        if scheme == "direct":
-            pka_kwargs["delta_G_proton"] = delta_G_proton
-        elif scheme == "proton exchange":
-            pka_kwargs.update(
-                href_gas_file=entry["href_gas"],
-                ref_gas_file=entry["ref_gas"],
-                href_solv_file=entry["href_sp"],
-                ref_solv_file=entry["ref_sp"],
-                pka_reference=float(entry["pka_ref"]),
-            )
-        else:
-            raise ValueError(f"Unsupported pKa analysis scheme: {scheme!r}")
-        pka_result = output_cls.compute_pka(**pka_kwargs)
-        pka_result["basename"] = entry["basename"]
-        results.append(pka_result)
-    return results
-
-
-def pka_scheme_delta_g_key(scheme):
-    """Return the result-dict key for a scheme-specific ΔG value."""
-    keys = {
-        "direct": "delta_G_diss_kcal_mol",
-        "proton exchange": "delta_G_soln_kcal_mol",
-    }
-    if scheme is None:
-        return None
-    return keys.get(scheme)
-
-
-def pka_scheme_delta_g_value(result, scheme=None):
-    """Return the ΔG value appropriate for the analysis scheme."""
-    resolved_scheme = scheme or result.get("scheme")
-    key = pka_scheme_delta_g_key(resolved_scheme)
-    if key is not None:
-        return result[key]
-    return result.get("delta_G_diss_kcal_mol", result["delta_G_soln_kcal_mol"])
-
-
-def export_pka_results_table(
-    entries: list,
-    results: list,
-    output_path: str,
-    scheme: str = None,
-) -> None:
-    """Export a table with original columns plus computed pKa values.
-
-    Writes a CSV or whitespace-delimited file (inferred from extension)
-    that appends ``pka`` and a scheme-specific ΔG column to the original
-    entry data.
-
-    Args:
-        entries: The parsed output-table entries.
-        results: The list of result dicts from
-            :func:`compute_pka_from_output_table`.
-        output_path: Destination file path (``.csv`` → comma-delimited,
-            otherwise whitespace-delimited).
-        scheme: Thermodynamic cycle ('direct' or 'proton exchange'). When
-            omitted, inferred from the first result dict if available.
-    """
-    import pandas as pd
-
-    if scheme is None and results:
-        scheme = results[0].get("scheme")
-    delta_g_column = pka_scheme_delta_g_key(scheme) or "delta_G_soln_kcal_mol"
-
-    rows = []
-    for entry, result in zip(entries, results):
-        row = entry.to_dict()
-        row["pka"] = result["pKa"]
-        row[delta_g_column] = pka_scheme_delta_g_value(result, scheme)
-        rows.append(row)
-
-    df = pd.DataFrame(rows)
-    if str(output_path).lower().endswith(".csv"):
-        df.to_csv(output_path, index=False)
-    else:
-        df.to_csv(output_path, index=False, sep="\t")
-
-    logger.info(f"pKa results table written to {output_path}")
-
-
 class PKaOutputTable:
     """Parsed pKa output table with reference resolution and pKa execution.
 
@@ -3096,11 +2851,193 @@ class PKaOutputTable:
         self.source_path = source_path
         self.results = None
 
+    @staticmethod
+    def parse_pka_output_table(table_path: str, delimiter: str = None) -> list:
+        """Parse an output-table file into :class:`PKaOutputTableEntry` rows."""
+        import pandas as pd
+
+        dataset = TabularDataset.parse_table(
+            table_path=table_path,
+            delimiter=delimiter,
+            comment="#",
+        )
+
+        rename_map = {}
+        for canonical, aliases in PKaOutputTableEntry._ALIASES.items():
+            resolved = TabularDataset.resolve_column(
+                dataset.columns,
+                aliases,
+                required=False,
+            )
+            if resolved is not None:
+                rename_map[resolved] = canonical
+
+        if "basename" not in rename_map.values():
+            raise ValueError(
+                "Output table is missing required column: basename. "
+                f"Accepted aliases: {PKaOutputTableEntry._ALIASES['basename']}"
+            )
+
+        canonical_df = dataset.dataframe.rename(columns=rename_map)
+        canonical_cols = [
+            c
+            for c in PKaOutputTableEntry._ALIASES
+            if c in canonical_df.columns
+        ]
+        canonical_df = canonical_df[canonical_cols]
+        canonical_df = canonical_df.where(pd.notnull(canonical_df), None)
+
+        canonical_dataset = TabularDataset(
+            canonical_df, source_path=table_path
+        )
+        entries = canonical_dataset.to_entries(
+            entry_cls=PKaOutputTableEntry,
+            row_offset=2,
+        )
+
+        if not entries:
+            raise ValueError(
+                f"No valid entries found in pKa output table: {table_path}"
+            )
+
+        return entries
+
     @classmethod
     def from_file(cls, table_path: str, delimiter: str = None):
         """Parse an output table file into a ``PKaOutputTable`` object."""
-        entries = parse_pka_output_table(table_path, delimiter=delimiter)
+        entries = cls.parse_pka_output_table(table_path, delimiter=delimiter)
         return cls(entries=entries, source_path=table_path)
+
+    @staticmethod
+    def resolve_pka_output_references(entries: list) -> list:
+        """Fill blank reference-acid columns by carrying forward earlier rows."""
+        ref_cols = PKaOutputTableEntry._REFERENCE_COLUMNS
+        last_ref = {}
+
+        for entry in entries:
+            for col in ref_cols:
+                val = entry.get(col)
+                if val is not None and not (
+                    isinstance(val, float) and np.isnan(val)
+                ):
+                    last_ref[col] = val
+                else:
+                    if col not in last_ref:
+                        raise ValueError(
+                            f"Reference column '{col}' is blank in row "
+                            f"{entry.row_number} and no previous value exists "
+                            f"to carry forward."
+                        )
+                    entry[col] = last_ref[col]
+
+        return entries
+
+    @staticmethod
+    def compute_pka_from_output_table(
+        entries: list,
+        output_cls,
+        temperature: float = 298.15,
+        concentration: float = 1.0,
+        pressure: float = 1.0,
+        cutoff_entropy_grimme: float = 100.0,
+        cutoff_enthalpy: float = 100.0,
+        scheme: str = "proton exchange",
+        delta_G_proton: float = None,
+    ) -> list:
+        """Compute pKa for every row using the supplied output class."""
+        if scheme == "direct" and delta_G_proton is None:
+            raise ValueError(
+                "delta_G_proton is required when scheme='direct'."
+            )
+
+        results = []
+        for entry in entries:
+            pka_kwargs = dict(
+                ha_gas_file=entry["ha_gas"],
+                a_gas_file=entry["a_gas"],
+                ha_solv_file=entry["ha_sp"],
+                a_solv_file=entry["a_sp"],
+                temperature=temperature,
+                concentration=concentration,
+                pressure=pressure,
+                cutoff_entropy_grimme=cutoff_entropy_grimme,
+                cutoff_enthalpy=cutoff_enthalpy,
+                scheme=scheme,
+            )
+            if scheme == "direct":
+                pka_kwargs["delta_G_proton"] = delta_G_proton
+            elif scheme == "proton exchange":
+                pka_kwargs.update(
+                    href_gas_file=entry["href_gas"],
+                    ref_gas_file=entry["ref_gas"],
+                    href_solv_file=entry["href_sp"],
+                    ref_solv_file=entry["ref_sp"],
+                    pka_reference=float(entry["pka_ref"]),
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported pKa analysis scheme: {scheme!r}"
+                )
+            pka_result = output_cls.compute_pka(**pka_kwargs)
+            pka_result["basename"] = entry["basename"]
+            results.append(pka_result)
+        return results
+
+    @staticmethod
+    def pka_scheme_delta_g_key(scheme):
+        """Return the result-dict key for a scheme-specific ΔG value."""
+        keys = {
+            "direct": "delta_G_diss_kcal_mol",
+            "proton exchange": "delta_G_soln_kcal_mol",
+        }
+        if scheme is None:
+            return None
+        return keys.get(scheme)
+
+    @staticmethod
+    def pka_scheme_delta_g_value(result, scheme=None):
+        """Return the ΔG value appropriate for the analysis scheme."""
+        resolved_scheme = scheme or result.get("scheme")
+        key = PKaOutputTable.pka_scheme_delta_g_key(resolved_scheme)
+        if key is not None:
+            return result[key]
+        return result.get(
+            "delta_G_diss_kcal_mol", result["delta_G_soln_kcal_mol"]
+        )
+
+    @staticmethod
+    def export_pka_results_table(
+        entries: list,
+        results: list,
+        output_path: str,
+        scheme: str = None,
+    ) -> None:
+        """Export a table with original columns plus computed pKa values."""
+        import pandas as pd
+
+        if scheme is None and results:
+            scheme = results[0].get("scheme")
+        delta_g_column = (
+            PKaOutputTable.pka_scheme_delta_g_key(scheme)
+            or "delta_G_soln_kcal_mol"
+        )
+
+        rows = []
+        for entry, result in zip(entries, results):
+            row = entry.to_dict()
+            row["pka"] = result["pKa"]
+            row[delta_g_column] = PKaOutputTable.pka_scheme_delta_g_value(
+                result, scheme
+            )
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        if str(output_path).lower().endswith(".csv"):
+            df.to_csv(output_path, index=False)
+        else:
+            df.to_csv(output_path, index=False, sep="\t")
+
+        logger.info(f"pKa results table written to {output_path}")
 
     def __len__(self):
         return len(self.entries)
@@ -3110,7 +3047,7 @@ class PKaOutputTable:
 
     def resolve_references(self):
         """Fill blank reference-acid columns by carrying previous values."""
-        resolve_pka_output_references(self.entries)
+        self.resolve_pka_output_references(self.entries)
         return self
 
     def validate(
@@ -3155,7 +3092,7 @@ class PKaOutputTable:
         delta_G_proton: float = None,
     ) -> list:
         """Compute pKa for every row using the supplied output class."""
-        self.results = compute_pka_from_output_table(
+        self.results = self.compute_pka_from_output_table(
             entries=self.entries,
             output_cls=output_cls,
             temperature=temperature,
@@ -3172,12 +3109,20 @@ class PKaOutputTable:
         self, output_path: str, results: list = None, scheme: str = None
     ) -> None:
         """Export computed pKa results for this table."""
-        export_pka_results_table(
+        self.export_pka_results_table(
             self.entries,
             self.results if results is None else results,
             output_path,
             scheme=scheme,
         )
+
+
+parse_pka_output_table = PKaOutputTable.parse_pka_output_table
+resolve_pka_output_references = PKaOutputTable.resolve_pka_output_references
+compute_pka_from_output_table = PKaOutputTable.compute_pka_from_output_table
+pka_scheme_delta_g_key = PKaOutputTable.pka_scheme_delta_g_key
+pka_scheme_delta_g_value = PKaOutputTable.pka_scheme_delta_g_value
+export_pka_results_table = PKaOutputTable.export_pka_results_table
 
 
 def validate_pka_table_entries(

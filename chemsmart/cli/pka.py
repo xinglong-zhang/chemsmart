@@ -526,7 +526,7 @@ def echo_pka_output_table_results(
     pressure,
     scheme=None,
 ):
-    from chemsmart.utils.utils import pka_scheme_delta_g_value
+    from chemsmart.utils.utils import PKaOutputTable
 
     display_scheme = scheme
     if display_scheme is None and results:
@@ -546,7 +546,7 @@ def echo_pka_output_table_results(
     click.echo(f"{'basename':<30} {'pKa':>10} {dg_label:>20}")
     click.echo("-" * 78)
     for entry, result in zip(pka_table, results):
-        dg_value = pka_scheme_delta_g_value(result, scheme)
+        dg_value = PKaOutputTable.pka_scheme_delta_g_value(result, scheme)
         click.echo(
             f"{entry['basename']:<30} "
             f"{result['pKa']:>10.2f} "
