@@ -243,13 +243,13 @@ def batch(ctx, skip_completed, **kwargs):
     from chemsmart.jobs.orca.pka import ORCApKaJob
     from chemsmart.jobs.orca.settings import ORCApKaJobSettings
     from chemsmart.utils.utils import (
-        parse_pka_table,
+        PKaTableEntry,
         validate_pka_table_entries,
     )
 
     logger.info(f"Reading ORCA pKa jobs from table: {input_table_path}")
     try:
-        entries = parse_pka_table(input_table_path)
+        entries = PKaTableEntry.parse_pka_table(input_table_path)
         validate_pka_table_entries(entries, check_file_exists=True)
     except (FileNotFoundError, ValueError) as e:
         raise click.UsageError(str(e))
