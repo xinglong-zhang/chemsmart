@@ -2,7 +2,7 @@
  Querying Databases
 ####################
 
-The ``query`` subcommand searches a chemsmart database using a compact expression language. The query target can be
+The ``query`` subcommand searches a CHEMSMART database using a compact expression language. The query target can be
 switched between records, molecules, or structures.
 
 *******

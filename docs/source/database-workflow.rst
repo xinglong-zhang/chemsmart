@@ -2,15 +2,15 @@
  Workflow Integration
 ######################
 
-Once a chemsmart database has been assembled, its records and structures can be reused directly as inputs for other
-chemsmart commands without any manual export step. This page describes how database files fit into visualization and new
+Once a CHEMSMART database has been assembled, its records and structures can be reused directly as inputs for other
+CHEMSMART commands without any manual export step. This page describes how database files fit into visualization and new
 calculation workflows.
 
 ***************************
  Using a Database as Input
 ***************************
 
-Database files (``.db``) can be used as input for supported chemsmart workflows, including Gaussian jobs (see
+Database files (``.db``) can be used as input for supported CHEMSMART workflows, including Gaussian jobs (see
 :doc:`gaussian-cli-options`), ORCA jobs (see :doc:`orca-cli-options`), and PyMOL visualization (see
 :doc:`pymol-cli-options`), in the same way as ordinary molecule files.
 
@@ -128,7 +128,7 @@ Gaussian/ORCA calculations.
    chemsmart run mol -f project.db --ri 12 visualize
    chemsmart sub -s server gaussian -p project -f project.db --ri 12 sp
 
-This pattern — assemble, query, inspect, export, reuse — captures the most common interaction with chemsmart databases:
+This pattern — assemble, query, inspect, export, reuse — captures the most common interaction with CHEMSMART databases:
 calculation outputs are collected into a database, inspected or filtered, exported when needed, and reused as inputs for
 visualization or new calculations.
 

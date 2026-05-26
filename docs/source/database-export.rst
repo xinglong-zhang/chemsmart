@@ -2,7 +2,7 @@
  Exporting Databases
 #####################
 
-The ``export`` subcommand writes data from a chemsmart database to a portable file format. The output format is inferred
+The ``export`` subcommand writes data from a CHEMSMART database to a portable file format. The output format is inferred
 from the extension of the output file specified with ``-o/--output``.
 
 *******

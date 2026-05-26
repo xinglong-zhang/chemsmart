@@ -2,7 +2,7 @@
  Inspecting Databases
 ######################
 
-The ``inspect`` subcommand provides human-readable summaries and detailed views of a chemsmart database. Without
+The ``inspect`` subcommand provides human-readable summaries and detailed views of a CHEMSMART database. Without
 selectors, it prints a database-level overview. With selectors, it drills down to a single record, structure, or
 molecule.
 

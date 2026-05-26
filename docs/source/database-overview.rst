@@ -2,9 +2,9 @@
  Database Management
 #####################
 
-Chemsmart provides a unified database subsystem for managing, querying, and reusing quantum chemistry calculation data.
+CHEMSMART provides a unified database subsystem for managing, querying, and reusing quantum chemistry calculation data.
 The ``chemsmart run database`` command group converts heterogeneous computational output files into a structured,
-identity-aware, and queryable database for downstream analysis, machine learning, and chemsmart workflow automation.
+identity-aware, and queryable database for downstream analysis, machine learning, and CHEMSMART workflow automation.
 
 ************
  Motivation
@@ -14,15 +14,15 @@ Computational chemistry projects typically generate hundreds to thousands of out
 directories, programs, and levels of theory. Without a unified data model, it can be difficult to manage, compare,
 query, and report these results in a consistent and reproducible way.
 
-The chemsmart database module addresses this challenge by converting fragmented calculation outputs into normalized,
+The CHEMSMART database module addresses this challenge by converting fragmented calculation outputs into normalized,
 reusable database records. It is designed to:
 
 -  parse computational output files into schema-driven records;
 -  separate molecular identity from calculation context;
 -  deduplicate chemical species and 3D conformers across calculations;
--  store everything in a portable, single-file chemsmart database (``.db``);
+-  store everything in a portable, single-file CHEMSMART database (``.db``);
 -  provide CLI tools for inspecting, querying, filtering, and exporting data;
--  enable stored records and structures to be reused directly in downstream chemsmart workflows.
+-  enable stored records and structures to be reused directly in downstream CHEMSMART workflows.
 
 Together, these features allow computational results to be treated not as isolated output files, but as structured,
 traceable, and reusable scientific data.
@@ -31,7 +31,7 @@ traceable, and reusable scientific data.
  Data Model
 ************
 
-The chemsmart database separates calculation data into three core entities: ``record``, ``molecule``, and ``structure``.
+The CHEMSMART database separates calculation data into three core entities: ``record``, ``molecule``, and ``structure``.
 These entities represent *what was computed*, *what chemical species was studied*, and *which 3D geometry was used*.
 
 .. list-table::
@@ -57,7 +57,7 @@ These entities represent *what was computed*, *what chemical species was studied
       -  Identified by ``structure_id``. Stores geometry-level information, including coordinates, charge, multiplicity,
          and simple geometric descriptors.
 
-This organization allows chemsmart to recognize when the same molecule or conformer appears in multiple calculations,
+This organization allows CHEMSMART to recognize when the same molecule or conformer appears in multiple calculations,
 while preserving calculation-specific information needed for analysis and reproducibility.
 
 Identifiers
@@ -97,7 +97,7 @@ Identifiers
  Workflow
 **********
 
-A typical chemsmart database workflow is:
+A typical CHEMSMART database workflow is:
 
 #. **Assemble** output files from a project directory into a single ``.db`` file using ``chemsmart run database
    assemble`` (see :doc:`database-assemble`).
@@ -119,7 +119,7 @@ A typical chemsmart database workflow is:
    -  -  Subcommand
       -  Purpose
    -  -  ``assemble``
-      -  Parse computational chemistry output files and build a chemsmart database.
+      -  Parse computational chemistry output files and build a CHEMSMART database.
    -  -  ``inspect``
       -  Print detailed information for databases, records, molecules, and structures.
    -  -  ``query``
@@ -135,9 +135,9 @@ A typical chemsmart database workflow is:
    skipped during ``assemble``.
 -  **Idempotent assembly.** Re-running ``assemble`` on the same directory will not duplicate records. Entries with the
    same ``record_id`` are replaced, and the number of replaced duplicates is reported.
--  **Database validation.** Every database operation first verifies that the input is a valid chemsmart database with
+-  **Database validation.** Every database operation first verifies that the input is a valid CHEMSMART database with
    the expected schema. Foreign ``.db`` files are rejected with a clear error.
--  **Portability.** A chemsmart database is stored as a single portable ``.db`` file. It can be copied between machines
+-  **Portability.** A CHEMSMART database is stored as a single portable ``.db`` file. It can be copied between machines
    and shared alongside the source outputs for reproducibility, since each record carries provenance metadata.
 
 ***********************

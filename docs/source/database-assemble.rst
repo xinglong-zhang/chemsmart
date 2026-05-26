@@ -3,7 +3,7 @@
 ####################
 
 The ``assemble`` subcommand scans a project directory for supported quantum chemistry output files, parses the extracted
-calculation data, and stores the results as records in a chemsmart database.
+calculation data, and stores the results as records in a CHEMSMART database.
 
 Each record is uniquely identified by its ``record_id``. If a newly parsed output file generates a ``record_id`` that
 already exists in the database, the existing record is updated with the newly parsed data rather than duplicated. This
