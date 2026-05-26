@@ -122,6 +122,14 @@ class TestGetOutfileFormat:
         result = get_program_type_from_file(water_output_gas_path)
         assert result == "orca"
 
+    def test_orca_log_output_detection(self, tmp_path):
+        """Test detection of ORCA .log output file."""
+        log_content = "* O   R   C   A *"
+        log_file = tmp_path / "test.log"
+        log_file.write_text(log_content)
+        result = get_program_type_from_file(str(log_file))
+        assert result == "orca"
+
     def test_unknown_format(self):
         """Test unknown file format."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
