@@ -571,6 +571,65 @@ class TestDatabaseSchemaAndInsertion:
             )
         conn.close()
 
+    def test_upsert_fills_missing_perception_columns(
+        self, tmp_path, gaussian_co2_opt_outfile
+    ):
+        """molecules UPSERT: a later record supplying SMILES / InChI fills in
+        the NULLs left by an earlier record with the same molecule_id."""
+        record = SingleFileAssembler(gaussian_co2_opt_outfile).assemble_data
+        molecule_id = record.molecules[0]["molecule_id"]
+        original_smiles = record.molecules[0]["smiles"]
+        original_inchi = record.molecules[0]["inchi"]
+        # sanity: parser produces both perception fields
+        assert original_smiles is not None
+        assert original_inchi is not None
+
+        # First insertion: blank out perception fields on every frame so the
+        # row lands with NULL across the board
+        for m in record.molecules:
+            m["smiles"] = None
+            m["inchi"] = None
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        db.insert_records([record])
+        row = db.get_molecule(molecule_id)
+        assert row["smiles"] is None
+        assert row["inchi"] is None
+
+        # Second insertion: restore values; UPSERT must fill both NULLs
+        for m in record.molecules:
+            m["smiles"] = original_smiles
+            m["inchi"] = original_inchi
+        db.insert_records([record])
+        row = db.get_molecule(molecule_id)
+        assert row["smiles"] == original_smiles
+        assert row["inchi"] == original_inchi
+
+    def test_upsert_does_not_overwrite_perception_columns(
+        self, tmp_path, gaussian_co2_opt_outfile
+    ):
+        """molecules UPSERT: existing non-NULL SMILES / InChI are preserved
+        when a later record arrives with these fields NULL."""
+        record = SingleFileAssembler(gaussian_co2_opt_outfile).assemble_data
+        molecule_id = record.molecules[0]["molecule_id"]
+        original_smiles = record.molecules[0]["smiles"]
+        original_inchi = record.molecules[0]["inchi"]
+        assert original_smiles is not None
+        assert original_inchi is not None
+
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        db.insert_records([record])
+
+        # Second insertion: same molecule_id but no perception fields
+        for m in record.molecules:
+            m["smiles"] = None
+            m["inchi"] = None
+        db.insert_records([record])
+        row = db.get_molecule(molecule_id)
+        assert row["smiles"] == original_smiles
+        assert row["inchi"] == original_inchi
+
 
 class TestDatabaseRecordMoleculeStructureQueries:
     def test_get_record_summaries(

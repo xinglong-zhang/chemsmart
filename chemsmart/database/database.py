@@ -367,7 +367,9 @@ class Database:
     def _insert_related_rows(self, conn, record_dict):
         """Insert rows into molecules, structures, and record_structures tables.
         For each Molecule entry in the record, splits its data into:
-        1. INSERT OR IGNORE into molecules (species dedup by molecule_id)
+        1. UPSERT into molecules: dedup by molecule_id; preserve deterministic
+           columns (formula, mass, ...) and enrich NULL chemical-perception
+           columns (smiles, inchi, chiral_centers) when later records supply them.
         2. INSERT OR IGNORE into structures (geometry dedup by structure_id)
         3. INSERT into record_structures (per-calculation data)
         """
@@ -386,7 +388,7 @@ class Database:
             # Step 1: Insert species (dedup by molecule_id)
             conn.execute(
                 """
-                INSERT OR IGNORE INTO molecules (
+                INSERT INTO molecules (
                     molecule_id, molecule_label, empirical_formula,
                     chemical_formula, smiles, inchi, chiral_centers_json,
                     number_of_atoms, mass,
@@ -394,6 +396,10 @@ class Database:
                     is_aromatic, is_monoatomic, is_diatomic, is_linear,
                     is_multicomponent, num_components
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(molecule_id) DO UPDATE SET
+                    smiles = COALESCE(molecules.smiles, excluded.smiles),
+                    inchi = COALESCE(molecules.inchi, excluded.inchi),
+                    chiral_centers_json = COALESCE(molecules.chiral_centers_json, excluded.chiral_centers_json)
                 """,
                 (
                     molecule_id,
