@@ -186,7 +186,7 @@ def submit(ctx, skip_completed, **kwargs):
     is a multi-fragment CDXML, this will expand to one job per molecule.
 
     Example:
-        chemsmart run gaussian <gaussian_options> pka <pka_options> submit
+        chemsmart sub gaussian <gaussian_options> pka <pka_options> submit
 
     Args:
         ctx: Click context containing shared options and objects from the
