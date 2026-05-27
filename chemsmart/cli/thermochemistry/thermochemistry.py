@@ -162,13 +162,14 @@ def click_thermochemistry_options(f):
         show_default=True,
         help="Overwrite existing output files if they already exist.",
     )(f)
-    return click.option(
+    f = click.option(
         "-i/",
         "--check-imaginary-frequencies/--no-check-imaginary-frequencies",
         default=True,
         show_default=True,
         help="Check for imaginary frequencies in the calculations.",
     )(f)
+    return f
 
 
 # use MyGroup to allow potential subcommands in the future
