@@ -9,6 +9,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+SCHEMA_VERSION = 1
+
 # Width of the separator lines
 LINE_WIDTH = 100
 
@@ -19,14 +21,34 @@ CUSTOM_BASIS_KEYWORDS = {"gen", "genecp"}
 CUSTOM_SOLVENT_KEYWORDS = {"generic,read", "generic"}
 
 
+def open_connection(db_file):
+    """Open a SQLite connection with chemsmart's standard pragmas."""
+    conn = sqlite3.connect(db_file, timeout=30.0)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
+
+
+def check_schema_version(db_file):
+    """Raise RuntimeError if the database schema version does not match SCHEMA_VERSION."""
+    conn = open_connection(db_file)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+    if version != SCHEMA_VERSION:
+        raise RuntimeError(
+            f"Database schema version mismatch: expected {SCHEMA_VERSION}, got {version}. "
+            f"Re-assemble the database with the current version of chemsmart."
+        )
+
+
 def is_chemsmart_database(filepath):
     """Check if a .db file is a chemsmart database.
 
     A valid chemsmart database contains the four tables:
     'records', 'molecules', 'structures', and 'record_structures'.
     """
-    import sqlite3
-
     required_tables = {
         "records",
         "molecules",
@@ -240,7 +262,7 @@ def collect_energies_for_structure(db_file, structure_id):
     """Return list of (method, basis, energy) for every record that references
     the given structure_id, ordered by record_index.
     """
-    conn = sqlite3.connect(db_file)
+    conn = open_connection(db_file)
     conn.row_factory = sqlite3.Row
     try:
         cursor = conn.execute(

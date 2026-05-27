@@ -15,8 +15,10 @@ from pathlib import Path
 
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
+    SCHEMA_VERSION,
     convert_numpy,
     from_json,
+    open_connection,
     to_json,
 )
 
@@ -63,7 +65,7 @@ class Database:
         - structures: One row per unique 3D geometry instance (conformer)
         - record_structures: Junction table linking records to structures
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = open_connection(self.db_file)
         try:
             # Create records table
             conn.execute("""
@@ -228,6 +230,7 @@ class Database:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_records_trajectory_id ON records(trajectory_id)"
             )
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
             logger.debug(f"Created database at {self.db_file}.")
         finally:
@@ -245,7 +248,7 @@ class Database:
         program = record_dict.get("provenance", {}).get("program", "unknown")
         close_conn = False
         if conn is None:
-            conn = sqlite3.connect(self.db_file)
+            conn = self.get_connection()
             close_conn = True
 
         try:
@@ -475,7 +478,7 @@ class Database:
 
     def insert_records(self, records):
         """Insert multiple records into the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         count = 0
         try:
             for record in records:
@@ -490,12 +493,12 @@ class Database:
         return count
 
     def get_connection(self):
-        """Get a database connection."""
-        return sqlite3.connect(self.db_file)
+        """Get a database connection with chemsmart's standard pragmas."""
+        return open_connection(self.db_file)
 
     def count_records(self):
         """Count the number of records in the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM records")
             return cursor.fetchone()[0]
@@ -508,7 +511,7 @@ class Database:
 
     def get_record(self, record_index=None, record_id=None):
         """Get a full record with structures from the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             if record_index is not None:
@@ -534,7 +537,7 @@ class Database:
 
     def get_all_records(self):
         """Get all records from the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -777,7 +780,7 @@ class Database:
         Matches record IDs that start with the given prefix. Requires
         exactly one match; raises ValueError otherwise.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         try:
             cursor = conn.execute(
                 "SELECT record_id FROM records WHERE record_id LIKE ?",
@@ -804,7 +807,7 @@ class Database:
         record_id=None,
     ):
         """Get summary of a record (without structures)."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             if record_index is not None:
@@ -851,7 +854,7 @@ class Database:
 
     def get_all_record_summaries(self):
         """Get summaries for all records."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -888,7 +891,7 @@ class Database:
         Returns the full joined record_structures + structures + molecules
         data for each structure entry in the record.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -919,7 +922,7 @@ class Database:
 
     def get_molecule(self, molecule_id):
         """Get a molecule (chemical species) by molecule_id."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -935,7 +938,7 @@ class Database:
 
     def get_all_molecules(self):
         """Get all unique molecules (chemical species) from the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -948,7 +951,7 @@ class Database:
 
     def get_molecule_by_partial_id(self, partial_id):
         """Resolve a partial molecule ID to the full molecule_id."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         try:
             cursor = conn.execute(
                 "SELECT molecule_id FROM molecules WHERE molecule_id LIKE ?",
@@ -972,7 +975,7 @@ class Database:
 
     def count_molecules(self):
         """Count unique molecules in the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM molecules")
             return cursor.fetchone()[0]
@@ -984,7 +987,7 @@ class Database:
         Returns structure fields joined with parent molecule info for
         convenient display.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -1006,7 +1009,7 @@ class Database:
 
     def get_all_structures(self):
         """Get all structures (conformers) from the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute("""
@@ -1026,7 +1029,7 @@ class Database:
         Matches structure IDs that start with the given prefix. Requires
         exactly one match; raises ValueError otherwise.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         try:
             cursor = conn.execute(
                 "SELECT structure_id FROM structures WHERE structure_id LIKE ?",
@@ -1050,7 +1053,7 @@ class Database:
 
     def count_structures(self):
         """Count unique structures in the database."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM structures")
             return cursor.fetchone()[0]
@@ -1070,7 +1073,7 @@ class Database:
         if not sids:
             return None, None
         placeholders = ",".join("?" for _ in sids)
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -1102,7 +1105,7 @@ class Database:
         casing stored in the records table."""
         if method is None or basis is None:
             return None
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         try:
             cursor = conn.execute(
                 "SELECT method, basis FROM records "
@@ -1124,7 +1127,7 @@ class Database:
         Returns:
             tuple: (forces, energy), or (None, None) if no matching forces exist.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -1157,7 +1160,7 @@ class Database:
         Returns:
             tuple: (forces, energy), or (None, None) if no matching data exists.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -1185,7 +1188,7 @@ class Database:
 
     def get_structures_for_molecule(self, molecule_id):
         """Get all structures (conformers) belonging to a molecule."""
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -1208,7 +1211,7 @@ class Database:
         """Get all record summaries that reference a given molecule.
         Traverses: molecules -> structures -> record_structures -> records.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
@@ -1233,7 +1236,7 @@ class Database:
         """Get all record summaries that reference a given structure.
         Traverses: record_structures -> records.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = self.get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(

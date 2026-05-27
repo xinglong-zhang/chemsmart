@@ -102,12 +102,19 @@ def query(ctx, file, target, query, limit):
     if not os.path.isfile(file):
         raise FileNotFoundError(f"Database file not found: {file}")
 
-    from chemsmart.database.utils import is_chemsmart_database
+    from chemsmart.database.utils import (
+        check_schema_version,
+        is_chemsmart_database,
+    )
 
     if not is_chemsmart_database(file):
         raise click.UsageError(
             f"File {file} is not a valid chemsmart database file."
         )
+    try:
+        check_schema_version(file)
+    except RuntimeError as e:
+        raise click.UsageError(str(e))
 
     if limit is not None:
         if limit <= 0:

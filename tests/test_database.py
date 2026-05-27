@@ -1,5 +1,6 @@
 import csv
 import json
+import sqlite3
 
 import numpy as np
 import pytest
@@ -11,7 +12,9 @@ from chemsmart.database.inspect import DatabaseInspector
 from chemsmart.database.query import DatabaseQuery
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
+    SCHEMA_VERSION,
     bool_to_str,
+    check_schema_version,
     compute_trajectory_id,
     convert_numpy,
     format_energy,
@@ -533,6 +536,40 @@ class TestDatabaseSchemaAndInsertion:
         db.create()
         assert db.insert_records([succeeded, failed]) == 1
         assert db.count_records() == 1
+
+    def test_schema_version_set_on_create(self, tmp_path):
+        """create() writes SCHEMA_VERSION into PRAGMA user_version."""
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        conn = db.get_connection()
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        conn.close()
+        assert version == SCHEMA_VERSION
+
+    def test_schema_version_mismatch_raises(self, tmp_path):
+        """check_schema_version() raises RuntimeError for a stale database."""
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        # Simulate a database written by a future (incompatible) chemsmart
+        conn = sqlite3.connect(db.db_file)
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+        conn.commit()
+        conn.close()
+        with pytest.raises(RuntimeError, match="schema version mismatch"):
+            check_schema_version(db.db_file)
+
+    def test_foreign_key_enforced(self, tmp_path):
+        """open_connection() enables FK enforcement: orphan inserts are rejected."""
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        conn = db.get_connection()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO record_structures "
+                "(record_id, structure_id, index_in_record) "
+                "VALUES ('nonexistent_record', 'nonexistent_structure', 0)"
+            )
+        conn.close()
 
 
 class TestDatabaseRecordMoleculeStructureQueries:
