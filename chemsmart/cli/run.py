@@ -1,6 +1,5 @@
 import logging
 import platform
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import set_start_method
 
 import click
@@ -9,8 +8,7 @@ from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner, get_submitter_worker_count
-from chemsmart.settings.server import Server
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -59,8 +57,6 @@ def run(
     logger.info("Entering main program")
 
     # Instantiate the jobrunner with CLI options
-    if server is not None:
-        server = Server.from_servername(server)
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
@@ -109,43 +105,6 @@ def process_pipeline(ctx, *args, **kwargs):
         )
         return None
 
-    # Handle list of jobs (when multiple molecules are specified with --index)
-    if isinstance(job, list):
-        logger.info(f"Running {len(job)} jobs")
-
-        def _prepare_runner(single_job):
-            return jobrunner.from_job(
-                job=single_job,
-                server=jobrunner.server,
-                scratch=jobrunner.scratch,
-                fake=jobrunner.fake,
-                delete_scratch=jobrunner.delete_scratch,
-                num_cores=jobrunner.num_cores,
-                num_gpus=jobrunner.num_gpus,
-                mem_gb=jobrunner.mem_gb,
-            )
-
-        logger.info("Running jobs with concurrent submitters")
-        max_workers = get_submitter_worker_count(jobrunner, len(job))
-        logger.info(f"Using up to {max_workers} parallel submitter workers")
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_job = {}
-            for single_job in job:
-                single_job.jobrunner = _prepare_runner(single_job)
-                future = executor.submit(single_job.run)
-                future_to_job[future] = single_job
-
-            for future in as_completed(future_to_job):
-                single_job = future_to_job[future]
-                try:
-                    future.result()
-                except Exception as exc:
-                    logger.error(
-                        f"Job {single_job.label} failed in list execution: {exc}",
-                        exc_info=True,
-                    )
-        return None
-
     # Instantiate a specific jobrunner based on job type
     # jobrunner at this stage is an instance of specific JobRunner subclass
     # to run the job
@@ -164,6 +123,10 @@ def process_pipeline(ctx, *args, **kwargs):
         # Attach jobrunner to job and run the job with the jobrunner
         job.jobrunner = jobrunner
         job.run()
+    elif isinstance(job, list):
+        raise ValueError(
+            "Batch job submission is not supported in this branch."
+        )
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 
