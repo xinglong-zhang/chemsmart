@@ -172,6 +172,9 @@ release_pattern = r'(release\s*=\s*")[^"]+(")'
 safe_label_pattern = r"^[a-zA-Z0-9_\-\.]+$"
 
 
+# Route string sub-token splitter: splits on whitespace, '/', '=', '(', ')', ','
+route_split_pattern = r"[/=(),\s]+"
+
 # Database query patterns
 # Matches a single condition: field  operator  value
 # value is either a quoted string ('…' or "…") or a bare numeric token.

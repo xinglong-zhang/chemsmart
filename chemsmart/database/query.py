@@ -13,7 +13,7 @@ import os
 import re
 import sqlite3
 
-from chemsmart.database.utils import format_float, separator
+from chemsmart.database.utils import format_float, open_connection, separator
 from chemsmart.utils.repattern import (
     query_condition_pattern,
     query_logic_split_pattern,
@@ -274,7 +274,7 @@ class DatabaseQuery:
         Returns:
             List of dictionaries, one per matched entity.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = open_connection(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
             sql = self._config["summary_select"]
@@ -297,7 +297,7 @@ class DatabaseQuery:
         Returns:
             Total number of entities in the database.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = open_connection(self.db_file)
         try:
             return conn.execute(self._config["count_total_sql"]).fetchone()[0]
         finally:
@@ -309,7 +309,7 @@ class DatabaseQuery:
         Returns:
             Number of entities matching the query, or total if no query.
         """
-        conn = sqlite3.connect(self.db_file)
+        conn = open_connection(self.db_file)
         try:
             if self.query_string:
                 where_clause, params = self.parse_query()

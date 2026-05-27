@@ -17,6 +17,7 @@ from chemsmart import __version__ as chemsmart_version
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
     canonical_json_hash,
+    canonicalize_route_string,
     compute_trajectory_id,
     file_size,
     get_record_id,
@@ -95,6 +96,17 @@ class BaseAssembler:
         meta = {**meta, "trajectory_id": trajectory_id}
         custom_basis_hash = canonical_json_hash(meta.get("custom_basis"))
         custom_solvent_hash = canonical_json_hash(meta.get("custom_solvent"))
+        route_tokens = canonicalize_route_string(
+            self.output.route_string,
+            drop_terms=[
+                self.output.functional,
+                self.output.basis,
+                self.output.jobtype,
+                self.output.solvent_model,
+                self.output.solvent_id,
+            ],
+        )
+        route_hash = canonical_json_hash(route_tokens)
         record_id = get_record_id(
             program=provenance.get("program") or None,
             method=meta.get("method") or None,
@@ -105,6 +117,7 @@ class BaseAssembler:
             solvent_model=meta.get("solvent_model"),
             solvent_id=meta.get("solvent_id"),
             custom_solvent_hash=custom_solvent_hash,
+            route_hash=route_hash,
         )
 
         return AssembledRecord(

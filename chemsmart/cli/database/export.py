@@ -153,12 +153,19 @@ def export(
     if not os.path.isfile(file):
         raise click.UsageError(f"Database file not found: {file}")
 
-    from chemsmart.database.utils import is_chemsmart_database
+    from chemsmart.database.utils import (
+        check_schema_version,
+        is_chemsmart_database,
+    )
 
     if not is_chemsmart_database(file):
         raise click.UsageError(
             f"File {file} is not a valid chemsmart database file."
         )
+    try:
+        check_schema_version(file)
+    except RuntimeError as e:
+        raise click.UsageError(str(e))
 
     output = os.path.abspath(output)
     ext = os.path.splitext(output)[1].lower()

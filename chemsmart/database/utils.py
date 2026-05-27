@@ -1,13 +1,18 @@
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 
+from chemsmart.utils.repattern import route_split_pattern
+
 logger = logging.getLogger(__name__)
+
+SCHEMA_VERSION = 1
 
 # Width of the separator lines
 LINE_WIDTH = 100
@@ -18,6 +23,31 @@ CUSTOM_BASIS_KEYWORDS = {"gen", "genecp"}
 # Keywords that indicate a custom (inline) solvent
 CUSTOM_SOLVENT_KEYWORDS = {"generic,read", "generic"}
 
+# Tokens that mark the start of a route line
+ROUTE_PREFIX_TOKENS = {"#", "#p", "#n", "#t", "!"}
+
+
+def open_connection(db_file):
+    """Open a SQLite connection with chemsmart's standard pragmas."""
+    conn = sqlite3.connect(db_file, timeout=30.0)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
+
+
+def check_schema_version(db_file):
+    """Raise RuntimeError if the database schema version does not match SCHEMA_VERSION."""
+    conn = open_connection(db_file)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+    if version != SCHEMA_VERSION:
+        raise RuntimeError(
+            f"Database schema version mismatch: expected {SCHEMA_VERSION}, got {version}. "
+            f"Re-assemble the database with the current version of chemsmart."
+        )
+
 
 def is_chemsmart_database(filepath):
     """Check if a .db file is a chemsmart database.
@@ -25,8 +55,6 @@ def is_chemsmart_database(filepath):
     A valid chemsmart database contains the four tables:
     'records', 'molecules', 'structures', and 'record_structures'.
     """
-    import sqlite3
-
     required_tables = {
         "records",
         "molecules",
@@ -69,11 +97,12 @@ def get_record_id(
     solvent_model=None,
     solvent_id=None,
     custom_solvent_hash=None,
+    route_hash=None,
 ):
     """Generate a stable record ID for one full QM calculation.
     The record_id uniquely identifies a single source file's worth of work:
-    a specific (program, method, basis, jobtype, solvent setup) applied to
-    a specific trajectory of structures.
+    a specific (program, method, basis, jobtype, solvent setup, route)
+    applied to a specific trajectory of structures.
     Args:
         program: Computational chemistry program name (e.g. "gaussian").
         method: DFT functional / method (e.g. "b3lyp").
@@ -90,6 +119,10 @@ def get_record_id(
         solvent_id: Solvent identifier (e.g. "water", "toluene") or None.
         custom_solvent_hash: SHA-256 of canonical-JSON of the custom-solvent
             parameters block, or None.
+        route_hash: SHA-256 hash of the canonicalized route string. Makes
+        record identity sensitive to route-level options not otherwise
+        captured in structured fields, such as grid, SCF, dispersion, symmetry,
+        and opt/freq settings. None if unavailable.
     Returns:
         SHA-256 hex digest string.
     """
@@ -103,9 +136,28 @@ def get_record_id(
         solvent_model,
         solvent_id,
         custom_solvent_hash,
+        route_hash,
     ]
     payload = "|".join("" if c is None else str(c) for c in components)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def canonicalize_route_string(route_string, drop_terms=()):
+    """Canonicalize a QM-program route string for hashing into record_id."""
+    if not route_string:
+        return None
+    drop_set = {t.lower().replace("-", "") for t in drop_terms if t}
+    kept = []
+    for token in re.split(route_split_pattern, route_string):
+        if not token:
+            continue
+        norm = token.lower().replace("-", "")
+        if norm in ROUTE_PREFIX_TOKENS:
+            continue
+        if norm in drop_set:
+            continue
+        kept.append(norm)
+    return sorted(kept) or None
 
 
 def canonical_json_hash(obj):
@@ -240,7 +292,7 @@ def collect_energies_for_structure(db_file, structure_id):
     """Return list of (method, basis, energy) for every record that references
     the given structure_id, ordered by record_index.
     """
-    conn = sqlite3.connect(db_file)
+    conn = open_connection(db_file)
     conn.row_factory = sqlite3.Row
     try:
         cursor = conn.execute(

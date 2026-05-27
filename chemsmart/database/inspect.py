@@ -14,6 +14,7 @@ from chemsmart.database.utils import (
     format_float,
     format_kv,
     human_size,
+    open_connection,
     separator,
     sort_structure_dicts_by_energy,
     truncate_iso,
@@ -64,7 +65,7 @@ class DatabaseInspector:
 
     def overview(self):
         """Return database-level statistics as a dictionary."""
-        conn = sqlite3.connect(self.db_file)
+        conn = open_connection(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
             stats = {}

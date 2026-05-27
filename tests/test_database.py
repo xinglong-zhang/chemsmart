@@ -1,5 +1,6 @@
 import csv
 import json
+import sqlite3
 
 import numpy as np
 import pytest
@@ -11,7 +12,10 @@ from chemsmart.database.inspect import DatabaseInspector
 from chemsmart.database.query import DatabaseQuery
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
+    SCHEMA_VERSION,
     bool_to_str,
+    canonicalize_route_string,
+    check_schema_version,
     compute_trajectory_id,
     convert_numpy,
     format_energy,
@@ -37,11 +41,11 @@ INCHIKEY_HE = "SWQJXJOGLNCZEY-UHFFFAOYSA-N"
 INCHIKEY_CO2 = "CURLTUGMZLYLDI-UHFFFAOYSA-N"
 # Known stable record ID: Gaussian MP2/aug-cc-pVTZ geometry optimisation of water
 RECORD_ID_GAUSSIAN_MP2_WATER = (
-    "f9b9f1b79a7bff9a29ba999e0f625875f8ec3bc4162260ccf2a8117a9403e726"
+    "3cc5dff791c16d7218c3768e539c2ffa211742fe3e61c939870ccdf2a8842504"
 )
 # Known stable record ID: ORCA M062X/def2-SVP geometry optimisation of water
 RECORD_ID_ORCA_M062X_WATER = (
-    "57efe22eb7c24111c0e06f4b8ae3c6b8c38c7b916ba8375225d2cdd33a043a7e"
+    "59279a681dffacf2de9289109d212e8831b0eded1ab0be5a75c3b075ac1a2713"
 )
 # Known stable structure ID: He atom at origin (0,0,0)
 STRUCTURE_ID_ORIGIN_HE = (
@@ -191,6 +195,26 @@ class TestDatabaseUtilities:
             custom_solvent_hash="d" * 64,
         )
         assert id5_cs != id5_cs2
+        # no route_hash vs with route_hash -> different record
+        id6 = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            route_hash="c" * 64,
+        )
+        assert id0 != id6
+        # different route_hash -> different record
+        id6_rs = get_record_id(
+            program="gaussian",
+            method="b3lyp",
+            basis="6-31g",
+            jobtype="sp",
+            trajectory_id="traj_abc",
+            route_hash="d" * 64,
+        )
+        assert id6 != id6_rs
         # idempotency: same inputs always produce the same id
         id0_repeat = get_record_id(
             program="gaussian",
@@ -216,9 +240,45 @@ class TestDatabaseUtilities:
                 id5_si,
                 id5_cs,
                 id5_cs2,
+                id6,
+                id6_rs,
                 id0_repeat,
             ]
         )
+
+    def test_canonicalize_route_string(self):
+        route1 = "# opt=(ts,calcfc,noeigentest) b3lyp def2-svp"
+        drop1 = ["b3lyp", "def2svp", "ts"]
+        tokens1 = canonicalize_route_string(route1, drop_terms=drop1)
+        assert "calcfc" in tokens1
+        assert "noeigentest" in tokens1
+        assert "opt" in tokens1
+        for known in ("b3lyp", "def2svp", "ts"):
+            assert known not in tokens1
+
+        route2 = (
+            "#p opt m06-2x genecp int=ultrafine scf=tight "
+            "empiricaldispersion=gd3bj"
+        )
+        drop2 = ["m062x", "genecp", "opt"]
+        tokens2 = canonicalize_route_string(route2, drop_terms=drop2)
+        for modifier in (
+            "int",
+            "ultrafine",
+            "scf",
+            "tight",
+            "empiricaldispersion",
+            "gd3bj",
+        ):
+            assert modifier in tokens2
+
+        route3 = "! PBE0 def2-TZVP TightSCF Grid5 D3BJ Opt"
+        drop3 = ["pbe0", "def2tzvp", "opt"]
+        tokens3 = canonicalize_route_string(route3, drop_terms=drop3)
+        for modifier in ("tightscf", "grid5", "d3bj"):
+            assert modifier in tokens3
+        for known in ("pbe0", "def2tzvp", "opt"):
+            assert known not in tokens3
 
     def test_compute_trajectory_id(self):
         sid_a = "a" * 64
@@ -533,6 +593,99 @@ class TestDatabaseSchemaAndInsertion:
         db.create()
         assert db.insert_records([succeeded, failed]) == 1
         assert db.count_records() == 1
+
+    def test_schema_version_set_on_create(self, tmp_path):
+        """create() writes SCHEMA_VERSION into PRAGMA user_version."""
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        conn = db.get_connection()
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        conn.close()
+        assert version == SCHEMA_VERSION
+
+    def test_schema_version_mismatch_raises(self, tmp_path):
+        """check_schema_version() raises RuntimeError for a stale database."""
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        # Simulate a database written by a future (incompatible) chemsmart
+        conn = sqlite3.connect(db.db_file)
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+        conn.commit()
+        conn.close()
+        with pytest.raises(RuntimeError, match="schema version mismatch"):
+            check_schema_version(db.db_file)
+
+    def test_foreign_key_enforced(self, tmp_path):
+        """open_connection() enables FK enforcement: orphan inserts are rejected."""
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        conn = db.get_connection()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO record_structures "
+                "(record_id, structure_id, index_in_record) "
+                "VALUES ('nonexistent_record', 'nonexistent_structure', 0)"
+            )
+        conn.close()
+
+    def test_upsert_fills_missing_perception_columns(
+        self, tmp_path, gaussian_co2_opt_outfile
+    ):
+        """molecules UPSERT: a later record supplying SMILES / InChI fills in
+        the NULLs left by an earlier record with the same molecule_id."""
+        record = SingleFileAssembler(gaussian_co2_opt_outfile).assemble_data
+        molecule_id = record.molecules[0]["molecule_id"]
+        original_smiles = record.molecules[0]["smiles"]
+        original_inchi = record.molecules[0]["inchi"]
+        # sanity: parser produces both perception fields
+        assert original_smiles is not None
+        assert original_inchi is not None
+
+        # First insertion: blank out perception fields on every frame so the
+        # row lands with NULL across the board
+        for m in record.molecules:
+            m["smiles"] = None
+            m["inchi"] = None
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        db.insert_records([record])
+        row = db.get_molecule(molecule_id)
+        assert row["smiles"] is None
+        assert row["inchi"] is None
+
+        # Second insertion: restore values; UPSERT must fill both NULLs
+        for m in record.molecules:
+            m["smiles"] = original_smiles
+            m["inchi"] = original_inchi
+        db.insert_records([record])
+        row = db.get_molecule(molecule_id)
+        assert row["smiles"] == original_smiles
+        assert row["inchi"] == original_inchi
+
+    def test_upsert_does_not_overwrite_perception_columns(
+        self, tmp_path, gaussian_co2_opt_outfile
+    ):
+        """molecules UPSERT: existing non-NULL SMILES / InChI are preserved
+        when a later record arrives with these fields NULL."""
+        record = SingleFileAssembler(gaussian_co2_opt_outfile).assemble_data
+        molecule_id = record.molecules[0]["molecule_id"]
+        original_smiles = record.molecules[0]["smiles"]
+        original_inchi = record.molecules[0]["inchi"]
+        assert original_smiles is not None
+        assert original_inchi is not None
+
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        db.insert_records([record])
+
+        # Second insertion: same molecule_id but no perception fields
+        for m in record.molecules:
+            m["smiles"] = None
+            m["inchi"] = None
+        db.insert_records([record])
+        row = db.get_molecule(molecule_id)
+        assert row["smiles"] == original_smiles
+        assert row["inchi"] == original_inchi
 
 
 class TestDatabaseRecordMoleculeStructureQueries:
@@ -1050,20 +1203,20 @@ class TestDatabaseAssembler:
 
 class TestStaticDatabaseContent:
     def test_database_counts(self, database_chemsmart_file):
-        """The fixture holds exactly 40 records, 30 molecules, 303 structures."""
+        """The fixture holds exactly 47 records, 33 molecules, 314 structures."""
         db = Database(database_chemsmart_file)
-        assert db.count_records() == 40
-        assert db.count_molecules() == 30
-        assert db.count_structures() == 303
+        assert db.count_records() == 47
+        assert db.count_molecules() == 33
+        assert db.count_structures() == 314
 
     def test_program_distribution(self, database_chemsmart_file):
-        """30 Gaussian records and 10 ORCA records are present."""
+        """36 Gaussian records and 11 ORCA records are present."""
         db = Database(database_chemsmart_file)
         programs = {}
         for s in db.get_all_record_summaries():
             programs[s["program"]] = programs.get(s["program"], 0) + 1
-        assert programs["gaussian"] == 30
-        assert programs["orca"] == 10
+        assert programs["gaussian"] == 36
+        assert programs["orca"] == 11
 
     def test_gaussian_mp2_water_record(
         self, database_chemsmart_file, gaussian_mp2_outputfile
@@ -1173,10 +1326,7 @@ class TestStaticDatabaseContent:
         assert programs == {"gaussian", "orca"}
 
     def test_he_molecule(self, database_chemsmart_file):
-        """He molecule: monoatomic, single geometry, two records.
-        The database holds exactly 2 He calculations (Gaussian he.log + ORCA
-        He.out) both use the same single-atom He geometry.
-        """
+        """He molecule: monoatomic, single geometry, 3 records across Gaussian and ORCA."""
         db = Database(database_chemsmart_file)
         mol = db.get_molecule(INCHIKEY_HE)
         assert mol is not None
@@ -1185,15 +1335,15 @@ class TestStaticDatabaseContent:
         assert mol["number_of_atoms"] == 1
         assert mol["is_monoatomic"] is True
         records = db.get_records_for_molecule(INCHIKEY_HE)
-        assert len(records) == 2  # he.log and He.out
+        assert len(records) == 3
         programs = {r["program"] for r in records}
         assert programs == {"gaussian", "orca"}
 
     def test_query_by_program(self, database_chemsmart_file):
-        """Filtering by program='gaussian' returns exactly 30 of the 40 records."""
+        """Filtering by program='gaussian' returns exactly 36 of the 47 records."""
         dq = DatabaseQuery(database_chemsmart_file, "program = 'gaussian'")
-        assert dq.count_total() == 40
-        assert dq.count_matched() == 30
+        assert dq.count_total() == 47
+        assert dq.count_matched() == 36
 
     def test_query_by_method_mp2(self, database_chemsmart_file):
         """Only one record uses plain MP2 — Gaussian water_mp2.log."""
@@ -1208,17 +1358,17 @@ class TestStaticDatabaseContent:
         """limit= truncates results but count_total() still reflects the full DB."""
         dq = DatabaseQuery(database_chemsmart_file, None, limit=5)
         assert len(dq.query_summaries()) == 5
-        assert dq.count_total() == 40
+        assert dq.count_total() == 47
 
     def test_inspect_overview(self, database_chemsmart_file):
         """Inspector overview matches the manually verified DB-wide statistics."""
         inspector = DatabaseInspector(database_chemsmart_file)
         stats = inspector.overview()
-        assert stats["num_records"] == 40
-        assert stats["num_molecules"] == 30
-        assert stats["num_structures"] == 303
-        assert ("gaussian", 30) in stats["programs"]
-        assert ("orca", 10) in stats["programs"]
+        assert stats["num_records"] == 47
+        assert stats["num_molecules"] == 33
+        assert stats["num_structures"] == 314
+        assert ("gaussian", 36) in stats["programs"]
+        assert ("orca", 11) in stats["programs"]
 
     def test_inspect_mp2_water_record(self, database_chemsmart_file):
         """Inspector record detail matches the same ground truth as
@@ -1247,7 +1397,7 @@ class TestStaticDatabaseContent:
 
     def test_partial_id_for_mp2_water(self, database_chemsmart_file):
         """A 12-character prefix is sufficient to uniquely identify MP2 water
-        in this 40-record database."""
+        in this 47-record database."""
         db = Database(database_chemsmart_file)
         resolved = db.get_record_by_partial_id(
             RECORD_ID_GAUSSIAN_MP2_WATER[:12]
