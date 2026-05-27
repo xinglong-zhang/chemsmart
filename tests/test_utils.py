@@ -1553,8 +1553,8 @@ class TestPKaTableParsing:
     def test_validate_pka_table_entries(self, tmp_path):
         """Test batch validation of PKaTableEntry list."""
         from chemsmart.utils.utils import (
+            PKaOutputTable,
             PKaTableEntry,
-            validate_pka_table_entries,
         )
 
         # Create test files
@@ -1569,7 +1569,9 @@ class TestPKaTableParsing:
         ]
 
         # Should not raise
-        result = validate_pka_table_entries(entries, check_file_exists=True)
+        result = PKaOutputTable.validate_pka_table_entries(
+            entries, check_file_exists=True
+        )
         assert result == entries
 
     def test_pka_table_entry_repr(self):

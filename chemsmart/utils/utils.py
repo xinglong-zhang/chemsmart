@@ -3177,6 +3177,50 @@ class PKaOutputTable:
             scheme=scheme,
         )
 
+    def validate_pka_table_entries(
+        entries: list,
+        check_file_exists: bool = True,
+    ) -> list:
+        """Validate a list of PKaTableEntry objects.
+
+        Args:
+            entries: List of PKaTableEntry to validate.
+            check_file_exists: If True, verify that each filepath exists.
+
+        Returns:
+            list[PKaTableEntry]: The validated entries (same list, for chaining).
+
+        Raises:
+            ValueError: If any entry fails validation.
+        """
+        all_errors = []
+
+        for entry in entries:
+            try:
+                if check_file_exists:
+                    entry.validate()
+                else:
+                    # Validate without file existence check
+                    if entry.proton_index is None or entry.proton_index < 1:
+                        raise ValueError(
+                            f"Invalid proton_index: {entry.proton_index}"
+                        )
+                    if entry.charge is None:
+                        raise ValueError("Missing charge")
+                    if entry.multiplicity is None or entry.multiplicity < 1:
+                        raise ValueError(
+                            f"Invalid multiplicity: {entry.multiplicity}"
+                        )
+            except ValueError as e:
+                all_errors.append(str(e))
+
+        if all_errors:
+            raise ValueError(
+                "pKa table validation failed:\n" + "\n".join(all_errors)
+            )
+
+        return entries
+
 
 parse_pka_output_table = PKaOutputTable.parse_pka_output_table
 resolve_pka_output_references = PKaOutputTable.resolve_pka_output_references
@@ -3184,48 +3228,3 @@ compute_pka_from_output_table = PKaOutputTable.compute_pka_from_output_table
 pka_scheme_delta_g_key = PKaOutputTable.pka_scheme_delta_g_key
 pka_scheme_delta_g_value = PKaOutputTable.pka_scheme_delta_g_value
 export_pka_results_table = PKaOutputTable.export_pka_results_table
-
-
-def validate_pka_table_entries(
-    entries: list,
-    check_file_exists: bool = True,
-) -> list:
-    """Validate a list of PKaTableEntry objects.
-
-    Args:
-        entries: List of PKaTableEntry to validate.
-        check_file_exists: If True, verify that each filepath exists.
-
-    Returns:
-        list[PKaTableEntry]: The validated entries (same list, for chaining).
-
-    Raises:
-        ValueError: If any entry fails validation.
-    """
-    all_errors = []
-
-    for entry in entries:
-        try:
-            if check_file_exists:
-                entry.validate()
-            else:
-                # Validate without file existence check
-                if entry.proton_index is None or entry.proton_index < 1:
-                    raise ValueError(
-                        f"Invalid proton_index: {entry.proton_index}"
-                    )
-                if entry.charge is None:
-                    raise ValueError("Missing charge")
-                if entry.multiplicity is None or entry.multiplicity < 1:
-                    raise ValueError(
-                        f"Invalid multiplicity: {entry.multiplicity}"
-                    )
-        except ValueError as e:
-            all_errors.append(str(e))
-
-    if all_errors:
-        raise ValueError(
-            "pKa table validation failed:\n" + "\n".join(all_errors)
-        )
-
-    return entries
