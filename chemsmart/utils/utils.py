@@ -3007,6 +3007,63 @@ class PKaOutputTable:
             "delta_G_diss_kcal_mol", result["delta_G_soln_kcal_mol"]
         )
 
+    def echo_pka_output_table_results(
+        self,
+        results,
+        output_results,
+        temperature,
+        pressure,
+        scheme=None,
+    ):
+        display_scheme = scheme
+        if display_scheme is None and results:
+            display_scheme = results[0].get("scheme")
+
+        if output_results is not None:
+            self.export_results(output_results, results, scheme=scheme)
+            return f"pKa results written to {output_results}"
+
+        header = self._scheme_batch_header(display_scheme)
+        dg_label = self._scheme_delta_g_label(display_scheme)
+
+        lines = [
+            "=" * 78,
+            header,
+            "=" * 78,
+            f"Temperature: {temperature} K",
+            f"Pressure: {pressure} atm",
+            f"{'basename':<30} {'pKa':>10} {dg_label:>20}",
+            "-" * 78,
+        ]
+
+        for entry, result in zip(self, results):
+            dg_value = PKaOutputTable.pka_scheme_delta_g_value(result, scheme)
+            lines.append(
+                f"{entry['basename']:<30} "
+                f"{result['pKa']:>10.2f} "
+                f"{dg_value:>20.4f}"
+            )
+        lines.append("=" * 78)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _scheme_batch_header(scheme):
+        if scheme is None:
+            return "Batch pKa Results"
+        headers = {
+            "direct": "Batch pKa Results (Direct Dissociation)",
+            "proton exchange": "Batch pKa Results (Dual-level Proton Exchange)",
+        }
+        return headers.get(scheme, f"Batch pKa Results ({scheme})")
+
+    @staticmethod
+    def _scheme_delta_g_label(scheme):
+        labels = {
+            "direct": "ΔG_diss (kcal/mol)",
+            "proton exchange": "ΔG_soln (kcal/mol)",
+        }
+        return labels.get(scheme, "ΔG (kcal/mol)")
+
     @staticmethod
     def export_pka_results_table(
         entries: list,

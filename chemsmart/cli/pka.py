@@ -259,24 +259,6 @@ def _resolve_pka_analysis_scheme(scheme, delta_g_proton):
     return scheme
 
 
-def _scheme_batch_header(scheme):
-    if scheme is None:
-        return "Batch pKa Results"
-    headers = {
-        "direct": "Batch pKa Results (Direct Dissociation)",
-        "proton exchange": "Batch pKa Results (Dual-level Proton Exchange)",
-    }
-    return headers.get(scheme, f"Batch pKa Results ({scheme})")
-
-
-def _scheme_delta_g_label(scheme):
-    labels = {
-        "direct": "ΔG_diss (kcal/mol)",
-        "proton exchange": "ΔG_soln (kcal/mol)",
-    }
-    return labels.get(scheme, "ΔG (kcal/mol)")
-
-
 def _scheme_display_name(scheme):
     names = {
         "direct": "Direct Dissociation",
@@ -525,43 +507,6 @@ def _resolve_batch_output_cls(program):
         return ORCApKaOutput
     else:
         raise ValueError(f"Unsupported program: {program}")
-
-
-def echo_pka_output_table_results(
-    pka_table,
-    results,
-    output_results,
-    temperature,
-    pressure,
-    scheme=None,
-):
-    from chemsmart.utils.utils import PKaOutputTable
-
-    display_scheme = scheme
-    if display_scheme is None and results:
-        display_scheme = results[0].get("scheme")
-
-    if output_results is not None:
-        pka_table.export_results(output_results, results, scheme=scheme)
-        click.echo(f"pKa results written to {output_results}")
-        return
-
-    click.echo("=" * 78)
-    click.echo(_scheme_batch_header(display_scheme))
-    click.echo("=" * 78)
-    click.echo(f"Temperature: {temperature} K")
-    click.echo(f"Pressure: {pressure} atm")
-    dg_label = _scheme_delta_g_label(display_scheme)
-    click.echo(f"{'basename':<30} {'pKa':>10} {dg_label:>20}")
-    click.echo("-" * 78)
-    for entry, result in zip(pka_table, results):
-        dg_value = PKaOutputTable.pka_scheme_delta_g_value(result, scheme)
-        click.echo(
-            f"{entry['basename']:<30} "
-            f"{result['pKa']:>10.2f} "
-            f"{dg_value:>20.4f}"
-        )
-    click.echo("=" * 78)
 
 
 def _first_output_file_from_table(pka_table):
@@ -939,14 +884,14 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
         scheme=scheme,
         delta_G_proton=shared.get("delta_g_proton"),
     )
-    echo_pka_output_table_results(
-        pka_table=pka_output_table,
+    output_string = pka_output_table.echo_pka_output_table_results(
         results=results,
         output_results=output_results,
         temperature=shared["temperature"],
         pressure=shared["pressure"],
         scheme=scheme,
     )
+    click.echo(output_string)
 
     return None
 
