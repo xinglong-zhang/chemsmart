@@ -406,40 +406,6 @@ def click_pka_analyze_options(f):
     return f
 
 
-def resolve_proton_index(filename, proton_index, color_code):
-    """Resolve proton index from filename, explicit index, or color code."""
-    pka_molecules = None
-    if (
-        proton_index is None
-        and filename is not None
-        and filename.lower().endswith((".cdx", ".cdxml"))
-    ):
-        logger.info(
-            "Attempting to auto-detect proton index from multi-fragment CDXML"
-        )
-        try:
-            pka_file = PKaCDXFile(filename)
-            pka_molecules = pka_file.get_pka_molecules(
-                color_code=color_code, index=":"
-            )
-            proton_index = [mol.proton_index for mol in pka_molecules]
-        except (ValueError, FileNotFoundError) as e:
-            logger.warning(f"Could not auto-detect proton from CDXML: {e}")
-
-    if proton_index is None:
-        raise click.UsageError(
-            "Proton index (-pi) or color code (-cc) must be specified, "
-            "or auto-detection must succeed with a .cdxml file."
-        )
-    if isinstance(proton_index, list):
-        if len(proton_index) > 1:
-            raise click.UsageError(
-                "Multiple protons detected in CDXML. Specify -pi/-cc to select one."
-            )
-        proton_index = proton_index[0]
-    return proton_index, pka_molecules
-
-
 def resolve_reference_proton(
     reference, reference_proton_index, reference_color_code
 ):

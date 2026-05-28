@@ -24,9 +24,9 @@ from chemsmart.cli.job import click_job_options
 from chemsmart.cli.pka import (
     click_pka_proton_options,
     click_pka_shared_options,
-    resolve_proton_index,
     validate_reference_options,
 )
+from chemsmart.io.file import PKaCDXFile
 from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
@@ -205,7 +205,7 @@ def submit(ctx, skip_completed, **kwargs):
     jobrunner = ctx.obj["jobrunner"]
 
     # ── resolve proton index (CDXML auto-detect) ──
-    proton_index, pka_molecules = resolve_proton_index(
+    proton_index, pka_molecules = PKaCDXFile.resolve_proton_index(
         filename, proton_index, color_code
     )
 
