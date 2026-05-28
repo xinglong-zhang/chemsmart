@@ -406,29 +406,6 @@ def click_pka_analyze_options(f):
     return f
 
 
-def resolve_reference_proton(
-    reference, reference_proton_index, reference_color_code
-):
-    """Resolve reference proton index, handling CDXML auto-detection."""
-    if reference_proton_index is not None:
-        return reference_proton_index
-    if not reference or not reference.lower().endswith((".cdx", ".cdxml")):
-        return None
-
-    try:
-        pka_file = PKaCDXFile(reference)
-        # Assuming a single molecule/fragment for the reference
-        pka_mol = pka_file.get_pka_molecules(
-            color_code=reference_color_code, index="-1"
-        )
-        return pka_mol.proton_index
-    except (ValueError, FileNotFoundError) as exc:
-        raise click.UsageError(
-            f"Could not auto-detect reference proton from CDXML: {exc}\n"
-            "Use -rpi/--reference-proton-index to specify the proton explicitly."
-        )
-
-
 def validate_reference_options(shared):
     reference = shared["reference"]
     if reference is None:
@@ -440,7 +417,7 @@ def validate_reference_options(shared):
             "cycle. Use -s 'proton exchange' or remove the -r option."
         )
 
-    shared["reference_proton_index"] = resolve_reference_proton(
+    shared["reference_proton_index"] = PKaCDXFile.resolve_reference_proton(
         reference,
         shared["reference_proton_index"],
         shared["reference_color_code"],

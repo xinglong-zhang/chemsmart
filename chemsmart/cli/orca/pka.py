@@ -264,7 +264,6 @@ def batch(ctx, skip_completed, **kwargs):
     logger.info(f"Found {len(entries)} entries in table")
 
     if shared["scheme"] == "proton exchange":
-        from chemsmart.cli.pka import resolve_reference_proton
 
         missing = []
         if shared["reference"] is None:
@@ -274,7 +273,7 @@ def batch(ctx, skip_completed, **kwargs):
             if ref.endswith((".cdx", ".cdxml")):
                 try:
                     shared["reference_proton_index"] = (
-                        resolve_reference_proton(
+                        PKaCDXFile.resolve_reference_proton(
                             ref, None, shared["reference_color_code"]
                         )
                     )
