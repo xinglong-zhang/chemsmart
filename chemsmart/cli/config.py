@@ -91,6 +91,16 @@ class Config:
         return self.chemsmart_dest / "orca"
 
     @property
+    def chemsmart_agent(self):
+        """Path to the ``agent`` sub-directory of the user config."""
+        return self.chemsmart_dest / "agent"
+
+    @property
+    def chemsmart_agent_yaml(self):
+        """Path to the user's agent provider configuration YAML file."""
+        return self.chemsmart_agent / "agent.yaml"
+
+    @property
     def chemsmart_package_path(self):
         """Absolute path to the root of the chemsmart source/install tree."""
         chemsmart_path = Path(__file__).resolve().parent / ".." / ".."
@@ -338,7 +348,64 @@ class Config:
             else:
                 logger.info(f"Skipping {sw_name} configuration.")
 
-    def setup_environment(self):
+    def configure_agent_interactively(self) -> None:
+        """Interactively configure ``~/.chemsmart/agent/agent.yaml``."""
+        agent_yaml = self.chemsmart_agent_yaml
+        if agent_yaml.exists() and not click.confirm(
+            "Overwrite agent.yaml? [y/N]",
+            default=False,
+            show_default=False,
+        ):
+            logger.info(f"Keeping existing agent config: {agent_yaml}")
+            return
+
+        provider_type = click.prompt(
+            "Agent provider",
+            type=click.Choice(["openai", "anthropic"]),
+            default="openai",
+            show_default=True,
+        )
+        api_key = click.prompt(
+            f"{provider_type} API key",
+            hide_input=True,
+            confirmation_prompt=False,
+        ).strip()
+        default_model = {
+            "openai": "gpt-5.4",
+            "anthropic": "claude-sonnet-4-6",
+        }[provider_type]
+        model = click.prompt(
+            "Agent model",
+            default=default_model,
+            show_default=True,
+        ).strip()
+
+        self.chemsmart_agent.mkdir(parents=True, exist_ok=True)
+        template = self.chemsmart_template / "agent" / "agent.yaml.template"
+        with resources.as_file(template) as template_path:
+            shutil.copyfile(template_path, agent_yaml)
+
+        replacements = {
+            "__ACTIVE_PROVIDER__": provider_type,
+            "__OPENAI_API_KEY__": api_key if provider_type == "openai" else "",
+            "__ANTHROPIC_API_KEY__": (
+                api_key if provider_type == "anthropic" else ""
+            ),
+            "model: gpt-5.4": (
+                f"model: {model}"
+                if provider_type == "openai"
+                else "model: gpt-5.4"
+            ),
+            "model: claude-sonnet-4-6": (
+                f"model: {model}"
+                if provider_type == "anthropic"
+                else "model: claude-sonnet-4-6"
+            ),
+        }
+        _replace_in_file(agent_yaml, replacements)
+        logger.info(f"Configured agent provider in {agent_yaml}")
+
+    def setup_environment(self, configure_interactively: bool = False):
         """
         Copy bundled templates to ``~/.chemsmart`` and register the
         ``chemsmart`` command in the active shell environment.
@@ -391,6 +458,10 @@ class Config:
                 "'PATH', 'User')"
             )
 
+        if configure_interactively:
+            self.configure_paths_interactively()
+            self.configure_agent_interactively()
+
 
 def update_yaml_files(target_directory, value_in_file, user_value):
     """
@@ -417,6 +488,16 @@ def update_yaml_files(target_directory, value_in_file, user_value):
         with open(yaml_file, "w") as g:
             g.writelines(new_lines)
         logger.info(f"Updated YAML file: {yaml_file}")
+
+
+def _replace_in_file(path: Path, replacements: dict[str, str]) -> None:
+    """Replace literal strings in a text file."""
+    with open(path, "r", encoding="utf-8") as f:
+        contents = f.read()
+    for value_in_file, user_value in replacements.items():
+        contents = contents.replace(value_in_file, user_value)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(contents)
 
 
 def add_lines_in_yaml_files(
@@ -478,8 +559,7 @@ def config(ctx):
     ctx.obj["cfg"] = cfg
     if ctx.invoked_subcommand is None:
         # Run the default environment setup when no subcommand is provided
-        cfg.setup_environment()
-        cfg.configure_paths_interactively()
+        cfg.setup_environment(configure_interactively=True)
 
 
 @config.command()
@@ -600,10 +680,24 @@ def nciplot(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/bin/nciplot", folder)
 
 
+@config.command()
+@click.pass_context
+def agent(ctx):
+    """
+    Configure the agent provider in ~/.chemsmart/agent/agent.yaml.
+
+    Examples:
+        chemsmart config agent
+    """
+    cfg = ctx.obj["cfg"]
+    cfg.configure_agent_interactively()
+
+
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
 config.add_command(nciplot)
+config.add_command(agent)
 
 if __name__ == "__main__":
     config()

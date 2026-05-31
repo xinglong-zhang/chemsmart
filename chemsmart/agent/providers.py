@@ -9,10 +9,16 @@ from __future__ import annotations
 
 import os
 import time
+import warnings
 from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
+
+from chemsmart.agent.provider_config import (
+    AgentProviderConfigError,
+    load_active_provider_config,
+)
 
 _GATEWAY_URL_OPENAI = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 _GATEWAY_URL_ANTHROPIC = (
@@ -43,13 +49,23 @@ class AnthropicProvider:
     default_model = "claude-sonnet-4-6"
     gateway_url = _GATEWAY_URL_ANTHROPIC
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str | None = None,
+        base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         import anthropic
 
-        self._client = anthropic.Anthropic(
-            api_key=api_key,
-            base_url=self.gateway_url,
-        )
+        self.default_model = model or type(self).default_model
+        client_kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "base_url": base_url or self.gateway_url,
+        }
+        if extra_headers:
+            client_kwargs["default_headers"] = extra_headers
+        self._client = anthropic.Anthropic(**client_kwargs)
 
     def chat(
         self,
@@ -92,13 +108,23 @@ class OpenAIProvider:
     default_model = "gpt-5.4"
     gateway_url = _GATEWAY_URL_OPENAI
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str | None = None,
+        base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         import openai
 
-        self._client = openai.OpenAI(
-            api_key=api_key,
-            base_url=self.gateway_url,
-        )
+        self.default_model = model or type(self).default_model
+        client_kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "base_url": base_url or self.gateway_url,
+        }
+        if extra_headers:
+            client_kwargs["default_headers"] = extra_headers
+        self._client = openai.OpenAI(**client_kwargs)
 
     def chat(
         self,
@@ -159,8 +185,38 @@ def get_provider(
 ) -> AnthropicProvider | OpenAIProvider:
     """Return a configured provider instance; raises ProviderError on failure.
 
-    Validates AI_PROVIDER and ai_api_key before constructing the provider.
+    Prefer ``~/.chemsmart/agent/agent.yaml``. If it is absent, fall back to the
+    legacy ``api.env``/``AI_PROVIDER`` path for backwards compatibility.
     """
+    try:
+        config = load_active_provider_config()
+    except AgentProviderConfigError as exc:
+        raise ProviderError(str(exc)) from exc
+
+    if config is not None:
+        if config.type == "anthropic":
+            return AnthropicProvider(
+                config.api_key,
+                model=config.model,
+                base_url=config.base_url or None,
+                extra_headers=config.extra_headers,
+            )
+        if config.type == "openai":
+            return OpenAIProvider(
+                config.api_key,
+                model=config.model,
+                base_url=config.base_url or None,
+                extra_headers=config.extra_headers,
+            )
+        raise ProviderError(f"provider type {config.type!r} is not supported")
+
+    warnings.warn(
+        "agent.yaml missing; legacy api.env will be removed. "
+        "Run `make configure`.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     env_path = _resolve_api_env_path(env_path)
 
     # Load api.env first so AI_PROVIDER and ai_api_key can both come from the

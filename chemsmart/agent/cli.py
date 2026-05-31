@@ -116,7 +116,16 @@ def agent(ctx, plain: bool, verbose: bool):
 def doctor(no_ping: bool):
     """Validate api.env, AI_PROVIDER, and provider connectivity."""
     with _agent_command_logging():
+        from chemsmart.agent.provider_config import (
+            AgentProviderConfigError,
+            load_active_provider_config,
+        )
         import chemsmart.agent.providers as providers
+
+        try:
+            provider_config = load_active_provider_config()
+        except AgentProviderConfigError as exc:
+            raise click.ClickException(str(exc)) from exc
 
         try:
             provider = providers.get_provider()
@@ -124,13 +133,24 @@ def doctor(no_ping: bool):
             raise click.ClickException(str(exc)) from exc
 
         registry = ToolRegistry.default()
-        api_key = os.environ.get("ai_api_key", "").strip()
-        provider_name = os.environ.get("AI_PROVIDER", "").strip()
-        gateway_url = _get_gateway_url(providers, provider_name)
-
-        click.echo(f"AI_PROVIDER={provider_name} OK")
-        click.echo(f"api.env: OK (key length={len(api_key)})")
-        click.echo(f"gateway: {gateway_url}")
+        if provider_config is not None:
+            provider_name = provider_config.type
+            gateway_url = provider_config.base_url or "(default gateway)"
+            click.echo(
+                "agent.yaml: "
+                f"{Path.home() / '.chemsmart' / 'agent' / 'agent.yaml'}"
+            )
+            click.echo(f"active: {provider_config.name}")
+            click.echo(f"type: {provider_config.type}")
+            click.echo(f"model: {provider_config.model}")
+            click.echo(f"base_url: {gateway_url}")
+        else:
+            api_key = os.environ.get("ai_api_key", "").strip()
+            provider_name = os.environ.get("AI_PROVIDER", "").strip()
+            gateway_url = _get_gateway_url(providers, provider_name)
+            click.echo(f"AI_PROVIDER={provider_name} OK")
+            click.echo(f"api.env: OK (key length={len(api_key)})")
+            click.echo(f"gateway: {gateway_url}")
 
         if no_ping:
             click.echo("ping: skipped (--no-ping)")
