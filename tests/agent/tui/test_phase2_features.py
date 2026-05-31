@@ -12,7 +12,6 @@ from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.popups import ApprovalOverlay, ApprovalResult
 
 from .._agent_session_helpers import FakeProvider
-from .._loop_helpers import openai_final_response
 
 
 def test_approval_overlay_blocks_run_until_yes(
@@ -162,7 +161,16 @@ def test_agent_cli_ask_streams_without_tui_import(
     import builtins
 
     provider = FakeProvider(
-        [{"__raw_response__": openai_final_response("Loop answer.")}]
+        [
+            {
+                "status": "ready",
+                "command": "chemsmart sub gaussian opt -p water -b 6-31g*",
+                "explanation": "Loop answer.",
+                "confidence": "medium",
+                "missing_info": [],
+                "alternatives": [],
+            }
+        ]
     )
     real_import = builtins.__import__
 
@@ -196,9 +204,10 @@ def test_agent_cli_ask_streams_without_tui_import(
     result = runner.invoke(
         agent,
         ["ask", f"optimize {single_molecule_xyz_file}"],
+        input="N\n",
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0, result.output
-    assert "Assistant" in result.output
+    assert "ChemSmart synthesis" in result.output
     assert "Loop answer." in result.output

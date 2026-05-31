@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +24,12 @@ def build_chemsmart_cli_schema() -> JsonDict:
     parameters and recursively nested subcommands.
     """
 
+    numexpr_logger = logging.getLogger("numexpr.utils")
+    previous_numexpr_level = numexpr_logger.level
+    numexpr_logger.setLevel(logging.WARNING)
     from chemsmart.cli.main import entry_point
 
+    numexpr_logger.setLevel(previous_numexpr_level)
     with click.Context(entry_point, info_name="chemsmart") as ctx:
         return _command_schema(entry_point, ctx)
 

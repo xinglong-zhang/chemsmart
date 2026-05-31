@@ -8,6 +8,7 @@ import logging
 import os
 import threading
 import time
+import warnings
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -317,55 +318,17 @@ def agent_run(
 )
 @click.argument("request")
 def ask(request: str, mode_name: str, yolo: bool):
-    """Run a one-shot dry-run request and stream Rich output to stdout."""
+    """Synthesize one ChemSmart CLI command from a natural-language request."""
+    if mode_name != "driving" or yolo:
+        warnings.warn(
+            "ask now uses synthesis mode; legacy flags ignored",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     with _agent_command_logging():
-        session = AgentSession()
-        console = Console()
-        result_box: dict[str, dict] = {}
-        error_box: dict[str, Exception] = {}
-        policy = _permission_policy_from_flags(mode_name, yolo)
+        from chemsmart.agent.synthesis import SynthesisSession
 
-        def runner() -> None:
-            try:
-                result_box["result"] = session.run_loop(
-                    request,
-                    policy=policy,
-                    approver=_auto_deny_approver,
-                )
-            except Exception as exc:  # pragma: no cover - bridged below
-                error_box["error"] = exc
-
-        thread = threading.Thread(target=runner, daemon=True)
-        thread.start()
-
-        seen = 0
-        while thread.is_alive() or (
-            session.session_dir
-            and (session.session_dir / "decision_log.jsonl").exists()
-        ):
-            log_path = (
-                None
-                if session.session_dir is None
-                else session.session_dir / "decision_log.jsonl"
-            )
-            if log_path and log_path.exists():
-                lines = log_path.read_text(encoding="utf-8").splitlines()
-                for line in lines[seen:]:
-                    if line.strip():
-                        _stream_event(console, json.loads(line))
-                seen = len(lines)
-            if not thread.is_alive():
-                break
-            time.sleep(0.05)
-        thread.join()
-
-        if "error" in error_box:
-            raise click.ClickException(str(error_box["error"])) from error_box[
-                "error"
-            ]
-        result = result_box["result"]
-        if result.get("limit_reason"):
-            click.echo(f"limit reason: {result['limit_reason']}")
+        SynthesisSession().run_interactive(request)
 
 
 @agent.command()
@@ -586,9 +549,13 @@ def _agent_command_logging():
         return
 
     log_path = _silence_console_logging(_agent_log_root())
+    numexpr_logger = logging.getLogger("numexpr.utils")
+    previous_numexpr_level = numexpr_logger.level
+    numexpr_logger.setLevel(logging.NOTSET)
     try:
         yield
     finally:
+        numexpr_logger.setLevel(previous_numexpr_level)
         _flush_logging_handlers()
         if log_path.exists() and log_path.stat().st_size:
             click.echo(f"Debug log saved to: {log_path}", err=True)

@@ -12,7 +12,6 @@ from chemsmart.agent.cli import agent
 from chemsmart.agent.core import Plan
 
 from ._agent_session_helpers import FakeProvider
-from ._loop_helpers import openai_final_response
 from .tui._helpers import write_session_fixture
 
 
@@ -295,10 +294,12 @@ def test_ask_renders_advisory_plan(
     provider = FakeProvider(
         [
             {
-                "__raw_response__": openai_final_response(
-                    "Advisory text: start with wB97X-D/def2-SVP, confirm "
-                    "one imaginary frequency, then refine with def2-TZVP."
-                )
+                "status": "ready",
+                "command": "chemsmart sub gaussian ts -p cope -b def2-svp",
+                "explanation": "Synthesize a safe ChemSmart CLI command for the request.",
+                "confidence": "medium",
+                "missing_info": [],
+                "alternatives": [],
             }
         ]
     )
@@ -326,10 +327,11 @@ def test_ask_renders_advisory_plan(
             "ask",
             "Recommend method/basis for a Cope rearrangement TS and explain trade-offs.",
         ],
+        input="N\n",
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0, result.output
-    assert "Assistant" in result.output
-    assert "Advisory text" in result.output
-    assert "Plan" not in result.output
+    assert "ChemSmart synthesis" in result.output
+    assert "chemsmart sub gaussian ts -p cope -b def2-svp" in result.output
+    assert "Run? [Y]es/[E]dit/[N]o/[T]est" in result.output
