@@ -56,7 +56,9 @@ CASES: list[tuple[str, str, list[str]]] = [
     (
         "NCI plot",
         "NCI analysis of dimer.wfn locally",
-        ["chemsmart", "gaussian", "nci"],
+        # Raw .wfn input goes through the `nciplot` subcommand, NOT
+        # `gaussian nci`. See system-prompt NCI family guidance.
+        ["chemsmart", "run", "nciplot", "-f", "dimer.wfn"],
     ),
     (
         "TDDFT",
