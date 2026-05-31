@@ -142,3 +142,30 @@ def test_apply_third_party_silence_strips_direct_handlers_from_listed_loggers(
         for log, handler in stamped:
             if handler in log.handlers:
                 log.removeHandler(handler)
+
+
+def test_io_converter_import_does_not_wipe_existing_handlers(
+    isolated_root_handlers, tmp_path
+) -> None:
+    """Regression: importing chemsmart.io.converter / .organizer used to call
+    ``create_logger()`` at module top level, which sets ``root.handlers = []``
+    and re-attaches a stdout StreamHandler. This silently broke the agent's
+    quiet-mode silencer whenever ``ToolRegistry.default()`` lazily imported
+    those modules. The guard added in this fix only sets up default logging
+    when no handlers are present yet.
+    """
+    root = logging.getLogger()
+    root.handlers[:] = []
+    sentinel = logging.FileHandler(tmp_path / "sentinel.log", mode="w")
+    root.addHandler(sentinel)
+
+    # Re-import to trigger the module-level guard fresh.
+    import importlib
+
+    import chemsmart.io.converter as converter_mod
+    import chemsmart.io.organizer as organizer_mod
+
+    importlib.reload(converter_mod)
+    importlib.reload(organizer_mod)
+
+    assert sentinel in root.handlers

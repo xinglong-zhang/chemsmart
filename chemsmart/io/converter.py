@@ -22,7 +22,15 @@ from chemsmart.utils.logger import create_logger
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"
 
-create_logger()
+# Only set up default console logging on import when nothing else has
+# configured logging yet. Without this guard the unconditional call wipes
+# every handler already attached to root (see ``create_logger``: ``logger
+# .handlers = []``) and re-attaches noisy stdout/stderr StreamHandlers,
+# which silently breaks downstream consumers such as the agent's quiet-mode
+# silencer that attaches its own file handler before this module is
+# imported lazily through the tool registry.
+if not logging.getLogger().handlers:
+    create_logger()
 
 
 class FileConverter:
