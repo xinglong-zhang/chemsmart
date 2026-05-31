@@ -1,0 +1,364 @@
+{
+  "description": "CLI subcommand for running Gaussian transition state calculation.",
+  "name": "ts",
+  "options": [
+    {
+      "choices": null,
+      "default": true,
+      "help": "Skip completed jobs. Use -R to rerun completed jobs.",
+      "is_flag": true,
+      "multiple": false,
+      "name": "skip_completed",
+      "nargs": 1,
+      "opts": [
+        "-R",
+        "-S",
+        "--no-skip-completed",
+        "--skip-completed"
+      ],
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "choices": null,
+      "default": null,
+      "help": "Indices of atoms to freeze for constrained optimization. 1-indexed.",
+      "is_flag": false,
+      "multiple": false,
+      "name": "freeze_atoms",
+      "nargs": 1,
+      "opts": [
+        "-f",
+        "--freeze-atoms"
+      ],
+      "required": false,
+      "type": "str"
+    }
+  ],
+  "subcommands": {
+    "qmmm": {
+      "description": "Run a QM/MM calculation for this job type.",
+      "name": "qmmm",
+      "options": [
+        {
+          "choices": null,
+          "default": null,
+          "help": "Functional for high-level QM region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "high_level_functional",
+          "nargs": 1,
+          "opts": [
+            "-hx",
+            "--high-level-functional"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Basis set for high-level QM region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "high_level_basis",
+          "nargs": 1,
+          "opts": [
+            "-hb",
+            "--high-level-basis"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Force field for high-level region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "high_level_force_field",
+          "nargs": 1,
+          "opts": [
+            "-hff",
+            "--high-level-force-field"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Functional for medium-level QM region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "medium_level_functional",
+          "nargs": 1,
+          "opts": [
+            "-mx",
+            "--medium-level-functional"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Basis set for medium-level QM region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "medium_level_basis",
+          "nargs": 1,
+          "opts": [
+            "-mb",
+            "--medium-level-basis"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Force field for medium-level region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "medium_level_force_field",
+          "nargs": 1,
+          "opts": [
+            "-mff",
+            "--medium-level-force-field"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Functional for low-level MM region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "low_level_functional",
+          "nargs": 1,
+          "opts": [
+            "-lx",
+            "--low-level-functional"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Basis set for low-level MM region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "low_level_basis",
+          "nargs": 1,
+          "opts": [
+            "-lb",
+            "--low-level-basis"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Force field for low-level MM region.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "low_level_force_field",
+          "nargs": 1,
+          "opts": [
+            "-lff",
+            "--low-level-force-field"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Total system charge (1-indexed atoms)",
+          "is_flag": false,
+          "multiple": false,
+          "name": "charge_total",
+          "nargs": 1,
+          "opts": [
+            "-ct",
+            "--charge-total"
+          ],
+          "required": false,
+          "type": "int"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Total system multiplicity (2S+1)",
+          "is_flag": false,
+          "multiple": false,
+          "name": "mult_total",
+          "nargs": 1,
+          "opts": [
+            "-mt",
+            "--mult-total"
+          ],
+          "required": false,
+          "type": "int"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Charge of intermediate (high+medium) system",
+          "is_flag": false,
+          "multiple": false,
+          "name": "charge_intermediate",
+          "nargs": 1,
+          "opts": [
+            "-ci",
+            "--charge-intermediate"
+          ],
+          "required": false,
+          "type": "int"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Multiplicity of intermediate (high+medium) system",
+          "is_flag": false,
+          "multiple": false,
+          "name": "mult_intermediate",
+          "nargs": 1,
+          "opts": [
+            "-mi",
+            "--mult-intermediate"
+          ],
+          "required": false,
+          "type": "int"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Charge of high-level (model) system",
+          "is_flag": false,
+          "multiple": false,
+          "name": "charge_high",
+          "nargs": 1,
+          "opts": [
+            "-ch",
+            "--charge-high"
+          ],
+          "required": false,
+          "type": "int"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Multiplicity of high-level (model) system",
+          "is_flag": false,
+          "multiple": false,
+          "name": "mult_high",
+          "nargs": 1,
+          "opts": [
+            "-mh",
+            "--mult-high"
+          ],
+          "required": false,
+          "type": "int"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Atom indices for high-level QM region (1-indexed, e.g., '1-10,15,20').",
+          "is_flag": false,
+          "multiple": false,
+          "name": "high_level_atoms",
+          "nargs": 1,
+          "opts": [
+            "-ha",
+            "--high-level-atoms"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Atom indices for medium-level region (1-indexed).",
+          "is_flag": false,
+          "multiple": false,
+          "name": "medium_level_atoms",
+          "nargs": 1,
+          "opts": [
+            "-ma",
+            "--medium-level-atoms"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Atom indices for low-level MM region (1-indexed).",
+          "is_flag": false,
+          "multiple": false,
+          "name": "low_level_atoms",
+          "nargs": 1,
+          "opts": [
+            "-la",
+            "--low-level-atoms"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Bonded atom pairs at QM/MM boundary as string representation of dict.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "bonded_atoms",
+          "nargs": 1,
+          "opts": [
+            "-ba",
+            "--bonded-atoms"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": null,
+          "help": "Scale factors for QM/MM calculations as string representation of dict.",
+          "is_flag": false,
+          "multiple": false,
+          "name": "scale_factors",
+          "nargs": 1,
+          "opts": [
+            "-sf",
+            "--scale-factors"
+          ],
+          "required": false,
+          "type": "str"
+        },
+        {
+          "choices": null,
+          "default": true,
+          "help": "Skip completed jobs. Use -R to rerun completed jobs.",
+          "is_flag": true,
+          "multiple": false,
+          "name": "skip_completed",
+          "nargs": 1,
+          "opts": [
+            "-R",
+            "-S",
+            "--no-skip-completed",
+            "--skip-completed"
+          ],
+          "required": false,
+          "type": "bool"
+        }
+      ],
+      "subcommands": {}
+    }
+  }
+}

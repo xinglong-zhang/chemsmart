@@ -106,6 +106,30 @@ def agent(ctx, plain: bool, verbose: bool):
     launch_tui(plain=plain)
 
 
+@agent.command(name="_dump-cli-schema", hidden=True)
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the CLI schema JSON to this path instead of stdout.",
+)
+def dump_cli_schema(out_path: Path | None) -> None:
+    """Emit a JSON schema for the ChemSmart click command tree."""
+    from chemsmart.agent.cli_schema import (
+        build_chemsmart_cli_schema,
+        dump_schema_to_json,
+        schema_with_metadata,
+    )
+
+    if out_path is not None:
+        dump_schema_to_json(out_path)
+        return
+
+    document = schema_with_metadata(build_chemsmart_cli_schema())
+    click.echo(json.dumps(document, indent=2, sort_keys=True))
+
+
 @agent.command()
 @click.option(
     "--no-ping",
