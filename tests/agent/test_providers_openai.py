@@ -64,6 +64,33 @@ def test_openai_provider_ping_returns_resolved_model(monkeypatch):
     completions.create.assert_called_once_with(
         model="gpt-5.4",
         messages=[{"role": "user", "content": "ping"}],
+        max_completion_tokens=5,
+        timeout=30,
+    )
+
+
+def test_openai_provider_ping_uses_max_tokens_for_legacy_models(monkeypatch):
+    """OpenAIProvider.ping keeps max_tokens for pre GPT-5 models."""
+    response = MagicMock()
+    response.model = "gpt-4o-2024-08-06"
+
+    completions = MagicMock()
+    completions.create.return_value = response
+
+    client = MagicMock()
+    client.chat.completions = completions
+
+    openai_module = MagicMock()
+    openai_module.OpenAI.return_value = client
+    monkeypatch.setitem(sys.modules, "openai", openai_module)
+
+    provider = OpenAIProvider("test-key", model="gpt-4o")
+    result = provider.ping()
+
+    assert result["ok"] is True
+    completions.create.assert_called_once_with(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "ping"}],
         max_tokens=5,
         timeout=30,
     )
