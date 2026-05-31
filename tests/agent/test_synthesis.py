@@ -135,7 +135,106 @@ def test_confirm_and_execute_inserts_test_only_for_sub(
     session.confirm_and_execute("chemsmart config show", "explain", "medium")
 
     assert calls == [
-        ["chemsmart", "sub", "--test", "gaussian", "ts", "-p", "oxetane"]
+        [
+            "chemsmart",
+            "--no-verbose",
+            "sub",
+            "--test",
+            "gaussian",
+            "ts",
+            "-p",
+            "oxetane",
+        ]
+    ]
+
+
+def test_confirm_and_execute_injects_no_verbose_on_yes_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = SynthesisSession(provider=DummyProvider([]))
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr("click.prompt", lambda *_args, **_kwargs: "Y")
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.subprocess.run",
+        lambda args, check=False: calls.append(args),
+    )
+
+    session.confirm_and_execute(
+        "chemsmart sub gaussian opt -p water -b 6-31g*",
+        "explain",
+        "high",
+    )
+
+    assert calls == [
+        [
+            "chemsmart",
+            "--no-verbose",
+            "sub",
+            "gaussian",
+            "opt",
+            "-p",
+            "water",
+            "-b",
+            "6-31g*",
+        ]
+    ]
+
+
+def test_confirm_and_execute_skips_no_verbose_when_debug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = SynthesisSession(provider=DummyProvider([]), debug=True)
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr("click.prompt", lambda *_args, **_kwargs: "Y")
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.subprocess.run",
+        lambda args, check=False: calls.append(args),
+    )
+
+    session.confirm_and_execute(
+        "chemsmart sub gaussian opt -p water -b 6-31g*",
+        "explain",
+        "high",
+    )
+
+    assert calls == [
+        [
+            "chemsmart",
+            "sub",
+            "gaussian",
+            "opt",
+            "-p",
+            "water",
+            "-b",
+            "6-31g*",
+        ]
+    ]
+
+
+def test_quiet_argv_respects_existing_verbose_flags() -> None:
+    session = SynthesisSession(provider=DummyProvider([]))
+    argv_with_verbose = session._quiet_argv(
+        ["chemsmart", "--verbose", "sub", "gaussian", "opt"]
+    )
+    argv_with_no_verbose = session._quiet_argv(
+        ["chemsmart", "--no-verbose", "sub", "gaussian", "opt"]
+    )
+
+    assert argv_with_verbose == [
+        "chemsmart",
+        "--verbose",
+        "sub",
+        "gaussian",
+        "opt",
+    ]
+    assert argv_with_no_verbose == [
+        "chemsmart",
+        "--no-verbose",
+        "sub",
+        "gaussian",
+        "opt",
     ]
 
 
@@ -186,3 +285,45 @@ def test_agent_ask_e2e_uses_synthesis_session(
     assert "chemsmart sub gaussian ts -p oxetane -b def2-svp" in result.output
     assert "Run? [Y]es/[E]dit/[N]o/[T]est" in result.output
     assert calls == []
+
+
+def test_agent_ask_debug_flag_plumbs_to_synthesis_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = DummyProvider([_json_response(READY)])
+    monkeypatch.setattr(
+        "chemsmart.agent.providers.get_provider",
+        lambda: provider,
+    )
+    captured: dict[str, bool] = {}
+    real_init = SynthesisSession.__init__
+
+    def spy_init(self, *args: Any, **kwargs: Any) -> None:
+        captured["debug"] = bool(kwargs.get("debug", False))
+        real_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(SynthesisSession, "__init__", spy_init)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.subprocess.run",
+        lambda args, check=False: calls.append(args),
+    )
+
+    result = CliRunner().invoke(
+        agent, ["ask", "--debug", "make a ts job"], input="Y\n"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured.get("debug") is True
+    assert calls == [
+        [
+            "chemsmart",
+            "sub",
+            "gaussian",
+            "ts",
+            "-p",
+            "oxetane",
+            "-b",
+            "def2-svp",
+        ]
+    ]

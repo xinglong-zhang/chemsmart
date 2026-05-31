@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 import shlex
 import subprocess
@@ -33,6 +32,7 @@ class SynthesisSession:
         provider: Any | None = None,
         schema: JsonDict | None = None,
         max_retries: int = 2,
+        debug: bool = False,
     ) -> None:
         """Initialize a synthesis session.
 
@@ -41,6 +41,9 @@ class SynthesisSession:
                 configured provider.
             schema: Optional precomputed CLI schema.
             max_retries: Number of corrective retries for invalid JSON.
+            debug: When True, executed chemsmart subprocesses keep their
+                default ``--verbose`` behavior; when False (default), a
+                ``--no-verbose`` flag is injected so the child stays quiet.
         """
 
         if provider is None:
@@ -50,6 +53,7 @@ class SynthesisSession:
         self.provider = provider
         self.schema = schema or build_chemsmart_cli_schema()
         self.max_retries = max_retries
+        self.debug = debug
         self.memory = ConversationMemory()
 
     def synthesize(self, request: str) -> JsonDict:
@@ -102,11 +106,8 @@ class SynthesisSession:
         if len(tokens) == 1:
             return False, "command must include a chemsmart subcommand"
 
-        numexpr_logger = logging.getLogger("numexpr.utils")
-        previous_numexpr_level = numexpr_logger.level
         from chemsmart.cli.main import entry_point
 
-        numexpr_logger.setLevel(previous_numexpr_level)
         remainder = tokens[1:]
         try:
             entry_point.make_context(
@@ -194,7 +195,7 @@ class SynthesisSession:
         )
 
         if choice in {"", "Y", "YES"}:
-            subprocess.run(shlex.split(cmd), check=False)
+            subprocess.run(self._quiet_argv(shlex.split(cmd)), check=False)
             return
         if choice in {"N", "NO"}:
             click.echo("cancelled")
@@ -215,11 +216,29 @@ class SynthesisSession:
             tokens = shlex.split(cmd)
             if len(tokens) > 1 and tokens[1] == "sub":
                 tokens.insert(2, "--test")
-                subprocess.run(tokens, check=False)
+                subprocess.run(self._quiet_argv(tokens), check=False)
             else:
                 click.echo("test only for sub")
             return
         click.echo("cancelled")
+
+    def _quiet_argv(self, tokens: list[str]) -> list[str]:
+        """Inject ``--no-verbose`` after ``chemsmart`` unless debug is on.
+
+        The top-level ``chemsmart`` CLI defaults to ``--verbose=True`` which
+        prints the ASCII banner and INFO logs to stdout. Quiet mode is the
+        user-facing default for synthesis-driven invocations; ``--debug``
+        passes the command through unchanged so the child stays loud.
+        """
+        if self.debug:
+            return list(tokens)
+        if not tokens or tokens[0] != "chemsmart":
+            return list(tokens)
+        if "--no-verbose" in tokens or "--verbose" in tokens:
+            return list(tokens)
+        argv = list(tokens)
+        argv.insert(1, "--no-verbose")
+        return argv
 
     def _messages_for_request(self, request: str) -> list[dict[str, str]]:
         context = self.memory.prompt_context()

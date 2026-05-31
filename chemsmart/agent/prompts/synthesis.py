@@ -42,6 +42,7 @@ Rules:
 - If the request cannot be expressed by the ChemSmart CLI schema, set status to "infeasible".
 - Prefer safe, dry-run, local, or test-oriented flags when the user asks for planning or previewing.
 - Do not include shell operators, environment assignments, pipes, redirects, command substitutions, semicolons, or multiple commands.
+- Never include `--debug`, `--verbose`, `-v`, or other diagnostic-only flags unless the user explicitly asked for verbose or debug output.
 
 ChemSmart CLI schema:
 {schema_json}

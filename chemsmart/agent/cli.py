@@ -34,6 +34,7 @@ from chemsmart.agent.permissions import (
 from chemsmart.agent.providers import ProviderError
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.tui._logging import (
+    _apply_third_party_silence,
     _enable_console_logging,
     _flush_logging_handlers,
     _silence_console_logging,
@@ -85,15 +86,28 @@ _INLINE_CLI_STDERR_HINTS = (
         "agent log file."
     ),
 )
+@click.option(
+    "--debug",
+    "debug",
+    is_flag=True,
+    default=False,
+    help=(
+        "Show DEBUG console logs including 3rd-party library chatter "
+        "(numexpr/openai/anthropic/httpx). Equivalent to --verbose plus "
+        "passing verbose flags through to executed chemsmart subprocesses."
+    ),
+)
 @click.pass_context
-def agent(ctx, plain: bool, verbose: bool):
+def agent(ctx, plain: bool, verbose: bool, debug: bool):
     """AI-scientist agent commands for chemsmart."""
     ctx.ensure_object(dict)
-    ctx.obj["agent_verbose"] = verbose
+    effective_verbose = verbose or debug
+    ctx.obj["agent_verbose"] = effective_verbose
+    ctx.obj["agent_debug"] = debug
     if ctx.invoked_subcommand is not None:
         return
 
-    if verbose:
+    if effective_verbose:
         _enable_console_logging()
         logger.debug("Agent verbose logging enabled")
     try:
@@ -316,8 +330,19 @@ def agent_run(
     default=False,
     help="Allow run_local and submit_hpc in driving mode.",
 )
+@click.option(
+    "--debug",
+    "debug",
+    is_flag=True,
+    default=False,
+    help=(
+        "Show DEBUG console logs and forward verbose to executed "
+        "chemsmart subprocesses."
+    ),
+)
 @click.argument("request")
-def ask(request: str, mode_name: str, yolo: bool):
+@click.pass_context
+def ask(ctx, request: str, mode_name: str, yolo: bool, debug: bool):
     """Synthesize one ChemSmart CLI command from a natural-language request."""
     if mode_name != "driving" or yolo:
         warnings.warn(
@@ -325,10 +350,14 @@ def ask(request: str, mode_name: str, yolo: bool):
             DeprecationWarning,
             stacklevel=2,
         )
+    if debug:
+        if isinstance(ctx.obj, dict):
+            ctx.obj["agent_verbose"] = True
+            ctx.obj["agent_debug"] = True
     with _agent_command_logging():
         from chemsmart.agent.synthesis import SynthesisSession
 
-        SynthesisSession().run_interactive(request)
+        SynthesisSession(debug=debug).run_interactive(request)
 
 
 @agent.command()
@@ -539,8 +568,12 @@ def tools():
 @contextmanager
 def _agent_command_logging():
     verbose = _agent_verbose_enabled()
+    debug = _agent_debug_enabled()
     if verbose:
         _enable_console_logging()
+        _apply_third_party_silence(
+            logging.DEBUG if debug else logging.WARNING
+        )
         logger.debug("Agent verbose logging enabled")
         try:
             yield
@@ -549,13 +582,10 @@ def _agent_command_logging():
         return
 
     log_path = _silence_console_logging(_agent_log_root())
-    numexpr_logger = logging.getLogger("numexpr.utils")
-    previous_numexpr_level = numexpr_logger.level
-    numexpr_logger.setLevel(logging.NOTSET)
+    _apply_third_party_silence(logging.WARNING)
     try:
         yield
     finally:
-        numexpr_logger.setLevel(previous_numexpr_level)
         _flush_logging_handlers()
         if log_path.exists() and log_path.stat().st_size:
             click.echo(f"Debug log saved to: {log_path}", err=True)
@@ -566,6 +596,15 @@ def _agent_verbose_enabled() -> bool:
     while ctx is not None:
         if isinstance(ctx.obj, dict) and "agent_verbose" in ctx.obj:
             return bool(ctx.obj["agent_verbose"])
+        ctx = ctx.parent
+    return False
+
+
+def _agent_debug_enabled() -> bool:
+    ctx = click.get_current_context(silent=True)
+    while ctx is not None:
+        if isinstance(ctx.obj, dict) and "agent_debug" in ctx.obj:
+            return bool(ctx.obj["agent_debug"])
         ctx = ctx.parent
     return False
 
