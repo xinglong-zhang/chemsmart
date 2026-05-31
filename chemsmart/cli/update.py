@@ -12,7 +12,8 @@ from chemsmart.utils.logger import create_logger
 
 # Initialize logger
 logger = logging.getLogger(__name__)
-create_logger(debug=True, stream=True)
+if not logging.getLogger().handlers:
+    create_logger(debug=True, stream=True)
 
 
 class Updater:
@@ -53,7 +54,7 @@ class Updater:
         if requirements_path:
             self._update_toml(requirements_path)
 
-    def _generate_requirements(self, ignore_dirs=None) -> Path:
+    def _generate_requirements(self, ignore_dirs=None) -> Path | None:
         """
         Run pipreqs and extract dependencies.
         """

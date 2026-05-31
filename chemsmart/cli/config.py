@@ -12,7 +12,8 @@ from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
 
-create_logger(debug=True, stream=True)
+if not logging.getLogger().handlers:
+    create_logger(debug=True, stream=True)
 
 
 def _update_powershell_profiles(profiles, env_vars) -> None:

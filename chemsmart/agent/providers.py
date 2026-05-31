@@ -8,6 +8,7 @@ Dispatches on AI_PROVIDER env var; v1 supports Anthropic and OpenAI.
 from __future__ import annotations
 
 import os
+import re
 import time
 import warnings
 from pathlib import Path
@@ -36,8 +37,14 @@ _AVAILABLE_MODELS = {
     "anthropic": ["claude-sonnet-4-6"],
 }
 _SUPPORTED = frozenset(_AVAILABLE_MODELS)
-_PING_MESSAGES = [{"role": "user", "content": "ping"}]
+_PING_MESSAGES: Any = [{"role": "user", "content": "ping"}]
 DEFAULT_TIMEOUT_S = 30
+_OPENAI_USES_MCT = re.compile(r"^(gpt-5|o1|o3|o4)")
+
+
+def _openai_uses_max_completion_tokens(model: str | None) -> bool:
+    """Return whether an OpenAI-family model requires max_completion_tokens."""
+    return bool(_OPENAI_USES_MCT.match((model or "").strip().lower()))
 
 
 class ProviderError(Exception):
@@ -145,12 +152,16 @@ class OpenAIProvider:
     def ping(self) -> dict[str, Any]:
         started = time.perf_counter()
         try:
-            response = self._client.chat.completions.create(
-                model=self.default_model,
-                messages=_PING_MESSAGES,
-                max_tokens=5,
-                timeout=DEFAULT_TIMEOUT_S,
-            )
+            kwargs: dict[str, Any] = {
+                "model": self.default_model,
+                "messages": _PING_MESSAGES,
+                "timeout": DEFAULT_TIMEOUT_S,
+            }
+            if _openai_uses_max_completion_tokens(self.default_model):
+                kwargs["max_completion_tokens"] = 5
+            else:
+                kwargs["max_tokens"] = 5
+            response = self._client.chat.completions.create(**kwargs)
         except Exception as exc:
             raise ProviderError(f"ping failed: {exc}") from exc
 
