@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,10 @@ def _make_runner(gmx_executable="gmx"):
     """
     runner = GromacsJobRunner.__new__(GromacsJobRunner)
     runner.gmx_executable = gmx_executable
+    runner.gmx_modules = []
+    runner.gmx_env = {}
+    runner.gmx_source_scripts = []
+    runner.fake = False
     return runner
 
 
@@ -226,6 +231,30 @@ def test_gromacs_runner_get_grompp_command_with_index(tmp_path):
     ]
 
 
+def test_gromacs_runner_get_grompp_command_with_maxwarn(tmp_path):
+    mdp_file = tmp_path / "em.mdp"
+    structure_file = tmp_path / "input.gro"
+    top_file = tmp_path / "topol.top"
+    tpr_file = tmp_path / "em.tpr"
+
+    job = GromacsEMJob(
+        molecule=None,
+        label="em",
+        jobrunner=None,
+        mdp_file=mdp_file,
+        structure_file=structure_file,
+        top_file=top_file,
+        tpr_file=tpr_file,
+        grompp_maxwarn=1,
+    )
+
+    runner = _make_runner()
+
+    command = runner._get_grompp_command(job)
+
+    assert command[-2:] == ["-maxwarn", "1"]
+
+
 def test_gromacs_runner_get_mdrun_command(tmp_path):
     tpr_file = tmp_path / "em.tpr"
 
@@ -248,6 +277,43 @@ def test_gromacs_runner_get_mdrun_command(tmp_path):
         "mdrun",
         "-deffnm",
         str(tmp_path / "em"),
+    ]
+
+
+def test_gromacs_runner_get_mdrun_command_with_runtime_options(tmp_path):
+    tpr_file = tmp_path / "em.tpr"
+
+    job = GromacsEMJob(
+        molecule=None,
+        label="em",
+        jobrunner=None,
+        mdp_file=tmp_path / "em.mdp",
+        structure_file=tmp_path / "input.gro",
+        top_file=tmp_path / "topol.top",
+        tpr_file=tpr_file,
+        mdrun_threads=4,
+        mdrun_ntmpi=1,
+        mdrun_ntomp=4,
+        mdrun_extra_args=["-pin", "auto"],
+    )
+
+    runner = _make_runner()
+
+    command = runner._get_mdrun_command(job)
+
+    assert command == [
+        "gmx",
+        "mdrun",
+        "-deffnm",
+        str(tmp_path / "em"),
+        "-nt",
+        "4",
+        "-ntmpi",
+        "1",
+        "-ntomp",
+        "4",
+        "-pin",
+        "auto",
     ]
 
 
@@ -330,12 +396,12 @@ def test_gromacs_runner_get_pdb2gmx_command(tmp_path):
         jobrunner=None,
         mdp_file=tmp_path / "em.mdp",
         structure_file=output_gro,
+        input_pdb=input_pdb,
         top_file=top_file,
+        processed_structure_file=output_gro,
+        force_field="amber99sb-ildn",
+        water_model="tip3p",
     )
-    job.input_pdb = input_pdb
-    job.output_gro = output_gro
-    job.force_field = "amber99sb-ildn"
-    job.water_model = "tip3p"
 
     runner = _make_runner()
 
@@ -368,11 +434,11 @@ def test_gromacs_runner_get_editconf_command(tmp_path):
         mdp_file=tmp_path / "em.mdp",
         structure_file=input_structure,
         top_file=tmp_path / "topol.top",
+        processed_structure_file=input_structure,
+        boxed_structure_file=output_structure,
+        box_type="cubic",
+        box_distance=1.0,
     )
-    job.editconf_input_file = input_structure
-    job.editconf_output_file = output_structure
-    job.box_type = "cubic"
-    job.box_distance = 1.0
 
     runner = _make_runner()
 
@@ -404,9 +470,9 @@ def test_gromacs_runner_get_solvate_command(tmp_path):
         mdp_file=tmp_path / "em.mdp",
         structure_file=tmp_path / "input.gro",
         top_file=top_file,
+        boxed_structure_file=input_structure,
+        solvated_structure_file=output_structure,
     )
-    job.boxed_structure_file = input_structure
-    job.solvated_structure_file = output_structure
 
     runner = _make_runner()
 
@@ -436,12 +502,12 @@ def test_gromacs_runner_get_genion_command(tmp_path):
         mdp_file=tmp_path / "em.mdp",
         structure_file=tmp_path / "input.gro",
         top_file=top_file,
+        ions_tpr_file=input_tpr,
+        ionized_structure_file=output_structure,
+        positive_ion="NA",
+        negative_ion="CL",
+        neutral=True,
     )
-    job.ions_tpr_file = input_tpr
-    job.ions_output_file = output_structure
-    job.positive_ion = "NA"
-    job.negative_ion = "CL"
-    job.neutral = True
 
     runner = _make_runner()
 
@@ -464,18 +530,45 @@ def test_gromacs_runner_get_genion_command(tmp_path):
     ]
 
 
-def test_gromacs_runner_full_setup_is_not_implemented():
+def test_gromacs_runner_get_commands_for_full_setup(tmp_path):
+    input_pdb = tmp_path / "input.pdb"
+    mdp_file = tmp_path / "em.mdp"
+    top_file = tmp_path / "topol.top"
+
+    input_pdb.write_text("dummy pdb\n", encoding="utf-8")
+    mdp_file.write_text("integrator = steep\n", encoding="utf-8")
+
     job = GromacsEMJob(
         molecule=None,
         label="em",
         jobrunner=None,
+        mdp_file=mdp_file,
+        input_pdb=input_pdb,
+        top_file=top_file,
         workflow="full_setup",
+        force_field="amber99sb-ildn",
+        water_model="tip3p",
     )
 
-    runner = _make_runner()
+    job.set_folder(str(tmp_path))
 
-    with pytest.raises(NotImplementedError):
-        runner._get_commands(job)
+    runner = _make_runner()
+    commands = runner._get_commands(job)
+
+    assert commands[0][1] == "pdb2gmx"
+    assert commands[1][1] == "editconf"
+    assert commands[2][1] == "solvate"
+    assert commands[3][1] == "grompp"
+    assert commands[4][1] == "genion"
+    assert commands[5][1] == "grompp"
+    assert commands[6][1] == "mdrun"
+
+    assert job.processed_structure_file == tmp_path / "processed.gro"
+    assert job.boxed_structure_file == tmp_path / "boxed.gro"
+    assert job.solvated_structure_file == tmp_path / "solvated.gro"
+    assert job.ions_tpr_file == tmp_path / "ions.tpr"
+    assert job.ionized_structure_file == tmp_path / "ionized.gro"
+    assert job.tpr_file == tmp_path / "em.tpr"
 
 
 def test_gromacs_runner_raises_for_unsupported_workflow():
@@ -490,6 +583,49 @@ def test_gromacs_runner_raises_for_unsupported_workflow():
 
     with pytest.raises(ValueError, match="Unsupported GROMACS workflow"):
         runner._get_commands(job)
+
+
+def test_gromacs_runner_run_command_passes_stdin(tmp_path, monkeypatch):
+    runner = _make_runner()
+    runner.running_directory = str(tmp_path)
+    runner.job_outputfile = str(tmp_path / "job.out")
+    runner.job_errfile = str(tmp_path / "job.err")
+
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["input"] = kwargs.get("input")
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    runner._run_command(
+        ["gmx", "genion"],
+        input_text="SOL\n",
+        stage="genion",
+    )
+
+    assert captured["input"] == "SOL\n"
+
+
+def test_gromacs_runner_wraps_command_for_modules():
+    runner = _make_runner(gmx_executable="/opt/gromacs/bin/gmx")
+    runner.gmx_modules = ["gcc/13", "gromacs/2026"]
+    runner.gmx_source_scripts = ["/opt/gromacs/bin/GMXRC"]
+
+    wrapped = runner._wrap_command_if_needed(
+        ["/opt/gromacs/bin/gmx", "mdrun", "-deffnm", "em"]
+    )
+
+    assert wrapped[:2] == ["bash", "-lc"]
+    assert "module load gcc/13" in wrapped[2]
+    assert "module load gromacs/2026" in wrapped[2]
+    assert "source /opt/gromacs/bin/GMXRC" in wrapped[2]
 
 
 def test_gromacs_executable_defaults_to_gmx():

@@ -1,0 +1,21 @@
+project:
+  name: water_prepared_em
+  type: gromacs
+  job_type: em
+  mode: prepared
+
+gromacs_settings:
+  force_field: user_provided
+  water_model: spc
+  timestep: 0.001
+  temperature: 300.0
+  pressure: 1.0
+  constraints: none
+  grompp_maxwarn: 0
+  mdrun_threads: 1
+
+inputs:
+  mdp_file: em.mdp
+  structure_file: water.gro
+  topology_file: topol.top
+  tpr_file: em.tpr
