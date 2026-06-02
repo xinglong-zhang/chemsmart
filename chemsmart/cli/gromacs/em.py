@@ -1,27 +1,21 @@
+
+from __future__ import annotations
 """
 GROMACS energy minimization CLI command.
 
 This command supports two creation modes:
-
-1. YAML-driven mode:
-       chemsmart run gromacs -p project.yaml em
-
-2. Direct CLI mode:
-       chemsmart run gromacs em --mdp em.mdp --structure input.gro --top topol.top
-
-YAML-driven mode is preferred for ChemSmart integration because it follows the
-settings -> job -> runner architecture.
+1. YAML-driven mode: chemsmart run gromacs -p project.yaml em
+2. Direct CLI mode: chemsmart run gromacs em --mdp em.mdp --structure input.gro --top topol.top
 """
 
 import logging
-import os
 from pathlib import Path
-
 import click
 
 from chemsmart.cli.gromacs.gromacs import gromacs
 from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.gromacs.job import GromacsEMJob
+from chemsmart.settings.gromacs import GromacsProjectSettings
 from chemsmart.utils.cli import MyGroup
 
 logger = logging.getLogger(__name__)
@@ -36,6 +30,7 @@ logger = logging.getLogger(__name__)
         exists=True,
         dir_okay=False,
         resolve_path=True,
+        path_type=Path,
     ),
     default=None,
     help="GROMACS .mdp file for energy minimization.",
@@ -47,6 +42,7 @@ logger = logging.getLogger(__name__)
         exists=True,
         dir_okay=False,
         resolve_path=True,
+        path_type=Path,
     ),
     default=None,
     help="Optional .mdp file used to generate ions.tpr in full_setup workflow.",
@@ -59,6 +55,7 @@ logger = logging.getLogger(__name__)
         exists=True,
         dir_okay=False,
         resolve_path=True,
+        path_type=Path,
     ),
     default=None,
     help="Input structure file, such as .gro or .pdb.",
@@ -70,6 +67,7 @@ logger = logging.getLogger(__name__)
         exists=True,
         dir_okay=False,
         resolve_path=True,
+        path_type=Path,
     ),
     default=None,
     help="Raw PDB file used by the full_setup workflow.",
@@ -81,6 +79,7 @@ logger = logging.getLogger(__name__)
         exists=True,
         dir_okay=False,
         resolve_path=True,
+        path_type=Path,
     ),
     default=None,
     help="GROMACS topology .top file.",
@@ -92,9 +91,22 @@ logger = logging.getLogger(__name__)
         exists=True,
         dir_okay=False,
         resolve_path=True,
+        path_type=Path,
     ),
     default=None,
     help="Optional GROMACS index .ndx file.",
+)
+@click.option(
+    "--itp",
+    "itp_files",
+    multiple=True,
+    type=click.Path(
+        exists=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=Path,
+    ),
+    help="Optional GROMACS .itp include file. Can be used multiple times.",
 )
 @click.option(
     "--workflow",
@@ -111,9 +123,10 @@ def em(
     structure_file,
     input_pdb,
     top_file,
-    itp_files,
     index_file,
+    itp_files,
     workflow,
+    molecule=None,
     **kwargs,
 ):
     """
@@ -144,47 +157,39 @@ def em(
         settings.validate()
 
         logger.info(
-            "Creating GROMACS EM job from project settings: project=%s, "
-            "project_yaml=%s",
-            project,
-            project_yaml,
+            "Creating GROMACS EM job from project YAML: %s",
+            project_yaml
         )
 
         if ctx.invoked_subcommand is None:
             return GromacsEMJob.from_project_settings(
                 settings=settings,
-                molecule=None,
+                molecule=molecule,
                 jobrunner=jobrunner,
                 skip_completed=skip_completed,
                 **kwargs,
             )
-
         return None
 
+    # direct CLI mode
     label = "gromacs_em"
-
     if structure_file is not None:
         label = (
-            os.path.splitext(os.path.basename(str(structure_file)))[0]
-            + "_em"
+            Path(structure_file).stem + "_em"
         )
 
     workflow = workflow or "prepared"
 
     logger.info("Creating GROMACS EM job from direct CLI options.")
-    logger.info("GROMACS EM project: %s", project)
     logger.info("GROMACS EM structure file: %s", structure_file)
-    logger.info("GROMACS EM input PDB file: %s", input_pdb)
     logger.info("GROMACS EM mdp file: %s", mdp_file)
-    logger.info("GROMACS EM ions mdp file: %s", ions_mdp_file)
     logger.info("GROMACS EM topology file: %s", top_file)
     logger.info("GROMACS EM itp files: %s", itp_files)
-    logger.info("GROMACS EM index file: %s", index_file)
     logger.info("GROMACS EM workflow: %s", workflow)
 
     if ctx.invoked_subcommand is None:
         return GromacsEMJob(
-            molecule=None,
+            molecule=molecule,
             label=label,
             jobrunner=jobrunner,
             mdp_file=Path(mdp_file) if mdp_file else None,
@@ -198,5 +203,3 @@ def em(
             skip_completed=skip_completed,
             **kwargs,
         )
-
-    return None
