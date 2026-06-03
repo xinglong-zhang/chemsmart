@@ -547,8 +547,8 @@ def _local_model_is_cached() -> bool:
     """Return True if both the Qwen base and LoRA adapter are fully cached.
 
     Looks for at least one safetensors file under each repo's snapshots
-    directory; partial/incomplete downloads return False so the user is
-    prompted for a token to finish them.
+    directory; partial/incomplete downloads return False so the prefetch
+    helper finishes them on a subsequent call.
     """
     cache = Path.home() / ".cache" / "huggingface" / "hub"
     repos = (
@@ -584,13 +584,9 @@ def _prefetch_local_model(hf_token: str | None) -> None:
         )
         return
 
-    token = hf_token or os.environ.get("HF_TOKEN")
-    if not token:
-        logger.warning(
-            "No HF token available; skipping pre-fetch. Set HF_TOKEN or "
-            "re-run `chemsmart config agent` with a token."
-        )
-        return
+    # Both repos are public; a token is only required for higher anonymous
+    # rate limits. Passing token=None falls back to anonymous access.
+    token = hf_token or os.environ.get("HF_TOKEN") or None
 
     base_repo = "Qwen/Qwen2.5-7B-Instruct"
     adapter_repo = "Smilesjs/chemsmart-qwen2.5-7b-lora"
