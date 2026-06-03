@@ -122,7 +122,7 @@ def _load_agent_group() -> click.Group:
 @click.group(cls=MyGroup)
 @click.pass_context
 @click.version_option(version=__version__, prog_name="CHEMSMART")
-@click.option("--verbose", is_flag=True, default=True)
+@click.option("--verbose/--no-verbose", default=True)
 def entry_point(ctx, verbose):
     """
     Main entry point for the chemsmart CLI.
