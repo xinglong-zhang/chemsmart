@@ -172,6 +172,138 @@ class OpenAIProvider:
         }
 
 
+class LocalProvider:
+    """In-process V4 LoRA provider for ``type: local`` agent.yaml entries.
+
+    Loads :mod:`chemsmart.agent.local` lazily on the first ``chat`` call so
+    ``chemsmart agent doctor`` / ``chemsmart config agent`` stay fast and do
+    not require torch/peft at import time.
+    """
+
+    name = "local"
+    default_model = "chemsmart-qwen2.5-7b-lora"
+
+    def __init__(
+        self,
+        api_key: str = "",
+        model: str | None = None,
+        base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
+        base_model_id: str = "",
+        adapter_repo_id: str = "",
+        runtime: str = "",
+    ) -> None:
+        del base_url, extra_headers
+        self.default_model = model or type(self).default_model
+        self._hf_token = api_key or os.environ.get("HF_TOKEN", "")
+        self._base_model_id = base_model_id
+        self._adapter_repo_id = adapter_repo_id
+        self._runtime = runtime or None
+        self._bundle: Any = None
+
+    def _ensure_loaded(self) -> Any:
+        if self._bundle is not None:
+            return self._bundle
+        from chemsmart.agent.local.loader import (
+            ADAPTER_REPO_ID,
+            BASE_MODEL_ID,
+            load_lora_model,
+        )
+
+        self._bundle = load_lora_model(
+            base_model_id=self._base_model_id or BASE_MODEL_ID,
+            adapter_repo_id=self._adapter_repo_id or ADAPTER_REPO_ID,
+            hf_token=self._hf_token or None,
+            runtime=self._runtime,
+        )
+        return self._bundle
+
+    def chat(
+        self,
+        messages: list,
+        tools: Optional[list] = None,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
+    ) -> dict:
+        del tools, timeout_s
+        from chemsmart.agent.local.adapter import plan_to_synthesis_result
+        from chemsmart.agent.local.generator import generate_plan
+
+        user_query = ""
+        history: list[dict[str, str]] = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role", ""))
+            content = msg.get("content", "")
+            if not isinstance(content, str):
+                content = str(content)
+            if role == "user":
+                if user_query:
+                    history.append({"role": "user", "content": user_query})
+                user_query = content
+            elif role == "assistant":
+                history.append({"role": "assistant", "content": content})
+        if not user_query:
+            raise ProviderError("local provider requires a user message")
+
+        bundle = self._ensure_loaded()
+        try:
+            plan = generate_plan(bundle, user_query, history=history)
+        except ValueError as exc:
+            raise ProviderError(f"local provider decode failed: {exc}") from exc
+        result = plan_to_synthesis_result(plan, user_query)
+        import json as _json
+
+        return {
+            "id": "local-completion",
+            "model": self.default_model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": _json.dumps(result, ensure_ascii=False),
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0},
+        }
+
+    def ping(self) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            from chemsmart.agent.local.loader import BASE_MODEL_ID
+        except Exception as exc:  # pragma: no cover - import guard
+            raise ProviderError(f"local provider ping failed: {exc}") from exc
+
+        try:
+            from transformers import AutoTokenizer  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise ProviderError(
+                "local provider requires transformers + peft + bitsandbytes. "
+                "Install with: pip install 'huggingface_hub>=0.34.0,<1.0' "
+                "'transformers==4.56.2' 'peft==0.16.0' 'accelerate==1.10.0' "
+                "'bitsandbytes==0.47.0'"
+            ) from exc
+
+        try:
+            AutoTokenizer.from_pretrained(
+                self._base_model_id or BASE_MODEL_ID,
+                token=(self._hf_token or None),
+            )
+        except Exception as exc:
+            raise ProviderError(
+                f"local provider ping failed (cache missing? run "
+                f"`chemsmart config agent` to pre-fetch). underlying: {exc}"
+            ) from exc
+        return {
+            "ok": True,
+            "resolved_model": self.default_model,
+            "latency_ms": _latency_ms(started),
+        }
+
+
 def _resolve_api_env_path(explicit: str | None) -> str | None:
     if isinstance(explicit, str) and explicit.strip():
         return explicit.strip()
@@ -218,6 +350,14 @@ def get_provider(
                 model=config.model,
                 base_url=config.base_url or None,
                 extra_headers=config.extra_headers,
+            )
+        if config.type == "local":
+            return LocalProvider(
+                api_key=config.hf_token or config.api_key,
+                model=config.model,
+                base_model_id=config.base_model_id,
+                adapter_repo_id=config.adapter_repo_id,
+                runtime=config.runtime,
             )
         raise ProviderError(f"provider type {config.type!r} is not supported")
 

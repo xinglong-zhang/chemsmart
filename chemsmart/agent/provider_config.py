@@ -11,7 +11,7 @@ import yaml
 
 from chemsmart.io.yaml import YAMLFile
 
-_SUPPORTED_PROVIDER_TYPES = frozenset({"openai", "anthropic"})
+_SUPPORTED_PROVIDER_TYPES = frozenset({"openai", "anthropic", "local"})
 
 
 @dataclass
@@ -24,6 +24,10 @@ class AgentProviderConfig:
     model: str
     base_url: str
     extra_headers: dict[str, str]
+    base_model_id: str = ""
+    adapter_repo_id: str = ""
+    hf_token: str = ""
+    runtime: str = ""
 
 
 class AgentProviderConfigError(Exception):
@@ -95,10 +99,17 @@ def load_active_provider_config(
             f"supported: {sorted(_SUPPORTED_PROVIDER_TYPES)}"
         )
 
-    api_key = _resolve_api_key(provider_entry, active)
     model = _string_field(provider_entry, "model")
     base_url = _optional_string_field(provider_entry, "base_url")
     extra_headers = _extra_headers(provider_entry, active)
+    base_model_id = _optional_string_field(provider_entry, "base_model_id")
+    adapter_repo_id = _optional_string_field(provider_entry, "adapter_repo_id")
+    runtime = _optional_string_field(provider_entry, "runtime")
+
+    if provider_type == "local":
+        api_key = _resolve_local_hf_token(provider_entry)
+    else:
+        api_key = _resolve_api_key(provider_entry, active)
 
     return AgentProviderConfig(
         name=active,
@@ -107,7 +118,24 @@ def load_active_provider_config(
         model=model,
         base_url=base_url,
         extra_headers=extra_headers,
+        base_model_id=base_model_id,
+        adapter_repo_id=adapter_repo_id,
+        hf_token=api_key if provider_type == "local" else "",
+        runtime=runtime,
     )
+
+
+def _resolve_local_hf_token(entry: dict[str, Any]) -> str:
+    """Return the HF token for a ``type: local`` provider.
+
+    Order: literal ``hf_token`` → ``hf_token_env`` → ``HF_TOKEN`` env var →
+    empty string (loader will raise if the model is not already cached).
+    """
+    literal = _optional_string_field(entry, "hf_token")
+    if literal:
+        return literal
+    token_env = _optional_string_field(entry, "hf_token_env") or "HF_TOKEN"
+    return os.environ.get(token_env, "").strip()
 
 
 def _string_field(entry: dict[str, Any], key: str) -> str:

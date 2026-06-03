@@ -350,7 +350,14 @@ class Config:
                 logger.info(f"Skipping {sw_name} configuration.")
 
     def configure_agent_interactively(self) -> None:
-        """Interactively configure ``~/.chemsmart/agent/agent.yaml``."""
+        """Interactively configure ``~/.chemsmart/agent/agent.yaml``.
+
+        Three provider choices: ``openai``, ``anthropic``, ``local``. The
+        ``local`` option targets the chemsmart V4 LoRA
+        (``Smilesjs/chemsmart-qwen2.5-7b-lora``); when selected, the model
+        artifacts are pre-fetched into the Hugging Face cache so the first
+        ``chemsmart agent ask`` call does not stall on a 15 GB download.
+        """
         agent_yaml = self.chemsmart_agent_yaml
         if agent_yaml.exists() and not click.confirm(
             "Overwrite agent.yaml? [y/N]",
@@ -360,26 +367,60 @@ class Config:
             logger.info(f"Keeping existing agent config: {agent_yaml}")
             return
 
-        provider_type = click.prompt(
+        active_name = click.prompt(
             "Agent provider",
-            type=click.Choice(["openai", "anthropic"]),
+            type=click.Choice(["openai", "anthropic", "local"]),
             default="openai",
             show_default=True,
         )
-        api_key = click.prompt(
-            f"{provider_type} API key",
-            hide_input=True,
-            confirmation_prompt=False,
-        ).strip()
-        default_model = {
-            "openai": "gpt-5.4",
-            "anthropic": "claude-sonnet-4-6",
-        }[provider_type]
-        model = click.prompt(
-            "Agent model",
-            default=default_model,
-            show_default=True,
-        ).strip()
+
+        api_key = ""
+        hf_token = ""
+        if active_name in {"openai", "anthropic"}:
+            api_key = click.prompt(
+                f"{active_name} API key",
+                hide_input=True,
+                confirmation_prompt=False,
+            ).strip()
+            default_model = {
+                "openai": "gpt-5.4",
+                "anthropic": "claude-sonnet-4-6",
+            }[active_name]
+            model = click.prompt(
+                "Agent model",
+                default=default_model,
+                show_default=True,
+            ).strip()
+        else:
+            click.echo(
+                "Local provider serves Smilesjs/chemsmart-qwen2.5-7b-lora "
+                "(Qwen2.5-7B base + LoRA, ~15 GB)."
+            )
+            model = "chemsmart-qwen2.5-7b-lora"
+            cached = _local_model_is_cached()
+            if cached:
+                click.echo("Model artifacts already cached; skipping download.")
+                hf_token = ""
+            else:
+                hf_token = click.prompt(
+                    "Hugging Face read token (needed to download the model; "
+                    "leave blank to read HF_TOKEN env var at runtime)",
+                    hide_input=True,
+                    confirmation_prompt=False,
+                    default="",
+                    show_default=False,
+                ).strip()
+                if click.confirm(
+                    "Pre-fetch the model artifacts into the HF cache now?",
+                    default=True,
+                    show_default=False,
+                ):
+                    _prefetch_local_model(hf_token or None)
+
+        # Switch active to the canonical provider key in the template.
+        active_provider_key = (
+            "local_chemsmart_v4" if active_name == "local" else active_name
+        )
 
         self.chemsmart_agent.mkdir(parents=True, exist_ok=True)
         template = self.chemsmart_template / "agent" / "agent.yaml.template"
@@ -387,19 +428,20 @@ class Config:
             shutil.copyfile(template_path, agent_yaml)
 
         replacements = {
-            "__ACTIVE_PROVIDER__": provider_type,
-            "__OPENAI_API_KEY__": api_key if provider_type == "openai" else "",
+            "__ACTIVE_PROVIDER__": active_provider_key,
+            "__OPENAI_API_KEY__": api_key if active_name == "openai" else "",
             "__ANTHROPIC_API_KEY__": (
-                api_key if provider_type == "anthropic" else ""
+                api_key if active_name == "anthropic" else ""
             ),
+            "__HF_TOKEN__": hf_token,
             "model: gpt-5.4": (
                 f"model: {model}"
-                if provider_type == "openai"
+                if active_name == "openai"
                 else "model: gpt-5.4"
             ),
             "model: claude-sonnet-4-6": (
                 f"model: {model}"
-                if provider_type == "anthropic"
+                if active_name == "anthropic"
                 else "model: claude-sonnet-4-6"
             ),
         }
@@ -499,6 +541,71 @@ def _replace_in_file(path: Path, replacements: dict[str, str]) -> None:
         contents = contents.replace(value_in_file, user_value)
     with open(path, "w", encoding="utf-8") as f:
         f.write(contents)
+
+
+def _local_model_is_cached() -> bool:
+    """Return True if both the Qwen base and LoRA adapter are fully cached.
+
+    Looks for at least one safetensors file under each repo's snapshots
+    directory; partial/incomplete downloads return False so the user is
+    prompted for a token to finish them.
+    """
+    cache = Path.home() / ".cache" / "huggingface" / "hub"
+    repos = (
+        "models--Qwen--Qwen2.5-7B-Instruct",
+        "models--Smilesjs--chemsmart-qwen2.5-7b-lora",
+    )
+    for repo in repos:
+        snapshots = cache / repo / "snapshots"
+        if not snapshots.is_dir():
+            return False
+        safetensors = list(snapshots.glob("*/*.safetensors"))
+        if not safetensors:
+            return False
+        incomplete = list((cache / repo / "blobs").glob("*.incomplete"))
+        if incomplete:
+            return False
+    return True
+
+
+def _prefetch_local_model(hf_token: str | None) -> None:
+    """Download the Qwen2.5-7B base + chemsmart-qwen2.5-7b-lora adapter.
+
+    Uses the standard HF cache (``~/.cache/huggingface/hub``) so subsequent
+    ``transformers``/``peft`` loads pick it up automatically. Idempotent: if
+    the files are already present, the call returns quickly.
+    """
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        logger.warning(
+            "huggingface_hub is not installed; cannot pre-fetch local model. "
+            "Install with: pip install 'huggingface_hub>=0.34.0,<1.0'"
+        )
+        return
+
+    token = hf_token or os.environ.get("HF_TOKEN")
+    if not token:
+        logger.warning(
+            "No HF token available; skipping pre-fetch. Set HF_TOKEN or "
+            "re-run `chemsmart config agent` with a token."
+        )
+        return
+
+    base_repo = "Qwen/Qwen2.5-7B-Instruct"
+    adapter_repo = "Smilesjs/chemsmart-qwen2.5-7b-lora"
+    try:
+        logger.info(f"Pre-fetching {adapter_repo} ...")
+        snapshot_download(repo_id=adapter_repo, token=token)
+        logger.info(f"Pre-fetching {base_repo} (~15 GB; one-time) ...")
+        snapshot_download(
+            repo_id=base_repo,
+            token=token,
+            allow_patterns=["*.json", "*.txt", "*.safetensors", "tokenizer*"],
+        )
+        logger.info("Local model artifacts ready in HF cache.")
+    except Exception as exc:  # pragma: no cover - network/HF errors
+        logger.warning(f"Pre-fetch failed: {exc}")
 
 
 def add_lines_in_yaml_files(
