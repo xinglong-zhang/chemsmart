@@ -1,0 +1,24 @@
+; Minimal energy minimization parameters for a prepared GROMACS demo case.
+
+integrator              = steep
+nsteps                  = 50
+emtol                   = 1000.0
+emstep                  = 0.01
+
+; Output control
+nstlog                  = 1
+nstenergy               = 1
+
+; Neighbor searching and non-bonded settings
+cutoff-scheme           = Verlet
+nstlist                 = 1
+coulombtype             = Cut-off
+rcoulomb                = 0.8
+vdwtype                 = Cut-off
+rvdw                    = 0.8
+
+; Boundary condition
+pbc                     = xyz
+
+; Constraints
+constraints             = none

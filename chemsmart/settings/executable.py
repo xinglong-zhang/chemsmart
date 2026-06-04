@@ -238,6 +238,7 @@ class ORCAExecutable(Executable):
             executable_path = os.path.join(self.executable_folder, "orca")
             return executable_path
 
+
 class GromacsExecutable(Executable):
     """
     Executable handler for GROMACS molecular dynamics software.
@@ -275,6 +276,7 @@ class GromacsExecutable(Executable):
             return os.path.join(self.executable_folder, self.executable_name)
 
         return self.executable_name
+
 
 class NCIPLOTExecutable(Executable):
     """

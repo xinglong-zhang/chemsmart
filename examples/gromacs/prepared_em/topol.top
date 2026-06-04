@@ -1,0 +1,10 @@
+; Minimal topology for one SPC water molecule.
+
+#include "oplsaa.ff/forcefield.itp"
+#include "oplsaa.ff/spc.itp"
+
+[ system ]
+Single water molecule prepared EM demo
+
+[ molecules ]
+SOL 1
