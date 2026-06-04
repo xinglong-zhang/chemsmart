@@ -16,6 +16,8 @@ SERVER:
         export PATH=$HOME/bin/chemsmart/chemsmart/cli:$PATH
         export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
         export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
+    EXTRA_SCHEDULER_DIRECTIVES: |
+        #PBS -m abe
 GAUSSIAN:
     EXEFOLDER: ~/programs/g16 
     LOCAL_RUN: True  # local run True to use serial_command

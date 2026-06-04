@@ -13,6 +13,8 @@ SERVER:
     USE_HOSTS: true
     EXTRA_COMMANDS: |
         #extra commands to activate chemsmart environment in submission script
+    EXTRA_SCHEDULER_DIRECTIVES: |
+        #SBATCH --reservation=xlzhang_1
 GAUSSIAN:
     EXEFOLDER: ~/bin/g16 
     LOCAL_RUN: True  # local run True to use serial_command
