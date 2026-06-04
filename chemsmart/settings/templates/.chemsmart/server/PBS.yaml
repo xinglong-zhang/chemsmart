@@ -2,7 +2,7 @@ SERVER:
     SCHEDULER: PBS
     QUEUE_NAME: normal
     NUM_HOURS: 24
-    MEM_GB: 400
+    MEM_GB: 375
     NUM_CORES: 64
     NUM_GPUS: 0
     NUM_THREADS: 64

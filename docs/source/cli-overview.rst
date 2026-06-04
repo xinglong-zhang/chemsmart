@@ -2,14 +2,14 @@
  Command Line Interface Overview
 #################################
 
-Chemsmart provides a comprehensive command-line interface for quantum chemistry calculations and molecular analysis.
+CHEMSMART provides a comprehensive command-line interface for quantum chemistry calculations and molecular analysis.
 This guide covers the fundamental CLI structure, execution modes, and common options.
 
 *************************
  Basic Command Structure
 *************************
 
-Chemsmart offers two main execution modes:
+CHEMSMART offers two main execution modes:
 
 -  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
@@ -144,6 +144,7 @@ These options are only available with ``chemsmart sub``:
 -  ``orca``: Run or submit ORCA jobs
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
+-  ``grouper``: Run structure grouping jobs
 
 ************
  Next Steps
@@ -155,8 +156,9 @@ For specific job types, see the detailed tutorials:
 -  :doc:`orca-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
+-  :doc:`grouper-cli-options`
 
 .. note::
 
-   Chemsmart checks job name uniqueness. If a job with the same name is already running, submission will be blocked. Use
+   CHEMSMART checks job name uniqueness. If a job with the same name is already running, submission will be blocked. Use
    ``-a`` (append label) or ``-l`` (label) options to create unique job names.

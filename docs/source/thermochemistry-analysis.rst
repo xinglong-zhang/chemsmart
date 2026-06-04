@@ -2,7 +2,7 @@
  Thermochemistry Analysis
 ##########################
 
-Chemsmart provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
+CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
 output files.
 
 *******************************
@@ -12,14 +12,17 @@ output files.
 The ``thermochemistry`` command parses output files and calculates thermochemical properties including enthalpy,
 entropy, and Gibbs free energy.
 
+When processing a directory, use ``-p/--program`` when chemsmart needs to identify Gaussian versus ORCA output from the
+file content, and use ``-t/--filetype`` when you only want to filter by filename suffix such as ``.log`` or ``.out``.
+
 Usage
 =====
 
 .. code:: text
 
-   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-f filename(s)]
+   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-t filetype] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
-                                 [-ch h_freq_cutoff] [-c concentration] [-P pressure] [-w]
+                                 [-ch h_freq_cutoff] [-c concentration] [-P pressure] [--weighted | --no-weighted]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
                                  [-o outfile.dat] [-O] [-i] [-S|-R]
 
@@ -38,15 +41,21 @@ Options
 
    -  -  ``-d, --directory``
       -  string
-      -  Directory for batch processing (mutually exclusive with -f)
+      -  Directory for batch processing (mutually exclusive with ``-f``)
 
    -  -  ``-p, --program``
       -  string
-      -  Program that produced the output files: ``gaussian`` or ``orca``. Required when using ``-d``.
+      -  Program that produced the output files: ``gaussian`` or ``orca``. Use this when parsing depends on program
+         identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
+
+   -  -  ``-t, --filetype``
+      -  string
+      -  File extension to filter when using ``-d`` (e.g. ``log``, ``out``). Use this when selection is purely
+         suffix-based, regardless of which program generated the files.
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific file(s) to analyze (repeatable, mutually exclusive with -d)
+      -  Specific file(s) to analyze (repeatable, mutually exclusive with ``-d``)
 
 **Quasi-RRHO Corrections:**
 
@@ -92,9 +101,10 @@ Options
       -  float
       -  Gas-phase pressure in atm (default: 1.0)
 
-   -  -  ``-w, --weighted``
+   -  -  ``-w, --weighted, --no-weighted``
       -  bool
-      -  Use isotopically weighted masses
+      -  Toggle between natural abundance weighted masses (``--weighted``) and most abundant isotope masses
+         (``--no-weighted``). Default: ``--weighted``.
 
    -  -  ``-T, --temperature``
       -  float
@@ -162,6 +172,12 @@ Output:
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -d . -p gaussian -o thermo.dat
+
+Select files by extension only:
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -d . -t log -o thermo_logs.dat
 
 **Batch processing with custom pressure:**
 

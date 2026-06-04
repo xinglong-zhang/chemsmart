@@ -106,7 +106,7 @@ This uses the 5th structure (1-indexed) from the XYZ file.
 
 .. warning::
 
-   Chemsmart uses 1-based indexing to match most molecular visualization software.
+   CHEMSMART uses 1-based indexing to match most molecular visualization software.
 
 Using PubChem
 -------------

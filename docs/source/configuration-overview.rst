@@ -2,7 +2,7 @@
  Configuration Overview
 ########################
 
-After installation, run simple commands to configure Chemsmart on your local machine or cluster.
+After installation, run simple commands to configure CHEMSMART on your local machine or cluster.
 
 ****************************************
  For Linux, macOS, Ubuntu, and Clusters

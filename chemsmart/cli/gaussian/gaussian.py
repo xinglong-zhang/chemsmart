@@ -14,9 +14,7 @@ from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
-from chemsmart.utils.utils import (
-    return_objects_and_indices_from_string_index,
-)
+from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 
 logger = logging.getLogger(__name__)
 
@@ -221,48 +219,6 @@ def click_gaussian_jobtype_options(f):
         "--num-steps",
         default=None,
         help="Number of steps for coordinate scans.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
-
-
-def click_gaussian_grouper_options(f):
-    """Common click options for Gaussian grouper jobs."""
-
-    @click.option(
-        "-g",
-        "--grouping-strategy",
-        type=click.Choice(
-            ["rmsd", "tanimoto", "isomorphism", "formula", "connectivity"],
-            case_sensitive=False,
-        ),
-        default=None,
-        help="Grouping strategy to use for Gaussian jobs.",
-    )
-    @click.option(
-        "-t",
-        "--threshold",
-        type=float,
-        default=None,
-        help="Threshold for grouping. If not specified, uses strategy-specific "
-        "defaults: RMSD=0.5, Tanimoto=0.9, Connectivity=0.0.",
-    )
-    @click.option(
-        "-i",
-        "--ignore-hydrogens",
-        is_flag=True,
-        default=False,
-        help="Whether to ignore hydrogens in grouping.",
-    )
-    @click.option(
-        "-p",
-        "--num-procs",
-        type=int,
-        default=1,
-        help="Number of processors to use for the grouper.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

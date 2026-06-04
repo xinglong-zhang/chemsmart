@@ -1,6 +1,7 @@
 import os.path
 
 import numpy as np
+import pytest
 from ase import units
 from ase.symbols import Symbols
 
@@ -526,13 +527,14 @@ class TestGaussian16Output:
         assert len(g16_output.excitation_energies_eV) == 50
         assert len(g16_output.transitions) == 50
         assert len(g16_output.contribution_coefficients) == 50
+        assert len(g16_output.contributions) == 50
         assert g16_output.transitions[0] == [
-            "104A ->108A",
-            "105A ->107A",
-            "106A ->107A",
-            "106A ->108A",
-            "105B ->106B",
-            "106A <-107A",
+            "104A -> 108A",
+            "105A -> 107A",
+            "106A -> 107A",
+            "106A -> 108A",
+            "105B -> 106B",
+            "106A <- 107A",
         ]
         assert g16_output.contribution_coefficients[0] == [
             0.15573,
@@ -550,6 +552,22 @@ class TestGaussian16Output:
             0.79088,
             0.17825,
         ]
+        assert g16_output.contributions[0] == [
+            2.4,
+            1.5,
+            87.5,
+            1.1,
+            6.8,
+            1.5,
+        ]
+        assert g16_output.contributions[-1] == [
+            3.0,
+            2.2,
+            1.9,
+            9.7,
+            62.5,
+            3.2,
+        ]
 
         assert (
             g16_output.total_core_hours
@@ -559,6 +577,20 @@ class TestGaussian16Output:
         assert g16_output.total_elapsed_walltime == 6.4
         mol = g16_output.molecule
         assert not mol.has_vibrations
+
+    def test_contribution_percentage_spin_scaling(self):
+        output = type("Output", (), {})()
+        output.contribution_coefficients = [[0.5, -0.3]]
+
+        output.spin = "restricted"
+        assert Gaussian16Output.contributions.func(output) == [[50.0, 18.0]]
+
+        output.spin = "unrestricted"
+        assert Gaussian16Output.contributions.func(output) == [[25.0, 9.0]]
+
+        output.spin = None
+        with pytest.raises(ValueError, match="Unknown spin type"):
+            Gaussian16Output.contributions.func(output)
 
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
@@ -2117,6 +2149,68 @@ class TestGaussian16Output:
         assert (
             g16_pm6.semiempirical == "PM6"
         )  # changed to upper case in route_object.semiempirical
+
+    def test_normal_termination_with_trailing_blank_lines(
+        self, gaussian_ts_genecp_outfile, tmp_path
+    ):
+        with open(gaussian_ts_genecp_outfile, "r") as f:
+            contents = f.read()
+
+        output_with_trailing_blanks = tmp_path / "pd_genecp_ts_trailing.log"
+        with open(output_with_trailing_blanks, "w") as f:
+            f.write(contents + "\n\n")
+
+        g16_output = Gaussian16Output(
+            filename=str(output_with_trailing_blanks)
+        )
+        assert g16_output.normal_termination
+
+    def test_oldform_redundant_coordinates_atomic_numbers(self, tmp_path):
+        outputfile = tmp_path / "old_form_numeric_coords.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt b3lyp/gen",
+                    " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
+                    " Charge =  0 Multiplicity = 1",
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " H,0,0.000000,0.000000,1.000000",
+                    " Recover connectivity data from disk.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16_output = Gaussian16Output(filename=str(outputfile))
+        assert g16_output.symbols == ["Pd", "H"]
+        assert g16_output.all_structures == []
+        assert g16_output.last_structure.chemical_symbols == ["Pd", "H"]
+        assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
+
+    def test_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        g16_output = Gaussian16Output(
+            filename=gaussian_pd_insertion_ts_r_outfile
+        )
+        assert g16_output.normal_termination
+        assert g16_output.charge == 0
+        assert g16_output.multiplicity == 1
+        assert len(g16_output.symbols) == g16_output.molecule.num_atoms
+        assert "Pd" in g16_output.symbols
+        assert "Pd" in g16_output.molecule.chemical_symbols
+
+    def test_energy_extraction_from_gaussian_output_file(
+        self, gaussian_quintet_opt_outfile
+    ):
+        g16_out = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        h_from_file = g16_out.enthalpy
+        assert np.isclose(h_from_file, -7521.416016, rtol=1e-4)
+        g_from_file = g16_out.gibbs_free_energy
+        assert np.isclose(g_from_file, -7521.548653, rtol=1e-4)
 
     def test_custom_solvent_smd_generic(self, gaussian_smd_generic_outfile):
         g16_generic = Gaussian16Output(filename=gaussian_smd_generic_outfile)

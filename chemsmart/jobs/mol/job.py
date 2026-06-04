@@ -46,6 +46,7 @@ class PyMOLJob(Job):
         self,
         molecule=None,
         label=None,
+        source_basename=None,
         jobrunner=None,
         pymol_script=None,
         style=None,
@@ -71,6 +72,8 @@ class PyMOLJob(Job):
         Args:
             molecule: Molecule or list[Molecule] to visualize.
             label: Job identifier string (default: None).
+            source_basename: Basename of source calculation/input files
+                used for processing steps like chk/fchk/cube handling.
             jobrunner: Runner for executing the job (default: None).
             pymol_script: Custom PyMOL script path (default: None).
             style: Visualization style settings (default: None).
@@ -91,6 +94,9 @@ class PyMOLJob(Job):
         super().__init__(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
+        if source_basename is None:
+            source_basename = label
+        self.source_basename = source_basename
         self.pymol_script = pymol_script
         self.style = style
         self.trace = trace
@@ -280,9 +286,10 @@ class PyMOLJob(Job):
         if label is None:
             # by default, if no label is given and the job is read in
             # from a file, the label is set to the file basename
-            label = os.path.basename(filename).split(".")[0]
+            label = os.path.splitext(os.path.basename(filename))[0]
 
-        logger.info(f"Num of molecules read: {len(molecules)}.")
+        source_basename = os.path.splitext(os.path.basename(filename))[0]
+
         molecules = molecules[string2index_1based(index)]
         logger.info(f"Num of molecules to use: {len(molecules)}.")
 
@@ -292,6 +299,7 @@ class PyMOLJob(Job):
                 cls(
                     molecule=molecules,
                     label=label,
+                    source_basename=source_basename,
                     pymol_script=pymol_script,
                     style=style,
                     vdw=vdw,
@@ -309,6 +317,7 @@ class PyMOLJob(Job):
         return cls(
             molecule=molecules,
             label=label,
+            source_basename=source_basename,
             jobrunner=jobrunner,
             pymol_script=pymol_script,
             style=style,

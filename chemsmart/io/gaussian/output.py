@@ -1,7 +1,6 @@
 import logging
 import re
 from functools import cached_property
-from itertools import islice
 
 import numpy as np
 from ase import units
@@ -85,10 +84,13 @@ class Gaussian16Output(GaussianFileMixin):
         if len(contents) == 0:
             return False
 
-        last_line = contents[-1]
-        if "Normal termination of Gaussian" in last_line:
-            logger.debug(f"File {self.filename} terminated normally.")
-            return True
+        for line in reversed(contents):
+            if not line:
+                continue
+            if "Normal termination of Gaussian" in line:
+                logger.debug(f"File {self.filename} terminated normally.")
+                return True
+            break
 
         logger.debug(f"File {self.filename} has error termination.")
         return False
@@ -508,6 +510,36 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain the coordinate block from the
         input that is printed in the outputfile."""
         coordinates_block_lines_list = []
+
+        def _is_oldform_coordinate_line(line):
+            elements = [element.strip() for element in line.split(",")]
+            if len(elements) < 5:
+                return False
+
+            atom = elements[0]
+            if atom in p.PERIODIC_TABLE:
+                pass
+            else:
+                try:
+                    atom_float = float(atom)
+                    if not atom_float.is_integer():
+                        return False
+                except ValueError:
+                    return False
+
+            try:
+                float(elements[2])
+                float(elements[3])
+                float(elements[4])
+            except ValueError:
+                return False
+
+            return True
+
+        def _normalize_oldform_coordinate_line(line):
+            elements = [element.strip() for element in line.split(",")]
+            return f"{elements[0]} {elements[2]} {elements[3]} {elements[4]}"
+
         for i, line in enumerate(self.contents):
             if line.startswith("Symbolic Z-matrix:"):
                 for j_line in self.contents[i + 2 :]:
@@ -524,6 +556,25 @@ class Gaussian16Output(GaussianFileMixin):
                         # elif j_line.startswith("TV"):
                         # we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
+                if len(coordinates_block_lines_list) > 0:
+                    break
+            elif "Redundant internal coordinates found in file." in line:
+                for j_line in self.contents[i + 1 :]:
+                    if len(j_line) == 0:
+                        if len(coordinates_block_lines_list) > 0:
+                            break
+                        continue
+                    if j_line.startswith("Charge ="):
+                        logger.debug(f"Skipping line: {j_line}")
+                        continue
+                    if _is_oldform_coordinate_line(j_line):
+                        coordinates_block_lines_list.append(
+                            _normalize_oldform_coordinate_line(j_line)
+                        )
+                    elif len(coordinates_block_lines_list) > 0:
+                        break
+                if len(coordinates_block_lines_list) > 0:
+                    break
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
 
@@ -789,7 +840,9 @@ class Gaussian16Output(GaussianFileMixin):
         completed successfully. Useful for analyzing partially converged
         optimizations or error cases.
         """
-        return self.all_structures[-1]
+        if self.all_structures:
+            return self.all_structures[-1]
+        return self.input_coordinates_block.molecule
 
     @property
     def molecule(self):
@@ -1859,33 +1912,94 @@ class Gaussian16Output(GaussianFileMixin):
         return cc
 
     def _read_transitions_and_contribution_coefficients(self):
+        from chemsmart.utils.repattern import gaussian_tddft_transition_pattern
+
         transitions = []
         contribution_coefficients = []
-        for i, line in enumerate(self.contents):
-            if line.startswith("Excited State"):
+        td_transition_pattern = re.compile(gaussian_tddft_transition_pattern)
+
+        i = 0
+        n = len(self.contents)
+
+        while i < n:
+            line = self.contents[i]
+            if line.lstrip().startswith("Excited State"):
                 each_state_transitions = []
                 each_state_contribution_coefficients = []
-                # parse the lines that follow until
-                # an empty line is encountered
-                j = 1
-                while len(self.contents[i + j]) != 0:
-                    line_element = self.contents[i + j].split()
-                    if len(line_element) <= 4:
-                        mo_transition = " ".join(
-                            list(islice(line_element, len(line_element) - 1))
+
+                j = i + 1
+                while j < n:
+                    current = self.contents[j]
+
+                    # stop on truly blank line
+                    if not current.strip():
+                        break
+
+                    match = td_transition_pattern.match(current)
+                    if match:
+                        from_mo, arrow, to_mo, coeff = match.groups()
+                        each_state_transitions.append(
+                            f"{from_mo} {arrow} {to_mo}"
                         )
-                        contribution_coefficient = float(line_element[-1])
-                        each_state_transitions.append(mo_transition)
                         each_state_contribution_coefficients.append(
-                            contribution_coefficient
+                            float(coeff)
                         )
+                        j += 1
+                        continue
+
+                    # once transition lines have started, stop at first non-transition line
+                    if each_state_transitions:
+                        break
+
                     j += 1
+
                 transitions.append(each_state_transitions)
                 contribution_coefficients.append(
                     each_state_contribution_coefficients
                 )
 
+                i = j
+            else:
+                i += 1
         return transitions, contribution_coefficients
+
+    @cached_property
+    def contributions(self):
+        """
+        Return the contributions of each molecular orbital excitation
+        to an excited state.
+
+        The base value for each contribution coefficient is calculated as
+        ``(coef**2) * 100``.
+
+        The returned values then depend on ``self.spin``:
+
+        - ``"restricted"``: the base percentages are doubled.
+        - ``"unrestricted"``: the base percentages are unchanged.
+        - any other value: a ``ValueError`` is raised.
+        """
+        contribution_percentage = [
+            [(coef**2) * 100 for coef in cc]
+            for cc in self.contribution_coefficients
+        ]
+
+        if self.spin == "restricted":
+            logger.debug(
+                "Closed-shell system: contribution percentage is doubled."
+            )
+            factor = 2
+        elif self.spin == "unrestricted":
+            logger.debug(
+                "Unrestricted system: contribution percentage uses base values."
+            )
+            factor = 1
+        else:
+            raise ValueError(f"Unknown spin type: {self.spin!r}")
+
+        return [
+            [round(value * factor, 1) for value in percentage]
+            for percentage in contribution_percentage
+        ]
 
     @cached_property
     def alpha_occ_eigenvalues(self):

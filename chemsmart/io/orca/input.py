@@ -180,7 +180,7 @@ class ORCAInput(ORCAFileMixin):
             # update charge and spin multiplicity
         if molecule:
             molecule.charge = self.charge
-            molecule.spin_multiplicity = self.multiplicity
+            molecule.multiplicity = self.multiplicity
         return molecule
 
     @property

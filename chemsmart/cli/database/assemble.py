@@ -3,7 +3,7 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_output_folder_options
+from chemsmart.cli.job import click_folder_options
 from chemsmart.database.assemble import SingleFileAssembler
 from chemsmart.database.database import Database
 from chemsmart.io.folder import BaseFolder
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @database.command(cls=MyCommand)
-@click_output_folder_options
+@click_folder_options
 @click.option(
     "-i",
     "--index",

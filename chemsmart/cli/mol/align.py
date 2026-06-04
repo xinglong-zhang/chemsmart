@@ -4,10 +4,7 @@ import os
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.mol.mol import (
-    click_pymol_visualization_options,
-    mol,
-)
+from chemsmart.cli.mol.mol import click_pymol_visualization_options, mol
 from chemsmart.io.folder import BaseFolder
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.io import load_molecules_from_paths, select_items_by_index

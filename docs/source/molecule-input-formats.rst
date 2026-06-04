@@ -2,7 +2,7 @@
  Molecule Input Formats
 ########################
 
-Chemsmart provides flexible molecule input capabilities, supporting multiple file formats and molecular representations.
+CHEMSMART provides flexible molecule input capabilities, supporting multiple file formats and molecular representations.
 This page describes the various ways you can create molecules for use in quantum chemistry calculations.
 
 .. note::
@@ -100,7 +100,7 @@ Gaussian input files contain route, charge, multiplicity, and coordinates:
 
 .. tip::
 
-   Chemsmart reads the existing charge and multiplicity from ``.com`` files. Override with ``-c`` and ``-m`` if needed.
+   CHEMSMART reads the existing charge and multiplicity from ``.com`` files. Override with ``-c`` and ``-m`` if needed.
 
 Gaussian Output Files (.log, .out)
 ----------------------------------
@@ -142,16 +142,16 @@ ChemDraw Files
 ChemDraw XML (.cdxml) and Binary (.cdx) Files
 ---------------------------------------------
 
-**NEW**: Chemsmart now supports reading molecular structures directly from ChemDraw files! This enables seamless
-integration with chemical drawing tools.
+CHEMSMART supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
+with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 .. code:: bash
 
-   # Basic usage with ChemDraw file
+   # Organic molecule
    chemsmart sub -s server gaussian -p project -f molecule.cdxml -c 0 -m 1 opt
 
-   # Complete single-command workflow
-   chemsmart sub -s server gaussian -p project -f benzene.cdxml -c 0 -m 1 opt
+   # Organometallic complex (charge and multiplicity must be specified explicitly)
+   chemsmart sub -s server gaussian -p project -f ferrocene.cdxml -c 0 -m 1 opt
 
 .. tip::
 
@@ -170,10 +170,14 @@ integration with chemical drawing tools.
 
 .. note::
 
-   -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported
-   -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates
-   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule
-   -  3D coordinates are automatically generated from 2D structures
+   -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported.
+   -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates.
+   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule.
+   -  3D coordinates are automatically generated from 2D structures.
+   -  Reading binary ``.cdx`` files requires Open Babel (``obabel``) to be installed. If Open Babel is not available,
+      save the file as ``.cdxml`` instead.
+   -  Charge and multiplicity of organometallic complexes are **not** inferred from the ChemDraw file – always specify
+      ``-c`` and ``-m`` explicitly.
 
 **Example: Multi-molecule ChemDraw file**
 
@@ -181,6 +185,8 @@ integration with chemical drawing tools.
 
    # Select the 2nd molecule from a ChemDraw file with multiple structures
    chemsmart sub -s server gaussian -p project -f molecules.cdxml -i 2 -c 0 -m 1 opt
+
+For full details on organometallic complex support and its restrictions, see :doc:`chemdraw-organometallic`.
 
 *********************
  Molecular Databases
@@ -252,7 +258,7 @@ Use structures from ASE database or trajectory files:
  Python Object Integration
 ***************************
 
-Chemsmart's ``Molecule`` class provides seamless integration with popular Python chemistry libraries:
+CHEMSMART's ``Molecule`` class provides seamless integration with popular Python chemistry libraries:
 
 From ASE Atoms
 ==============
@@ -265,7 +271,7 @@ From ASE Atoms
    # Create ASE Atoms object
    atoms = Atoms('H2O', positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
 
-   # Convert to Chemsmart Molecule
+   # Convert to CHEMSMART Molecule
    molecule = Molecule.from_ase_atoms(atoms)
 
 From RDKit Mol
@@ -281,25 +287,51 @@ From RDKit Mol
    rdkit_mol = Chem.MolFromSmiles('CCO')
    AllChem.EmbedMolecule(rdkit_mol)
 
-   # Convert to Chemsmart Molecule
+   # Convert to CHEMSMART Molecule
    molecule = Molecule.from_rdkit_mol(rdkit_mol)
+
+Aromaticity Detection (``is_aromatic``)
+---------------------------------------
+
+The ``is_aromatic`` property detects aromaticity by converting the molecule to an RDKit representation and checking
+whether any atom both carries the aromatic flag **and** belongs to a ring. This guards against false positives in
+acyclic molecules (e.g. H₂O, MgI₂) that can arise when the geometry-based bond-order heuristic assigns a bond order of
+1.5 to short single bonds.
+
+.. note::
+
+   **Known limitations of aromaticity detection:**
+
+   -  Bond orders are inferred purely from 3D geometry (interatomic distances), not from an electronic structure
+      calculation. This means the detection is **model-dependent** and may not match formal aromaticity criteria in all
+      cases.
+
+   -  **Edge cases** such as the cyclopropenyl cation (aromatic) versus the cyclopropenyl radical (non-aromatic) may not
+      be distinguished correctly, because the outcome depends on how bond orders and electron counts are assigned from
+      the geometry alone.
+
+   -  For borderline or unusual systems (strained rings, metal-organic frameworks, non-Kekulé structures, etc.) the
+      result should be treated as a heuristic estimate rather than a definitive answer.
+
+   -  If precise aromaticity information is required, consider constructing the RDKit molecule directly from a SMILES
+      string or from an output file that encodes explicit bond orders.
 
 From Pymatgen
 =============
 
-Chemsmart molecules can be converted to and from Pymatgen format:
+CHEMSMART molecules can be converted to and from Pymatgen format:
 
 .. code:: python
 
    from chemsmart.io.molecules.structure import Molecule
 
-   # Convert Chemsmart Molecule to Pymatgen
+   # Convert CHEMSMART Molecule to Pymatgen
    molecule = Molecule.from_filepath('input.xyz')
    pymatgen_mol = molecule.to_pymatgen()
 
 .. note::
 
-   For converting Pymatgen molecules to Chemsmart, you can use the ASE Atoms adaptor as an intermediate format.
+   For converting Pymatgen molecules to CHEMSMART, you can use the ASE Atoms adaptor as an intermediate format.
 
 ****************
  Best Practices
@@ -333,12 +365,12 @@ For multi-structure files, use ``-i`` to select a specific structure:
 
 .. warning::
 
-   Chemsmart uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
+   CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
 
 File Format Auto-Detection
 ==========================
 
-Chemsmart automatically detects file formats based on extensions:
+CHEMSMART automatically detects file formats based on extensions:
 
 -  ``.xyz`` → XYZ format
 -  ``.sdf`` → SDF format
@@ -352,10 +384,10 @@ Chemsmart automatically detects file formats based on extensions:
 
 .. note::
 
-   For ``.out`` files, Chemsmart automatically detects whether the file is from ORCA or Gaussian by examining the file
+   For ``.out`` files, CHEMSMART automatically detects whether the file is from ORCA or Gaussian by examining the file
    header. If detection fails, an error will be raised indicating the unsupported format.
 
-For unsupported extensions, Chemsmart falls back to ASE's file reading capabilities.
+For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilities.
 
 **********
  See Also
