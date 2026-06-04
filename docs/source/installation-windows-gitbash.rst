@@ -2,7 +2,7 @@
  Installation for Windows Using Git Bash
 #########################################
 
-This guide covers installing Chemsmart on Windows using Git Bash.
+This guide covers installing CHEMSMART on Windows using Git Bash.
 
 ********************
  Create Environment
@@ -71,7 +71,7 @@ This guide covers installing Chemsmart on Windows using Git Bash.
       make install-dev
 
 *********************
- Configure Chemsmart
+ Configure CHEMSMART
 *********************
 
 Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the ``chemsmart`` command in

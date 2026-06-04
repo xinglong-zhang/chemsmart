@@ -11,8 +11,8 @@ This page documents file management scripts for organizing and converting comput
 The ``file_organizer.py`` script organizes computational chemistry output files based on an Excel spreadsheet. It
 creates folders, renames files, and moves them to their corresponding directories.
 
-For this script, ``-t/--filetype`` is only a filename-suffix filter. It matches extensions such as ``.log`` or
-``.out`` and does not inspect file contents or detect whether a file came from Gaussian, ORCA, or another program.
+For this script, ``-t/--filetype`` is only a filename-suffix filter. It matches extensions such as ``.log`` or ``.out``
+and does not inspect file contents or detect whether a file came from Gaussian, ORCA, or another program.
 
 Usage
 =====
@@ -94,8 +94,8 @@ whether the file was created by Gaussian, ORCA, or another tool.
 
 The ``file_converter.py`` script converts structure files between formats.
 
-For directory-based conversion, ``-t/--filetype`` selects files by extension, while ``-p/--program`` is only needed
-when chemsmart must know which program-specific parser to use.
+For directory-based conversion, ``-t/--filetype`` selects files by extension, while ``-p/--program`` is only needed when
+chemsmart must know which program-specific parser to use.
 
 Usage
 =====

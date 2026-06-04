@@ -2,7 +2,7 @@
  NCIPLOT Tutorial
 ##################
 
-This section will cover NCIPLOT analysis capabilities in Chemsmart.
+This section will cover NCIPLOT analysis capabilities in CHEMSMART.
 
 .. note::
 
@@ -13,7 +13,7 @@ This section will cover NCIPLOT analysis capabilities in Chemsmart.
 **********
 
 NCIPLOT is a tool for analyzing non-covalent interactions in molecular systems by generating density and reduced density
-gradient (RDG) cube files. Chemsmart provides a convenient interface for running NCIPLOT calculations through the
+gradient (RDG) cube files. CHEMSMART provides a convenient interface for running NCIPLOT calculations through the
 ``chemsmart sub nciplot`` command.
 
 *******************************************
@@ -221,7 +221,7 @@ NCIPLOT can analyze multiple molecules simultaneously:
  Additional NCIPLOT Options
 ****************************
 
-Chemsmart provides many options for customizing NCIPLOT calculations. For a complete list, use:
+CHEMSMART provides many options for customizing NCIPLOT calculations. For a complete list, use:
 
 .. code:: bash
 
