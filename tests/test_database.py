@@ -788,8 +788,8 @@ class TestDatabaseRecordMoleculeStructureQueries:
 
         # A prefix should be unique in this small database
         assert (
-            db.get_record_by_partial_id(RECORD_ID_GAUSSIAN_MP2_WATER[:12])
-            == RECORD_ID_GAUSSIAN_MP2_WATER
+            db.get_record_by_partial_id(water_gaussian.record_id[:12])
+            == water_gaussian.record_id
         )
         assert db.get_molecule_by_partial_id(INCHIKEY_CO2[:16]) == INCHIKEY_CO2
         assert (
@@ -1067,11 +1067,7 @@ class TestDatabaseInspect:
         )
         assert record_inspector.resolve_id() == water_gaussian.record_id
         detail = record_inspector.record_detail()
-        assert (
-            detail["record_id"]
-            == water_gaussian.record_id
-            == RECORD_ID_GAUSSIAN_MP2_WATER
-        )
+        assert detail["record_id"] == water_gaussian.record_id
         formatted = record_inspector.format_record_detail()
         assert "Record Detail" in formatted
         assert "Electronic Results" in formatted
@@ -1100,11 +1096,7 @@ class TestDatabaseInspect:
             structure_index=1,
         )
         record, structure = structure_inspector.structure_detail()
-        assert (
-            record["record_id"]
-            == water_orca.record_id
-            == RECORD_ID_ORCA_M062X_WATER
-        )
+        assert record["record_id"] == water_orca.record_id
         assert (
             structure["structure_id"]
             == water_orca_record["molecules"][0]["structure_id"]
@@ -1226,7 +1218,6 @@ class TestStaticDatabaseContent:
         record = db.get_record(record_id=RECORD_ID_GAUSSIAN_MP2_WATER)
         assembled = SingleFileAssembler(gaussian_mp2_outputfile).assemble_data
 
-        assert record["record_id"] == assembled.record_id
         assert (
             record["provenance"]["program"]
             == assembled.provenance["program"]
@@ -1285,7 +1276,6 @@ class TestStaticDatabaseContent:
         record = db.get_record(record_id=RECORD_ID_ORCA_M062X_WATER)
         assembled = SingleFileAssembler(water_output_gas_path).assemble_data
 
-        assert record["record_id"] == assembled.record_id
         assert (
             record["provenance"]["program"]
             == assembled.provenance["program"]

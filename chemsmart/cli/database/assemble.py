@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 def assemble(
     ctx,
     directory,
+    filetype,
     program,
     index,
     output,
