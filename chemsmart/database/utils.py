@@ -283,6 +283,8 @@ def standardize_basis_set(basis):
     standardized Gaussian-like format (e.g., 'def2svp', 'def2tzvp') by
     removing hyphens between 'def2' and the polarization level.
     """
+    if not basis:
+        return basis
     if basis.startswith("def2-"):
         return basis.replace("def2-", "def2", 1)
     return basis
