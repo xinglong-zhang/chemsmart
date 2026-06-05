@@ -39,7 +39,7 @@ def click_query_options(f):
         help=(
             "Query expression. "
             "If omitted, all entities are shown. "
-            "Supported operators: <, <=, >, >=, =, !=, ~. "
+            "Supported operators: <, <=, >, >=, =, ==, !=, ~. "
             "Logical: AND, OR. "
             "Example: \"fmo_gap < 7 AND program = 'gaussian'\""
         ),
@@ -84,7 +84,7 @@ def query(ctx, file, target, query, limit):
         Fields: chemical_formula, number_of_atoms, charge,
         multiplicity
 
-    Supported operators: <, <=, >, >=, =, !=, ~ (substring match)
+    Supported operators: <, <=, >, >=, =, ==, !=, ~ (substring match)
 
     Logical: AND, OR
 

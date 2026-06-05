@@ -70,6 +70,8 @@ quoted with single quotes. Conditions can be combined with the case-insensitive 
       -  Greater than or equal to. Numeric fields only.
    -  -  ``=``
       -  Equal to. Numeric or string fields.
+   -  -  ``==``
+      -  Equal to (alias of ``=``). Numeric or string fields.
    -  -  ``!=``
       -  Not equal to. Numeric or string fields.
    -  -  ``~``

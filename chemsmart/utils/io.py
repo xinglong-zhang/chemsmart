@@ -153,6 +153,7 @@ def create_molecule_list(
             is_optimized_structure=(
                 is_optimized_structure_list[i]
                 if is_optimized_structure_list
+                and i < len(is_optimized_structure_list)
                 else None
             ),
             rotational_constants=(

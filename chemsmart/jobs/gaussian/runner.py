@@ -844,5 +844,6 @@ class FakeGaussian:
                 " Elapsed time:      0 days  0 hours  0 minutes  0.0 seconds.\n"
             )
             g.write(
-                f" Normal termination of Gaussian 16 (fake executable) at {datetime.now()}."
+                f" Normal termination of Gaussian 16 (fake executable) at "
+                f"{datetime.now().strftime('%a %b %d %H:%M:%S %Y')}."
             )

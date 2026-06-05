@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 _CONDITION_RE = re.compile(query_condition_pattern)
 _LOGIC_SPLIT_RE = re.compile(query_logic_split_pattern, re.IGNORECASE)
 
-SUPPORTED_OPERATORS = {"<", "<=", ">", ">=", "=", "!=", "~"}
+SUPPORTED_OPERATORS = {"<", "<=", ">", ">=", "=", "==", "!=", "~"}
 VALID_TARGETS = {"records", "molecules", "structures"}
 
 _RECORDS_JOIN = """

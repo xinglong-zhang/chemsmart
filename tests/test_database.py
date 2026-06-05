@@ -813,6 +813,12 @@ class TestDatabaseQuery:
         assert "AND" in where
         assert params == (-3, "orca")
 
+        # '==' should parse as an equality operator as well
+        eq_alias = DatabaseQuery(db.db_file, "program == 'orca'")
+        where_eq, params_eq = eq_alias.parse_query()
+        assert "r.program == ?" in where_eq
+        assert params_eq == ("orca",)
+
         # Test parsing LIKE pattern
         like = DatabaseQuery(db.db_file, 'source_file ~ "CO2"')
         where, params = like.parse_query()
@@ -856,6 +862,9 @@ class TestDatabaseQuery:
         matched = DatabaseQuery(db.db_file, "program = 'orca'")
         assert matched.count_matched() == 1
         assert matched.query_summaries()[0]["program"] == "orca"
+
+        matched_eq_alias = DatabaseQuery(db.db_file, "program == 'orca'")
+        assert matched_eq_alias.count_matched() == matched.count_matched()
 
         # Test molecule-level queries: 3-atom molecules
         molecules = DatabaseQuery(

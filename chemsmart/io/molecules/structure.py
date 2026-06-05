@@ -264,7 +264,7 @@ class Molecule:
 
     @property
     def elements(self):
-        return list(set(self.symbols))
+        return sorted(set(self.symbols))
 
     @property
     def element_counts(self):
