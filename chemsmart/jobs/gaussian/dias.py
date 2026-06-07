@@ -9,6 +9,7 @@ coordinates by computing energies of fragments and whole molecules.
 """
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.utils.utils import get_list_from_string_range
 
 
@@ -115,6 +116,18 @@ class GaussianDIASJob(GaussianJob):
 
         self.fragment1_settings = fragment1_settings
         self.fragment2_settings = fragment2_settings
+        self.fragment1_reactant_opt_settings = self.fragment1_settings.copy()
+        self.fragment1_reactant_opt_settings.jobtype = "opt"
+        self.fragment1_reactant_opt_settings.freq = False
+        self.fragment1_reactant_sp_settings = self.fragment1_settings.copy()
+        self.fragment1_reactant_sp_settings.jobtype = "sp"
+        self.fragment1_reactant_sp_settings.freq = False
+        self.fragment2_reactant_opt_settings = self.fragment2_settings.copy()
+        self.fragment2_reactant_opt_settings.jobtype = "opt"
+        self.fragment2_reactant_opt_settings.freq = False
+        self.fragment2_reactant_sp_settings = self.fragment2_settings.copy()
+        self.fragment2_reactant_sp_settings.jobtype = "sp"
+        self.fragment2_reactant_sp_settings.freq = False
 
     @property
     def num_molecules(self):
@@ -370,6 +383,62 @@ class GaussianDIASJob(GaussianJob):
         for job in self.fragment2_jobs:
             job.run()
 
+    @property
+    def fragment1_reactant_opt_job(self):
+        label = f"{self.label}_fragment1_opt"
+        return GaussianOptJob(
+            molecule=self.fragment1_atoms[-1],
+            settings=self.fragment1_reactant_opt_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
+    def fragment2_reactant_opt_job(self):
+        label = f"{self.label}_fragment2_opt"
+        return GaussianOptJob(
+            molecule=self.fragment2_atoms[-1],
+            settings=self.fragment2_reactant_opt_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
+    def fragment1_reactant_sp_job(self):
+        molecule = self.fragment1_reactant_opt_job.optimized_structure()
+        if molecule is None:
+            molecule = self.fragment1_atoms[-1]
+        label = f"{self.label}_fragment1_r1"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment1_reactant_sp_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
+    def fragment2_reactant_sp_job(self):
+        molecule = self.fragment2_reactant_opt_job.optimized_structure()
+        if molecule is None:
+            molecule = self.fragment2_atoms[-1]
+        label = f"{self.label}_fragment2_i2"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment2_reactant_sp_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    def _run_fragment_reactant_jobs(self):
+        self.fragment1_reactant_opt_job.run()
+        self.fragment1_reactant_sp_job.run()
+        self.fragment2_reactant_opt_job.run()
+        self.fragment2_reactant_sp_job.run()
+
     def _run(self, **kwargs):
         """
         Execute the complete DI-AS calculation workflow.
@@ -378,6 +447,7 @@ class GaussianDIASJob(GaussianJob):
         1. Complete molecules at sampled points
         2. Fragment 1 structures at the same points
         3. Fragment 2 structures at the same points
+        4. Optimized isolated fragments and SP energies
 
         Args:
             **kwargs: Additional keyword arguments for job execution.
@@ -385,13 +455,15 @@ class GaussianDIASJob(GaussianJob):
         self._run_all_molecules_jobs()
         self._run_fragment1_jobs()
         self._run_fragment2_jobs()
+        self._run_fragment_reactant_jobs()
 
     def is_complete(self):
         """
         Check if all DI-AS calculation jobs are complete.
 
         Verifies that all three sets of calculations (complete molecules,
-        fragment 1, and fragment 2) have finished successfully.
+        fragment 1, fragment 2, and reactant fragment jobs) have finished
+        successfully.
 
         Returns:
             bool: True if all jobs are complete, False otherwise.
@@ -400,6 +472,7 @@ class GaussianDIASJob(GaussianJob):
             self._run_all_molecules_jobs_are_complete()
             and self._run_fragment1_jobs_are_complete()
             and self._run_fragment2_jobs_are_complete()
+            and self._run_fragment_reactant_jobs_are_complete()
         )
 
     def _run_all_molecules_jobs_are_complete(self):
@@ -431,3 +504,11 @@ class GaussianDIASJob(GaussianJob):
                 False otherwise.
         """
         return all(job.is_complete() for job in self.fragment2_jobs)
+
+    def _run_fragment_reactant_jobs_are_complete(self):
+        return (
+            self.fragment1_reactant_opt_job.is_complete()
+            and self.fragment1_reactant_sp_job.is_complete()
+            and self.fragment2_reactant_opt_job.is_complete()
+            and self.fragment2_reactant_sp_job.is_complete()
+        )

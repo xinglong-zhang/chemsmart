@@ -3,7 +3,7 @@ from filecmp import cmp
 
 import pytest
 
-from chemsmart.jobs.gaussian import GaussianOptJob
+from chemsmart.jobs.gaussian import GaussianDIASJob, GaussianOptJob
 from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -133,6 +133,45 @@ class TestGaussianJobs:
                 jobrunner=gaussian_jobrunner_no_scratch,
             )
 
+
+class TestGaussianDIASJobs:
+    def test_dias_reactant_fragment_job_labels(
+        self,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        assert job.fragment1_reactant_opt_job.label == "input_fragment1_opt"
+        assert job.fragment2_reactant_opt_job.label == "input_fragment2_opt"
+        assert job.fragment1_reactant_sp_job.label == "input_fragment1_r1"
+        assert job.fragment2_reactant_sp_job.label == "input_fragment2_i2"
+        assert job.fragment1_reactant_opt_job.settings.jobtype == "opt"
+        assert job.fragment2_reactant_opt_job.settings.jobtype == "opt"
+        assert job.fragment1_reactant_sp_job.settings.jobtype == "sp"
+        assert job.fragment2_reactant_sp_job.settings.jobtype == "sp"
 
 class TestGaussianlinkIRCJobs:
     def test_gaussian_link_irc_job_creation(
