@@ -285,7 +285,7 @@ class JobRunner(RegistryMixin):
             if scratch is not None:
                 scratch = scratch
             else:
-                scratch = selected_runner.scratch
+                scratch = selected_runner.SCRATCH
             logger.info(
                 f"Using scratch={scratch} for job runner: {selected_runner}"
             )
