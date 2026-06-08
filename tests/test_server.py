@@ -28,11 +28,8 @@ export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
 export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
 """
         )
-        assert (
-            server.extra_scheduler_directives
-            == """#PBS -m abe
+        assert server.extra_scheduler_directives == """#PBS -m abe
 """
-        )
 
     def test_gaussian_executable(self, server_yaml_file):
         gaussian_executable = GaussianExecutable.from_servername(
