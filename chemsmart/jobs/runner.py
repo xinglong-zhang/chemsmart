@@ -271,16 +271,10 @@ class JobRunner(RegistryMixin):
 
         if candidate_runners:
             selected_runner = None
-            if fake:
-                for runner in candidate_runners:
-                    if getattr(runner, "FAKE", False):
-                        selected_runner = runner
-                        break
-            else:
-                for runner in candidate_runners:
-                    if not getattr(runner, "FAKE", False):
-                        selected_runner = runner
-                        break
+            for runner in candidate_runners:
+                if runner.FAKE == fake:
+                    selected_runner = runner
+                    break
 
             if selected_runner is None:
                 selected_runner = candidate_runners[0]
@@ -288,11 +282,10 @@ class JobRunner(RegistryMixin):
             logger.info(f"Using job runner: {selected_runner} for job: {job}")
 
             # If scratch is None, use the runner's default scratch value
-            scratch = (
-                scratch
-                if scratch is not None
-                else getattr(selected_runner, "SCRATCH", None)
-            )
+            if scratch is not None:
+                scratch = scratch
+            else:
+                scratch = selected_runner.scratch
             logger.info(
                 f"Using scratch={scratch} for job runner: {selected_runner}"
             )

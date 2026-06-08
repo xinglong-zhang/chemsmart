@@ -39,9 +39,7 @@ class TestJobRunnerSelection:
         )
         assert isinstance(orca_runner, ORCAJobRunner)
 
-    def test_fake_flag_propagates_when_no_fake_runner_exists(
-        self, pbs_server
-    ):
+    def test_fake_flag_propagates_when_no_fake_runner_exists(self, pbs_server):
         job = SimpleNamespace(TYPE="iterate")
         runner = JobRunner.from_job(
             job=job, server=pbs_server, scratch=False, fake=True
