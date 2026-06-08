@@ -173,6 +173,7 @@ class TestGaussianDIASJobs:
         assert job.fragment1_reactant_sp_job.settings.jobtype == "sp"
         assert job.fragment2_reactant_sp_job.settings.jobtype == "sp"
 
+
 class TestGaussianlinkIRCJobs:
     def test_gaussian_link_irc_job_creation(
         self,
