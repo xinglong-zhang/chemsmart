@@ -96,7 +96,7 @@ def click_orca_settings_options(f):
         "-b", "--basis", type=str, default=None, help="New basis set to run."
     )
     @click.option(
-        "-a",
+        "-B",
         "--aux-basis",
         type=str,
         default=None,

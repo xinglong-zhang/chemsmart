@@ -32,6 +32,24 @@ class DummyORCAJob:
         return str(Path(self.folder) / f"{self.label}.out")
 
 
+class DummyGaussianJob:
+    def __init__(self, folder, label):
+        self.folder = str(folder)
+        self.label = label
+
+    @property
+    def inputfile(self):
+        return str(Path(self.folder) / f"{self.label}.com")
+
+    @property
+    def chkfile(self):
+        return str(Path(self.folder) / f"{self.label}.chk")
+
+    @property
+    def errfile(self):
+        return str(Path(self.folder) / f"{self.label}.err")
+
+
 class TestJobRunnerSelection:
     def test_fake_gaussian_runner_selected_when_fake_enabled(self, pbs_server):
         job = SimpleNamespace(TYPE="g16opt")
@@ -96,6 +114,33 @@ class TestJobRunnerSelection:
         job = DummyORCAJob(folder=tmp_path, label="orca_opt")
 
         runner._set_up_variables_in_scratch(job)
+
+        assert job.label == "orca_opt_fake"
+        assert Path(runner.job_inputfile).name == "orca_opt_fake.inp"
+        assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
+        assert Path(runner.job_errfile).name == "orca_opt_fake.err"
+        assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
+
+    def test_fake_gaussian_does_not_duplicate_fake_suffix(
+        self, pbs_server, tmp_path
+    ):
+        runner = FakeGaussianJobRunner(server=pbs_server, scratch=False, fake=True)
+        job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt_fake")
+
+        runner._set_up_variables_in_job_directory(job)
+
+        assert job.label == "gaussian_opt_fake"
+        assert Path(runner.job_inputfile).name == "gaussian_opt_fake.com"
+        assert Path(runner.job_chkfile).name == "gaussian_opt_fake.chk"
+        assert Path(runner.job_errfile).name == "gaussian_opt_fake.err"
+
+    def test_fake_orca_does_not_duplicate_fake_suffix(
+        self, pbs_server, tmp_path
+    ):
+        runner = FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
+        job = DummyORCAJob(folder=tmp_path, label="orca_opt_fake")
+
+        runner._set_up_variables_in_job_directory(job)
 
         assert job.label == "orca_opt_fake"
         assert Path(runner.job_inputfile).name == "orca_opt_fake.inp"
