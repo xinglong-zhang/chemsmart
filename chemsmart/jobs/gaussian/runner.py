@@ -449,9 +449,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         self.running_directory = scratch_job_dir
         logger.debug(f"Running directory: {self.running_directory}")
 
-        # assign label with fake to differentiate from real job
-        job.label = f"{job.label}_fake"
-        logger.debug(f"Job label for fake job run: {job.label}")
+        self._append_suffix_to_job_label(job, "_fake")
 
         job_inputfile = job.label + ".com"
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
@@ -477,8 +475,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         """
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
-        job.label = f"{job.label}_fake"
-        logger.debug(f"Job label for fake job run: {job.label}")
+        self._append_suffix_to_job_label(job, "_fake")
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_chkfile = os.path.abspath(job.chkfile)
         self.job_errfile = os.path.abspath(job.errfile)

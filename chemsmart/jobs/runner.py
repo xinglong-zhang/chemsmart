@@ -256,6 +256,7 @@ class JobRunner(RegistryMixin):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
+        candidate_runners = []
 
         for runner in runners:
             logger.debug(f"Checking runner: {runner} for job: {job}")
@@ -266,19 +267,32 @@ class JobRunner(RegistryMixin):
                 runner_jobtypes = []
 
             if jobtype in runner_jobtypes:
-                logger.info(f"Using job runner: {runner} for job: {job}")
+                candidate_runners.append(runner)
 
-                # If scratch is None, use the runner's default scratch value
-                scratch = (
-                    scratch
-                    if scratch is not None
-                    else getattr(runner, "SCRATCH", None)
-                )
-                logger.info(
-                    f"Using scratch={scratch} for job runner: {runner}"
-                )
+        if candidate_runners:
+            selected_runner = None
+            for runner in candidate_runners:
+                if runner.FAKE == fake:
+                    selected_runner = runner
+                    break
 
-                return runner(server=server, scratch=scratch, **kwargs)
+            if selected_runner is None:
+                selected_runner = candidate_runners[0]
+
+            logger.info(f"Using job runner: {selected_runner} for job: {job}")
+
+            # If scratch is None, use the runner's default scratch value
+            if scratch is not None:
+                scratch = scratch
+            else:
+                scratch = selected_runner.SCRATCH
+            logger.info(
+                f"Using scratch={scratch} for job runner: {selected_runner}"
+            )
+
+            return selected_runner(
+                server=server, scratch=scratch, fake=fake, **kwargs
+            )
 
         raise ValueError(
             f"Could not find any runners for job: {job}. \n"
@@ -305,6 +319,12 @@ class JobRunner(RegistryMixin):
     def _get_base_filepath_to_remove(self, job):
         """Get the base filepath for the job to assist in file removal."""
         return Path(job.folder) / job.label
+
+    def _append_suffix_to_job_label(self, job, suffix):
+        """Append ``suffix`` to ``job.label`` once."""
+        if suffix and not job.label.endswith(suffix):
+            job.label = f"{job.label}{suffix}"
+        logger.debug(f"Job label: {job.label}")
 
     def _delete_scratch_directory(self):
         """

@@ -111,7 +111,7 @@ Method and Basis Set Options
       -  string
       -  Basis set
 
-   -  -  ``-a, --aux-basis``
+   -  -  ``-B, --aux-basis``
       -  string
       -  Auxiliary basis set
 

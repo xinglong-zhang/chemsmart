@@ -83,6 +83,16 @@ Execution Control Options
 
    Use ``-R`` at the end of the command to rerun a completed job.
 
+.. note::
+
+   ``--fake`` automatically selects the program-matched fake runner based on the command group:
+
+   -  ``chemsmart run --fake gaussian ...`` / ``chemsmart sub --fake gaussian ...`` uses the Gaussian fake runner.
+   -  ``chemsmart run --fake orca ...`` / ``chemsmart sub --fake orca ...`` uses the ORCA fake runner.
+
+   In these fake modes, executable-path checks for the corresponding real program are not required and the corresponding
+   fake runner will be used without needing to specify its path.
+
 Debugging and Logging Options
 =============================
 
