@@ -124,7 +124,9 @@ class TestJobRunnerSelection:
     def test_fake_gaussian_does_not_duplicate_fake_suffix(
         self, pbs_server, tmp_path
     ):
-        runner = FakeGaussianJobRunner(server=pbs_server, scratch=False, fake=True)
+        runner = FakeGaussianJobRunner(
+            server=pbs_server, scratch=False, fake=True
+        )
         job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt_fake")
 
         runner._set_up_variables_in_job_directory(job)

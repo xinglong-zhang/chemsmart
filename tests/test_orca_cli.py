@@ -580,7 +580,9 @@ class TestORCALabelAndAuxBasisOptions:
         from chemsmart.cli.orca.orca import orca as orca_cli
 
         runner = CliRunner()
-        with patch("chemsmart.jobs.orca.singlepoint.ORCASinglePointJob") as mock:
+        with patch(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob"
+        ) as mock:
             mock.return_value = MagicMock()
             result = runner.invoke(
                 orca_cli,
@@ -615,7 +617,9 @@ class TestORCALabelAndAuxBasisOptions:
         from chemsmart.cli.orca.orca import orca as orca_cli
 
         runner = CliRunner()
-        with patch("chemsmart.jobs.orca.singlepoint.ORCASinglePointJob") as mock:
+        with patch(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob"
+        ) as mock:
             mock.return_value = MagicMock()
             result = runner.invoke(
                 orca_cli,
