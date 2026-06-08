@@ -3,7 +3,7 @@ from filecmp import cmp
 
 import pytest
 
-from chemsmart.jobs.gaussian import GaussianDIASJob, GaussianOptJob
+from chemsmart.jobs.gaussian import GaussianDIASJob, GaussianGeneralJob, GaussianOptJob
 from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -170,8 +170,140 @@ class TestGaussianDIASJobs:
         assert job.fragment2_reactant_sp_job.label == "input_fragment2_i2"
         assert job.fragment1_reactant_opt_job.settings.jobtype == "opt"
         assert job.fragment2_reactant_opt_job.settings.jobtype == "opt"
+        assert job.fragment1_reactant_opt_job.settings.freq is True
+        assert job.fragment2_reactant_opt_job.settings.freq is True
         assert job.fragment1_reactant_sp_job.settings.jobtype == "sp"
         assert job.fragment2_reactant_sp_job.settings.jobtype == "sp"
+
+    def test_dias_reactant_fragment_opt_retries_on_imaginary_frequency(
+        self,
+        monkeypatch,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        opt_run_calls = []
+        sp_run_calls = []
+
+        def fake_opt_run(self, **kwargs):
+            opt_run_calls.append(
+                (
+                    self.label,
+                    self.settings.additional_opt_options_in_route,
+                    self.settings.additional_route_parameters,
+                )
+            )
+
+        def fake_opt_output(self):
+            opt_options = self.settings.additional_opt_options_in_route or ""
+            frequencies = [100.0] if "maxstep=5" in opt_options else [-10.0]
+            return type(
+                "DummyOutput",
+                (),
+                {
+                    "normal_termination": True,
+                    "vibrational_frequencies": frequencies,
+                    "optimized_structure": self.molecule,
+                },
+            )()
+
+        def fake_sp_run(self, **kwargs):
+            sp_run_calls.append(self.label)
+
+        monkeypatch.setattr(GaussianOptJob, "run", fake_opt_run)
+        monkeypatch.setattr(GaussianOptJob, "_output", fake_opt_output)
+        monkeypatch.setattr(GaussianGeneralJob, "run", fake_sp_run)
+
+        job._run_fragment_reactant_jobs()
+
+        assert len(opt_run_calls) == 4
+        retry_calls = [c for c in opt_run_calls if "maxstep=5" in (c[1] or "")]
+        assert len(retry_calls) == 2
+        assert all("scf=qc" in (c[2] or "") for c in retry_calls)
+        assert sp_run_calls == ["input_fragment1_r1", "input_fragment2_i2"]
+
+    def test_dias_reactant_fragment_opt_raises_when_retry_still_imaginary(
+        self,
+        monkeypatch,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        opt_run_calls = []
+        sp_run_calls = []
+
+        def fake_opt_run(self, **kwargs):
+            opt_run_calls.append(self.label)
+
+        def fake_opt_output(self):
+            return type(
+                "DummyOutput",
+                (),
+                {
+                    "normal_termination": True,
+                    "vibrational_frequencies": [-10.0],
+                    "optimized_structure": self.molecule,
+                },
+            )()
+
+        def fake_sp_run(self, **kwargs):
+            sp_run_calls.append(self.label)
+
+        monkeypatch.setattr(GaussianOptJob, "run", fake_opt_run)
+        monkeypatch.setattr(GaussianOptJob, "_output", fake_opt_output)
+        monkeypatch.setattr(GaussianGeneralJob, "run", fake_sp_run)
+
+        with pytest.raises(ValueError, match="Imaginary frequencies remained"):
+            job._run_fragment_reactant_jobs()
+
+        assert len(opt_run_calls) == 2
+        assert sp_run_calls == []
 
 
 class TestGaussianlinkIRCJobs:

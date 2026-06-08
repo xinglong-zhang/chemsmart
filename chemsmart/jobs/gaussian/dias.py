@@ -8,9 +8,13 @@ These calculations analyze molecular fragmentation along reaction
 coordinates by computing energies of fragments and whole molecules.
 """
 
+import logging
+
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.utils.utils import get_list_from_string_range
+
+logger = logging.getLogger(__name__)
 
 
 class GaussianDIASJob(GaussianJob):
@@ -118,13 +122,13 @@ class GaussianDIASJob(GaussianJob):
         self.fragment2_settings = fragment2_settings
         self.fragment1_reactant_opt_settings = self.fragment1_settings.copy()
         self.fragment1_reactant_opt_settings.jobtype = "opt"
-        self.fragment1_reactant_opt_settings.freq = False
+        self.fragment1_reactant_opt_settings.freq = True
         self.fragment1_reactant_sp_settings = self.fragment1_settings.copy()
         self.fragment1_reactant_sp_settings.jobtype = "sp"
         self.fragment1_reactant_sp_settings.freq = False
         self.fragment2_reactant_opt_settings = self.fragment2_settings.copy()
         self.fragment2_reactant_opt_settings.jobtype = "opt"
-        self.fragment2_reactant_opt_settings.freq = False
+        self.fragment2_reactant_opt_settings.freq = True
         self.fragment2_reactant_sp_settings = self.fragment2_settings.copy()
         self.fragment2_reactant_sp_settings.jobtype = "sp"
         self.fragment2_reactant_sp_settings.freq = False
@@ -433,11 +437,97 @@ class GaussianDIASJob(GaussianJob):
             skip_completed=self.skip_completed,
         )
 
+    @staticmethod
+    def _contains_imaginary_frequencies(opt_job):
+        output = opt_job._output()
+        if output is None or not output.normal_termination:
+            return True
+        frequencies = output.vibrational_frequencies
+        if not frequencies:
+            return True
+        return any(freq < 0.0 for freq in frequencies)
+
+    @staticmethod
+    def _append_csv_option(existing_options, option):
+        if existing_options is None:
+            return option
+        options = [opt.strip() for opt in existing_options.split(",") if opt]
+        if option not in options:
+            options.append(option)
+        return ",".join(options)
+
+    @staticmethod
+    def _append_route_parameter(existing_parameters, parameter):
+        if existing_parameters is None:
+            return parameter
+        parameters = existing_parameters.split()
+        if parameter not in parameters:
+            parameters.append(parameter)
+        return " ".join(parameters)
+
+    def _retry_reactant_opt_job(self, opt_job):
+        retry_settings = opt_job.settings.copy()
+        retry_settings.additional_opt_options_in_route = (
+            self._append_csv_option(
+                retry_settings.additional_opt_options_in_route, "maxstep=5"
+            )
+        )
+        retry_settings.additional_route_parameters = (
+            self._append_route_parameter(
+                retry_settings.additional_route_parameters, "scf=qc"
+            )
+        )
+        return GaussianOptJob(
+            molecule=opt_job.molecule,
+            settings=retry_settings,
+            label=opt_job.label,
+            jobrunner=opt_job.jobrunner,
+            skip_completed=opt_job.skip_completed,
+        )
+
+    def _run_reactant_opt_and_sp_job(
+        self, opt_job, sp_settings, sp_label, fallback_molecule
+    ):
+        opt_job.run()
+        if self._contains_imaginary_frequencies(opt_job):
+            logger.warning(
+                f"Imaginary frequencies detected in {opt_job.label}. "
+                "Retrying optimization with maxstep=5 and scf=qc."
+            )
+            opt_job = self._retry_reactant_opt_job(opt_job)
+            opt_job.run()
+
+        if self._contains_imaginary_frequencies(opt_job):
+            raise ValueError(
+                f"Imaginary frequencies remained after retry for {opt_job.label}. "
+                "Fragment SP was not started."
+            )
+
+        molecule = opt_job.optimized_structure()
+        if molecule is None:
+            molecule = fallback_molecule
+        sp_job = GaussianGeneralJob(
+            molecule=molecule,
+            settings=sp_settings,
+            label=sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        sp_job.run()
+
     def _run_fragment_reactant_jobs(self):
-        self.fragment1_reactant_opt_job.run()
-        self.fragment1_reactant_sp_job.run()
-        self.fragment2_reactant_opt_job.run()
-        self.fragment2_reactant_sp_job.run()
+        self._run_reactant_opt_and_sp_job(
+            opt_job=self.fragment1_reactant_opt_job,
+            sp_settings=self.fragment1_reactant_sp_settings,
+            sp_label=f"{self.label}_fragment1_r1",
+            fallback_molecule=self.fragment1_atoms[-1],
+        )
+        self._run_reactant_opt_and_sp_job(
+            opt_job=self.fragment2_reactant_opt_job,
+            sp_settings=self.fragment2_reactant_sp_settings,
+            sp_label=f"{self.label}_fragment2_i2",
+            fallback_molecule=self.fragment2_atoms[-1],
+        )
 
     def _run(self, **kwargs):
         """
