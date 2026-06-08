@@ -95,9 +95,24 @@ def dias(
     # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
+    filename = ctx.obj.get("filename")
     keywords = ctx.obj["keywords"]
 
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
+
+    reactant_opt_settings = job_settings
+    if filename and filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        reactant_opt_settings = GaussianJobSettings.from_filepath(filename)
+        logger.info(
+            "DI-AS reactant fragment opt settings loaded from input file: "
+            f"{filename}"
+        )
+    else:
+        logger.info(
+            "DI-AS reactant fragment opt settings falling back to job settings."
+        )
 
     check_charge_and_multiplicity(sp_settings)
 
@@ -119,7 +134,7 @@ def dias(
     return GaussianDIASJob(
         molecules=molecules,
         settings=sp_settings,
-        reactant_opt_settings=job_settings,
+        reactant_opt_settings=reactant_opt_settings,
         label=label,
         jobrunner=jobrunner,
         fragment_indices=fragment_indices,

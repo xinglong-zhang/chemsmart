@@ -886,6 +886,7 @@ class TestGaussianCLIQrcCommand:
         assert result.exit_code == 0, result.output
         assert settings.basis == "def2svp"
 
+
     def test_qrc_settings_from_solv_project(
         self,
         single_molecule_xyz_file,
@@ -971,3 +972,53 @@ class TestGaussianCLIQrcCommand:
         )
         assert result.exit_code == 0, result.output
         assert settings.basis == "def2svp"
+
+
+class TestGaussianCLIDiasCommand:
+    def test_dias_reactant_opt_settings_are_loaded_from_input_file(
+        self,
+        gaussian_link_opt_outputfile,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+        from unittest.mock import MagicMock, patch
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        expected_input_settings = GaussianJobSettings.from_filepath(
+            gaussian_link_opt_outputfile
+        )
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.dias.GaussianDIASJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    gaussian_link_opt_outputfile,
+                    "-x",
+                    "M062X",
+                    "dias",
+                    "-i",
+                    "1",
+                    "-n",
+                    "1",
+                    "-m",
+                    "ts",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_job.call_args.kwargs
+        assert (
+            call_kwargs["reactant_opt_settings"].functional
+            == expected_input_settings.functional
+        )
+        assert call_kwargs["settings"].functional.lower() == "m062x"
