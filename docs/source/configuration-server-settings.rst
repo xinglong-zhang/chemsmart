@@ -229,6 +229,30 @@ to disable.
    USE_HOSTS: true
    USE_HOSTS: false
 
+EXTRA_SCHEDULER_DIRECTIVES
+--------------------------
+
+**Type:** Multiline string
+
+**Description:** Additional scheduler directives to inject into the submission script header. Use this for scheduler
+options that are not covered by built-in settings.
+
+**Examples:**
+
+.. code:: yaml
+
+   # For SLURM
+   EXTRA_SCHEDULER_DIRECTIVES: |
+       #SBATCH --reservation=xlzhang_1
+
+or
+
+.. code:: yaml
+
+   # For PBS/Torque
+   EXTRA_SCHEDULER_DIRECTIVES: |
+       #PBS -m abe
+
 EXTRA_COMMANDS
 --------------
 
@@ -246,26 +270,6 @@ set environment variables, or activate conda environments. Use the pipe (``|``) 
        export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
        source ~/miniconda3/etc/profile.d/conda.sh
        conda activate chemsmart
-
-EXTRA_SCHEDULER_DIRECTIVES
---------------------------
-
-**Type:** Multiline string
-
-**Description:** Additional scheduler directives to inject into the submission script header. Use this for scheduler
-options that are not covered by built-in settings.
-
-**Examples:**
-
-.. code:: yaml
-
-   # For SLURM
-   EXTRA_SCHEDULER_DIRECTIVES: |
-       #SBATCH --reservation=xlzhang_1
-
-   # For PBS/Torque
-   EXTRA_SCHEDULER_DIRECTIVES: |
-       #PBS -m abe
 
 Program-Specific Sections
 =========================

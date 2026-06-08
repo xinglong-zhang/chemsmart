@@ -396,22 +396,6 @@ class Submitter(RegistryMixin):
                 f.write(line)
             f.write("\n")
 
-    def _write_extra_commands(self, f):
-        """
-        Write additional server-specific commands.
-
-        Extra commands that may be required for the job execution.
-        These commands are needed for all jobs across all programs
-        and are specific to the server configuration.
-
-        Args:
-            f: File handle for writing extra commands.
-        """
-        if self.server.extra_commands is not None:
-            for line in self.server.extra_commands:
-                f.write(line)
-            f.write("\n")
-
     def _write_extra_scheduler_directives(self, f):
         """
         Write additional scheduler directives from server settings.
@@ -431,6 +415,22 @@ class Submitter(RegistryMixin):
             f.write(line)
             if line and not line.endswith("\n"):
                 f.write("\n")
+
+    def _write_extra_commands(self, f):
+        """
+        Write additional server-specific commands.
+
+        Extra commands that may be required for the job execution.
+        These commands are needed for all jobs across all programs
+        and are specific to the server configuration.
+
+        Args:
+            f: File handle for writing extra commands.
+        """
+        if self.server.extra_commands is not None:
+            for line in self.server.extra_commands:
+                f.write(line)
+            f.write("\n")
 
     def _write_program_specific_environment_variables(self, f):
         """
