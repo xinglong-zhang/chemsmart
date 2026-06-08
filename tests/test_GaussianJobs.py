@@ -3,7 +3,11 @@ from filecmp import cmp
 
 import pytest
 
-from chemsmart.jobs.gaussian import GaussianDIASJob, GaussianGeneralJob, GaussianOptJob
+from chemsmart.jobs.gaussian import (
+    GaussianDIASJob,
+    GaussianGeneralJob,
+    GaussianOptJob,
+)
 from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
