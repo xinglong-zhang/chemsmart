@@ -506,6 +506,7 @@ class GaussianDIASJob(GaussianJob):
     def _run_reactant_opt_and_sp_job(
         self, opt_job, sp_settings, sp_label, fallback_molecule
     ):
+        logger.info(f"Running reactant fragment optimization: {opt_job.label}")
         opt_job.run()
         if self._contains_imaginary_frequencies(opt_job):
             logger.warning(
@@ -513,9 +514,21 @@ class GaussianDIASJob(GaussianJob):
                 "Retrying optimization with maxstep=5 and scf=qc."
             )
             opt_job = self._retry_reactant_opt_job(opt_job)
+            logger.info(
+                f"Running reactant fragment optimization retry: {opt_job.label}"
+            )
             opt_job.run()
+        else:
+            logger.info(
+                f"Reactant fragment optimization passed frequency check: "
+                f"{opt_job.label}"
+            )
 
         if self._contains_imaginary_frequencies(opt_job):
+            logger.error(
+                f"Imaginary frequencies remained after retry for {opt_job.label}. "
+                "Fragment SP will not be run."
+            )
             raise ValueError(
                 f"Imaginary frequencies remained after retry for {opt_job.label}. "
                 "Fragment SP was not started."
@@ -523,7 +536,12 @@ class GaussianDIASJob(GaussianJob):
 
         molecule = opt_job.optimized_structure()
         if molecule is None:
+            logger.warning(
+                f"Optimized structure unavailable for {opt_job.label}; using "
+                f"fallback geometry for {sp_label}."
+            )
             molecule = fallback_molecule
+        logger.info(f"Running reactant fragment SP job: {sp_label}")
         sp_job = GaussianGeneralJob(
             molecule=molecule,
             settings=sp_settings,
@@ -532,8 +550,12 @@ class GaussianDIASJob(GaussianJob):
             skip_completed=self.skip_completed,
         )
         sp_job.run()
+        logger.info(f"Completed reactant fragment SP job: {sp_label}")
 
     def _run_fragment_reactant_jobs(self):
+        logger.info(
+            "Running optimized reactant fragment jobs with frequency checks."
+        )
         self._run_reactant_opt_and_sp_job(
             opt_job=self.fragment1_reactant_opt_job,
             sp_settings=self.fragment1_reactant_sp_settings,
