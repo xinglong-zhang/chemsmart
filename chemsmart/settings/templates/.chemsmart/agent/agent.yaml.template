@@ -1,0 +1,18 @@
+# chemsmart agent provider configuration.
+# Leave base_url empty to use the default chemsmart gateway for that provider.
+active: __ACTIVE_PROVIDER__
+providers:
+    openai:
+        type: openai
+        api_key_env: OPENAI_API_KEY
+        api_key: "__OPENAI_API_KEY__"
+        model: gpt-5.4
+        base_url: ""
+        extra_headers: {}
+    anthropic:
+        type: anthropic
+        api_key_env: ANTHROPIC_API_KEY
+        api_key: "__ANTHROPIC_API_KEY__"
+        model: claude-sonnet-4-6
+        base_url: ""
+        extra_headers: {}

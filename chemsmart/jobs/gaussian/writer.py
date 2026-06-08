@@ -237,6 +237,8 @@ class GaussianInputWriter(InputWriter):
         """
         logger.debug("Writing Gaussian title.")
         title = self.settings.title
+        if title is None:
+            title = self.job.label or ""
         f.write(f"{title}\n")
         f.write("\n")
 

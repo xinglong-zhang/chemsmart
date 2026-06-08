@@ -123,8 +123,7 @@ install:          ## Install the project in user mode. Normal users (runtime onl
 
 .PHONY: install-dev
 install-dev:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[voronoi]
-	$(ENV_PREFIX)pip install -e .[dev,test,docs]
+	$(ENV_PREFIX)pip install -e .[dev,test,docs,agent-tui]
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: pre-commit

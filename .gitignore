@@ -139,3 +139,15 @@ dmypy.json
 #macos
 .DS_Store
 .idea/
+
+# Agent QA / benchmark / evaluation reports (local only, not for version control)
+qa_*.md
+expert_review*.md
+frontier_improvement_plan.md
+agent_qa_report*.md
+benchmarks/
+api.env
+
+# Generated Gaussian/ORCA input files at repo root (agent dry-run artifacts)
+/*.com
+/*.inp

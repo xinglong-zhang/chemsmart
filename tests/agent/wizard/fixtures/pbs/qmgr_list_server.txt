@@ -1,0 +1,25 @@
+Server chemnode1
+    server_state = Active
+    server_host = chemnode1.asia-northeast1-a.c.chemsmart-sge-260511.internal
+    scheduling = True
+    total_jobs = 0
+    state_count = Transit:0 Queued:0 Held:0 Waiting:0 Running:0 Exiting:0 Begun:0 
+    default_queue = workq
+    log_events = 511
+    mailer = /usr/sbin/sendmail
+    mail_from = adm
+    query_other_jobs = True
+    resources_default.ncpus = 1
+    default_chunk.ncpus = 1
+    scheduler_iteration = 600
+    resv_enable = True
+    node_fail_requeue = 310
+    max_array_size = 10000
+    pbs_license_min = 0
+    pbs_license_max = 2147483647
+    pbs_license_linger_time = 31536000
+    license_count = Avail_Global:1000000 Avail_Local:1000000 Used:0 High_Use:0
+    pbs_version = 23.06.06
+    eligible_time_enable = False
+    max_concurrent_provision = 5
+    max_job_sequence_id = 9999999
