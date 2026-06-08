@@ -119,6 +119,7 @@ def dias(
     return GaussianDIASJob(
         molecules=molecules,
         settings=sp_settings,
+        reactant_opt_settings=job_settings,
         label=label,
         jobrunner=jobrunner,
         fragment_indices=fragment_indices,

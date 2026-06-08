@@ -12,6 +12,7 @@ import logging
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class GaussianDIASJob(GaussianJob):
         multiplicity_of_fragment1=None,
         charge_of_fragment2=None,
         multiplicity_of_fragment2=None,
+        reactant_opt_settings=None,
         **kwargs,
     ):
         """
@@ -120,13 +122,29 @@ class GaussianDIASJob(GaussianJob):
 
         self.fragment1_settings = fragment1_settings
         self.fragment2_settings = fragment2_settings
-        self.fragment1_reactant_opt_settings = self.fragment1_settings.copy()
+        if reactant_opt_settings is None:
+            reactant_opt_settings = self.settings
+        # Normalize to GaussianJobSettings to avoid carrying IRC-specific
+        # route generation logic into fragment optimization jobs.
+        reactant_opt_settings = GaussianJobSettings(
+            **reactant_opt_settings.__dict__
+        )
+
+        self.fragment1_reactant_opt_settings = reactant_opt_settings.copy()
+        self.fragment1_reactant_opt_settings.charge = self.fragment1_settings.charge
+        self.fragment1_reactant_opt_settings.multiplicity = (
+            self.fragment1_settings.multiplicity
+        )
         self.fragment1_reactant_opt_settings.jobtype = "opt"
         self.fragment1_reactant_opt_settings.freq = True
         self.fragment1_reactant_sp_settings = self.fragment1_settings.copy()
         self.fragment1_reactant_sp_settings.jobtype = "sp"
         self.fragment1_reactant_sp_settings.freq = False
-        self.fragment2_reactant_opt_settings = self.fragment2_settings.copy()
+        self.fragment2_reactant_opt_settings = reactant_opt_settings.copy()
+        self.fragment2_reactant_opt_settings.charge = self.fragment2_settings.charge
+        self.fragment2_reactant_opt_settings.multiplicity = (
+            self.fragment2_settings.multiplicity
+        )
         self.fragment2_reactant_opt_settings.jobtype = "opt"
         self.fragment2_reactant_opt_settings.freq = True
         self.fragment2_reactant_sp_settings = self.fragment2_settings.copy()

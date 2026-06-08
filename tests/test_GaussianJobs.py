@@ -8,6 +8,7 @@ from chemsmart.jobs.gaussian import (
     GaussianGeneralJob,
     GaussianOptJob,
 )
+from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
 from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -308,6 +309,65 @@ class TestGaussianDIASJobs:
 
         assert len(opt_run_calls) == 2
         assert sp_run_calls == []
+
+    def test_dias_reactant_opt_settings_use_input_job_settings(
+        self,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        sp_settings = project_settings.sp_settings()
+        sp_settings.charge = 0
+        sp_settings.multiplicity = 1
+
+        reactant_opt_settings = GaussianIRCJobSettings(
+            functional="B3LYP",
+            basis="6-31G(d)",
+            charge=0,
+            multiplicity=1,
+            jobtype="irc",
+            predictor="HPC",
+            recorrect="Never",
+            direction="forward",
+            maxpoints=20,
+        )
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=sp_settings,
+            reactant_opt_settings=reactant_opt_settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        assert (
+            job.fragment1_reactant_opt_settings.functional
+            == reactant_opt_settings.functional
+        )
+        assert (
+            job.fragment1_reactant_opt_settings.basis
+            == reactant_opt_settings.basis
+        )
+        assert "irc(" not in job.fragment1_reactant_opt_settings.route_string
+        assert (
+            job.fragment1_reactant_sp_settings.functional
+            == job.fragment1_settings.functional
+        )
+        assert (
+            job.fragment1_reactant_sp_settings.basis == job.fragment1_settings.basis
+        )
 
 
 class TestGaussianlinkIRCJobs:
