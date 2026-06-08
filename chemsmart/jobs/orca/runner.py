@@ -492,6 +492,51 @@ class FakeORCAJobRunner(ORCAJobRunner):
         """
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
+    def _set_fake_label(self, job):
+        """Append ``_fake`` to job label if not already present."""
+        if not job.label.endswith("_fake"):
+            job.label = f"{job.label}_fake"
+        logger.debug(f"Job label for fake job run: {job.label}")
+
+    def _set_up_variables_in_scratch(self, job):
+        """Set fake ORCA file paths for scratch execution."""
+        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        if not os.path.exists(scratch_job_dir):
+            with suppress(FileExistsError):
+                os.makedirs(scratch_job_dir)
+        self.running_directory = scratch_job_dir
+        logger.debug(f"Running directory: {self.running_directory}")
+
+        self._set_fake_label(job)
+
+        job_inputfile = job.label + ".inp"
+        scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
+        self.job_inputfile = os.path.abspath(scratch_job_inputfile)
+
+        job_gbwfile = job.label + ".gbw"
+        scratch_job_gbwfile = os.path.join(scratch_job_dir, job_gbwfile)
+        self.job_gbwfile = os.path.abspath(scratch_job_gbwfile)
+
+        job_errfile = job.label + ".err"
+        scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
+        self.job_errfile = os.path.abspath(scratch_job_errfile)
+
+        job_outputfile = job.label + ".out"
+        scratch_job_outputfile = os.path.join(scratch_job_dir, job_outputfile)
+        self.job_outputfile = os.path.abspath(scratch_job_outputfile)
+
+    def _set_up_variables_in_job_directory(self, job):
+        """Set fake ORCA file paths for job-directory execution."""
+        self.running_directory = job.folder
+        logger.debug(f"Running directory: {self.running_directory}")
+
+        self._set_fake_label(job)
+
+        self.job_inputfile = os.path.abspath(job.inputfile)
+        self.job_gbwfile = os.path.abspath(job.gbwfile)
+        self.job_errfile = os.path.abspath(job.errfile)
+        self.job_outputfile = os.path.abspath(job.outputfile)
+
     def run(self, job):
         """
         Run a fake ORCA job.
