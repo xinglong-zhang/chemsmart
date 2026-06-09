@@ -110,16 +110,6 @@ class ORCApKaJob(ORCAJob):
     # ------------------------------------------------------------------
 
     @property
-    def _acid_basename(self):
-        """Basename for the target acid (HA) – equals ``self.label``."""
-        return self.label
-
-    @property
-    def _conjugate_base_label(self):
-        """Label for the conjugate base (A⁻)."""
-        return f"{self._acid_basename}_cb"
-
-    @property
     def _ref_basename(self):
         """Basename for the reference acid (Href), derived from the
         reference geometry filename so it stays unique when multiple HA
@@ -289,14 +279,14 @@ class ORCApKaJob(ORCAJob):
         protonated_job = ORCAOptJob(
             molecule=protonated_mol,
             settings=protonated_settings,
-            label=self._acid_basename,
+            label=f"{self.label}_HA_opt",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
         conjugate_base_job = ORCAOptJob(
             molecule=conjugate_base_mol,
             settings=conjugate_base_settings,
-            label=self._conjugate_base_label,
+            label=f"{self.label}_A_opt",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
@@ -324,14 +314,14 @@ class ORCApKaJob(ORCAJob):
         protonated_sp_job = ORCASinglePointJob(
             molecule=protonated_mol,
             settings=protonated_sp_settings,
-            label=f"{self._acid_basename}_sp",
+            label=f"{self.label}_HA_sp",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
         conjugate_base_sp_job = ORCASinglePointJob(
             molecule=conjugate_base_mol,
             settings=conjugate_base_sp_settings,
-            label=f"{self._conjugate_base_label}_sp",
+            label=f"{self.label}_A_sp",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
@@ -468,7 +458,7 @@ class ORCApKaJob(ORCAJob):
 
         opt_transition = decide_phase_transition(
             phase_name="Opt",
-            require_complete=False,
+            require_complete=True,
             is_complete=all(j.is_complete() for j in self.opt_jobs),
             stop_message="Opt jobs incomplete, halting serial execution.",
         )
@@ -480,7 +470,7 @@ class ORCApKaJob(ORCAJob):
             self._run_ref_opt_jobs()
             ref_opt_transition = decide_phase_transition(
                 phase_name="Ref Opt",
-                require_complete=False,
+                require_complete=True,
                 is_complete=all(j.is_complete() for j in self.ref_opt_jobs),
                 stop_message="Ref Opt jobs incomplete, halting serial execution.",
             )
@@ -496,7 +486,7 @@ class ORCApKaJob(ORCAJob):
 
         sp_transition = decide_phase_transition(
             phase_name="SP",
-            require_complete=False,
+            require_complete=True,
             is_complete=all(j.is_complete() for j in self.sp_jobs),
             stop_message="SP jobs incomplete, halting serial execution.",
         )

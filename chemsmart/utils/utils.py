@@ -2737,35 +2737,34 @@ class PKaOutputTableEntry:
 
     def _resolve_filenames(self):
         """Auto-discover output files based on basename if not explicitly provided."""
-        suffixes = {
-            "ha_gas": "_pka",
-            "a_gas": "_pka_cb",
-            "ha_sp": "_pka_sp",
-            "a_sp": "_pka_cb_sp",
+        suffix_candidates = {
+            "ha_gas": ["_pka_HA_opt", "_pka_HA", "_pka"],
+            "a_gas": ["_pka_A_opt", "_pka_A", "_pka_cb"],
+            "ha_sp": ["_pka_HA_sp", "_pka_sp"],
+            "a_sp": ["_pka_A_sp", "_pka_cb_sp"],
         }
         extensions = [".log", ".out"]
 
-        for field, suffix in suffixes.items():
+        for field, suffixes in suffix_candidates.items():
             current_val = getattr(self, field)
             if current_val is not None and not (
                 isinstance(current_val, float) and np.isnan(current_val)
             ):
                 continue
 
-            # Try to find file with supported extensions
             found = False
-            for ext in extensions:
-                candidate = f"{self.basename}{suffix}{ext}"
-                if os.path.exists(candidate):
-                    setattr(self, field, candidate)
-                    found = True
+            for suffix in suffixes:
+                for ext in extensions:
+                    candidate = f"{self.basename}{suffix}{ext}"
+                    if os.path.exists(candidate):
+                        setattr(self, field, candidate)
+                        found = True
+                        break
+                if found:
                     break
 
-            # If not found, fail soft (leave as None) or set default?
-            # Setting default helps validation error be more specific ("File not found" vs "Missing")
             if not found:
-                # Default to .log for error reporting purposes checking implicit path
-                setattr(self, field, f"{self.basename}{suffix}.log")
+                setattr(self, field, f"{self.basename}{suffixes[0]}.log")
 
     def get(self, key, default=None):
         if key in self._data:

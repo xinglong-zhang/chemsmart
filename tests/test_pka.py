@@ -929,6 +929,94 @@ def test_pka_resolve_proton_index_accepts_explicit_index():
     assert molecules is None
 
 
+def test_orca_pka_job_generates_ha_and_a_subjobs(
+    single_molecule_xyz_file, orca_jobrunner_no_scratch
+):
+    """ORCA pKa should prepare HA/A opt and SP jobs with Gaussian-style labels."""
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.orca.opt import ORCAOptJob
+    from chemsmart.jobs.orca.pka import ORCApKaJob
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+    from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
+
+    mol = Molecule.from_filepath(single_molecule_xyz_file)
+    mol.charge = 0
+    mol.multiplicity = 1
+    proton_index = next(
+        i + 1 for i, symbol in enumerate(mol.symbols) if symbol == "H"
+    )
+
+    settings = ORCApKaJobSettings(
+        proton_index=proton_index,
+        scheme="direct",
+        functional="B3LYP",
+        basis="def2-SVP",
+    )
+
+    job = ORCApKaJob(
+        molecule=mol,
+        settings=settings,
+        label="1a_pka",
+        jobrunner=orca_jobrunner_no_scratch,
+    )
+
+    assert len(job.opt_jobs) == 2
+    assert isinstance(job.protonated_job, ORCAOptJob)
+    assert isinstance(job.conjugate_base_job, ORCAOptJob)
+    assert job.protonated_job.label == "1a_pka_HA_opt"
+    assert job.conjugate_base_job.label == "1a_pka_A_opt"
+    assert job.conjugate_base_job.settings.charge == -1
+
+    assert len(job.sp_jobs) == 2
+    assert isinstance(job.protonated_sp_job, ORCASinglePointJob)
+    assert isinstance(job.conjugate_base_sp_job, ORCASinglePointJob)
+    assert job.protonated_sp_job.label == "1a_pka_HA_sp"
+    assert job.conjugate_base_sp_job.label == "1a_pka_A_sp"
+
+
+def test_orca_pka_run_executes_ha_and_a_opt_jobs(
+    single_molecule_xyz_file, orca_jobrunner_no_scratch, monkeypatch
+):
+    """ORCA pKa opt phase should run both acid and conjugate-base jobs."""
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.orca.pka import ORCApKaJob
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+    mol = Molecule.from_filepath(single_molecule_xyz_file)
+    mol.charge = 0
+    mol.multiplicity = 1
+    proton_index = next(
+        i + 1 for i, symbol in enumerate(mol.symbols) if symbol == "H"
+    )
+
+    settings = ORCApKaJobSettings(
+        proton_index=proton_index,
+        scheme="direct",
+        functional="B3LYP",
+        basis="def2-SVP",
+    )
+    job = ORCApKaJob(
+        molecule=mol,
+        settings=settings,
+        label="1a_pka",
+        jobrunner=orca_jobrunner_no_scratch,
+    )
+
+    captured = {"labels": []}
+
+    def _fake_run_phase_jobs(*, jobs, **kwargs):
+        for child_job in jobs:
+            captured["labels"].append(child_job.label)
+
+    monkeypatch.setattr(
+        "chemsmart.jobs.orca.pka.run_phase_jobs",
+        _fake_run_phase_jobs,
+    )
+
+    job._run_opt_jobs()
+    assert captured["labels"] == ["1a_pka_HA_opt", "1a_pka_A_opt"]
+
+
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])
 def test_run_pka_batch_table_processing(tmp_path, monkeypatch, backend):
     """pKa table batch returns multiple jobs; run executes each locally."""
