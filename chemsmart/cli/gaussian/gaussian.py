@@ -533,6 +533,10 @@ def gaussian(
     # obtain Gaussian Settings from filename, if supplied;
     #  otherwise return defaults
 
+    # Defer filetype validation if the pka subcommand is being invoked,
+    # as it has its own .csv file handling.
+    is_pka_subcommand = ctx.invoked_subcommand == "pka"
+
     if filename is None:
         # for cases where filename is not supplied, eg,
         #  get structure from pubchem
@@ -547,6 +551,12 @@ def gaussian(
         job_settings = GaussianJobSettings.from_filepath(filename)
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
     #  ".cif", ".traj", ".gro", ".db")):
+    elif is_pka_subcommand and filename.endswith(".csv"):
+        job_settings = GaussianJobSettings.default()
+        logger.info(
+            "pka subcommand invoked with .csv file; "
+            "skipping filetype validation and using default Gaussian settings"
+        )
     else:
         job_settings = GaussianJobSettings.default()
     # else:
