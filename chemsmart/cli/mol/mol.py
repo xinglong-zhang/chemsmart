@@ -400,12 +400,8 @@ def mol(
     if filenames is not None and len(filenames) == 1:
         single_filename = filenames[0]
 
-    is_database_file = (
-        single_filename is not None
-        and single_filename.endswith(".db")
-        and is_chemsmart_database(single_filename)
-    )
-    if is_database_file:
+    is_chemsmart_db = is_chemsmart_database(single_filename)
+    if is_chemsmart_db:
         record_selectors = [
             record_index is not None,
             record_id is not None,
@@ -511,7 +507,7 @@ def mol(
                 )
             if single_filename:
                 filenames = single_filename
-                if is_database_file:
+                if is_chemsmart_db:
                     if molecule_id is not None:
                         molecules = Molecule.from_filepath(
                             filepath=filenames,
@@ -561,7 +557,7 @@ def mol(
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filenames))[0]
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
@@ -573,7 +569,7 @@ def mol(
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filenames))[0]
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id[:12]}"
             elif record_id is not None:
@@ -592,7 +588,7 @@ def mol(
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
-    if index is not None and not is_database_file:
+    if index is not None and not is_chemsmart_db:
         logger.debug(f"Using molecule with index: {index}")
         molecules = select_items_by_index(
             molecules,
@@ -600,7 +596,7 @@ def mol(
             allow_duplicates=False,
             allow_out_of_range=False,
         )
-    elif not is_database_file:
+    elif not is_chemsmart_db:
         molecules = [molecules[-1]]  # Default: last molecule as list
 
     logger.debug(f"Obtained molecules: {molecules}")

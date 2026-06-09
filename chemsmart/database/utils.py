@@ -55,6 +55,9 @@ def is_chemsmart_database(filepath):
     A valid chemsmart database contains the four tables:
     'records', 'molecules', 'structures', and 'record_structures'.
     """
+    if not is_database_file(filepath):
+        return False
+
     required_tables = {
         "records",
         "molecules",
@@ -70,6 +73,11 @@ def is_chemsmart_database(filepath):
         return required_tables.issubset(tables)
     except Exception:
         return False
+
+
+def is_database_file(filename):
+    """Check if a file is a non-empty .db path."""
+    return filename is not None and filename.endswith(".db")
 
 
 def is_custom_basis(basis):

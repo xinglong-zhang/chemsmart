@@ -529,12 +529,8 @@ def gaussian(
 ):
     """CLI subcommand for running Gaussian
     jobs using the chemsmart framework."""
-    is_database_file = (
-        filename is not None
-        and filename.endswith(".db")
-        and is_chemsmart_database(filename)
-    )
-    if is_database_file:
+    is_chemsmart_db = is_chemsmart_database(filename)
+    if is_chemsmart_db:
         record_selectors = [record_index is not None, record_id is not None]
         if sum(record_selectors) + (structure_id is not None) != 1:
             raise click.UsageError(
@@ -570,7 +566,7 @@ def gaussian(
         #  and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
     elif filename.endswith(".db"):
-        if is_chemsmart_database(filename):
+        if is_chemsmart_db:
             job_settings = GaussianJobSettings.from_database(
                 filepath=filename,
                 record_index=record_index,
@@ -666,7 +662,7 @@ def gaussian(
         )
 
     if filename:
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 molecules = Molecule.from_filepath(
                     filepath=filename,
@@ -714,7 +710,7 @@ def gaussian(
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
@@ -724,7 +720,7 @@ def gaussian(
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
@@ -738,7 +734,7 @@ def gaussian(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
     molecule_indices = None
-    if index is not None and not is_database_file:
+    if index is not None and not is_chemsmart_db:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index

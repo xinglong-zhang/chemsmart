@@ -464,12 +464,8 @@ def orca(
     job settings, loads molecular structures, and prepares the context for
     subcommands.
     """
-    is_database_file = (
-        filename is not None
-        and filename.endswith(".db")
-        and is_chemsmart_database(filename)
-    )
-    if is_database_file:
+    is_chemsmart_db = is_chemsmart_database(filename)
+    if is_chemsmart_db:
         record_selectors = [record_index is not None, record_id is not None]
         if sum(record_selectors) + (structure_id is not None) != 1:
             raise click.UsageError(
@@ -510,7 +506,7 @@ def orca(
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
     elif filename.endswith(".db"):
-        if is_chemsmart_database(filename):
+        if is_chemsmart_db:
             job_settings = ORCAJobSettings.from_database(
                 filepath=filename,
                 record_index=record_index,
@@ -636,7 +632,7 @@ def orca(
         )
 
     if filename:
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 molecules = Molecule.from_filepath(
                     filepath=filename,
@@ -681,7 +677,7 @@ def orca(
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
@@ -692,7 +688,7 @@ def orca(
         logger.debug(f"Created label with append: {label}")
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
-        if is_database_file:
+        if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
@@ -707,7 +703,7 @@ def orca(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
     molecule_indices = None
-    if index is not None and not is_database_file:
+    if index is not None and not is_chemsmart_db:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index
