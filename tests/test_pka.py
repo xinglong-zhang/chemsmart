@@ -840,6 +840,39 @@ def test_sub_pka_csv_table_without_batch_subcommand(
 
 
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_csv_table_submit_subcommand_routes_to_batch(
+    tmp_path, monkeypatch, backend
+):
+    """Explicit submit with table -f still uses row-wise batch processing."""
+    _require_backend_pka_subcommand(sub, backend)
+    table, captured = _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "submit",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "proton-index is required" not in result.output
+    assert len(captured["submissions"]) == 2
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
 def test_run_pka_batch_table_processing(tmp_path, monkeypatch, backend):
     """pKa table batch returns multiple jobs; run executes each locally."""
     _require_backend_pka_subcommand(run, backend)

@@ -211,7 +211,7 @@ def submit(ctx, skip_completed, **kwargs):
     from chemsmart.utils.utils import PKaTableEntry
 
     if PKaTableEntry.is_submission_table(filename):
-        return batch(ctx, skip_completed=skip_completed, **kwargs)
+        return ctx.invoke(batch, skip_completed=skip_completed)
 
     # ── resolve proton index (CDXML auto-detect) ──
     proton_index, pka_molecules = PKaCDXFile.resolve_proton_index(
