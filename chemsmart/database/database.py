@@ -25,19 +25,6 @@ from chemsmart.database.utils import (
 logger = logging.getLogger(__name__)
 
 
-def record_to_dict(record):
-    """Convert AssembledRecord to dictionary."""
-    if isinstance(record, AssembledRecord):
-        return {
-            "record_id": record.record_id,
-            "meta": record.meta,
-            "results": record.results,
-            "molecules": record.molecules,
-            "provenance": record.provenance,
-        }
-    return record
-
-
 class Database:
     """SQLite database for storing assembled calculation records.
     This class provides methods for creating, populating, and managing
@@ -56,6 +43,19 @@ class Database:
         self.db_file = db_file
         if not self.db_file.endswith(".db"):
             self.db_file = self.db_file + ".db"
+
+    @staticmethod
+    def record_to_dict(record):
+        """Convert AssembledRecord to dictionary."""
+        if isinstance(record, AssembledRecord):
+            return {
+                "record_id": record.record_id,
+                "meta": record.meta,
+                "results": record.results,
+                "molecules": record.molecules,
+                "provenance": record.provenance,
+            }
+        return record
 
     def create(self):
         """Create the database with the required schema.
@@ -242,7 +242,7 @@ class Database:
         conn=None,
     ):
         """Insert a single record into the database."""
-        record_dict = record_to_dict(record)
+        record_dict = self.record_to_dict(record)
         record_dict = convert_numpy(record_dict)
 
         program = record_dict.get("provenance", {}).get("program", "unknown")
