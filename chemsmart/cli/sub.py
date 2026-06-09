@@ -202,6 +202,14 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "-m": str(batch_entry["multiplicity"]),
         }
 
+        def _drop_option_pair(tokens, option_names):
+            idx = 0
+            while idx < len(tokens):
+                if tokens[idx] in option_names:
+                    del tokens[idx : idx + 2]
+                    continue
+                idx += 1
+
         def _set_option(tokens, long_opt, short_opt, insert_before=None):
             if long_opt in tokens:
                 pos = tokens.index(long_opt)
@@ -221,9 +229,16 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             # aliases such as "-pi" as grouped short flags (e.g. "-p -i").
             tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
 
-        # Proton index belongs to the pka group and must appear before the
-        # pka leaf subcommand token (submit after rewrite above).
-        _set_option(args, "--proton-index", "-pi", insert_before="submit")
+        def _set_option_after(tokens, long_opt, short_opt, insert_after=None):
+            _drop_option_pair(tokens, {long_opt, short_opt})
+            insert_idx = len(tokens)
+            if insert_after in tokens:
+                insert_idx = tokens.index(insert_after) + 1
+            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
+
+        # Proton index is declared on ``pka submit``; place it after ``submit``
+        # so per-row ``chemsmart run`` scripts parse it reliably.
+        _set_option_after(args, "--proton-index", "-pi", insert_after="submit")
         # Charge/multiplicity belong to the backend group (gaussian/orca), so
         # they must appear before entering the "pka" group.
         _set_option(args, "--charge", "-c", insert_before="pka")

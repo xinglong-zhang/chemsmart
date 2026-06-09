@@ -526,7 +526,8 @@ class PKaCDXFile(CDXFile):
     ionizable sites and their associated protons can be identified reliably.
     """
 
-    def resolve_proton_index(cls, filename, proton_index, color_code=None):
+    @staticmethod
+    def resolve_proton_index(filename, proton_index, color_code=None):
         """Resolve the proton index for deprotonation, optionally via CDXML.
 
         If a proton index is provided, it is returned directly. For CDX/CDXML
@@ -555,9 +556,11 @@ class PKaCDXFile(CDXFile):
 
         filename = str(filename)
         if filename and filename.endswith((".cdx", ".cdxml")):
-            cdx_file = cls
+            cdx_file = PKaCDXFile(filename)
             try:
-                pka_mols = cdx_file.get_pka_molecules(color_code=color_code)
+                pka_mols = cdx_file.get_pka_molecules(
+                    color_code=color_code, index=":", return_list=True
+                )
             except ValueError as exc:
                 raise ValueError(
                     "Could not auto-detect proton from CDXML colour: "
@@ -601,8 +604,9 @@ class PKaCDXFile(CDXFile):
             "calculations (or use a .cdxml file with a coloured proton)."
         )
 
+    @staticmethod
     def resolve_reference_proton(
-        cls, reference, reference_proton_index, reference_color_code
+        reference, reference_proton_index, reference_color_code
     ):
         """Resolve reference proton index for CDX/CDXML files.
 
@@ -623,8 +627,9 @@ class PKaCDXFile(CDXFile):
         if reference is None:
             return None
 
+        reference = str(reference)
         if reference.endswith((".cdx", ".cdxml")):
-            ref_cdx = cls(filename=reference)
+            ref_cdx = PKaCDXFile(reference)
             ref_pka_mol = ref_cdx.get_pka_molecules(
                 index="-1", color_code=reference_color_code
             )

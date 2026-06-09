@@ -24,6 +24,7 @@ from chemsmart.cli.job import click_job_options
 from chemsmart.cli.pka import (
     click_pka_proton_options,
     click_pka_shared_options,
+    resolve_pka_submit_proton_options,
     validate_reference_options,
 )
 from chemsmart.io.file import PKaCDXFile
@@ -181,8 +182,9 @@ def pka(
 
 @pka.command("submit", cls=MyCommand)
 @click_job_options
+@click_pka_proton_options
 @click.pass_context
-def submit(ctx, skip_completed, **kwargs):
+def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
     """Submit a single-molecule Gaussian pKa calculation.
 
     Builds Gaussian pKa settings from CLI/project context, validates required
@@ -204,14 +206,16 @@ def submit(ctx, skip_completed, **kwargs):
     """
     shared = ctx.obj["pka_shared"]
     filename = ctx.obj.get("filename")
-    proton_index = ctx.obj.get("pka_proton_index")
-    color_code = ctx.obj.get("pka_color_code")
     jobrunner = ctx.obj["jobrunner"]
 
     from chemsmart.utils.utils import PKaTableEntry
 
     if PKaTableEntry.is_submission_table(filename):
         return ctx.invoke(batch, skip_completed=skip_completed)
+
+    proton_index, color_code = resolve_pka_submit_proton_options(
+        ctx, proton_index=proton_index, color_code=color_code
+    )
 
     # ── resolve proton index (CDXML auto-detect) ──
     proton_index, pka_molecules = PKaCDXFile.resolve_proton_index(

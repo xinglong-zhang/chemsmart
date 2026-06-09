@@ -412,7 +412,7 @@ def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
     assert "batch" not in first_args
     assert first_args.index("--charge") < first_args.index("pka")
     assert first_args.index("--multiplicity") < first_args.index("pka")
-    assert first_args.index("--proton-index") < first_args.index("submit")
+    assert first_args.index("submit") < first_args.index("--proton-index")
 
 
 def test_sub_orca_pka_batch_shared_reference_loaded_once(
@@ -870,6 +870,63 @@ def test_sub_pka_csv_table_submit_subcommand_routes_to_batch(
     assert result.exit_code == 0, result.output
     assert "proton-index is required" not in result.output
     assert len(captured["submissions"]) == 2
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_batch_reconstructed_run_args_accept_proton_index(
+    tmp_path, monkeypatch, backend
+):
+    """Per-row chemsmart_run_*.py args must parse --proton-index under run."""
+    _require_backend_pka_subcommand(sub, backend)
+    table, captured = _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["submissions"]
+
+    cli_args = captured["submissions"][0][2]
+    assert "submit" in cli_args
+    assert "--proton-index" in cli_args
+    assert cli_args.index("submit") < cli_args.index("--proton-index")
+
+    from chemsmart.jobs.job import Job
+
+    def _fake_run(self):
+        return None
+
+    monkeypatch.setattr(Job, "run", _fake_run)
+
+    run_result = runner.invoke(run, ["--no-scratch", "--fake"] + cli_args)
+    assert run_result.exit_code == 0, run_result.output
+    assert "proton-index is required" not in run_result.output
+
+
+def test_pka_resolve_proton_index_accepts_explicit_index():
+    from chemsmart.io.file import PKaCDXFile
+
+    proton_index, molecules = PKaCDXFile.resolve_proton_index(
+        "acid.xyz", 8, None
+    )
+    assert proton_index == 8
+    assert molecules is None
 
 
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])
