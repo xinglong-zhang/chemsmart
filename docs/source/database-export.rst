@@ -171,7 +171,37 @@ from the extension of the output file specified with ``-o/--output``.
 
 .. code:: bash
 
-   chemsmart run database export -f my.db --mid BLQJIBCZHWBKSL-U -x 'MN15/def2tzvp' -o conformers.extxyz
+   chemsmart run database export -f my.db --mid BLQJIBCZHWBKSL-U -x 'mn15/def2tzvp' -o conformers.extxyz
+
+.. tip::
+
+   Before using ``-x``/``--method-basis``, or attempting an ``.extxyz`` export, use ``inspect`` to check which
+   ``method/basis`` combinations are available and which have forces stored:
+
+   .. code:: bash
+
+      # Inspect a specific molecule to see its available method/basis combinations
+      chemsmart run database inspect -f my.db --mid BLQJIBCZHWBKSL-U
+
+      # Or inspect a specific structure
+      chemsmart run database inspect -f my.db --sid 0df6b2ea4bdc
+
+   For example, ``chemsmart run database inspect -f chemsmart.db --mid BLQJIBCZHWBKSL-U`` lists all records associated
+   with a molecule, showing the available method/basis combinations:
+
+   .. code:: text
+
+      === Related Records: 2 =============================================================================
+        Record ID     Job       Program   Method        Basis           Energy (Eh)
+        ------------  --------  --------  ------------  --------------  ---------------
+        3cc5dff791c1  opt       gaussian  mp2           aug-cc-pvtz     -76.32899232
+        59279a681dff  opt       orca      mn15          def2tzvp        -76.32331101
+
+   You can then pass one of the listed combinations directly to ``-x``:
+
+   .. code:: bash
+
+      chemsmart run database export -f my.db --mid BLQJIBCZHWBKSL-U -x 'mn15/def2tzvp' -o conformers.extxyz
 
 .. note::
 
@@ -183,8 +213,3 @@ from the extension of the output file specified with ``-o/--output``.
    ``(method, basis)`` pair that covers the most structures with both energy and forces stored. With ``--sid``,
    chemsmart picks an available ``(method, basis)`` pair with both energy and forces for that structure. With
    ``--ri``/``--rid``, the selected record's own ``method/basis`` is used.
-
-.. tip::
-
-   Use ``chemsmart run database inspect -f my.db`` to verify which levels of theory have forces stored before attempting
-   an extended XYZ export.
