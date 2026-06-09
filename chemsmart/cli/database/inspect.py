@@ -25,7 +25,6 @@ def click_inspect_options(f):
     @click.option(
         "--ri",
         "--record-index",
-        "record_index",
         type=int,
         default=None,
         help="Record index (1-based) to inspect.",
@@ -33,7 +32,6 @@ def click_inspect_options(f):
     @click.option(
         "--rid",
         "--record-id",
-        "record_id",
         type=str,
         default=None,
         help="Record ID (or prefix, at least 12 chars) to inspect.",
@@ -41,7 +39,6 @@ def click_inspect_options(f):
     @click.option(
         "--si",
         "--structure-index",
-        "structure_index",
         type=int,
         default=None,
         help="Structure index (1-based) within the record.",
@@ -49,7 +46,6 @@ def click_inspect_options(f):
     @click.option(
         "--mid",
         "--molecule-id",
-        "molecule_id",
         type=str,
         default=None,
         help="Molecule ID (or prefix, at least 16 chars) to inspect.",
@@ -57,7 +53,6 @@ def click_inspect_options(f):
     @click.option(
         "--sid",
         "--structure-id",
-        "structure_id",
         type=str,
         default=None,
         help="Structure ID (or prefix, at least 12 chars) to inspect.",

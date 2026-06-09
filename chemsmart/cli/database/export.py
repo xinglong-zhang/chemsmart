@@ -25,7 +25,6 @@ def click_export_options(f):
     @click.option(
         "--ri",
         "--record-index",
-        "record_index",
         type=int,
         default=None,
         help="Record index (1-based) to export.",
@@ -33,7 +32,6 @@ def click_export_options(f):
     @click.option(
         "--rid",
         "--record-id",
-        "record_id",
         type=str,
         default=None,
         help="Record ID (or prefix) to export.",
@@ -41,7 +39,6 @@ def click_export_options(f):
     @click.option(
         "--si",
         "--structure-index",
-        "structure_index",
         type=str,
         default=None,
         help="Structure index (1-based) within the selected record. "
@@ -50,7 +47,6 @@ def click_export_options(f):
     @click.option(
         "--sid",
         "--structure-id",
-        "structure_id",
         type=str,
         default=None,
         help="Structure ID (or prefix) to export as a single structure.",
@@ -58,7 +54,6 @@ def click_export_options(f):
     @click.option(
         "--mid",
         "--molecule-id",
-        "molecule_id",
         type=str,
         default=None,
         help="Molecule ID (or prefix); exports every conformer of that molecule.",
@@ -76,7 +71,6 @@ def click_export_options(f):
     @click.option(
         "-x",
         "--method-basis",
-        "method_basis",
         type=str,
         default=None,
         help=(
