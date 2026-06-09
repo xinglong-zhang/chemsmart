@@ -97,7 +97,7 @@ def query(ctx, file, target, query, limit):
         chemsmart run database query -f my.db -t molecules -q "mass > 100"
         chemsmart run database query -f my.db -t structures -l 10
     """
-    # Validate input database
+    logger.info(f"Validating database: {file}")
     file = os.path.abspath(file)
     if not os.path.isfile(file):
         raise FileNotFoundError(f"Database file not found: {file}")

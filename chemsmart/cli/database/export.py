@@ -25,6 +25,7 @@ def click_export_options(f):
     @click.option(
         "--ri",
         "--record-index",
+        "record_index",
         type=int,
         default=None,
         help="Record index (1-based) to export.",
@@ -32,6 +33,7 @@ def click_export_options(f):
     @click.option(
         "--rid",
         "--record-id",
+        "record_id",
         type=str,
         default=None,
         help="Record ID (or prefix) to export.",
@@ -39,6 +41,7 @@ def click_export_options(f):
     @click.option(
         "--si",
         "--structure-index",
+        "structure_index",
         type=str,
         default=None,
         help="Structure index (1-based) within the selected record. "
@@ -47,6 +50,7 @@ def click_export_options(f):
     @click.option(
         "--sid",
         "--structure-id",
+        "structure_id",
         type=str,
         default=None,
         help="Structure ID (or prefix) to export as a single structure.",
@@ -54,6 +58,7 @@ def click_export_options(f):
     @click.option(
         "--mid",
         "--molecule-id",
+        "molecule_id",
         type=str,
         default=None,
         help="Molecule ID (or prefix); exports every conformer of that molecule.",
@@ -142,7 +147,7 @@ def export(
         chemsmart run database export -f my.db --sid 0df6b2ea4bdc -o struct.extxyz
         chemsmart run database export -f my.db --mid BLQJIBCZHWBKSL-U -x 'MN15/def2tzvp' -o conformers.extxyz
     """
-    # Validate input database
+    logger.info(f"Validating database: {file}")
     file = os.path.abspath(file)
     if not os.path.isfile(file):
         raise click.UsageError(f"Database file not found: {file}")
