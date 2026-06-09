@@ -2416,6 +2416,22 @@ class PKaTableEntry:
         if errors:
             raise ValueError("; ".join(errors))
 
+    @staticmethod
+    def is_submission_table(table_path) -> bool:
+        """Return True when *table_path* has pKa submission-table columns."""
+        if not table_path:
+            return False
+        try:
+            dataset = TabularDataset.parse_table(
+                table_path=table_path,
+                comment="#",
+            )
+            for aliases in PKaTableEntry._ALIASES.values():
+                TabularDataset.resolve_column(dataset.columns, aliases)
+            return True
+        except (ValueError, FileNotFoundError, OSError):
+            return False
+
     def parse_pka_table(
         table_path: str,
         delimiter: str = None,

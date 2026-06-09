@@ -587,6 +587,15 @@ class PKaCDXFile(CDXFile):
                 "-cc/--color-code can only be used with .cdx/.cdxml files."
             )
 
+        from chemsmart.utils.utils import PKaTableEntry
+
+        if PKaTableEntry.is_submission_table(filename):
+            raise ValueError(
+                "Table input detected for pKa job submission. "
+                "Use the 'batch' subcommand to process each table row, e.g. "
+                "'pka -s direct batch' (proton_index is read from the table)."
+            )
+
         raise ValueError(
             "-pi/--proton-index is required when launching new pKa "
             "calculations (or use a .cdxml file with a coloured proton)."

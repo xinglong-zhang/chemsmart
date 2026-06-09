@@ -534,8 +534,13 @@ def gaussian(
     #  otherwise return defaults
 
     # Defer filetype validation if the pka subcommand is being invoked,
-    # as it has its own .csv file handling.
+    # as it has its own table file handling.
+    from chemsmart.utils.utils import PKaTableEntry
+
     is_pka_subcommand = ctx.invoked_subcommand == "pka"
+    is_pka_table_input = (
+        is_pka_subcommand and PKaTableEntry.is_submission_table(filename)
+    )
 
     if filename is None:
         # for cases where filename is not supplied, eg,
@@ -551,10 +556,10 @@ def gaussian(
         job_settings = GaussianJobSettings.from_filepath(filename)
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
     #  ".cif", ".traj", ".gro", ".db")):
-    elif is_pka_subcommand and filename.endswith(".csv"):
+    elif is_pka_table_input:
         job_settings = GaussianJobSettings.default()
         logger.info(
-            "pka subcommand invoked with .csv file; "
+            "pka subcommand invoked with table file; "
             "skipping filetype validation and using default Gaussian settings"
         )
     else:
@@ -627,9 +632,11 @@ def gaussian(
     # obtain molecule structure
     molecules = None
 
-    # Skip molecule loading for pKa CSV files (they are handled by pKa subcommand)
-    if is_pka_subcommand and filename and filename.endswith(".csv"):
-        logger.debug(f"Skipping molecule loading for pKa CSV file: {filename}")
+    # Skip molecule loading for pKa table files (handled by pKa batch)
+    if is_pka_table_input:
+        logger.debug(
+            f"Skipping molecule loading for pKa table file: {filename}"
+        )
         molecules = None
     else:
         if filename is None and pubchem is None:

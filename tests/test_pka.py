@@ -728,6 +728,37 @@ def _write_test_backend_project(tmp_path, backend):
     return config_root
 
 
+def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
+    """Shared fixtures for sub ... pka batch submission tests."""
+    acid1 = tmp_path / "acid1.xyz"
+    acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    acid2 = tmp_path / "acid2.xyz"
+    acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+    table = tmp_path / "pka_scale.csv"
+    table.write_text(
+        "structure,filepath,proton_index,charge,multiplicity\n"
+        f"acid1,{acid1},2,0,1\n"
+        f"acid2,{acid2},2,1,2\n"
+    )
+
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    captured = {"submissions": []}
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
+        "submissions"
+    ].append((job, test, cli_args))
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+    return table, captured
+
+
 def _build_pka_batch_table(tmp_path):
     acid1 = tmp_path / "acid1.xyz"
     acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
@@ -741,6 +772,71 @@ def _build_pka_batch_table(tmp_path):
         f"{acid2},2,1,2\n"
     )
     return table
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_csv_table_auto_routes_to_batch(
+    tmp_path, monkeypatch, backend
+):
+    """Table -f input should use batch workflow without requiring -pi."""
+    _require_backend_pka_subcommand(sub, backend)
+    table, captured = _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "proton-index is required" not in result.output
+    assert len(captured["submissions"]) == 2
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_csv_table_without_batch_subcommand(
+    tmp_path, monkeypatch, backend
+):
+    """Omitting the batch subcommand still routes table input to batch."""
+    _require_backend_pka_subcommand(sub, backend)
+    table, captured = _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "proton-index is required" not in result.output
+    assert len(captured["submissions"]) == 2
 
 
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])

@@ -122,7 +122,11 @@ def pka(
     ctx.obj["pka_color_code"] = color_code
 
     if ctx.invoked_subcommand is None:
-        ctx.invoke(
+        from chemsmart.utils.utils import PKaTableEntry
+
+        if PKaTableEntry.is_submission_table(ctx.obj.get("filename")):
+            return ctx.invoke(batch, skip_completed=skip_completed)
+        return ctx.invoke(
             submit,
             skip_completed=skip_completed,
         )
@@ -152,6 +156,11 @@ def submit(ctx, skip_completed, **kwargs):
     proton_index = ctx.obj.get("pka_proton_index")
     color_code = ctx.obj.get("pka_color_code")
     jobrunner = ctx.obj["jobrunner"]
+
+    from chemsmart.utils.utils import PKaTableEntry
+
+    if PKaTableEntry.is_submission_table(filename):
+        return batch(ctx, skip_completed=skip_completed, **kwargs)
 
     proton_index, pka_molecules = PKaCDXFile.resolve_proton_index(
         filename, proton_index, color_code
