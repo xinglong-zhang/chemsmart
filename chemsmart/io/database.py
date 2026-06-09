@@ -28,17 +28,22 @@ class DatabaseFile(FileMixin):
             positions=(np.array(positions) if positions is not None else None),
             charge=struct_dict.get("charge"),
             multiplicity=struct_dict.get("multiplicity"),
+            frozen_atoms=struct_dict.get("frozen_atoms"),
             energy=struct_dict.get("energy"),
             forces=(
                 np.array(struct_dict["forces"])
                 if struct_dict.get("forces")
                 else None
             ),
-            frozen_atoms=struct_dict.get("frozen_atoms"),
             vibrational_frequencies=struct_dict.get("vibrational_frequencies"),
             vibrational_modes=vibrational_modes,
+            structure_index_in_file=struct_dict.get("structure_index_in_file"),
+            rotational_symmetry_number=struct_dict.get(
+                "rotational_symmetry_number"
+            ),
             mulliken_atomic_charges=struct_dict.get("mulliken_atomic_charges"),
             mulliken_spin_densities=struct_dict.get("mulliken_spin_densities"),
+            is_optimized_structure=struct_dict.get("is_optimized_structure"),
             dipole_moment=(
                 np.array(struct_dict["dipole_moment"])
                 if struct_dict.get("dipole_moment") is not None
@@ -51,11 +56,6 @@ class DatabaseFile(FileMixin):
                 else None
             ),
             point_group=struct_dict.get("point_group"),
-            rotational_symmetry_number=struct_dict.get(
-                "rotational_symmetry_number"
-            ),
-            is_optimized_structure=struct_dict.get("is_optimized_structure"),
-            structure_index_in_file=struct_dict.get("structure_index_in_file"),
         )
 
     def get_molecule_by_structure_id(self, structure_id, return_list=False):

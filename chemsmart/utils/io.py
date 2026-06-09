@@ -142,11 +142,11 @@ def create_molecule_list(
         Molecule(
             symbols=symbols,
             positions=orientations[i],
-            translation_vectors=orientations_pbc[i],
             charge=charge,
             multiplicity=multiplicity,
             frozen_atoms=frozen_atoms,
             pbc_conditions=pbc_conditions,
+            translation_vectors=orientations_pbc[i],
             energy=energies[i] if energies else None,
             forces=forces[i] if forces else None,
             structure_index_in_file=i + 1,

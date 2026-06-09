@@ -61,8 +61,6 @@ class Molecule:
     scale factors: a dictionary of scale factors for QM/MM calculations,
         where the key is the bonded atom pair indices and the value is
         a list of scale factors for (low, medium, high).
-    info: dict
-        A dictionary containing additional information about the molecule.
     structure_index_in_file: int | None
         1-based index of this structure within the source file, if applicable.
     rotational_symmetry_number: int | None
@@ -81,6 +79,8 @@ class Molecule:
         Rotational constants [A, B, C] in Hz, if available.
     point_group: str | None
         Molecular point group string (e.g. "CS", "C2V"), if available.
+    info: dict
+        A dictionary containing additional information about the molecule.
     """
 
     def __init__(
@@ -101,7 +101,6 @@ class Molecule:
         vibrational_ir_intensities=None,
         vibrational_mode_symmetries=None,
         vibrational_modes=None,
-        info=None,
         structure_index_in_file=None,
         rotational_symmetry_number=None,
         mulliken_atomic_charges=None,
@@ -111,6 +110,7 @@ class Molecule:
         dipole_moment_magnitude=None,
         rotational_constants=None,
         point_group=None,
+        info=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
