@@ -626,34 +626,44 @@ def gaussian(
 
     # obtain molecule structure
     molecules = None
-    if filename is None and pubchem is None:
-        raise ValueError(
-            "[filename] or [pubchem] has not been specified!\n"
-            "Please specify one of them!"
-        )
-    if filename and pubchem:
-        raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\n"
-            "Please specify only one of them."
-        )
 
-    if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
-        )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(
-            f"Obtained {len(molecules)} molecule {molecules} from {filename}"
-        )
+    # Skip molecule loading for pKa CSV files (they are handled by pKa subcommand)
+    if is_pka_subcommand and filename and filename.endswith(".csv"):
+        logger.debug(f"Skipping molecule loading for pKa CSV file: {filename}")
+        molecules = None
+    else:
+        if filename is None and pubchem is None:
+            raise ValueError(
+                "[filename] or [pubchem] has not been specified!\n"
+                "Please specify one of them!"
+            )
+        if filename and pubchem:
+            raise ValueError(
+                "Both [filename] and [pubchem] have been specified!\n"
+                "Please specify only one of them."
+            )
 
-    if pubchem:
-        molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from PubChem {pubchem}!"
-        logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
+        if filename:
+            molecules = Molecule.from_filepath(
+                filepath=filename, index=":", return_list=True
+            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filename}!"
+            logger.debug(
+                f"Obtained {len(molecules)} molecule {molecules} from {filename}"
+            )
+
+        if pubchem:
+            molecules = Molecule.from_pubchem(
+                identifier=pubchem, return_list=True
+            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from PubChem {pubchem}!"
+            logger.debug(
+                f"Obtained molecule {molecules} from PubChem {pubchem}"
+            )
 
     # update labels
     if label is not None and append_label is not None:
@@ -665,22 +675,26 @@ def gaussian(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{ctx.invoked_subcommand}"
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
+        if ctx.invoked_subcommand:
+            label = f"{label}_{ctx.invoked_subcommand}"
 
     label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
     molecule_indices = None
-    if index is not None:
+    if index is not None and molecules is not None:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index
             )
         )
 
-    if not isinstance(molecules, list):
+    if molecules is not None and not isinstance(molecules, list):
         molecules = [molecules]
         if molecule_indices is not None and not isinstance(
             molecule_indices, list
@@ -694,7 +708,7 @@ def gaussian(
     # represented as QMMMMolecule so the subcommand sees QMMM-specific
     # attributes early (e.g., high_level_atoms, bonded_atoms).
     try:
-        if ctx.invoked_subcommand == "qmmm":
+        if ctx.invoked_subcommand == "qmmm" and molecules is not None:
             from chemsmart.io.molecules.structure import QMMMMolecule
 
             converted = []
