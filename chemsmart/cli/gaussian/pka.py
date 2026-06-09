@@ -292,13 +292,16 @@ def batch(ctx, skip_completed, **kwargs):
     from chemsmart.io.molecules.structure import Molecule
     from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.utils.utils import (
+        PKaOutputTable,
         PKaTableEntry,
     )
 
     try:
         entries = PKaTableEntry.parse_pka_table(input_table_path)
-        for entry in entries:
-            entry.validate(check_file_exists=True)
+        # Validate entries using the utility that supports optional file checks
+        PKaOutputTable.validate_pka_table_entries(
+            entries, check_file_exists=True
+        )
     except (FileNotFoundError, ValueError) as e:
         raise click.UsageError(str(e))
 
