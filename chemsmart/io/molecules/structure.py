@@ -496,7 +496,7 @@ class Molecule:
 
         return result
 
-    @property
+    @cached_property
     def smiles(self):
         """SMILES string for the molecule (convenience property).
         Equivalent to calling ``to_smiles()``.
