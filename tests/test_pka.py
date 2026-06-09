@@ -1,6 +1,7 @@
 import importlib
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -707,3 +708,142 @@ def test_run_pka_help_keeps_output_analysis_commands():
     assert result.exit_code == 0, result.output
     assert "analyze" in result.output
     assert "batch-analyze" in result.output
+
+
+def _write_test_backend_project(tmp_path, backend):
+    config_root = tmp_path / "chemsmart_cfg"
+    backend_cfg_dir = config_root / backend
+    backend_cfg_dir.mkdir(parents=True)
+    (backend_cfg_dir / "test.yaml").write_text(
+        "gas:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "solv:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "  freq: false\n"
+        "  solvent_model: smd\n"
+        "  solvent_id: water\n"
+    )
+    return config_root
+
+
+def _build_pka_batch_table(tmp_path):
+    acid1 = tmp_path / "acid1.xyz"
+    acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    acid2 = tmp_path / "acid2.xyz"
+    acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+    table = tmp_path / "pka_scale.csv"
+    table.write_text(
+        "filepath,proton_index,charge,multiplicity\n"
+        f"{acid1},2,0,1\n"
+        f"{acid2},2,1,2\n"
+    )
+    return table
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_run_pka_batch_table_processing(tmp_path, monkeypatch, backend):
+    """pKa table batch returns multiple jobs; run executes each locally."""
+    _require_backend_pka_subcommand(run, backend)
+    table = _build_pka_batch_table(tmp_path)
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    captured = {"runs": []}
+
+    from chemsmart.jobs.job import Job
+
+    def _fake_run(self):
+        captured["runs"].append(self.label)
+
+    monkeypatch.setattr(Job, "run", _fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        [
+            "--no-scratch",
+            "--fake",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Batch job submission is not supported" not in result.output
+    assert len(captured["runs"]) == 2
+    if backend == "gaussian":
+        assert set(captured["runs"]) == {"acid1", "acid2"}
+    else:
+        assert set(captured["runs"]) == {"acid1_pka", "acid2_pka"}
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_run_pka_batch_defaults_to_no_scratch(tmp_path, monkeypatch, backend):
+    """run should not require a scratch directory when --scratch is omitted."""
+    _require_backend_pka_subcommand(run, backend)
+    table = _build_pka_batch_table(tmp_path)
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    missing_scratch = tmp_path / "missing_scratch"
+    from chemsmart.jobs import runner as runner_module
+
+    monkeypatch.setattr(
+        runner_module.user_settings, "scratch", str(missing_scratch)
+    )
+
+    captured = {"runs": []}
+
+    from chemsmart.jobs.job import Job
+
+    def _fake_run(self):
+        captured["runs"].append(self.label)
+
+    monkeypatch.setattr(Job, "run", _fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        [
+            "--fake",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Specified scratch dir does not exist" not in result.output
+    assert len(captured["runs"]) == 2
+
+
+def test_run_rejects_non_job_batch_payload(pbs_server):
+    """Scheduler-style batch payloads that are not Job lists stay blocked."""
+
+    from chemsmart.cli.run import process_pipeline
+    from chemsmart.jobs.runner import JobRunner
+
+    ctx = click.Context(run)
+    ctx.ensure_object(dict)
+    ctx.obj["jobrunner"] = JobRunner(server=pbs_server, fake=True)
+
+    with pytest.raises(
+        ValueError, match="Batch job submission is not supported"
+    ):
+        process_pipeline.__wrapped__(ctx, ["not-a-job", "also-not-a-job"])

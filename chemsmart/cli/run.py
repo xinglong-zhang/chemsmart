@@ -56,6 +56,10 @@ def run(
     create_logger(debug=debug, stream=stream)
     logger.info("Entering main program")
 
+    # Local execution does not use scratch unless explicitly requested.
+    if scratch is None:
+        scratch = False
+
     # Instantiate the jobrunner with CLI options
     jobrunner = JobRunner(
         server=server,
@@ -73,6 +77,22 @@ def run(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
+
+
+def _run_single_job(job, jobrunner):
+    """Attach a typed jobrunner and execute one job locally."""
+    typed_runner = jobrunner.from_job(
+        job=job,
+        server=jobrunner.server,
+        scratch=jobrunner.scratch,
+        fake=jobrunner.fake,
+        delete_scratch=jobrunner.delete_scratch,
+        num_cores=jobrunner.num_cores,
+        num_gpus=jobrunner.num_gpus,
+        mem_gb=jobrunner.mem_gb,
+    )
+    job.jobrunner = typed_runner
+    job.run()
 
 
 @run.result_callback()
@@ -105,28 +125,21 @@ def process_pipeline(ctx, *args, **kwargs):
         )
         return None
 
-    # Instantiate a specific jobrunner based on job type
-    # jobrunner at this stage is an instance of specific JobRunner subclass
-    # to run the job
-    if isinstance(job, Job):
-        jobrunner = jobrunner.from_job(
-            job=job,
-            server=jobrunner.server,
-            scratch=jobrunner.scratch,
-            fake=jobrunner.fake,
-            delete_scratch=jobrunner.delete_scratch,
-            num_cores=jobrunner.num_cores,
-            num_gpus=jobrunner.num_gpus,
-            mem_gb=jobrunner.mem_gb,
-        )
+    if isinstance(job, list):
+        if not job:
+            logger.debug("Empty job list. Skipping job execution.")
+            return None
+        if not all(isinstance(single_job, Job) for single_job in job):
+            raise ValueError(
+                "Batch job submission is not supported in this branch."
+            )
+        logger.info(f"Running {len(job)} jobs locally")
+        for single_job in job:
+            _run_single_job(single_job, jobrunner)
+        return None
 
-        # Attach jobrunner to job and run the job with the jobrunner
-        job.jobrunner = jobrunner
-        job.run()
-    elif isinstance(job, list):
-        raise ValueError(
-            "Batch job submission is not supported in this branch."
-        )
+    if isinstance(job, Job):
+        _run_single_job(job, jobrunner)
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 
