@@ -68,7 +68,6 @@ class CDXFile(FileMixin):
     """
 
     def __init__(self, filename):
-        from pathlib import Path
 
         # Accept both str and pathlib.Path
         self.filename = (
@@ -118,7 +117,6 @@ class CDXFile(FileMixin):
             ValueError: If no molecules can be read or no valid 3D structures
             can be generated from the ChemDraw file.
         """
-        from pathlib import Path
 
         from rdkit import Chem
 
@@ -555,7 +553,7 @@ class PKaCDXFile(CDXFile):
         if proton_index is not None:
             return proton_index, None
 
-        filename = Path(filename).suffix.lower()
+        filename = str(filename)
         if filename and filename.endswith((".cdx", ".cdxml")):
             cdx_file = cls
             try:
