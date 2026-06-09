@@ -1,0 +1,11 @@
+﻿basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref
+1a,1a_pka.log,1a_pka_A_opt.log,1a_pka_sp.log,1a_pka_A_opt.sp.log,phenol_pka.log,phenol_pka_A_opt.log,phenol_pka_sp.log,phenol_pka_A_opt.sp.log,10.6
+2a,2a_pka.log,2a_pka_A_opt.log,2a_pka_sp.log,2a_pka_A_opt.sp.log,,,,,
+3a,3a_pka.log,3a_pka_A_opt.log,3a_pka_sp.log,3a_pka_A_opt.sp.log,,,,,
+4a,4a_pka.log,4a_pka_A_opt.log,4a_pka_sp.log,4a_pka_A_opt.sp_smd_TetraHydroFuran.log,,,,,
+5a,5a_pka.log,5a_pka_A_opt.log,5a_pka_sp.log,5a_pka_A_opt.sp.log,,,,,
+6a,6a_pka.log,6a_pka_A_opt.log,6a_pka_sp.log,6a_pka_A_opt.sp.log,,,,,
+7a,7a_pka.log,7a_pka_A_opt.log,7a_pka_sp.log,7a_pka_A_opt.sp.log,,,,,
+8a,8a_pka.log,8a_pka_A_opt.log,8a_pka_sp.log,8a_pka_A_opt.sp.log,,,,,
+9a,9a_pka.log,9a_pka_A_opt.log,9a_pka_sp.log,9a_pka_A_opt.sp.log,,,,,
+10a,10a_pka.log,10a_pka_A_opt.log,10a_pka_sp.log,10a_pka_A_opt.sp.log,,,,,

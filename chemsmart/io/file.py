@@ -2,6 +2,7 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
+from pathlib import Path
 
 import numpy as np
 
@@ -554,8 +555,9 @@ class PKaCDXFile(CDXFile):
         if proton_index is not None:
             return proton_index, None
 
+        filename = Path(filename).suffix.lower()
         if filename and filename.endswith((".cdx", ".cdxml")):
-            cdx_file = cls(filename=filename)
+            cdx_file = cls
             try:
                 pka_mols = cdx_file.get_pka_molecules(color_code=color_code)
             except ValueError as exc:
