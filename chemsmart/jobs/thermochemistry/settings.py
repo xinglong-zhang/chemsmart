@@ -34,6 +34,8 @@ class ThermochemistryJobSettings:
         overwrite (bool): Overwrite existing output when True.
         check_imaginary_frequencies (bool):
         Validate absence of imaginary modes.
+        check_ts_reaction_coordinate (bool):
+        Validate TS imaginary mode via displaced-connectivity check.
         write_header (bool): Write header to output file when True.
     """
 
@@ -51,6 +53,7 @@ class ThermochemistryJobSettings:
         outputfile=None,
         overwrite=False,
         check_imaginary_frequencies=True,
+        check_ts_reaction_coordinate=False,
         write_header=True,
     ):
         """
@@ -69,6 +72,7 @@ class ThermochemistryJobSettings:
             outputfile (str, optional): Path to output file
             overwrite (bool): Whether to overwrite existing output files
             check_imaginary_frequencies (bool): Check for imaginary frequencies
+            check_ts_reaction_coordinate (bool): Validate TS reaction mode
             write_header (bool): Whether to write
             header to output file (default: True)
         """
@@ -85,6 +89,7 @@ class ThermochemistryJobSettings:
         self.outputfile = outputfile
         self.overwrite = overwrite
         self.check_imaginary_frequencies = check_imaginary_frequencies
+        self.check_ts_reaction_coordinate = check_ts_reaction_coordinate
         self.write_header = write_header
 
     def copy(self):
@@ -107,6 +112,7 @@ class ThermochemistryJobSettings:
             outputfile=self.outputfile,
             overwrite=self.overwrite,
             check_imaginary_frequencies=self.check_imaginary_frequencies,
+            check_ts_reaction_coordinate=self.check_ts_reaction_coordinate,
             write_header=self.write_header,
         )
 

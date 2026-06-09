@@ -37,6 +37,7 @@ THERMOCHEMISTRY_DEFAULT_KWARGS = {
     "h_freq_cutoff": None,
     "energy_units": "hartree",
     "check_imaginary_frequencies": True,
+    "check_ts_reaction_coordinate": False,
 }
 
 
@@ -52,6 +53,7 @@ def build_thermochemistry_kwargs(
     weighted=None,
     energy_units=None,
     check_imaginary_frequencies=None,
+    check_ts_reaction_coordinate=None,
 ) -> dict:
     """Build Thermochemistry kwargs from defaults plus CLI overrides."""
     if (
@@ -81,6 +83,7 @@ def build_thermochemistry_kwargs(
         "use_weighted_mass": weighted,
         "energy_units": energy_units,
         "check_imaginary_frequencies": check_imaginary_frequencies,
+        "check_ts_reaction_coordinate": check_ts_reaction_coordinate,
         "cutoff_entropy_grimme": cutoff_entropy_grimme,
         "cutoff_entropy_truhlar": cutoff_entropy_truhlar,
         "cutoff_enthalpy": cutoff_enthalpy,
@@ -237,6 +240,13 @@ def click_grouper_thermochemistry_options(f):
         show_default=True,
         help="For-Thermo-Correction: Whether to check for imaginary frequencies.",
     )
+    @click.option(
+        "--check-ts-reaction-coordinate/--no-check-ts-reaction-coordinate",
+        default=False,
+        show_default=True,
+        help="For TS jobs, validate whether the imaginary mode changes "
+        "connectivity between +/- displaced structures.",
+    )
     @functools.wraps(f)
     def wrapper_thermochemistry_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -275,6 +285,7 @@ def grouper(
     weighted,
     energy_units,
     check_imaginary_frequencies,
+    check_ts_reaction_coordinate,
     **kwargs,
 ):
     """
@@ -331,6 +342,7 @@ def grouper(
             weighted=weighted,
             energy_units=energy_units,
             check_imaginary_frequencies=check_imaginary_frequencies,
+            check_ts_reaction_coordinate=check_ts_reaction_coordinate,
         )
     except ValueError as exc:
         raise click.BadParameter(str(exc)) from exc
@@ -618,6 +630,8 @@ def _load_molecules_from_directory(
                 filename=filepath,
                 **thermo_init_kwargs,
             )
+            if thermo.check_ts_reaction_coordinate and thermo.jobtype == "ts":
+                thermo.check_frequencies()
 
             mol = thermo.molecule
             if mol is not None:
