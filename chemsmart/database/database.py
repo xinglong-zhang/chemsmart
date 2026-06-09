@@ -67,7 +67,7 @@ class Database:
         """
         conn = open_connection(self.db_file)
         try:
-            # Create records table
+            logger.debug("Creating records table...")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS records (
                     record_index INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,7 +137,7 @@ class Database:
                 )
             """)
 
-            # Create molecules table (chemical species)
+            logger.debug("Creating molecules table...")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS molecules (
                     molecule_id TEXT PRIMARY KEY NOT NULL,
@@ -162,7 +162,7 @@ class Database:
                 )
             """)
 
-            # Create structures table (unique 3D geometry instances)
+            logger.debug("Creating structures table...")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS structures (
                     structure_id TEXT PRIMARY KEY,
@@ -178,7 +178,7 @@ class Database:
                 )
             """)
 
-            # Create record_structures junction table
+            logger.debug("Creating record_structures junction table...")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS record_structures (
                     record_id TEXT NOT NULL,
@@ -205,7 +205,7 @@ class Database:
                 )
             """)
 
-            # Create indices
+            logger.debug("Creating database indices...")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_record_id ON records(record_id)"
             )
@@ -801,6 +801,7 @@ class Database:
                 f"No record found matching ID prefix '{partial_id}'."
             )
         if len(matches) > 1:
+            # Create a preview showing up to 10 matching record IDs, truncated to 12 chars each
             preview = ", ".join(m[:12] for m in matches[:10])
             raise ValueError(
                 f"Ambiguous ID prefix '{partial_id}' matches {len(matches)} records: {preview}"
@@ -972,6 +973,7 @@ class Database:
                 f"No molecule found matching ID prefix '{partial_id}'."
             )
         if len(matches) > 1:
+            # Create a preview showing up to 10 matching molecule IDs, truncated to 12 chars each
             preview = ", ".join(m[:12] for m in matches[:10])
             raise ValueError(
                 f"Ambiguous ID prefix '{partial_id}' matches "
@@ -1050,6 +1052,7 @@ class Database:
                 f"No structure found matching ID prefix '{partial_id}'."
             )
         if len(matches) > 1:
+            # Create a preview showing up to 10 matching structure IDs, truncated to 12 chars each
             preview = ", ".join(m[:12] for m in matches[:10])
             raise ValueError(
                 f"Ambiguous ID prefix '{partial_id}' matches "
