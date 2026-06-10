@@ -4,6 +4,7 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_database_id_options
 from chemsmart.database.export import CSV_OPTIONAL_COLUMNS, DatabaseExporter
 from chemsmart.utils.cli import MyCommand
 
@@ -21,47 +22,6 @@ def click_export_options(f):
         type=str,
         required=True,
         help="Path to the input database file (.db).",
-    )
-    @click.option(
-        "--ri",
-        "--record-index",
-        "record_index",
-        type=int,
-        default=None,
-        help="Record index (1-based) to export.",
-    )
-    @click.option(
-        "--rid",
-        "--record-id",
-        "record_id",
-        type=str,
-        default=None,
-        help="Record ID (or prefix) to export.",
-    )
-    @click.option(
-        "--si",
-        "--structure-index",
-        "structure_index",
-        type=str,
-        default=None,
-        help="Structure index (1-based) within the selected record. "
-        "Defaults to the last structure when used with --ri/--rid.",
-    )
-    @click.option(
-        "--sid",
-        "--structure-id",
-        "structure_id",
-        type=str,
-        default=None,
-        help="Structure ID (or prefix) to export as a single structure.",
-    )
-    @click.option(
-        "--mid",
-        "--molecule-id",
-        "molecule_id",
-        type=str,
-        default=None,
-        help="Molecule ID (or prefix); exports every conformer of that molecule.",
     )
     @click.option(
         "-k",
@@ -100,6 +60,7 @@ def click_export_options(f):
 
 @database.command(cls=MyCommand)
 @click_export_options
+@click_database_id_options
 @click.pass_context
 def export(
     ctx,

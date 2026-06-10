@@ -5,7 +5,7 @@ import os
 import click
 
 from chemsmart.cli.job import (
-    click_database_entry_options,
+    click_database_id_options,
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
@@ -494,7 +494,7 @@ def click_gaussian_qmmm_options(f):
 @click_gaussian_options
 @click_filename_options
 @click_file_label_and_index_options
-@click_database_entry_options
+@click_database_id_options
 @click_gaussian_settings_options
 @click_gaussian_solvent_group_options
 @click_pubchem_options
@@ -515,6 +515,8 @@ def gaussian(
     record_index,
     record_id,
     structure_id,
+    structure_index,
+    molecule_id,
     additional_opt_options,
     additional_route_parameters,
     append_additional_info,
@@ -529,6 +531,22 @@ def gaussian(
 ):
     """CLI subcommand for running Gaussian
     jobs using the chemsmart framework."""
+    # --mid is not supported for job submission
+    if molecule_id is not None:
+        raise click.UsageError(
+            "--mid/--molecule-id is not supported for Gaussian job submission. "
+            "Use --sid/--structure-id or --ri/--rid with -i/--si instead."
+        )
+    # -i/--index and --si/--structure-index are equivalent aliases
+    if index is not None and structure_index is not None:
+        raise click.UsageError(
+            "-i/--index and --si/--structure-index are mutually exclusive. "
+            "Use only one to specify the structure index."
+        )
+    # If --si is given, treat it as -i so all downstream code uses index
+    if structure_index is not None:
+        index = structure_index
+
     is_chemsmart_db = is_chemsmart_database(filename)
     if is_chemsmart_db:
         record_selectors = [record_index is not None, record_id is not None]
@@ -540,8 +558,8 @@ def gaussian(
             )
         if index is not None and not any(record_selectors):
             raise click.UsageError(
-                "For chemsmart database input, -i/--index can only be used "
-                "together with --ri/--record-index or --rid/--record-id."
+                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "can only be used together with --ri/--record-index or --rid/--record-id."
             )
 
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings

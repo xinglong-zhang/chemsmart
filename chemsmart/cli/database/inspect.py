@@ -4,6 +4,7 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_database_id_options
 from chemsmart.database.inspect import DatabaseInspector
 from chemsmart.utils.cli import MyCommand
 
@@ -22,46 +23,6 @@ def click_inspect_options(f):
         required=True,
         help="Path to the input database file (.db).",
     )
-    @click.option(
-        "--ri",
-        "--record-index",
-        "record_index",
-        type=int,
-        default=None,
-        help="Record index (1-based) to inspect.",
-    )
-    @click.option(
-        "--rid",
-        "--record-id",
-        "record_id",
-        type=str,
-        default=None,
-        help="Record ID (or prefix, at least 12 chars) to inspect.",
-    )
-    @click.option(
-        "--si",
-        "--structure-index",
-        "structure_index",
-        type=int,
-        default=None,
-        help="Structure index (1-based) within the record.",
-    )
-    @click.option(
-        "--mid",
-        "--molecule-id",
-        "molecule_id",
-        type=str,
-        default=None,
-        help="Molecule ID (or prefix, at least 16 chars) to inspect.",
-    )
-    @click.option(
-        "--sid",
-        "--structure-id",
-        "structure_id",
-        type=str,
-        default=None,
-        help="Structure ID (or prefix, at least 12 chars) to inspect.",
-    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -71,6 +32,7 @@ def click_inspect_options(f):
 
 @database.command(cls=MyCommand)
 @click_inspect_options
+@click_database_id_options
 @click.pass_context
 def inspect(
     ctx,
@@ -143,6 +105,17 @@ def inspect(
         raise click.UsageError(
             "Option --si/--structure-index requires --ri/--record-index or --rid/--record-id."
         )
+
+    # Convert structure_index to int for DatabaseInspector (shared decorator
+    # uses str type to support slice syntax; inspect accepts only single index)
+    if structure_index is not None:
+        try:
+            structure_index = int(structure_index)
+        except ValueError:
+            raise click.UsageError(
+                f"--si/--structure-index must be an integer index (1-based) for inspect, "
+                f"but got '{structure_index}'."
+            )
 
     inspector = DatabaseInspector(
         file,

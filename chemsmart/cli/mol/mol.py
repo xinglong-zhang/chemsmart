@@ -6,7 +6,7 @@ import os
 import click
 
 from chemsmart.cli.job import (
-    click_database_entry_options,
+    click_database_id_options,
     click_file_label_and_index_options,
     click_filenames_options,
     click_folder_options,
@@ -332,16 +332,7 @@ def click_pymol_save_options(f):
 @click.group(cls=MyGroup)
 @click_filenames_options
 @click_file_label_and_index_options
-@click_database_entry_options
-@click.option(
-    "--mid",
-    "--molecule-id",
-    "molecule_id",
-    type=str,
-    default=None,
-    help="Molecule ID (or unique prefix) inside a chemsmart database. "
-    "Loads all conformers for that molecule.",
-)
+@click_database_id_options
 @click_folder_options
 @click_pubchem_options
 @click.pass_context
@@ -354,6 +345,7 @@ def mol(
     record_index,
     record_id,
     structure_id,
+    structure_index,
     molecule_id,
     directory,
     filetype,
@@ -392,6 +384,16 @@ def mol(
     molecules = None
     source_basename = None
 
+    # -i/--index and --si/--structure-index are equivalent aliases
+    if index is not None and structure_index is not None:
+        raise click.UsageError(
+            "-i/--index and --si/--structure-index are mutually exclusive. "
+            "Use only one to specify the structure index."
+        )
+    # If --si is given, treat it as -i so all downstream code uses index
+    if structure_index is not None:
+        index = structure_index
+
     # Normalize empty tuple to None (click's
     # multiple=True returns () when no -f provided)
     if not filenames:
@@ -420,8 +422,8 @@ def mol(
             )
         if index is not None and not any(record_selectors):
             raise click.UsageError(
-                "For chemsmart database input, -i/--index can only be used "
-                "together with --ri/--record-index or --rid/--record-id."
+                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "can only be used together with --ri/--record-index or --rid/--record-id."
             )
 
     # obtain molecule structure

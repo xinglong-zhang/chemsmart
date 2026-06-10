@@ -181,11 +181,9 @@ def click_filename_options(f):
     return wrapper_common_options
 
 
-def click_database_entry_options(f):
-    """CLI options for selecting records or structures from a chemsmart database.
-    Adds --ri/--rid for record selection and --sid for global structure
-    selection. Only relevant when the input file (-f) is a chemsmart
-    database (.db).
+def click_database_id_options(f):
+    """CLI options for selecting records/molecules/structures from a chemsmart database
+    by ID or index. Only relevant when the input file (-f) is a chemsmart database (.db).
     """
 
     @click.option(
@@ -194,8 +192,7 @@ def click_database_entry_options(f):
         "record_index",
         type=int,
         default=None,
-        help="1-based record index inside a chemsmart database. "
-        "Only used when -f points to a chemsmart .db file.",
+        help="Record index (1-based) within a chemsmart database.",
     )
     @click.option(
         "--rid",
@@ -203,8 +200,15 @@ def click_database_entry_options(f):
         "record_id",
         type=str,
         default=None,
-        help="Record ID (or unique prefix) inside a chemsmart database. "
-        "Only used when -f points to a chemsmart .db file.",
+        help="Record ID (or unique prefix) within a chemsmart database.",
+    )
+    @click.option(
+        "--si",
+        "--structure-index",
+        "structure_index",
+        type=str,
+        default=None,
+        help="Structure index (1-based) within the selected record.",
     )
     @click.option(
         "--sid",
@@ -212,8 +216,15 @@ def click_database_entry_options(f):
         "structure_id",
         type=str,
         default=None,
-        help="Global structure ID (or unique prefix) inside a chemsmart "
-        "database. Only used when -f points to a chemsmart .db file.",
+        help="Global structure ID (or unique prefix) within a chemsmart database.",
+    )
+    @click.option(
+        "--mid",
+        "--molecule-id",
+        "molecule_id",
+        type=str,
+        default=None,
+        help="Molecule ID (or unique prefix); selects every conformer of that molecule.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
