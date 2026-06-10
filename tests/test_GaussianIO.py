@@ -881,6 +881,7 @@ class TestGaussian16Output:
         assert g16_link_opt.is_link
         assert g16_link_opt.jobtype == "opt"
         assert g16_link_opt.normal_termination
+        assert g16_link_opt.spin == "unrestricted"
         assert isinstance(g16_link_opt.molecule, Molecule)
         assert g16_link_opt.tddft_transitions == []
         assert len(g16_link_opt.alpha_occ_eigenvalues) == 8
@@ -925,6 +926,7 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_link_ts_outputfile)
         g16_link_ts = Gaussian16Output(filename=gaussian_link_ts_outputfile)
         assert not g16_link_ts.normal_termination  # Error termination
+        assert g16_link_ts.spin == "unrestricted"
         assert (
             g16_link_ts.route_string
             == "# opt=(ts,calcfc,noeigentest,maxstep=10) freq um062x def2svp geom=check guess=read"
@@ -973,6 +975,7 @@ class TestGaussian16Output:
             filename=gaussian_link_modred_output
         )
         assert g16_link_modred.normal_termination
+        assert g16_link_modred.spin == "unrestricted"
         assert (
             g16_link_modred.route_string
             == "# opt=modredundant freq umn15 def2svp geom=check guess=read"
