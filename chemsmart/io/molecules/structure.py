@@ -985,7 +985,9 @@ class Molecule:
         return len(self.vibrational_modes)
 
     @classmethod
-    def from_coordinate_block_text(cls, coordinate_block):
+    def from_coordinate_block_text(
+        cls, coordinate_block, structure_index_in_file=None
+    ):
         """
         Create molecule from coordinate block text.
         """
@@ -995,6 +997,7 @@ class Molecule:
             positions=cb.positions,
             frozen_atoms=cb.constrained_atoms,
             translation_vectors=cb.translation_vectors,
+            structure_index_in_file=structure_index_in_file,
         )
 
     @classmethod

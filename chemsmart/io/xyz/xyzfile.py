@@ -97,11 +97,12 @@ class XYZFile(FileMixin):
             # Read the coordinate block
             coordinate_block = self.contents[i : i + num_atoms]
             i += num_atoms
-            molecule = Molecule.from_coordinate_block_text(coordinate_block)
 
             # Assign frame index (1-based) where the structure appears in file
             frame_idx += 1
-            setattr(molecule, "structure_index_in_file", frame_idx)
+            molecule = Molecule.from_coordinate_block_text(
+                coordinate_block, structure_index_in_file=frame_idx
+            )
 
             # Store the molecule data
             all_molecules.append(molecule)
