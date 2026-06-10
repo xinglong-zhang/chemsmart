@@ -53,7 +53,7 @@ def click_pka_thermochemistry_options(f):
         temperature_default=298.15,
         concentration_default=1.0,
         pressure_default=1.0,
-        concentration_short="-conc",
+        concentration_short="-c",
     )
     return thermochemistry_cutoff_options(
         f,
