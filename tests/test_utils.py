@@ -1901,10 +1901,10 @@ class TestPKaTableParsing:
         assert entries[1]["ref_sp"] == "refbase1_sp.log"  # carried forward
         assert entries[1]["pka_ref"] == 4.5  # kept own value
 
-    def test_pka_output_table_entry_resolve_filenames_from_basename(
+    def test_pka_output_table_entry_resolve_filenames_gaussian_log(
         self, tmp_path, monkeypatch
     ):
-        """Blank result-file cells resolve to <basename>_<suffix>.log files."""
+        """Blank result-file cells resolve to Gaussian <basename>_<suffix>.log files."""
         from chemsmart.utils.utils import PKaOutputTableEntry
 
         monkeypatch.chdir(tmp_path)
@@ -1914,7 +1914,7 @@ class TestPKaTableParsing:
             "pka_scale_frag3_pka_HA_sp.log",
             "pka_scale_frag3_pka_A_sp.log",
         ]:
-            (tmp_path / name).write_text("dummy")
+            (tmp_path / name).write_text("Entering Gaussian System\n")
 
         entry = PKaOutputTableEntry(
             {
@@ -1933,6 +1933,65 @@ class TestPKaTableParsing:
         assert entry["ha_sp"] == "pka_scale_frag3_pka_HA_sp.log"
         assert entry["a_sp"] == "pka_scale_frag3_pka_A_sp.log"
 
+    def test_pka_output_table_entry_resolve_filenames_orca_out(
+        self, tmp_path, monkeypatch
+    ):
+        """Blank result-file cells resolve to ORCA <basename>_<suffix>.out files."""
+        from chemsmart.utils.utils import PKaOutputTableEntry
+
+        monkeypatch.chdir(tmp_path)
+        for name in [
+            "pka_scale_frag3_pka_HA_opt.out",
+            "pka_scale_frag3_pka_A_opt.out",
+            "pka_scale_frag3_pka_HA_sp.out",
+            "pka_scale_frag3_pka_A_sp.out",
+        ]:
+            (tmp_path / name).write_text("* O   R   C   A *\n")
+
+        entry = PKaOutputTableEntry(
+            {
+                "basename": "pka_scale_frag3",
+                "ha_gas": None,
+                "a_gas": None,
+                "ha_sp": None,
+                "a_sp": None,
+            },
+            row_number=4,
+        )
+        entry.validate(check_file_exists=True, scheme="direct")
+
+        assert entry["ha_gas"] == "pka_scale_frag3_pka_HA_opt.out"
+        assert entry["a_gas"] == "pka_scale_frag3_pka_A_opt.out"
+        assert entry["ha_sp"] == "pka_scale_frag3_pka_HA_sp.out"
+        assert entry["a_sp"] == "pka_scale_frag3_pka_A_sp.out"
+
+    def test_pka_output_table_entry_resolve_filenames_orca_default_extension(
+        self, tmp_path, monkeypatch
+    ):
+        """ORCA reference paths default missing basename outputs to .out."""
+        from chemsmart.utils.utils import PKaOutputTableEntry
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "6a_HA_opt.out").write_text("* O   R   C   A *\n")
+
+        entry = PKaOutputTableEntry(
+            {
+                "basename": "pka_scale_frag3",
+                "ha_gas": None,
+                "a_gas": None,
+                "ha_sp": None,
+                "a_sp": None,
+                "href_gas": "6a_HA_opt.out",
+            },
+            row_number=4,
+        )
+        entry._resolve_filenames()
+
+        assert entry["ha_gas"] == "pka_scale_frag3_pka_HA_opt.out"
+        assert entry["a_gas"] == "pka_scale_frag3_pka_A_opt.out"
+        assert entry["ha_sp"] == "pka_scale_frag3_pka_HA_sp.out"
+        assert entry["a_sp"] == "pka_scale_frag3_pka_A_sp.out"
+
     def test_pka_output_table_prepare_autodetects_files_and_inherits_references(
         self, tmp_path, monkeypatch
     ):
@@ -1947,14 +2006,16 @@ class TestPKaTableParsing:
                 "_pka_HA_sp",
                 "_pka_A_sp",
             ):
-                (tmp_path / f"{basename}{suffix}.log").write_text("dummy")
+                (tmp_path / f"{basename}{suffix}.log").write_text(
+                    "Entering Gaussian System\n"
+                )
         for name in (
             "6a_HA_opt.log",
             "6a_A_opt.log",
             "6a_HA_sp.log",
             "6a_A_sp.log",
         ):
-            (tmp_path / name).write_text("dummy")
+            (tmp_path / name).write_text("Entering Gaussian System\n")
 
         table_file = tmp_path / "pka_output.csv"
         table_file.write_text(

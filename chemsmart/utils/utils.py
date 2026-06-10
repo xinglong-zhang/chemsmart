@@ -2626,6 +2626,17 @@ class PKaOutputTableEntry:
         "pka_ref",
     )
 
+    _OUTPUT_PATH_FIELDS = (
+        "ha_gas",
+        "a_gas",
+        "ha_sp",
+        "a_sp",
+        "href_gas",
+        "ref_gas",
+        "href_sp",
+        "ref_sp",
+    )
+
     def __init__(self, data: dict, row_number: int = None):
         # Explicitly initialized attributes
         self.row_number = row_number
@@ -2763,15 +2774,59 @@ class PKaOutputTableEntry:
             f"basename={self.basename if self.basename is not None else '?'})"
         )
 
+    def _existing_output_paths(self):
+        """Return existing output-file paths already listed in this row."""
+        paths = []
+        for field in self._OUTPUT_PATH_FIELDS:
+            val = normalize_table_cell(self.get(field))
+            if val and os.path.isfile(str(val)):
+                paths.append(str(val))
+        return paths
+
+    def _basename_output_paths(self, suffix_candidates):
+        """Return existing basename-pattern output files for this row."""
+        paths = []
+        for suffixes in suffix_candidates.values():
+            for suffix in suffixes:
+                for ext in (".log", ".out"):
+                    candidate = f"{self.basename}{suffix}{ext}"
+                    if os.path.isfile(candidate):
+                        paths.append(candidate)
+        return paths
+
+    def _detect_output_program(self, suffix_candidates):
+        """Detect Gaussian/ORCA from basename outputs or explicit row paths."""
+        from chemsmart.utils.io import detect_program_type_from_files
+
+        for path_group in (
+            self._basename_output_paths(suffix_candidates),
+            self._existing_output_paths(),
+        ):
+            if not path_group:
+                continue
+            try:
+                return detect_program_type_from_files(
+                    path_group,
+                    allowed_programs={"gaussian", "orca"},
+                )
+            except ValueError:
+                continue
+        return None
+
     def _resolve_filenames(self):
         """Auto-discover output files based on basename if not explicitly provided."""
+        from chemsmart.utils.io import get_program_output_extensions
+
         suffix_candidates = {
             "ha_gas": ["_pka_HA_opt", "_pka_HA", "_pka"],
             "a_gas": ["_pka_A_opt", "_pka_A", "_pka_cb"],
             "ha_sp": ["_pka_HA_sp", "_pka_sp"],
             "a_sp": ["_pka_A_sp", "_pka_cb_sp"],
         }
-        extensions = [".log", ".out"]
+
+        program = self._detect_output_program(suffix_candidates)
+        extensions = get_program_output_extensions(program)
+        default_ext = extensions[0]
 
         for field, suffixes in suffix_candidates.items():
             if normalize_table_cell(self.get(field)) is not None:
@@ -2789,7 +2844,9 @@ class PKaOutputTableEntry:
                     break
 
             if not found:
-                self._set_field(field, f"{self.basename}{suffixes[0]}.log")
+                self._set_field(
+                    field, f"{self.basename}{suffixes[0]}{default_ext}"
+                )
 
         self._derive_helper_fields()
 
