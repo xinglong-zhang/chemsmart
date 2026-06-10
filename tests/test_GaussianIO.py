@@ -596,7 +596,7 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
         assert g16_output.version == "G16RevB.01"
-        assert g16_output.date == "2024-06-20 18:09:26"
+        assert g16_output.file_date == "2024-06-20 18:09:26"
         assert g16_output.normal_termination
         assert g16_output.molecule.num_atoms == 40
         assert g16_output.spin == "restricted"

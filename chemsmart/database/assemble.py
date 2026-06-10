@@ -41,7 +41,7 @@ def build_provenance(filename, output):
         "source_file": filename,
         "source_file_hash": sha256_content(output),
         "source_file_size": file_size(filename),
-        "source_file_date": output.date,
+        "source_file_date": output.file_date,
         "program": get_program_type_from_file(filename),
         "program_version": output.version,
         "parser": output.__class__.__name__,

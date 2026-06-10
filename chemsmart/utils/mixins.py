@@ -422,7 +422,7 @@ class GaussianFileMixin(FileMixin):
         return None
 
     @property
-    def date(self):
+    def file_date(self):
         if not self.contents:
             return None
         last_line = self.contents[-1]
@@ -936,7 +936,7 @@ class ORCAFileMixin(FileMixin):
         return None
 
     @property
-    def date(self):
+    def file_date(self):
         for line in self.contents:
             if "Starting time:" in line:
                 match = re.search(orca_date_pattern, line)
