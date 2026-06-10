@@ -267,6 +267,69 @@ class ORCApKaJob(ORCAJob):
     # Job preparation
     # ------------------------------------------------------------------
 
+    def _orca_output_terminates_normally(self, path):
+        if not path or not os.path.exists(path):
+            return False
+        from chemsmart.io.orca.output import ORCAOutput
+
+        try:
+            return ORCAOutput(path).normal_termination
+        except Exception:
+            return False
+
+    def _subjob_output_paths(self, job, legacy_label=None):
+        """Candidate ORCA output files for a pKa sub-job."""
+        paths = []
+        runner = job.jobrunner
+        if runner is not None:
+            runner_out = getattr(runner, "job_outputfile", None)
+            if runner_out:
+                paths.append(runner_out)
+        paths.append(job.outputfile)
+        if legacy_label is not None:
+            paths.append(os.path.join(self.folder, f"{legacy_label}.out"))
+        seen = set()
+        ordered = []
+        for path in paths:
+            if path and path not in seen:
+                seen.add(path)
+                ordered.append(path)
+        return ordered
+
+    def _subjob_is_complete(self, job, legacy_label=None):
+        return any(
+            self._orca_output_terminates_normally(path)
+            for path in self._subjob_output_paths(job, legacy_label)
+        )
+
+    def _subjob_output(self, job, legacy_label=None):
+        from chemsmart.io.orca.output import ORCAOutput
+
+        for path in self._subjob_output_paths(job, legacy_label):
+            if not os.path.exists(path):
+                continue
+            try:
+                output = ORCAOutput(path)
+            except Exception:
+                continue
+            if output.normal_termination:
+                return output
+        return None
+
+    def _bind_subjob(self, job, legacy_label=None):
+        """Keep sub-jobs in the parent folder and resolve scratch/legacy outputs."""
+        job.folder = self.folder
+        job._legacy_outputfile = (
+            os.path.join(self.folder, f"{legacy_label}.out")
+            if legacy_label is not None
+            else None
+        )
+
+        def is_complete():
+            return self._subjob_is_complete(job, legacy_label)
+
+        job.is_complete = is_complete
+
     def _prepare_opt_jobs(self):
         """Create gas phase optimization jobs for HA and A-."""
         protonated_mol, conjugate_base_mol = (
@@ -290,6 +353,8 @@ class ORCApKaJob(ORCAJob):
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        self._bind_subjob(protonated_job, legacy_label=self.label)
+        self._bind_subjob(conjugate_base_job, legacy_label=f"{self.label}_cb")
         return protonated_job, conjugate_base_job
 
     def _prepare_sp_jobs(self):
@@ -299,14 +364,18 @@ class ORCApKaJob(ORCAJob):
         )
 
         # Use optimised geometry if available
-        prot_out = self.protonated_job._output()
-        if prot_out is not None and prot_out.normal_termination:
+        prot_out = self._subjob_output(
+            self.protonated_job, legacy_label=self.label
+        )
+        if prot_out is not None:
             protonated_mol = prot_out.molecule
         else:
             protonated_mol = self.protonated_molecule
 
-        cb_out = self.conjugate_base_job._output()
-        if cb_out is not None and cb_out.normal_termination:
+        cb_out = self._subjob_output(
+            self.conjugate_base_job, legacy_label=f"{self.label}_cb"
+        )
+        if cb_out is not None:
             conjugate_base_mol = cb_out.molecule
         else:
             conjugate_base_mol = self.conjugate_base_molecule
@@ -324,6 +393,10 @@ class ORCApKaJob(ORCAJob):
             label=f"{self.label}_A_sp",
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
+        )
+        self._bind_subjob(protonated_sp_job, legacy_label=f"{self.label}_sp")
+        self._bind_subjob(
+            conjugate_base_sp_job, legacy_label=f"{self.label}_cb_sp"
         )
         return protonated_sp_job, conjugate_base_sp_job
 
@@ -352,6 +425,14 @@ class ORCApKaJob(ORCAJob):
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        if self._ref_basename is not None:
+            self._bind_subjob(ref_acid_job, legacy_label=self._ref_basename)
+            self._bind_subjob(
+                ref_cb_job, legacy_label=self._ref_conjugate_base_label
+            )
+        else:
+            self._bind_subjob(ref_acid_job)
+            self._bind_subjob(ref_cb_job)
         return ref_acid_job, ref_cb_job
 
     def _prepare_ref_sp_jobs(self):
@@ -386,6 +467,17 @@ class ORCApKaJob(ORCAJob):
             jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
+        if self._ref_basename is not None:
+            self._bind_subjob(
+                ref_acid_sp_job, legacy_label=f"{self._ref_basename}_sp"
+            )
+            self._bind_subjob(
+                ref_cb_sp_job,
+                legacy_label=f"{self._ref_conjugate_base_label}_sp",
+            )
+        else:
+            self._bind_subjob(ref_acid_sp_job)
+            self._bind_subjob(ref_cb_sp_job)
         return ref_acid_sp_job, ref_cb_sp_job
 
     # ------------------------------------------------------------------
@@ -396,7 +488,7 @@ class ORCApKaJob(ORCAJob):
         run_phase_jobs(
             parent_runner=self.jobrunner,
             jobs=self.opt_jobs,
-            stop_on_incomplete=True,
+            stop_on_incomplete=False,
             logger_obj=logger,
             phase_label="opt",
         )
@@ -407,7 +499,7 @@ class ORCApKaJob(ORCAJob):
         run_phase_jobs(
             parent_runner=self.jobrunner,
             jobs=self.ref_opt_jobs,
-            stop_on_incomplete=True,
+            stop_on_incomplete=False,
             logger_obj=logger,
             phase_label="ref opt",
         )
