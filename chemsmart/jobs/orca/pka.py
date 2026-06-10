@@ -267,16 +267,6 @@ class ORCApKaJob(ORCAJob):
     # Job preparation
     # ------------------------------------------------------------------
 
-    def _orca_output_terminates_normally(self, path):
-        if not path or not os.path.exists(path):
-            return False
-        from chemsmart.io.orca.output import ORCAOutput
-
-        try:
-            return ORCAOutput(path).normal_termination
-        except Exception:
-            return False
-
     def _subjob_output_paths(self, job, legacy_label=None):
         """Candidate ORCA output files for a pKa sub-job."""
         paths = []
@@ -297,10 +287,17 @@ class ORCApKaJob(ORCAJob):
         return ordered
 
     def _subjob_is_complete(self, job, legacy_label=None):
-        return any(
-            self._orca_output_terminates_normally(path)
-            for path in self._subjob_output_paths(job, legacy_label)
-        )
+        from chemsmart.io.orca.output import ORCAOutput
+
+        for path in self._subjob_output_paths(job, legacy_label):
+            if not path or not os.path.exists(path):
+                continue
+            try:
+                if ORCAOutput(path).normal_termination:
+                    return True
+            except Exception:
+                continue
+        return False
 
     def _subjob_output(self, job, legacy_label=None):
         from chemsmart.io.orca.output import ORCAOutput
@@ -319,11 +316,6 @@ class ORCApKaJob(ORCAJob):
     def _bind_subjob(self, job, legacy_label=None):
         """Keep sub-jobs in the parent folder and resolve scratch/legacy outputs."""
         job.folder = self.folder
-        job._legacy_outputfile = (
-            os.path.join(self.folder, f"{legacy_label}.out")
-            if legacy_label is not None
-            else None
-        )
 
         def is_complete():
             return self._subjob_is_complete(job, legacy_label)

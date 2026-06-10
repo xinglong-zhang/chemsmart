@@ -974,6 +974,93 @@ def test_orca_pka_job_generates_ha_and_a_subjobs(
     assert job.conjugate_base_sp_job.label == "1a_pka_A_sp"
 
 
+def test_orca_pka_subjob_is_complete_uses_parent_folder(
+    single_molecule_xyz_file, orca_jobrunner_no_scratch, tmp_path
+):
+    """Sub-jobs should detect completed outputs in the parent pKa folder."""
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.orca.pka import ORCApKaJob
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+    mol = Molecule.from_filepath(single_molecule_xyz_file)
+    mol.charge = 0
+    mol.multiplicity = 1
+    proton_index = next(
+        i + 1 for i, symbol in enumerate(mol.symbols) if symbol == "H"
+    )
+    settings = ORCApKaJobSettings(
+        proton_index=proton_index,
+        scheme="direct",
+        functional="B3LYP",
+        basis="def2-SVP",
+    )
+    job = ORCApKaJob(
+        molecule=mol,
+        settings=settings,
+        label="5a_pka",
+        jobrunner=orca_jobrunner_no_scratch,
+    )
+    job.folder = str(tmp_path)
+
+    for name in ("5a_pka_HA_opt", "5a_pka_A_opt"):
+        (tmp_path / f"{name}.out").write_text(
+            "****ORCA TERMINATED NORMALLY****\n"
+        )
+
+    assert all(j.is_complete() for j in job.opt_jobs)
+
+
+def test_orca_pka_run_sp_jobs_after_completed_opt(
+    single_molecule_xyz_file, orca_jobrunner_no_scratch, tmp_path, monkeypatch
+):
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.orca.pka import ORCApKaJob
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+    mol = Molecule.from_filepath(single_molecule_xyz_file)
+    mol.charge = 0
+    mol.multiplicity = 1
+    proton_index = next(
+        i + 1 for i, symbol in enumerate(mol.symbols) if symbol == "H"
+    )
+    settings = ORCApKaJobSettings(
+        proton_index=proton_index,
+        scheme="direct",
+        functional="B3LYP",
+        basis="def2-SVP",
+    )
+    job = ORCApKaJob(
+        molecule=mol,
+        settings=settings,
+        label="5a_pka",
+        jobrunner=orca_jobrunner_no_scratch,
+    )
+    job.folder = str(tmp_path)
+
+    for name in ("5a_pka_HA_opt", "5a_pka_A_opt"):
+        (tmp_path / f"{name}.out").write_text(
+            "****ORCA TERMINATED NORMALLY****\n"
+        )
+
+    captured = {"sp_labels": []}
+
+    def _fake_run_phase_jobs(*, jobs=None, jobs_factory=None, **kwargs):
+        phase_jobs = jobs_factory() if jobs_factory is not None else jobs
+        for child_job in phase_jobs:
+            captured["sp_labels"].append(child_job.label)
+
+    monkeypatch.setattr(
+        "chemsmart.jobs.orca.pka.run_phase_jobs",
+        _fake_run_phase_jobs,
+    )
+    monkeypatch.setattr(job, "_run_opt_jobs", lambda: None)
+    monkeypatch.setattr(job, "_subjob_output", lambda *args, **kwargs: None)
+
+    job._run()
+    assert all(j.is_complete() for j in job.opt_jobs)
+    assert captured["sp_labels"] == ["5a_pka_HA_sp", "5a_pka_A_sp"]
+
+
 def test_orca_pka_subjob_is_complete_recognizes_legacy_output(
     single_molecule_xyz_file, orca_jobrunner_no_scratch, tmp_path
 ):
