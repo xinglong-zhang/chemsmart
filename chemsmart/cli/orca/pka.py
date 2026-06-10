@@ -22,8 +22,10 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.pka import (
+    batch_pka_jobs_from_cdxml,
     click_pka_proton_options,
     click_pka_shared_options,
+    is_pka_cdxml_input,
     resolve_pka_submit_proton_options,
     validate_reference_options,
 )
@@ -236,13 +238,16 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
 
 @pka.command("batch", cls=MyCommand)
 @click_job_options
+@click_pka_proton_options
 @click.pass_context
-def batch(ctx, skip_completed, **kwargs):
-    """Table-driven batch ORCA pKa job submission.
+def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
+    """Batch ORCA pKa job submission from a CSV table or multi-molecule CDXML.
 
     \b
-    Table format (4 columns, whitespace or comma-delimited):
+    CSV table format (4 columns, whitespace or comma-delimited):
         filepath    proton_index    charge    multiplicity
+
+    CDXML files create one job per fragment using coloured-proton detection.
 
     \b
     Examples:
@@ -257,6 +262,15 @@ def batch(ctx, skip_completed, **kwargs):
         raise click.UsageError(
             "Batch mode requires the parent ORCA -f/--filename to "
             "specify the table file path."
+        )
+
+    if is_pka_cdxml_input(input_table_path):
+        return batch_pka_jobs_from_cdxml(
+            ctx,
+            skip_completed,
+            _create_orca_pka_jobs_from_molecules,
+            lambda ctx, **invoke_kwargs: ctx.invoke(submit, **invoke_kwargs),
+            **kwargs,
         )
 
     from chemsmart.io.molecules.structure import Molecule

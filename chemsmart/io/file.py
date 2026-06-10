@@ -773,6 +773,90 @@ class PKaCDXFile(CDXFile):
 
         return fragment_atoms
 
+    def _rdkit_atom_idx_by_cdxml_id(self, rdkit_mol, cdxml_id):
+        """Return the 0-based RDKit index for a CDXML node id."""
+        if rdkit_mol is None:
+            return None
+        target_id = int(cdxml_id)
+        for atom in rdkit_mol.GetAtoms():
+            if atom.HasProp("_CDX_ATOM_ID"):
+                if atom.GetIntProp("_CDX_ATOM_ID") == target_id:
+                    return atom.GetIdx()
+        return None
+
+    def _nested_deprotonatable_cdxml_ids(self, node_cdxml_id):
+        """Return nested atom ids with explicit/implicit H inside a fragment node."""
+        root = self._parse_cdxml_root()
+        node = None
+        for candidate in root.iter("n"):
+            if candidate.get("id") == str(node_cdxml_id):
+                node = candidate
+                break
+        if node is None or node.get("NodeType") != "Fragment":
+            return []
+
+        inner_fragment = node.find("fragment")
+        if inner_fragment is None:
+            return []
+
+        ids = []
+        for child in inner_fragment.findall("n"):
+            if child.get("NodeType") == "ExternalConnectionPoint":
+                continue
+            num_h_attr = child.get("NumHydrogens")
+            if num_h_attr is None or int(num_h_attr) < 1:
+                continue
+            element = int(child.get("Element", "0"))
+            if element in (1, 7, 8, 16):
+                child_id = child.get("id")
+                if child_id is not None:
+                    ids.append(child_id)
+        return ids
+
+    def _rdkit_heavy_idx_for_implicit_h(
+        self, rdkit_mol_h, atom, local_idx=None
+    ):
+        """Map a coloured implicit-H heavy atom to a post-AddHs RDKit index."""
+        heavy_idx = self._rdkit_atom_idx_by_cdxml_id(
+            rdkit_mol_h, atom["cdxml_id"]
+        )
+        if heavy_idx is None:
+            for nested_id in self._nested_deprotonatable_cdxml_ids(
+                atom["cdxml_id"]
+            ):
+                heavy_idx = self._rdkit_atom_idx_by_cdxml_id(
+                    rdkit_mol_h, nested_id
+                )
+                if heavy_idx is not None:
+                    break
+
+        if heavy_idx is None and local_idx is not None:
+            if 0 <= local_idx < rdkit_mol_h.GetNumAtoms():
+                heavy_idx = local_idx
+        return heavy_idx
+
+    def _proton_index_from_rdkit_heavy(self, rdkit_mol_h, heavy_idx, atom):
+        """Return the 1-based index of an H bonded to *heavy_idx* after AddHs."""
+        heavy_atom = rdkit_mol_h.GetAtomWithIdx(heavy_idx)
+        h_indices = [
+            bond.GetOtherAtom(heavy_atom).GetIdx()
+            for bond in heavy_atom.GetBonds()
+            if bond.GetOtherAtom(heavy_atom).GetSymbol() == "H"
+        ]
+        if not h_indices:
+            raise ValueError(
+                f"No hydrogen bonded to {atom['symbol']} "
+                f"(CDXML id={atom['cdxml_id']}) after AddHs."
+            )
+
+        proton_index = h_indices[0] + 1
+        logger.info(
+            f"Functional-group H detected on {atom['symbol']} "
+            f"(CDXML id={atom['cdxml_id']}): 1-based Molecule index "
+            f"{proton_index} (implicit_h_color={atom['implicit_h_color']})."
+        )
+        return proton_index
+
     def get_colored_proton_index(self, color_code=None):
         """Identify the 1-based atom index of a proton marked by colour.
 
@@ -946,25 +1030,12 @@ class PKaCDXFile(CDXFile):
         return self._resolve_implicit_h_index(atoms, cdxml_idx, atom)
 
     def _resolve_implicit_h_index(self, atoms, cdxml_idx, atom):
-        """Map a functional-group implicit H to a 1-based Molecule index.
-
-        After ``Chem.AddHs`` the implicit hydrogens are appended to the
-        RDKit molecule.  This helper parses the CDXML with RDKit (without
-        removing Hs), calls ``AddHs``, and finds the H atom bonded to the
-        heavy atom at *cdxml_idx*.
-
-        Args:
-            atoms: Full atom list from ``parse_cdxml_atom_colors``.
-            cdxml_idx: 0-based position of the heavy atom in *atoms*.
-            atom: The dict entry for that heavy atom.
-
-        Returns:
-            int: 1-based index in the final Molecule.
-        """
+        """Map a functional-group implicit H to a 1-based Molecule index."""
         from rdkit import Chem
 
         num_h = atom.get("num_hydrogens")
-        if num_h is None or num_h < 1:
+        nested_ids = self._nested_deprotonatable_cdxml_ids(atom["cdxml_id"])
+        if (num_h is None or num_h < 1) and not nested_ids:
             raise ValueError(
                 f"Atom at CDXML position {cdxml_idx + 1} "
                 f"(id={atom['cdxml_id']}, {atom['symbol']}) has a "
@@ -972,43 +1043,35 @@ class PKaCDXFile(CDXFile):
                 f"{num_h!r}. Cannot identify an implicit hydrogen."
             )
 
-        # Read the molecule with RDKit (same pipeline as _parse_chemdraw_file)
         rdkit_mols = list(
             Chem.MolsFromCDXMLFile(self.filename, removeHs=False)
         )
-        if not rdkit_mols or rdkit_mols[0] is None:
+        if not rdkit_mols:
             raise ValueError(
                 f"RDKit could not read {self.filename} for implicit-H "
                 f"resolution."
             )
-        rdkit_mol = rdkit_mols[0]
-        rdkit_mol = Chem.AddHs(rdkit_mol)
 
-        # The heavy atom keeps its original 0-based index after AddHs.
-        heavy_atom = rdkit_mol.GetAtomWithIdx(cdxml_idx)
-        h_indices = []
-        for bond in heavy_atom.GetBonds():
-            other = bond.GetOtherAtom(heavy_atom)
-            if other.GetSymbol() == "H":
-                h_indices.append(other.GetIdx())
-
-        if not h_indices:
-            raise ValueError(
-                f"No hydrogen bonded to {atom['symbol']} "
-                f"(CDXML id={atom['cdxml_id']}) after AddHs."
+        for rdkit_mol in rdkit_mols:
+            if rdkit_mol is None:
+                continue
+            rdkit_mol_h = Chem.AddHs(rdkit_mol)
+            heavy_idx = self._rdkit_heavy_idx_for_implicit_h(
+                rdkit_mol_h, atom, local_idx=cdxml_idx
             )
+            if heavy_idx is None:
+                continue
+            try:
+                return self._proton_index_from_rdkit_heavy(
+                    rdkit_mol_h, heavy_idx, atom
+                )
+            except ValueError:
+                continue
 
-        # Use the *first* H bonded to this heavy atom (for OH / NH there
-        # is typically exactly one).
-        proton_0based = h_indices[0]
-        proton_index = proton_0based + 1  # 1-based
-
-        logger.info(
-            f"Functional-group H detected on {atom['symbol']} "
-            f"(CDXML id={atom['cdxml_id']}): 1-based Molecule index "
-            f"{proton_index} (implicit_h_color={atom['implicit_h_color']})."
+        raise ValueError(
+            f"No hydrogen bonded to {atom['symbol']} "
+            f"(CDXML id={atom['cdxml_id']}) after AddHs."
         )
-        return proton_index
 
     # ------------------------------------------------------------------
     # PKaMolecule factory
@@ -1279,34 +1342,35 @@ class PKaCDXFile(CDXFile):
                 frag_atoms, fragment_index=frag_idx + 1
             )
 
+            if rdkit_mol_h is None:
+                raise ValueError(
+                    f"RDKit molecule for fragment {frag_idx + 1} is "
+                    f"None; cannot resolve proton index."
+                )
+
             if detection["type"] == "explicit":
-                # Explicit H: local_idx is 0-based in the pre-AddHs atom
-                # list.  After AddHs the original atoms keep their
-                # indices, so 1-based proton_index = local_idx + 1.
-                proton_index = detection["local_idx"] + 1
+                heavy_idx = self._rdkit_atom_idx_by_cdxml_id(
+                    rdkit_mol_h, detection["atom"]["cdxml_id"]
+                )
+                if heavy_idx is None:
+                    heavy_idx = detection["local_idx"]
+                proton_index = heavy_idx + 1
             else:
-                # Implicit / functional-group H: need to find the H
-                # bonded to the heavy atom via RDKit after AddHs.
-                if rdkit_mol_h is None:
-                    raise ValueError(
-                        f"RDKit molecule for fragment {frag_idx + 1} is "
-                        f"None; cannot resolve implicit H index."
-                    )
-                heavy_idx = detection["local_idx"]
-                heavy_atom = rdkit_mol_h.GetAtomWithIdx(heavy_idx)
-                h_indices = [
-                    bond.GetOtherAtom(heavy_atom).GetIdx()
-                    for bond in heavy_atom.GetBonds()
-                    if bond.GetOtherAtom(heavy_atom).GetSymbol() == "H"
-                ]
-                if not h_indices:
+                heavy_idx = self._rdkit_heavy_idx_for_implicit_h(
+                    rdkit_mol_h,
+                    detection["atom"],
+                    local_idx=detection["local_idx"],
+                )
+                if heavy_idx is None:
                     raise ValueError(
                         f"No hydrogen bonded to "
                         f"{detection['atom']['symbol']} "
                         f"(CDXML id={detection['atom']['cdxml_id']}) "
                         f"in fragment {frag_idx + 1} after AddHs."
                     )
-                proton_index = h_indices[0] + 1  # 1-based
+                proton_index = self._proton_index_from_rdkit_heavy(
+                    rdkit_mol_h, heavy_idx, detection["atom"]
+                )
 
             logger.info(
                 f"Fragment {frag_idx + 1}: detected proton at 1-based "

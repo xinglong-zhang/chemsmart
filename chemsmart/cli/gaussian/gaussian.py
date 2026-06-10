@@ -535,11 +535,13 @@ def gaussian(
 
     # Defer filetype validation if the pka subcommand is being invoked,
     # as it has its own table file handling.
+    from chemsmart.cli.pka import is_pka_cdxml_input
     from chemsmart.utils.utils import PKaTableEntry
 
     is_pka_subcommand = ctx.invoked_subcommand == "pka"
-    is_pka_table_input = (
-        is_pka_subcommand and PKaTableEntry.is_submission_table(filename)
+    is_pka_table_input = is_pka_subcommand and (
+        PKaTableEntry.is_submission_table(filename)
+        or is_pka_cdxml_input(filename)
     )
 
     if filename is None:
@@ -559,7 +561,7 @@ def gaussian(
     elif is_pka_table_input:
         job_settings = GaussianJobSettings.default()
         logger.info(
-            "pka subcommand invoked with table file; "
+            "pka subcommand invoked with table or CDXML file; "
             "skipping filetype validation and using default Gaussian settings"
         )
     else:

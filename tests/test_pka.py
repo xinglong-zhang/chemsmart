@@ -919,6 +919,124 @@ def test_sub_pka_batch_reconstructed_run_args_accept_proton_index(
     assert "proton-index is required" not in run_result.output
 
 
+def test_pka_is_submission_table_rejects_cdxml(tmp_path):
+    from chemsmart.utils.utils import PKaTableEntry
+
+    cdxml = tmp_path / "scale.cdxml"
+    cdxml.write_text("<CDXML></CDXML>\n")
+    assert PKaTableEntry.is_submission_table(str(cdxml)) is False
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_cdxml_batch_uses_coloured_proton_fragments(
+    tmp_path, monkeypatch, backend, colored_proton_two_molecule_cdxml_file
+):
+    """CDXML batch should create one job per coloured-proton fragment."""
+    _require_backend_pka_subcommand(sub, backend)
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    captured = {"labels": []}
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
+        "labels"
+    ].append(job.label)
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            colored_proton_two_molecule_cdxml_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Expected 5 fields" not in result.output
+    assert "proton-index is required" not in result.output
+    assert len(captured["labels"]) == 2
+    assert all("_frag" in label for label in captured["labels"])
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_cdxml_batch_ignores_sibling_csv(
+    tmp_path, monkeypatch, backend, colored_proton_two_molecule_cdxml_file
+):
+    """CDXML batch must not fall back to a sibling CSV submission table."""
+    _require_backend_pka_subcommand(sub, backend)
+    sibling_csv = Path(colored_proton_two_molecule_cdxml_file).with_suffix(
+        ".csv"
+    )
+    sibling_csv.write_text(
+        "filepath,proton_index,charge,multiplicity\n"
+        "only_one_row.xyz,1,0,1\n"
+    )
+
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    captured = {"labels": []}
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
+        "labels"
+    ].append(job.label)
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            colored_proton_two_molecule_cdxml_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["labels"]) == 2
+    assert all("_frag" in label for label in captured["labels"])
+
+
 def test_pka_resolve_proton_index_accepts_explicit_index():
     from chemsmart.io.file import PKaCDXFile
 

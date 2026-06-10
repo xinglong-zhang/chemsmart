@@ -175,6 +175,47 @@ def click_pka_shared_options(f):
     return wrapper
 
 
+def is_pka_cdxml_input(filename):
+    """Return True when *filename* is a ChemDraw CDX/CDXML structure file."""
+    return bool(filename) and str(filename).lower().endswith(
+        (".cdx", ".cdxml")
+    )
+
+
+def batch_pka_jobs_from_cdxml(
+    ctx,
+    skip_completed,
+    create_jobs_fn,
+    invoke_submit_fn,
+    **kwargs,
+):
+    """Create pKa jobs from a CDXML batch input via coloured-proton detection."""
+    from chemsmart.io.file import PKaCDXFile
+
+    filename = ctx.obj.get("filename")
+    shared = ctx.obj["pka_shared"]
+    proton_index, color_code = resolve_pka_submit_proton_options(ctx)
+    try:
+        proton_index, pka_molecules = PKaCDXFile.resolve_proton_index(
+            filename, proton_index, color_code
+        )
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+
+    if pka_molecules is not None:
+        return create_jobs_fn(
+            ctx, pka_molecules, shared, skip_completed, **kwargs
+        )
+
+    return invoke_submit_fn(
+        ctx,
+        skip_completed=skip_completed,
+        proton_index=proton_index,
+        color_code=color_code,
+        **kwargs,
+    )
+
+
 def resolve_pka_submit_proton_options(ctx, proton_index=None, color_code=None):
     """Resolve proton options for ``pka submit`` from multiple Click scopes.
 

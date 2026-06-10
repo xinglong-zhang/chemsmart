@@ -2059,8 +2059,8 @@ class TabularDataset:
 
         sep = delimiter
         if sep is None:
-            sep = "," if str(table_path).lower().endswith(".csv") else r"\s+"
-
+            ext = os.path.splitext(table_path)[1].lower()
+            sep = "," if ext == ".csv" else r"\s+"
         try:
             df = pd.read_csv(
                 table_path,
@@ -2071,6 +2071,10 @@ class TabularDataset:
             )
         except pd.errors.EmptyDataError:
             raise ValueError(f"No valid entries found in table: {table_path}")
+        except pd.errors.ParserError as exc:
+            raise ValueError(
+                f"Failed to parse submission table '{table_path}': {exc}"
+            ) from exc
 
         if df.empty:
             raise ValueError(f"No valid entries found in table: {table_path}")
@@ -2421,6 +2425,8 @@ class PKaTableEntry:
         """Return True when *table_path* has pKa submission-table columns."""
         if not table_path:
             return False
+        if str(table_path).lower().endswith((".cdx", ".cdxml")):
+            return False
         try:
             dataset = TabularDataset.parse_table(
                 table_path=table_path,
@@ -2432,6 +2438,7 @@ class PKaTableEntry:
         except (ValueError, FileNotFoundError, OSError):
             return False
 
+    @staticmethod
     def parse_pka_table(
         table_path: str,
         delimiter: str = None,

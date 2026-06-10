@@ -2711,6 +2711,21 @@ class TestpKaCDXFile:
         assert isinstance(pka_mol, PKaMolecule)
         assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
 
+    def test_get_pka_molecules_auto_nested_fragment_groups(self):
+        """Nested ChemDraw fragment groups resolve coloured acidic protons."""
+        from pathlib import Path
+
+        cdxml = Path(__file__).resolve().parents[1] / "pka_scale.cdxml"
+        if not cdxml.is_file():
+            pytest.skip("pka_scale.cdxml not available in workspace")
+
+        cdx_file = PKaCDXFile(filename=str(cdxml))
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 5
+        for pka_mol in pka_mols:
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
     def test_fragment_colors_match_flat_colors(
         self, colored_proton_cdxml_file
     ):

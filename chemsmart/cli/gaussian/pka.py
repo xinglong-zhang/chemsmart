@@ -22,8 +22,10 @@ import click
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.pka import (
+    batch_pka_jobs_from_cdxml,
     click_pka_proton_options,
     click_pka_shared_options,
+    is_pka_cdxml_input,
     resolve_pka_submit_proton_options,
     validate_reference_options,
 )
@@ -287,11 +289,13 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
 
 @pka.command("batch", cls=MyCommand)
 @click_job_options
+@click_pka_proton_options
 @click.pass_context
-def batch(ctx, skip_completed, **kwargs):
-    """Table-driven batch pKa job submission.
+def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
+    """Batch pKa job submission from a CSV table or multi-molecule CDXML.
 
-    Returns a list of pKa jobs created from the input table, one per row.
+    CSV tables provide filepath, proton_index, charge, and multiplicity per row.
+    CDXML files create one job per fragment using coloured-proton detection.
     """
     shared = ctx.obj["pka_shared"]
     jobrunner = ctx.obj["jobrunner"]
@@ -300,6 +304,15 @@ def batch(ctx, skip_completed, **kwargs):
     if not input_table_path:
         raise click.UsageError(
             "Batch mode requires the parent Gaussian -f/--filename to specify the table file path."
+        )
+
+    if is_pka_cdxml_input(input_table_path):
+        return batch_pka_jobs_from_cdxml(
+            ctx,
+            skip_completed,
+            _create_pka_jobs_from_molecules,
+            lambda ctx, **invoke_kwargs: ctx.invoke(submit, **invoke_kwargs),
+            **kwargs,
         )
 
     from chemsmart.io.molecules.structure import Molecule

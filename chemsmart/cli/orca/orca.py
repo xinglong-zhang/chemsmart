@@ -471,11 +471,13 @@ def orca(
 
     # Defer filetype validation if the pka subcommand is being invoked,
     # as it has its own table file handling.
+    from chemsmart.cli.pka import is_pka_cdxml_input
     from chemsmart.utils.utils import PKaTableEntry
 
     is_pka_subcommand = ctx.invoked_subcommand == "pka"
-    is_pka_table_input = (
-        is_pka_subcommand and PKaTableEntry.is_submission_table(filename)
+    is_pka_table_input = is_pka_subcommand and (
+        PKaTableEntry.is_submission_table(filename)
+        or is_pka_cdxml_input(filename)
     )
 
     if filename is None:
@@ -601,10 +603,10 @@ def orca(
     # obtain molecule structure from file or PubChem
     molecules = None
 
-    # Skip molecule loading for pKa table files (handled by pKa batch)
+    # Skip molecule loading for pKa table/CDXML files (handled by pKa batch)
     if is_pka_table_input:
         logger.debug(
-            f"Skipping molecule loading for pKa table file: {filename}"
+            f"Skipping molecule loading for pKa table/CDXML file: {filename}"
         )
         molecules = None
     else:
