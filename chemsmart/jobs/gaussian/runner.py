@@ -832,10 +832,18 @@ class FakeGaussian:
                 )
             g.write(" Mulliken charges:\n")
             g.write("               1\n")
-            total_charge = 0.0
+            total_charge = self.charge
+            running_charge = 0.0
             for i in range(self.num_atoms):
-                charge = round(random() * 0.2 - 0.1, 6)  # small random charge
-                total_charge += charge
+                if i < self.num_atoms - 1:
+                    charge = round(
+                        random() * 0.2 - 0.1, 6
+                    )  # small random charge
+                    running_charge += charge
+                else:
+                    charge = round(
+                        total_charge - running_charge, 6
+                    )  # balance charge
                 g.write(
                     f"{i + 1:>7} {self.atomic_symbols[i]:>3} {charge:>12.6f}\n"
                 )  # not real values
