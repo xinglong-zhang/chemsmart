@@ -1725,6 +1725,40 @@ class TestPKaTableParsing:
         assert entries[0]["ha_gas"] == f"{tmp_path}/a.log"
         assert entries[0]["pka_ref"] == 14.0
 
+    def test_parse_pka_output_table_empty_cells_become_none(self, tmp_path):
+        """Blank CSV cells must not remain as float NaN in parsed entries."""
+        from chemsmart.utils.utils import parse_pka_output_table
+
+        ref_log = tmp_path / "ref_HA_opt.log"
+        ref_log.write_text("dummy")
+
+        table_file = tmp_path / "outputs.csv"
+        table_file.write_text(
+            "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+            f"system1,,,,,{ref_log},{ref_log},,,10.6\n"
+        )
+
+        entries = parse_pka_output_table(str(table_file))
+        assert entries[0].ha_gas is None
+        assert entries[0].href_gas == str(ref_log)
+
+    def test_first_output_file_from_table_skips_blank_cells(self, tmp_path):
+        """batch-analyze auto-detect must ignore NaN/blank path cells."""
+        from chemsmart.cli.pka import _first_output_file_from_table
+        from chemsmart.utils.utils import PKaOutputTable
+
+        ref_log = tmp_path / "6a_HA_opt.log"
+        ref_log.write_text("dummy")
+
+        table_file = tmp_path / "outputs.csv"
+        table_file.write_text(
+            "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+            f"system1,,,,,{ref_log},,,,10.6\n"
+        )
+
+        table = PKaOutputTable.from_file(str(table_file))
+        assert _first_output_file_from_table(table) == str(ref_log)
+
     def test_parse_pka_output_table_empty(self, tmp_path):
         """Test that an empty output table raises ValueError."""
         from chemsmart.utils.utils import parse_pka_output_table
@@ -1866,6 +1900,82 @@ class TestPKaTableParsing:
         assert entries[1]["href_sp"] == "ref1_sp.log"  # carried forward
         assert entries[1]["ref_sp"] == "refbase1_sp.log"  # carried forward
         assert entries[1]["pka_ref"] == 4.5  # kept own value
+
+    def test_pka_output_table_entry_resolve_filenames_from_basename(
+        self, tmp_path, monkeypatch
+    ):
+        """Blank result-file cells resolve to <basename>_<suffix>.log files."""
+        from chemsmart.utils.utils import PKaOutputTableEntry
+
+        monkeypatch.chdir(tmp_path)
+        for name in [
+            "pka_scale_frag3_pka_HA_opt.log",
+            "pka_scale_frag3_pka_A_opt.log",
+            "pka_scale_frag3_pka_HA_sp.log",
+            "pka_scale_frag3_pka_A_sp.log",
+        ]:
+            (tmp_path / name).write_text("dummy")
+
+        entry = PKaOutputTableEntry(
+            {
+                "basename": "pka_scale_frag3",
+                "ha_gas": None,
+                "a_gas": None,
+                "ha_sp": None,
+                "a_sp": None,
+            },
+            row_number=4,
+        )
+        entry.validate(check_file_exists=True, scheme="direct")
+
+        assert entry["ha_gas"] == "pka_scale_frag3_pka_HA_opt.log"
+        assert entry["a_gas"] == "pka_scale_frag3_pka_A_opt.log"
+        assert entry["ha_sp"] == "pka_scale_frag3_pka_HA_sp.log"
+        assert entry["a_sp"] == "pka_scale_frag3_pka_A_sp.log"
+
+    def test_pka_output_table_prepare_autodetects_files_and_inherits_references(
+        self, tmp_path, monkeypatch
+    ):
+        """prepare() auto-discovers output files and carries forward references."""
+        from chemsmart.utils.utils import PKaOutputTable
+
+        monkeypatch.chdir(tmp_path)
+        for basename in ("pka_scale_frag1", "pka_scale_frag2"):
+            for suffix in (
+                "_pka_HA_opt",
+                "_pka_A_opt",
+                "_pka_HA_sp",
+                "_pka_A_sp",
+            ):
+                (tmp_path / f"{basename}{suffix}.log").write_text("dummy")
+        for name in (
+            "6a_HA_opt.log",
+            "6a_A_opt.log",
+            "6a_HA_sp.log",
+            "6a_A_sp.log",
+        ):
+            (tmp_path / name).write_text("dummy")
+
+        table_file = tmp_path / "pka_output.csv"
+        table_file.write_text(
+            "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+            "pka_scale_frag1,,,,,6a_HA_opt.log,6a_A_opt.log,6a_HA_sp.log,6a_A_sp.log,10.6\n"
+            "pka_scale_frag2,,,,,,,,,\n"
+        )
+
+        pka_table = PKaOutputTable.from_file(str(table_file))
+        pka_table.prepare(check_file_exists=True, scheme="proton exchange")
+
+        for entry in pka_table.entries:
+            assert entry["ha_gas"] == f"{entry.basename}_pka_HA_opt.log"
+            assert entry["a_gas"] == f"{entry.basename}_pka_A_opt.log"
+            assert entry["ha_sp"] == f"{entry.basename}_pka_HA_sp.log"
+            assert entry["a_sp"] == f"{entry.basename}_pka_A_sp.log"
+            assert entry["href_gas"] == "6a_HA_opt.log"
+            assert entry["ref_gas"] == "6a_A_opt.log"
+            assert entry["href_sp"] == "6a_HA_sp.log"
+            assert entry["ref_sp"] == "6a_A_sp.log"
+            assert entry["pka_ref"] == 10.6
 
     def test_pka_output_table_entry_validate_valid(self, tmp_path):
         """Test validation passes for a complete, valid entry."""

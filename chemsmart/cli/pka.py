@@ -517,6 +517,16 @@ def _resolve_batch_output_cls(program):
         raise ValueError(f"Unsupported program: {program}")
 
 
+def _is_existing_output_path(value):
+    """Return True when *value* is a non-empty path to an existing file."""
+    from chemsmart.utils.utils import normalize_table_cell
+
+    path = normalize_table_cell(value)
+    if path is None:
+        return False
+    return os.path.isfile(str(path))
+
+
 def _first_output_file_from_table(pka_table):
     """Return the first existing output path from a prepared pKa table.
 
@@ -525,10 +535,19 @@ def _first_output_file_from_table(pka_table):
     first_entry = next(iter(pka_table), None)
     if first_entry is None:
         raise click.UsageError("Output table is empty.")
-    for col in ["ha_gas", "a_gas", "href_gas", "ref_gas"]:
+    for col in (
+        "ha_gas",
+        "a_gas",
+        "ha_sp",
+        "a_sp",
+        "href_gas",
+        "ref_gas",
+        "href_sp",
+        "ref_sp",
+    ):
         val = first_entry.get(col)
-        if val and os.path.isfile(val):
-            return val
+        if _is_existing_output_path(val):
+            return str(val).strip()
     return None
 
 

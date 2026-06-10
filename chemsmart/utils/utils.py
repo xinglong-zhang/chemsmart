@@ -2028,6 +2028,25 @@ def deduplicate_string_keywords(route_string, keywords):
 # ---------------------------------------------------------------------------
 
 
+def normalize_table_cell(value):
+    """Convert blank/NaN table cells to None for stable downstream handling."""
+    if value is None:
+        return None
+    if isinstance(value, float) and np.isnan(value):
+        return None
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return None
+    except (TypeError, ImportError):
+        pass
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped if stripped else None
+    return value
+
+
 class TabularDataset:
     """Generic DataFrame-backed dataset for high-throughput workflows."""
 
@@ -2277,6 +2296,7 @@ class PKaTableEntry:
         return None
 
     def _set_field(self, key, value):
+        value = normalize_table_cell(value)
         canonical = self._canonical_key(key)
         if canonical == "filepath":
             self.filepath = value
@@ -2656,6 +2676,7 @@ class PKaOutputTableEntry:
         return None
 
     def _set_field(self, key, value):
+        value = normalize_table_cell(value)
         canonical = self._canonical_key(key)
         if canonical == "basename":
             self.basename = value
@@ -2753,10 +2774,7 @@ class PKaOutputTableEntry:
         extensions = [".log", ".out"]
 
         for field, suffixes in suffix_candidates.items():
-            current_val = getattr(self, field)
-            if current_val is not None and not (
-                isinstance(current_val, float) and np.isnan(current_val)
-            ):
+            if normalize_table_cell(self.get(field)) is not None:
                 continue
 
             found = False
@@ -2764,14 +2782,16 @@ class PKaOutputTableEntry:
                 for ext in extensions:
                     candidate = f"{self.basename}{suffix}{ext}"
                     if os.path.exists(candidate):
-                        setattr(self, field, candidate)
+                        self._set_field(field, candidate)
                         found = True
                         break
                 if found:
                     break
 
             if not found:
-                setattr(self, field, f"{self.basename}{suffixes[0]}.log")
+                self._set_field(field, f"{self.basename}{suffixes[0]}.log")
+
+        self._derive_helper_fields()
 
     def get(self, key, default=None):
         if key in self._data:
