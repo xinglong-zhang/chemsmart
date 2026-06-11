@@ -3111,24 +3111,21 @@ class PKaOutputTable:
             "delta_G_diss_kcal_mol", result["delta_G_soln_kcal_mol"]
         )
 
-    def echo_pka_output_table_results(
-        self,
+    @staticmethod
+    def format_pka_batch_results_table(
+        entries,
         results,
-        output_results,
         temperature,
         pressure,
         scheme=None,
     ):
+        """Return the formatted batch pKa summary table shown on stdout."""
         display_scheme = scheme
         if display_scheme is None and results:
             display_scheme = results[0].get("scheme")
 
-        if output_results is not None:
-            self.export_results(output_results, results, scheme=scheme)
-            return f"pKa results written to {output_results}"
-
-        header = self._scheme_batch_header(display_scheme)
-        dg_label = self._scheme_delta_g_label(display_scheme)
+        header = PKaOutputTable._scheme_batch_header(display_scheme)
+        dg_label = PKaOutputTable._scheme_delta_g_label(display_scheme)
 
         lines = [
             "=" * 78,
@@ -3140,7 +3137,7 @@ class PKaOutputTable:
             "-" * 78,
         ]
 
-        for entry, result in zip(self, results):
+        for entry, result in zip(entries, results):
             dg_value = PKaOutputTable.pka_scheme_delta_g_value(result, scheme)
             lines.append(
                 f"{entry['basename']:<30} "
@@ -3149,6 +3146,31 @@ class PKaOutputTable:
             )
         lines.append("=" * 78)
         return "\n".join(lines)
+
+    def echo_pka_output_table_results(
+        self,
+        results,
+        output_results,
+        temperature,
+        pressure,
+        scheme=None,
+    ):
+        table_text = self.format_pka_batch_results_table(
+            self.entries,
+            results,
+            temperature,
+            pressure,
+            scheme=scheme,
+        )
+        if output_results is not None:
+            self.export_results(
+                output_results,
+                results=results,
+                scheme=scheme,
+                temperature=temperature,
+                pressure=pressure,
+            )
+        return table_text
 
     @staticmethod
     def _scheme_batch_header(scheme):
@@ -3174,33 +3196,21 @@ class PKaOutputTable:
         results: list,
         output_path: str,
         scheme: str = None,
+        temperature: float = 298.15,
+        pressure: float = 1.0,
     ) -> None:
-        """Export a table with original columns plus computed pKa values."""
-        import pandas as pd
-
-        if scheme is None and results:
-            scheme = results[0].get("scheme")
-        delta_g_column = (
-            PKaOutputTable.pka_scheme_delta_g_key(scheme)
-            or "delta_G_soln_kcal_mol"
+        """Write the formatted batch pKa summary table to *output_path*."""
+        table_text = PKaOutputTable.format_pka_batch_results_table(
+            entries,
+            results,
+            temperature,
+            pressure,
+            scheme=scheme,
         )
+        with open(output_path, "w", encoding="utf-8") as fh:
+            fh.write(table_text + "\n")
 
-        rows = []
-        for entry, result in zip(entries, results):
-            row = entry.to_dict()
-            row["pka"] = result["pKa"]
-            row[delta_g_column] = PKaOutputTable.pka_scheme_delta_g_value(
-                result, scheme
-            )
-            rows.append(row)
-
-        df = pd.DataFrame(rows)
-        if str(output_path).lower().endswith(".csv"):
-            df.to_csv(output_path, index=False)
-        else:
-            df.to_csv(output_path, index=False, sep="\t")
-
-        logger.info(f"pKa results table written to {output_path}")
+        logger.info(f"pKa results written to {output_path}")
 
     def __len__(self):
         return len(self.entries)
@@ -3271,14 +3281,21 @@ class PKaOutputTable:
         return self.results
 
     def export_results(
-        self, output_path: str, results: list = None, scheme: str = None
+        self,
+        output_path: str,
+        results: list = None,
+        scheme: str = None,
+        temperature: float = 298.15,
+        pressure: float = 1.0,
     ) -> None:
-        """Export computed pKa results for this table."""
+        """Export the formatted batch pKa summary table for this table."""
         self.export_pka_results_table(
             self.entries,
             self.results if results is None else results,
             output_path,
             scheme=scheme,
+            temperature=temperature,
+            pressure=pressure,
         )
 
     def validate_pka_table_entries(

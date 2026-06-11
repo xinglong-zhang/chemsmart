@@ -2144,11 +2144,10 @@ class TestPKaTableParsing:
         assert d["ha_gas"] == "a.log"
         assert d["pka_ref"] == 6.75
 
-    def test_export_pka_results_table_csv(self, tmp_path):
-        """Test that export writes CSV with pka column appended."""
-        import pandas as pd
-
+    def test_export_pka_results_table_matches_stdout_format(self, tmp_path):
+        """-O output should match the formatted batch table printed to stdout."""
         from chemsmart.utils.utils import (
+            PKaOutputTable,
             PKaOutputTableEntry,
             export_pka_results_table,
         )
@@ -2159,12 +2158,12 @@ class TestPKaTableParsing:
                     "basename": "sys1",
                     "ha_gas": "a.log",
                     "a_gas": "b.log",
-                    "hb_gas": "c.log",
-                    "b_gas": "d.log",
+                    "href_gas": "c.log",
+                    "ref_gas": "d.log",
                     "ha_sp": "e.log",
                     "a_sp": "f.log",
-                    "hb_sp": "g.log",
-                    "b_sp": "h.log",
+                    "href_sp": "g.log",
+                    "ref_sp": "h.log",
                     "pka_ref": 6.75,
                 }
             ),
@@ -2173,19 +2172,32 @@ class TestPKaTableParsing:
             {"pKa": 12.34, "delta_G_soln_kcal_mol": 7.89, "basename": "sys1"},
         ]
 
-        out_path = tmp_path / "results.csv"
-        export_pka_results_table(entries, results, str(out_path))
+        expected = PKaOutputTable.format_pka_batch_results_table(
+            entries,
+            results,
+            temperature=333.15,
+            pressure=1.0,
+            scheme="proton exchange",
+        )
 
-        df = pd.read_csv(str(out_path))
-        assert "pka" in df.columns
-        assert "delta_G_soln_kcal_mol" in df.columns
-        assert len(df) == 1
-        assert abs(df["pka"].iloc[0] - 12.34) < 0.01
+        out_path = tmp_path / "results.dat"
+        export_pka_results_table(
+            entries,
+            results,
+            str(out_path),
+            scheme="proton exchange",
+            temperature=333.15,
+            pressure=1.0,
+        )
+
+        assert out_path.read_text(encoding="utf-8").rstrip("\n") == expected
+        assert "Batch pKa Results (Dual-level Proton Exchange)" in expected
+        assert "sys1" in expected
+        assert "12.34" in expected
+        assert "7.8900" in expected
 
     def test_export_pka_results_table_direct_scheme(self, tmp_path):
-        """Direct-cycle export writes delta_G_diss_kcal_mol, not delta_G_soln."""
-        import pandas as pd
-
+        """Direct-cycle export uses the ΔG_diss column label."""
         from chemsmart.utils.utils import (
             PKaOutputTableEntry,
             export_pka_results_table,
@@ -2212,51 +2224,59 @@ class TestPKaTableParsing:
             }
         ]
 
-        out_path = tmp_path / "results_direct.csv"
+        out_path = tmp_path / "results_direct.dat"
         export_pka_results_table(
             entries, results, str(out_path), scheme="direct"
         )
 
-        df = pd.read_csv(str(out_path))
-        assert "delta_G_diss_kcal_mol" in df.columns
-        assert "delta_G_soln_kcal_mol" not in df.columns
-        assert abs(df["delta_G_diss_kcal_mol"].iloc[0] - 6.1) < 0.01
+        text = out_path.read_text(encoding="utf-8")
+        assert "Batch pKa Results (Direct Dissociation)" in text
+        assert "ΔG_diss (kcal/mol)" in text
+        assert "6.1000" in text
 
-    def test_export_pka_results_table_txt(self, tmp_path):
-        """Test that export writes tab-delimited TXT for non-.csv extension."""
-        import pandas as pd
-
-        from chemsmart.utils.utils import (
-            PKaOutputTableEntry,
-            export_pka_results_table,
-        )
+    def test_echo_pka_output_table_results_writes_same_table_to_file(
+        self, tmp_path
+    ):
+        """batch-analyze -O should write the same table echoed to stdout."""
+        from chemsmart.utils.utils import PKaOutputTable, PKaOutputTableEntry
 
         entries = [
             PKaOutputTableEntry(
                 {
-                    "basename": "sys1",
+                    "basename": "phenol",
                     "ha_gas": "a.log",
                     "a_gas": "b.log",
-                    "hb_gas": "c.log",
-                    "b_gas": "d.log",
+                    "href_gas": "c.log",
+                    "ref_gas": "d.log",
                     "ha_sp": "e.log",
                     "a_sp": "f.log",
-                    "hb_sp": "g.log",
-                    "b_sp": "h.log",
+                    "href_sp": "g.log",
+                    "ref_sp": "h.log",
                     "pka_ref": 6.75,
                 }
             ),
         ]
         results = [
-            {"pKa": 5.0, "delta_G_soln_kcal_mol": -2.1, "basename": "sys1"},
+            {
+                "pKa": 10.12,
+                "delta_G_soln_kcal_mol": 13.4567,
+                "basename": "phenol",
+            },
         ]
+        table = PKaOutputTable(entries)
+        out_path = tmp_path / "output.dat"
 
-        out_path = tmp_path / "results.txt"
-        export_pka_results_table(entries, results, str(out_path))
+        stdout_text = table.echo_pka_output_table_results(
+            results=results,
+            output_results=str(out_path),
+            temperature=298.15,
+            pressure=1.0,
+            scheme="proton exchange",
+        )
 
-        df = pd.read_csv(str(out_path), sep="\t")
-        assert "pka" in df.columns
-        assert len(df) == 1
+        assert stdout_text == out_path.read_text(encoding="utf-8").rstrip("\n")
+        assert "phenol" in stdout_text
+        assert "10.12" in stdout_text
 
     def test_parse_and_resolve_multi_row_table(self, tmp_path):
         """End-to-end test: parse → resolve → validate on a multi-row table."""

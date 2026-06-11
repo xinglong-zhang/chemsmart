@@ -169,11 +169,11 @@ These columns are required for the proton exchange cycle and are ignored for dir
    For proton exchange, if reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values
    from the most recently defined reference acid in a previous row will be used.
 
-The results, including the computed pKa for each entry, are written to the file specified by ``-O`` /
-``--output-results`` or printed to stdout if omitted. The appended ΔG column depends on the analysis scheme:
+The formatted batch summary table is printed to stdout. When ``-O`` / ``--output-results`` is given, the same table is
+also written to that file. The ΔG column header depends on the analysis scheme:
 
--  Proton exchange: ``delta_G_soln_kcal_mol``
--  Direct dissociation: ``delta_G_diss_kcal_mol``
+-  Proton exchange: ``ΔG_soln (kcal/mol)``
+-  Direct dissociation: ``ΔG_diss (kcal/mol)``
 
 Computing pKa from Output Files
 ===============================
@@ -447,10 +447,10 @@ When computing pKa from output files, CHEMSMART prints a detailed summary. The f
      *** Computed pKa(HA) = 52.70 ***
    ==============================================================================
 
-**Batch analyze (stdout)**
+**Batch analyze output**
 
-When ``-O`` / ``--output-results`` is omitted, ``batch-analyze`` prints a compact table whose ΔG column header matches
-the scheme:
+``batch-analyze`` prints a compact table whose ΔG column header matches the scheme. The same formatted report is written
+to the ``-O`` / ``--output-results`` file when that option is provided:
 
 .. code:: text
 

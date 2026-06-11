@@ -1284,7 +1284,7 @@ def analyze(
     "--output-results",
     type=click.Path(),
     default=None,
-    help="Path to write results table (.csv/.txt).  Stdout if omitted.",
+    help="Path to write the formatted results report.  Stdout if omitted.",
 )
 @click.option(
     "-p",
