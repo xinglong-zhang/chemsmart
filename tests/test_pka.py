@@ -104,9 +104,9 @@ def test_run_pka_detects_gaussian_and_dispatches(tmp_path, monkeypatch):
     def _fake_print(*args, **kwargs):
         called["kwargs"] = kwargs
 
-    from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+    import chemsmart.cli.pka as pka_cli
 
-    monkeypatch.setattr(Gaussian16pKaOutput, "print_pka_summary", _fake_print)
+    monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
 
     runner = CliRunner()
     result = _invoke_pka(runner, files)
@@ -125,9 +125,9 @@ def test_run_pka_direct_analyze_dispatches(tmp_path, monkeypatch):
     def _fake_print(*args, **kwargs):
         called["kwargs"] = kwargs
 
-    from chemsmart.io.gaussian.output import Gaussian16pKaOutput
+    import chemsmart.cli.pka as pka_cli
 
-    monkeypatch.setattr(Gaussian16pKaOutput, "print_pka_summary", _fake_print)
+    monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
 
     runner = CliRunner()
     result = _invoke_pka_direct(runner, files, delta_g_proton=-270.0)
@@ -169,9 +169,9 @@ def test_run_pka_detects_orca_and_dispatches(tmp_path, monkeypatch):
     def _fake_print(*args, **kwargs):
         called["kwargs"] = kwargs
 
-    from chemsmart.io.orca.output import ORCApKaOutput
+    import chemsmart.cli.pka as pka_cli
 
-    monkeypatch.setattr(ORCApKaOutput, "print_pka_summary", _fake_print)
+    monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
 
     runner = CliRunner()
     result = _invoke_pka(runner, files)
@@ -181,30 +181,196 @@ def test_run_pka_detects_orca_and_dispatches(tmp_path, monkeypatch):
     assert called["kwargs"]["href_gas_file"] == files["hb.log"]
 
 
-def test_run_pka_mixed_programs_raises(tmp_path):
+def test_run_pka_mixed_programs_analyze(tmp_path, monkeypatch):
     files = _build_outputs(tmp_path, "gaussian")
     _write_signature_file(Path(files["bs.log"]), "orca")
+    called = {}
+
+    def _fake_print(*args, **kwargs):
+        called["kwargs"] = kwargs
+
+    import chemsmart.cli.pka as pka_cli
+
+    monkeypatch.setattr(pka_cli, "print_pka_summary", _fake_print)
 
     runner = CliRunner()
     result = _invoke_pka(runner, files)
 
-    assert result.exit_code != 0
-    assert isinstance(result.exception, ValueError)
-    assert "mixed program types" in str(result.exception).lower()
+    assert result.exit_code == 0, result.output
+    assert called["kwargs"]["href_solv_file"] == files["hbs.log"]
+    assert called["kwargs"]["ref_solv_file"] == files["bs.log"]
 
 
-def test_run_pka_unknown_program_raises(tmp_path):
+class _FakeThermochemistry:
+    def __init__(self, filename, **kwargs):
+        self.filename = filename
+        self.electronic_energy = -627.0
+        self.qrrho_gibbs_free_energy = -628.0
+
+
+def _install_fake_thermochemistry(monkeypatch, constructed=None):
+    constructed = [] if constructed is None else constructed
+
+    def _from_filepath(cls, filepath, **kwargs):
+        constructed.append(Path(filepath).name)
+        return _FakeThermochemistry(filepath, **kwargs)
+
+    monkeypatch.setattr(
+        "chemsmart.analysis.thermochemistry.Thermochemistry.from_filepath",
+        classmethod(_from_filepath),
+    )
+    return constructed
+
+
+def test_run_pka_batch_analyze_orca_outputs(tmp_path, monkeypatch):
+    """batch-analyze should build Thermochemistry objects for ORCA files."""
+    monkeypatch.chdir(tmp_path)
+    basename = "target"
+    for suffix in ("_pka_HA_opt", "_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+        (tmp_path / f"{basename}{suffix}.out").write_text(
+            "* O   R   C   A *\n"
+        )
+    for name in ("ref_HA_opt", "ref_A_opt", "ref_HA_sp", "ref_A_sp"):
+        (tmp_path / f"{name}.out").write_text("* O   R   C   A *\n")
+
+    table = tmp_path / "pka_output.csv"
+    table.write_text(
+        "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+        f"{basename},,,,,ref_HA_opt.out,ref_A_opt.out,ref_HA_sp.out,ref_A_sp.out,10.6\n"
+    )
+
+    constructed = _install_fake_thermochemistry(monkeypatch)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        [
+            "pka",
+            "-T",
+            "333.15",
+            "-csg",
+            "100",
+            "-ch",
+            "100",
+            "batch-analyze",
+            "-o",
+            str(table),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "target_pka_HA_sp.out" in constructed
+    assert "ref_HA_sp.out" in constructed
+    assert "pKa" in result.output
+
+
+def test_run_pka_batch_analyze_mixed_gaussian_orca(tmp_path, monkeypatch):
+    """batch-analyze stays program-agnostic via Thermochemistry.from_filepath."""
+    monkeypatch.chdir(tmp_path)
+    basename = "target"
+    for suffix in ("_pka_HA_opt", "_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+        (tmp_path / f"{basename}{suffix}.out").write_text(
+            "* O   R   C   A *\n"
+        )
+    for name in ("ref_HA_opt", "ref_A_opt", "ref_HA_sp", "ref_A_sp"):
+        (tmp_path / f"{name}.log").write_text("Gaussian, Inc.\n")
+
+    table = tmp_path / "pka_output.csv"
+    table.write_text(
+        "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+        f"{basename},,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,10.6\n"
+    )
+
+    constructed = _install_fake_thermochemistry(monkeypatch)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        [
+            "pka",
+            "batch-analyze",
+            "-o",
+            str(table),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "target_pka_HA_sp.out" in constructed
+    assert "ref_HA_sp.log" in constructed
+    assert "pKa" in result.output
+
+
+def test_run_pka_batch_analyze_gaussian_outputs(tmp_path, monkeypatch):
+    """batch-analyze should preserve Gaussian table behavior."""
+    monkeypatch.chdir(tmp_path)
+    basename = "target"
+    for suffix in ("_pka_HA_opt", "_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
+        (tmp_path / f"{basename}{suffix}.log").write_text("Gaussian, Inc.\n")
+    for name in ("ref_HA_opt", "ref_A_opt", "ref_HA_sp", "ref_A_sp"):
+        (tmp_path / f"{name}.log").write_text("Gaussian, Inc.\n")
+
+    table = tmp_path / "pka_output.csv"
+    table.write_text(
+        "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
+        f"{basename},,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,6.75\n"
+    )
+
+    constructed = _install_fake_thermochemistry(monkeypatch)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        run,
+        ["pka", "batch-analyze", "-o", str(table)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "target_pka_HA_opt.log" in constructed
+    assert "ref_HA_sp.log" in constructed
+    assert "pKa" in result.output
+
+
+def test_pka_thermochemistry_missing_scf_energy(tmp_path, monkeypatch):
+    class _MissingScfThermo:
+        electronic_energy = None
+        qrrho_gibbs_free_energy = -1.0
+
+    monkeypatch.setattr(
+        "chemsmart.analysis.thermochemistry.Thermochemistry.from_filepath",
+        classmethod(lambda cls, filepath, **kwargs: _MissingScfThermo()),
+    )
+
+    from chemsmart.cli.pka import pka_solvent_scf_energy
+
+    with pytest.raises(ValueError, match="Could not extract SCF energy"):
+        pka_solvent_scf_energy(str(tmp_path / "missing.out"))
+
+
+def test_pka_thermochemistry_missing_qh_gibbs(tmp_path, monkeypatch):
+    class _MissingQhThermo:
+        electronic_energy = -1.0
+        qrrho_gibbs_free_energy = None
+
+    monkeypatch.setattr(
+        "chemsmart.analysis.thermochemistry.Thermochemistry.from_filepath",
+        classmethod(lambda cls, filepath, **kwargs: _MissingQhThermo()),
+    )
+
+    from chemsmart.cli.pka import pka_gas_phase_data
+
+    with pytest.raises(
+        ValueError, match="Could not extract quasi-harmonic Gibbs free energy"
+    ):
+        pka_gas_phase_data(str(tmp_path / "gas.out"))
+
+
+def test_run_pka_unparseable_output_raises(tmp_path):
+    """analyze no longer pre-detects program type; parsing fails on bad files."""
     files = _build_outputs(tmp_path, "unknown")
 
     runner = CliRunner()
     result = _invoke_pka(runner, files)
 
     assert result.exit_code != 0
-    assert isinstance(result.exception, ValueError)
-    assert (
-        "could not detect output-file program type"
-        in str(result.exception).lower()
-    )
 
 
 def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
@@ -917,14 +1083,6 @@ def test_sub_pka_batch_reconstructed_run_args_accept_proton_index(
     run_result = runner.invoke(run, ["--no-scratch", "--fake"] + cli_args)
     assert run_result.exit_code == 0, run_result.output
     assert "proton-index is required" not in run_result.output
-
-
-def test_pka_is_submission_table_rejects_cdxml(tmp_path):
-    from chemsmart.utils.utils import PKaTableEntry
-
-    cdxml = tmp_path / "scale.cdxml"
-    cdxml.write_text("<CDXML></CDXML>\n")
-    assert PKaTableEntry.is_submission_table(str(cdxml)) is False
 
 
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])

@@ -3022,7 +3022,12 @@ class PKaOutputTable:
                 raise ValueError(
                     f"Unsupported pKa analysis scheme: {scheme!r}"
                 )
-            pka_result = output_cls.compute_pka(**pka_kwargs)
+            compute_fn = (
+                output_cls.compute_pka
+                if isinstance(output_cls, type)
+                else output_cls
+            )
+            pka_result = compute_fn(**pka_kwargs)
             pka_result["basename"] = entry["basename"]
             results.append(pka_result)
         return results

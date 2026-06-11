@@ -2576,77 +2576,21 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cutoff_enthalpy=100.0,
         energy_units="hartree",
     ):
-        """
-        Compute thermochemistry for pKa species (HA, A-, HB, B-).
+        """Compute thermochemistry for pKa species (HA, A-, HRef, Ref-)."""
+        from chemsmart.cli.pka import compute_pka_thermochemistry
 
-        This helper method extracts thermochemical properties from gas-phase
-        frequency calculation files for all species involved in pKa calculations.
-
-        Args:
-            ha_file (str, optional): Path to HA (protonated acid) output file.
-            a_file (str, optional): Path to A- (conjugate base) output file.
-            href_file (str, optional): Path to HB (reference acid) output file.
-            ref_file (str, optional): Path to B- (reference conjugate base) output file.
-            temperature (float): Temperature in Kelvin. Default 298.15 K.
-            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
-            pressure (float): Pressure in atm. Default 1.0 atm.
-            cutoff_entropy_grimme (float): Cutoff for entropy (cm^-1). Default 100.0.
-            cutoff_enthalpy (float): Cutoff for enthalpy (cm^-1). Default 100.0.
-            energy_units (str): Energy units for output. Default 'hartree'.
-
-        Returns:
-            dict: Dictionary containing thermochemistry for each species and settings:
-                - 'settings': Dict of calculation settings
-                - 'HA': Dict with E, qh_G, ZPE, H, qh_H, G, name for protonated acid
-                - 'A': Dict with same keys for conjugate base
-                - 'HRef': Dict for reference acid (if provided)
-                - 'Ref': Dict for reference conjugate base (if provided)
-        """
-        results = {
-            "settings": {
-                "temperature": temperature,
-                "concentration": concentration,
-                "pressure": pressure,
-                "cutoff_entropy_grimme": cutoff_entropy_grimme,
-                "cutoff_enthalpy": cutoff_enthalpy,
-                "energy_units": energy_units,
-            }
-        }
-
-        common_kwargs = {
-            "temperature": temperature,
-            "concentration": concentration,
-            "pressure": pressure,
-            "cutoff_entropy_grimme": cutoff_entropy_grimme,
-            "cutoff_enthalpy": cutoff_enthalpy,
-            "energy_units": energy_units,
-        }
-
-        def get_species_thermo(file_path, name):
-            """Extract thermochemistry for a species."""
-            if file_path is None:
-                return None
-            output = Gaussian16pKaOutput(filename=file_path, **common_kwargs)
-            return {
-                "name": name,
-                "E": output.electronic_energy_in_units,
-                "qh_G": output.qh_gibbs_free_energy,
-                "ZPE": output.zero_point_energy_in_units,
-                "H": output.enthalpy_in_units,
-                "qh_H": output.qh_enthalpy_in_units,
-                "G": output.gibbs_free_energy_in_units,
-            }
-
-        if ha_file is not None:
-            results["HA"] = get_species_thermo(ha_file, "HA")
-        if a_file is not None:
-            results["A"] = get_species_thermo(a_file, "A-")
-        if href_file is not None:
-            results["HRef"] = get_species_thermo(href_file, "HRef")
-        if ref_file is not None:
-            results["Ref"] = get_species_thermo(ref_file, "Ref-")
-
-        return results
+        return compute_pka_thermochemistry(
+            ha_file=ha_file,
+            a_file=a_file,
+            href_file=href_file,
+            ref_file=ref_file,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
 
     @classmethod
     def from_pka_settings(
@@ -2786,143 +2730,27 @@ class Gaussian16pKaOutput(Gaussian16Output):
             ΔG_diss = G_soln(A⁻) + G_soln(H⁺) - G_soln(HA)
             pKa = ΔG_diss / (2.303 × R × T)
         """
-        from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL
+        from chemsmart.cli.pka import compute_pka
 
-        if scheme == "direct":
-            if delta_G_proton is None:
-                raise ValueError(
-                    "delta_G_proton is required when scheme='direct'."
-                )
-        elif pka_reference is None:
-            raise ValueError(
-                "pka_reference is required when scheme='proton exchange'."
-            )
-        else:
-            missing = [
-                name
-                for name, value in (
-                    ("href_gas_file", href_gas_file),
-                    ("ref_gas_file", ref_gas_file),
-                    ("ha_solv_file", ha_solv_file),
-                    ("a_solv_file", a_solv_file),
-                    ("href_solv_file", href_solv_file),
-                    ("ref_solv_file", ref_solv_file),
-                )
-                if value is None
-            ]
-            if missing:
-                raise ValueError(
-                    "Missing required files for proton exchange scheme: "
-                    + ", ".join(missing)
-                )
-
-        if scheme == "direct" and (
-            ha_solv_file is None or a_solv_file is None
-        ):
-            raise ValueError(
-                "ha_solv_file and a_solv_file are required for scheme='direct'."
-            )
-
-        def get_gas_phase_data(gas_file):
-            output = Gaussian16pKaOutput(
-                filename=gas_file,
-                temperature=temperature,
-                concentration=concentration,
-                pressure=pressure,
-                cutoff_entropy_grimme=cutoff_entropy_grimme,
-                cutoff_enthalpy=cutoff_enthalpy,
-                entropy_method=entropy_method,
-            )
-            E_gas_au = output.electronic_energy_in_units
-            G_corr_au = output.qh_gibbs_free_energy - E_gas_au
-            return E_gas_au, G_corr_au
-
-        def get_solvent_energy(solv_file):
-            output = Gaussian16Output(filename=solv_file)
-            # Get the last SCF energy (solvent SP) in Hartree
-            E_solv_au = output.energies[-1] if output.energies else None
-            if E_solv_au is None:
-                raise ValueError(
-                    f"Could not extract SCF energy from solvent file: {solv_file}"
-                )
-            return E_solv_au
-
-        E_gas_HA_au, G_corr_HA_au = get_gas_phase_data(ha_gas_file)
-        E_gas_A_au, G_corr_A_au = get_gas_phase_data(a_gas_file)
-        E_solv_HA_au = get_solvent_energy(ha_solv_file)
-        E_solv_A_au = get_solvent_energy(a_solv_file)
-        G_soln_HA_au = E_solv_HA_au + G_corr_HA_au
-        G_soln_A_au = E_solv_A_au + G_corr_A_au
-
-        R_kcal = 0.001987204
-        ln10 = 2.302585093
-
-        if scheme == "direct":
-            G_soln_HA_kcal = G_soln_HA_au * HARTREE_TO_KCAL_MOL
-            G_soln_A_kcal = G_soln_A_au * HARTREE_TO_KCAL_MOL
-            delta_G_diss_kcal_mol = (
-                G_soln_A_kcal + delta_G_proton - G_soln_HA_kcal
-            )
-            delta_G_diss_au = delta_G_diss_kcal_mol / HARTREE_TO_KCAL_MOL
-            pka = delta_G_diss_kcal_mol / (R_kcal * temperature * ln10)
-            return {
-                "pKa": pka,
-                "scheme": "direct",
-                "delta_G_proton_kcal_mol": delta_G_proton,
-                "delta_G_diss_kcal_mol": delta_G_diss_kcal_mol,
-                "delta_G_diss_au": delta_G_diss_au,
-                "delta_G_soln_kcal_mol": delta_G_diss_kcal_mol,
-                "delta_G_soln_au": delta_G_diss_au,
-                "temperature": temperature,
-                "G_soln_HA_au": G_soln_HA_au,
-                "G_soln_A_au": G_soln_A_au,
-                "E_solv_HA_au": E_solv_HA_au,
-                "E_solv_A_au": E_solv_A_au,
-                "G_corr_HA_au": G_corr_HA_au,
-                "G_corr_A_au": G_corr_A_au,
-                "E_gas_HA_au": E_gas_HA_au,
-                "E_gas_A_au": E_gas_A_au,
-            }
-
-        E_gas_HRef_au, G_corr_HRef_au = get_gas_phase_data(href_gas_file)
-        E_gas_Ref_au, G_corr_Ref_au = get_gas_phase_data(ref_gas_file)
-        E_solv_HRef_au = get_solvent_energy(href_solv_file)
-        E_solv_Ref_au = get_solvent_energy(ref_solv_file)
-        G_soln_HRef_au = E_solv_HRef_au + G_corr_HRef_au
-        G_soln_Ref_au = E_solv_Ref_au + G_corr_Ref_au
-
-        delta_G_soln_au = (G_soln_A_au + G_soln_HRef_au) - (
-            G_soln_HA_au + G_soln_Ref_au
+        return compute_pka(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
         )
-        delta_G_soln_kcal_mol = delta_G_soln_au * HARTREE_TO_KCAL_MOL
-        pka = pka_reference + delta_G_soln_kcal_mol / (
-            R_kcal * temperature * ln10
-        )
-
-        return {
-            "pKa": pka,
-            "scheme": "proton exchange",
-            "pKa_reference": pka_reference,
-            "delta_G_soln_kcal_mol": delta_G_soln_kcal_mol,
-            "delta_G_soln_au": delta_G_soln_au,
-            "temperature": temperature,
-            "G_soln_HA_au": G_soln_HA_au,
-            "G_soln_A_au": G_soln_A_au,
-            "G_soln_HRef_au": G_soln_HRef_au,
-            "G_soln_Ref_au": G_soln_Ref_au,
-            "E_solv_HA_au": E_solv_HA_au,
-            "E_solv_A_au": E_solv_A_au,
-            "E_solv_HRef_au": E_solv_HRef_au,
-            "E_solv_Ref_au": E_solv_Ref_au,
-            "G_corr_HA_au": G_corr_HA_au,
-            "G_corr_A_au": G_corr_A_au,
-            "G_corr_HRef_au": G_corr_HRef_au,
-            "G_corr_Ref_au": G_corr_Ref_au,
-            "E_gas_HA_au": E_gas_HA_au,
-            "E_gas_A_au": E_gas_A_au,
-            "E_gas_HRef_au": E_gas_HRef_au,
-            "E_gas_Ref_au": E_gas_Ref_au,
-        }
 
     @classmethod
     def print_pka_summary(
@@ -2946,7 +2774,9 @@ class Gaussian16pKaOutput(Gaussian16Output):
         delta_G_proton=None,
     ):
         """Print a formatted summary of a dual-level pKa calculation."""
-        result = cls.compute_pka(
+        from chemsmart.cli.pka import print_pka_summary as _print_pka_summary
+
+        return _print_pka_summary(
             ha_gas_file=ha_gas_file,
             a_gas_file=a_gas_file,
             href_gas_file=href_gas_file,
@@ -2960,101 +2790,11 @@ class Gaussian16pKaOutput(Gaussian16Output):
             concentration=concentration,
             pressure=pressure,
             cutoff_entropy_grimme=cutoff_entropy_grimme,
-            entropy_method=entropy_method,
             cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
             scheme=scheme,
             delta_G_proton=delta_G_proton,
         )
-
-        if scheme == "direct":
-            print("=" * 78)
-            print("pKa Calculation - Direct Dissociation Scheme")
-            print("=" * 78)
-            print("Reaction: HA → A⁻ + H⁺")
-            print(f"Temperature: {temperature} K")
-            print()
-            print("Method:")
-            print(
-                "  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)"
-            )
-            print("  G_soln = E_solv + G_corr  (solution free energy)")
-            print("  ΔG_diss = G_soln(A⁻) + G_soln(H⁺) - G_soln(HA)")
-            print("  pKa = ΔG_diss / (2.303 × R × T)")
-            print("-" * 78)
-            print()
-            print("Gas-Phase Electronic Energies (E_gas, au):")
-            print(f"  HA:  {result['E_gas_HA_au']:.10f}")
-            print(f"  A⁻:  {result['E_gas_A_au']:.10f}")
-            print()
-            print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
-            print(f"  HA:  {result['G_corr_HA_au']:.10f}")
-            print(f"  A⁻:  {result['G_corr_A_au']:.10f}")
-            print()
-            print("Solvent Single-Point Energies (E_solv, au):")
-            print(f"  HA:  {result['E_solv_HA_au']:.10f}")
-            print(f"  A⁻:  {result['E_solv_A_au']:.10f}")
-            print()
-            print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
-            print(f"  HA:  {result['G_soln_HA_au']:.10f}")
-            print(f"  A⁻:  {result['G_soln_A_au']:.10f}")
-            print("-" * 78)
-            print()
-            print("pKa Calculation:")
-            print(f"  G_soln(H⁺) = {delta_G_proton:.4f} kcal/mol")
-            print(f"  ΔG_diss = {result['delta_G_diss_au']:.10f} au")
-            print(f"         = {result['delta_G_diss_kcal_mol']:.4f} kcal/mol")
-            print()
-            print(f"  *** Computed pKa(HA) = {result['pKa']:.2f} ***")
-            print("=" * 78)
-            return
-
-        print("=" * 78)
-        print("pKa Calculation - Dual-level Proton Exchange Scheme")
-        print("=" * 78)
-        print("Reaction: HA + Ref⁻ → A⁻ + HRef")
-        print(f"Temperature: {temperature} K")
-        print()
-        print("Method:")
-        print("  G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)")
-        print("  G_soln = E_solv + G_corr  (solution free energy)")
-        print(
-            "  ΔG_soln = [G(A⁻)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref⁻)_soln]"
-        )
-        print("  pKa = pKa_ref + ΔG_soln / (RT × ln10)")
-        print("-" * 78)
-        print()
-        print("Gas-Phase Electronic Energies (E_gas, au):")
-        print(f"  HA:  {result['E_gas_HA_au']:.10f}")
-        print(f"  A⁻:  {result['E_gas_A_au']:.10f}")
-        print(f"  HRef:  {result['E_gas_HRef_au']:.10f}")
-        print(f"  Ref⁻:  {result['E_gas_Ref_au']:.10f}")
-        print()
-        print("Thermal Corrections (G_corr = qh-G - E_gas, au):")
-        print(f"  HA:  {result['G_corr_HA_au']:.10f}")
-        print(f"  A⁻:  {result['G_corr_A_au']:.10f}")
-        print(f"  HRef:  {result['G_corr_HRef_au']:.10f}")
-        print(f"  Ref⁻:  {result['G_corr_Ref_au']:.10f}")
-        print()
-        print("Solvent Single-Point Energies (E_solv, au):")
-        print(f"  HA:  {result['E_solv_HA_au']:.10f}")
-        print(f"  A⁻:  {result['E_solv_A_au']:.10f}")
-        print(f"  HRef:  {result['E_solv_HRef_au']:.10f}")
-        print(f"  Ref⁻:  {result['E_solv_Ref_au']:.10f}")
-        print()
-        print("Solution Free Energies (G_soln = E_solv + G_corr, au):")
-        print(f"  HA:  {result['G_soln_HA_au']:.10f}")
-        print(f"  A⁻:  {result['G_soln_A_au']:.10f}")
-        print(f"  HRef:  {result['G_soln_HRef_au']:.10f}")
-        print(f"  Ref⁻:  {result['G_soln_Ref_au']:.10f}")
-        print("-" * 78)
-        print()
-        print("pKa Calculation:")
-        print(f"  ΔG_soln = {result['delta_G_soln_au']:.10f} au")
-        print(f"         = {result['delta_G_soln_kcal_mol']:.4f} kcal/mol")
-        print(f"  pKa(HRef)_ref = {pka_reference:.2f}")
-        print()
-        print(f"  *** Computed pKa(HA) = {result['pKa']:.2f} ***")
-        print("=" * 78)
 
     # Alias for backward compatibility
     print_pka_dual_level_summary = print_pka_summary
