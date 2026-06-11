@@ -330,13 +330,12 @@ class JobRunner(RegistryMixin):
             # Basic sanity checks
             if not sd.exists() or not sd.is_dir():
                 logger.error(
-                    "scratch_dir %s doesn't exist or is not a directory; "
-                    "refusing to proceed.",
-                    sd,
+                    f"scratch_dir {sd} doesn't exist or is not a directory; "
+                    "refusing to proceed."
                 )
             elif rd == sd:
                 logger.warning(
-                    "Refusing to delete the scratch root itself: %s", sd
+                    f"Refusing to delete the scratch root itself: {sd}"
                 )
             # Python 3.9+: Path.is_relative_to
             elif rd.is_relative_to(sd):
