@@ -794,7 +794,7 @@ def gaussian(
                         )
                     except Exception as exc2:
                         logger.warning(
-                            f"Failed to convert molecule {m.label} (idx {idx}) to QMMMMolecule: {exc2}; "
+                            f"Failed to convert molecule (idx {idx}) to QMMMMolecule: {exc2}; "
                             f"leaving as original molecule type {type(m)}",
                         )
                         converted.append(m)
