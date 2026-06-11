@@ -206,19 +206,18 @@ multiplicity come from the parent ``-c`` / ``-m`` options and apply to every fra
 
 **CDXML paths inside a CSV batch table**
 
-You can list ``.cdxml`` / ``.cdx`` files in a submission table alongside XYZ inputs, but **every row still needs an
-explicit integer ``proton_index``**. Empty cells are not accepted. Coloured-proton auto-detection is **not** applied per
-CSV row.
+You can mix XYZ and CDXML inputs in the same submission table. Each row becomes one pKa job. For a **single-molecule**
+``.cdxml`` / ``.cdx`` row, leave ``proton_index`` blank to auto-detect the coloured proton; an explicit value overrides
+the detection (same behaviour as single-file CDXML submit). Non-CDXML rows still require ``proton_index``.
 
 .. code:: text
 
    filepath,proton_index,charge,multiplicity
    /path/to/acid1.xyz,12,0,1
-   /path/to/acid2.cdxml,8,0,1
+   /path/to/acid2.cdxml,,0,1
 
-To auto-detect coloured protons across multiple ChemDraw fragments, pass the CDXML file directly as ``-f`` with ``pka
-batch`` (see above) instead of embedding it in a CSV table. A CSV row pointing at a multi-fragment CDXML file loads only
-the default structure from that file and creates **one** job for that row.
+Multi-molecule CDXML files cannot be expanded from a table row. Pass them directly as ``-f`` with ``pka batch`` (see
+above) to create one job per ChemDraw fragment.
 
 .. note::
 

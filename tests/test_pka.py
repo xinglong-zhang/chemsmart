@@ -1205,6 +1205,210 @@ def test_pka_resolve_proton_index_accepts_explicit_index():
     assert molecules is None
 
 
+def test_resolve_pka_batch_row_auto_detects_coloured_proton(
+    colored_proton_cdxml_file,
+):
+    from chemsmart.cli.pka import resolve_pka_batch_row
+    from chemsmart.io.molecules.structure import PKaMolecule
+
+    proton_index, molecule = resolve_pka_batch_row(
+        colored_proton_cdxml_file, proton_index=None
+    )
+    assert proton_index == 8
+    assert isinstance(molecule, PKaMolecule)
+    assert molecule.proton_index == 8
+
+
+def test_resolve_pka_batch_row_explicit_index_overrides_cdxml(
+    colored_proton_cdxml_file,
+):
+    from chemsmart.cli.pka import resolve_pka_batch_row
+    from chemsmart.io.molecules.structure import Molecule
+
+    proton_index, molecule = resolve_pka_batch_row(
+        colored_proton_cdxml_file, proton_index=8
+    )
+    assert proton_index == 8
+    assert isinstance(molecule, Molecule)
+
+
+def test_resolve_pka_batch_row_rejects_multi_molecule_cdxml(
+    colored_proton_two_molecule_cdxml_file,
+):
+    from chemsmart.cli.pka import resolve_pka_batch_row
+
+    with pytest.raises(ValueError, match="single-molecule CDXML"):
+        resolve_pka_batch_row(
+            colored_proton_two_molecule_cdxml_file, proton_index=None
+        )
+
+
+def test_resolve_pka_batch_row_requires_proton_index_for_xyz(
+    single_molecule_xyz_file,
+):
+    from chemsmart.cli.pka import resolve_pka_batch_row
+
+    with pytest.raises(ValueError, match="Missing proton_index"):
+        resolve_pka_batch_row(single_molecule_xyz_file, proton_index=None)
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_csv_table_cdxml_blank_proton_index_auto_detects(
+    tmp_path, monkeypatch, backend, colored_proton_cdxml_file
+):
+    """CDXML rows with blank proton_index auto-detect the coloured proton."""
+    _require_backend_pka_subcommand(sub, backend)
+
+    table = tmp_path / "pka_cdxml.csv"
+    table.write_text(
+        "filepath,proton_index,charge,multiplicity\n"
+        f"{colored_proton_cdxml_file},,0,1\n"
+    )
+
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    captured = {"submissions": []}
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
+        "submissions"
+    ].append((job, test, cli_args))
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["submissions"]) == 1
+    job = captured["submissions"][0][0]
+    assert job.settings.proton_index == 8
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_csv_table_cdxml_explicit_proton_index_overrides(
+    tmp_path, monkeypatch, backend, colored_proton_cdxml_file
+):
+    """Explicit table proton_index overrides CDXML coloured-proton detection."""
+    _require_backend_pka_subcommand(sub, backend)
+
+    table = tmp_path / "pka_cdxml.csv"
+    table.write_text(
+        "filepath,proton_index,charge,multiplicity\n"
+        f"{colored_proton_cdxml_file},8,0,1\n"
+    )
+
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    captured = {"submissions": []}
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
+        "submissions"
+    ].append((job, test, cli_args))
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["submissions"]) == 1
+    job = captured["submissions"][0][0]
+    assert job.settings.proton_index == 8
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_csv_table_rejects_multi_molecule_cdxml_row(
+    tmp_path, monkeypatch, backend, colored_proton_two_molecule_cdxml_file
+):
+    """Multi-molecule CDXML paths in a table row must fail clearly."""
+    _require_backend_pka_subcommand(sub, backend)
+
+    table = tmp_path / "pka_cdxml.csv"
+    table.write_text(
+        "filepath,proton_index,charge,multiplicity\n"
+        f"{colored_proton_two_molecule_cdxml_file},,0,1\n"
+    )
+
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: None
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            str(table),
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "single-molecule CDXML" in result.output
+
+
 def test_orca_pka_job_generates_ha_and_a_subjobs(
     single_molecule_xyz_file, orca_jobrunner_no_scratch
 ):

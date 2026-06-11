@@ -629,6 +629,56 @@ def is_pka_cdxml_input(filename):
     )
 
 
+def resolve_pka_batch_row(filepath, proton_index=None, color_code=None):
+    """Resolve proton index and molecule for one pKa submission-table row.
+
+    Each table row maps to a single job. When ``proton_index`` is omitted for a
+    single-molecule ``.cdxml`` / ``.cdx`` filepath, the coloured proton is
+    auto-detected. An explicit ``proton_index`` always takes precedence. Multi-
+    molecule CDXML files are rejected here; pass them directly as ``-f`` with
+    ``pka batch`` instead.
+
+    Returns:
+        tuple[int, Molecule | PKaMolecule]: Resolved proton index and structure.
+    """
+    from chemsmart.io.file import PKaCDXFile
+    from chemsmart.io.molecules.structure import Molecule
+
+    filepath = str(filepath)
+    if proton_index is not None:
+        return int(proton_index), Molecule.from_filepath(filepath)
+
+    if not is_pka_cdxml_input(filepath):
+        raise ValueError(
+            f"Missing proton_index for {filepath}. "
+            "Provide proton_index in the table, or use a single-molecule "
+            ".cdxml/.cdx file with a coloured proton and leave proton_index blank."
+        )
+
+    cdx_file = PKaCDXFile(filepath)
+    try:
+        pka_molecules = cdx_file.get_pka_molecules(
+            color_code=color_code,
+            index=":",
+            return_list=True,
+        )
+    except ValueError as exc:
+        raise ValueError(
+            f"Could not auto-detect proton from CDXML colour for {filepath}: "
+            f"{exc}"
+        ) from exc
+
+    if len(pka_molecules) != 1:
+        raise ValueError(
+            f"CDXML file {filepath} contains {len(pka_molecules)} molecules. "
+            "Submission-table rows support single-molecule CDXML files only. "
+            "Pass a multi-molecule CDXML file directly as -f with pka batch."
+        )
+
+    pka_mol = pka_molecules[0]
+    return pka_mol.proton_index, pka_mol
+
+
 def batch_pka_jobs_from_cdxml(
     ctx,
     skip_completed,

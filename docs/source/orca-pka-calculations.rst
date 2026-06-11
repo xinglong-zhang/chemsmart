@@ -117,8 +117,8 @@ Table Format
 ============
 
 Required columns: ``filepath``, ``proton_index``, ``charge``, ``multiplicity``. See :ref:`gaussian-pka-calculations` for
-CSV examples. ``proton_index`` is required for every row, including ``.cdxml`` / ``.cdx`` paths; auto-detection applies
-only when the CDXML file is given directly as ``-f``.
+CSV examples. For single-molecule ``.cdxml`` / ``.cdx`` rows, ``proton_index`` may be left blank for coloured-proton
+auto-detection.
 
 ChemDraw CDXML / CDX batch input
 ================================

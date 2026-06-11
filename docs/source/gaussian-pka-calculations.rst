@@ -146,13 +146,13 @@ Example ``pka_input_table.csv``:
    filepath,proton_index,charge,multiplicity
    /path/to/acid1.xyz,12,0,1
    /path/to/acid2.xyz,8,-1,2
-   /path/to/acid3.cdxml,8,0,1
+   /path/to/acid3.cdxml,,0,1
 
 .. note::
 
-   CSV rows require an explicit ``proton_index`` even when ``filepath`` is ``.cdxml`` / ``.cdx``. Coloured-proton
-   auto-detection and multi-fragment expansion apply only when the CDXML file is passed directly as ``-f`` (see
-   **ChemDraw CDXML / CDX batch input** below), not when it appears as a table row.
+   For single-molecule ``.cdxml`` / ``.cdx`` table rows, leave ``proton_index`` blank to auto-detect the coloured
+   proton. Multi-fragment CDXML expansion applies only when the CDXML file is passed directly as ``-f`` (see **ChemDraw
+   CDXML / CDX batch input** below).
 
 .. note::
 
@@ -179,8 +179,8 @@ follow ``<basename>_frag<N>_pka`` (e.g. ``acids_frag1_pka_HA_opt.log``).
    # Optional: pin the colour table index when auto-detection is ambiguous
    chemsmart run gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -cc 4 -s direct batch
 
-A CSV table may list ``.cdxml`` paths per row (see Table Format above), but each row must supply ``proton_index``
-explicitly; coloured-proton auto-detection is not used in that path.
+A CSV table may list single-molecule ``.cdxml`` paths per row (see Table Format above); blank ``proton_index`` triggers
+coloured-proton auto-detection for that row.
 
 ******************************************
  Computing pKa from Existing Output Files

@@ -26,6 +26,7 @@ from chemsmart.cli.pka import (
     click_pka_proton_options,
     click_pka_shared_options,
     is_pka_cdxml_input,
+    resolve_pka_batch_row,
     resolve_pka_submit_proton_options,
     validate_reference_options,
 )
@@ -275,7 +276,6 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
 
     import copy
 
-    from chemsmart.io.molecules.structure import Molecule
     from chemsmart.jobs.orca.pka import ORCApKaJob
     from chemsmart.utils.utils import (
         PKaOutputTable,
@@ -329,11 +329,22 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
     if job_settings:
         opt_settings = opt_settings.merge(job_settings, keywords=kw)
 
+    _, color_code = resolve_pka_submit_proton_options(
+        ctx, proton_index=proton_index, color_code=color_code
+    )
+
     jobs = []
     original_scheme = shared["scheme"]
     for index, entry in enumerate(entries):
         filepath = entry.get("filepath") or entry.get("path") or entry.filepath
-        molecule = Molecule.from_filepath(filepath)
+        try:
+            row_proton_index, molecule = resolve_pka_batch_row(
+                filepath,
+                proton_index=entry.proton_index,
+                color_code=color_code,
+            )
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
         label = Path(filepath).stem
         base_label = label if label.endswith("_pka") else f"{label}_pka"
 
@@ -360,7 +371,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             row_shared["reference_conjugate_base_multiplicity"] = None
 
         pka_settings = _build_orca_pka_settings(
-            proton_index=int(entry.proton_index),
+            proton_index=row_proton_index,
             shared=row_shared,
             opt_settings=row_opt_settings,
         )
@@ -377,7 +388,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
         # one-entry commands instead of replaying the full table.
         job._batch_entry = {
             "filepath": str(filepath),
-            "proton_index": int(entry.proton_index),
+            "proton_index": row_proton_index,
             "charge": int(entry.charge),
             "multiplicity": int(entry.multiplicity),
             "scheme": row_shared["scheme"],

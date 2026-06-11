@@ -1483,6 +1483,37 @@ class TestPKaTableParsing:
         with pytest.raises(ValueError, match="not an integer"):
             PKaTableEntry.parse_pka_table(str(table_file))
 
+    def test_parse_pka_table_blank_proton_index_for_cdxml(
+        self, tmp_path, colored_proton_cdxml_file
+    ):
+        """Blank proton_index is allowed for single-molecule CDXML table rows."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        table_file = tmp_path / "table.csv"
+        table_file.write_text(
+            "filepath,proton_index,charge,multiplicity\n"
+            f"{colored_proton_cdxml_file},,0,1\n"
+        )
+
+        entries = PKaTableEntry.parse_pka_table(str(table_file))
+        assert len(entries) == 1
+        assert entries[0].proton_index is None
+        entries[0].validate()
+
+    def test_parse_pka_table_blank_proton_index_for_xyz_raises(self, tmp_path):
+        """Blank proton_index is rejected for non-CDXML table rows."""
+        from chemsmart.utils.utils import PKaTableEntry
+
+        xyz_file = tmp_path / "acid.xyz"
+        xyz_file.write_text("2\nacid\nC 0 0 0\nH 0 0 1\n")
+        table_file = tmp_path / "table.csv"
+        table_file.write_text(
+            "filepath,proton_index,charge,multiplicity\n" f"{xyz_file},,0,1\n"
+        )
+
+        with pytest.raises(ValueError, match="Missing proton_index"):
+            PKaTableEntry.parse_pka_table(str(table_file))
+
     def test_parse_pka_table_empty_raises(self, tmp_path):
         """Test that empty table raises ValueError."""
         from chemsmart.utils.utils import PKaTableEntry

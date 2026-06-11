@@ -2387,6 +2387,12 @@ class PKaTableEntry:
             out = {k: v for k, v in out.items() if v is not None}
         return out
 
+    @staticmethod
+    def _is_cdxml_filepath(filepath):
+        return bool(filepath) and str(filepath).lower().endswith(
+            (".cdx", ".cdxml")
+        )
+
     def validate(self):
         errors = []
         row_info = f" (row {self.row_number})" if self.row_number else ""
@@ -2395,6 +2401,7 @@ class PKaTableEntry:
         proton_index = self.proton_index
         charge = self.charge
         multiplicity = self.multiplicity
+        is_cdxml = self._is_cdxml_filepath(filepath)
 
         if not filepath:
             errors.append(f"Empty filepath{row_info}")
@@ -2402,7 +2409,8 @@ class PKaTableEntry:
             errors.append(f"File not found: {filepath}{row_info}")
 
         if proton_index is None:
-            errors.append(f"Missing proton_index{row_info}")
+            if not is_cdxml:
+                errors.append(f"Missing proton_index{row_info}")
         else:
             try:
                 proton_index = int(proton_index)
@@ -2527,14 +2535,22 @@ class PKaTableEntry:
         # Coerce numeric fields to preserve historical parse_pka_table behavior.
         for entry in entries:
             line_num = entry.row_number if entry.row_number is not None else 0
+            is_cdxml = PKaTableEntry._is_cdxml_filepath(entry.filepath)
 
-            try:
-                entry["proton_index"] = int(entry["proton_index"])
-            except (TypeError, ValueError):
-                raise ValueError(
-                    f"Invalid proton_index at line {line_num}: "
-                    f"{entry['proton_index']!r} is not an integer"
-                )
+            if entry.proton_index is None:
+                if not is_cdxml:
+                    raise ValueError(
+                        f"Missing proton_index at line {line_num} for "
+                        f"{entry.filepath!r}"
+                    )
+            else:
+                try:
+                    entry["proton_index"] = int(entry["proton_index"])
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Invalid proton_index at line {line_num}: "
+                        f"{entry['proton_index']!r} is not an integer"
+                    )
 
             try:
                 entry["charge"] = int(entry["charge"])
@@ -3353,7 +3369,13 @@ class PKaOutputTable:
                     entry.validate()
                 else:
                     # Validate without file existence check
-                    if entry.proton_index is None or entry.proton_index < 1:
+                    is_cdxml = PKaTableEntry._is_cdxml_filepath(entry.filepath)
+                    if entry.proton_index is None:
+                        if not is_cdxml:
+                            raise ValueError(
+                                f"Missing proton_index for {entry.filepath}"
+                            )
+                    elif entry.proton_index < 1:
                         raise ValueError(
                             f"Invalid proton_index: {entry.proton_index}"
                         )
