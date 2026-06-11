@@ -4,11 +4,10 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_database_id_options
 from chemsmart.database.inspect import DatabaseInspector
 from chemsmart.utils.cli import MyCommand
 
-from .database import database
+from .database import click_database_id_options, database
 
 logger = logging.getLogger(__name__)
 

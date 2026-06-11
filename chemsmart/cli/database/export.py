@@ -4,11 +4,10 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_database_id_options
 from chemsmart.database.export import CSV_OPTIONAL_COLUMNS, DatabaseExporter
 from chemsmart.utils.cli import MyCommand
 
-from .database import database
+from .database import click_database_id_options, database
 
 logger = logging.getLogger(__name__)
 

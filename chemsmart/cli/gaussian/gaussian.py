@@ -4,8 +4,8 @@ import os
 
 import click
 
+from chemsmart.cli.database.database import click_database_id_options
 from chemsmart.cli.job import (
-    click_database_id_options,
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
