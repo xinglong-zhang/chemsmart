@@ -829,11 +829,26 @@ class FakeGaussian:
                 )
             g.write(" Mulliken charges:\n")
             g.write("               1\n")
+            total_charge = self.charge
+            running_charge = 0.0
             for i in range(self.num_atoms):
+                if i < self.num_atoms - 1:
+                    charge = round(
+                        random() * 0.2 - 0.1, 6
+                    )  # small random charge
+                    running_charge += charge
+                else:
+                    charge = round(
+                        total_charge - running_charge, 6
+                    )  # balance charge
                 g.write(
-                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {random():>12.6}\n"
+                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {charge:>12.6f}\n"
                 )  # not real values
-            g.write(" Elapsed time: xx\n")
+            g.write(f" Sum of Mulliken charges =  {total_charge:.5f}\n")
             g.write(
-                f" Normal termination of Gaussian 16 (fake executable) at {datetime.now()}."
+                " Elapsed time:      0 days  0 hours  0 minutes  0.0 seconds.\n"
+            )
+            g.write(
+                f" Normal termination of Gaussian 16 (fake executable) at "
+                f"{datetime.now().strftime('%a %b %d %H:%M:%S %Y')}."
             )

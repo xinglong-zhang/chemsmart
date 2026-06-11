@@ -25,7 +25,7 @@ calculations:
            ├─── ASE Atoms
            ├─── Pymatgen Molecule
            ├─── RDKit Molecule
-           ├─── File Formats (.xyz, .sdf, .com/.log, .inp/.out, .cdx/.cdxml, etc.)
+           ├─── File Formats (.xyz, .sdf, .com/.log, .inp/.out, .db, .cdx/.cdxml, etc.)
            └─── PubChem queries (by name, CID, or SMILES)
            │
            ▼
@@ -192,6 +192,33 @@ For full details on organometallic complex support and its restrictions, see :do
  Molecular Databases
 *********************
 
+Chemsmart Database Files (.db)
+==============================
+
+Chemsmart ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
+:doc:`database-assemble`). When a chemsmart database is used as molecular input, chemsmart first selects the requested
+record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
+(see :doc:`database-workflow`).
+
+.. tip::
+
+   Use ``chemsmart run database query -f chemsmart.db`` to list available record indices and IDs before selecting
+   structures from a database.
+
+.. code:: bash
+
+   # By index of the record (last structure by default)
+   chemsmart sub -s server gaussian -p project -f chemsmart.db --ri 3 opt
+
+   # By record ID and structure index
+   chemsmart sub -s server gaussian -p project -f chemsmart.db --rid a1b2c3d4e5f6 -i 5 sp
+
+   # By structure ID
+   chemsmart sub -s server orca -p project -f chemsmart.db --sid c4d5e6f78a9b ts
+
+   # By molecule ID (all structures in the molecule)
+   chemsmart run mol -f chemsmart.db --mid ABCDEFGHIJKLMN-U visualize
+
 PubChem Integration
 ===================
 
@@ -214,8 +241,8 @@ Query PubChem directly by name, CID, or SMILES:
    -  PubChem queries support compound names, CIDs (Compound IDs), and SMILES strings.
    -  SMILES strings are processed by PubChem to retrieve 3D structures and generate coordinates.
 
-ASE Database Files (.db, .traj)
-===============================
+ASE Database and Trajectory Files (.db, .traj)
+==============================================
 
 Use structures from ASE database or trajectory files:
 
@@ -352,7 +379,8 @@ CHEMSMART automatically detects file formats based on extensions:
 -  ``.inp`` → ORCA input
 -  ``.out`` → ORCA/Gaussian output (auto-detected by reading file header)
 -  ``.cdx``, ``.cdxml`` → ChemDraw format
--  ``.db``, ``.traj`` → ASE database/trajectory
+-  ``.db`` → Chemsmart/ASE database (auto-detected by validating the database schema)
+-  ``.traj`` → ASE trajectory
 
 .. note::
 
@@ -367,6 +395,8 @@ For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilit
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`pymol-cli-options`
+-  :doc:`database-workflow`
 -  :doc:`cli-overview`
 
 For more technical details on the implementation, see the CHEMSMART preprint: https://arxiv.org/abs/2508.20042

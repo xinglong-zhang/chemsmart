@@ -9,6 +9,7 @@ from chemsmart.utils.geometry import (
     calculate_molecular_volume_vdp,
     calculate_moments_of_inertia,
     calculate_vdw_volume,
+    canonicalize_positions,
     is_collinear,
 )
 
@@ -271,3 +272,79 @@ class TestCalculateMolecularVolumeVDP:
         )
         # Volume can be 0 for some configurations depending on tessellation
         assert volume >= 0
+
+
+class TestCanonicalizePositions:
+    """Tests for the canonicalize_positions function."""
+
+    def test_center_of_mass_at_origin(self):
+        """Centre of mass of canonical positions must be at the origin."""
+        masses = [12.0, 16.0, 16.0]
+        coords = np.array(
+            [
+                [-2.184891, -0.000000, -0.000000],
+                [2.184891, -0.000000, -0.000000],
+                [0.000000, 0.000000, 0.000000],
+            ]
+        )
+        result = canonicalize_positions(masses, coords)
+        com = np.average(result, axis=0, weights=masses)
+        assert np.allclose(com, 0.0, atol=1e-6)
+
+    def test_single_atom_returns_origin(self):
+        """A single atom must be placed at the origin."""
+        masses = [12.0]
+        coords = [[5.0, 3.0, -1.0]]
+        result = canonicalize_positions(masses, coords)
+        assert np.allclose(result, [[0.0, 0.0, 0.0]])
+
+    def test_diatomic_aligned_along_z(self):
+        """A diatomic molecule must be aligned along the z-axis."""
+        masses = [14.0, 14.0]
+        coords = [[1.0, 2.0, 3.0], [2.0, 4.0, 5.0]]
+        result = canonicalize_positions(masses, coords)
+        # bond length = ||r2 - r1|| = sqrt(1^2 + 2^2 + 2^2) = 3
+        # canonical positions = (0,0,±|v|/2) = (0,0,±1.5)
+        assert np.allclose(result, [[0.0, 0.0, -1.5], [0.0, 0.0, 1.5]])
+
+    def test_translation_invariance(self):
+        """Translating all atoms by a constant vector must not change the result."""
+        masses = [12.0, 1.0, 1.0, 1.0, 1.0]
+        coords = np.array(
+            [
+                [0, 0, 0],
+                [1.09, 0, 0],
+                [-1.09, 0, 0],
+                [0, 1.09, 0],
+                [0, -1.09, 0],
+            ]
+        )
+        shifted = coords + np.array([10.0, -20.0, 30.0])
+        canon_shifted = canonicalize_positions(masses, shifted)
+        canon_original = canonicalize_positions(masses, coords)
+        assert np.allclose(canon_original, canon_shifted, atol=1e-6)
+
+    def test_rotation_invariance(self):
+        """Rotating all atoms must not change the canonical positions."""
+        masses = [12.0, 16.0, 1.0, 1.0]
+        coords = np.array(
+            [
+                [-0.6123, 0.0000, 0.0000],
+                [0.6123, 0.0000, 0.0000],
+                [-1.2000, 0.2426, -0.8998],
+                [-1.2000, -0.2424, 0.8998],
+            ]
+        )
+        # Apply a rotation matrix (90° around z-axis)
+        theta = np.pi / 2
+        R = np.array(
+            [
+                [np.cos(theta), -np.sin(theta), 0],
+                [np.sin(theta), np.cos(theta), 0],
+                [0, 0, 1],
+            ]
+        )
+        rotated = coords @ R.T
+        canon_original = canonicalize_positions(masses, coords)
+        canon_rotated = canonicalize_positions(masses, rotated)
+        assert np.allclose(canon_original, canon_rotated, atol=1e-6)

@@ -85,6 +85,18 @@ chemistry software.
 
    thermochemistry-analysis
 
+..
+   .. toctree::
+      :maxdepth: 2
+      :caption: Database
+
+      database-overview
+      database-assemble
+      database-query
+      database-inspect
+      database-export
+      database-workflow
+
 .. toctree::
    :maxdepth: 2
    :caption: PyMOL Visualization

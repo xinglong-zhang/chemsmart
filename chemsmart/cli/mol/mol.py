@@ -6,11 +6,13 @@ import os
 import click
 
 from chemsmart.cli.job import (
+    click_database_id_options,
     click_file_label_and_index_options,
     click_filenames_options,
     click_folder_options,
     click_pubchem_options,
 )
+from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.utils.cli import MyGroup
@@ -330,6 +332,7 @@ def click_pymol_save_options(f):
 @click.group(cls=MyGroup)
 @click_filenames_options
 @click_file_label_and_index_options
+@click_database_id_options
 @click_folder_options
 @click_pubchem_options
 @click.pass_context
@@ -339,6 +342,11 @@ def mol(
     label,
     append_label,
     index,
+    record_index,
+    record_id,
+    structure_id,
+    structure_index,
+    molecule_id,
     directory,
     filetype,
     program,
@@ -376,10 +384,47 @@ def mol(
     molecules = None
     source_basename = None
 
+    # -i/--index and --si/--structure-index are equivalent aliases
+    if index is not None and structure_index is not None:
+        raise click.UsageError(
+            "-i/--index and --si/--structure-index are mutually exclusive. "
+            "Use only one to specify the structure index."
+        )
+    # If --si is given, treat it as -i so all downstream code uses index
+    if structure_index is not None:
+        index = structure_index
+
     # Normalize empty tuple to None (click's
     # multiple=True returns () when no -f provided)
     if not filenames:
         filenames = None
+    single_filename = None
+    if filenames is not None and len(filenames) == 1:
+        single_filename = filenames[0]
+
+    is_chemsmart_db = is_chemsmart_database(single_filename)
+    if is_chemsmart_db:
+        record_selectors = [
+            record_index is not None,
+            record_id is not None,
+        ]
+        selector_count = (
+            (record_index is not None)
+            + (record_id is not None)
+            + (structure_id is not None)
+            + (molecule_id is not None)
+        )
+        if selector_count != 1:
+            raise click.UsageError(
+                "For chemsmart database input, select exactly one of "
+                "--ri/--record-index, --rid/--record-id, "
+                "--sid/--structure-id, or --mid/--molecule-id."
+            )
+        if index is not None and not any(record_selectors):
+            raise click.UsageError(
+                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "can only be used together with --ri/--record-index or --rid/--record-id."
+            )
 
     # obtain molecule structure
     if directory is not None and filetype is not None:
@@ -462,6 +507,33 @@ def mol(
                 molecules = Molecule.from_filepath(
                     filepath=filenames, index=":", return_list=True
                 )
+            if single_filename:
+                filenames = single_filename
+                if is_chemsmart_db:
+                    if molecule_id is not None:
+                        molecules = Molecule.from_filepath(
+                            filepath=filenames,
+                            return_list=True,
+                            molecule_id=molecule_id,
+                        )
+                    elif structure_id is not None:
+                        molecules = Molecule.from_filepath(
+                            filepath=filenames,
+                            return_list=True,
+                            structure_id=structure_id,
+                        )
+                    else:
+                        molecules = Molecule.from_filepath(
+                            filepath=filenames,
+                            index=index or "-1",
+                            return_list=True,
+                            record_index=record_index,
+                            record_id=record_id,
+                        )
+                else:
+                    molecules = Molecule.from_filepath(
+                        filepath=filenames, index=":", return_list=True
+                    )
                 assert (
                     molecules is not None
                 ), f"Could not obtain molecule from {filenames}!"
@@ -487,9 +559,27 @@ def mol(
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filenames))[0]
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
+            elif molecule_id is not None:
+                label = f"{label}_MID-{molecule_id}"
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filenames))[0]
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id[:12]}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id[:12]}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
+            elif molecule_id is not None:
+                label = f"{label}_MID-{molecule_id[:16]}"
 
     label = clean_label(label)
 
@@ -500,7 +590,7 @@ def mol(
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
-    if index is not None:
+    if index is not None and not is_chemsmart_db:
         logger.debug(f"Using molecule with index: {index}")
         molecules = select_items_by_index(
             molecules,
@@ -508,7 +598,7 @@ def mol(
             allow_duplicates=False,
             allow_out_of_range=False,
         )
-    else:
+    elif not is_chemsmart_db:
         molecules = [molecules[-1]]  # Default: last molecule as list
 
     logger.debug(f"Obtained molecules: {molecules}")

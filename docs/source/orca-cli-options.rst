@@ -60,10 +60,23 @@ Project and File Options
       -  string
       -  Query structure from PubChem
 
+   -  -  ``--ri, --record-index``
+      -  int
+      -  Select a record from a chemsmart database by its 1-based index
+
+   -  -  ``--rid, --record-id``
+      -  string
+      -  Select a record from a chemsmart database by its ID
+
+   -  -  ``--sid, --structure-id``
+      -  string
+      -  Select a structure from a chemsmart database by its ID
+
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, or ``.out``.
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a chemsmart
+      database ``.db`` file.
 
 Molecular Properties Options
 ============================
