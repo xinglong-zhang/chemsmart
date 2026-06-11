@@ -273,9 +273,10 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             **kwargs,
         )
 
+    import copy
+
     from chemsmart.io.molecules.structure import Molecule
     from chemsmart.jobs.orca.pka import ORCApKaJob
-    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
     from chemsmart.utils.utils import (
         PKaOutputTable,
         PKaTableEntry,
@@ -336,7 +337,12 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
         label = Path(filepath).stem
         base_label = label if label.endswith("_pka") else f"{label}_pka"
 
-        row_scheme = (
+        row_opt_settings = copy.copy(opt_settings)
+        row_opt_settings.charge = int(entry.charge)
+        row_opt_settings.multiplicity = int(entry.multiplicity)
+
+        row_shared = copy.copy(shared)
+        row_shared["scheme"] = (
             original_scheme
             if index == 0
             else (
@@ -345,83 +351,18 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
                 else original_scheme
             )
         )
+        if row_shared["scheme"] != "proton exchange":
+            row_shared["reference"] = None
+            row_shared["reference_proton_index"] = None
+            row_shared["reference_charge"] = None
+            row_shared["reference_multiplicity"] = None
+            row_shared["reference_conjugate_base_charge"] = None
+            row_shared["reference_conjugate_base_multiplicity"] = None
 
-        solvent_model = shared["solvent_model"]
-        if solvent_model is None:
-            try:
-                solvent_model = opt_settings.solvent_model
-            except AttributeError:
-                solvent_model = None
-        solvent_id = shared["solvent_id"]
-        if solvent_id is None:
-            try:
-                solvent_id = opt_settings.solvent_id
-            except AttributeError:
-                solvent_id = None
-        if solvent_model is None:
-            solvent_model = "CPCM"
-        if solvent_id is None:
-            solvent_id = "water"
-
-        pka_settings = ORCApKaJobSettings(
+        pka_settings = _build_orca_pka_settings(
             proton_index=int(entry.proton_index),
-            scheme=row_scheme,
-            reference_file=(
-                shared["reference"]
-                if row_scheme == "proton exchange"
-                else None
-            ),
-            reference_proton_index=(
-                shared["reference_proton_index"]
-                if row_scheme == "proton exchange"
-                else None
-            ),
-            reference_charge=(
-                shared["reference_charge"]
-                if row_scheme == "proton exchange"
-                else None
-            ),
-            reference_multiplicity=(
-                shared["reference_multiplicity"]
-                if row_scheme == "proton exchange"
-                else None
-            ),
-            reference_conjugate_base_charge=(
-                shared["reference_conjugate_base_charge"]
-                if row_scheme == "proton exchange"
-                else None
-            ),
-            reference_conjugate_base_multiplicity=(
-                shared["reference_conjugate_base_multiplicity"]
-                if row_scheme == "proton exchange"
-                else None
-            ),
-            delta_G_proton=shared["delta_g_proton"],
-            conjugate_base_charge=shared["conjugate_base_charge"],
-            conjugate_base_multiplicity=shared["conjugate_base_multiplicity"],
-            solvent_model=solvent_model,
-            solvent_id=solvent_id,
-            temperature=shared["temperature"],
-            concentration=shared["concentration"],
-            pressure=shared["pressure"],
-            cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-            cutoff_enthalpy=shared["cutoff_enthalpy"],
-            charge=int(entry.charge),
-            multiplicity=int(entry.multiplicity),
-            functional=opt_settings.functional,
-            basis=opt_settings.basis,
-            ab_initio=opt_settings.ab_initio,
-            dispersion=opt_settings.dispersion,
-            aux_basis=opt_settings.aux_basis,
-            defgrid=opt_settings.defgrid,
-            semiempirical=opt_settings.semiempirical,
-            additional_route_parameters=(
-                opt_settings.additional_route_parameters
-            ),
-            gen_genecp_file=opt_settings.gen_genecp_file,
-            heavy_elements=opt_settings.heavy_elements,
-            heavy_elements_basis=opt_settings.heavy_elements_basis,
-            light_elements_basis=opt_settings.light_elements_basis,
+            shared=row_shared,
+            opt_settings=row_opt_settings,
         )
 
         job = ORCApKaJob(
@@ -439,7 +380,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             "proton_index": int(entry.proton_index),
             "charge": int(entry.charge),
             "multiplicity": int(entry.multiplicity),
-            "scheme": row_scheme,
+            "scheme": row_shared["scheme"],
         }
         jobs.append(job)
 

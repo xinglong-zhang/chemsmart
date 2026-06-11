@@ -1742,23 +1742,6 @@ class TestPKaTableParsing:
         assert entries[0].ha_gas is None
         assert entries[0].href_gas == str(ref_log)
 
-    def test_first_output_file_from_table_skips_blank_cells(self, tmp_path):
-        """batch-analyze auto-detect must ignore NaN/blank path cells."""
-        from chemsmart.cli.pka import _first_output_file_from_table
-        from chemsmart.utils.utils import PKaOutputTable
-
-        ref_log = tmp_path / "6a_HA_opt.log"
-        ref_log.write_text("dummy")
-
-        table_file = tmp_path / "outputs.csv"
-        table_file.write_text(
-            "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
-            f"system1,,,,,{ref_log},,,,10.6\n"
-        )
-
-        table = PKaOutputTable.from_file(str(table_file))
-        assert _first_output_file_from_table(table) == str(ref_log)
-
     def test_parse_pka_output_table_empty(self, tmp_path):
         """Test that an empty output table raises ValueError."""
         from chemsmart.utils.utils import parse_pka_output_table

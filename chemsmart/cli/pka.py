@@ -989,30 +989,6 @@ def _is_existing_output_path(value):
     return os.path.isfile(str(path))
 
 
-def _first_output_file_from_table(pka_table):
-    """Return the first existing output path from a prepared pKa table.
-
-    This supports backend auto-detection without re-reading the raw table file.
-    """
-    first_entry = next(iter(pka_table), None)
-    if first_entry is None:
-        raise click.UsageError("Output table is empty.")
-    for col in (
-        "ha_gas",
-        "a_gas",
-        "ha_sp",
-        "a_sp",
-        "href_gas",
-        "ref_gas",
-        "href_sp",
-        "ref_sp",
-    ):
-        val = first_entry.get(col)
-        if _is_existing_output_path(val):
-            return str(val).strip()
-    return None
-
-
 def validate_analyze_files(
     ha, a, href, ref, ha_solv, a_solv, href_solv, ref_solv, reference_pka
 ):
@@ -1040,6 +1016,20 @@ def validate_analyze_files(
     if reference_pka is None:
         raise click.UsageError(
             "-rp/--reference-pka is required for output-file analysis."
+        )
+
+    solv_names = [f"{name}-solv" for name in file_names]
+    missing_files = []
+    for name, path in zip(file_names, required_gas):
+        if path is not None and not os.path.isfile(path):
+            missing_files.append(f"  --{name}: {path}")
+    for name, path in zip(solv_names, required_solv):
+        if path is not None and not os.path.isfile(path):
+            missing_files.append(f"  --{name}: {path}")
+    if missing_files:
+        raise click.UsageError(
+            "One or more pKa analysis files do not exist:\n"
+            + "\n".join(missing_files)
         )
 
 
@@ -1293,8 +1283,9 @@ def analyze(
     default="auto",
     show_default=True,
     help=(
-        "QC program that produced the output files.  'auto' detects the "
-        "backend independently for each output file."
+        "Require every populated output path to match this backend.  "
+        "'auto' (default) parses each file independently and supports "
+        "mixed Gaussian/ORCA tables."
     ),
 )
 @click.pass_context
