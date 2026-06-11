@@ -25,10 +25,7 @@ from chemsmart.cli.thermochemistry.thermochemistry import (
 from chemsmart.io.file import PKaCDXFile
 from chemsmart.utils.cli import MyCommand, MyGroup
 from chemsmart.utils.constants import HARTREE_TO_KCAL_MOL, energy_conversion
-from chemsmart.utils.io import (
-    get_program_output_extensions,
-    get_program_type_from_file,
-)
+from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
 
@@ -803,31 +800,14 @@ def validate_direct_analyze_files(ha, a, ha_solv, a_solv):
 
 def _auto_discover_direct_pka_files(ha_gas_path, program=None):
     """Infer A- and solvent SP paths from the HA gas-phase output path."""
-    if program is None:
-        program = get_program_type_from_file(ha_gas_path)
+    from chemsmart.utils.utils import (
+        PKA_TARGET_SUFFIX_HELP,
+        discover_pka_target_companion_outputs,
+    )
 
-    extensions = get_program_output_extensions(program)
-
-    def _find(directory, stem):
-        for ext in extensions:
-            candidate = os.path.join(directory, stem + ext)
-            if os.path.isfile(candidate):
-                return candidate
-        return None
-
-    def _derive(gas_path, suffix):
-        dirpath = os.path.dirname(gas_path) or "."
-        stem = os.path.splitext(os.path.basename(gas_path))[0]
-        found = _find(dirpath, f"{stem}{suffix}")
-        if found is not None:
-            return found
-        return os.path.join(dirpath, f"{stem}{suffix}{extensions[0]}")
-
-    results = {
-        "a": _derive(ha_gas_path, "_cb"),
-        "ha_solv": _derive(ha_gas_path, "_sp"),
-        "a_solv": _derive(ha_gas_path, "_cb_sp"),
-    }
+    results = discover_pka_target_companion_outputs(
+        ha_gas_path, program=program
+    )
 
     missing = [
         f"  {k}: {v}" for k, v in results.items() if not os.path.isfile(v)
@@ -837,9 +817,7 @@ def _auto_discover_direct_pka_files(ha_gas_path, program=None):
             "Auto-discovery could not find some companion output files.\n"
             "Missing files:\n" + "\n".join(missing) + "\n\n"
             "Provide them explicitly or ensure output files follow:\n"
-            "  <basename>_cb.<ext>     (conjugate base)\n"
-            "  <basename>_sp.<ext>     (solvent single-point)\n"
-            "  <basename>_cb_sp.<ext>  (conjugate base solvent SP)"
+            + PKA_TARGET_SUFFIX_HELP
         )
     return results
 
@@ -1034,43 +1012,21 @@ def validate_analyze_files(
 
 
 def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
-    """Infer companion output paths from HA and HRef gas-phase paths.
+    """Infer companion output paths from HA and HRef gas-phase paths."""
+    from chemsmart.utils.utils import (
+        PKA_REFERENCE_SUFFIX_HELP,
+        PKA_TARGET_SUFFIX_HELP,
+        discover_pka_reference_companion_outputs,
+        discover_pka_target_companion_outputs,
+    )
 
-    Naming convention produced by the pKa job classes::
-
-        <basename>.<ext>        gas-phase opt+freq
-        <basename>_cb.<ext>     conjugate base gas-phase
-        <basename>_sp.<ext>     solvent single-point
-        <basename>_cb_sp.<ext>  conjugate base solvent SP
-    """
     if program is None:
         program = get_program_type_from_file(ha_gas_path)
 
-    extensions = get_program_output_extensions(program)
-
-    def _find(directory, stem):
-        for ext in extensions:
-            candidate = os.path.join(directory, stem + ext)
-            if os.path.isfile(candidate):
-                return candidate
-        return None
-
-    def _derive(gas_path, suffix):
-        dirpath = os.path.dirname(gas_path) or "."
-        stem = os.path.splitext(os.path.basename(gas_path))[0]
-        found = _find(dirpath, f"{stem}{suffix}")
-        if found is not None:
-            return found
-        return os.path.join(dirpath, f"{stem}{suffix}{extensions[0]}")
-
-    results = {
-        "a": _derive(ha_gas_path, "_cb"),
-        "ha_solv": _derive(ha_gas_path, "_sp"),
-        "a_solv": _derive(ha_gas_path, "_cb_sp"),
-        "ref": _derive(href_gas_path, "_cb"),
-        "href_solv": _derive(href_gas_path, "_sp"),
-        "ref_solv": _derive(href_gas_path, "_cb_sp"),
-    }
+    results = discover_pka_target_companion_outputs(
+        ha_gas_path, program=program
+    )
+    results.update(discover_pka_reference_companion_outputs(href_gas_path))
 
     missing = [
         f"  {k}: {v}" for k, v in results.items() if not os.path.isfile(v)
@@ -1080,9 +1036,9 @@ def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
             "Auto-discovery could not find some companion output files.\n"
             "Missing files:\n" + "\n".join(missing) + "\n\n"
             "Provide them explicitly or ensure output files follow:\n"
-            "  <basename>_cb.<ext>     (conjugate base)\n"
-            "  <basename>_sp.<ext>     (solvent single-point)\n"
-            "  <basename>_cb_sp.<ext>  (conjugate base solvent SP)"
+            + PKA_TARGET_SUFFIX_HELP
+            + "\n"
+            + PKA_REFERENCE_SUFFIX_HELP
         )
     return results
 
@@ -1150,10 +1106,11 @@ def analyze(
 
     \b
     Only -ha and -hr are required.  The remaining six files are
-    auto-discovered from the naming convention:
-      <basename>_cb.<ext>     conjugate base
-      <basename>_sp.<ext>     solvent single-point
-      <basename>_cb_sp.<ext>  conjugate base solvent SP
+    auto-discovered from the same naming convention as batch-analyze:
+      <basename>_pka_A_opt.<ext>   conjugate base
+      <basename>_pka_HA_sp.<ext>   HA solvent single-point
+      <basename>_pka_A_sp.<ext>    conjugate base solvent SP
+      (and the corresponding _pka_Ref_* / _pka_HRef_sp files for HRef)
     Override any auto-discovered path with the corresponding flag.
 
     \b

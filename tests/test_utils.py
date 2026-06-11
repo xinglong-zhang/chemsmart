@@ -1884,6 +1884,52 @@ class TestPKaTableParsing:
         assert entries[1]["ref_sp"] == "refbase1_sp.log"  # carried forward
         assert entries[1]["pka_ref"] == 4.5  # kept own value
 
+    def test_discover_pka_target_companion_outputs_matches_batch_suffixes(
+        self, tmp_path
+    ):
+        """analyze auto-discovery should use the same suffixes as batch-analyze."""
+        from chemsmart.utils.utils import discover_pka_target_companion_outputs
+
+        for name in (
+            "acid1_pka_HA_opt.log",
+            "acid1_pka_A_opt.log",
+            "acid1_pka_HA_sp.log",
+            "acid1_pka_A_sp.log",
+        ):
+            (tmp_path / name).write_text("Gaussian, Inc.\n")
+
+        ha_gas = tmp_path / "acid1_pka_HA_opt.log"
+        discovered = discover_pka_target_companion_outputs(str(ha_gas))
+
+        assert discovered["a"] == str(tmp_path / "acid1_pka_A_opt.log")
+        assert discovered["ha_solv"] == str(tmp_path / "acid1_pka_HA_sp.log")
+        assert discovered["a_solv"] == str(tmp_path / "acid1_pka_A_sp.log")
+
+    def test_discover_pka_reference_companion_outputs(self, tmp_path):
+        """analyze should discover HRef companion files from the HRef gas output."""
+        from chemsmart.utils.utils import (
+            discover_pka_reference_companion_outputs,
+        )
+
+        for name in (
+            "collidine_pka_HRef_opt.log",
+            "collidine_pka_Ref_opt.log",
+            "collidine_pka_HRef_sp.log",
+            "collidine_pka_Ref_sp.log",
+        ):
+            (tmp_path / name).write_text("Gaussian, Inc.\n")
+
+        href_gas = tmp_path / "collidine_pka_HRef_opt.log"
+        discovered = discover_pka_reference_companion_outputs(str(href_gas))
+
+        assert discovered["ref"] == str(tmp_path / "collidine_pka_Ref_opt.log")
+        assert discovered["href_solv"] == str(
+            tmp_path / "collidine_pka_HRef_sp.log"
+        )
+        assert discovered["ref_solv"] == str(
+            tmp_path / "collidine_pka_Ref_sp.log"
+        )
+
     def test_pka_output_table_entry_resolve_filenames_gaussian_log(
         self, tmp_path, monkeypatch
     ):

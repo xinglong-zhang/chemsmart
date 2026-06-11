@@ -219,16 +219,18 @@ The program will automatically detect whether the output files are from Gaussian
 .. note::
 
    For proton exchange, only ``-ha`` and ``-hr`` are strictly required. The remaining six companion files are
-   auto-discovered from the naming convention:
+   auto-discovered using the same suffix convention as ``batch-analyze`` (CHEMSMART pKa job output names):
 
-   -  ``<basename>_cb.<ext>`` — conjugate base
-   -  ``<basename>_sp.<ext>`` — solvent single-point
-   -  ``<basename>_cb_sp.<ext>`` — conjugate base solvent SP
+   -  ``<basename>_pka_A_opt.<ext>`` — conjugate base gas-phase
+   -  ``<basename>_pka_HA_sp.<ext>`` — HA solvent single-point
+   -  ``<basename>_pka_A_sp.<ext>`` — conjugate base solvent SP
+   -  ``<basename>_pka_Ref_opt.<ext>``, ``<basename>_pka_HRef_sp.<ext>``, ``<basename>_pka_Ref_sp.<ext>`` — reference
+      acid companions (from the HRef basename)
 
    Override any auto-discovered path with the corresponding flag.
 
    For direct dissociation, only ``-ha`` is strictly required; ``-a``, ``-has``, and ``-as`` are auto-discovered from
-   the same suffix convention when omitted.
+   the target-acid suffixes above when omitted.
 
 *************************
  Analysis Scheme Options

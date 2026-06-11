@@ -2637,6 +2637,39 @@ class PKaOutputTableEntry:
         "ref_sp",
     )
 
+    # Filename suffix patterns for CHEMSMART pKa job outputs (not CSV aliases).
+    _OUTPUT_SUFFIX_CANDIDATES = {
+        "ha_gas": ["_pka_HA_opt", "_pka_HA", "_pka"],
+        "a_gas": ["_pka_A_opt", "_pka_A", "_pka_cb"],
+        "ha_sp": ["_pka_HA_sp", "_pka_sp"],
+        "a_sp": ["_pka_A_sp", "_pka_cb_sp"],
+        "href_gas": ["_pka_HRef_opt", "_HRef_opt", "_pka_HRef", "_HRef"],
+        "ref_gas": [
+            "_pka_Ref_opt",
+            "_Ref_opt",
+            "_pka_Ref",
+            "_Ref",
+            "_pka_cb",
+            "_cb",
+        ],
+        "href_sp": ["_pka_HRef_sp", "_HRef_sp"],
+        "ref_sp": ["_pka_Ref_sp", "_Ref_sp", "_pka_cb_sp", "_cb_sp"],
+    }
+
+    _TARGET_AUTO_DISCOVER_FIELDS = ("ha_gas", "a_gas", "ha_sp", "a_sp")
+
+    TARGET_SUFFIX_HELP = (
+        "  <basename>_pka_A_opt.<ext>   (conjugate base gas-phase)\n"
+        "  <basename>_pka_HA_sp.<ext>   (HA solvent single-point)\n"
+        "  <basename>_pka_A_sp.<ext>    (conjugate base solvent SP)"
+    )
+
+    REFERENCE_SUFFIX_HELP = (
+        "  <basename>_pka_Ref_opt.<ext>  (reference conjugate base)\n"
+        "  <basename>_pka_HRef_sp.<ext>  (reference acid solvent SP)\n"
+        "  <basename>_pka_Ref_sp.<ext>   (reference conjugate base solvent SP)"
+    )
+
     def __init__(self, data: dict, row_number: int = None):
         # Explicitly initialized attributes
         self.row_number = row_number
@@ -2818,10 +2851,8 @@ class PKaOutputTableEntry:
         from chemsmart.utils.io import get_program_output_extensions
 
         suffix_candidates = {
-            "ha_gas": ["_pka_HA_opt", "_pka_HA", "_pka"],
-            "a_gas": ["_pka_A_opt", "_pka_A", "_pka_cb"],
-            "ha_sp": ["_pka_HA_sp", "_pka_sp"],
-            "a_sp": ["_pka_A_sp", "_pka_cb_sp"],
+            key: self._OUTPUT_SUFFIX_CANDIDATES[key]
+            for key in self._TARGET_AUTO_DISCOVER_FIELDS
         }
 
         program = self._detect_output_program(suffix_candidates)
@@ -3342,6 +3373,89 @@ class PKaOutputTable:
 
         return entries
 
+
+def pka_output_basename_from_path(filepath, role):
+    """Strip a known gas-phase suffix to recover the pKa job basename."""
+    stem = os.path.splitext(os.path.basename(str(filepath)))[0]
+    for suffix in PKaOutputTableEntry._OUTPUT_SUFFIX_CANDIDATES.get(role, []):
+        if stem.endswith(suffix):
+            return stem[: -len(suffix)]
+    return stem
+
+
+def discover_pka_output_path(
+    basename,
+    directory,
+    role,
+    program=None,
+    filepath_hint=None,
+):
+    """Return the first existing companion output path for *role*."""
+    from chemsmart.utils.io import (
+        get_program_output_extensions,
+        get_program_type_from_file,
+    )
+
+    if program is None and filepath_hint is not None:
+        program = get_program_type_from_file(filepath_hint)
+    extensions = get_program_output_extensions(program)
+    suffixes = PKaOutputTableEntry._OUTPUT_SUFFIX_CANDIDATES[role]
+    directory = directory or "."
+    for suffix in suffixes:
+        for ext in extensions:
+            candidate = os.path.join(directory, f"{basename}{suffix}{ext}")
+            if os.path.isfile(candidate):
+                return candidate
+    return os.path.join(directory, f"{basename}{suffixes[0]}{extensions[0]}")
+
+
+def discover_pka_target_companion_outputs(ha_gas_path, program=None):
+    """Infer A- and solvent SP paths from a HA gas-phase output file."""
+    from chemsmart.utils.io import get_program_type_from_file
+
+    ha_gas_path = str(ha_gas_path)
+    directory = os.path.dirname(ha_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ha_gas_path)
+    basename = pka_output_basename_from_path(ha_gas_path, "ha_gas")
+    return {
+        "a": discover_pka_output_path(
+            basename, directory, "a_gas", program=program
+        ),
+        "ha_solv": discover_pka_output_path(
+            basename, directory, "ha_sp", program=program
+        ),
+        "a_solv": discover_pka_output_path(
+            basename, directory, "a_sp", program=program
+        ),
+    }
+
+
+def discover_pka_reference_companion_outputs(href_gas_path, program=None):
+    """Infer Ref- and reference solvent SP paths from an HRef gas-phase file."""
+    from chemsmart.utils.io import get_program_type_from_file
+
+    href_gas_path = str(href_gas_path)
+    directory = os.path.dirname(href_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(href_gas_path)
+    basename = pka_output_basename_from_path(href_gas_path, "href_gas")
+    return {
+        "ref": discover_pka_output_path(
+            basename, directory, "ref_gas", program=program
+        ),
+        "href_solv": discover_pka_output_path(
+            basename, directory, "href_sp", program=program
+        ),
+        "ref_solv": discover_pka_output_path(
+            basename, directory, "ref_sp", program=program
+        ),
+    }
+
+
+PKA_OUTPUT_SUFFIX_CANDIDATES = PKaOutputTableEntry._OUTPUT_SUFFIX_CANDIDATES
+PKA_TARGET_SUFFIX_HELP = PKaOutputTableEntry.TARGET_SUFFIX_HELP
+PKA_REFERENCE_SUFFIX_HELP = PKaOutputTableEntry.REFERENCE_SUFFIX_HELP
 
 parse_pka_output_table = PKaOutputTable.parse_pka_output_table
 resolve_pka_output_references = PKaOutputTable.resolve_pka_output_references
