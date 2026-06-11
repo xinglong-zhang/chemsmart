@@ -12,6 +12,7 @@ import logging
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.utils.utils import get_list_from_string_range
 
@@ -503,6 +504,48 @@ class GaussianDIASJob(GaussianJob):
             skip_completed=opt_job.skip_completed,
         )
 
+    @staticmethod
+    def _first_imaginary_mode_index(job):
+        output = job._output()
+        if output is None or not output.normal_termination:
+            return 1
+        frequencies = output.vibrational_frequencies or []
+        for idx, freq in enumerate(frequencies, start=1):
+            if freq < 0.0:
+                return idx
+        return 1
+
+    def _run_qrc_for_reactant_opt_job(self, opt_job):
+        mode_idx = self._first_imaginary_mode_index(opt_job)
+        qrc_label = f"{opt_job.label}_qrc"
+        qrc_job = GaussianQRCJob(
+            molecule=opt_job.optimized_structure() or opt_job.molecule,
+            settings=opt_job.settings.copy(),
+            label=qrc_label,
+            jobrunner=opt_job.jobrunner,
+            mode_idx=mode_idx,
+            skip_completed=opt_job.skip_completed,
+        )
+        logger.info(
+            f"Running QRC fallback for {opt_job.label} with mode index {mode_idx}."
+        )
+        for qrc_subjob in qrc_job.both_qrc_jobs:
+            qrc_subjob.run()
+            if not self._contains_imaginary_frequencies(qrc_subjob):
+                logger.info(
+                    f"QRC fallback produced frequency-validated structure: "
+                    f"{qrc_subjob.label}"
+                )
+                return qrc_subjob
+        logger.error(
+            f"Imaginary frequencies remained after QRC fallback for {opt_job.label}. "
+            "Fragment SP will not be run."
+        )
+        raise ValueError(
+            f"Imaginary frequencies remained after QRC fallback for {opt_job.label}. "
+            "Fragment SP was not started."
+        )
+
     def _run_reactant_opt_and_sp_job(
         self, opt_job, sp_settings, sp_label, fallback_molecule
     ):
@@ -525,14 +568,11 @@ class GaussianDIASJob(GaussianJob):
             )
 
         if self._contains_imaginary_frequencies(opt_job):
-            logger.error(
+            logger.warning(
                 f"Imaginary frequencies remained after retry for {opt_job.label}. "
-                "Fragment SP will not be run."
+                "Running QRC fallback."
             )
-            raise ValueError(
-                f"Imaginary frequencies remained after retry for {opt_job.label}. "
-                "Fragment SP was not started."
-            )
+            opt_job = self._run_qrc_for_reactant_opt_job(opt_job)
 
         molecule = opt_job.optimized_structure()
         if molecule is None:

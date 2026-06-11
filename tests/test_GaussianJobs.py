@@ -281,6 +281,7 @@ class TestGaussianDIASJobs:
         )
 
         opt_run_calls = []
+        qrc_run_calls = []
         sp_run_calls = []
 
         def fake_opt_run(self, **kwargs):
@@ -300,15 +301,166 @@ class TestGaussianDIASJobs:
         def fake_sp_run(self, **kwargs):
             sp_run_calls.append(self.label)
 
+        class DummyQRCSubJob:
+            def __init__(self, label, molecule):
+                self.label = label
+                self.molecule = molecule
+
+            def run(self, **kwargs):
+                qrc_run_calls.append(self.label)
+
+            def _output(self):
+                return type(
+                    "DummyOutput",
+                    (),
+                    {
+                        "normal_termination": True,
+                        "vibrational_frequencies": [-10.0],
+                        "optimized_structure": self.molecule,
+                    },
+                )()
+
+            def optimized_structure(self):
+                return self.molecule
+
+        class DummyQRCJob:
+            def __init__(
+                self,
+                molecule,
+                settings=None,
+                label=None,
+                jobrunner=None,
+                mode_idx=1,
+                skip_completed=True,
+                **kwargs,
+            ):
+                self.both_qrc_jobs = [
+                    DummyQRCSubJob(f"{label}f_opt", molecule),
+                    DummyQRCSubJob(f"{label}r_opt", molecule),
+                ]
+
         monkeypatch.setattr(GaussianOptJob, "run", fake_opt_run)
         monkeypatch.setattr(GaussianOptJob, "_output", fake_opt_output)
         monkeypatch.setattr(GaussianGeneralJob, "run", fake_sp_run)
+        monkeypatch.setattr(
+            "chemsmart.jobs.gaussian.dias.GaussianQRCJob", DummyQRCJob
+        )
 
-        with pytest.raises(ValueError, match="Imaginary frequencies remained"):
+        with pytest.raises(
+            ValueError, match="Imaginary frequencies remained after QRC fallback"
+        ):
             job._run_fragment_reactant_jobs()
 
         assert len(opt_run_calls) == 2
+        assert qrc_run_calls == [
+            "input_fragment1_opt_qrcf_opt",
+            "input_fragment1_opt_qrcr_opt",
+        ]
         assert sp_run_calls == []
+
+    def test_dias_reactant_fragment_opt_qrc_fallback_runs_sp_on_valid_qrc(
+        self,
+        monkeypatch,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        sp_run_calls = []
+        qrc_run_calls = []
+
+        def fake_opt_run(self, **kwargs):
+            return None
+
+        def fake_opt_output(self):
+            return type(
+                "DummyOutput",
+                (),
+                {
+                    "normal_termination": True,
+                    "vibrational_frequencies": [-10.0],
+                    "optimized_structure": self.molecule,
+                },
+            )()
+
+        def fake_sp_run(self, **kwargs):
+            sp_run_calls.append(self.label)
+
+        class DummyQRCSubJob:
+            def __init__(self, label, molecule, frequencies):
+                self.label = label
+                self.molecule = molecule
+                self._frequencies = frequencies
+
+            def run(self, **kwargs):
+                qrc_run_calls.append(self.label)
+
+            def _output(self):
+                return type(
+                    "DummyOutput",
+                    (),
+                    {
+                        "normal_termination": True,
+                        "vibrational_frequencies": self._frequencies,
+                        "optimized_structure": self.molecule,
+                    },
+                )()
+
+            def optimized_structure(self):
+                return self.molecule
+
+        class DummyQRCJob:
+            def __init__(
+                self,
+                molecule,
+                settings=None,
+                label=None,
+                jobrunner=None,
+                mode_idx=1,
+                skip_completed=True,
+                **kwargs,
+            ):
+                self.both_qrc_jobs = [
+                    DummyQRCSubJob(f"{label}f_opt", molecule, [100.0]),
+                    DummyQRCSubJob(f"{label}r_opt", molecule, [-10.0]),
+                ]
+
+        monkeypatch.setattr(GaussianOptJob, "run", fake_opt_run)
+        monkeypatch.setattr(GaussianOptJob, "_output", fake_opt_output)
+        monkeypatch.setattr(GaussianGeneralJob, "run", fake_sp_run)
+        monkeypatch.setattr(
+            "chemsmart.jobs.gaussian.dias.GaussianQRCJob", DummyQRCJob
+        )
+
+        job._run_fragment_reactant_jobs()
+
+        assert qrc_run_calls == [
+            "input_fragment1_opt_qrcf_opt",
+            "input_fragment2_opt_qrcf_opt",
+        ]
+        assert sp_run_calls == ["input_fragment1_r1", "input_fragment2_i2"]
 
     def test_dias_reactant_opt_settings_use_input_job_settings(
         self,

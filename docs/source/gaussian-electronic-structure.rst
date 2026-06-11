@@ -153,7 +153,11 @@ For each reactant fragment, DI-AS now runs an isolated-fragment optimization bef
 
 #. Run fragment SP only after a valid minimum (no imaginary frequencies) is confirmed.
 
-#. If imaginary frequencies persist after retry, DI-AS flags failure and does not run fragment SP for that fragment.
+#. If imaginary frequencies persist after retry, run QRC on the retry result and re-check frequencies on the QRC outputs.
+
+#. Run fragment SP on the first QRC geometry that passes the frequency check.
+
+#. If imaginary frequencies still persist after QRC, DI-AS flags failure and does not run fragment SP for that fragment.
 
 Optimized reactant-fragment SP outputs are labeled for auto-analysis compatibility, e.g. ``input_fragment1_r1.log`` and
 ``input_fragment2_i2.log``.
