@@ -4,13 +4,14 @@
  Gaussian pKa Calculations
 ###########################
 
-This module provides tools for computing acid dissociation constants (pKa) using Gaussian electronic structure
-calculations with proper thermodynamic cycles.
+This page covers **Gaussian pKa job submission** — generating input files and running the dual-level HA / A⁻ /
+(optional) HRef / Ref⁻ workflow.
 
 .. note::
 
-   Gaussian pKa execution uses the shared CLI pipeline. The Gaussian pKa CLI returns a single ``GaussianpKaJob`` or a
-   ``list[GaussianpKaJob]`` and delegates execution to the shared CLI pipeline.
+   Output-file analysis is backend-independent. After calculations finish, use ``chemsmart run pka analyze`` or
+   ``chemsmart run pka batch-analyze``. See :ref:`pka-calculations` for the full analysis workflow, table formats, and
+   thermochemistry options.
 
 .. contents:: Table of Contents
    :local:
@@ -20,175 +21,123 @@ calculations with proper thermodynamic cycles.
  Theory
 ********
 
-The pKa of an acid HA in aqueous solution is defined by the equilibrium:
-
-.. math::
-
-   \text{HA}_{(\text{aq})} \rightleftharpoons \text{A}^{-}_{(\text{aq})} + \text{H}^{+}_{(\text{aq})}
-
-The pKa is related to the standard Gibbs free energy change by:
-
-.. math::
-
-   \text{p}K_{\text{a}} = \frac{\Delta G^{\circ}_{\text{aq}}}{2.303 \cdot R \cdot T}
-
-where :math:`R` is the gas constant and :math:`T` is the temperature.
-
-Thermodynamic Cycles
-====================
-
-Currently, CHEMSMART supports two thermodynamic cycles for pKa calculations:
-
-**1. Proton Exchange (Isodesmic) Cycle** (Default, Recommended)
-
-Uses a reference acid HRef with known experimental pKa to cancel systematic errors:
-
-.. math::
-
-   \text{HA} + \text{Ref}^{-} \rightarrow \text{A}^{-} + \text{HRef}
-
-The pKa is computed as:
-
-.. math::
-
-   \text{p}K_{\text{a}}(\text{HA}) = \text{p}K_{\text{a}}(\text{HRef}) + \frac{\Delta G_{\text{soln}}}{2.303 \cdot R \cdot T}
-
-where:
-
-.. math::
-
-   \Delta G_{\text{soln}} = \left[ G(\text{A}^{-})_{\text{soln}} + G(\text{HRef})_{\text{soln}} \right] - \left[ G(\text{HA})_{\text{soln}} + G(\text{Ref}^{-})_{\text{soln}} \right]
-
-**2. Direct Cycle**
-
-Uses the absolute free energy of a proton in water:
-
-.. math::
-
-   \text{p}K_{\text{a}} = \frac{G(\text{A}^{-})_{\text{aq}} - G(\text{HA})_{\text{aq}} + \Delta G^{\circ}(\text{H}^{+})_{\text{aq}}}{2.303 \cdot R \cdot T}
-
-Default value: :math:`\Delta G^{\circ}(\text{H}^{+})_{\text{aq}} = -265.9` kcal/mol (Tissandier et al., 1998).
-
-Dual-Level Approach
-===================
-
-CHEMSMART implements a dual-level approach for accurate solvation free energies:
-
-#. **Thermal corrections** (:math:`G_{\text{corr}}`) from gas-phase frequency calculations using quasi-harmonic Gibbs
-   free energy:
-
-   .. math::
-
-      G_{\text{corr}} = G_{\text{qh}}(T) - E_{\text{gas}}
-
-#. **Solvent energies** (:math:`E_{\text{solv}}`) from high-level single-point calculations in implicit solvent (e.g.,
-   SMD).
-
-#. **Total free energy in solution**:
-
-   .. math::
-
-      G_{\text{soln}} = E_{\text{solv}} + G_{\text{corr}}
-
-.. note::
-
-   All internal energies are stored in Hartree (au). Only :math:`\Delta G_{\text{soln}}` is converted to kcal/mol for
-   the pKa formula (1 Hartree = 627.5094740631 kcal/mol).
+For thermodynamic cycles, the dual-level approach, and analysis methodology, see :ref:`pka-calculations`.
 
 *************
  Quick Start
 *************
 
-Basic pKa Calculation
-=====================
+**Proton exchange (default)**
 
-To run a pKa calculation for an acid molecule from an XYZ file:
-
-.. code:: bash
-
-   chemsmart run gaussian -p my_project -f acid.xyz -c 0 -m 1 pka -pi 10
-
-Where:
-
--  ``-p my_project``: Project settings file (defines functional, basis set, etc.)
--  ``-f acid.xyz``: Input geometry file (XYZ, LOG, or COM format)
--  ``-c 0 -m 1``: Charge and multiplicity of the protonated acid (HA)
--  ``-pi 10``: 1-based index of the proton to remove
-
-Example with Acetic Acid
-------------------------
-
-.. code:: bash
-
-   # Run pKa calculation for acetic acid (proton at index 10)
-   chemsmart run gaussian -p my_project -f acetic_acid.xyz -c 0 -m 1 pka -pi 10
-
-This will:
-
-#. Optimize HA in gas phase (opt + freq)
-#. Optimize A⁻ in gas phase (opt + freq)
-#. Run single-point on optimized HA in solution (SMD/water)
-#. Run single-point on optimized A⁻ in solution (SMD/water)
-
-Proton Exchange Cycle with Reference Acid
-=========================================
-
-For more accurate results, use a reference acid with known pKa:
+Unless ``-s direct`` is given, CHEMSMART uses the **proton exchange** scheme and expects a reference acid. Provide
+``-r``, ``-rpi``, ``-rc``, and ``-rm`` (or a coloured-proton CDXML reference with auto-detected ``-rpi``).
 
 .. code:: bash
 
    chemsmart run gaussian -p my_project -f acid.xyz -c 0 -m 1 pka \
        -pi 10 \
-       -s "proton exchange" \
-       -r water.xyz \
-       -rpi 1 \
-       -rc 0 \
-       -rm 1 \
-       -rp 14.0
+       -r ref_acid.xyz \
+       -rpi 21 \
+       -rc 1 \
+       -rm 1
 
-This additionally runs calculations for the reference acid HRef and its conjugate base Ref⁻.
+Where:
+
+-  ``-p my_project``: Project settings (functional, basis set, etc.)
+-  ``-f acid.xyz``: Input geometry (XYZ, LOG, COM, CDXML, …)
+-  ``-c 0 -m 1``: Charge and multiplicity of the protonated acid (HA)
+-  ``-pi 10``: 1-based index of the proton to remove
+-  ``-r`` / ``-rpi`` / ``-rc`` / ``-rm``: Reference acid HRef and its deprotonation settings
+
+This runs gas-phase opt+freq and solvent single-points for HA, A⁻, HRef, and Ref⁻ (default solvent: SMD/water from
+project or CLI).
+
+**Direct cycle**
+
+Use ``-s direct`` when you do **not** want a reference acid. Only HA and A⁻ calculations are submitted.
+
+.. code:: bash
+
+   chemsmart run gaussian -p my_project -f acid.xyz -c 0 -m 1 pka \
+       -pi 10 \
+       -s direct
+
+**ChemDraw CDXML / CDX input**
+
+Structures drawn in ChemDraw can be submitted directly. Mark the acidic proton with a **distinct atom colour**;
+CHEMSMART reads the drawing and auto-detects it, so ``-pi`` is optional for single-fragment files.
+
+.. code:: bash
+
+   # Single fragment — proton index auto-detected from colour
+   chemsmart run gaussian -p my_project -f phenol.cdxml -c 0 -m 1 pka \
+       -r ref_acid.xyz -rpi 21 -rc 1 -rm 1
+
+   # Reference acid can also be CDXML (omit -rpi when uniquely coloured)
+   chemsmart run gaussian -p my_project -f phenol.cdxml -c 0 -m 1 pka \
+       -r ref_acid.cdxml -rc 1 -rm 1
+
+See :ref:`pka-calculations` for multi-molecule CDXML batch submission and the ``-cc`` / ``-rcc`` colour options.
+
+************************
+ Job Output File Naming
+************************
+
+Sub-job labels determine output filenames. For a job with label ``acid1`` (the default when submitting ``acid1.xyz``):
+
+.. code:: text
+
+   acid1_HA_opt.log      # HA gas-phase opt+freq
+   acid1_A_opt.log       # A- gas-phase opt+freq
+   acid1_HA_sp.log       # HA solvent single-point
+   acid1_A_sp.log        # A- solvent single-point
+   acid1_HRef_opt.log    # HRef gas-phase (proton exchange)
+   acid1_Ref_opt.log     # Ref- gas-phase (proton exchange)
+   acid1_HRef_sp.log     # HRef solvent SP (proton exchange)
+   acid1_Ref_sp.log      # Ref- solvent SP (proton exchange)
+
+When building a ``batch-analyze`` output table, either list these paths explicitly or use a ``basename`` and suffix
+convention documented in :ref:`pka-calculations` (the ``_pka_*`` autodiscovery pattern matches ORCA-labelled outputs;
+Gaussian-labelled outputs are typically given as explicit paths).
 
 ************************************
  Batch Processing with Input Tables
 ************************************
 
-For high-throughput pKa calculations, you can use a table-driven approach to submit multiple jobs at once.
+Pass a ``.csv`` or whitespace-delimited ``.txt`` file via ``-f`` and invoke ``pka batch`` (or omit the subcommand —
+batch is selected automatically when ``-f`` points to a submission table).
 
-Using a CSV Input Table
-=======================
-
-Pass a ``.csv`` (or whitespace-delimited ``.txt``) file via the ``-f`` option and add the ``pka batch`` subcommand.
+Proton exchange (default — reference acid required on the ``pka`` group):
 
 .. code:: bash
 
    chemsmart run gaussian -p my_project -f pka_input_table.csv pka \
-       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
+       -r ref_acid.xyz -rpi 5 -rc 0 -rm 1 batch
 
-Or with the direct cycle (no reference acid required):
+Direct cycle (``-s direct`` must be set explicitly):
 
 .. code:: bash
 
-   chemsmart run gaussian -p my_project -f pka_input_table.csv pka batch
+   chemsmart run gaussian -p my_project -f pka_input_table.csv pka -s direct batch
 
 .. note::
 
-   When a ``.csv`` file is detected, ``gaussian`` defers molecule loading to the ``batch`` subcommand. The ``-c`` /
-   ``-m`` options on the parent ``gaussian`` command are **not** required; charge and multiplicity are read from the
-   table rows instead.
+   When ``-f`` is a submission table, the parent ``gaussian`` command does not require ``-c`` / ``-m``; charge and
+   multiplicity are read from each table row.
 
 .. note::
 
-   In batch mode, pKa rows are emitted as independent jobs (one job per table row).
+   In batch mode, each table row becomes an independent pKa job.
 
 Table Format
-------------
+============
 
-The input table must contain the following four columns (comma or whitespace delimited):
+Required columns (comma or whitespace delimited):
 
--  ``filepath``: Path to the input geometry file for the acid (HA).
--  ``proton_index``: 1-based index of the proton to remove.
--  ``charge``: Charge of the HA molecule.
--  ``multiplicity``: Multiplicity of the HA molecule.
+-  ``filepath``: Path to the input geometry for HA
+-  ``proton_index``: 1-based index of the proton to remove
+-  ``charge``: Charge of HA
+-  ``multiplicity``: Multiplicity of HA
 
 Example ``pka_input_table.csv``:
 
@@ -197,52 +146,57 @@ Example ``pka_input_table.csv``:
    filepath,proton_index,charge,multiplicity
    /path/to/acid1.xyz,12,0,1
    /path/to/acid2.xyz,8,-1,2
-   /path/to/acid3.cdxml,,0,1
+   /path/to/acid3.cdxml,8,0,1
 
 .. note::
 
-   When using a ChemDraw file (``.cdxml``) in the table, you can leave the ``proton_index`` blank to enable automatic
-   proton detection based on atom coloring.
+   CSV rows require an explicit ``proton_index`` even when ``filepath`` is ``.cdxml`` / ``.cdx``. Coloured-proton
+   auto-detection and multi-fragment expansion apply only when the CDXML file is passed directly as ``-f`` (see
+   **ChemDraw CDXML / CDX batch input** below), not when it appears as a table row.
 
-For the proton exchange cycle, the reference acid options (``-r``, ``-rpi``, ``-rc``, ``-rm``) are still required on the
-``pka`` group even in batch mode.
+.. note::
 
-Computing pKa from Existing Output Files
-========================================
+   For proton exchange with batch input (the default scheme), ``-r``, ``-rpi``, ``-rc``, and ``-rm`` are required on the
+   ``pka`` group. When the table has multiple rows, only the **first** row uses the reference acid; later rows switch to
+   the direct cycle automatically.
 
-If you already have completed Gaussian output files, compute pKa directly:
+ChemDraw CDXML / CDX batch input
+================================
 
-**Proton exchange (default)**
+When ``-f`` is a ``.cdxml`` or ``.cdx`` file (not a CSV table), ``pka batch`` reads **every ChemDraw fragment** in the
+file, auto-detects the coloured proton in each fragment independently, and submits one pKa job per molecule. Labels
+follow ``<basename>_frag<N>_pka`` (e.g. ``acids_frag1_pka_HA_opt.log``).
+
+.. code:: bash
+
+   # Multi-molecule CDXML — proton exchange (default)
+   chemsmart run gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka \
+       -r ref_acid.xyz -rpi 21 -rc 1 -rm 1 batch
+
+   # Multi-molecule CDXML — direct cycle
+   chemsmart run gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
+
+   # Optional: pin the colour table index when auto-detection is ambiguous
+   chemsmart run gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -cc 4 -s direct batch
+
+A CSV table may list ``.cdxml`` paths per row (see Table Format above), but each row must supply ``proton_index``
+explicitly; coloured-proton auto-detection is not used in that path.
+
+******************************************
+ Computing pKa from Existing Output Files
+******************************************
+
+Use the backend-independent analysis command (not ``gaussian pka``):
 
 .. code:: bash
 
    chemsmart run pka analyze \
-       -ha acid_opt.log \
-       -a conjugate_base_opt.log \
-       -hr reference_acid_opt.log \
-       -r reference_base_opt.log \
-       -has acid_sp_smd.log \
-       -as conjugate_base_sp_smd.log \
-       -hrs reference_acid_sp_smd.log \
-       -rs reference_base_sp_smd.log \
+       -ha acid1_HA_opt.log \
+       -hr ref_acid_HRef_opt.log \
        -rp 6.75 \
-       -T 298.15
+       -T 298.15 -c 1.0 -csg 100 -ch 100
 
-**Direct dissociation**
-
-.. code:: bash
-
-   chemsmart run pka -s direct -dG -265.9 analyze \
-       -ha acid_opt.log \
-       -a conjugate_base_opt.log \
-       -has acid_sp_smd.log \
-       -as conjugate_base_sp_smd.log \
-       -T 298.15
-
-.. note::
-
-   Output file analysis is backend-independent. See :ref:`pka-calculations` for analysis scheme options, batch-analyze,
-   and the full list of ``chemsmart run pka`` options.
+See :ref:`pka-calculations` for auto-discovery rules, direct-cycle syntax, and ``batch-analyze``.
 
 ************
  Parameters
@@ -261,22 +215,26 @@ Core Options
 
    -  -  ``-pi``
       -  ``--proton-index``
-      -  **Required** (single-molecule mode). 1-based index of the proton to remove.
+      -  **Required** in single-molecule mode (unless CDXML auto-detection applies). 1-based proton index.
+
+   -  -  ``-cc``
+      -  ``--color-code``
+      -  CDXML colour-table index for the proton to remove. Auto-detected when uniquely coloured.
 
    -  -  ``-s``
       -  ``--scheme``
-      -  Thermodynamic cycle type: ``"direct"`` or ``"proton exchange"`` (default).
+      -  ``direct`` or ``proton exchange`` (default).
 
-   -  -  ``-cc``
+   -  -
       -  ``--conjugate-base-charge``
       -  Charge of A⁻. Defaults to ``charge - 1``.
 
-   -  -  ``-cm``
+   -  -
       -  ``--conjugate-base-multiplicity``
-      -  Multiplicity of A⁻. Defaults to same as HA.
+      -  Multiplicity of A⁻. Defaults to HA multiplicity.
 
-Reference Acid Options (Proton Exchange Cycle)
-==============================================
+Reference Acid Options (Proton Exchange)
+========================================
 
 .. list-table::
    :header-rows: 1
@@ -288,11 +246,15 @@ Reference Acid Options (Proton Exchange Cycle)
 
    -  -  ``-r``
       -  ``--reference``
-      -  Path to geometry file for reference acid (HRef).
+      -  Geometry file for HRef.
 
    -  -  ``-rpi``
       -  ``--reference-proton-index``
-      -  1-based index of proton to remove from HRef. Required with ``-r``.
+      -  1-based proton index on HRef. Required with ``-r`` (unless CDXML auto-detection applies).
+
+   -  -  ``-rcc``
+      -  ``--reference-color-code``
+      -  CDXML colour index for the reference proton.
 
    -  -  ``-rc``
       -  ``--reference-charge``
@@ -302,17 +264,17 @@ Reference Acid Options (Proton Exchange Cycle)
       -  ``--reference-multiplicity``
       -  Multiplicity of HRef. Required with ``-r``.
 
-   -  -  ``-rcc``
+   -  -
       -  ``--reference-conjugate-base-charge``
       -  Charge of Ref⁻. Defaults to ``reference_charge - 1``.
 
-   -  -  ``-rcm``
+   -  -
       -  ``--reference-conjugate-base-multiplicity``
-      -  Multiplicity of Ref⁻. Defaults to ``reference_multiplicity``.
+      -  Multiplicity of Ref⁻. Defaults to reference multiplicity.
 
    -  -  ``-rp``
       -  ``--reference-pka``
-      -  Experimental pKa of HRef. Required for proton exchange output analysis (``chemsmart run pka analyze``).
+      -  Experimental pKa of HRef. Required for ``chemsmart run pka analyze`` (not for job submission).
 
 Solvent Options
 ===============
@@ -327,7 +289,7 @@ Solvent Options
 
    -  -  ``-sm``
       -  ``--solvent-model``
-      -  Solvation model for solution phase SP. Default: ``SMD``.
+      -  Solvation model for solvent SP. Default: ``SMD`` (or project setting).
 
    -  -  ``-si``
       -  ``--solvent-id``
@@ -348,32 +310,37 @@ Thermochemistry Options
       -  ``--temperature``
       -  Temperature in Kelvin. Default: ``298.15`` K.
 
-   -  -  ``-conc``
+   -  -  ``-c``
       -  ``--concentration``
       -  Concentration in mol/L. Default: ``1.0`` mol/L.
 
+   -  -  ``-P``
+      -  ``--pressure``
+      -  Pressure in atm. Default: ``1.0`` atm.
+
    -  -  ``-csg``
       -  ``--cutoff-entropy-grimme``
-      -  Cutoff frequency (cm⁻¹) for entropy using Grimme's quasi-RRHO. Default: ``100.0``.
+      -  Grimme quasi-RRHO entropy cutoff (cm⁻¹). Default: ``100.0``.
+
+   -  -  ``-cst``
+      -  ``--cutoff-entropy-truhlar``
+      -  Truhlar quasi-RRHO entropy cutoff (cm⁻¹). Mutually exclusive with ``-csg``.
 
    -  -  ``-ch``
       -  ``--cutoff-enthalpy``
-      -  Cutoff frequency (cm⁻¹) for enthalpy using Head-Gordon's method. Default: ``100.0``.
+      -  Head-Gordon enthalpy cutoff (cm⁻¹). Default: ``100.0``.
 
    -  -  ``-dG``
-
       -  ``--delta-g-proton``
-
-      -  :math:`\Delta G^{\circ}(\text{H}^{+})_{\text{aq}}` in kcal/mol for direct cycle submission. Default:
-         ``-265.9``. For output analysis, ``-dG`` must be passed explicitly with ``-s direct`` (see
-         :ref:`pka-calculations`).
+      -  :math:`\Delta G^{\circ}(\text{H}^{+})_{\text{aq}}` in kcal/mol for direct-cycle **submission**. Default:
+         ``-265.9``. For output analysis, pass explicitly with ``-s direct`` (see :ref:`pka-calculations`).
 
 **********
  Examples
 **********
 
-Example 1: Simple pKa with Direct Cycle
-=======================================
+Example 1: Direct Cycle Submission
+==================================
 
 .. code:: bash
 
@@ -382,14 +349,13 @@ Example 1: Simple pKa with Direct Cycle
        -s direct \
        -T 298.15
 
-Example 2: pKa with Proton Exchange and Custom Temperature
-==========================================================
+Example 2: Proton Exchange with Custom Temperature
+==================================================
 
 .. code:: bash
 
    chemsmart run gaussian -p m062x_project -f benzoic_acid.xyz -c 0 -m 1 pka \
        -pi 15 \
-       -s "proton exchange" \
        -r acetic_acid.xyz \
        -rpi 10 \
        -rc 0 \
@@ -404,117 +370,36 @@ Example 3: Batch Submission from CSV
 .. code:: bash
 
    chemsmart run gaussian -p m062x_project -f pka_scale.csv pka \
-       -s "proton exchange" \
-       -r collidine.xyz \
+       -r ref_acid.xyz \
        -rpi 21 \
        -rc 1 \
        -rm 1 \
-       -rp 6.75 \
        batch
 
-In this example, ``charge`` and ``multiplicity`` for each molecule are read from the CSV file rather than from the CLI.
-
-Example 4: Extract pKa from Completed Calculations (Proton Exchange)
-====================================================================
+Example 4: Analyze Completed Gaussian Outputs
+=============================================
 
 .. code:: bash
 
    chemsmart run pka analyze \
-       -ha phenol_opt.log \
-       -a phenolate_opt.log \
-       -hr collidine_H_opt.log \
-       -r collidine_opt.log \
-       -has phenol_sp_smd.log \
-       -as phenolate_sp_smd.log \
-       -hrs collidine_H_sp_smd.log \
-       -rs collidine_sp_smd.log \
+       -ha phenol_HA_opt.log \
+       -hr ref_acid_HRef_opt.log \
        -rp 6.75 \
-       -T 298.15 \
-       -csg 100 \
-       -ch 100
+       -T 298.15 -c 1.0 -csg 100 -ch 100
 
-Example 5: Extract pKa from Completed Calculations (Direct Cycle)
-=================================================================
+Example 5: Direct-Cycle Analysis
+================================
 
 .. code:: bash
 
    chemsmart run pka -s direct -dG -265.9 analyze \
-       -ha phenol_opt.log \
-       -a phenolate_opt.log \
-       -has phenol_sp_smd.log \
-       -as phenolate_sp_smd.log \
-       -T 298.15 \
-       -csg 100 \
-       -ch 100
-
-***************
- Output Format
-***************
-
-When computing pKa from output files, CHEMSMART prints a detailed summary. The format depends on the analysis scheme;
-see :ref:`pka-calculations` for proton exchange and direct dissociation examples.
-
-**Proton exchange**
-
-.. code:: text
-
-   ==============================================================================
-   pKa Calculation - Dual-level Proton Exchange Scheme
-   ==============================================================================
-   Reaction: HA + Ref- -> A- + HRef
-   Temperature: 373.15 K
-
-   Method:
-     G_corr = qh-G(T) - E_gas  (from gas-phase freq calculation)
-     G_soln = E_solv + G_corr  (solution free energy)
-     DG_soln = [G(A-)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref-)_soln]
-     pKa = pKa_ref + DG_soln / (RT * ln10)
-   ------------------------------------------------------------------------------
-
-   Gas-Phase Electronic Energies (E_gas, au):
-     HA:    -345.7419436500
-     A-:    -344.9153986020
-     HRef:  -365.8436493070
-     Ref-:  -365.4561783660
-
-   Thermal Corrections (G_corr = qh-G - E_gas, au):
-     HA:    0.0931931305
-     A-:    0.0758935969
-     HRef:  0.1404528844
-     Ref-:  0.1267467582
-
-   Solvent Single-Point Energies (E_solv, au):
-     HA:    -346.4882221850
-     A-:    -345.8989956310
-     HRef:  -366.5974351550
-     Ref-:  -366.1368369100
-
-   Solution Free Energies (G_soln = E_solv + G_corr, au):
-     HA:    -346.3950290545
-     A-:    -345.8231020341
-     HRef:  -366.4569822706
-     Ref-:  -366.0100901518
-   ------------------------------------------------------------------------------
-
-   pKa Calculation:
-     DG_soln = 0.1250349015 au
-             = 78.4606 kcal/mol
-     pKa(HRef)_ref = 6.75
-
-     *** Computed pKa(HA) = 52.70 ***
-   ==============================================================================
-
-************
- References
-************
-
-#. Tissandier, M. D. et al. (1998). *J. Phys. Chem. A*, 102, 7787. (Absolute proton solvation energy)
-#. Grimme, S. (2012). *Chem. Eur. J.*, 18, 9955. (Quasi-RRHO method)
-#. Marenich, A. V.; Cramer, C. J.; Truhlar, D. G. (2009). *J. Phys. Chem. B*, 113, 6378. (SMD solvation model)
+       -ha phenol_HA_opt.log \
+       -T 298.15 -csg 100 -ch 100
 
 **********
  See Also
 **********
 
 -  :ref:`pka-calculations`
+-  :ref:`orca-pka-calculations`
 -  :doc:`thermochemistry-analysis`

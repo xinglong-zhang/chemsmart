@@ -4,13 +4,13 @@
  ORCA pKa Calculations
 #######################
 
-This section describes how to run pKa calculations using ORCA. The command structure mirrors the Gaussian pKa
-calculations for a consistent user experience.
+This page covers **ORCA pKa job submission**. The command structure mirrors Gaussian pKa for a consistent experience.
 
 .. note::
 
-   ORCA pKa execution uses the shared CLI pipeline. The ORCA pKa CLI returns a single ``ORCApKaJob`` or a
-   ``list[ORCApKaJob]`` and delegates execution to the shared CLI pipeline.
+   Output-file analysis is backend-independent. After calculations finish, use ``chemsmart run pka analyze`` or
+   ``chemsmart run pka batch-analyze``. See :ref:`pka-calculations` for the full analysis workflow, table formats, and
+   thermochemistry options.
 
 .. contents:: Table of Contents
    :local:
@@ -20,144 +20,140 @@ calculations for a consistent user experience.
  Quick Start
 *************
 
-To run a pKa calculation for an acid molecule from an XYZ file with ORCA:
+**Proton exchange (default)**
 
-.. code:: bash
-
-   chemsmart run orca -p my_project -f acid.xyz -c 0 -m 1 pka -pi 10
-
-Where:
-
--  ``-p my_project``: Project settings file (defines functional, basis set, etc. for ORCA)
--  ``-f acid.xyz``: Input geometry file (XYZ, ORCA output, or other formats)
--  ``-c 0 -m 1``: Charge and multiplicity of the protonated acid (HA)
--  ``-pi 10``: 1-based index of the proton to remove
-
-This will:
-
-#. Optimize HA in gas phase (opt + freq)
-#. Optimize A- in gas phase (opt + freq)
-#. Run single-point on optimized HA in solution (CPCM/water)
-#. Run single-point on optimized A- in solution (CPCM/water)
-
-Proton Exchange Cycle with Reference Acid
-=========================================
-
-For more accurate results, use a reference acid with known pKa:
+Unless ``-s direct`` is given, CHEMSMART uses the **proton exchange** scheme and expects a reference acid.
 
 .. code:: bash
 
    chemsmart run orca -p my_project -f acid.xyz -c 0 -m 1 pka \
        -pi 10 \
-       -s "proton exchange" \
-       -r reference.xyz \
-       -rpi 1 \
-       -rc 0 \
-       -rm 1 \
-       -rp 14.0
+       -r ref_acid.xyz \
+       -rpi 21 \
+       -rc 1 \
+       -rm 1
 
-This will run the full set of calculations for HA, A-, HRef, and Ref- using ORCA.
+Where:
+
+-  ``-p my_project``: ORCA project settings
+-  ``-f acid.xyz``: Input geometry
+-  ``-c 0 -m 1``: Charge and multiplicity of HA
+-  ``-pi 10``: 1-based proton index
+-  ``-r`` / ``-rpi`` / ``-rc`` / ``-rm``: Reference acid HRef
+
+This runs gas-phase opt+freq and CPCM/water solvent single-points for HA, A⁻, HRef, and Ref⁻.
+
+**Direct cycle**
+
+.. code:: bash
+
+   chemsmart run orca -p my_project -f acid.xyz -c 0 -m 1 pka \
+       -pi 10 \
+       -s direct
+
+**ChemDraw CDXML / CDX input**
+
+ChemDraw ``.cdxml`` and ``.cdx`` files are supported. Colour the acidic proton in ChemDraw; CHEMSMART reads the drawing
+and detects it automatically, so ``-pi`` can be omitted for single-fragment inputs.
+
+.. code:: bash
+
+   chemsmart run orca -p my_project -f phenol.cdxml -c 0 -m 1 pka \
+       -r ref_acid.xyz -rpi 21 -rc 1 -rm 1
+
+   chemsmart run orca -p my_project -f phenol.cdxml -c 0 -m 1 pka \
+       -r ref_acid.cdxml -rc 1 -rm 1
+
+See :ref:`pka-calculations` for multi-molecule CDXML workflows and colour-code options.
+
+************************
+ Job Output File Naming
+************************
+
+ORCA batch submission appends ``_pka`` to the input stem when forming the job label. For input ``acid1.xyz`` the label
+is ``acid1_pka`` and typical outputs are:
+
+.. code:: text
+
+   acid1_pka_HA_opt.out
+   acid1_pka_A_opt.out
+   acid1_pka_HA_sp.out
+   acid1_pka_A_sp.out
+   acid1_pka_HRef_opt.out    # proton exchange
+   acid1_pka_Ref_opt.out
+   acid1_pka_HRef_sp.out
+   acid1_pka_Ref_sp.out
+
+These names align with the ``batch-analyze`` autodiscovery convention ``<basename>_pka_*`` when ``basename`` is
+``acid1``.
 
 ************************************
  Batch Processing with Input Tables
 ************************************
 
-For high-throughput pKa calculations, use a table-driven approach to submit multiple jobs at once.
-
-Using a CSV Input Table
-=======================
-
-Pass a ``.csv`` (or whitespace-delimited ``.txt``) file via the ``-f`` option and add the ``pka batch`` subcommand.
+Proton exchange (default — reference acid required):
 
 .. code:: bash
 
    chemsmart run orca -p my_project -f pka_input_table.csv pka \
-       -s "proton exchange" -r ref.xyz -rpi 5 -rc 0 -rm 1 batch
+       -r ref_acid.xyz -rpi 5 -rc 0 -rm 1 batch
 
-Or with the direct cycle (no reference acid required):
+Direct cycle:
 
 .. code:: bash
 
-   chemsmart run orca -p my_project -f pka_input_table.csv pka batch
+   chemsmart run orca -p my_project -f pka_input_table.csv pka -s direct batch
 
 .. note::
 
-   When a ``.csv`` file is detected, ``orca`` defers molecule loading to the ``batch`` subcommand. The ``-c`` / ``-m``
-   options on the parent ``orca`` command are **not** required; charge and multiplicity are read from the table rows
-   instead.
+   When ``-f`` is a submission table, the parent ``orca`` command does not require ``-c`` / ``-m``.
 
 .. note::
 
-   In batch mode, pKa rows are emitted as independent jobs (one job per table row).
+   For proton exchange with multiple batch rows, only the first row uses the reference acid; subsequent rows switch to
+   the direct cycle (same behaviour as Gaussian batch).
 
 Table Format
-------------
+============
 
-The input table must contain the following four columns (comma or whitespace delimited):
+Required columns: ``filepath``, ``proton_index``, ``charge``, ``multiplicity``. See :ref:`gaussian-pka-calculations` for
+CSV examples. ``proton_index`` is required for every row, including ``.cdxml`` / ``.cdx`` paths; auto-detection applies
+only when the CDXML file is given directly as ``-f``.
 
--  ``filepath``: Path to the input geometry file for the acid (HA).
--  ``proton_index``: 1-based index of the proton to remove.
--  ``charge``: Charge of the HA molecule.
--  ``multiplicity``: Multiplicity of the HA molecule.
+ChemDraw CDXML / CDX batch input
+================================
 
-Example ``pka_input_table.csv``:
+Pass a multi-molecule CDXML file directly as ``-f`` with ``pka batch``. Each ChemDraw fragment becomes one pKa job with
+per-fragment coloured-proton detection. Labels are ``<basename>_frag<N>_pka`` (outputs such as
+``acids_frag1_pka_HA_opt.out``).
 
-.. code:: text
+.. code:: bash
 
-   filepath,proton_index,charge,multiplicity
-   /path/to/acid1.xyz,12,0,1
-   /path/to/acid2.xyz,8,-1,2
-   /path/to/acid3.cdxml,,0,1
+   chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka \
+       -r ref_acid.xyz -rpi 21 -rc 1 -rm 1 batch
 
-.. note::
+   chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-   When using a ChemDraw file (``.cdxml``) in the table, you can leave the ``proton_index`` blank to enable automatic
-   proton detection based on atom coloring.
-
-For the proton exchange cycle, the reference acid options (``-r``, ``-rpi``, ``-rc``, ``-rm``) are still required on the
-``pka`` group even in batch mode.
-
-Computing pKa from Existing Output Files
-========================================
-
-If you already have completed ORCA output files, compute pKa directly using the backend-independent command:
-
-**Proton exchange (default)**
+******************************************
+ Computing pKa from Existing Output Files
+******************************************
 
 .. code:: bash
 
    chemsmart run pka analyze \
-       -ha acid_opt.out \
-       -a conjugate_base_opt.out \
-       -hr reference_acid_opt.out \
-       -r reference_base_opt.out \
-       -has acid_sp_cpcm.out \
-       -as conjugate_base_sp_cpcm.out \
-       -hrs reference_acid_sp_cpcm.out \
-       -rs reference_base_sp_cpcm.out \
+       -ha acid1_pka_HA_opt.out \
+       -hr ref_acid_pka_HRef_opt.out \
        -rp 6.75 \
        -T 298.15
 
-**Direct dissociation**
-
-.. code:: bash
-
-   chemsmart run pka -s direct -dG -265.9 analyze \
-       -ha acid_opt.out \
-       -a conjugate_base_opt.out \
-       -has acid_sp_cpcm.out \
-       -as conjugate_base_sp_cpcm.out \
-       -T 298.15
-
-The program automatically detects ORCA output files. See :ref:`pka-calculations` for analysis scheme options,
-batch-analyze, and the full list of ``chemsmart run pka`` options.
+ORCA ``.out`` and Gaussian ``.log`` files can be combined in ``batch-analyze``. See :ref:`pka-calculations`.
 
 ************
  Parameters
 ************
 
-The parameters for ORCA pKa calculations mirror those for Gaussian. The key difference is the default solvation model
-(``CPCM`` instead of ``SMD``).
+ORCA pKa options mirror Gaussian submission options. The main default difference is the solvent model (**CPCM** instead
+of **SMD**).
 
 .. list-table::
    :header-rows: 1
@@ -169,23 +165,27 @@ The parameters for ORCA pKa calculations mirror those for Gaussian. The key diff
 
    -  -  ``-pi``
       -  ``--proton-index``
-      -  **Required** (single-molecule mode). 1-based index of the proton to remove.
+      -  **Required** in single-molecule mode (unless CDXML auto-detection applies).
+
+   -  -  ``-cc``
+      -  ``--color-code``
+      -  CDXML colour-table index for the target proton.
 
    -  -  ``-s``
       -  ``--scheme``
-      -  Thermodynamic cycle: ``"direct"`` or ``"proton exchange"`` (default).
+      -  ``direct`` or ``proton exchange`` (default).
 
-   -  -  ``-cc``
+   -  -
       -  ``--conjugate-base-charge``
-      -  Charge of A-. Defaults to ``charge - 1``.
+      -  Charge of A⁻. Defaults to ``charge - 1``.
 
-   -  -  ``-cm``
+   -  -
       -  ``--conjugate-base-multiplicity``
-      -  Multiplicity of A-. Defaults to same as HA.
+      -  Multiplicity of A⁻.
 
    -  -  ``-sm``
       -  ``--solvent-model``
-      -  Solvation model for solution phase SP. Default: ``CPCM``.
+      -  Solvation model for solvent SP. Default: ``CPCM``.
 
    -  -  ``-si``
       -  ``--solvent-id``
@@ -193,59 +193,58 @@ The parameters for ORCA pKa calculations mirror those for Gaussian. The key diff
 
    -  -  ``-r``
       -  ``--reference``
-      -  Path to geometry file for reference acid (HRef). Required for proton exchange cycle.
+      -  Reference acid geometry (proton exchange).
 
    -  -  ``-rpi``
       -  ``--reference-proton-index``
-      -  1-based index of proton to remove from HRef.
-
-   -  -  ``-rc``
-      -  ``--reference-charge``
-      -  Charge of HRef.
-
-   -  -  ``-rm``
-      -  ``--reference-multiplicity``
-      -  Multiplicity of HRef.
+      -  Proton index on HRef.
 
    -  -  ``-rcc``
-      -  ``--reference-conjugate-base-charge``
-      -  Charge of Ref-. Defaults to ``reference_charge - 1``.
+      -  ``--reference-color-code``
+      -  CDXML colour index for the reference proton.
 
-   -  -  ``-rcm``
+   -  -  ``-rc`` / ``-rm``
+      -  ``--reference-charge`` / ``--reference-multiplicity``
+      -  Required with ``-r`` for proton exchange batch/submit.
+
+   -  -
+      -  ``--reference-conjugate-base-charge``
+      -  Charge of Ref⁻.
+
+   -  -
       -  ``--reference-conjugate-base-multiplicity``
-      -  Multiplicity of Ref-. Defaults to ``reference_multiplicity``.
+      -  Multiplicity of Ref⁻.
 
    -  -  ``-rp``
       -  ``--reference-pka``
-      -  Experimental pKa of HRef. Required for proton exchange output analysis (``chemsmart run pka analyze``).
+      -  Experimental pKa of HRef (required for ``chemsmart run pka analyze`` only).
 
    -  -  ``-T``
       -  ``--temperature``
-      -  Temperature in Kelvin. Default: ``298.15`` K.
+      -  Default: ``298.15`` K.
 
-   -  -  ``-conc``
+   -  -  ``-c``
       -  ``--concentration``
-      -  Concentration in mol/L. Default: ``1.0`` mol/L.
+      -  Default: ``1.0`` mol/L.
 
-   -  -  ``-csg``
-      -  ``--cutoff-entropy-grimme``
-      -  Cutoff frequency (cm-1) for quasi-RRHO entropy. Default: ``100.0``.
+   -  -  ``-P``
+      -  ``--pressure``
+      -  Default: ``1.0`` atm.
 
-   -  -  ``-ch``
-      -  ``--cutoff-enthalpy``
-      -  Cutoff frequency (cm-1) for Head-Gordon enthalpy. Default: ``100.0``.
+   -  -  ``-csg`` / ``-cst`` / ``-ch``
+      -  ``--cutoff-entropy-grimme``, etc.
+      -  Entropy and enthalpy cutoffs (cm⁻¹). See :ref:`pka-calculations`.
 
    -  -  ``-dG``
       -  ``--delta-g-proton``
-      -  Absolute free energy of H+ in kcal/mol for direct cycle submission. Default: ``-265.9``. For output analysis,
-         ``-dG`` must be passed explicitly with ``-s direct`` (see :ref:`pka-calculations`).
+      -  Default ``-265.9`` kcal/mol for submission; explicit for direct-cycle analysis.
 
 **********
  Examples
 **********
 
-Example 1: Simple ORCA pKa with Direct Cycle
-============================================
+Example 1: Direct Cycle Submission
+==================================
 
 .. code:: bash
 
@@ -254,14 +253,13 @@ Example 1: Simple ORCA pKa with Direct Cycle
        -s direct \
        -T 298.15
 
-Example 2: pKa with Proton Exchange Cycle
-=========================================
+Example 2: Proton Exchange Submission
+=====================================
 
 .. code:: bash
 
    chemsmart run orca -p orca_m062x -f benzoic_acid.xyz -c 0 -m 1 pka \
        -pi 15 \
-       -s "proton exchange" \
        -r acetic_acid.xyz \
        -rpi 10 \
        -rc 0 \
@@ -276,49 +274,32 @@ Example 3: Batch Submission from CSV
 .. code:: bash
 
    chemsmart run orca -p orca_m062x -f pka_scale.csv pka \
-       -s "proton exchange" \
-       -r collidine.xyz \
+       -r ref_acid.xyz \
        -rpi 21 \
        -rc 1 \
        -rm 1 \
-       -rp 6.75 \
        batch
 
-In this example, ``charge`` and ``multiplicity`` for each molecule are read from the CSV file rather than from the CLI.
-The parent ``orca`` command does not require ``-c`` / ``-m``.
-
-Example 4: Extract pKa from Completed ORCA Calculations (Proton Exchange)
-=========================================================================
+Example 4: Analyze Completed ORCA Outputs
+=========================================
 
 .. code:: bash
 
    chemsmart run pka analyze \
-       -ha phenol_opt.out \
-       -a phenolate_opt.out \
-       -hr collidine_H_opt.out \
-       -r collidine_opt.out \
-       -has phenol_sp_cpcm.out \
-       -as phenolate_sp_cpcm.out \
-       -hrs collidine_H_sp_cpcm.out \
-       -rs collidine_sp_cpcm.out \
+       -ha phenol_pka_HA_opt.out \
+       -hr ref_acid_pka_HRef_opt.out \
        -rp 6.75 \
-       -T 298.15 \
-       -csg 100 \
-       -ch 100
+       -T 298.15 -c 1.0 -csg 100 -ch 100
 
-Example 5: Extract pKa from Completed ORCA Calculations (Direct Cycle)
-======================================================================
+Example 5: Mixed Gaussian/ORCA Batch Analysis
+=============================================
 
 .. code:: bash
 
-   chemsmart run pka -s direct -dG -265.9 analyze \
-       -ha phenol_opt.out \
-       -a phenolate_opt.out \
-       -has phenol_sp_cpcm.out \
-       -as phenolate_sp_cpcm.out \
-       -T 298.15 \
-       -csg 100 \
-       -ch 100
+   chemsmart run pka batch-analyze -o pka_output.csv
+
+With ``-p auto`` (default), ORCA target ``.out`` files and Gaussian reference ``.log`` files in the same table are
+supported. See :ref:`pka-calculations`.
 
 **********
  See Also

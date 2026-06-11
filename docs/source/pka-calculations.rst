@@ -4,23 +4,14 @@
  pKa Calculations
 ##################
 
-This module provides tools for computing acid dissociation constants (pKa) using quantum chemistry calculations with
-proper thermodynamic cycles. Both Gaussian and ORCA are supported.
+CHEMSMART provides pKa workflows in two separate stages:
 
-************************
- Execution Architecture
-************************
+#. **Job submission** — generate and run Gaussian or ORCA calculations for HA, A⁻, and (optionally) a reference acid.
+   See :ref:`gaussian-pka-calculations` and :ref:`orca-pka-calculations`.
 
-pKa submission is implemented as regular job execution through the shared CLI pipeline.
-
--  ``chemsmart run/sub ... pka submit`` returns either a single job object or a list of job objects.
--  ``chemsmart run/sub ... pka batch`` returns a list of per-entry jobs.
--  Execution is handled by the shared CLI pipeline (``process_pipeline``), which runs one job or iterates job lists.
-
-.. note::
-
-   pKa submission returns a single job object or a list of per-entry jobs, and execution is handled by
-   ``process_pipeline``.
+#. **Output analysis** — compute pKa values from completed output files using the backend-independent command
+   ``chemsmart run pka``. Analysis is **program-agnostic**: the same workflow reads Gaussian ``.log`` and ORCA ``.out``
+   files and extracts the energies and thermal corrections needed for the pKa cycle.
 
 .. toctree::
    :maxdepth: 2
@@ -32,6 +23,26 @@ pKa submission is implemented as regular job execution through the shared CLI pi
 .. contents:: Table of Contents
    :local:
    :depth: 2
+
+************************
+ Execution Architecture
+************************
+
+**Job submission**
+
+-  ``chemsmart run/sub gaussian ... pka [submit|batch]`` — prepare and run Gaussian pKa calculations.
+-  ``chemsmart run/sub orca ... pka [submit|batch]`` — prepare and run ORCA pKa calculations.
+-  A single structure yields one job; batch input (CSV table or multi-molecule CDXML) can produce multiple jobs in one
+   invocation.
+-  When ``pka`` is invoked without an explicit subcommand, a submission table triggers ``batch``; otherwise ``submit``
+   runs.
+
+**Output analysis**
+
+-  ``chemsmart run pka analyze`` — single-system analysis from up to eight output files.
+-  ``chemsmart run pka batch-analyze`` — table-driven batch analysis.
+-  Both commands use the same pKa analysis workflow. Gaussian ``.log`` and ORCA ``.out`` files can be mixed in the same
+   batch table; each file is read and interpreted on its own.
 
 Theory
 ======
@@ -58,7 +69,8 @@ CHEMSMART supports two thermodynamic cycles for pKa calculations:
 
 **1. Proton Exchange (Isodesmic) Cycle** (Default, Recommended)
 
-Uses a reference acid HRef with known experimental pKa to cancel systematic errors:
+This is the default when ``-s`` is omitted for both job submission and output analysis. A reference acid HRef with known
+experimental pKa is required to cancel systematic errors:
 
 .. math::
 
@@ -114,129 +126,378 @@ CHEMSMART implements a dual-level approach for accurate solvation free energies:
    G_{\text{diss}}` (direct dissociation) are converted to kcal/mol for the pKa formula (1 Hartree = 627.5094740631
    kcal/mol).
 
-Batch Processing of Output Files
-================================
+**********************************
+ Job Submission (Gaussian / ORCA)
+**********************************
 
-You can parse a table of pre-computed output files to calculate pKa values in batch using ``batch-analyze``.
+Job submission is backend-specific. Use the dedicated pages for full examples and parameter tables:
 
-**Proton exchange (default)**
+-  :ref:`gaussian-pka-calculations`
+-  :ref:`orca-pka-calculations`
 
-.. code:: bash
+**Commands**
 
-   chemsmart run pka batch-analyze \
-       -o pka_output_table.csv \
-       -O computed_pka.csv
-
-**Direct dissociation**
-
-Both ``-s direct`` and ``-dG`` are required for direct-cycle analysis:
+The default scheme is **proton exchange**, which requires a reference acid (``-r``, ``-rpi``, ``-rc``, ``-rm``). Use
+``-s direct`` only when you want the direct dissociation cycle without a reference acid.
 
 .. code:: bash
 
-   chemsmart run pka -s direct -dG -265.9 batch-analyze \
-       -o pka_output_table_direct.csv \
-       -O computed_pka_direct.csv
+   # Proton exchange (default) — reference acid required
+   chemsmart run gaussian -p my_project -f acid.xyz -c 0 -m 1 pka \
+       -pi 10 -r ref_acid.xyz -rpi 21 -rc 1 -rm 1
 
-The output table (e.g., ``pka_output_table.csv``) must contain at least a ``basename`` column. Other file paths are
-auto-discovered if omitted.
+   chemsmart run orca -p my_project -f acid.xyz -c 0 -m 1 pka \
+       -pi 10 -r ref_acid.xyz -rpi 21 -rc 1 -rm 1
 
-**Required Column:**
+   # Direct cycle — no reference acid; must set -s direct explicitly
+   chemsmart run gaussian -p my_project -f acid.xyz -c 0 -m 1 pka -pi 10 -s direct
+   chemsmart run orca -p my_project -f acid.xyz -c 0 -m 1 pka -pi 10 -s direct
 
--  ``basename``: A unique identifier for each acid. Used for file auto-discovery.
+   # Batch submission (proton exchange requires reference options on the pka group)
+   chemsmart run gaussian -p my_project -f pka_input.csv pka \
+       -r ref_acid.xyz -rpi 21 -rc 1 -rm 1 batch
 
-**Target-Acid File Columns (Both Schemes)**
+   # Batch submission (direct cycle)
+   chemsmart run gaussian -p my_project -f pka_input.csv pka -s direct batch
 
-If these columns are omitted, CHEMSMART automatically looks for files named ``<basename>_suffix.<ext>`` (where ``<ext>``
-is ``.log`` or ``.out``).
+**Submission input table** (``pka batch``)
 
--  ``ha_gas``: HA gas-phase optimization output. Auto-discovery suffix: ``_pka``
--  ``a_gas``: A⁻ gas-phase optimization output. Auto-discovery suffix: ``_pka_cb``
--  ``ha_sp``: HA solvent single-point output. Auto-discovery suffix: ``_pka_sp``
--  ``a_sp``: A⁻ solvent single-point output. Auto-discovery suffix: ``_pka_cb_sp``
+Comma- or whitespace-delimited table with columns ``filepath``, ``proton_index``, ``charge``, ``multiplicity``.
 
-**Reference Acid Columns (Proton Exchange Only)**
+***************************************
+ ChemDraw CDXML / CDX Input (pKa Jobs)
+***************************************
 
-These columns are required for the proton exchange cycle and are ignored for direct dissociation:
+pKa job submission can read structures directly from ChemDraw ``.cdxml`` and ``.cdx`` files. CHEMSMART reads atom
+colours in the drawing to identify the **acidic proton** to remove. Colour the proton (or the ``H`` in a functional
+group such as –OH) in ChemDraw with a distinct colour; CHEMSMART auto-detects it so ``-pi`` is often unnecessary.
 
--  ``href_gas``: Path to the gas-phase optimization output for the reference acid HRef.
--  ``ref_gas`` (optional): Path to the gas-phase optimization output for Ref⁻.
--  ``href_sp`` (optional): Path to the solvent single-point output for HRef.
--  ``ref_sp`` (optional): Path to the solvent single-point output for Ref⁻.
--  ``pka_ref``: The experimental pKa of the reference acid.
+**Single-molecule submit**
+
+When ``-f`` points to one CDXML structure with a single fragment, omit ``-pi`` if the coloured proton is unique:
+
+.. code:: bash
+
+   chemsmart run gaussian -p my_project -f phenol.cdxml -c 0 -m 1 pka \
+       -r ref_acid.xyz -rpi 21 -rc 1 -rm 1
+
+   chemsmart run gaussian -p my_project -f phenol.cdxml -c 0 -m 1 pka -s direct
+
+Use ``-cc`` / ``--color-code`` when several hydrogens share similar styling and you need to select a specific ChemDraw
+colour-table index. The reference acid may also be a CDXML file; in that case ``-rpi`` can be omitted when the reference
+proton is uniquely coloured (or use ``-rcc`` / ``--reference-color-code``).
+
+**Multi-molecule CDXML (one job per fragment)**
+
+A single ``.cdxml`` / ``.cdx`` file may contain **multiple molecules** (multiple ChemDraw fragments). CHEMSMART performs
+**per-fragment** coloured-proton detection and creates **one pKa job per fragment**.
+
+Pass the file with ``pka batch`` (or ``pka submit`` for a single-fragment file):
+
+.. code:: bash
+
+   chemsmart run gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka \
+       -r ref_acid.xyz -rpi 21 -rc 1 -rm 1 batch
+
+   chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
+
+Job labels are derived from the filename, e.g. ``acids_frag1_pka`` (Gaussian) or ``acids_frag1_pka`` (ORCA). Charge and
+multiplicity come from the parent ``-c`` / ``-m`` options and apply to every fragment unless overridden in a CSV table.
+
+**CDXML paths inside a CSV batch table**
+
+You can list ``.cdxml`` / ``.cdx`` files in a submission table alongside XYZ inputs, but **every row still needs an
+explicit integer ``proton_index``**. Empty cells are not accepted. Coloured-proton auto-detection is **not** applied per
+CSV row.
+
+.. code:: text
+
+   filepath,proton_index,charge,multiplicity
+   /path/to/acid1.xyz,12,0,1
+   /path/to/acid2.cdxml,8,0,1
+
+To auto-detect coloured protons across multiple ChemDraw fragments, pass the CDXML file directly as ``-f`` with ``pka
+batch`` (see above) instead of embedding it in a CSV table. A CSV row pointing at a multi-fragment CDXML file loads only
+the default structure from that file and creates **one** job for that row.
 
 .. note::
 
-   For proton exchange, if reference acid columns (``href_gas``, ``ref_gas``, etc.) are left blank for a row, the values
-   from the most recently defined reference acid in a previous row will be used.
+   If ``-f`` is a CDXML file (not a CSV table), CHEMSMART routes to coloured-proton batch expansion automatically. For
+   general CDXML structure handling outside pKa, see :doc:`chemdraw-organometallic`.
 
-The formatted batch summary table is printed to stdout. When ``-O`` / ``--output-results`` is given, the same table is
-also written to that file. The ΔG column header depends on the analysis scheme:
+**Proton and reference options for CDXML**
 
--  Proton exchange: ``ΔG_soln (kcal/mol)``
--  Direct dissociation: ``ΔG_diss (kcal/mol)``
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 70
 
-Computing pKa from Output Files
-===============================
+   -  -  Short
+      -  Long
+      -  Description
 
-If you have already completed output files for a single acid, you can compute the pKa directly without resubmitting jobs
-using ``analyze``. This is the recommended way to get the pKa value after your calculations are done.
+   -  -  ``-pi``
+      -  ``--proton-index``
+      -  Optional for CDXML when a uniquely coloured proton is present. Required for XYZ/LOG/COM inputs.
+
+   -  -  ``-cc``
+      -  ``--color-code``
+      -  ChemDraw colour-table index for the target acidic proton (``.cdxml`` / ``.cdx`` only).
+
+   -  -  ``-rpi``
+      -  ``--reference-proton-index``
+      -  Optional when ``-r`` is a CDXML file with a uniquely coloured reference proton.
+
+   -  -  ``-rcc``
+      -  ``--reference-color-code``
+      -  ChemDraw colour-table index for the reference proton (``.cdxml`` / ``.cdx`` reference only).
+
+**Job output file naming**
+
+Each pKa job creates gas-phase opt+freq and solvent single-point sub-jobs. Output filenames follow the sub-job label:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   -  -  Sub-job label suffix
+      -  Species
+   -  -  ``_HA_opt``
+      -  Target acid HA (gas-phase opt+freq)
+   -  -  ``_A_opt``
+      -  Target conjugate base A⁻ (gas-phase opt+freq)
+   -  -  ``_HA_sp``
+      -  HA solvent single-point
+   -  -  ``_A_sp``
+      -  A⁻ solvent single-point
+   -  -  ``_HRef_opt`` / ``_Ref_opt``
+      -  Reference acid / conjugate base (proton exchange only)
+   -  -  ``_HRef_sp`` / ``_Ref_sp``
+      -  Reference solvent single-points (proton exchange only)
+
+Gaussian batch jobs use the input stem as the job label (e.g. ``acid1_HA_opt.log``). ORCA batch jobs append ``_pka`` to
+the stem (e.g. ``acid1_pka_HA_opt.out``). The output-analysis autodiscovery convention below is aligned with the
+``{basename}_pka_*`` pattern used by ORCA submission and by typical batch output tables.
+
+*****************************************
+ Output Analysis (``chemsmart run pka``)
+*****************************************
+
+All post-processing lives under ``chemsmart run pka``. No Gaussian or ORCA backend is invoked during analysis.
+
+Thermochemistry extraction
+==========================
+
+For each output file, analysis:
+
+#. Open the file and detect the program (Gaussian or ORCA).
+#. Reads the gas-phase SCF energy and quasi-harmonic Gibbs free energy (for opt+freq outputs).
+#. Reads the solvent-phase SCF energy (for single-point outputs).
+#. Raises a clear error if a required quantity cannot be extracted.
+
+Computing pKa from Output Files (``analyze``)
+=============================================
+
+If you have completed output files for a single acid, compute pKa with ``analyze``.
 
 **Proton exchange (default)**
 
-Only ``-ha`` and ``-hr`` are strictly required; the remaining six companion files are auto-discovered from the naming
-convention (see note below). ``-rp`` / ``--reference-pka`` is required.
+Only ``-ha`` and ``-hr`` are strictly required; the remaining six companion files are auto-discovered when they follow
+the naming convention below. ``-rp`` / ``--reference-pka`` is required.
 
 .. code:: bash
 
    chemsmart run pka analyze \
-       -ha acid_opt.log \
-       -a conjugate_base_opt.log \
-       -hr reference_acid_opt.log \
-       -r reference_base_opt.log \
-       -has acid_sp_smd.log \
-       -as conjugate_base_sp_smd.log \
-       -hrs reference_acid_sp_smd.log \
-       -rs reference_base_sp_smd.log \
+       -ha acid1_pka_HA_opt.log \
+       -hr ref_acid_pka_HRef_opt.log \
+       -rp 6.75 \
+       -T 333.15 -c 1.0 -csg 100 -ch 100
+
+Provide all eight files explicitly when auto-discovery is not appropriate:
+
+.. code:: bash
+
+   chemsmart run pka analyze \
+       -ha acid1_pka_HA_opt.log \
+       -a acid1_pka_A_opt.log \
+       -hr ref_acid_pka_HRef_opt.log \
+       -r ref_acid_pka_Ref_opt.log \
+       -has acid1_pka_HA_sp.log \
+       -as acid1_pka_A_sp.log \
+       -hrs ref_acid_pka_HRef_sp.log \
+       -rs ref_acid_pka_Ref_sp.log \
        -rp 6.75 \
        -T 298.15
 
 **Direct dissociation**
 
 Four output files are required (HA, A⁻, and their solvent single-points). Both ``-s direct`` and ``-dG`` must be
-specified explicitly on the ``pka`` group **before** the ``analyze`` subcommand:
+specified on the ``pka`` group **before** the ``analyze`` subcommand:
 
 .. code:: bash
 
    chemsmart run pka -s direct -dG -265.9 analyze \
-       -ha acid_opt.log \
-       -a conjugate_base_opt.log \
-       -has acid_sp_smd.log \
-       -as conjugate_base_sp_smd.log \
+       -ha acid1_pka_HA_opt.log \
        -T 298.15
 
-The program will automatically detect whether the output files are from Gaussian or ORCA.
+Only ``-ha`` is strictly required; ``-a``, ``-has``, and ``-as`` are auto-discovered from the target-acid suffix
+convention when omitted.
 
-.. note::
+File autodetection (``analyze``)
+================================
 
-   For proton exchange, only ``-ha`` and ``-hr`` are strictly required. The remaining six companion files are
-   auto-discovered using the same suffix convention as ``batch-analyze`` (CHEMSMART pKa job output names):
+When companion paths are omitted, CHEMSMART derives them from the HA and HRef gas-phase files using the same suffix
+patterns as ``batch-analyze``:
 
-   -  ``<basename>_pka_A_opt.<ext>`` — conjugate base gas-phase
-   -  ``<basename>_pka_HA_sp.<ext>`` — HA solvent single-point
-   -  ``<basename>_pka_A_sp.<ext>`` — conjugate base solvent SP
-   -  ``<basename>_pka_Ref_opt.<ext>``, ``<basename>_pka_HRef_sp.<ext>``, ``<basename>_pka_Ref_sp.<ext>`` — reference
-      acid companions (from the HRef basename)
+**From the HA gas-phase file (``-ha``)**
 
-   Override any auto-discovered path with the corresponding flag.
+-  ``<basename>_pka_A_opt.<ext>`` — conjugate base gas-phase
+-  ``<basename>_pka_HA_sp.<ext>`` — HA solvent single-point
+-  ``<basename>_pka_A_sp.<ext>`` — conjugate base solvent SP
 
-   For direct dissociation, only ``-ha`` is strictly required; ``-a``, ``-has``, and ``-as`` are auto-discovered from
-   the target-acid suffixes above when omitted.
+**From the HRef gas-phase file (``-hr``)**
+
+-  ``<basename>_pka_Ref_opt.<ext>`` — reference conjugate base
+-  ``<basename>_pka_HRef_sp.<ext>`` — reference acid solvent SP
+-  ``<basename>_pka_Ref_sp.<ext>`` — reference conjugate base solvent SP
+
+Alternative suffixes (``_HRef_opt``, ``_pka_cb``, etc.) are also recognised. The file extension (``.log`` or ``.out``)
+is chosen from the detected program. Override any auto-discovered path with the corresponding flag.
+
+If a required file is missing or cannot be parsed, analysis stops with a clear error (missing paths or missing
+thermochemistry data).
+
+Batch Processing of Output Files (``batch-analyze``)
+====================================================
+
+Parse a table of pre-computed output file paths to calculate pKa values in batch.
+
+**Proton exchange (default)**
+
+.. code:: bash
+
+   chemsmart run pka -T 333.15 -c 1.0 -csg 100 -ch 100 batch-analyze \
+       -o pka_output_table.csv \
+       -O results.dat
+
+**Direct dissociation**
+
+Both ``-s direct`` and ``-dG`` are required:
+
+.. code:: bash
+
+   chemsmart run pka -s direct -dG -265.9 batch-analyze \
+       -o pka_output_table_direct.csv \
+       -O results_direct.dat
+
+The formatted batch summary table is printed to stdout. When ``-O`` / ``--output-results`` is given, the same formatted
+report is written to that file (not a wide CSV of input columns).
+
+Output table format
+-------------------
+
+The output table (``-o`` / ``--output-table``) must contain at least a ``basename`` column. Other file paths may be
+omitted and are auto-discovered from ``basename`` when blank.
+
+**Required column**
+
+-  ``basename``: Unique identifier for each acid. Used for file auto-discovery.
+
+**Target-acid columns (both schemes)**
+
+Accepted header aliases include ``ha_opt``, ``a_opt``, ``ha_solv``, ``a_solv``, etc. (see column list below).
+
+When blank, CHEMSMART searches for ``<basename><suffix>.<ext>`` in the current working directory. Suffixes are tried in
+order; both ``.log`` and ``.out`` are tested.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 50 30
+
+   -  -  Column
+      -  Description
+      -  Auto-discovery suffixes (first match wins)
+
+   -  -  ``ha_gas``
+      -  HA gas-phase opt+freq output
+      -  ``_pka_HA_opt``, ``_pka_HA``, ``_pka``
+
+   -  -  ``a_gas``
+      -  A⁻ gas-phase opt+freq output
+      -  ``_pka_A_opt``, ``_pka_A``, ``_pka_cb``
+
+   -  -  ``ha_sp``
+      -  HA solvent single-point output
+      -  ``_pka_HA_sp``, ``_pka_sp``
+
+   -  -  ``a_sp``
+      -  A⁻ solvent single-point output
+      -  ``_pka_A_sp``, ``_pka_cb_sp``
+
+**Reference-acid columns (proton exchange only)**
+
+Ignored for direct dissociation. Blank reference columns inherit values from the previous row.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   -  -  Column
+      -  Description
+   -  -  ``href_gas``
+      -  HRef gas-phase opt+freq output (not auto-discovered from ``basename``; provide explicitly or inherit)
+   -  -  ``ref_gas``
+      -  Ref⁻ gas-phase opt+freq output
+   -  -  ``href_sp``
+      -  HRef solvent single-point output
+   -  -  ``ref_sp``
+      -  Ref⁻ solvent single-point output
+   -  -  ``pka_ref``
+      -  Experimental pKa of the reference acid
+
+**Example** ``pka_output_table.csv``:
+
+.. code:: text
+
+   basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref
+   phenol,,,,,ref_acid_pka_HRef_opt.log,ref_acid_pka_Ref_opt.log,ref_acid_pka_HRef_sp.log,ref_acid_pka_Ref_sp.log,6.75
+   benzoic_acid,,,,,,,,,6.75
+
+``batch-analyze`` options
+-------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 70
+
+   -  -  Short
+      -  Long
+      -  Description
+
+   -  -  ``-o``
+      -  ``--output-table``
+      -  **Required.** Path to the output-file table.
+
+   -  -  ``-O``
+      -  ``--output-results``
+      -  Optional path for the formatted results report. Stdout always receives the summary table.
+
+   -  -  ``-p``
+      -  ``--program``
+      -  Require every populated output path to match ``gaussian`` or ``orca``. Default: ``auto`` (per-file detection;
+         supports mixed tables).
+
+Mixed Gaussian / ORCA tables
+----------------------------
+
+With ``-p auto`` (default), the program behind each output file is detected automatically. A batch table may contain
+Gaussian ``.log`` targets and ORCA ``.out`` reference files in the same run. Use ``-p gaussian`` or ``-p orca`` only
+when you want to **validate** that all populated paths belong to one backend.
 
 *************************
  Analysis Scheme Options
 *************************
 
-These options apply to ``chemsmart run pka`` (``analyze`` and ``batch-analyze``). They are separate from the submission
+These options apply to ``chemsmart run pka`` (``analyze`` and ``batch-analyze``). They are separate from submission
 options on ``chemsmart run/sub gaussian ... pka`` and ``chemsmart run/sub orca ... pka``.
 
 .. list-table::
@@ -249,26 +510,25 @@ options on ``chemsmart run/sub gaussian ... pka`` and ``chemsmart run/sub orca .
 
    -  -  ``-s``
       -  ``--scheme``
-      -  Thermodynamic cycle for analysis: ``direct`` or ``proton exchange``. Default: ``proton exchange`` when omitted.
+      -  Thermodynamic cycle: ``direct`` or ``proton exchange``. Default: ``proton exchange``.
 
    -  -  ``-dG``
-
       -  ``--delta-g-proton``
-
-      -  :math:`G_{\text{soln}}(\text{H}^{+})` in kcal/mol for the direct cycle. **Required** when ``-s direct`` is
-         specified. Has no default for analysis; if ``-dG`` is given without ``-s direct``, it is ignored with a log
-         message.
+      -  :math:`G_{\text{soln}}(\text{H}^{+})` in kcal/mol for the direct cycle. **Required** when ``-s direct`` is used
+         for analysis. Has no default during analysis.
 
 .. note::
 
-   For job submission, ``-dG`` defaults to ``-265.9`` kcal/mol (Tissandier et al., 1998). For output analysis, you must
-   pass ``-dG`` explicitly whenever ``-s direct`` is used.
+   For job submission, ``-dG`` defaults to ``-265.9`` kcal/mol. For output analysis you must pass ``-dG`` explicitly
+   whenever ``-s direct`` is used.
 
 *********************
  Output File Options
 *********************
 
-**Gas-Phase Optimization + Frequency Files:**
+Used by ``analyze`` (not ``batch-analyze``, which reads paths from the table).
+
+**Gas-phase optimization + frequency files**
 
 .. list-table::
    :header-rows: 1
@@ -280,21 +540,21 @@ options on ``chemsmart run/sub gaussian ... pka`` and ``chemsmart run/sub orca .
 
    -  -  ``-ha``
       -  ``--ha``
-      -  HA (protonated acid) gas-phase opt+freq output.
+      -  HA gas-phase opt+freq output.
 
    -  -  ``-a``
       -  ``--a``
-      -  A⁻ (conjugate base) gas-phase opt+freq output.
+      -  A⁻ gas-phase opt+freq output.
 
    -  -  ``-hr``
       -  ``--href``
-      -  HRef (reference acid) gas-phase opt+freq output.
+      -  HRef gas-phase opt+freq output.
 
    -  -  ``-r``
       -  ``--ref``
-      -  Ref⁻ (reference conjugate base) gas-phase opt+freq output.
+      -  Ref⁻ gas-phase opt+freq output.
 
-**Solvent Single-Point Files:**
+**Solvent single-point files**
 
 .. list-table::
    :header-rows: 1
@@ -324,6 +584,8 @@ options on ``chemsmart run/sub gaussian ... pka`` and ``chemsmart run/sub orca .
  Thermochemistry Options
 *************************
 
+Shared by ``analyze`` and ``batch-analyze``.
+
 .. list-table::
    :header-rows: 1
    :widths: 15 15 70
@@ -336,13 +598,21 @@ options on ``chemsmart run/sub gaussian ... pka`` and ``chemsmart run/sub orca .
       -  ``--temperature``
       -  Temperature in Kelvin. Default: ``298.15`` K.
 
-   -  -  ``-conc``
+   -  -  ``-c``
       -  ``--concentration``
       -  Concentration in mol/L. Default: ``1.0`` mol/L.
+
+   -  -  ``-P``
+      -  ``--pressure``
+      -  Pressure in atm. Default: ``1.0`` atm.
 
    -  -  ``-csg``
       -  ``--cutoff-entropy-grimme``
       -  Cutoff frequency (cm⁻¹) for entropy using Grimme's quasi-RRHO. Default: ``100.0``.
+
+   -  -  ``-cst``
+      -  ``--cutoff-entropy-truhlar``
+      -  Cutoff frequency (cm⁻¹) for entropy using Truhlar's quasi-RRHO. Mutually exclusive with ``-csg``.
 
    -  -  ``-ch``
       -  ``--cutoff-enthalpy``
@@ -350,7 +620,7 @@ options on ``chemsmart run/sub gaussian ... pka`` and ``chemsmart run/sub orca .
 
    -  -  ``-rp``
       -  ``--reference-pka``
-      -  Experimental pKa of HRef. Required for proton exchange output analysis.
+      -  Experimental pKa of HRef. Required for proton exchange analysis.
 
 Output Format
 =============
@@ -452,7 +722,7 @@ When computing pKa from output files, CHEMSMART prints a detailed summary. The f
 **Batch analyze output**
 
 ``batch-analyze`` prints a compact table whose ΔG column header matches the scheme. The same formatted report is written
-to the ``-O`` / ``--output-results`` file when that option is provided:
+to ``-O`` when provided:
 
 .. code:: text
 
@@ -469,9 +739,6 @@ to the ``-O`` / ``--output-results`` file when that option is provided:
 
 For direct dissociation, the header reads ``Batch pKa Results (Direct Dissociation)`` and the column is labeled
 ``DG_diss (kcal/mol)``.
-
-Use ``-p gaussian`` or ``-p orca`` with ``batch-analyze`` when auto-detection from the output table fails (default:
-``auto``).
 
 References
 ==========
