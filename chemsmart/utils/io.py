@@ -1838,9 +1838,7 @@ def resolve_output_path(input_file, output_file):
             and os.path.abspath(candidate) != in_path
         ):
             logger.warning(
-                "Resolved output path would overwrite input (%s); using %s instead.",
-                out_path,
-                candidate,
+                f"Resolved output path would overwrite input ({out_path}); using {candidate} instead."
             )
             return candidate, True
         counter += 1

@@ -4,8 +4,8 @@ import os
 
 import click
 
+from chemsmart.cli.database.database import click_database_id_options
 from chemsmart.cli.job import (
-    click_database_id_options,
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
@@ -600,11 +600,10 @@ def gaussian(
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
     #  ".cif", ".traj", ".gro")):
     else:
+        logger.debug(
+            f"Falling back to default Gaussian job settings for file {filename}."
+        )
         job_settings = GaussianJobSettings.default()
-    # else:
-    #     raise ValueError(
-    #         f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
-    #     )
 
     # Update keywords
     keywords = (
@@ -786,9 +785,8 @@ def gaussian(
                     converted.append(QMMMMolecule(molecule=m))
                 except (TypeError, AttributeError, ValueError) as exc:
                     logger.debug(
-                        "QMMM wrap via molecule= failed at index %s: %s; retrying dict-based init",
-                        idx,
-                        exc,
+                        f"QMMM wrap via molecule= failed at index {idx}: {exc}; "
+                        f"retrying dict-based init",
                     )
                     try:
                         converted.append(
@@ -796,10 +794,8 @@ def gaussian(
                         )
                     except Exception as exc2:
                         logger.warning(
-                            "Failed to convert molecule %s (idx %s) to QMMMMolecule: %s; leaving original",
-                            getattr(m, "label", idx),
-                            idx,
-                            exc2,
+                            f"Failed to convert molecule (idx {idx}) to QMMMMolecule: {exc2}; "
+                            f"leaving as original molecule type {type(m)}",
                         )
                         converted.append(m)
 
@@ -811,8 +807,7 @@ def gaussian(
         # Non-fatal: if anything goes wrong, keep original molecules and
         # let the qmmm subcommand attempt conversion itself.
         logger.debug(
-            "Could not convert molecules to QMMMMolecule at group level: %s",
-            exc,
+            f"Could not convert molecules to QMMMMolecule at group level: {exc}"
         )
 
     # store objects
