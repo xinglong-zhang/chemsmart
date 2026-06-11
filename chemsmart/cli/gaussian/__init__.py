@@ -5,6 +5,7 @@ from .dias import dias
 from .gaussian import gaussian
 from .irc import irc
 from .link import link
+from .mecp import mecp
 from .modred import modred
 from .nci import nci
 from .opt import opt
@@ -25,6 +26,7 @@ __all__ = [
     "gaussian",
     "irc",
     "link",
+    "mecp",
     "modred",
     "nci",
     "opt",
