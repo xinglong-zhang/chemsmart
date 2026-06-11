@@ -35,22 +35,6 @@ from chemsmart.utils.io import get_program_type_from_file
 logger = logging.getLogger(__name__)
 
 
-def build_provenance(filename, output):
-    """Build provenance metadata for an assembled record."""
-    return {
-        "source_file": filename,
-        "source_file_hash": sha256_content(output),
-        "source_file_size": file_size(filename),
-        "source_file_date": output.file_date,
-        "program": get_program_type_from_file(filename),
-        "program_version": output.version,
-        "parser": output.__class__.__name__,
-        "chemsmart_version": chemsmart_version,
-        "assembled_at": utcnow_iso(),
-        "normal_termination": output.normal_termination,
-    }
-
-
 class BaseAssembler:
     OUTPUT_CLASS = None  # To be defined in subclasses
     PROGRAM = "unknown"  # To be defined in subclasses
@@ -66,6 +50,22 @@ class BaseAssembler:
         return Molecule.from_filepath(
             self.filename, index=self.index, return_list=True
         )
+
+    @staticmethod
+    def build_provenance(filename, output):
+        """Build provenance metadata for an assembled record."""
+        return {
+            "source_file": filename,
+            "source_file_hash": sha256_content(output),
+            "source_file_size": file_size(filename),
+            "source_file_date": output.file_date,
+            "program": get_program_type_from_file(filename),
+            "program_version": output.version,
+            "parser": output.__class__.__name__,
+            "chemsmart_version": chemsmart_version,
+            "assembled_at": utcnow_iso(),
+            "normal_termination": output.normal_termination,
+        }
 
     def assemble(self):
         if not self.output.normal_termination:
@@ -85,7 +85,7 @@ class BaseAssembler:
 
         meta = self.get_meta_data()
         results = self.get_calculation_results()
-        provenance = build_provenance(self.filename, self.output)
+        provenance = self.build_provenance(self.filename, self.output)
         molecules = []
         for i, mol in enumerate(self.molecules_list):
             mol_entry = {"index": i + 1, **self.get_molecule_info(mol)}
