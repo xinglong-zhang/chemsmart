@@ -475,16 +475,23 @@ def _create_pka_jobs_from_molecules(
             f"proton_index={pka_mol.proton_index}, label={label}"
         )
 
-        jobs.append(
-            GaussianpKaJob(
-                molecule=pka_mol,
-                settings=pka_settings,
-                label=label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                **kwargs,
-            )
+        job = GaussianpKaJob(
+            molecule=pka_mol,
+            settings=pka_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
         )
+        job._batch_entry = {
+            "filepath": str(filename),
+            "proton_index": pka_mol.proton_index,
+            "charge": int(pka_settings.charge),
+            "multiplicity": int(pka_settings.multiplicity),
+            "scheme": shared["scheme"],
+            "fragment_index": idx,
+        }
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from multi-fragment CDXML")
     return jobs

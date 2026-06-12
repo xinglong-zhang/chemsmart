@@ -495,16 +495,23 @@ def _create_orca_pka_jobs_from_molecules(
             f"proton_index={pka_mol.proton_index}, label={mol_label}"
         )
 
-        jobs.append(
-            ORCApKaJob(
-                molecule=pka_mol,
-                settings=pka_settings,
-                label=mol_label,
-                jobrunner=jobrunner,
-                skip_completed=skip_completed,
-                **kwargs,
-            )
+        job = ORCApKaJob(
+            molecule=pka_mol,
+            settings=pka_settings,
+            label=mol_label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
         )
+        job._batch_entry = {
+            "filepath": str(filename),
+            "proton_index": pka_mol.proton_index,
+            "charge": int(pka_settings.charge),
+            "multiplicity": int(pka_settings.multiplicity),
+            "scheme": shared["scheme"],
+            "fragment_index": idx,
+        }
+        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from multi-fragment CDXML")
     return jobs

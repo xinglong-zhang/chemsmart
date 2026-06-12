@@ -202,6 +202,11 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "-m": str(batch_entry["multiplicity"]),
         }
 
+        fragment_index = batch_entry.get("fragment_index")
+        if fragment_index is not None:
+            option_map["--index"] = str(fragment_index)
+            option_map["-i"] = str(fragment_index)
+
         def _drop_option_pair(tokens, option_names):
             idx = 0
             while idx < len(tokens):
@@ -243,6 +248,8 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         # they must appear before entering the "pka" group.
         _set_option(args, "--charge", "-c", insert_before="pka")
         _set_option(args, "--multiplicity", "-m", insert_before="pka")
+        if fragment_index is not None:
+            _set_option(args, "--index", "-i", insert_before="pka")
 
         batch_scheme = batch_entry.get("scheme")
         if batch_scheme is not None:

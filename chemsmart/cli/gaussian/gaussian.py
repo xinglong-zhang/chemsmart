@@ -535,13 +535,13 @@ def gaussian(
 
     # Defer filetype validation if the pka subcommand is being invoked,
     # as it has its own table file handling.
-    from chemsmart.cli.pka import is_pka_cdxml_input
+    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
     from chemsmart.utils.utils import PKaTableEntry
 
     is_pka_subcommand = ctx.invoked_subcommand == "pka"
     is_pka_table_input = is_pka_subcommand and (
         PKaTableEntry.is_submission_table(filename)
-        or is_pka_cdxml_input(filename)
+        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
     )
 
     if filename is None:

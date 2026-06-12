@@ -1138,6 +1138,77 @@ def test_sub_pka_cdxml_batch_uses_coloured_proton_fragments(
 
 
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_cdxml_batch_reconstructed_scripts_target_single_fragment(
+    tmp_path, monkeypatch, backend, colored_proton_two_molecule_cdxml_file
+):
+    """Each CDXML fragment script must submit only that fragment, not re-batch all."""
+    _require_backend_pka_subcommand(sub, backend)
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    captured = {"submissions": []}
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
+        "submissions"
+    ].append((job, test, cli_args))
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            colored_proton_two_molecule_cdxml_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["submissions"]) == 2
+
+    fragment_indices = []
+    for _job, _test, cli_args in captured["submissions"]:
+        assert "batch" not in cli_args
+        assert "submit" in cli_args
+        assert "--proton-index" in cli_args
+        assert "--index" in cli_args
+        fragment_indices.append(cli_args[cli_args.index("--index") + 1])
+
+    assert fragment_indices == ["1", "2"]
+
+    from chemsmart.jobs.job import Job
+
+    def _fake_run(self):
+        return None
+
+    monkeypatch.setattr(Job, "run", _fake_run)
+
+    for _job, _test, cli_args in captured["submissions"]:
+        run_result = runner.invoke(run, ["--no-scratch", "--fake"] + cli_args)
+        assert run_result.exit_code == 0, run_result.output
+        assert "proton-index is required" not in run_result.output
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
 def test_sub_pka_cdxml_batch_ignores_sibling_csv(
     tmp_path, monkeypatch, backend, colored_proton_two_molecule_cdxml_file
 ):

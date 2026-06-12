@@ -471,13 +471,13 @@ def orca(
 
     # Defer filetype validation if the pka subcommand is being invoked,
     # as it has its own table file handling.
-    from chemsmart.cli.pka import is_pka_cdxml_input
+    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
     from chemsmart.utils.utils import PKaTableEntry
 
     is_pka_subcommand = ctx.invoked_subcommand == "pka"
     is_pka_table_input = is_pka_subcommand and (
         PKaTableEntry.is_submission_table(filename)
-        or is_pka_cdxml_input(filename)
+        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
     )
 
     if filename is None:
@@ -496,10 +496,12 @@ def orca(
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
-    elif is_pka_table_input:
+    elif is_pka_table_input or (
+        is_pka_subcommand and is_pka_cdxml_input(filename)
+    ):
         job_settings = ORCAJobSettings.default()
         logger.info(
-            "pka subcommand invoked with table file; "
+            "pka subcommand invoked with table or CDXML file; "
             "skipping filetype validation and using default ORCA settings"
         )
     else:
