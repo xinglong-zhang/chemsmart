@@ -22,10 +22,12 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.pka import (
+    apply_pka_molecule_charge_multiplicity,
     batch_pka_jobs_from_cdxml,
     click_pka_proton_options,
     click_pka_shared_options,
     is_pka_cdxml_input,
+    require_pka_charge_multiplicity,
     resolve_pka_batch_row,
     resolve_pka_submit_proton_options,
     validate_reference_options,
@@ -188,22 +190,20 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
     keywords = ctx.obj["keywords"]
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
-    pka_settings = _build_orca_pka_settings(proton_index, shared, opt_settings)
+    molecules = ctx.obj["molecules"]
+    if molecules:
+        opt_settings = apply_pka_molecule_charge_multiplicity(
+            opt_settings, molecules[-1]
+        )
 
-    if pka_settings.charge is None:
-        raise click.UsageError(
-            "Charge must be specified via -c/--charge option"
-        )
-    if pka_settings.multiplicity is None:
-        raise click.UsageError(
-            "Multiplicity must be specified via -m/--multiplicity option"
-        )
+    pka_settings = _build_orca_pka_settings(proton_index, shared, opt_settings)
+    require_pka_charge_multiplicity(
+        pka_settings, source_hint=f"input file {filename}"
+    )
 
     logger.info(f"ORCA pKa job settings: {pka_settings.__dict__}")
     logger.info(f"Proton index to remove: {proton_index}")
     logger.info(f"Thermodynamic cycle: {shared['scheme']}")
-
-    molecules = ctx.obj["molecules"]
     molecule_indices = ctx.obj.get("molecule_indices")
     label = ctx.obj["label"]
     base_label = label if label.endswith("_pka") else f"{label}_pka"
@@ -486,8 +486,15 @@ def _create_orca_pka_jobs_from_molecules(
     jobs = []
     for idx, pka_mol in enumerate(pka_molecules, start=1):
         mol_label = f"{base_name}_frag{idx}_pka"
+        row_opt_settings = apply_pka_molecule_charge_multiplicity(
+            opt_settings, pka_mol
+        )
+        require_pka_charge_multiplicity(
+            row_opt_settings,
+            source_hint=f"CDXML fragment {idx} in {filename}",
+        )
         pka_settings = _build_orca_pka_settings(
-            pka_mol.proton_index, shared, opt_settings
+            pka_mol.proton_index, shared, row_opt_settings
         )
 
         logger.info(

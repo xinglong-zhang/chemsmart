@@ -1138,6 +1138,68 @@ def test_sub_pka_cdxml_batch_uses_coloured_proton_fragments(
 
 
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])
+def test_sub_pka_cdxml_batch_uses_molecule_charge_without_parent_flags(
+    tmp_path, monkeypatch, backend, colored_proton_two_molecule_cdxml_file
+):
+    """CDXML batch should infer charge/mult from parsed Molecule objects."""
+    _require_backend_pka_subcommand(sub, backend)
+    config_root = _write_test_backend_project(tmp_path, backend)
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
+
+    from chemsmart.settings.server import Server
+
+    fake_server = Server(name="dummy")
+    captured = {"jobs": []}
+    fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
+        "jobs"
+    ].append(job)
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.from_servername",
+        lambda _name: fake_server,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        sub,
+        [
+            "--test",
+            "--server",
+            "dummy",
+            "--no-scratch",
+            backend,
+            "-p",
+            "test",
+            "-f",
+            colored_proton_two_molecule_cdxml_file,
+            "pka",
+            "-s",
+            "direct",
+            "batch",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(captured["jobs"]) == 2
+    for job in captured["jobs"]:
+        assert job.settings.charge == 0
+        assert job.settings.multiplicity == 1
+        assert job._batch_entry["charge"] == 0
+        assert job._batch_entry["multiplicity"] == 1
+
+
+def test_get_pka_molecules_auto_assigns_charge_and_multiplicity(
+    colored_proton_cdxml_file,
+):
+    from chemsmart.io.file import PKaCDXFile
+
+    pka_mol = PKaCDXFile(colored_proton_cdxml_file).get_pka_molecules(
+        index="-1"
+    )
+    assert pka_mol.charge == 0
+    assert pka_mol.multiplicity == 1
+
+
+@pytest.mark.parametrize("backend", ["gaussian", "orca"])
 def test_sub_pka_cdxml_batch_reconstructed_scripts_target_single_fragment(
     tmp_path, monkeypatch, backend, colored_proton_two_molecule_cdxml_file
 ):

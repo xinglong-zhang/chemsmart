@@ -629,6 +629,38 @@ def is_pka_cdxml_input(filename):
     )
 
 
+def apply_pka_molecule_charge_multiplicity(opt_settings, molecule):
+    """Use charge/multiplicity from *molecule* when absent on *opt_settings*."""
+    import copy
+
+    updated = copy.copy(opt_settings)
+    mol_charge = molecule.charge
+    mol_mult = molecule.multiplicity
+    if updated.charge is None and mol_charge is not None:
+        updated.charge = int(mol_charge)
+    if updated.multiplicity is None and mol_mult is not None:
+        updated.multiplicity = int(mol_mult)
+    return updated
+
+
+def require_pka_charge_multiplicity(opt_settings, source_hint=""):
+    """Raise when charge or multiplicity are still unset after resolution."""
+    missing = []
+    if opt_settings.charge is None:
+        missing.append("-c/--charge")
+    if opt_settings.multiplicity is None:
+        missing.append("-m/--multiplicity")
+    if not missing:
+        return
+    suffix = f" ({source_hint})" if source_hint else ""
+    raise click.UsageError(
+        "Charge and multiplicity are required for pKa submission. "
+        f"Missing: {', '.join(missing)}. "
+        "Provide them on the parent command or use a ChemDraw structure "
+        f"from which they can be inferred{suffix}."
+    )
+
+
 def is_pka_batch_invocation(ctx):
     """Return True when the nested ``pka`` command targets ``batch`` mode."""
     if getattr(ctx, "invoked_subcommand", None) != "pka":

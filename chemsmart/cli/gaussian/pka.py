@@ -22,10 +22,12 @@ import click
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.pka import (
+    apply_pka_molecule_charge_multiplicity,
     batch_pka_jobs_from_cdxml,
     click_pka_proton_options,
     click_pka_shared_options,
     is_pka_cdxml_input,
+    require_pka_charge_multiplicity,
     resolve_pka_batch_row,
     resolve_pka_submit_proton_options,
     validate_reference_options,
@@ -243,23 +245,22 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
     keywords = ctx.obj["keywords"]
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
+    molecules = ctx.obj["molecules"]
+    if molecules:
+        opt_settings = apply_pka_molecule_charge_multiplicity(
+            opt_settings, molecules[-1]
+        )
+
     pka_settings = _build_gaussian_pka_settings(
         proton_index, shared, opt_settings, project_settings.sp_settings()
     )
-
-    if pka_settings.charge is None:
-        raise click.UsageError(
-            "Charge must be specified via -c/--charge option"
-        )
-    if pka_settings.multiplicity is None:
-        raise click.UsageError(
-            "Multiplicity must be specified via -m/--multiplicity option"
-        )
+    require_pka_charge_multiplicity(
+        pka_settings, source_hint=f"input file {filename}"
+    )
 
     _log_pka_settings(pka_settings, proton_index, shared)
 
     # ── create job(s) ──
-    molecules = ctx.obj["molecules"]
     molecule_indices = ctx.obj.get("molecule_indices")
     label = ctx.obj["label"]
     jobrunner = ctx.obj["jobrunner"]
@@ -463,10 +464,17 @@ def _create_pka_jobs_from_molecules(
     jobs = []
     for idx, pka_mol in enumerate(pka_molecules, start=1):
         label = f"{base_name}_frag{idx}_pka"
+        row_opt_settings = apply_pka_molecule_charge_multiplicity(
+            opt_settings, pka_mol
+        )
+        require_pka_charge_multiplicity(
+            row_opt_settings,
+            source_hint=f"CDXML fragment {idx} in {filename}",
+        )
         pka_settings = _build_gaussian_pka_settings(
             pka_mol.proton_index,
             shared,
-            opt_settings,
+            row_opt_settings,
             project_settings.sp_settings(),
         )
 
