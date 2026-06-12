@@ -57,7 +57,7 @@ PROGRAM_INFO = {
             "Your ORCA version",
             "ORCA versions",
         ],
-        "suffixes": [".out"],
+        "suffixes": [".out", ".log"],
     },
     "xtb": {
         "keywords": ["x T B", "xtb version", "xtb is free software:"],
@@ -70,6 +70,11 @@ ALL_SUFFIXES = tuple(
 )
 # Folder-level detection is currently supported only for these programs
 PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
+
+
+def get_program_output_extensions(program, default=(".log", ".out")):
+    """Return preferred output-file extensions for a detected program."""
+    return tuple(PROGRAM_INFO.get(program, {}).get("suffixes", default))
 
 
 def create_molecule_list(
@@ -365,6 +370,51 @@ def get_program_type_from_file(filepath):
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
     return "unknown"
+
+
+def detect_program_type_from_files(filepaths, allowed_programs=None):
+    """Detect a single QC program type from multiple output files.
+
+    Args:
+        filepaths (Iterable[str]): Output file paths to inspect.
+        allowed_programs (set[str] | None): If provided, require the detected
+            program to be a member of this set.
+
+    Returns:
+        str: Detected program name.
+
+    Raises:
+        ValueError: If no program can be detected, multiple programs are
+            detected, or the program is not in ``allowed_programs``.
+    """
+    detected = {}
+    programs = set()
+    for fp in filepaths:
+        program = get_program_type_from_file(fp)
+        detected[fp] = program
+        if program != "unknown":
+            programs.add(program)
+
+    if not programs:
+        raise ValueError(
+            "Could not detect output-file program type from supplied "
+            "files. Supported: Gaussian and ORCA output files."
+        )
+    if len(programs) > 1:
+        pairs = ", ".join(f"{k}: {v}" for k, v in detected.items())
+        raise ValueError(
+            "Supplied files contain mixed program types. "
+            "Use outputs from a single QC program.\n"
+            f"Detected: {pairs}"
+        )
+
+    program = next(iter(programs))
+    if allowed_programs is not None and program not in allowed_programs:
+        raise ValueError(
+            f"Detected unsupported program '{program}'. "
+            f"Only {sorted(allowed_programs)} are supported."
+        )
+    return program
 
 
 def check_program_availability_in_chemsmart(program_name):
