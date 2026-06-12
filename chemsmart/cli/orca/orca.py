@@ -676,7 +676,7 @@ def orca(
                 "Please specify only one of them."
             )
 
-    if filename:
+    if filename and not is_pka_table_input:
         if is_chemsmart_db:
             if structure_id is not None:
                 molecules = Molecule.from_filepath(
@@ -707,7 +707,7 @@ def orca(
             ), f"Could not obtain molecule from {filename}!"
             logger.debug(f"Obtained molecules {molecules} from {filename}")
 
-    if pubchem:
+    if pubchem and not is_pka_table_input:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None
