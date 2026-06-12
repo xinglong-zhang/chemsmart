@@ -1185,6 +1185,7 @@ def test_sub_pka_cdxml_batch_uses_molecule_charge_without_parent_flags(
         assert job.settings.multiplicity == 1
         assert job._batch_entry["charge"] == 0
         assert job._batch_entry["multiplicity"] == 1
+        assert job._batch_entry["label"] == job.label
 
 
 def test_get_pka_molecules_auto_assigns_charge_and_multiplicity(
@@ -1248,11 +1249,13 @@ def test_sub_pka_cdxml_batch_reconstructed_scripts_target_single_fragment(
     assert len(captured["submissions"]) == 2
 
     fragment_indices = []
-    for _job, _test, cli_args in captured["submissions"]:
+    for job, _test, cli_args in captured["submissions"]:
         assert "batch" not in cli_args
         assert "submit" in cli_args
         assert "--proton-index" in cli_args
         assert "--index" in cli_args
+        assert "--label" in cli_args
+        assert cli_args[cli_args.index("--label") + 1] == job.label
         fragment_indices.append(cli_args[cli_args.index("--index") + 1])
 
     assert fragment_indices == ["1", "2"]
@@ -1264,10 +1267,18 @@ def test_sub_pka_cdxml_batch_reconstructed_scripts_target_single_fragment(
 
     monkeypatch.setattr(Job, "run", _fake_run)
 
-    for _job, _test, cli_args in captured["submissions"]:
+    for job, _test, cli_args in captured["submissions"]:
+        run_labels = []
+
+        def _fake_run(self):
+            run_labels.append(self.label)
+            return None
+
+        monkeypatch.setattr(Job, "run", _fake_run)
         run_result = runner.invoke(run, ["--no-scratch", "--fake"] + cli_args)
         assert run_result.exit_code == 0, run_result.output
         assert "proton-index is required" not in run_result.output
+        assert run_labels == [job.label]
 
 
 @pytest.mark.parametrize("backend", ["gaussian", "orca"])

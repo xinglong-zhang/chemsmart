@@ -207,6 +207,11 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             option_map["--index"] = str(fragment_index)
             option_map["-i"] = str(fragment_index)
 
+        batch_label = batch_entry.get("label")
+        if batch_label is not None:
+            option_map["--label"] = str(batch_label)
+            option_map["-l"] = str(batch_label)
+
         def _drop_option_pair(tokens, option_names):
             idx = 0
             while idx < len(tokens):
@@ -250,6 +255,8 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         _set_option(args, "--multiplicity", "-m", insert_before="pka")
         if fragment_index is not None:
             _set_option(args, "--index", "-i", insert_before="pka")
+        if batch_label is not None:
+            _set_option(args, "--label", "-l", insert_before="pka")
 
         batch_scheme = batch_entry.get("scheme")
         if batch_scheme is not None:

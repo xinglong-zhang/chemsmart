@@ -434,6 +434,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             "charge": int(entry.charge),
             "multiplicity": int(entry.multiplicity),
             "scheme": row_shared["scheme"],
+            "label": label,
         }
         jobs.append(job)
 
@@ -498,6 +499,7 @@ def _create_pka_jobs_from_molecules(
             "multiplicity": int(pka_settings.multiplicity),
             "scheme": shared["scheme"],
             "fragment_index": idx,
+            "label": label,
         }
         jobs.append(job)
 
