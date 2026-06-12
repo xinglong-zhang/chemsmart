@@ -622,7 +622,7 @@ class TestGaussianRoute:
         assert isinstance(route_object2, object)
         assert route_object2.jobtype == "opt"
         assert route_object2.freq is False
-        assert route_object2.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert route_object2.functional == "b3lyp-d3bj"
         assert route_object2.basis == "6-31G(d)".lower()
         assert route_object2.solvent_model is None
         assert route_object2.solvent_id is None
@@ -848,6 +848,44 @@ class TestGaussianJobFromLogFile:
         assert settings.semiempirical == "PM6"
         assert settings.solvent_model is None
         assert settings.solvent_id is None
+
+    def test_reads_oldform_redundant_coordinates_with_atomic_numbers(
+        self, tmp_path
+    ):
+        outputfile = tmp_path / "old_form_numeric_coords.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt b3lyp/gen",
+                    " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
+                    " Charge =  0 Multiplicity = 1",
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " H,0,0.000000,0.000000,1.000000",
+                    " Recover connectivity data from disk.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        settings = GaussianJobSettings.from_logfile(str(outputfile))
+        assert settings.jobtype == "opt"
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "gen"
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+
+    def test_reads_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        settings = GaussianJobSettings.from_logfile(
+            gaussian_pd_insertion_ts_r_outfile
+        )
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+        assert settings.functional == "b3lyp-d3"
 
 
 class TestGaussianPBCJob:

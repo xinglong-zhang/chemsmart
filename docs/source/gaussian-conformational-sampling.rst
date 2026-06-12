@@ -9,7 +9,7 @@ This page covers CREST conformational searches and trajectory analysis using Gau
 ************
 
 CREST (Conformer-Rotamer Ensemble Sampling Tool) performs systematic conformational searches to find low-energy
-conformers. Chemsmart combines CREST with Gaussian for subsequent calculations.
+conformers. CHEMSMART combines CREST with Gaussian for subsequent calculations.
 
 .. code:: bash
 

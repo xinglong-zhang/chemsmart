@@ -523,6 +523,26 @@ class Submitter(RegistryMixin):
                 f.write(line)
             f.write("\n")
 
+    def _write_extra_scheduler_directives(self, f):
+        """
+        Write additional scheduler directives from server settings.
+
+        Args:
+            f: File handle for writing scheduler directives.
+        """
+        directives = self.server.extra_scheduler_directives
+        if directives is None:
+            return
+        if isinstance(directives, str):
+            f.write(directives)
+            if directives and not directives.endswith("\n"):
+                f.write("\n")
+            return
+        for line in directives:
+            f.write(line)
+            if line and not line.endswith("\n"):
+                f.write("\n")
+
     def _write_extra_commands(self, f):
         """
         Write additional server-specific commands.
@@ -679,6 +699,7 @@ class PBSSubmitter(Submitter):
             if user_settings.data.get("EMAIL"):
                 f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
                 f.write("#PBS -m abe\n")
+        self._write_extra_scheduler_directives(f)
         f.write("\n")
         f.write("\n")
 
@@ -755,6 +776,7 @@ class SLURMSubmitter(Submitter):
             if user_settings.data.get("EMAIL"):
                 f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
                 f.write("#SBATCH --mail-type=END,FAIL\n")
+        self._write_extra_scheduler_directives(f)
         f.write("\n")
         f.write("\n")
 

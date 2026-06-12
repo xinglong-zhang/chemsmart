@@ -2,7 +2,7 @@
  Molecule Input Formats
 ########################
 
-Chemsmart provides flexible molecule input capabilities, supporting multiple file formats and molecular representations.
+CHEMSMART provides flexible molecule input capabilities, supporting multiple file formats and molecular representations.
 This page describes the various ways you can create molecules for use in quantum chemistry calculations.
 
 .. note::
@@ -25,7 +25,7 @@ calculations:
            ├─── ASE Atoms
            ├─── Pymatgen Molecule
            ├─── RDKit Molecule
-           ├─── File Formats (.xyz, .sdf, .com/.log, .inp/.out, .cdx/.cdxml, etc.)
+           ├─── File Formats (.xyz, .sdf, .com/.log, .inp/.out, .db, .cdx/.cdxml, etc.)
            └─── PubChem queries (by name, CID, or SMILES)
            │
            ▼
@@ -100,7 +100,7 @@ Gaussian input files contain route, charge, multiplicity, and coordinates:
 
 .. tip::
 
-   Chemsmart reads the existing charge and multiplicity from ``.com`` files. Override with ``-c`` and ``-m`` if needed.
+   CHEMSMART reads the existing charge and multiplicity from ``.com`` files. Override with ``-c`` and ``-m`` if needed.
 
 Gaussian Output Files (.log, .out)
 ----------------------------------
@@ -142,7 +142,7 @@ ChemDraw Files
 ChemDraw XML (.cdxml) and Binary (.cdx) Files
 ---------------------------------------------
 
-Chemsmart supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
+CHEMSMART supports reading molecular structures directly from ChemDraw files, including **organometallic complexes**
 with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 .. code:: bash
@@ -192,6 +192,33 @@ For full details on organometallic complex support and its restrictions, see :do
  Molecular Databases
 *********************
 
+Chemsmart Database Files (.db)
+==============================
+
+Chemsmart ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
+:doc:`database-assemble`). When a chemsmart database is used as molecular input, chemsmart first selects the requested
+record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
+(see :doc:`database-workflow`).
+
+.. tip::
+
+   Use ``chemsmart run database query -f chemsmart.db`` to list available record indices and IDs before selecting
+   structures from a database.
+
+.. code:: bash
+
+   # By index of the record (last structure by default)
+   chemsmart sub -s server gaussian -p project -f chemsmart.db --ri 3 opt
+
+   # By record ID and structure index
+   chemsmart sub -s server gaussian -p project -f chemsmart.db --rid a1b2c3d4e5f6 -i 5 sp
+
+   # By structure ID
+   chemsmart sub -s server orca -p project -f chemsmart.db --sid c4d5e6f78a9b ts
+
+   # By molecule ID (all structures in the molecule)
+   chemsmart run mol -f chemsmart.db --mid ABCDEFGHIJKLMN-U visualize
+
 PubChem Integration
 ===================
 
@@ -214,8 +241,8 @@ Query PubChem directly by name, CID, or SMILES:
    -  PubChem queries support compound names, CIDs (Compound IDs), and SMILES strings.
    -  SMILES strings are processed by PubChem to retrieve 3D structures and generate coordinates.
 
-ASE Database Files (.db, .traj)
-===============================
+ASE Database and Trajectory Files (.db, .traj)
+==============================================
 
 Use structures from ASE database or trajectory files:
 
@@ -231,7 +258,7 @@ Use structures from ASE database or trajectory files:
  Python Object Integration
 ***************************
 
-Chemsmart's ``Molecule`` class provides seamless integration with popular Python chemistry libraries:
+CHEMSMART's ``Molecule`` class provides seamless integration with popular Python chemistry libraries:
 
 From ASE Atoms
 ==============
@@ -244,7 +271,7 @@ From ASE Atoms
    # Create ASE Atoms object
    atoms = Atoms('H2O', positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
 
-   # Convert to Chemsmart Molecule
+   # Convert to CHEMSMART Molecule
    molecule = Molecule.from_ase_atoms(atoms)
 
 From RDKit Mol
@@ -260,7 +287,7 @@ From RDKit Mol
    rdkit_mol = Chem.MolFromSmiles('CCO')
    AllChem.EmbedMolecule(rdkit_mol)
 
-   # Convert to Chemsmart Molecule
+   # Convert to CHEMSMART Molecule
    molecule = Molecule.from_rdkit_mol(rdkit_mol)
 
 Aromaticity Detection (``is_aromatic``)
@@ -292,19 +319,19 @@ acyclic molecules (e.g. H₂O, MgI₂) that can arise when the geometry-based bo
 From Pymatgen
 =============
 
-Chemsmart molecules can be converted to and from Pymatgen format:
+CHEMSMART molecules can be converted to and from Pymatgen format:
 
 .. code:: python
 
    from chemsmart.io.molecules.structure import Molecule
 
-   # Convert Chemsmart Molecule to Pymatgen
+   # Convert CHEMSMART Molecule to Pymatgen
    molecule = Molecule.from_filepath('input.xyz')
    pymatgen_mol = molecule.to_pymatgen()
 
 .. note::
 
-   For converting Pymatgen molecules to Chemsmart, you can use the ASE Atoms adaptor as an intermediate format.
+   For converting Pymatgen molecules to CHEMSMART, you can use the ASE Atoms adaptor as an intermediate format.
 
 ****************
  Best Practices
@@ -338,12 +365,12 @@ For multi-structure files, use ``-i`` to select a specific structure:
 
 .. warning::
 
-   Chemsmart uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
+   CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
 
 File Format Auto-Detection
 ==========================
 
-Chemsmart automatically detects file formats based on extensions:
+CHEMSMART automatically detects file formats based on extensions:
 
 -  ``.xyz`` → XYZ format
 -  ``.sdf`` → SDF format
@@ -352,14 +379,15 @@ Chemsmart automatically detects file formats based on extensions:
 -  ``.inp`` → ORCA input
 -  ``.out`` → ORCA/Gaussian output (auto-detected by reading file header)
 -  ``.cdx``, ``.cdxml`` → ChemDraw format
--  ``.db``, ``.traj`` → ASE database/trajectory
+-  ``.db`` → Chemsmart/ASE database (auto-detected by validating the database schema)
+-  ``.traj`` → ASE trajectory
 
 .. note::
 
-   For ``.out`` files, Chemsmart automatically detects whether the file is from ORCA or Gaussian by examining the file
+   For ``.out`` files, CHEMSMART automatically detects whether the file is from ORCA or Gaussian by examining the file
    header. If detection fails, an error will be raised indicating the unsupported format.
 
-For unsupported extensions, Chemsmart falls back to ASE's file reading capabilities.
+For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilities.
 
 **********
  See Also
@@ -367,6 +395,8 @@ For unsupported extensions, Chemsmart falls back to ASE's file reading capabilit
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`pymol-cli-options`
+-  :doc:`database-workflow`
 -  :doc:`cli-overview`
 
 For more technical details on the implementation, see the CHEMSMART preprint: https://arxiv.org/abs/2508.20042

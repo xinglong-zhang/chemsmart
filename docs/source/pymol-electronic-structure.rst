@@ -80,7 +80,7 @@ Generate spin density visualizations for open-shell systems.
 
 .. note::
 
-   Requires both ``.log`` and ``.chk`` files in the same folder. If ``-l/--label`` is provided, Chemsmart still
+   Requires both ``.log`` and ``.chk`` files in the same folder. If ``-l/--label`` is provided, CHEMSMART still
    processes files from the source filename basename (for example, ``output.log`` -> ``output.chk``/``output.fchk``),
    while the final spin output/session filename follows the custom label.
 

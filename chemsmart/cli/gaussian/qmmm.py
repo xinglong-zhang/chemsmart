@@ -358,7 +358,7 @@ def create_qmmm_subcommand(parent_command):
                 )
             except Exception as exc:
                 logger.debug(
-                    "Failed to merge parent settings into QMMM: %s", exc
+                    f"Failed to merge parent settings into QMMM: {exc}"
                 )
 
         if parent_jobtype is not None:

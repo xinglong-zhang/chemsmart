@@ -183,6 +183,132 @@ def calculate_moments_of_inertia(mass, coords):
     return moi_tensor, evals, evecs.transpose()
 
 
+def canonicalize_positions(masses, coords, moment_tol=1e-6):
+    """Compute deterministic canonical atomic positions.
+
+    The canonical frame is translation- and rotation-invariant:
+
+    Algorithm
+    ---------
+    1. Translate the coordinates so that the centre of mass is at the origin.
+    2. Rotate coordinates into the principal-axes frame obtained from the
+       moment-of-inertia tensor (eigenvalues sorted in ascending order).
+    3. Apply a deterministic sign convention to each principal axis so that the
+       result is unique.
+    4. Enforce a right-handed coordinate system.
+
+    Notes
+    -----
+    - This is a practical heuristic for structure normalization, not a
+      mathematically perfect canonicalization.
+    - Near-degenerate or highly symmetric cases may remain numerically
+      sensitive because the principal axes themselves may not be uniquely
+      defined.
+    - In the centre-of-mass frame, the first mass-weighted coordinate moment
+      along each axis is theoretically zero, so in practice the third and
+      fifth moments are the main sign-disambiguation criteria.
+
+    Parameters
+    ----------
+    masses : array-like
+        Atomic masses, shape (N,).
+    coords : array-like
+        Cartesian coordinates, shape (N, 3).
+    moment_tol : float, optional
+        Tolerance for treating a mass-weighted moment as zero (default 1e-6).
+
+    Returns
+    -------
+    canonical : np.ndarray
+        Canonical coordinates, shape (N, 3).
+    """
+    masses = np.asarray(masses, dtype=float)
+    coords = np.asarray(coords, dtype=float)
+    n_atoms = len(masses)
+
+    # --- Step 1: translate to centre of mass ----------------------------
+    com = np.average(coords, axis=0, weights=masses)
+    shifted = coords - com
+
+    # --- Edge case: single atom -----------------------------------------
+    if n_atoms == 1:
+        return shifted
+
+    # --- Edge case: diatomic → align along z-axis -----------------------
+    if n_atoms == 2:
+        vec = shifted[1] - shifted[0]
+        norm = np.linalg.norm(vec)
+        if norm < 1e-14:
+            return shifted
+        z_hat = vec / norm
+        # Build a right-handed frame with z_hat as the third axis.
+        trial = np.array([1.0, 0.0, 0.0])
+        if abs(np.dot(z_hat, trial)) > 0.9:
+            trial = np.array([0.0, 1.0, 0.0])
+        x_hat = np.cross(z_hat, trial)
+        x_hat /= np.linalg.norm(x_hat)
+        y_hat = np.cross(z_hat, x_hat)
+        y_hat /= np.linalg.norm(y_hat)
+        R = np.vstack(
+            [x_hat, y_hat, z_hat]
+        )  # rotation matrix (rows = new axes)
+        rotated = shifted @ R.T
+
+        # Deterministic z-axis sign convention
+        if masses[0] > masses[1]:
+            rotated[:, 2] *= -1
+        elif masses[0] == masses[1]:
+            if rotated[0, 2] > 0:
+                rotated[:, 2] *= -1
+        return rotated
+
+    # --- Step 2: compute principal-axes frame ---------------------------
+    moi_tensor, evals, evecs_rows = calculate_moments_of_inertia(
+        masses, coords
+    )
+
+    # evecs_rows has shape (3, 3), each row is a principal axis
+    rotated = shifted @ evecs_rows.T
+
+    # --- Step 3: deterministic sign convention --------------------------
+    axis_scores = []
+    axis_signs = np.ones(3, dtype=float)
+    for i in range(3):
+        # In COM frame this is theoretically zero, but we keep it as the
+        # first numerical check.
+        first_moment = np.dot(masses, rotated[:, i])
+
+        if abs(first_moment) > moment_tol:
+            if first_moment < 0:
+                rotated[:, i] *= -1
+                axis_signs[i] = -1
+            score = abs(first_moment)
+        else:
+            third_moment = np.dot(masses, rotated[:, i] ** 3)
+            if abs(third_moment) > moment_tol:
+                if third_moment < 0:
+                    rotated[:, i] *= -1
+                    axis_signs[i] = -1
+                score = abs(third_moment)
+            else:
+                fifth_moment = np.dot(masses, rotated[:, i] ** 5)
+                if fifth_moment < -moment_tol:
+                    rotated[:, i] *= -1
+                    axis_signs[i] = -1
+                score = abs(fifth_moment)
+
+        axis_scores.append(score)
+
+    # --- Step 4: ensure right-handed coordinate system ------------------
+    # effective determinant after all sign flips
+    effective_det = np.linalg.det(evecs_rows) * np.prod(axis_signs)
+    if effective_det < 0:
+        idx_flip = int(np.argmin(axis_scores))
+        rotated[:, idx_flip] *= -1
+
+    return rotated
+
+
 def calculate_voronoi_dirichlet_occupied_volume(
     coords, radii, dispersion=None
 ):

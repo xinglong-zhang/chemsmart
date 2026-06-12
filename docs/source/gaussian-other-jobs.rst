@@ -96,7 +96,7 @@ This sets ``guess=(mix,always)`` in the route string:
  Custom User Jobs
 ******************
 
-Run custom calculations not built into Chemsmart.
+Run custom calculations not built into CHEMSMART.
 
 .. code:: bash
 

@@ -2,8 +2,8 @@
  Installation for HPC Cluster
 ##############################
 
-Chemsmart can run on any High Performance Computing (HPC) cluster, using the same commands as on a local machine. If you
-only need to use Chemsmart on an HPC cluster, you can install it directly there.
+CHEMSMART can run on any High Performance Computing (HPC) cluster, using the same commands as on a local machine. If you
+only need to use CHEMSMART on an HPC cluster, you can install it directly there.
 
 ***************
  Prerequisites
@@ -20,5 +20,5 @@ Before starting:
  Installation
 **************
 
-Since most HPC clusters run Linux, follow the instructions in :doc:`installation-linux-macos` to install Chemsmart on
+Since most HPC clusters run Linux, follow the instructions in :doc:`installation-linux-macos` to install CHEMSMART on
 your cluster.

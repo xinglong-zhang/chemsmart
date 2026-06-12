@@ -15,6 +15,7 @@ from chemsmart.io.gaussian.output import (
 )
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
 class TestRouteString:
@@ -32,7 +33,7 @@ class TestRouteString:
     def test_read_route_string_standard2(self):
         s1b = "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-311+G(d,p) empiricaldispersion=gd3bj"
         r1b = GaussianRoute(s1b)
-        assert r1b.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert r1b.functional == "b3lyp-d3bj"
         assert r1b.basis == "6-311+g(d,p)"
         assert r1b.jobtype == "ts"
         assert r1b.solv is False
@@ -82,7 +83,7 @@ class TestRouteString:
     def test_read_route_string_standard5(self):
         s1e = "#p opt=modred freq tpsstpss/def2tzvp/fit empiricaldispersion=gd3bj scrf=(cpcm,solvent=toluene)"
         r1e = GaussianRoute(s1e)
-        assert r1e.functional == "tpsstpss empiricaldispersion=gd3bj"
+        assert r1e.functional == "tpsstpss-d3bj"
         assert (
             r1e.basis == "def2tzvp/fit"
         )  # density fitting basis set (for pure functionals)
@@ -119,6 +120,20 @@ class TestRouteString:
         assert r1g.solvent_id == "dichloroethane"
         assert r1g.additional_opt_options_in_route is None
         # TODO: TD-DFT route to be specified
+
+    def test_read_route_string_oniom_layer_methods_and_bases(self):
+        s1qmmm = "# oniom(b3lyp/6-31g(d,p):uff) opt"
+        r1qmmm = GaussianRoute(s1qmmm)
+        assert r1qmmm.functional == "b3lyp:uff"
+        assert r1qmmm.basis == "6-31g(d,p):none"
+        s2qmmm = "# oniom(mp2/6-31g:hf/6-31g:am1) geom=connectivity"
+        r2qmmm = GaussianRoute(s2qmmm)
+        assert r2qmmm.functional == "mp2:hf:am1"
+        assert r2qmmm.basis == "6-31g:6-31g:none"
+        s3qmmm = "# oniom(mp2/6-31g:hf/6-31g) geom=connectivity"
+        r3qmmm = GaussianRoute(s3qmmm)
+        assert r3qmmm.functional == "mp2:hf"
+        assert r3qmmm.basis == "6-31g:6-31g"
 
     def test_read_route_string_nonstandard(self):
         s1 = "# pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly"
@@ -384,7 +399,7 @@ class TestGaussian16Input:
         )
         assert g16_link_opt.additional_opt_options_in_route is None
         assert g16_link_opt.jobtype == "opt"
-        assert g16_link_opt.functional == "um062x"
+        assert g16_link_opt.functional == "m062x"
         assert g16_link_opt.basis == "def2svp"
         assert g16_link_opt.molecule.frozen_atoms is None
 
@@ -402,7 +417,7 @@ class TestGaussian16Input:
         )
         assert g16_link_ts.additional_opt_options_in_route is None
         assert g16_link_ts.jobtype == "ts"
-        assert g16_link_ts.functional == "um062x"
+        assert g16_link_ts.functional == "m062x"
         assert g16_link_ts.basis == "def2svp"
         assert g16_link_ts.molecule.frozen_atoms is None
 
@@ -420,7 +435,7 @@ class TestGaussian16Input:
         )
         assert g16_link_sp.additional_opt_options_in_route is None
         assert g16_link_sp.jobtype == "sp"
-        assert g16_link_sp.functional == "um062x"
+        assert g16_link_sp.functional == "m062x"
         assert g16_link_sp.basis == "def2tzvp"
         assert g16_link_sp.molecule.frozen_atoms is None
 
@@ -581,6 +596,8 @@ class TestGaussian16Output:
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.version == "G16RevB.01"
+        assert g16_output.file_date == "2024-06-20 18:09:26"
         assert g16_output.normal_termination
         assert g16_output.molecule.num_atoms == 40
         assert g16_output.spin == "restricted"
@@ -601,6 +618,8 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+        assert g16_output.temperature_in_K == 298.15
+        assert g16_output.pressure_in_atm == 1.0
         assert g16_output.fmo_gap == g16_output.alpha_fmo_gap
         assert np.allclose(
             g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
@@ -660,6 +679,63 @@ class TestGaussian16Output:
             mol.vibrational_modes[0], vibrational_mode1, atol=1e-4
         )
         assert mol.vibrational_frequencies[0] == 11.9481
+        assert g16_output.zero_point_energy == 0.284336
+        assert np.isclose(
+            g16_output.thermal_vibration_correction,
+            190.931 * kcal_per_mol_to_hartree - 0.284336,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_rotation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_translation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert g16_output.thermal_energy_correction == 0.307101
+        assert g16_output.thermal_enthalpy_correction == 0.308045
+        assert g16_output.thermal_gibbs_free_energy_correction == 0.225790
+        assert g16_output.internal_energy == -1863.733079
+        assert g16_output.enthalpy == -1863.732135
+        assert g16_output.gibbs_free_energy == -1863.814390
+        assert np.isclose(
+            g16_output.electronic_entropy,
+            0.000 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.vibrational_entropy,
+            90.556 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.rotational_entropy,
+            37.462 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.translational_entropy,
+            45.103 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert g16_output.has_dipole_moment
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([4.7915, -0.1097, 0.4554]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 4.8143, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants[-1],
+            np.array([1.6245e8, 7.3820e7, 5.3320e7]),
+            rtol=1e-4,
+        )
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
@@ -718,6 +794,22 @@ class TestGaussian16Output:
             g16_output.beta_fmo_gap,
             (-0.05025 - (-0.18923)) * units.Hartree,
             rtol=1e-6,
+        )
+        assert g16_output.has_dipole_moment
+        assert g16_output.num_dipole_moments == 3
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([-1.6500, -5.4954, -2.3627]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 6.2052, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants[-1],
+            np.array([6.2290e7, 5.5130e7, 4.6900e7]),
+            rtol=1e-4,
         )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
@@ -790,6 +882,7 @@ class TestGaussian16Output:
         assert g16_link_opt.is_link
         assert g16_link_opt.jobtype == "opt"
         assert g16_link_opt.normal_termination
+        assert g16_link_opt.spin == "unrestricted"
         assert isinstance(g16_link_opt.molecule, Molecule)
         assert g16_link_opt.tddft_transitions == []
         assert len(g16_link_opt.alpha_occ_eigenvalues) == 8
@@ -834,6 +927,7 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_link_ts_outputfile)
         g16_link_ts = Gaussian16Output(filename=gaussian_link_ts_outputfile)
         assert not g16_link_ts.normal_termination  # Error termination
+        assert g16_link_ts.spin == "unrestricted"
         assert (
             g16_link_ts.route_string
             == "# opt=(ts,calcfc,noeigentest,maxstep=10) freq um062x def2svp geom=check guess=read"
@@ -882,6 +976,7 @@ class TestGaussian16Output:
             filename=gaussian_link_modred_output
         )
         assert g16_link_modred.normal_termination
+        assert g16_link_modred.spin == "unrestricted"
         assert (
             g16_link_modred.route_string
             == "# opt=modredundant freq umn15 def2svp geom=check guess=read"
@@ -1412,6 +1507,145 @@ class TestGaussian16Output:
             mol3.positions[29], [-2.505441, 2.147201, 0.152904], rtol=1e-4
         )
 
+    def test_read_full_gen_outputfile(self, gaussian_full_gen_outfile):
+        assert os.path.exists(gaussian_full_gen_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_gen_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "gen"
+        # Light elements use named basis
+        assert g16.light_elements == ["H", "C"]
+        assert g16.light_elements_basis == "6-31g(d)"
+        # Heavy elements has explicit orbital basis
+        assert g16.heavy_elements == ["Cl", "Br"]
+        heavy_basis = g16.heavy_elements_basis
+
+        cl_shells = heavy_basis["Cl"]
+        assert [shell["shell"] for shell in cl_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+        ]
+        cl_first_shell = cl_shells[0]
+        assert cl_first_shell["shell"] == "S"
+        assert len(cl_first_shell["primitives"]) == 6
+        cl_first_exp, cl_first_coeff = cl_first_shell["primitives"][0]
+        assert np.isclose(cl_first_exp, 1.0581900000e05)
+        assert np.isclose(cl_first_coeff, 7.3800000000e-04)
+        cl_last_shell = cl_shells[-1]
+        assert cl_last_shell["shell"] == "P"
+        assert len(cl_last_shell["primitives"]) == 1
+        cl_last_exp, cl_last_coeff = cl_last_shell["primitives"][0]
+        assert np.isclose(cl_last_exp, 1.0943700000e-01)
+        assert np.isclose(cl_last_coeff, 1.0000000000e00)
+
+        br_shells = heavy_basis["Br"]
+        assert [shell["shell"] for shell in br_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+        ]
+        br_first_shell = br_shells[0]
+        assert br_first_shell["shell"] == "S"
+        assert len(br_first_shell["primitives"]) == 6
+        br_first_exp, br_first_coeff = br_first_shell["primitives"][0]
+        assert np.isclose(br_first_exp, 4.3970000000e05)
+        assert np.isclose(br_first_coeff, 8.1300000000e-04)
+        br_last_shell = br_shells[-1]
+        assert br_last_shell["shell"] == "D"
+        assert len(br_last_shell["primitives"]) == 1
+        br_last_exp, br_last_coeff = br_last_shell["primitives"][0]
+        assert np.isclose(br_last_exp, 1.5350000000e00)
+        assert np.isclose(br_last_coeff, 1.0000000000e00)
+
+    def test_read_full_genecp_outputfile(self, gaussian_full_genecp_outfile):
+        assert os.path.exists(gaussian_full_genecp_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_genecp_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "genecp"
+        # Light element (Cl) uses named basis
+        assert g16.light_elements == ["Cl"]
+        assert g16.light_elements_basis == "def2svp"
+        # Heavy element (Ag) has explicit orbital basis
+        assert g16.heavy_elements == ["Ag"]
+
+        ag_shells = g16.heavy_elements_basis["Ag"]
+        assert [s["shell"] for s in ag_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+            "D",
+            "F",
+        ]
+        ag_first_shell = ag_shells[0]
+        assert ag_first_shell["shell"] == "S"
+        assert len(ag_first_shell["primitives"]) == 2
+        ag_first_exp, ag_first_coef = ag_first_shell["primitives"][0]
+        assert np.isclose(ag_first_exp, 1.9000000000e01)
+        assert np.isclose(ag_first_coef, -1.6600104141e-01)
+        ag_last_shell = ag_shells[-1]
+        assert ag_last_shell["shell"] == "F"
+        assert len(ag_last_shell["primitives"]) == 1
+        ag_last_exp, ag_last_coeff = ag_last_shell["primitives"][0]
+        assert np.isclose(ag_last_exp, 1.3971100000e00)
+        assert np.isclose(ag_last_coeff, 1.0000000000e00)
+
+        ecp = g16.heavy_elements_ecp
+        ag_ecp = ecp["Ag"]
+        assert ag_ecp["n_valence_electrons"] == 19
+        channel_names = [ch["name"] for ch in ag_ecp["channels"]]
+        assert channel_names == ["F and up", "S - F", "P - F", "D - F"]
+        ag_first_channel = ag_ecp["channels"][0]
+        assert ag_first_channel["name"] == "F and up"
+        assert len(ag_first_channel["terms"]) == 2
+        r_pow, ag_first_exp, ag_first_coef, spin_orbit_coef = ag_first_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_first_exp, 14.22)
+        assert np.isclose(ag_first_coef, -33.68992012)
+        assert np.isclose(spin_orbit_coef, 0.0)
+        ag_last_channel = ag_ecp["channels"][-1]
+        assert ag_last_channel["name"] == "D - F"
+        assert len(ag_last_channel["terms"]) == 4
+        r_pow, ag_last_exp, ag_last_coef, spin_orbit_coef = ag_last_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_last_exp, 10.21)
+        assert np.isclose(ag_last_coef, 73.71926087)
+        assert np.isclose(spin_orbit_coef, 0.0)
+
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
         g16_frozen = Gaussian16Output(
@@ -1920,6 +2154,59 @@ class TestGaussian16Output:
             g16_pm6.semiempirical == "PM6"
         )  # changed to upper case in route_object.semiempirical
 
+    def test_normal_termination_with_trailing_blank_lines(
+        self, gaussian_ts_genecp_outfile, tmp_path
+    ):
+        with open(gaussian_ts_genecp_outfile, "r") as f:
+            contents = f.read()
+
+        output_with_trailing_blanks = tmp_path / "pd_genecp_ts_trailing.log"
+        with open(output_with_trailing_blanks, "w") as f:
+            f.write(contents + "\n\n")
+
+        g16_output = Gaussian16Output(
+            filename=str(output_with_trailing_blanks)
+        )
+        assert g16_output.normal_termination
+
+    def test_oldform_redundant_coordinates_atomic_numbers(self, tmp_path):
+        outputfile = tmp_path / "old_form_numeric_coords.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt b3lyp/gen",
+                    " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
+                    " Charge =  0 Multiplicity = 1",
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " H,0,0.000000,0.000000,1.000000",
+                    " Recover connectivity data from disk.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16_output = Gaussian16Output(filename=str(outputfile))
+        assert g16_output.symbols == ["Pd", "H"]
+        assert g16_output.all_structures == []
+        assert g16_output.last_structure.chemical_symbols == ["Pd", "H"]
+        assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
+
+    def test_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        g16_output = Gaussian16Output(
+            filename=gaussian_pd_insertion_ts_r_outfile
+        )
+        assert g16_output.normal_termination
+        assert g16_output.charge == 0
+        assert g16_output.multiplicity == 1
+        assert len(g16_output.symbols) == g16_output.molecule.num_atoms
+        assert "Pd" in g16_output.symbols
+        assert "Pd" in g16_output.molecule.chemical_symbols
+
     def test_energy_extraction_from_gaussian_output_file(
         self, gaussian_quintet_opt_outfile
     ):
@@ -1928,6 +2215,22 @@ class TestGaussian16Output:
         assert np.isclose(h_from_file, -7521.416016, rtol=1e-4)
         g_from_file = g16_out.gibbs_free_energy
         assert np.isclose(g_from_file, -7521.548653, rtol=1e-4)
+
+    def test_custom_solvent_smd_generic(self, gaussian_smd_generic_outfile):
+        g16_generic = Gaussian16Output(filename=gaussian_smd_generic_outfile)
+        assert g16_generic.normal_termination
+        custom_solvent = g16_generic.custom_solvent
+        assert (
+            custom_solvent["SolventName"]
+            == "1,1,1,3,3,3-HEXAFLUOROPROPAN-2-OL"
+        )
+        assert custom_solvent["Eps"] == 16.7
+        assert custom_solvent["EpsInf"] == 1.625625
+        assert custom_solvent["HbondAcidity"] == 0.77
+        assert custom_solvent["HbondBasicity"] == 0.10
+        assert custom_solvent["SurfaceTensionAtInterface"] == 23.23
+        assert custom_solvent["CarbonAromaticity"] == 0.0
+        assert custom_solvent["ElectronegativeHalogenicity"] == 0.60
 
 
 class TestGaussianWBIOutput:
