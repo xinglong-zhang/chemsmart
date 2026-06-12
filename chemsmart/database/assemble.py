@@ -99,7 +99,7 @@ class BaseAssembler:
         route_tokens = canonicalize_route_string(
             self.output.route_string,
             drop_terms=[
-                self.output.functional,
+                self.output.method,
                 self.output.basis,
                 self.output.jobtype,
                 self.output.solvent_model,
@@ -135,7 +135,7 @@ class BaseAssembler:
         else:
             basis = standardize_basis_set(basis)
         meta_data = {
-            "method": self.output.functional,
+            "method": self.output.method,
             "basis": basis,
             "num_basis_functions": self.output.num_basis_functions,
             "spin": self.output.spin,

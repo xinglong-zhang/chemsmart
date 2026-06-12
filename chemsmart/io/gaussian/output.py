@@ -763,6 +763,15 @@ class Gaussian16Output(GaussianFileMixin):
         elif self.normal_termination:
             is_optimized[-1] = True
 
+        # For opt+freq-like tails, keep both optimized tags when the final
+        # frame is a duplicate of the previous optimized geometry.
+        if num_structures_to_use >= 2 and is_optimized[-1]:
+            idx_last = num_structures_to_use - 1
+            if np.allclose(
+                orientations[idx_last], orientations[idx_last - 1], rtol=1e-5
+            ):
+                is_optimized[idx_last - 1] = True
+
         # 5) Build Molecule list
         create_kwargs = dict(
             orientations=orientations,

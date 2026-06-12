@@ -1478,6 +1478,10 @@ class TestGaussian16Output:
         assert (
             len(g16_genecp.all_structures) == 11
         )  # 11 structures altogether, as shown in GaussView
+        optimized_flags = [
+            mol.is_optimized_structure for mol in g16_genecp.all_structures
+        ]
+        assert optimized_flags == [False] * 9 + [True, True]
         assert g16_genecp.optimized_structure.positions.shape == (48, 3)
         assert np.allclose(
             g16_genecp.optimized_structure.positions,
