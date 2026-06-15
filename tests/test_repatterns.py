@@ -300,6 +300,13 @@ class TestGaussianDiasRegexPatterns:
             "2",
             None,
         ), "Correct groups for test_r2.log"
+        assert (
+            pattern.match("test_i2.log") is not None
+        ), "Should match: test_i2.log"
+        assert pattern.match("test_i2.log").groups() == (
+            "2",
+            None,
+        ), "Correct groups for test_i2.log"
 
     def test_with_reactant_non_matches(self):
         pattern = re.compile(gaussian_dias_filename_with_reactant)

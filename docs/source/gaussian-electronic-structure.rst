@@ -137,6 +137,31 @@ Run DI-AS analysis for atoms 5-17 at every 10th point along an IRC:
 
    The ``irc.log`` file should be the IRC output from the transition state to the **reactant side**.
 
+DI-AS Reactant Fragment Workflow
+================================
+
+For each reactant fragment, DI-AS now runs an isolated-fragment optimization before the reactant SP calculation.
+
+#. Run isolated-fragment geometry optimization with frequency enabled.
+
+#. Check the optimization output for imaginary frequencies (negative frequencies in Gaussian output).
+
+#. If imaginary frequencies are found, retry optimization once with:
+
+   -  ``additional_opt_options_in_route=maxstep=5``
+   -  ``additional_route_parameters=scf=qc``
+
+#. Run fragment SP only after a valid minimum (no imaginary frequencies) is confirmed.
+
+#. If imaginary frequencies persist after retry, run QRC on the retry result and re-check frequencies on the QRC outputs.
+
+#. Run fragment SP on the first QRC geometry that passes the frequency check.
+
+#. If imaginary frequencies still persist after QRC, DI-AS flags failure and does not run fragment SP for that fragment.
+
+Optimized reactant-fragment SP outputs are labeled for auto-analysis compatibility, e.g. ``input_fragment1_r1.log`` and
+``input_fragment2_i2.log``.
+
 ***********
  RESP Jobs
 ***********

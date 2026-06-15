@@ -8,8 +8,15 @@ These calculations analyze molecular fragmentation along reaction
 coordinates by computing energies of fragments and whole molecules.
 """
 
+import logging
+
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.utils.utils import get_list_from_string_range
+
+logger = logging.getLogger(__name__)
 
 
 class GaussianDIASJob(GaussianJob):
@@ -57,6 +64,7 @@ class GaussianDIASJob(GaussianJob):
         multiplicity_of_fragment1=None,
         charge_of_fragment2=None,
         multiplicity_of_fragment2=None,
+        reactant_opt_settings=None,
         **kwargs,
     ):
         """
@@ -115,6 +123,34 @@ class GaussianDIASJob(GaussianJob):
 
         self.fragment1_settings = fragment1_settings
         self.fragment2_settings = fragment2_settings
+        if reactant_opt_settings is None:
+            reactant_opt_settings = self.settings
+        # Normalize to GaussianJobSettings to avoid carrying IRC-specific
+        # route generation logic into fragment optimization jobs.
+        reactant_opt_settings = GaussianJobSettings(
+            **reactant_opt_settings.__dict__
+        )
+
+        self.fragment1_reactant_opt_settings = reactant_opt_settings.copy()
+        self.fragment1_reactant_opt_settings.charge = self.fragment1_settings.charge
+        self.fragment1_reactant_opt_settings.multiplicity = (
+            self.fragment1_settings.multiplicity
+        )
+        self.fragment1_reactant_opt_settings.jobtype = "opt"
+        self.fragment1_reactant_opt_settings.freq = True
+        self.fragment1_reactant_sp_settings = self.fragment1_settings.copy()
+        self.fragment1_reactant_sp_settings.jobtype = "sp"
+        self.fragment1_reactant_sp_settings.freq = False
+        self.fragment2_reactant_opt_settings = reactant_opt_settings.copy()
+        self.fragment2_reactant_opt_settings.charge = self.fragment2_settings.charge
+        self.fragment2_reactant_opt_settings.multiplicity = (
+            self.fragment2_settings.multiplicity
+        )
+        self.fragment2_reactant_opt_settings.jobtype = "opt"
+        self.fragment2_reactant_opt_settings.freq = True
+        self.fragment2_reactant_sp_settings = self.fragment2_settings.copy()
+        self.fragment2_reactant_sp_settings.jobtype = "sp"
+        self.fragment2_reactant_sp_settings.freq = False
 
     @property
     def num_molecules(self):
@@ -370,6 +406,184 @@ class GaussianDIASJob(GaussianJob):
         for job in self.fragment2_jobs:
             job.run()
 
+    @property
+    def fragment1_reactant_opt_job(self):
+        label = f"{self.label}_fragment1_opt"
+        return GaussianOptJob(
+            molecule=self.fragment1_atoms[-1],
+            settings=self.fragment1_reactant_opt_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
+    def fragment2_reactant_opt_job(self):
+        label = f"{self.label}_fragment2_opt"
+        return GaussianOptJob(
+            molecule=self.fragment2_atoms[-1],
+            settings=self.fragment2_reactant_opt_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
+    def fragment1_reactant_sp_job(self):
+        molecule = self.fragment1_reactant_opt_job.optimized_structure()
+        if molecule is None:
+            molecule = self.fragment1_atoms[-1]
+        label = f"{self.label}_fragment1_r1"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment1_reactant_sp_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @property
+    def fragment2_reactant_sp_job(self):
+        molecule = self.fragment2_reactant_opt_job.optimized_structure()
+        if molecule is None:
+            molecule = self.fragment2_atoms[-1]
+        label = f"{self.label}_fragment2_i2"
+        return GaussianGeneralJob(
+            molecule=molecule,
+            settings=self.fragment2_reactant_sp_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    @staticmethod
+    def _contains_imaginary_frequencies(opt_job):
+        output = opt_job._output()
+        if output is None or not output.normal_termination:
+            return True
+        frequencies = output.vibrational_frequencies
+        if not frequencies:
+            return True
+        return any(freq < 0.0 for freq in frequencies)
+
+    def _retry_reactant_opt_job(self, opt_job):
+        retry_settings = opt_job.settings.copy()
+        retry_settings.additional_opt_options_in_route = "maxstep=5"
+        retry_settings.additional_route_parameters = "scf=qc"
+        retry_settings.route_to_be_written = None
+        return GaussianOptJob(
+            molecule=opt_job.molecule,
+            settings=retry_settings,
+            label=opt_job.label,
+            jobrunner=opt_job.jobrunner,
+            skip_completed=False,
+        )
+
+    @staticmethod
+    def _first_imaginary_mode_index(job):
+        output = job._output()
+        if output is None or not output.normal_termination:
+            return 1
+        frequencies = output.vibrational_frequencies or []
+        for idx, freq in enumerate(frequencies, start=1):
+            if freq < 0.0:
+                return idx
+        return 1
+
+    def _run_qrc_for_reactant_opt_job(self, opt_job):
+        mode_idx = self._first_imaginary_mode_index(opt_job)
+        qrc_label = f"{opt_job.label}_qrc"
+        qrc_job = GaussianQRCJob(
+            molecule=opt_job.optimized_structure() or opt_job.molecule,
+            settings=opt_job.settings.copy(),
+            label=qrc_label,
+            jobrunner=opt_job.jobrunner,
+            mode_idx=mode_idx,
+            skip_completed=opt_job.skip_completed,
+        )
+        logger.info(
+            f"Running QRC fallback for {opt_job.label} with mode index {mode_idx}."
+        )
+        for qrc_subjob in qrc_job.both_qrc_jobs:
+            qrc_subjob.run()
+            if not self._contains_imaginary_frequencies(qrc_subjob):
+                logger.info(
+                    f"QRC fallback produced frequency-validated structure: "
+                    f"{qrc_subjob.label}"
+                )
+                return qrc_subjob
+        logger.error(
+            f"Imaginary frequencies remained after QRC fallback for {opt_job.label}. "
+            "Fragment SP will not be run."
+        )
+        raise ValueError(
+            f"Imaginary frequencies remained after QRC fallback for {opt_job.label}. "
+            "Fragment SP was not started."
+        )
+
+    def _run_reactant_opt_and_sp_job(
+        self, opt_job, sp_settings, sp_label, fallback_molecule
+    ):
+        logger.info(f"Running reactant fragment optimization: {opt_job.label}")
+        opt_job.run()
+        if self._contains_imaginary_frequencies(opt_job):
+            logger.warning(
+                f"Imaginary frequencies detected in {opt_job.label}. "
+                "Retrying optimization with maxstep=5 and scf=qc."
+            )
+            opt_job = self._retry_reactant_opt_job(opt_job)
+            logger.info(
+                f"Running reactant fragment optimization retry: {opt_job.label}"
+            )
+            opt_job.run()
+        else:
+            logger.info(
+                f"Reactant fragment optimization passed frequency check: "
+                f"{opt_job.label}"
+            )
+
+        if self._contains_imaginary_frequencies(opt_job):
+            logger.warning(
+                f"Imaginary frequencies remained after retry for {opt_job.label}. "
+                "Running QRC fallback."
+            )
+            opt_job = self._run_qrc_for_reactant_opt_job(opt_job)
+
+        molecule = opt_job.optimized_structure()
+        if molecule is None:
+            logger.warning(
+                f"Optimized structure unavailable for {opt_job.label}; using "
+                f"fallback geometry for {sp_label}."
+            )
+            molecule = fallback_molecule
+        logger.info(f"Running reactant fragment SP job: {sp_label}")
+        sp_job = GaussianGeneralJob(
+            molecule=molecule,
+            settings=sp_settings,
+            label=sp_label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+        sp_job.run()
+        logger.info(f"Completed reactant fragment SP job: {sp_label}")
+
+    def _run_fragment_reactant_jobs(self):
+        logger.info(
+            "Running optimized reactant fragment jobs with frequency checks."
+        )
+        self._run_reactant_opt_and_sp_job(
+            opt_job=self.fragment1_reactant_opt_job,
+            sp_settings=self.fragment1_reactant_sp_settings,
+            sp_label=f"{self.label}_fragment1_r1",
+            fallback_molecule=self.fragment1_atoms[-1],
+        )
+        self._run_reactant_opt_and_sp_job(
+            opt_job=self.fragment2_reactant_opt_job,
+            sp_settings=self.fragment2_reactant_sp_settings,
+            sp_label=f"{self.label}_fragment2_i2",
+            fallback_molecule=self.fragment2_atoms[-1],
+        )
+
     def _run(self, **kwargs):
         """
         Execute the complete DI-AS calculation workflow.
@@ -378,6 +592,7 @@ class GaussianDIASJob(GaussianJob):
         1. Complete molecules at sampled points
         2. Fragment 1 structures at the same points
         3. Fragment 2 structures at the same points
+        4. Optimized isolated fragments and SP energies
 
         Args:
             **kwargs: Additional keyword arguments for job execution.
@@ -385,13 +600,15 @@ class GaussianDIASJob(GaussianJob):
         self._run_all_molecules_jobs()
         self._run_fragment1_jobs()
         self._run_fragment2_jobs()
+        self._run_fragment_reactant_jobs()
 
     def is_complete(self):
         """
         Check if all DI-AS calculation jobs are complete.
 
         Verifies that all three sets of calculations (complete molecules,
-        fragment 1, and fragment 2) have finished successfully.
+        fragment 1, fragment 2, and reactant fragment jobs) have finished
+        successfully.
 
         Returns:
             bool: True if all jobs are complete, False otherwise.
@@ -400,6 +617,7 @@ class GaussianDIASJob(GaussianJob):
             self._run_all_molecules_jobs_are_complete()
             and self._run_fragment1_jobs_are_complete()
             and self._run_fragment2_jobs_are_complete()
+            and self._run_fragment_reactant_jobs_are_complete()
         )
 
     def _run_all_molecules_jobs_are_complete(self):
@@ -431,3 +649,11 @@ class GaussianDIASJob(GaussianJob):
                 False otherwise.
         """
         return all(job.is_complete() for job in self.fragment2_jobs)
+
+    def _run_fragment_reactant_jobs_are_complete(self):
+        return (
+            self.fragment1_reactant_opt_job.is_complete()
+            and self.fragment1_reactant_sp_job.is_complete()
+            and self.fragment2_reactant_opt_job.is_complete()
+            and self.fragment2_reactant_sp_job.is_complete()
+        )

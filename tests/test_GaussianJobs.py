@@ -3,7 +3,12 @@ from filecmp import cmp
 
 import pytest
 
-from chemsmart.jobs.gaussian import GaussianOptJob
+from chemsmart.jobs.gaussian import (
+    GaussianDIASJob,
+    GaussianGeneralJob,
+    GaussianOptJob,
+)
+from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
 from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -132,6 +137,423 @@ class TestGaussianJobs:
                 index="0",
                 jobrunner=gaussian_jobrunner_no_scratch,
             )
+
+
+class TestGaussianDIASJobs:
+    def test_dias_reactant_fragment_job_labels(
+        self,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        assert job.fragment1_reactant_opt_job.label == "input_fragment1_opt"
+        assert job.fragment2_reactant_opt_job.label == "input_fragment2_opt"
+        assert job.fragment1_reactant_sp_job.label == "input_fragment1_r1"
+        assert job.fragment2_reactant_sp_job.label == "input_fragment2_i2"
+        assert job.fragment1_reactant_opt_job.settings.jobtype == "opt"
+        assert job.fragment2_reactant_opt_job.settings.jobtype == "opt"
+        assert job.fragment1_reactant_opt_job.settings.freq is True
+        assert job.fragment2_reactant_opt_job.settings.freq is True
+        assert job.fragment1_reactant_sp_job.settings.jobtype == "sp"
+        assert job.fragment2_reactant_sp_job.settings.jobtype == "sp"
+
+    def test_dias_reactant_fragment_opt_retries_on_imaginary_frequency(
+        self,
+        monkeypatch,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        opt_run_calls = []
+        sp_run_calls = []
+
+        def fake_opt_run(self, **kwargs):
+            opt_run_calls.append(
+                (
+                    self.label,
+                    self.settings.route_string,
+                )
+            )
+
+        def fake_opt_output(self):
+            route_string = self.settings.route_string or ""
+            frequencies = [100.0] if "maxstep=5" in route_string else [-10.0]
+            return type(
+                "DummyOutput",
+                (),
+                {
+                    "normal_termination": True,
+                    "vibrational_frequencies": frequencies,
+                    "optimized_structure": self.molecule,
+                },
+            )()
+
+        def fake_sp_run(self, **kwargs):
+            sp_run_calls.append(self.label)
+
+        monkeypatch.setattr(GaussianOptJob, "run", fake_opt_run)
+        monkeypatch.setattr(GaussianOptJob, "_output", fake_opt_output)
+        monkeypatch.setattr(GaussianGeneralJob, "run", fake_sp_run)
+
+        job._run_fragment_reactant_jobs()
+
+        assert len(opt_run_calls) == 4
+        retry_calls = [c for c in opt_run_calls if "maxstep=5" in (c[1] or "")]
+        assert len(retry_calls) == 2
+        assert all("scf=qc" in (c[1] or "") for c in retry_calls)
+        assert sp_run_calls == ["input_fragment1_r1", "input_fragment2_i2"]
+
+    def test_dias_reactant_fragment_opt_retry_forces_rerun(
+        self,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        retry_job = job._retry_reactant_opt_job(job.fragment1_reactant_opt_job)
+
+        assert retry_job.skip_completed is False
+        assert "maxstep=5" in (retry_job.settings.route_string or "")
+        assert "scf=qc" in (retry_job.settings.route_string or "")
+
+    def test_dias_reactant_fragment_opt_raises_when_retry_still_imaginary(
+        self,
+        monkeypatch,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        opt_run_calls = []
+        qrc_run_calls = []
+        sp_run_calls = []
+
+        def fake_opt_run(self, **kwargs):
+            opt_run_calls.append(self.label)
+
+        def fake_opt_output(self):
+            return type(
+                "DummyOutput",
+                (),
+                {
+                    "normal_termination": True,
+                    "vibrational_frequencies": [-10.0],
+                    "optimized_structure": self.molecule,
+                },
+            )()
+
+        def fake_sp_run(self, **kwargs):
+            sp_run_calls.append(self.label)
+
+        class DummyQRCSubJob:
+            def __init__(self, label, molecule):
+                self.label = label
+                self.molecule = molecule
+
+            def run(self, **kwargs):
+                qrc_run_calls.append(self.label)
+
+            def _output(self):
+                return type(
+                    "DummyOutput",
+                    (),
+                    {
+                        "normal_termination": True,
+                        "vibrational_frequencies": [-10.0],
+                        "optimized_structure": self.molecule,
+                    },
+                )()
+
+            def optimized_structure(self):
+                return self.molecule
+
+        class DummyQRCJob:
+            def __init__(
+                self,
+                molecule,
+                settings=None,
+                label=None,
+                jobrunner=None,
+                mode_idx=1,
+                skip_completed=True,
+                **kwargs,
+            ):
+                self.both_qrc_jobs = [
+                    DummyQRCSubJob(f"{label}f_opt", molecule),
+                    DummyQRCSubJob(f"{label}r_opt", molecule),
+                ]
+
+        monkeypatch.setattr(GaussianOptJob, "run", fake_opt_run)
+        monkeypatch.setattr(GaussianOptJob, "_output", fake_opt_output)
+        monkeypatch.setattr(GaussianGeneralJob, "run", fake_sp_run)
+        monkeypatch.setattr(
+            "chemsmart.jobs.gaussian.dias.GaussianQRCJob", DummyQRCJob
+        )
+
+        with pytest.raises(
+            ValueError, match="Imaginary frequencies remained after QRC fallback"
+        ):
+            job._run_fragment_reactant_jobs()
+
+        assert len(opt_run_calls) == 2
+        assert qrc_run_calls == [
+            "input_fragment1_opt_qrcf_opt",
+            "input_fragment1_opt_qrcr_opt",
+        ]
+        assert sp_run_calls == []
+
+    def test_dias_reactant_fragment_opt_qrc_fallback_runs_sp_on_valid_qrc(
+        self,
+        monkeypatch,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        sp_run_calls = []
+        qrc_run_calls = []
+
+        def fake_opt_run(self, **kwargs):
+            return None
+
+        def fake_opt_output(self):
+            return type(
+                "DummyOutput",
+                (),
+                {
+                    "normal_termination": True,
+                    "vibrational_frequencies": [-10.0],
+                    "optimized_structure": self.molecule,
+                },
+            )()
+
+        def fake_sp_run(self, **kwargs):
+            sp_run_calls.append(self.label)
+
+        class DummyQRCSubJob:
+            def __init__(self, label, molecule, frequencies):
+                self.label = label
+                self.molecule = molecule
+                self._frequencies = frequencies
+
+            def run(self, **kwargs):
+                qrc_run_calls.append(self.label)
+
+            def _output(self):
+                return type(
+                    "DummyOutput",
+                    (),
+                    {
+                        "normal_termination": True,
+                        "vibrational_frequencies": self._frequencies,
+                        "optimized_structure": self.molecule,
+                    },
+                )()
+
+            def optimized_structure(self):
+                return self.molecule
+
+        class DummyQRCJob:
+            def __init__(
+                self,
+                molecule,
+                settings=None,
+                label=None,
+                jobrunner=None,
+                mode_idx=1,
+                skip_completed=True,
+                **kwargs,
+            ):
+                self.both_qrc_jobs = [
+                    DummyQRCSubJob(f"{label}f_opt", molecule, [100.0]),
+                    DummyQRCSubJob(f"{label}r_opt", molecule, [-10.0]),
+                ]
+
+        monkeypatch.setattr(GaussianOptJob, "run", fake_opt_run)
+        monkeypatch.setattr(GaussianOptJob, "_output", fake_opt_output)
+        monkeypatch.setattr(GaussianGeneralJob, "run", fake_sp_run)
+        monkeypatch.setattr(
+            "chemsmart.jobs.gaussian.dias.GaussianQRCJob", DummyQRCJob
+        )
+
+        job._run_fragment_reactant_jobs()
+
+        assert qrc_run_calls == [
+            "input_fragment1_opt_qrcf_opt",
+            "input_fragment2_opt_qrcf_opt",
+        ]
+        assert sp_run_calls == ["input_fragment1_r1", "input_fragment2_i2"]
+
+    def test_dias_reactant_opt_settings_use_input_job_settings(
+        self,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        sp_settings = project_settings.sp_settings()
+        sp_settings.charge = 0
+        sp_settings.multiplicity = 1
+
+        reactant_opt_settings = GaussianIRCJobSettings(
+            functional="B3LYP",
+            basis="6-31G(d)",
+            charge=0,
+            multiplicity=1,
+            jobtype="irc",
+            predictor="HPC",
+            recorrect="Never",
+            direction="forward",
+            maxpoints=20,
+        )
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=sp_settings,
+            reactant_opt_settings=reactant_opt_settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        assert (
+            job.fragment1_reactant_opt_settings.functional
+            == reactant_opt_settings.functional
+        )
+        assert (
+            job.fragment1_reactant_opt_settings.basis
+            == reactant_opt_settings.basis
+        )
+        assert "irc(" not in job.fragment1_reactant_opt_settings.route_string
+        assert (
+            job.fragment1_reactant_sp_settings.functional
+            == job.fragment1_settings.functional
+        )
+        assert (
+            job.fragment1_reactant_sp_settings.basis == job.fragment1_settings.basis
+        )
 
 
 class TestGaussianlinkIRCJobs:

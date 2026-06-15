@@ -140,8 +140,8 @@ gaussian_dias_filename_point_with_fragment1 = r".*_p(\d+)_(f1)(?:_(.+)?)?\.log"
 # filename matches with point pxx and fragment f2
 gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 
-# filename matches with reactant r1 or r2
-gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
+# filename matches with reactant r1/r2 or isolated fragment i1/i2
+gaussian_dias_filename_with_reactant = r".*_(?:r|i)([12])(?:_(.+)?)?\.log"
 
 
 # Route string cleaning patterns for Gaussian link job settings
