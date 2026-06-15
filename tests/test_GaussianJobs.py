@@ -249,6 +249,41 @@ class TestGaussianDIASJobs:
         assert all("scf=qc" in (c[1] or "") for c in retry_calls)
         assert sp_run_calls == ["input_fragment1_r1", "input_fragment2_i2"]
 
+    def test_dias_reactant_fragment_opt_retry_forces_rerun(
+        self,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecule = Molecule.from_filepath(
+            filepath=single_molecule_xyz_file, index="-1", return_list=False
+        )
+
+        job = GaussianDIASJob(
+            molecules=[molecule],
+            settings=settings,
+            label="input",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            fragment_indices="1",
+            every_n_points=1,
+            mode="ts",
+        )
+
+        retry_job = job._retry_reactant_opt_job(job.fragment1_reactant_opt_job)
+
+        assert retry_job.skip_completed is False
+        assert "maxstep=5" in (retry_job.settings.route_string or "")
+        assert "scf=qc" in (retry_job.settings.route_string or "")
+
     def test_dias_reactant_fragment_opt_raises_when_retry_still_imaginary(
         self,
         monkeypatch,

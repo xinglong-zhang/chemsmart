@@ -521,7 +521,7 @@ class GaussianDIASJob(GaussianJob):
             settings=retry_settings,
             label=opt_job.label,
             jobrunner=opt_job.jobrunner,
-            skip_completed=opt_job.skip_completed,
+            skip_completed=False,
         )
 
     @staticmethod
