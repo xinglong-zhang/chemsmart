@@ -217,14 +217,13 @@ class TestGaussianDIASJobs:
             opt_run_calls.append(
                 (
                     self.label,
-                    self.settings.additional_opt_options_in_route,
-                    self.settings.additional_route_parameters,
+                    self.settings.route_string,
                 )
             )
 
         def fake_opt_output(self):
-            opt_options = self.settings.additional_opt_options_in_route or ""
-            frequencies = [100.0] if "maxstep=5" in opt_options else [-10.0]
+            route_string = self.settings.route_string or ""
+            frequencies = [100.0] if "maxstep=5" in route_string else [-10.0]
             return type(
                 "DummyOutput",
                 (),
@@ -247,7 +246,7 @@ class TestGaussianDIASJobs:
         assert len(opt_run_calls) == 4
         retry_calls = [c for c in opt_run_calls if "maxstep=5" in (c[1] or "")]
         assert len(retry_calls) == 2
-        assert all("scf=qc" in (c[2] or "") for c in retry_calls)
+        assert all("scf=qc" in (c[1] or "") for c in retry_calls)
         assert sp_run_calls == ["input_fragment1_r1", "input_fragment2_i2"]
 
     def test_dias_reactant_fragment_opt_raises_when_retry_still_imaginary(

@@ -9,6 +9,7 @@ coordinates by computing energies of fragments and whole molecules.
 """
 
 import logging
+import re
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
@@ -466,36 +467,55 @@ class GaussianDIASJob(GaussianJob):
             return True
         return any(freq < 0.0 for freq in frequencies)
 
-    @staticmethod
-    def _append_csv_option(existing_options, option):
-        if existing_options is None:
-            return option
-        options = [opt.strip() for opt in existing_options.split(",") if opt]
-        if option not in options:
-            options.append(option)
-        return ",".join(options)
-
-    @staticmethod
-    def _append_route_parameter(existing_parameters, parameter):
-        if existing_parameters is None:
-            return parameter
-        parameters = existing_parameters.split()
-        if parameter not in parameters:
-            parameters.append(parameter)
-        return " ".join(parameters)
-
     def _retry_reactant_opt_job(self, opt_job):
         retry_settings = opt_job.settings.copy()
-        retry_settings.additional_opt_options_in_route = (
-            self._append_csv_option(
-                retry_settings.additional_opt_options_in_route, "maxstep=5"
-            )
+        retry_route_string = retry_settings.route_string
+
+        opt_options_match = re.search(
+            r"\bopt\s*=\s*\(([^)]*)\)", retry_route_string, flags=re.IGNORECASE
         )
-        retry_settings.additional_route_parameters = (
-            self._append_route_parameter(
-                retry_settings.additional_route_parameters, "scf=qc"
+        if opt_options_match is not None:
+            opt_options = [
+                option.strip()
+                for option in opt_options_match.group(1).split(",")
+                if option.strip()
+            ]
+            if not any(option.lower() == "maxstep=5" for option in opt_options):
+                opt_options.append("maxstep=5")
+                retry_route_string = (
+                    f"{retry_route_string[:opt_options_match.start()]}"
+                    f"opt=({','.join(opt_options)})"
+                    f"{retry_route_string[opt_options_match.end():]}"
+                )
+        else:
+            opt_keyword_match = re.search(
+                r"\bopt(?:\s*=\s*(?!\()([^\s]+))?\b",
+                retry_route_string,
+                flags=re.IGNORECASE,
             )
-        )
+            if opt_keyword_match is not None:
+                existing_opt = opt_keyword_match.group(1)
+                if existing_opt is None:
+                    replacement = "opt=(maxstep=5)"
+                elif existing_opt.lower() == "maxstep=5":
+                    replacement = "opt=(maxstep=5)"
+                else:
+                    replacement = f"opt=({existing_opt},maxstep=5)"
+                retry_route_string = (
+                    f"{retry_route_string[:opt_keyword_match.start()]}"
+                    f"{replacement}"
+                    f"{retry_route_string[opt_keyword_match.end():]}"
+                )
+
+        if re.search(r"\bscf\s*=\s*qc\b", retry_route_string, flags=re.IGNORECASE):
+            retry_settings.route_to_be_written = retry_route_string
+        else:
+            retry_settings.route_to_be_written = (
+                f"{retry_route_string} scf=qc"
+            )
+
+        retry_settings.additional_opt_options_in_route = None
+        retry_settings.additional_route_parameters = None
         return GaussianOptJob(
             molecule=opt_job.molecule,
             settings=retry_settings,
