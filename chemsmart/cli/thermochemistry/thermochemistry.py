@@ -128,6 +128,13 @@ def click_thermochemistry_options(f):
         show_default=True,
         help="Check for imaginary frequencies in the calculations.",
     )
+    @click.option(
+        "--check-ts-reaction-coordinate/--no-check-ts-reaction-coordinate",
+        default=False,
+        show_default=True,
+        help="For TS jobs, validate that the single imaginary mode changes "
+        "connectivity between +/- displaced structures.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -161,6 +168,7 @@ def thermochemistry(
     outputfile,
     overwrite,
     check_imaginary_frequencies,
+    check_ts_reaction_coordinate,
     skip_completed,
     **kwargs,
 ):
@@ -225,6 +233,7 @@ def thermochemistry(
         outputfile=outputfile,
         overwrite=overwrite,
         check_imaginary_frequencies=check_imaginary_frequencies,
+        check_ts_reaction_coordinate=check_ts_reaction_coordinate,
     )
 
     # Initialize list to store jobs
