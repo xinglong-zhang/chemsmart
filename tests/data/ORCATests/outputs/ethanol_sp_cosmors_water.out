@@ -1,0 +1,115 @@
+                                 *****************
+                                 * O   R   C   A *
+                                 *****************
+
+================================================================================
+                                        INPUT FILE
+================================================================================
+NAME = ethanol_sp_cosmors_water.inp
+|  1> ! m062x def2-tzvp defgrid2 COSMORS(water)
+|  2> %cosmors
+|  3>   aeff              5.925
+|  4>   lnalpha           0.202
+|  5>   temp              298.15
+|  6>   dftfunc           "BP86"
+|  7>   dftbas            "def2-TZVPD"
+|  8> end
+|  9> * xyz 0 1
+| 10> O       -1.2031230000    0.2723330000   -0.0011950000
+| 11> C       -0.0572250000   -0.5420130000    0.0165350000
+| 12> C        1.2285460000    0.2689780000    0.0029480000
+| 13> H       -0.0618410000   -1.2266530000    0.8858170000
+| 14> H       -0.1125910000   -1.1721090000   -0.8829450000
+| 15> H        2.1140630000   -0.3817530000   -0.0308530000
+| 16> H        1.2466840000    0.9351970000   -0.8708150000
+| 17> H        1.3054740000    0.8911390000    0.9090430000
+| 18> H       -1.1708850000    0.8493810000    0.7691630000
+| 19> *
+| 20> 
+|                          ****END OF INPUT****
+================================================================================
+
+------------------------------------------------------------------------------
+                          OPENCOSMO-RS CALCULATION
+------------------------------------------------------------------------------
+
+----------------------
+GENERAL INFORMATION
+----------------------
+Calculation method                          ... DFT
+Functional                                  ... BP86
+Basis set                                   ... def2-TZVPD
+
+----------------------
+SOLUTE INFORMATION
+----------------------
+Number of atoms                             ...      9
+Total charge                                ...      0
+Multiplicity                                ...      1
+
+CARTESIAN COORDINATES (ANGSTROEM)
+  O     -1.203123    0.272333   -0.001195
+  C     -0.057225   -0.542013    0.016535
+  C      1.228546    0.268978    0.002948
+  H     -0.061841   -1.226653    0.885817
+  H     -0.112591   -1.172109   -0.882945
+  H      2.114063   -0.381753   -0.030853
+  H      1.246684    0.935197   -0.870815
+  H      1.305474    0.891139    0.909043
+  H     -1.170885    0.849381    0.769163
+
+----------------------
+SOLVENT INFORMATION
+----------------------
+Solvent name                                ... WATER
+Number of atoms                             ...      3
+Total charge                                ...      0
+Multiplicity                                ...      1
+
+CARTESIAN COORDINATES (ANGSTROEM)
+  O     -0.000795    0.401428    0.000000
+  H     -0.764800   -0.202217    0.000000
+  H      0.765595   -0.199210    0.000000
+
+----------------------------------------------
+Single Point Calculation (solute / gas-phase)
+----------------------------------------------
+Output single point calculation redirected to >ethanol_sp_cosmors_water.solute_vac.lastout
+
+FINAL SINGLE POINT ENERGY (Solute-gas-phase)     -155.106053403560
+
+----------------------------------------------
+Single Point Calculation (solute / CPCM)
+----------------------------------------------
+Output single point calculation redirected to >ethanol_sp_cosmors_water.solute_cpcm.lastout
+
+FINAL SINGLE POINT ENERGY (Solute-CPCM)     -155.113895532190
+
+----------------------------------------------
+Single Point Calculation (solvent / CPCM)
+----------------------------------------------
+Output single point calculation redirected to >ethanol_sp_cosmors_water.solvent_cpcm.lastout
+
+FINAL SINGLE POINT ENERGY (Solvent-CPCM)      -76.479237522635
+
+----------------------
+SOLVATION DATA
+----------------------
+Reference temperature              :                 298.15 K
+Free energy of solvation (dGsolv)  :       -0.006374918074 Eh             -4.000322 kcal/mol
+
+----------------------
+openCOSMO-RS TIMINGS
+----------------------
+Time single point calculation (solute  / gas-phase) ...        34.99 (sec)
+Time single point calculation (solute  / CPCM)      ...        38.27 (sec)
+Time single point calculation (solvent / CPCM)      ...        33.23 (sec)
+Time execution openCOSMO-RS binaries                ...         0.06 (sec)
+Total time openCOSMO-RS                             ...       106.57 (sec)
+
+Timings for individual modules:
+
+Sum of individual times          ...      106.573 sec (=   1.776 min)
+OPENCOSMO-RS module              ...      106.573 sec (=   1.776 min) 100.0 %
+                             ****ORCA TERMINATED NORMALLY****
+TOTAL RUN TIME: 0 days 0 hours 1 minutes 47 seconds 823 msec
