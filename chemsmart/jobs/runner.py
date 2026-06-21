@@ -27,6 +27,9 @@ class JobRunner(RegistryMixin):
         delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
+        run_in_serial (bool): Whether to run list of jobs in serial.
+            If True, jobs in a list are run one after another.
+            If False, use default behavior. Defaults to False.
         **kwargs: Additional keyword arguments.
     """
 
@@ -41,6 +44,7 @@ class JobRunner(RegistryMixin):
         scratch_dir=None,  # Explicit scratch directory
         delete_scratch=False,
         fake=False,
+        run_in_serial=False,
         num_cores=None,
         num_gpus=None,
         mem_gb=None,
@@ -61,6 +65,7 @@ class JobRunner(RegistryMixin):
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
         self.delete_scratch = delete_scratch
+        self.run_in_serial = run_in_serial
 
         if self.scratch:
             self._set_scratch()
