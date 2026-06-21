@@ -390,6 +390,8 @@ Other Jobs
       -  Run Gaussian input file as-is
    -  -  ``link``
       -  Multi-step link jobs
+   -  -  ``mecp``
+      -  Self-contained Minimum Energy Crossing Point (MECP) optimizer
    -  -  ``userjob``
       -  Custom user-defined jobs
 
