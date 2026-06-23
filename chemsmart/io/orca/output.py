@@ -2860,7 +2860,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def electronic_entropy(self):
         """
-        Electronic entropy in Hartree.
+        Electronic entropy in Hartree/K.
         """
         if self.electronic_entropy_no_temperature_in_SI is not None:
             electronic_entropy_hartree = (
@@ -2898,7 +2898,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def vibrational_entropy(self):
         """
-        Vibrational entropy in Hartree.
+        Vibrational entropy in Hartree/K.
         """
         if self.vibrational_entropy_no_temperature_in_SI is not None:
             vibrational_entropy_hartree = (
@@ -2934,7 +2934,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def rotational_entropy(self):
         """
-        Rotational entropy in Hartree.
+        Rotational entropy in Hartree/K.
         """
         if self.rotational_entropy_no_temperature_in_SI is not None:
             rotational_entropy_hartree = (
@@ -2972,7 +2972,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def translational_entropy(self):
         """
-        Translational entropy in Hartree.
+        Translational entropy in Hartree/K.
         """
         if self.translational_entropy_no_temperature_in_SI is not None:
             translational_entropy_hartree = (
@@ -3001,7 +3001,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def entropy(self):
         """
-        Total entropy in Hartree.
+        Total entropy in Hartree/K.
         """
         if self.entropy_in_J_per_mol_per_K is not None:
             total_entropy_hartree = (
