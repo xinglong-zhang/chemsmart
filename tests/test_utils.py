@@ -1919,7 +1919,7 @@ class TestPKaTableParsing:
         self, tmp_path
     ):
         """analyze auto-discovery should use the same suffixes as batch-analyze."""
-        from chemsmart.utils.utils import discover_pka_target_companion_outputs
+        from chemsmart.utils.io import discover_pka_target_companion_outputs
 
         for name in (
             "acid1_pka_HA_opt.log",

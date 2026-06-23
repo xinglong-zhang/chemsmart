@@ -30,9 +30,6 @@ from chemsmart.utils.io import get_program_type_from_file
 logger = logging.getLogger(__name__)
 
 
-# ── helpers moved from cli/pka_helpers.py ──────────────────────────────
-
-
 def resolve_pka_entropy_cutoff(cutoff_entropy_grimme, cutoff_entropy_truhlar):
     """Resolve pKa entropy cutoff; default to Grimme 100 cm⁻¹ when unset."""
     s_freq_cutoff, entropy_method = resolve_entropy_cutoff(
@@ -899,10 +896,8 @@ def validate_direct_analyze_files(ha, a, ha_solv, a_solv):
 
 def _auto_discover_direct_pka_files(ha_gas_path, program=None):
     """Infer A- and solvent SP paths from the HA gas-phase output path."""
-    from chemsmart.utils.utils import (
-        PKA_TARGET_SUFFIX_HELP,
-        discover_pka_target_companion_outputs,
-    )
+    from chemsmart.utils.io import discover_pka_target_companion_outputs
+    from chemsmart.utils.utils import PKA_TARGET_SUFFIX_HELP
 
     results = discover_pka_target_companion_outputs(
         ha_gas_path, program=program
@@ -1112,11 +1107,11 @@ def validate_analyze_files(
 
 def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
     """Infer companion output paths from HA and HRef gas-phase paths."""
+    from chemsmart.utils.io import discover_pka_target_companion_outputs
     from chemsmart.utils.utils import (
         PKA_REFERENCE_SUFFIX_HELP,
         PKA_TARGET_SUFFIX_HELP,
         discover_pka_reference_companion_outputs,
-        discover_pka_target_companion_outputs,
     )
 
     if program is None:

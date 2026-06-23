@@ -564,6 +564,31 @@ def detect_program_type_from_files(filepaths, allowed_programs=None):
     return program
 
 
+def discover_pka_target_companion_outputs(ha_gas_path, program=None):
+    """Infer A- and solvent SP paths from a HA gas-phase output file."""
+    from chemsmart.utils.utils import (
+        discover_pka_output_path,
+        pka_output_basename_from_path,
+    )
+
+    ha_gas_path = str(ha_gas_path)
+    directory = os.path.dirname(ha_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ha_gas_path)
+    basename = pka_output_basename_from_path(ha_gas_path, "ha_gas")
+    return {
+        "a": discover_pka_output_path(
+            basename, directory, "a_gas", program=program
+        ),
+        "ha_solv": discover_pka_output_path(
+            basename, directory, "ha_sp", program=program
+        ),
+        "a_solv": discover_pka_output_path(
+            basename, directory, "a_sp", program=program
+        ),
+    }
+
+
 def check_program_availability_in_chemsmart(program_name):
     """Utility function to check if user-supplied program type is
     supported in CHEMMART."""
