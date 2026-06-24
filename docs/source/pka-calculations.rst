@@ -32,6 +32,8 @@ CHEMSMART provides pKa workflows in two separate stages:
 
 -  ``chemsmart run/sub gaussian ... pka [submit|batch]`` — prepare and run Gaussian pKa calculations.
 -  ``chemsmart run/sub orca ... pka [submit|batch]`` — prepare and run ORCA pKa calculations.
+-  Use ``chemsmart run`` for local preparation and execution; use ``chemsmart sub`` on HPC clusters to generate
+   scheduler scripts (see :ref:`pka-hpc-batch-submission`).
 -  A single structure yields one job; batch input (CSV table or multi-molecule CDXML) can produce multiple jobs in one
    invocation.
 -  When ``pka`` is invoked without an explicit subcommand, a submission table triggers ``batch``; otherwise ``submit``
@@ -43,6 +45,7 @@ CHEMSMART provides pKa workflows in two separate stages:
 -  ``chemsmart run pka batch-analyze`` — table-driven batch analysis.
 -  Both commands use the same pKa analysis workflow. Gaussian ``.log`` and ORCA ``.out`` files can be mixed in the same
    batch table; each file is read and interpreted on its own.
+-  Analysis never invokes ``gaussian`` or ``orca`` job submission — only reads completed output files.
 
 Theory
 ======
@@ -201,8 +204,32 @@ Pass the file with ``pka batch`` (or ``pka submit`` for a single-fragment file):
 
    chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
 
-Job labels are derived from the filename, e.g. ``acids_frag1_pka`` (Gaussian) or ``acids_frag1_pka`` (ORCA). Charge and
-multiplicity come from the parent ``-c`` / ``-m`` options and apply to every fragment unless overridden in a CSV table.
+Job labels are derived from the filename, e.g. ``acids_frag1_pka`` (Gaussian) or ``acids_frag1_pka`` (ORCA).
+
+**Charge and multiplicity**
+
+How charge and multiplicity are resolved depends on the input mode:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   -  -  Input mode
+      -  Charge / multiplicity source
+
+   -  -  CSV batch table
+      -  **Required columns** on each row (``charge``, ``multiplicity``). The parent ``gaussian`` / ``orca`` command
+         does not need ``-c`` / ``-m`` when ``-f`` is a table.
+
+   -  -  Multi-fragment CDXML (``-f`` is ``.cdxml`` / ``.cdx``)
+      -  Parent ``-c`` / ``-m`` apply to every fragment by default. If either is omitted on the backend command,
+         CHEMSMART may copy values from the parsed CDXML structure when the drawing supplies them.
+
+   -  -  Single-molecule submit (XYZ, LOG, CDXML, …)
+      -  ``-c`` and ``-m`` on the backend command are required unless already present on merged project/job settings.
+
+Blank ``proton_index`` in a **single-molecule CDXML table row** triggers coloured-proton auto-detection only; it does
+**not** remove the requirement for ``charge`` and ``multiplicity`` columns in CSV tables.
 
 **CDXML paths inside a CSV batch table**
 
@@ -276,6 +303,67 @@ Each pKa job creates gas-phase opt+freq and solvent single-point sub-jobs. Outpu
 Gaussian batch jobs use the input stem as the job label (e.g. ``acid1_HA_opt.log``). ORCA batch jobs append ``_pka`` to
 the stem (e.g. ``acid1_pka_HA_opt.out``). The output-analysis autodiscovery convention below is aligned with the
 ``{basename}_pka_*`` pattern used by ORCA submission and by typical batch output tables.
+
+.. _pka-hpc-batch-submission:
+
+********************************************
+ HPC Cluster Submission (``chemsmart sub``)
+********************************************
+
+On a cluster, use ``chemsmart sub`` instead of ``chemsmart run`` to write scheduler scripts and per-job run wrappers.
+The pKa workflow is unchanged at the chemistry level; only the launch path differs.
+
+**Single job**
+
+.. code:: bash
+
+   chemsmart sub gaussian -p my_project -f acid.xyz -c 0 -m 1 pka -pi 10 -s direct submit
+
+**Batch table or multi-fragment CDXML**
+
+One scheduler submission is created **per table row** or **per ChemDraw fragment**. CHEMSMART expands ``pka batch`` into
+multiple jobs locally, then writes a separate ``chemsmart_sub_<label>.sh`` and ``chemsmart_run_<label>.py`` for each
+job.
+
+.. code:: bash
+
+   chemsmart sub gaussian -p my_project -f pka_input.csv pka -s direct batch
+
+   chemsmart sub gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
+
+Per-job script reconstruction
+=============================
+
+Each cluster run wrapper must replay **one** pKa submission, not the entire batch table or full multi-fragment CDXML
+file. When a job is created from ``pka batch``, CHEMSMART stores row- or fragment-level metadata and rewrites the CLI
+inside ``chemsmart_run_<label>.py`` before submission:
+
+#. **CSV batch rows** — replace the table path in ``-f`` / ``--filename`` with that row's ``filepath``; change ``batch``
+   to ``submit``.
+#. **Multi-fragment CDXML** — point ``-f`` at the same CDXML file but add ``--index`` / ``-i`` so only one fragment is
+   processed; change ``batch`` to ``submit``.
+#. **Explicit per-job options** — inject or update ``--proton-index``, ``--charge``, ``--multiplicity``, and ``--label``
+   so the reconstructed command is self-contained and passes Click validation on the cluster node.
+#. **Proton exchange tables** — rows after the first may run with ``-s direct``; reference-acid flags are dropped from
+   later rows automatically (same behaviour as local ``pka batch``).
+
+Example: a two-row CSV batch submitted with ``chemsmart sub ... pka batch`` yields two run scripts. The script for row
+two might equivalent to:
+
+.. code:: bash
+
+   chemsmart run gaussian -p my_project -f /path/to/acid2.xyz -c 0 -m 1 \
+       pka -pi 8 -s direct submit
+
+Example: a five-fragment CDXML file ``pka_scale.cdxml`` yields labels such as ``pka_scale_frag1_pka``, …,
+``pka_scale_frag5_pka``. Each run script targets one fragment via ``--index`` and the matching ``--proton-index``,
+``--label``, ``-c``, and ``-m``.
+
+This reconstruction is what allows ``chemsmart sub ... pka batch`` on a cluster to behave like five independent ``pka
+submit`` calls while you only maintain one top-level submission command locally.
+
+See also :doc:`cli-overview` for general ``chemsmart sub`` usage and :doc:`configuration-server-settings` for scheduler
+configuration.
 
 *****************************************
  Output Analysis (``chemsmart run pka``)
@@ -721,7 +809,9 @@ When computing pKa from output files, CHEMSMART prints a detailed summary. The f
 **Batch analyze output**
 
 ``batch-analyze`` prints a compact table whose ΔG column header matches the scheme. The same formatted report is written
-to ``-O`` when provided:
+to ``-O`` when provided.
+
+**Typical table** (single-acid basenames):
 
 .. code:: text
 
@@ -730,14 +820,33 @@ to ``-O`` when provided:
    ==============================================================================
    Temperature: 298.15 K
    Pressure: 1.0 atm
-   basename                              pKa     DG_soln (kcal/mol)
+   basename                              pKa   ΔG_soln (kcal/mol)
    ------------------------------------------------------------------------------
-   phenol                               10.12              13.4567
-   benzoic_acid                          4.20               5.7890
+   phenol                               10.12             13.4567
+   benzoic_acid                          4.20              5.7890
+   ==============================================================================
+
+**Multi-fragment CDXML workflow** — after ``chemsmart sub ... -f pka_scale.cdxml pka batch`` and ``chemsmart run pka
+batch-analyze``, basenames match the fragment labels (``<stem>_frag<N>_pka`` or the Gaussian stem without ``_pka``
+suffix, depending on backend). Example (values from a test reference acid; not physically meaningful):
+
+.. code:: text
+
+   ==============================================================================
+   Batch pKa Results (Dual-level Proton Exchange)
+   ==============================================================================
+   Temperature: 278.15 K
+   Pressure: 1.0 atm
+   basename                              pKa   ΔG_soln (kcal/mol)
+   ------------------------------------------------------------------------------
+   pka_scale_frag1                      -8.17            -23.8913
+   pka_scale_frag4                      -1.24            -15.0654
+   pka_scale_frag3                       9.22             -1.7521
+   pka_scale_frag5                      -2.68            -16.8958
    ==============================================================================
 
 For direct dissociation, the header reads ``Batch pKa Results (Direct Dissociation)`` and the column is labeled
-``DG_diss (kcal/mol)``.
+``ΔG_diss (kcal/mol)``.
 
 References
 ==========

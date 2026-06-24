@@ -113,6 +113,9 @@ Direct cycle:
    For proton exchange with multiple batch rows, only the first row uses the reference acid; subsequent rows switch to
    the direct cycle (same behaviour as Gaussian batch).
 
+   On HPC clusters, ``chemsmart sub ... pka batch`` writes one scheduler script per row or CDXML fragment with
+   reconstructed ``pka submit`` arguments. See :ref:`pka-hpc-batch-submission`.
+
 Table Format
 ============
 
@@ -133,6 +136,8 @@ per-fragment coloured-proton detection. Labels are ``<basename>_frag<N>_pka`` (o
        -r ref_acid.xyz -rpi 21 -rc 1 -rm 1 batch
 
    chemsmart run orca -p my_project -f acids.cdxml -c 0 -m 1 pka -s direct batch
+
+For cluster submission of multi-fragment CDXML, see :ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files

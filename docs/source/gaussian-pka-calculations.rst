@@ -129,6 +129,9 @@ Direct cycle (``-s direct`` must be set explicitly):
 
    In batch mode, each table row becomes an independent pKa job.
 
+   On HPC clusters, use ``chemsmart sub`` instead of ``chemsmart run``; each row receives its own scheduler script with
+   a reconstructed single-row ``pka submit`` command. See :ref:`pka-hpc-batch-submission`.
+
 Table Format
 ============
 
@@ -180,7 +183,11 @@ follow ``<basename>_frag<N>_pka`` (e.g. ``acids_frag1_pka_HA_opt.log``).
    chemsmart run gaussian -p my_project -f acids.cdxml -c 0 -m 1 pka -cc 4 -s direct batch
 
 A CSV table may list single-molecule ``.cdxml`` paths per row (see Table Format above); blank ``proton_index`` triggers
-coloured-proton auto-detection for that row.
+coloured-proton auto-detection for that row. ``charge`` and ``multiplicity`` still come from the table columns for CSV
+rows; for multi-fragment CDXML passed directly as ``-f``, see :ref:`pka-calculations` (Charge and multiplicity).
+
+On clusters, ``chemsmart sub ... pka batch`` with a CDXML file creates one submission per fragment; each run script
+targets a single fragment via ``--index``. See :ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files
