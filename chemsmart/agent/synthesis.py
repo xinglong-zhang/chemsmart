@@ -70,8 +70,13 @@ class SynthesisSession:
             try:
                 parsed = _parse_json_response(response)
                 if _is_v8_spec(parsed):
-                    return _normalize_v8_spec(parsed)
-                return _normalize_result(parsed)
+                    result = _normalize_v8_spec(parsed)
+                else:
+                    result = _normalize_result(parsed)
+                # Keep the model's verbatim output so the caller can record it as the
+                # assistant turn for native multi-turn replay (see _messages_for_request).
+                result["raw_response"] = _extract_text(response)
+                return result
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
@@ -165,7 +170,11 @@ class SynthesisSession:
                 click.echo(f"Synthesized command is invalid: {error}")
                 return
 
-        self._remember_turn(current_request, command)
+        self._remember_turn(
+            current_request,
+            command,
+            assistant_message=str(result.get("raw_response") or ""),
+        )
         self.confirm_and_execute(
             command,
             str(result.get("explanation") or ""),
@@ -244,25 +253,39 @@ class SynthesisSession:
         return argv
 
     def _messages_for_request(self, request: str) -> list[dict[str, str]]:
-        context = self.memory.prompt_context()
-        return [
+        """Build a NATIVE multi-turn message list: the system prompt, then each prior
+        turn replayed as real ``user``/``assistant`` messages, then the current request.
+
+        The assistant turns carry the model's verbatim SPEC (``assistant_message``), so a
+        follow-up like "change the charge to -1" lets the model edit its own prior spec in
+        context — the format it was effectively prompted with. Turns without an assistant
+        message (e.g. clarification sub-turns, whose content is folded into a later request)
+        are skipped to avoid duplicate/garbled user messages.
+        """
+        messages: list[dict[str, str]] = [
             {
                 "role": "system",
                 "content": build_synthesis_system_prompt(self.schema),
-            },
-            {
-                "role": "system",
-                "content": "Conversation memory: "
-                + json.dumps(context, sort_keys=True),
-            },
-            {"role": "user", "content": request},
+            }
         ]
+        for turn in self.memory.turns:
+            if not turn.assistant_message:
+                continue
+            messages.append({"role": "user", "content": turn.request})
+            messages.append(
+                {"role": "assistant", "content": turn.assistant_message}
+            )
+        messages.append({"role": "user", "content": request})
+        return messages
 
-    def _remember_turn(self, request: str, result: str) -> None:
+    def _remember_turn(
+        self, request: str, result: str, assistant_message: str = ""
+    ) -> None:
         turn = ConversationTurn(
             turn_index=len(self.memory.turns) + 1,
             request=request,
             plan_rationale=result,
+            assistant_message=assistant_message,
             status="completed",
         )
         self.memory.turns.append(turn)

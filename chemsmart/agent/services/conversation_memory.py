@@ -21,6 +21,9 @@ class ConversationTurn(BaseModel):
     turn_index: int
     request: str
     plan_rationale: str = ""
+    # Raw assistant message (the model's verbatim SPEC/JSON) for native multi-turn replay.
+    # Distinct from plan_rationale, which is a truncated human-readable summary for prompt_context.
+    assistant_message: str = ""
     intent: Literal["workflow", "advisory", "chitchat"] | None = None
     reusable_results: list[str] = Field(default_factory=list)
     status: Literal["in_progress", "completed"] = "in_progress"

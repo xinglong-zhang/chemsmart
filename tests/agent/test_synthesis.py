@@ -260,9 +260,13 @@ def test_multiturn_clarification_is_carried_in_memory(
     session.run_interactive("optimize oxetane")
 
     assert len(provider.messages) == 2
-    memory_message = provider.messages[1][1]["content"]
-    assert "Conversation memory" in memory_message
-    assert "What basis set?: def2-svp" in memory_message
+    # Native multi-turn: the second request is built as [system, user]. The clarification
+    # sub-turn carries no assistant SPEC, so its answers are folded into the follow-up user
+    # request rather than injected as a "Conversation memory" system blob.
+    second_call = provider.messages[1]
+    assert [m["role"] for m in second_call] == ["system", "user"]
+    followup_user = second_call[-1]["content"]
+    assert "What basis set?: def2-svp" in followup_user
 
 
 def test_agent_ask_e2e_uses_synthesis_session(

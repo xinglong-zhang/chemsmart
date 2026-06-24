@@ -62,3 +62,46 @@ def test_synthesis_v8_decline_is_infeasible():
     assert res["status"] == "infeasible"
     assert res["command"] == ""
     assert "fragment" in res["explanation"]
+
+
+def test_native_multiturn_history_is_replayed():
+    """A follow-up turn must reach the model as native [system, user, assistant, user] chat
+    history carrying the prior raw SPEC — so the model can edit its own previous spec."""
+    from chemsmart.agent.synthesis import SynthesisSession
+    from chemsmart.agent.services.conversation_memory import ConversationMemory
+
+    spec1 = json.dumps({"intent": "workflow", "jobs": [
+        {"id": 1, "kind": "gaussian.opt", "file": "m.xyz", "charge": 0, "mult": 1}]})
+    spec2 = json.dumps({"intent": "workflow", "jobs": [
+        {"id": 1, "kind": "gaussian.opt", "file": "m.xyz", "charge": -1, "mult": 1}]})
+    seen = {}
+
+    class MockProvider:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, messages):
+            seen["last"] = messages
+            self.calls += 1
+            return spec1 if self.calls == 1 else spec2
+
+    sess = SynthesisSession.__new__(SynthesisSession)
+    sess.provider = MockProvider()
+    sess.max_retries = 0
+    sess.debug = False
+    sess.schema = {"command": "chemsmart", "subcommands": {}}  # stub; only json-serialized into the prompt
+    sess.memory = ConversationMemory()
+
+    # turn 1
+    r1 = sess.synthesize("optimize m.xyz")
+    assert r1["status"] == "ready"
+    assert seen["last"][-1]["role"] == "user"  # first call: just system + current user
+    assert [m["role"] for m in seen["last"]] == ["system", "user"]
+    sess._remember_turn("optimize m.xyz", r1["command"], assistant_message=r1["raw_response"])
+
+    # turn 2: the follow-up must arrive as native history with the prior SPEC as an assistant turn
+    r2 = sess.synthesize("change the charge to -1")
+    assert [m["role"] for m in seen["last"]] == ["system", "user", "assistant", "user"]
+    assert seen["last"][2]["content"] == spec1          # the prior raw SPEC, verbatim
+    assert seen["last"][3]["content"] == "change the charge to -1"
+    assert r2["status"] == "ready" and "-1" in r2["command"]
