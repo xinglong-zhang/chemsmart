@@ -2105,12 +2105,12 @@ class PKaTableEntry:
         header = re.sub(r"_+", "_", header).strip("_")
         return header
 
-    @classmethod
-    def resolve_column(cls, columns, candidates, required=True):
+    @staticmethod
+    def resolve_column(columns, candidates, required=True):
         """Resolve a physical column name from logical candidates."""
-        normalized = {cls.normalize_header(c): c for c in columns}
+        normalized = {PKaTableEntry.normalize_header(c): c for c in columns}
         for candidate in candidates:
-            key = cls.normalize_header(candidate)
+            key = PKaTableEntry.normalize_header(candidate)
             if key in normalized:
                 return normalized[key]
         if required:
@@ -2120,8 +2120,8 @@ class PKaTableEntry:
             )
         return None
 
-    @classmethod
-    def parse_table(cls, table_path, delimiter=None, comment="#"):
+    @staticmethod
+    def parse_table(table_path, delimiter=None, comment="#"):
         """Backward-compatible shim for generic table parsing."""
         from chemsmart.utils.io import TabularDataset
 
@@ -3209,6 +3209,7 @@ class PKaOutputTable:
             pressure=pressure,
         )
 
+    @staticmethod
     def validate_pka_table_entries(
         entries: list,
         check_file_exists: bool = True,

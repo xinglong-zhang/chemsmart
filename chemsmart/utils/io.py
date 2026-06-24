@@ -90,11 +90,11 @@ class TabularDataset:
         )
         return cls(df, source_path=table_path)
 
-    @classmethod
-    def resolve_column(cls, columns, candidates, required=True):
-        normalized = {cls.normalize_header(c): c for c in columns}
+    @staticmethod
+    def resolve_column(columns, candidates, required=True):
+        normalized = {TabularDataset.normalize_header(c): c for c in columns}
         for candidate in candidates:
-            key = cls.normalize_header(candidate)
+            key = TabularDataset.normalize_header(candidate)
             if key in normalized:
                 return normalized[key]
         if required:

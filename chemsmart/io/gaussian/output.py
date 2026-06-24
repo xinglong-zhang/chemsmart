@@ -3491,9 +3491,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
             delta_G_proton=delta_G_proton,
         )
 
-    @classmethod
+    @staticmethod
     def print_pka_summary(
-        cls,
         ha_gas_file,
         a_gas_file,
         href_gas_file,

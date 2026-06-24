@@ -3958,9 +3958,8 @@ class ORCApKaOutput(ORCAOutput):
     # Dual-level pKa computation
     # ------------------------------------------------------------------
 
-    @classmethod
+    @staticmethod
     def compute_pka(
-        cls,
         ha_gas_file,
         a_gas_file,
         href_gas_file=None,
@@ -4002,9 +4001,8 @@ class ORCApKaOutput(ORCAOutput):
             delta_G_proton=delta_G_proton,
         )
 
-    @classmethod
+    @staticmethod
     def print_pka_summary(
-        cls,
         ha_gas_file,
         a_gas_file,
         href_gas_file,
