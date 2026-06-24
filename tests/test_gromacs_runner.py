@@ -637,3 +637,12 @@ def test_gromacs_executable_uses_executable_folder(tmp_path):
     executable = GromacsExecutable(executable_folder=tmp_path)
 
     assert executable.get_executable() == os.path.join(str(tmp_path), "gmx")
+
+
+def test_gromacs_executable_from_servername_without_gromacs_section(
+    server_yaml_file,
+):
+    executable = GromacsExecutable.from_servername(server_yaml_file)
+
+    assert executable.get_executable() == "gmx"
+    assert executable.executable_folder is None

@@ -249,6 +249,17 @@ class GromacsExecutable(Executable):
 
     PROGRAM = "GROMACS"
 
+    @classmethod
+    def from_servername(cls, servername):
+        try:
+            return super().from_servername(servername)
+        except KeyError:
+            logger.warning(
+                "No GROMACS section in server YAML %s; using 'gmx' from PATH.",
+                servername,
+            )
+            return cls()
+
     def __init__(
         self, executable_folder=None, executable_name="gmx", **kwargs
     ):

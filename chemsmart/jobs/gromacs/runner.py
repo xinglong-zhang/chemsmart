@@ -6,6 +6,7 @@ import logging
 import os
 import shlex
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 from chemsmart.jobs.gromacs.state import GromacsWorkflowState
@@ -69,11 +70,12 @@ class GromacsJobRunner(JobRunner):
         self.gmx_source_scripts = list(gmx_source_scripts or [])
 
     @property
+    @lru_cache(maxsize=12)
     def executable(self):
         """
-        Return the configured GROMACS executable.
+        Return the GROMACS executable configuration for the current server.
         """
-        return self._get_executable()
+        return GromacsExecutable.from_servername(servername=self.server.name)
 
     def _prerun(self, job):
         """
@@ -130,7 +132,7 @@ class GromacsJobRunner(JobRunner):
         if getattr(self, "gmx_executable", None) is not None:
             return self.gmx_executable
 
-        return GromacsExecutable().get_executable()
+        return self.executable.get_executable()
 
     def _get_grompp_command(
         self,
