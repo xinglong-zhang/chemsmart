@@ -68,7 +68,10 @@ class SynthesisSession:
         for attempt in range(self.max_retries + 1):
             response = self.provider.chat(messages)
             try:
-                return _normalize_result(_parse_json_response(response))
+                parsed = _parse_json_response(response)
+                if _is_v8_spec(parsed):
+                    return _normalize_v8_spec(parsed)
+                return _normalize_result(parsed)
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
@@ -279,6 +282,53 @@ def _parse_json_response(response: Any) -> JsonDict:
     if not isinstance(parsed, dict):
         raise ValueError("synthesis response must be a JSON object")
     return parsed
+
+
+_V8_INTENTS = {"workflow", "advisory", "decline", "chitchat"}
+
+
+def _is_v8_spec(parsed: JsonDict) -> bool:
+    """A v8 spec-emission model returns {"intent": ..., "jobs"/"message": ...} instead of the
+    {status, command, ...} synthesis shape."""
+    return (
+        isinstance(parsed, dict)
+        and parsed.get("intent") in _V8_INTENTS
+        and ("jobs" in parsed or "message" in parsed)
+        and "status" not in parsed
+    )
+
+
+def _normalize_v8_spec(parsed: JsonDict) -> JsonDict:
+    """Bridge a v8 job spec into the synthesis result shape via the deterministic v8 adapter
+    (parse -> postprocess -> render chemsmart command -> validate)."""
+    from chemsmart.agent import v8_adapter
+
+    out = v8_adapter.adapt(parsed)
+    if out["intent"] == "workflow":
+        commands = out.get("commands") or []
+        command = commands[0] if commands else ""
+        # a chain renders as multiple commands; the lead command is executed, the rest are surfaced
+        return _normalize_result(
+            {
+                "status": "ready" if command else "infeasible",
+                "confidence": "high" if out.get("valid") else "medium",
+                "command": command,
+                "explanation": ("multi-step: " + " ; ".join(commands)) if len(commands) > 1 else "",
+                "missing_info": [] if command else ["adapter produced no command"],
+                "alternatives": commands[1:],
+            }
+        )
+    status = "infeasible" if out["intent"] == "decline" else "needs_clarification"
+    return _normalize_result(
+        {
+            "status": status,
+            "confidence": "low",
+            "command": "",
+            "explanation": out.get("message") or "",
+            "missing_info": [],
+            "alternatives": [],
+        }
+    )
 
 
 def _extract_text(response: Any) -> str:
