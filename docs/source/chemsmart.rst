@@ -14,7 +14,6 @@
    chemsmart.jobs.gromacs
    chemsmart.settings
 
-
 *****************
  Module contents
 *****************

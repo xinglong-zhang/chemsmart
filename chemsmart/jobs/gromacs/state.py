@@ -1,9 +1,7 @@
-# chemsmart/jobs/gromacs/state.py
+"""Workflow state for GROMACS multi-step setup jobs."""
+
 from __future__ import annotations
 
-"""
-Workflow state for GROMACS multi-step setup jobs.
-"""
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +14,7 @@ class GromacsWorkflowState:
     Keeping these files in one state object avoids spreading intermediate file
     names across job, runner and CLI layers.
     """
+
     working_dir: Path
     label: str
 
@@ -29,8 +28,8 @@ class GromacsWorkflowState:
     @classmethod
     def from_job(cls, job) -> "GromacsWorkflowState":
         """
-         Build workflow state from a GROMACS job.
-         """
+        Build workflow state from a GROMACS job.
+        """
         working_dir = Path(job.folder).resolve()
         label = job.label
 
@@ -50,15 +49,13 @@ class GromacsWorkflowState:
                 or working_dir / "solvated.gro"
             ),
             ions_tpr_file=Path(
-                getattr(job, "ions_tpr_file", None)
-                or working_dir / "ions.tpr"
+                getattr(job, "ions_tpr_file", None) or working_dir / "ions.tpr"
             ),
             ionized_structure_file=Path(
                 getattr(job, "ionized_structure_file", None)
                 or working_dir / "ionized.gro"
             ),
             em_tpr_file=Path(
-                getattr(job, "tpr_file", None)
-                or working_dir / f"{label}.tpr"
+                getattr(job, "tpr_file", None) or working_dir / f"{label}.tpr"
             ),
         )

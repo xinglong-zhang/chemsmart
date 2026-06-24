@@ -1,5 +1,3 @@
-
-from __future__ import annotations
 """
 GROMACS energy minimization CLI command.
 
@@ -8,14 +6,16 @@ This command supports two creation modes:
 2. Direct CLI mode: chemsmart run gromacs em --mdp em.mdp --structure input.gro --top topol.top
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
+
 import click
 
 from chemsmart.cli.gromacs.gromacs import gromacs
 from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.gromacs.job import GromacsEMJob
-from chemsmart.settings.gromacs import GromacsProjectSettings
 from chemsmart.utils.cli import MyGroup
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,6 @@ def em(
     """
 
     jobrunner = ctx.obj.get("jobrunner", None)
-    project = ctx.obj.get("project", None)
     project_yaml = ctx.obj.get("project_yaml", None)
     project_settings = ctx.obj.get("project_settings", None)
     filename = ctx.obj.get("filename", None)
@@ -157,8 +156,7 @@ def em(
         settings.validate()
 
         logger.info(
-            "Creating GROMACS EM job from project YAML: %s",
-            project_yaml
+            "Creating GROMACS EM job from project YAML: %s", project_yaml
         )
 
         if ctx.invoked_subcommand is None:
@@ -174,9 +172,7 @@ def em(
     # direct CLI mode
     label = "gromacs_em"
     if structure_file is not None:
-        label = (
-            Path(structure_file).stem + "_em"
-        )
+        label = Path(structure_file).stem + "_em"
 
     workflow = workflow or "prepared"
 

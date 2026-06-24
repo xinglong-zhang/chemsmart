@@ -1,29 +1,28 @@
 # tests/test_gromacs_job.py
 
-from pathlib import Path
-import pytest
 
-from chemsmart.jobs.gromacs.job import GromacsEMJob, GromacsJob
+from chemsmart.jobs.gromacs.job import GromacsEMJob
 from chemsmart.settings.gromacs import GromacsProjectSettings
+
 
 def test_gromacs_job_can_be_created_from_project_settings(tmp_path):
     # Prepare virtual project settings
-    settings = GromacsProjectSettings.from_dict({
-        "project_name": "prepared_em",
-        "workflow": "prepared",
-        "mdp_file": tmp_path / "em.mdp",
-        "structure_file": tmp_path / "input.gro",
-        "top_file": tmp_path / "topol.top",
-        "tpr_file": tmp_path / "em.tpr",
-        "index_file": tmp_path / "index.ndx",
-        "itp_files": [tmp_path / "forcefield.itp"],
-    })
+    settings = GromacsProjectSettings.from_dict(
+        {
+            "project_name": "prepared_em",
+            "workflow": "prepared",
+            "mdp_file": tmp_path / "em.mdp",
+            "structure_file": tmp_path / "input.gro",
+            "top_file": tmp_path / "topol.top",
+            "tpr_file": tmp_path / "em.tpr",
+            "index_file": tmp_path / "index.ndx",
+            "itp_files": [tmp_path / "forcefield.itp"],
+        }
+    )
 
     # Create a Job through settings
     job = GromacsEMJob.from_project_settings(
-        settings=settings,
-        molecule=None,
-        jobrunner=None
+        settings=settings, molecule=None, jobrunner=None
     )
 
     assert isinstance(job, GromacsEMJob)
@@ -36,19 +35,20 @@ def test_gromacs_job_can_be_created_from_project_settings(tmp_path):
     assert job.index_file == tmp_path / "index.ndx"
     assert job.itp_files == [tmp_path / "forcefield.itp"]
 
+
 def test_gromacs_job_default_tpr(tmp_path):
-    settings = GromacsProjectSettings.from_dict({
-        "project_name": "prepared_em",
-        "workflow": "prepared",
-        "mdp_file": tmp_path / "em.mdp",
-        "structure_file": tmp_path / "input.gro",
-        "top_file": tmp_path / "topol.top",
-    })
+    settings = GromacsProjectSettings.from_dict(
+        {
+            "project_name": "prepared_em",
+            "workflow": "prepared",
+            "mdp_file": tmp_path / "em.mdp",
+            "structure_file": tmp_path / "input.gro",
+            "top_file": tmp_path / "topol.top",
+        }
+    )
 
     job = GromacsEMJob.from_project_settings(
-        settings=settings,
-        molecule=None,
-        jobrunner=None
+        settings=settings, molecule=None, jobrunner=None
     )
 
     # Set folder
@@ -58,17 +58,18 @@ def test_gromacs_job_default_tpr(tmp_path):
     expected_tpr = tmp_path / f"{job.label}.tpr"
     assert job.tpr_file == expected_tpr
 
+
 def test_gromacs_job_has_required_prepared_inputs(tmp_path):
-    settings = GromacsProjectSettings.from_dict({
-        "mdp_file": tmp_path / "em.mdp",
-        "structure_file": tmp_path / "input.gro",
-        "top_file": tmp_path / "topol.top",
-    })
+    settings = GromacsProjectSettings.from_dict(
+        {
+            "mdp_file": tmp_path / "em.mdp",
+            "structure_file": tmp_path / "input.gro",
+            "top_file": tmp_path / "topol.top",
+        }
+    )
 
     job = GromacsEMJob.from_project_settings(
-        settings=settings,
-        molecule=None,
-        jobrunner=None
+        settings=settings, molecule=None, jobrunner=None
     )
 
     job.set_folder(tmp_path)
@@ -83,3 +84,33 @@ def test_gromacs_job_has_required_prepared_inputs(tmp_path):
         f.write_text("dummy content", encoding="utf-8")
 
     assert job.has_required_prepared_inputs() is True
+
+
+def test_gromacs_job_is_complete_when_mdrun_log_exists(tmp_path):
+    job = GromacsEMJob(
+        molecule=None,
+        label="prepared_em",
+        jobrunner=None,
+        tpr_file=tmp_path / "em.tpr",
+    )
+    job.set_folder(tmp_path)
+
+    assert job.is_complete() is False
+
+    (tmp_path / "em.log").write_text("Finished mdrun\n", encoding="utf-8")
+
+    assert job.is_complete() is True
+
+
+def test_gromacs_job_is_incomplete_when_log_missing_success_markers(tmp_path):
+    job = GromacsEMJob(
+        molecule=None,
+        label="prepared_em",
+        jobrunner=None,
+        tpr_file=tmp_path / "em.tpr",
+    )
+    job.set_folder(tmp_path)
+
+    (tmp_path / "em.log").write_text("Starting mdrun\n", encoding="utf-8")
+
+    assert job.is_complete() is False

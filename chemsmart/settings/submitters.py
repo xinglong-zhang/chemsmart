@@ -5,6 +5,7 @@ from typing import Optional
 
 from chemsmart.settings.executable import (
     GaussianExecutable,
+    GromacsExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
 )
@@ -248,6 +249,8 @@ class Submitter(RegistryMixin):
             executable = ORCAExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "gromacs":
+            executable = GromacsExecutable.from_servername(self.server.name)
 
         else:
             # Need to add programs here to be

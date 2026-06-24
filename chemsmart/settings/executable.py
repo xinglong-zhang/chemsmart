@@ -249,7 +249,9 @@ class GromacsExecutable(Executable):
 
     PROGRAM = "GROMACS"
 
-    def __init__(self, executable_folder=None, executable_name="gmx", **kwargs):
+    def __init__(
+        self, executable_folder=None, executable_name="gmx", **kwargs
+    ):
         """
         Initialize GromacsExecutable instance.
 

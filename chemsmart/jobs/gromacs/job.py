@@ -1,10 +1,9 @@
+"""GROMACS job definitions."""
+
 from __future__ import annotations
 
-"""
-GROMACS job definitions.
-"""
-
 from pathlib import Path
+from types import SimpleNamespace
 
 from chemsmart.jobs.job import Job
 
@@ -95,20 +94,14 @@ class GromacsJob(Job):
             else None
         )
         self.boxed_structure_file = (
-            Path(boxed_structure_file)
-            if boxed_structure_file
-            else None
+            Path(boxed_structure_file) if boxed_structure_file else None
         )
         self.solvated_structure_file = (
-            Path(solvated_structure_file)
-            if solvated_structure_file
-            else None
+            Path(solvated_structure_file) if solvated_structure_file else None
         )
         self.ions_tpr_file = Path(ions_tpr_file) if ions_tpr_file else None
         self.ionized_structure_file = (
-            Path(ionized_structure_file)
-            if ionized_structure_file
-            else None
+            Path(ionized_structure_file) if ionized_structure_file else None
         )
 
         self.force_field = force_field
@@ -189,8 +182,7 @@ class GromacsJob(Job):
         ]
 
         return all(
-            path is not None and Path(path).exists()
-            for path in required_files
+            path is not None and Path(path).exists() for path in required_files
         )
 
     def has_required_full_setup_inputs(self):
@@ -216,6 +208,17 @@ class GromacsJob(Job):
 
         if self._use_default_tpr_file:
             self.tpr_file = Path(self.folder) / f"{self.label}.tpr"
+
+    def _output(self):
+        if self.tpr_file is None:
+            return None
+        log_file = Path(self.tpr_file).with_suffix(".log")
+        if not log_file.exists():
+            return None
+        text = log_file.read_text(encoding="utf-8", errors="ignore")
+        return SimpleNamespace(
+            normal_termination="Finished mdrun" in text,
+        )
 
 
 class GromacsEMJob(GromacsJob):
