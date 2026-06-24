@@ -370,10 +370,10 @@ def get_program_type_from_file(filepath):
 def check_program_availability_in_chemsmart(program_name):
     """Utility function to check if user-supplied program type is
     supported in CHEMMART."""
-    if program_name.lower() not in {"gaussian", "orca"}:
+    if program_name.lower() not in {"gaussian", "orca", "xtb"}:
         raise ValueError(
             f"Unsupported program '{program_name}' for thermochemistry.\n"
-            f"Please choose one of ['gaussian', 'orca']."
+            f"Please choose one of ['gaussian', 'orca', 'xtb']."
         )
 
 

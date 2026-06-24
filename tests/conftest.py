@@ -75,6 +75,7 @@ def make_thermochemistry_mock():
         mock.s_freq_cutoff_cm = s_freq_cutoff_cm
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
         mock.filename = "dummy.log"
+        mock.target = "dummy.log"
         return mock
 
     return _factory

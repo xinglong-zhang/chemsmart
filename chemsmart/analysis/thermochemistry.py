@@ -6,9 +6,11 @@ from functools import cached_property
 import numpy as np
 from ase import units
 
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.constants import (
     R,
     atm_to_pa,
@@ -56,7 +58,8 @@ class Thermochemistry:
 
     def __init__(
         self,
-        filename,
+        filename=None,
+        folder=None,
         temperature=None,
         concentration=None,
         pressure=1.0,
@@ -70,7 +73,16 @@ class Thermochemistry:
         **kwargs,
     ):
         self.filename = filename
-        self.molecule = Molecule.from_filepath(filename)
+        self.folder = folder
+        self.target = (
+            self.filename if self.filename is not None else self.folder
+        )
+
+        if filename is not None:
+            self.molecule = Molecule.from_filepath(filename)
+        else:
+            self.molecule = Molecule.from_directorypath(folder)
+
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
         # Keep original cm^-1 values for replacing imaginary frequencies
@@ -140,17 +152,24 @@ class Thermochemistry:
     @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        program = get_program_type_from_file(self.filename)
+        if self.filename is None:
+            program = BaseFolder(
+                folder=self.folder
+            ).get_program_type_from_folder()
+        else:
+            program = get_program_type_from_file(self.filename)
         if program == "gaussian":
             output = Gaussian16Output(self.filename)
         elif program == "orca":
             output = ORCAOutput(self.filename)
+        elif program == "xtb":
+            output = XTBOutput(self.folder)
         else:
             # can be added in future to parse other file formats
             raise ValueError("Unsupported file format.")
         if not output.normal_termination:
             raise ValueError(
-                f"File '{self.filename}' did not terminate normally. "
+                f"Calculation '{self.target}' did not terminate normally. "
                 "Skipping thermochemistry calculation for this file."
             )
         return output
@@ -284,7 +303,7 @@ class Thermochemistry:
             if self.check_imaginary_frequencies:
                 raise ValueError(
                     f"!! ERROR: Detected multiple imaginary frequencies in "
-                    f"TS calculation for {self.filename}. Only one "
+                    f"TS calculation for {self.target}. Only one "
                     f"imaginary frequency is allowed for a valid TS. "
                     f"Please re-optimize the geometry to locate a true TS."
                 )
@@ -304,7 +323,7 @@ class Thermochemistry:
         if self.check_imaginary_frequencies:
             raise ValueError(
                 f"!! ERROR: Detected imaginary frequencies in geometry "
-                f"optimization for {self.filename}. A valid optimized "
+                f"optimization for {self.target}. A valid optimized "
                 f"geometry should not contain imaginary frequencies. "
                 f"Please re-optimize the geometry to locate a true minimum."
             )
@@ -992,7 +1011,7 @@ class Thermochemistry:
 
     def compute_thermochemistry(self):
         """Compute Boltzmann-averaged properties."""
-        logger.debug(f"Computing thermochemistry for {self.filename}...")
+        logger.debug(f"Computing thermochemistry for {self.target}...")
         return self._compute_thermochemistry()
 
     def _compute_thermochemistry(self):
@@ -1016,7 +1035,10 @@ class Thermochemistry:
         logger.debug(f"Finished converting energies to {self.energy_units}.")
 
         # Log the results to the output file or console
-        structure = os.path.splitext(os.path.basename(self.filename))[0]
+        if self.filename is not None:
+            structure = os.path.splitext(os.path.basename(self.filename))[0]
+        else:
+            structure = os.path.basename(os.path.normpath(self.folder))
         return (
             structure,
             electronic_energy,
@@ -1037,19 +1059,19 @@ class Thermochemistry:
                     logger.info(
                         f"Correct Transition State detected: only 1 imaginary "
                         f"frequency\nImaginary frequency excluded for "
-                        f"thermochemistry calculation in {self.filename}."
+                        f"thermochemistry calculation in {self.target}."
                     )
                 else:
                     raise ValueError(
                         f"Invalid number of imaginary frequencies for "
-                        f"{self.filename}. Expected 0 for optimization or 1 "
+                        f"{self.target}. Expected 0 for optimization or 1 "
                         f"for TS, but found "
                         f"{len(self.imaginary_frequencies)} for job: "
                         f"{self.jobtype}!"
                     )
             else:
                 raise ValueError(
-                    f"Invalid geometry optimization for {self.filename}. "
+                    f"Invalid geometry optimization for {self.target}. "
                     f"A valid optimized geometry should not contain "
                     f"imaginary frequencies. Please re-optimize the geometry "
                     f"to locate a true minimum."
@@ -1231,7 +1253,12 @@ class Thermochemistry:
 
         # Default output file
         if outputfile is None:
-            outputfile = os.path.splitext(self.filename)[0] + ".dat"
+            if self.filename is not None:
+                outputfile = os.path.splitext(self.filename)[0] + ".dat"
+            else:
+                outputfile = (
+                    os.path.basename(os.path.normpath(self.folder)) + ".dat"
+                )
 
         # Check if all thermochemistry values are None
         all_none = all(

@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 
 import click
 
@@ -10,6 +11,7 @@ from chemsmart.cli.job import (
     click_job_options,
 )
 from chemsmart.io.folder import BaseFolder
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
@@ -168,8 +170,8 @@ def thermochemistry(
     CLI subcommand for running thermochemistry
     jobs using the chemsmart framework.
 
-    This command allows you to compute thermochemistry for Gaussian or ORCA
-    output files.
+    This command allows you to compute thermochemistry for Gaussian, ORCA,
+    or xTB output files.
 
     Examples:
     `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log
@@ -181,6 +183,10 @@ def thermochemistry(
     -o thermochemistry_results.dat`
     will compute thermochemistry for all Gaussian output files in the specified
     directory and save to `thermochemistry_results.dat`.
+
+    `chemsmart run thermochemistry -d /path/to/xtb_folders -p xtb -T 298.15`
+    will compute thermochemistry for xTB calculations in directories or
+    subdirectories.
     """
     # validate input
     if directory and filenames:
@@ -193,6 +199,13 @@ def thermochemistry(
         )
     if program:
         check_program_availability_in_chemsmart(program)
+
+    if program and program.lower() == "xtb" and filenames:
+        raise ValueError(
+            "For xTB thermochemistry, use --directory (-d) instead of "
+            "--filenames (-f). Each subdirectory should contain one xTB "
+            "calculation."
+        )
 
     if cutoff_entropy_grimme and cutoff_entropy_truhlar:
         raise ValueError(
@@ -232,7 +245,35 @@ def thermochemistry(
     files = []
 
     if directory:
-        if program and not filetype:
+        if program and program.lower() == "xtb":
+            folders = []
+            if XTBFolder(folder=directory).is_xtb_calculation_directory:
+                folders.append(directory)
+            else:
+                for entry in os.listdir(directory):
+                    subdir = os.path.join(directory, entry)
+                    if XTBFolder(folder=subdir).is_xtb_calculation_directory:
+                        folders.append(subdir)
+            if not folders:
+                raise ValueError(
+                    f"No xTB calculation folders found in '{directory}'.\n"
+                    "Expected to find directories containing xTB output files."
+                )
+            for folder_path in folders:
+                job = ThermochemistryJob.from_folder(
+                    foldername=folder_path,
+                    settings=job_settings,
+                    skip_completed=skip_completed,
+                )
+                if outputfile is not None:
+                    job_settings.overwrite = False
+                    job_settings.write_header = False
+                jobs.append(job)
+                logger.info(
+                    f"Created thermochemistry job for folder: {folder_path}"
+                )
+                logger.debug(f"Job settings: {job_settings.__dict__}")
+        elif program and not filetype:
             # obtain all output files belonging to a program
             files = BaseFolder(
                 folder=directory
