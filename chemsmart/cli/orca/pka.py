@@ -33,6 +33,7 @@ from chemsmart.cli.pka import (
     validate_reference_options,
 )
 from chemsmart.io.file import PKaCDXFile
+from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
@@ -196,7 +197,9 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
             opt_settings, molecules[-1]
         )
 
-    pka_settings = _build_orca_pka_settings(proton_index, shared, opt_settings)
+    pka_settings = ORCApKaJobSettings.build_orca_pka_settings(
+        proton_index, shared, opt_settings
+    )
     require_pka_charge_multiplicity(
         pka_settings, source_hint=f"input file {filename}"
     )
@@ -370,7 +373,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             row_shared["reference_conjugate_base_charge"] = None
             row_shared["reference_conjugate_base_multiplicity"] = None
 
-        pka_settings = _build_orca_pka_settings(
+        pka_settings = ORCApKaJobSettings.build_orca_pka_settings(
             proton_index=row_proton_index,
             shared=row_shared,
             opt_settings=row_opt_settings,
@@ -398,72 +401,6 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
     return jobs
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Private helpers
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def _build_orca_pka_settings(proton_index, shared, opt_settings):
-    """Build an ``ORCApKaJobSettings`` from shared options and project."""
-    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
-
-    solvent_model = shared["solvent_model"]
-    if solvent_model is None:
-        try:
-            solvent_model = opt_settings.solvent_model
-        except AttributeError:
-            solvent_model = None
-    solvent_id = shared["solvent_id"]
-    if solvent_id is None:
-        try:
-            solvent_id = opt_settings.solvent_id
-        except AttributeError:
-            solvent_id = None
-    if solvent_model is None:
-        solvent_model = "CPCM"
-    if solvent_id is None:
-        solvent_id = "water"
-
-    return ORCApKaJobSettings(
-        proton_index=proton_index,
-        scheme=shared["scheme"],
-        reference_file=shared["reference"],
-        reference_proton_index=shared["reference_proton_index"],
-        reference_charge=shared["reference_charge"],
-        reference_multiplicity=shared["reference_multiplicity"],
-        reference_conjugate_base_charge=shared[
-            "reference_conjugate_base_charge"
-        ],
-        reference_conjugate_base_multiplicity=shared[
-            "reference_conjugate_base_multiplicity"
-        ],
-        delta_G_proton=shared["delta_g_proton"],
-        conjugate_base_charge=shared["conjugate_base_charge"],
-        conjugate_base_multiplicity=shared["conjugate_base_multiplicity"],
-        solvent_model=solvent_model,
-        solvent_id=solvent_id,
-        temperature=shared["temperature"],
-        concentration=shared["concentration"],
-        pressure=shared["pressure"],
-        cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-        cutoff_enthalpy=shared["cutoff_enthalpy"],
-        charge=opt_settings.charge,
-        multiplicity=opt_settings.multiplicity,
-        functional=opt_settings.functional,
-        basis=opt_settings.basis,
-        ab_initio=opt_settings.ab_initio,
-        dispersion=opt_settings.dispersion,
-        aux_basis=opt_settings.aux_basis,
-        defgrid=opt_settings.defgrid,
-        semiempirical=opt_settings.semiempirical,
-        additional_route_parameters=opt_settings.additional_route_parameters,
-        gen_genecp_file=opt_settings.gen_genecp_file,
-        heavy_elements=opt_settings.heavy_elements,
-        heavy_elements_basis=opt_settings.heavy_elements_basis,
-        light_elements_basis=opt_settings.light_elements_basis,
-    )
 
 
 def _create_orca_pka_jobs_from_molecules(
@@ -494,7 +431,7 @@ def _create_orca_pka_jobs_from_molecules(
             row_opt_settings,
             source_hint=f"CDXML fragment {idx} in {filename}",
         )
-        pka_settings = _build_orca_pka_settings(
+        pka_settings = ORCApKaJobSettings.build_orca_pka_settings(
             pka_mol.proton_index, shared, row_opt_settings
         )
 
