@@ -7,7 +7,7 @@ The main purpose is to support project.yaml -> settings -> job creation.
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import yaml
 
@@ -172,7 +172,9 @@ class GromacsProjectSettings:
 
         flat = {
             "project_name": project.get("name"),
-            "workflow": project.get("mode", project.get("workflow", "prepared")),
+            "workflow": project.get(
+                "mode", project.get("workflow", "prepared")
+            ),
             "job_type": project.get("job_type", "em"),
             "project_dir": yaml_path.parent,
         }
@@ -206,10 +208,7 @@ class GromacsProjectSettings:
         if not values:
             return []
 
-        return [
-            cls._resolve_path(value, project_dir)
-            for value in values
-        ]
+        return [cls._resolve_path(value, project_dir) for value in values]
 
     def validate_prepared_inputs(self):
         """
@@ -328,8 +327,4 @@ class GromacsProjectSettings:
             "mdrun_extra_args": self.mdrun_extra_args or [],
         }
 
-        return {
-            key: value
-            for key, value in data.items()
-            if value is not None
-        }
+        return {key: value for key, value in data.items() if value is not None}

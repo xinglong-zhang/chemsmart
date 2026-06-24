@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 GROMACS input writer.
 
@@ -7,6 +5,8 @@ At this stage, prepared workflows use user-provided MDP, structure and topology
 files directly. This writer is kept as a small extension point for future MDP
 generation.
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 

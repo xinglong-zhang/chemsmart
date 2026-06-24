@@ -106,7 +106,6 @@ def gromacs(ctx, project, project_yaml, filename):
     ctx.obj["project_yaml"] = project_yaml
     ctx.obj["project_settings"] = project_settings
     ctx.obj["filename"] = filename
-    ctx.obj["jobrunner"] = None
 
 
 @gromacs.result_callback()

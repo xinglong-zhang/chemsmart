@@ -1,6 +1,3 @@
-from pathlib import Path
-from typing import Any, Optional
-
 from chemsmart.jobs.gromacs.job import GromacsEMJob
 from chemsmart.settings.gromacs import GromacsProjectSettings
 
