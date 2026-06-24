@@ -25,9 +25,31 @@ except Exception:  # standalone use outside the package
 ROUTE = ("ts", "calcfc", "noeigentest")
 _ARRAY_KEYS = {"additional_opt_options_in_route"}
 
+# --- v9 hardening (verified +8/45, 0 regressions on the easy/diverse study; deployable, no retrain) ---
+# The model HALLUCINATES default-valued / extra keys the clean training data never carried. Strip them at
+# the source so the canonical command emerges.
+_DEFAULT_VALUED = {"orca.ts": {"tssearch_type": "tssearch"}}   # drop key when its value == the CLI default
+_DROP_KEYS = {"gaussian.tddft": ("states", "root", "eqsolv")}  # canonical tddft is nstates-only
+_FORCE_PRESENT = {"gaussian.ts": {"freq": True}}               # a Gaussian TS implies freq; add iff omitted
+
 
 def _split(s):
     return [x for x in re.split(r"[,\s]+", str(s).strip()) if x]
+
+
+def _fix_scan_type(sd):
+    """gaussian.scan: the coordinate-type letter must match the atom count (B=2, A=3, D=4). The model
+    sometimes picks the wrong letter (e.g. `B 1 2 3` for a 3-atom angle) -> repair it from the count."""
+    if not isinstance(sd, str):
+        return sd
+    toks = sd.split()
+    if len(toks) >= 2 and toks[0] in ("B", "A", "D") and "S" in toks:
+        natoms = toks.index("S") - 1
+        correct = {2: "B", 3: "A", 4: "D"}.get(natoms)
+        if correct and correct != toks[0]:
+            toks[0] = correct
+            return " ".join(toks)
+    return sd
 
 
 def _route_opts(se, is_ts=False):
@@ -69,10 +91,20 @@ def postprocess(spec):
         kind = job.get("kind")
         allowed = set(KI.KIND_SETTINGS.get(kind, {}))
         se = dict(job.get("settings", {}) or {})
+        # v9.0) drop hallucinated default-valued / noise keys at the source
+        for k, dv in _DEFAULT_VALUED.get(kind, {}).items():
+            if se.get(k) == dv:
+                se.pop(k, None)
+        for k in _DROP_KEYS.get(kind, ()):
+            se.pop(k, None)
+        if kind == "gaussian.scan" and "scan_definition" in se:
+            se["scan_definition"] = _fix_scan_type(se["scan_definition"])
         new = {}
         # 1) TS route reconstruction (only if the kind accepts it)
         if isinstance(kind, str) and kind.endswith(".ts") and "additional_opt_options_in_route" in allowed:
             r = _route_opts(se, is_ts=True)
+            if not r and kind == "gaussian.ts":
+                r = list(ROUTE)  # v9: inject the canonical route when the model emitted none
             if r:
                 new["additional_opt_options_in_route"] = r
         # 2) keep only module-accepted keys; coerce + canonicalize
@@ -84,6 +116,11 @@ def postprocess(spec):
             if k == "freq" and v is False:
                 continue  # default; drop
             new[k] = v
+        # v9.3) ensure canonical-present keys the model omitted (e.g. a Gaussian TS implies freq);
+        # only when the key was absent entirely (an explicit False is respected/dropped above)
+        for k, v in _FORCE_PRESENT.get(kind, {}).items():
+            if k in allowed and k not in new and k not in se:
+                new[k] = v
         if new:
             job["settings"] = new
         elif "settings" in job:
@@ -110,6 +147,17 @@ def _selftest():
         ("runtime-owned stripped", "gaussian.opt", {"functional": "B3LYP", "freq": True}, {"freq": True}),
         ("already-correct ts", "gaussian.ts", {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc"]},
          {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc"]}),
+        # --- v9 hardening ---
+        ("orca.ts default tssearch stripped", "orca.ts", {"tssearch_type": "tssearch"}, None),
+        ("tddft hallucinated keys dropped", "gaussian.tddft",
+         {"nstates": 3, "states": "1,2,3", "root": "1", "eqsolv": "HF"}, {"nstates": 3}),
+        ("gaussian.ts freq forced when omitted", "gaussian.ts",
+         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"]},
+         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"], "freq": True}),
+        ("gaussian.ts route forced when omitted", "gaussian.ts", {"freq": True},
+         {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"]}),
+        ("scan wrong type letter fixed", "gaussian.scan", {"scan_definition": "B 1 2 3 S 8 5.0"},
+         {"scan_definition": "A 1 2 3 S 8 5.0"}),
     ]
     ok = 0
     for name, kind, sin, sout in cases:
