@@ -14,7 +14,6 @@ backend-independent ``chemsmart run pka`` command.
 """
 
 import logging
-import os
 from pathlib import Path
 
 import click
@@ -457,11 +456,11 @@ def _create_pka_jobs_from_molecules(
     if job_settings:
         opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
-    base_name = os.path.splitext(os.path.basename(filename))[0] or "pka"
+    basename = Path(filename).stem or "pka"
 
     jobs = []
     for idx, pka_mol in enumerate(pka_molecules, start=1):
-        label = f"{base_name}_frag{idx}_pka"
+        label = f"{basename}_frag{idx}_pka"
         row_opt_settings = apply_pka_molecule_charge_multiplicity(
             opt_settings, pka_mol
         )
