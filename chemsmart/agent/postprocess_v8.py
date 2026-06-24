@@ -25,12 +25,17 @@ except Exception:  # standalone use outside the package
 ROUTE = ("ts", "calcfc", "noeigentest")
 _ARRAY_KEYS = {"additional_opt_options_in_route"}
 
-# --- v9 hardening (verified +8/45, 0 regressions on the easy/diverse study; deployable, no retrain) ---
-# The model HALLUCINATES default-valued / extra keys the clean training data never carried. Strip them at
-# the source so the canonical command emerges.
-_DEFAULT_VALUED = {"orca.ts": {"tssearch_type": "tssearch"}}   # drop key when its value == the CLI default
-_DROP_KEYS = {"gaussian.tddft": ("states", "root", "eqsolv")}  # canonical tddft is nstates-only
-_FORCE_PRESENT = {"gaussian.ts": {"freq": True}}               # a Gaussian TS implies freq; add iff omitted
+# --- v9 hardening (verified against the real chemsmart CLI; diversity-preserving) ---
+# Rules are limited to what the repo scan confirmed is safe. We do NOT strip `states/root/eqsolv` from
+# gaussian.tddft: the repo (cli/gaussian/tddft.py `def td(ctx, states, root, nstates, eqsolv, ...)`) shows
+# these are REAL, valid TD-DFT options — stripping them would destroy legitimate requests (e.g. root=2).
+# The model over-emitting derived values is a training-side issue, not a postprocess one.
+#
+# orca.ts: `--tssearch-type` is real (cli/orca/ts.py) with default "optts" and values {optts, scants}. The
+# model sometimes emits the bogus value "tssearch" or the redundant default "optts"; drop either (-> the
+# runtime default), but KEEP a meaningful non-default like "scants".
+_TSSEARCH_DROP = {"tssearch", "optts"}
+_FORCE_PRESENT = {"gaussian.ts": {"freq": True}}    # TS implies freq (calcfc Hessian); add iff omitted
 
 
 def _split(s):
@@ -91,12 +96,9 @@ def postprocess(spec):
         kind = job.get("kind")
         allowed = set(KI.KIND_SETTINGS.get(kind, {}))
         se = dict(job.get("settings", {}) or {})
-        # v9.0) drop hallucinated default-valued / noise keys at the source
-        for k, dv in _DEFAULT_VALUED.get(kind, {}).items():
-            if se.get(k) == dv:
-                se.pop(k, None)
-        for k in _DROP_KEYS.get(kind, ()):
-            se.pop(k, None)
+        # v9.0) drop the redundant-default / bogus orca.ts search type (keeps meaningful values e.g. scants)
+        if kind == "orca.ts" and str(se.get("tssearch_type", "")).lower() in _TSSEARCH_DROP:
+            se.pop("tssearch_type", None)
         if kind == "gaussian.scan" and "scan_definition" in se:
             se["scan_definition"] = _fix_scan_type(se["scan_definition"])
         new = {}
@@ -147,10 +149,12 @@ def _selftest():
         ("runtime-owned stripped", "gaussian.opt", {"functional": "B3LYP", "freq": True}, {"freq": True}),
         ("already-correct ts", "gaussian.ts", {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc"]},
          {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc"]}),
-        # --- v9 hardening ---
-        ("orca.ts default tssearch stripped", "orca.ts", {"tssearch_type": "tssearch"}, None),
-        ("tddft hallucinated keys dropped", "gaussian.tddft",
-         {"nstates": 3, "states": "1,2,3", "root": "1", "eqsolv": "HF"}, {"nstates": 3}),
+        # --- v9 hardening (CLI-verified, diversity-preserving) ---
+        ("orca.ts bogus tssearch dropped", "orca.ts", {"tssearch_type": "tssearch"}, None),
+        ("orca.ts default optts dropped", "orca.ts", {"tssearch_type": "optts"}, None),
+        ("orca.ts scants KEPT (diversity)", "orca.ts", {"tssearch_type": "scants"}, {"tssearch_type": "scants"}),
+        ("tddft real options KEPT (diversity)", "gaussian.tddft",
+         {"nstates": 3, "root": 2}, {"nstates": 3, "root": 2}),
         ("gaussian.ts freq forced when omitted", "gaussian.ts",
          {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"]},
          {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"], "freq": True}),
