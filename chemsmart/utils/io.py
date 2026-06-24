@@ -2,13 +2,15 @@
 Input/output utility functions for molecular structure processing.
 
 This module provides helper functions for creating molecule objects,
-cleaning duplicate structures, and text processing operations commonly
-used in computational chemistry file I/O operations.
+cleaning duplicate structures, text processing operations commonly
+used in computational chemistry file I/O, and generic tabular dataset
+parsing for high-throughput workflows.
 
 Key functionality includes:
 - Molecule object creation from coordinate data
 - Duplicate structure detection and removal
 - Text processing for chemical file formats
+- Tabular dataset parsing (.txt/.csv)
 """
 
 from __future__ import annotations
@@ -30,6 +32,151 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
+
+
+class TabularDataset:
+    """Generic DataFrame-backed dataset for high-throughput workflows."""
+
+    def __init__(self, dataframe, source_path=None):
+        self.dataframe = dataframe.reset_index(drop=True)
+        self.source_path = source_path
+
+    @property
+    def columns(self):
+        return list(self.dataframe.columns)
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    @staticmethod
+    def normalize_header(header):
+        header = str(header).strip().lower()
+        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
+        header = re.sub(r"_+", "_", header).strip("_")
+        return header
+
+    @classmethod
+    def parse_table(cls, table_path, delimiter=None, comment="#"):
+        """Parse .txt/.csv into a generic TabularDataset."""
+        import pandas as pd
+
+        if not os.path.exists(table_path):
+            raise FileNotFoundError(f"Table file not found: {table_path}")
+
+        sep = delimiter
+        if sep is None:
+            ext = os.path.splitext(table_path)[1].lower()
+            sep = "," if ext == ".csv" else r"\s+"
+        try:
+            df = pd.read_csv(
+                table_path,
+                sep=sep,
+                engine="python",
+                comment=comment,
+                skip_blank_lines=True,
+            )
+        except pd.errors.EmptyDataError:
+            raise ValueError(f"No valid entries found in table: {table_path}")
+        except pd.errors.ParserError as exc:
+            raise ValueError(
+                f"Failed to parse submission table '{table_path}': {exc}"
+            ) from exc
+
+        if df.empty:
+            raise ValueError(f"No valid entries found in table: {table_path}")
+
+        df = df.rename(
+            columns={c: cls.normalize_header(c) for c in df.columns}
+        )
+        return cls(df, source_path=table_path)
+
+    @staticmethod
+    def resolve_column(columns, candidates, required=True):
+        normalized = {TabularDataset.normalize_header(c): c for c in columns}
+        for candidate in candidates:
+            key = TabularDataset.normalize_header(candidate)
+            if key in normalized:
+                return normalized[key]
+        if required:
+            raise ValueError(
+                "Could not resolve required column. Tried: "
+                + ", ".join(candidates)
+            )
+        return None
+
+    def to_entries(self, entry_cls, row_offset=2):
+        return [
+            entry_cls(row.to_dict(), row_number=idx + row_offset)
+            for idx, row in self.dataframe.iterrows()
+        ]
+
+    def validate(
+        self,
+        required_columns=None,
+        integer_columns=None,
+        positive_integer_columns=None,
+        path_columns=None,
+        check_file_exists=True,
+    ):
+        """Generic dataset-level validation without job-specific logic."""
+        required_columns = required_columns or []
+        integer_columns = integer_columns or []
+        positive_integer_columns = positive_integer_columns or []
+        path_columns = path_columns or []
+
+        missing = [col for col in required_columns if col not in self.columns]
+        if missing:
+            raise ValueError(
+                "Missing required table columns: " + ", ".join(missing)
+            )
+
+        errors = []
+        for idx, row in self.dataframe.iterrows():
+            row_no = idx + 2
+
+            for col in integer_columns:
+                value = row[col]
+                if value is None:
+                    errors.append(f"Missing {col} (row {row_no})")
+                    continue
+                try:
+                    int(value)
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Invalid integer for {col} at row {row_no}: {value!r}"
+                    )
+
+            for col in positive_integer_columns:
+                value = row[col]
+                if value is None:
+                    errors.append(f"Missing {col} (row {row_no})")
+                    continue
+                try:
+                    parsed = int(value)
+                    if parsed < 1:
+                        errors.append(
+                            f"{col} must be >= 1 at row {row_no}, got {parsed}"
+                        )
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Invalid integer for {col} at row {row_no}: {value!r}"
+                    )
+
+            if check_file_exists:
+                for col in path_columns:
+                    value = row[col]
+                    if not value:
+                        errors.append(f"Missing {col} (row {row_no})")
+                        continue
+                    if not os.path.exists(str(value)):
+                        errors.append(
+                            f"File not found for {col} at row {row_no}: {value}"
+                        )
+
+        if errors:
+            raise ValueError("Table validation failed:\n" + "\n".join(errors))
+        return self
+
 
 SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
@@ -57,7 +204,7 @@ PROGRAM_INFO = {
             "Your ORCA version",
             "ORCA versions",
         ],
-        "suffixes": [".out"],
+        "suffixes": [".out", ".log"],
     },
     "xtb": {
         "keywords": ["x T B", "xtb version", "xtb is free software:"],
@@ -70,6 +217,11 @@ ALL_SUFFIXES = tuple(
 )
 # Folder-level detection is currently supported only for these programs
 PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
+
+
+def get_program_output_extensions(program, default=(".log", ".out")):
+    """Return preferred output-file extensions for a detected program."""
+    return tuple(PROGRAM_INFO.get(program, {}).get("suffixes", default))
 
 
 def create_molecule_list(
@@ -365,6 +517,76 @@ def get_program_type_from_file(filepath):
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
     return "unknown"
+
+
+def detect_program_type_from_files(filepaths, allowed_programs=None):
+    """Detect a single QC program type from multiple output files.
+
+    Args:
+        filepaths (Iterable[str]): Output file paths to inspect.
+        allowed_programs (set[str] | None): If provided, require the detected
+            program to be a member of this set.
+
+    Returns:
+        str: Detected program name.
+
+    Raises:
+        ValueError: If no program can be detected, multiple programs are
+            detected, or the program is not in ``allowed_programs``.
+    """
+    detected = {}
+    programs = set()
+    for fp in filepaths:
+        program = get_program_type_from_file(fp)
+        detected[fp] = program
+        if program != "unknown":
+            programs.add(program)
+
+    if not programs:
+        raise ValueError(
+            "Could not detect output-file program type from supplied "
+            "files. Supported: Gaussian and ORCA output files."
+        )
+    if len(programs) > 1:
+        pairs = ", ".join(f"{k}: {v}" for k, v in detected.items())
+        raise ValueError(
+            "Supplied files contain mixed program types. "
+            "Use outputs from a single QC program.\n"
+            f"Detected: {pairs}"
+        )
+
+    program = next(iter(programs))
+    if allowed_programs is not None and program not in allowed_programs:
+        raise ValueError(
+            f"Detected unsupported program '{program}'. "
+            f"Only {sorted(allowed_programs)} are supported."
+        )
+    return program
+
+
+def discover_pka_target_companion_outputs(ha_gas_path, program=None):
+    """Infer A- and solvent SP paths from a HA gas-phase output file."""
+    from chemsmart.utils.utils import (
+        discover_pka_output_path,
+        pka_output_basename_from_path,
+    )
+
+    ha_gas_path = str(ha_gas_path)
+    directory = os.path.dirname(ha_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ha_gas_path)
+    basename = pka_output_basename_from_path(ha_gas_path, "ha_gas")
+    return {
+        "a": discover_pka_output_path(
+            basename, directory, "a_gas", program=program
+        ),
+        "ha_solv": discover_pka_output_path(
+            basename, directory, "ha_sp", program=program
+        ),
+        "a_solv": discover_pka_output_path(
+            basename, directory, "a_sp", program=program
+        ),
+    }
 
 
 def check_program_availability_in_chemsmart(program_name):
