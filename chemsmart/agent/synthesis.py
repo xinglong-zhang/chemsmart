@@ -55,6 +55,10 @@ class SynthesisSession:
         self.max_retries = max_retries
         self.debug = debug
         self.memory = ConversationMemory()
+        # The model's verbatim output from the most recent synthesize() call, recorded as the
+        # assistant turn for native multi-turn replay (see _messages_for_request). Kept off the
+        # result dict so the public synthesize() return shape is unchanged.
+        self._last_raw_response = ""
 
     def synthesize(self, request: str) -> JsonDict:
         """Return a structured synthesis result for ``request``.
@@ -67,16 +71,14 @@ class SynthesisSession:
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             response = self.provider.chat(messages)
+            # Record the model's verbatim output for native multi-turn replay; kept on the
+            # session (not the result dict) so synthesize()'s public shape is unchanged.
+            self._last_raw_response = _extract_text(response)
             try:
                 parsed = _parse_json_response(response)
                 if _is_v8_spec(parsed):
-                    result = _normalize_v8_spec(parsed)
-                else:
-                    result = _normalize_result(parsed)
-                # Keep the model's verbatim output so the caller can record it as the
-                # assistant turn for native multi-turn replay (see _messages_for_request).
-                result["raw_response"] = _extract_text(response)
-                return result
+                    return _normalize_v8_spec(parsed)
+                return _normalize_result(parsed)
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
@@ -173,7 +175,7 @@ class SynthesisSession:
         self._remember_turn(
             current_request,
             command,
-            assistant_message=str(result.get("raw_response") or ""),
+            assistant_message=self._last_raw_response,
         )
         self.confirm_and_execute(
             command,

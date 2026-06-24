@@ -95,9 +95,9 @@ def test_native_multiturn_history_is_replayed():
     # turn 1
     r1 = sess.synthesize("optimize m.xyz")
     assert r1["status"] == "ready"
-    assert seen["last"][-1]["role"] == "user"  # first call: just system + current user
+    assert "raw_response" not in r1  # raw output stays off the public result dict
     assert [m["role"] for m in seen["last"]] == ["system", "user"]
-    sess._remember_turn("optimize m.xyz", r1["command"], assistant_message=r1["raw_response"])
+    sess._remember_turn("optimize m.xyz", r1["command"], assistant_message=sess._last_raw_response)
 
     # turn 2: the follow-up must arrive as native history with the prior SPEC as an assistant turn
     r2 = sess.synthesize("change the charge to -1")
