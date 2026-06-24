@@ -33,6 +33,7 @@ from chemsmart.cli.pka import (
     validate_reference_options,
 )
 from chemsmart.io.file import PKaCDXFile
+from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
@@ -237,7 +238,6 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
     validate_reference_options(shared)
 
     # ── build settings ──
-    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -316,8 +316,6 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             lambda ctx, **invoke_kwargs: ctx.invoke(submit, **invoke_kwargs),
             **kwargs,
         )
-
-    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
     from chemsmart.utils.utils import (
         PKaOutputTable,
         PKaTableEntry,
@@ -446,7 +444,6 @@ def _create_pka_jobs_from_molecules(
     ctx, pka_molecules, shared, skip_completed, **kwargs
 ):
     """Create one GaussianpKaJob per PKaMolecule."""
-    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 
     validate_reference_options(shared)
 
