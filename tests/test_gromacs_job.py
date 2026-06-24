@@ -79,9 +79,9 @@ def test_gromacs_job_has_required_prepared_inputs(tmp_path):
     # Because the file does not exist on the disk
 
     # Create a file simulation existence
-    for file_attr in ["mdp_file", "structure_file", "top_file"]:
-        f = getattr(job, file_attr)
-        f.write_text("dummy content", encoding="utf-8")
+    job.mdp_file.write_text("dummy content", encoding="utf-8")
+    job.structure_file.write_text("dummy content", encoding="utf-8")
+    job.top_file.write_text("dummy content", encoding="utf-8")
 
     assert job.has_required_prepared_inputs() is True
 
