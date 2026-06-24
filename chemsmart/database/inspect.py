@@ -124,10 +124,11 @@ class DatabaseInspector:
             stats["solvated_records"] = row["solvated_records"]
             stats["gas_phase_records"] = row["gas_phase_records"]
 
-            # Frequency and solvent count (from record_structures table)
-            stats["freq_count"] = conn.execute(
-                "SELECT COUNT(DISTINCT record_id) FROM record_structures WHERE vibrational_frequencies_json IS NOT NULL"
+            # Forces count (records that have at least one structure with forces)
+            stats["forces_count"] = conn.execute(
+                "SELECT COUNT(DISTINCT record_id) FROM record_structures WHERE forces_json IS NOT NULL"
             ).fetchone()[0]
+            # Solvent count
             rows = conn.execute("""
                 SELECT solvent_id, COUNT(*) AS cnt
                 FROM records
@@ -238,12 +239,10 @@ class DatabaseInspector:
             format_kv("Records with Energies", f"{stats['energy_count']}")
         )
         lines.append(
-            format_kv("Records with Frequencies", f"{stats['freq_count']}")
+            format_kv("Records with Forces", f"{stats['forces_count']}")
         )
         lines.append(
-            format_kv(
-                "Records with Thermochemistry", f"{stats['thermo_count']}"
-            )
+            format_kv("Records with Frequencies", f"{stats['thermo_count']}")
         )
 
         lines.append("")

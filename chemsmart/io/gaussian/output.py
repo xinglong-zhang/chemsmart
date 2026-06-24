@@ -763,6 +763,15 @@ class Gaussian16Output(GaussianFileMixin):
         elif self.normal_termination:
             is_optimized[-1] = True
 
+        # For opt+freq-like tails, keep both optimized tags when the final
+        # frame is a duplicate of the previous optimized geometry.
+        if num_structures_to_use >= 2 and is_optimized[-1]:
+            idx_last = num_structures_to_use - 1
+            if np.allclose(
+                orientations[idx_last], orientations[idx_last - 1], rtol=1e-5
+            ):
+                is_optimized[idx_last - 1] = True
+
         # 5) Build Molecule list
         create_kwargs = dict(
             orientations=orientations,
@@ -1492,7 +1501,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def electronic_entropy(self):
         """
-        Electronic entropy in Hartree.
+        Electronic entropy in Hartree/K.
         """
         if self.electronic_entropy_no_temperature_in_SI is not None:
             electronic_entropy_hartree = (
@@ -1517,7 +1526,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_entropy(self):
         """
-        Vibrational entropy in Hartree.
+        Vibrational entropy in Hartree/K.
         """
         if self.vibrational_entropy_no_temperature_in_SI is not None:
             vibrational_entropy_hartree = (
@@ -1542,7 +1551,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def rotational_entropy(self):
         """
-        Rotational entropy in Hartree.
+        Rotational entropy in Hartree/K.
         """
         if self.rotational_entropy_no_temperature_in_SI is not None:
             rotational_entropy_hartree = (
@@ -1567,7 +1576,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def translational_entropy(self):
         """
-        Translational entropy in Hartree.
+        Translational entropy in Hartree/K.
         """
         if self.translational_entropy_no_temperature_in_SI is not None:
             translational_entropy_hartree = (
@@ -1592,7 +1601,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def entropy(self):
         """
-        Total entropy in Hartree.
+        Total entropy in Hartree/K.
         """
         if self.entropy_in_J_per_mol_per_K is not None:
             total_entropy_hartree = (
