@@ -77,6 +77,11 @@ class SynthesisSession:
             try:
                 parsed = _parse_json_response(response)
                 if _is_v8_spec(parsed):
+                    # deterministic kind-disambiguation backstop: the 3B model confuses a few kinds
+                    # (modredundant-constraint vs opt+freeze_atoms; Wiberg-bond-index vs DIAS) that no
+                    # amount of training data fixes; the user's request carries the disambiguating signal.
+                    from chemsmart.agent.kind_disambiguator import disambiguate
+                    parsed, _ = disambiguate(request, parsed)
                     return _normalize_v8_spec(parsed)
                 return _normalize_result(parsed)
             except (TypeError, ValueError, json.JSONDecodeError) as exc:

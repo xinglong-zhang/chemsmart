@@ -57,6 +57,24 @@ def test_synthesis_routes_v8_spec():
     assert res["command"].startswith("chemsmart ")
 
 
+def test_kind_disambiguator_fixes_confusions_safely():
+    from chemsmart.agent.kind_disambiguator import disambiguate
+    import copy
+    W = {"intent": "workflow", "jobs": [{"id": 1, "kind": "gaussian.dias", "file": "m.xyz", "charge": 0, "mult": 1}]}
+    s, ch = disambiguate("Wiberg bond index analysis on m.xyz", copy.deepcopy(W))
+    assert ch and s["jobs"][0]["kind"] == "gaussian.wbi"                       # dias->wbi on Wiberg cue
+    M = {"intent": "workflow", "jobs": [{"id": 1, "kind": "gaussian.opt", "file": "m.xyz", "charge": 0, "mult": 1, "settings": {"freeze_atoms": [3, 4]}}]}
+    s, ch = disambiguate("constrained opt freezing the bond between 3 and 4", copy.deepcopy(M))
+    assert ch and s["jobs"][0]["kind"] == "gaussian.modred" and s["jobs"][0]["settings"]["modred"] == [[3, 4]]
+    # safety: a genuine cartesian freeze + a real dias are NOT converted
+    O = {"intent": "workflow", "jobs": [{"id": 1, "kind": "gaussian.opt", "file": "m.xyz", "charge": 0, "mult": 1, "settings": {"freeze_atoms": [5, 9]}}]}
+    s, ch = disambiguate("optimize m.xyz with atoms 5 and 9 frozen in place (cartesian)", copy.deepcopy(O))
+    assert not ch and s["jobs"][0]["kind"] == "gaussian.opt"
+    D = {"intent": "workflow", "jobs": [{"id": 1, "kind": "gaussian.dias", "file": "m.xyz", "charge": 0, "mult": 1, "settings": {"fragment_indices": [[1, 2], [3, 4]]}}]}
+    s, ch = disambiguate("distortion-interaction between fragments 1-2 and 3-4", copy.deepcopy(D))
+    assert not ch and s["jobs"][0]["kind"] == "gaussian.dias"
+
+
 def test_synthesis_v8_decline_is_infeasible():
     res = S._normalize_v8_spec({"intent": "decline", "message": "missing fragment indices"})
     assert res["status"] == "infeasible"
