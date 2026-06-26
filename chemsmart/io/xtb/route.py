@@ -41,6 +41,20 @@ class XTBRoute:
         self.route_inputs = self.route_string.split()
 
     @property
+    def method(self):
+        """Extract the computational method (GFN method)."""
+        return self.gfn_version
+
+    @property
+    def basis(self):
+        """
+        Return default xTB basis set specification.
+        xTB uses a default basis set built-in to the Hamiltonian
+        and does not accept user-specified basis sets.
+        """
+        return "default"
+
+    @property
     def gfn_version(self):
         """
         Extract GFN version from the route.

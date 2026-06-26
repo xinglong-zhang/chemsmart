@@ -26,7 +26,11 @@ from ase import units
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.xtb.route import XTBRoute
-from chemsmart.utils.repattern import gaussian_date_pattern, orca_date_pattern
+from chemsmart.utils.repattern import (
+    gaussian_date_pattern,
+    orca_date_pattern,
+    xtb_date_pattern,
+)
 
 
 class FileMixin:
@@ -205,7 +209,10 @@ class FileMixin:
             list or None: List of SOMO energies, or None for closed-shell.
         """
         if self.multiplicity != 1:
-            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons :]
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[
+                    -self.num_unpaired_electrons :
+                ]
         return None
 
     @cached_property
@@ -1371,6 +1378,38 @@ class XTBFileMixin(FileMixin):
     """
 
     @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "xtb version" in line:
+                parts = line.split()
+                if "version" in parts:
+                    idx = parts.index("version")
+                    if idx + 1 < len(parts):
+                        return parts[idx + 1]
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "finished run on" in line:
+                match = re.search(xtb_date_pattern, line)
+                if match:
+                    date_str = match.group(1)  # YYYY/MM/DD
+                    time_str = match.group(2)  # HH:MM:SS
+                    try:
+                        # Convert from YYYY/MM/DD HH:MM:SS to YYYY-MM-DD HH:MM:SS
+                        date_obj = datetime.strptime(
+                            f"{date_str} {time_str}", "%Y/%m/%d %H:%M:%S"
+                        )
+                        return date_obj.strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
+    @property
     def route_string(self):
         """
         Get the route string from xTB main output file.
@@ -1407,6 +1446,27 @@ class XTBFileMixin(FileMixin):
             XTBRoute: Parsed xTB route object.
         """
         return XTBRoute(route_string=self.route_string)
+
+    @property
+    def method(self):
+        """Get the computational method from xTB route string or output Hamiltonian."""
+        gfn = self.route_object.method
+        if gfn:
+            return gfn
+        hamiltonian = self.hamiltonian
+        if hamiltonian:
+            return hamiltonian.lower().split("-")[0]
+        return None
+
+    @property
+    def basis(self):
+        """Return default xTB basis set specification."""
+        return self.route_object.basis
+
+    @property
+    def custom_solvent(self):
+        """xTB does not use Gaussian/ORCA-style inline custom solvent blocks."""
+        return None
 
     @property
     def jobtype(self):

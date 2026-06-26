@@ -120,10 +120,13 @@ class TestXTBMainOut:
         assert co2_main_out.num_electrons == 16
         assert co2_main_out.max_iter == 250
         assert co2_main_out.hamiltonian == "GFN2-xTB"
+        assert co2_main_out.method == "gfn2"
+        assert co2_main_out.basis == "default"
+        assert co2_main_out.custom_solvent is None
         assert not co2_main_out.restart
         assert not co2_main_out.solvent_on
         assert not co2_main_out.pc_potential
-        assert co2_main_out.electronic_temperature == 300.0
+        assert co2_main_out.temperature_in_K == 300.0
         assert co2_main_out.accuracy == 1.0
         assert co2_main_out.integral_cutoff == 25.0
         assert co2_main_out.integral_neglect == 1e-8
@@ -263,13 +266,13 @@ class TestXTBMainOut:
         assert co2_main_out.grrho_contribution == -0.008800347997
         assert co2_main_out.total_energy_without_gsasa_hb is None
         assert co2_main_out.total_energy == -10.308452289174
-        assert co2_main_out.total_enthalpy == -10.292932643737
-        assert co2_main_out.total_free_energy == -10.317252637172
+        assert co2_main_out.enthalpy == -10.292932643737
+        assert co2_main_out.gibbs_free_energy == -10.317252637172
         assert co2_main_out.gradient_norm == 0.000000274582
         assert co2_main_out.fmo_gap == 8.448655866329
         # Time Information
-        assert np.isclose(co2_main_out.total_wall_time * 3600, 0.468)
-        assert np.isclose(co2_main_out.total_cpu_time * 3600, 0.088)
+        assert np.isclose(co2_main_out.total_elapsed_walltime * 3600, 0.468)
+        assert np.isclose(co2_main_out.total_core_hours * 3600, 0.088)
         assert np.isclose(co2_main_out.scf_wall_time * 3600, 0.094)
         assert np.isclose(co2_main_out.scf_cpu_time * 3600, 0.015)
         assert np.isclose(co2_main_out.optimizer_wall_time * 3600, 0.302)

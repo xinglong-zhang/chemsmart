@@ -146,7 +146,7 @@ class XTBMainOut(XTBFileMixin):
         return pc_pot.lower() == "true"
 
     @property
-    def electronic_temperature(self):
+    def temperature_in_K(self):
         electronic_temp = self._get_setup_information("electronic temp.")
         return float(electronic_temp) if electronic_temp else None
 
@@ -189,6 +189,18 @@ class XTBMainOut(XTBFileMixin):
     def unpaired_electrons(self):
         unpaired_electrons = self._get_setup_information("unpaired electrons")
         return int(unpaired_electrons) if unpaired_electrons else None
+
+    @property
+    def multiplicity(self):
+        """Spin multiplicity from unpaired electrons."""
+        if self.unpaired_electrons:
+            return self.unpaired_electrons + 1
+        return 1
+
+    @property
+    def spin(self):
+        """Restricted or unrestricted spin treatment."""
+        return "unrestricted" if self.multiplicity != 1 else "restricted"
 
     @property
     def optimization_level(self):
@@ -1006,14 +1018,100 @@ class XTBMainOut(XTBFileMixin):
         return fmo_gap
 
     @property
-    def total_enthalpy(self):
+    def enthalpy(self):
         """Total enthalpy in Eh"""
         return self._extract_final_information("TOTAL ENTHALPY")
 
     @property
-    def total_free_energy(self):
+    def gibbs_free_energy(self):
         """Total free energy in Eh"""
         return self._extract_final_information("TOTAL FREE ENERGY")
+
+    @property
+    def alpha_occ_eigenvalues(self):
+        return None
+
+    @property
+    def beta_occ_eigenvalues(self):
+        return None
+
+    @property
+    def alpha_virtual_eigenvalues(self):
+        return None
+
+    @property
+    def beta_virtual_eigenvalues(self):
+        return None
+
+    @property
+    def rotational_temperatures(self):
+        return None
+
+    @property
+    def rotational_constants_in_Hz(self):
+        return None
+
+    @property
+    def thermal_vibration_correction(self):
+        return None
+
+    @property
+    def thermal_rotation_correction(self):
+        return None
+
+    @property
+    def thermal_translation_correction(self):
+        return None
+
+    @property
+    def thermal_energy_correction(self):
+        return None
+
+    @property
+    def thermal_enthalpy_correction(self):
+        return None
+
+    @property
+    def thermal_gibbs_free_energy_correction(self):
+        return None
+
+    @property
+    def internal_energy(self):
+        return None
+
+    @property
+    def electronic_entropy(self):
+        # TODO
+        return None
+
+    @property
+    def vibrational_entropy(self):
+        # TODO
+        return None
+
+    @property
+    def rotational_entropy(self):
+        # TODO
+        return None
+
+    @property
+    def translational_entropy(self):
+        # TODO
+        return None
+
+    @property
+    def entropy(self):
+        # TODO
+        return None
+
+    @property
+    def entropy_times_temperature(self):
+        # TODO
+        return None
+
+    @property
+    def pressure_in_atm(self):
+        return None
 
     @staticmethod
     def sum_time_hours(line):
@@ -1054,14 +1152,14 @@ class XTBMainOut(XTBFileMixin):
         return None
 
     @property
-    def total_wall_time(self):
+    def total_elapsed_walltime(self):
         """Total wall time for the entire calculation, in hours."""
         if self.elapsed_walltime_by_jobs("total:"):
             return sum(self.elapsed_walltime_by_jobs("total:"))
         return None
 
     @property
-    def total_cpu_time(self):
+    def total_core_hours(self):
         """Total CPU time for the entire calculation, in hours."""
         if self.cpu_runtime_by_jobs("total:"):
             return sum(self.cpu_runtime_by_jobs("total:"))
