@@ -6,7 +6,9 @@ This module consolidates the assembler pipeline:
 - BaseAssembler: core assembly logic shared across programs
 - GaussianAssembler: Gaussian-specific assembly
 - ORCAAssembler: ORCA-specific assembly
-- SingleFileAssembler: dispatcher that auto-detects program type
+- XTBAssembler: xTB folder-based assembly
+- SingleFileAssembler: dispatcher for file-based program outputs
+- SingleFolderAssembler: dispatcher for folder-based program outputs
 - build_provenance: provenance metadata builder
 """
 
@@ -19,6 +21,7 @@ from chemsmart.database.utils import (
     canonical_json_hash,
     canonicalize_route_string,
     compute_trajectory_id,
+    directory_size,
     file_size,
     get_record_id,
     is_custom_basis,
@@ -27,9 +30,11 @@ from chemsmart.database.utils import (
     standardize_basis_set,
     utcnow_iso,
 )
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.io import get_program_type_from_file
 
 logger = logging.getLogger(__name__)
@@ -38,28 +43,50 @@ logger = logging.getLogger(__name__)
 class BaseAssembler:
     OUTPUT_CLASS = None  # To be defined in subclasses
     PROGRAM = "unknown"  # To be defined in subclasses
+    FOLDER_BASED = False
 
-    def __init__(self, filename, index=":", include_failed=False):
+    def __init__(
+        self, filename=None, folder=None, index=":", include_failed=False
+    ):
         self.filename = filename
+        self.folder = folder
         self.index = index
         self.include_failed = include_failed
-        self.output = self.OUTPUT_CLASS(filename)
+        self.target = self.folder if self.FOLDER_BASED else self.filename
+        self.output = self.OUTPUT_CLASS(self.target)
 
     @property
     def molecules_list(self):
+        if self.FOLDER_BASED:
+            return Molecule.from_directorypath(
+                self.folder,
+                program=self.PROGRAM.lower(),
+                index=self.index,
+            )
         return Molecule.from_filepath(
             self.filename, index=self.index, return_list=True
         )
 
-    @staticmethod
-    def build_provenance(filename, output):
+    def build_provenance(self):
         """Build provenance metadata for an assembled record."""
+        target = self.target
+        output = self.output
+
+        if self.FOLDER_BASED:
+            hash_source = output.main_out
+            source_size = directory_size(target)
+        else:
+            hash_source = output
+            source_size = file_size(target)
+
         return {
-            "source_file": filename,
-            "source_file_hash": sha256_content(output),
-            "source_file_size": file_size(filename),
-            "source_file_date": output.file_date,
-            "program": get_program_type_from_file(filename),
+            "source": target,
+            "source_file_hash": (
+                sha256_content(hash_source) if hash_source else None
+            ),
+            "source_size": source_size,
+            "source_date": output.file_date,
+            "program": self.PROGRAM,
             "program_version": output.version,
             "parser": output.__class__.__name__,
             "chemsmart_version": chemsmart_version,
@@ -71,21 +98,22 @@ class BaseAssembler:
         if not self.output.normal_termination:
             if not self.include_failed:
                 logger.warning(
-                    f"Calculation in {self.filename} did not terminate normally, skip assembling..."
+                    f"Calculation in {self.target} did not terminate normally, "
+                    f"skip assembling..."
                 )
                 return None
             else:
                 logger.warning(
-                    f"Calculation in {self.filename} did not terminate normally, "
+                    f"Calculation in {self.target} did not terminate normally, "
                     f"assembling partial data..."
                 )
         if not self.molecules_list:
-            logger.error(f"No molecules parsed from {self.filename}.")
+            logger.error(f"No molecules parsed from {self.target}.")
             return None
 
         meta = self.get_meta_data()
         results = self.get_calculation_results()
-        provenance = self.build_provenance(self.filename, self.output)
+        provenance = self.build_provenance()
         molecules = []
         for i, mol in enumerate(self.molecules_list):
             mol_entry = {"index": i + 1, **self.get_molecule_info(mol)}
@@ -338,8 +366,39 @@ class ORCAAssembler(BaseAssembler):
         return calculation_results
 
 
+class XTBAssembler(BaseAssembler):
+    OUTPUT_CLASS = XTBOutput
+    PROGRAM = "xTB"
+    FOLDER_BASED = True
+
+    def get_meta_data(self):
+        meta_data = super().get_meta_data()
+        meta_data.update(
+            {
+                "num_atomic_orbital": self.output.num_atomic_orbital,
+                "num_shells": self.output.num_shells,
+                "num_electrons": self.output.num_electrons,
+                "max_iteration": self.output.max_iter,
+                "pc_potential": self.output.pc_potential,
+                "accuracy": self.output.accuracy,
+            }
+        )
+        return meta_data
+
+    def get_calculation_results(self):
+        calculation_results = super().get_calculation_results()
+        calculation_results.update(
+            {
+                "c6_coefficient": self.output.c6_coefficient,
+                "c8_coefficient": self.output.c8_coefficient,
+                "alpha_coefficient": self.output.alpha_coefficient,
+            }
+        )
+        return calculation_results
+
+
 class SingleFileAssembler:
-    """Auto-detect program type and delegate to the appropriate assembler."""
+    """Auto-detect program type and delegate to the appropriate file assembler."""
 
     def __init__(self, filename, index=":", include_failed=False):
         self.filename = filename
@@ -356,18 +415,57 @@ class SingleFileAssembler:
             return None
         return data
 
-    def _get_assembler(self, file):
-        program = get_program_type_from_file(self.filename)
+    def _get_assembler(self, path):
+        program = get_program_type_from_file(path)
         if program == "gaussian":
-            assembler = GaussianAssembler(
-                file, index=self.index, include_failed=self.include_failed
+            return GaussianAssembler(
+                filename=path,
+                index=self.index,
+                include_failed=self.include_failed,
             )
-        elif program == "orca":
-            assembler = ORCAAssembler(
-                file, index=self.index, include_failed=self.include_failed
+        if program == "orca":
+            return ORCAAssembler(
+                filename=path,
+                index=self.index,
+                include_failed=self.include_failed,
             )
-        else:
+        raise ValueError(
+            f"Unsupported file '{path}'. "
+            "Only 'gaussian' and 'orca' output files are supported."
+        )
+
+
+class SingleFolderAssembler:
+    """Auto-detect program type and delegate to the appropriate folder assembler."""
+
+    def __init__(self, folder, index=":", include_failed=False):
+        self.folder = folder
+        self.index = index
+        self.include_failed = include_failed
+
+    @cached_property
+    def assemble_data(self):
+        assembler = self._get_assembler(self.folder)
+        try:
+            data = assembler.assemble()
+        except Exception as e:
+            logger.error(f"Error assembling {self.folder}: {e}")
+            return None
+        return data
+
+    def _get_assembler(self, path):
+        program = BaseFolder(folder=path).get_program_type_from_folder()
+        if program == "xtb":
+            return XTBAssembler(
+                folder=path,
+                index=self.index,
+                include_failed=self.include_failed,
+            )
+        if program == "mixed":
             raise ValueError(
-                "Unsupported format. Only 'gaussian' and 'orca' are supported."
+                f"Folder '{path}' contains outputs from multiple programs."
             )
-        return assembler
+        raise ValueError(
+            f"Unsupported folder '{path}'. "
+            f"Only 'xtb' output folders are supported."
+        )

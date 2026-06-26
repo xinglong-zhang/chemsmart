@@ -4,9 +4,13 @@ import os
 import click
 
 from chemsmart.cli.job import click_folder_options
-from chemsmart.database.assemble import SingleFileAssembler
+from chemsmart.database.assemble import (
+    SingleFileAssembler,
+    SingleFolderAssembler,
+)
 from chemsmart.database.database import Database
 from chemsmart.io.folder import BaseFolder
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.utils.cli import MyCommand
 
 from .database import database
@@ -69,39 +73,60 @@ def assemble(
     if not os.path.isdir(directory):
         raise FileNotFoundError(f"Directory does not exist: {directory}")
 
-    # Collect available output files
-    supported_programs = {"gaussian", "orca"}
+    supported_programs = {"gaussian", "orca", "xtb"}
     if program is None:
         programs = supported_programs
     elif program.lower() in supported_programs:
         programs = {program.lower()}
     else:
         raise ValueError(
-            f"Unsupported program '{program}'. Use 'gaussian' or 'orca'."
-        )
-    folder = BaseFolder(folder=directory)
-    files = []
-    for prog in programs:
-        files.extend(
-            folder.get_all_output_files_in_current_folder_and_subfolders_by_program(
-                program=prog
-            )
+            f"Unsupported program '{program}'. "
+            "Use 'gaussian', 'orca', or 'xtb'."
         )
 
-    if not files:
+    files = []
+    file_programs = programs & {"gaussian", "orca"}
+    if file_programs:
+        base_folder = BaseFolder(folder=directory)
+        for prog in sorted(file_programs):
+            files.extend(
+                base_folder.get_all_output_files_in_current_folder_and_subfolders_by_program(
+                    program=prog
+                )
+            )
+        files = sorted(set(files))
+
+    folders = []
+    if "xtb" in programs:
+        if XTBFolder(folder=directory).is_xtb_calculation_directory:
+            folders.append(directory)
+        else:
+            for entry in os.listdir(directory):
+                subdir = os.path.join(directory, entry)
+                if XTBFolder(folder=subdir).is_xtb_calculation_directory:
+                    folders.append(subdir)
+        folders = sorted(folders)
+
+    if not files and not folders:
+        program_label = program or "gaussian, orca, or xtb"
         logger.error(
-            f"No {', '.join(programs)} output files found in directory: {directory}"
+            f"No {program_label} output found in directory: {directory}"
         )
         return None
 
     if program is None:
-        logger.info(f"Found {len(files)} output files, assembling...")
+        logger.info(
+            f"Found {len(files)} output file(s) and "
+            f"{len(folders)} xTB folder(s), assembling..."
+        )
+    elif program == "xtb":
+        logger.info(f"Found {len(folders)} xTB folder(s), assembling...")
     else:
         logger.info(
             f"Found {len(files)} {program} output files, assembling..."
         )
 
-    # Parse all collected files
+    # Parse all collected files or folders
     rows = []
     for file in files:
         try:
@@ -114,6 +139,17 @@ def assemble(
         except Exception as e:
             logger.error(f"Failed to parse {file}: {e}")
 
+    for folder in folders:
+        try:
+            assembler = SingleFolderAssembler(
+                folder=folder, index=index, include_failed=include_failed
+            )
+            data = assembler.assemble_data
+            if data:
+                rows.append(data)
+        except Exception as e:
+            logger.error(f"Failed to parse {folder}: {e}")
+
     if not rows:
         logger.error("No valid data parsed. Aborting.")
         return None
@@ -125,8 +161,9 @@ def assemble(
     actual = db.count_records()
     if attempted != actual:
         logger.warning(
-            f"Processed {attempted} file(s), but only {actual} unique record(s) "
-            f"were stored ({attempted - actual} duplicates were replaced)."
+            f"Processed {attempted} source(s), but only {actual} unique "
+            f"record(s) were stored ({attempted - actual} duplicates were "
+            f"replaced)."
         )
     logger.info(f"Assembled {actual} record(s) into database: {output}")
     return None
