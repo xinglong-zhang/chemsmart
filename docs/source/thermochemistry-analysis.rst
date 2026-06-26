@@ -2,8 +2,8 @@
  Thermochemistry Analysis
 ##########################
 
-CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
-output files.
+CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian, ORCA, and
+xTB output files.
 
 *******************************
  Thermochemistry Analysis Jobs
@@ -14,13 +14,14 @@ entropy, and Gibbs free energy.
 
 When processing a directory, use ``-p/--program`` when chemsmart needs to identify Gaussian versus ORCA output from the
 file content, and use ``-t/--filetype`` when you only want to filter by filename suffix such as ``.log`` or ``.out``.
+For xTB, use ``-d`` with ``-p xtb`` (calculation directories, not individual files).
 
 Usage
 =====
 
 .. code:: text
 
-   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca] [-t filetype] [-f filename(s)]
+   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca|xtb] [-t filetype] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
                                  [-ch h_freq_cutoff] [-c concentration] [-P pressure] [--weighted | --no-weighted]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
@@ -45,8 +46,8 @@ Options
 
    -  -  ``-p, --program``
       -  string
-      -  Program that produced the output files: ``gaussian`` or ``orca``. Use this when parsing depends on program
-         identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
+      -  Program that produced the output files: ``gaussian``, ``orca``, and ``xtb``. Use this when parsing depends on
+         program identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
 
    -  -  ``-t, --filetype``
       -  string
@@ -55,7 +56,7 @@ Options
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific file(s) to analyze (repeatable, mutually exclusive with ``-d``)
+      -  Specific Gaussian or ORCA file(s) to analyze (repeatable, mutually exclusive with ``-d``)
 
 **Quasi-RRHO Corrections:**
 
@@ -149,6 +150,8 @@ Examples
 
 **Single file analysis:**
 
+Analyze a single Gaussian/ORCA output file.
+
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -f water_opt.out
@@ -161,13 +164,25 @@ Output:
    ================================================================================
    water_opt               -76.323311   0.021581  -76.297951   0.021430  -76.319381
 
+**Single xTB calculation directory:**
+
+Analyze a single xTB calculation directory containing all relevant xTB output files.
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -d water_ohess/ -p xtb
+
 **Multiple files:**
+
+Analyze multiple Gaussian/ORCA output files in a single run.
 
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -f he_gaussian.log -f he_orca.out
 
-**Batch processing:**
+**Batch processing of Gaussian/ORCA output files:**
+
+Automatically discover and analyze Gaussian or ORCA output files within a directory.
 
 .. code:: bash
 
@@ -178,6 +193,28 @@ Select files by extension only:
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -d . -t log -o thermo_logs.dat
+
+**Batch processing of xTB calculation directories:**
+
+Analyze multiple xTB calculation directories located within a parent directory.
+
+Example directory layout:
+
+.. code::
+
+   molecules/
+   ├── molecule1_ohess/
+   ├── molecule2_hess/
+   ├── molecule3_opt/
+   └── molecule4_sp/
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -d molecules/ -p xtb -o thermo_xtb.dat
+
+The specified directory is scanned for xTB calculation folders. If the given directory itself is not an xTB calculation
+directory, only its immediate subdirectories (one level deep) are inspected. Thermochemistry analysis is performed for
+each identified calculation directory.
 
 **Batch processing with custom pressure:**
 
