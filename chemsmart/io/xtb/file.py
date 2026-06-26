@@ -718,6 +718,13 @@ class XTBMainOut(XTBFileMixin):
                 return False
         return False
 
+    @cached_property
+    def incomplete_optimized_geometry(self):
+        for line in self.contents:
+            if "INCOMPLETELY OPTIMIZED GEOMETRY" in line:
+                return True
+        return False
+
     @property
     def optimized_structure_block(self):
         """Return optimized structure."""

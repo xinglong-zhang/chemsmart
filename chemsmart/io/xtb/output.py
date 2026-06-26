@@ -347,6 +347,7 @@ class XTBOutput:
 
         # 3. Build complete Molecule objects using create_molecule_list
         logger.debug(f"Creating {n} Molecule objects with complete properties")
+        is_optimized = self._compute_is_optimized_structure_list(n)
         molecules = create_molecule_list(
             orientations=orientations,
             orientations_pbc=orientations_pbc,
@@ -357,6 +358,7 @@ class XTBOutput:
             multiplicity=self.multiplicity,
             frozen_atoms=None,
             pbc_conditions=None,
+            is_optimized_structure_list=is_optimized,
         )
         # 4. Assign forces to the final structure if available
         if self.final_forces is not None and molecules:
@@ -413,6 +415,19 @@ class XTBOutput:
             return [mol.positions], list(mol.symbols), [self.final_energy]
 
         return [], None, None
+
+    def _compute_is_optimized_structure_list(self, num_structures):
+        """Mark which structures correspond to optimized geometries."""
+        is_optimized = [False] * num_structures
+        if num_structures and self.normal_termination:
+            if self.jobtype == "opt" and self.geometry_optimization_converged:
+                is_optimized[-1] = True
+            elif (
+                self.jobtype == "hess"
+                and not self.incomplete_optimized_geometry
+            ):
+                is_optimized[-1] = True
+        return is_optimized
 
     @property
     def optimized_structure(self):

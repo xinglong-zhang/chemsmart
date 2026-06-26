@@ -865,3 +865,8 @@ class TestXTBOutput:
             "O2": -0.23213972,
             "C1": 0.46427944,
         }
+        optimized_flags = [
+            mol.is_optimized_structure for mol in xtb_co2_output.all_structures
+        ]
+        assert len(xtb_co2_output.all_structures) == 5
+        assert optimized_flags == [False] * 4 + [True]
