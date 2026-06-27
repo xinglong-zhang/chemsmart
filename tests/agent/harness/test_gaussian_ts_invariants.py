@@ -60,6 +60,24 @@ def test_true_extra_route_option_passes():
     assert result.verdict == "ok"
 
 
+def test_mangled_ts_extra_rejects():
+    result = check_gaussian_ts_route(
+        "# b3lyp/6-31g* opt=(ts,calcfc,noeigentest,calcfc/noeigentest)"
+    )
+
+    assert result.verdict == "reject"
+    assert any("non-allowlisted" in issue.message for issue in result.issues)
+
+
+def test_tssearch_type_extra_rejects():
+    result = check_gaussian_ts_route(
+        "# b3lyp/6-31g* opt=(ts,calcfc,noeigentest,tssearch_type=1)"
+    )
+
+    assert result.verdict == "reject"
+    assert any("non-allowlisted" in issue.message for issue in result.issues)
+
+
 def test_calcall_variant_passes_without_calcfc():
     result = check_gaussian_ts_route(
         "# b3lyp/6-31g* opt=(ts,noeigentest,calcall)"

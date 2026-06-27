@@ -9,6 +9,17 @@ from chemsmart.agent.harness.models import InvariantIssue, InvariantResult
 RULE_ID = "gaussian.ts.route"
 _OPT_BLOCK_RE = re.compile(r"\bopt\s*=\s*\((?P<body>[^)]*)\)", re.IGNORECASE)
 
+# Runtime-derived canonical TS triple.
+_CANON = {"ts", "calcfc", "noeigentest"}
+
+# Genuine user extras allowed in the TS opt block. Everything else is treated
+# as a model leak or malformed route token.
+_ALLOWED_EXTRA = re.compile(
+    r"^(calcall|cartesian|tight|"
+    r"(maxstep|maxcycles|maxcycle|recalcfc|maxmicroiterations)=\d+)$",
+    re.IGNORECASE,
+)
+
 
 def check_gaussian_ts_route(
     route: str | None,
@@ -70,6 +81,19 @@ def check_gaussian_ts_route(
     if "noeigentest" not in token_counts:
         issues.append(
             _reject("Gaussian TS route missing noeigentest option", evidence)
+        )
+
+    bad_extras = [
+        token
+        for token in token_counts
+        if token not in _CANON and not _ALLOWED_EXTRA.match(token)
+    ]
+    if bad_extras:
+        issues.append(
+            _reject(
+                "Gaussian TS route contains non-allowlisted extra opt token(s)",
+                {**evidence, "bad_extras": sorted(bad_extras)},
+            )
         )
 
     return _result(issues, evidence)
