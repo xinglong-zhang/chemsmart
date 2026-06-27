@@ -35,7 +35,9 @@ _ARRAY_KEYS = {"additional_opt_options_in_route"}
 # model sometimes emits the bogus value "tssearch" or the redundant default "optts"; drop either (-> the
 # runtime default), but KEEP a meaningful non-default like "scants".
 _TSSEARCH_DROP = {"tssearch", "optts"}
-_FORCE_PRESENT = {"gaussian.ts": {"freq": True}}    # TS implies freq (calcfc Hessian); add iff omitted
+# B1 verified: bare `gaussian ts` already emits opt=(ts,calcfc,noeigentest) (calcfc = the Hessian); a TS
+# does NOT auto-imply a separate freq job. So do not force freq — the model emits freq only if requested.
+_FORCE_PRESENT = {}
 
 
 def _split(s):
@@ -102,17 +104,20 @@ def postprocess(spec):
         if kind == "gaussian.scan" and "scan_definition" in se:
             se["scan_definition"] = _fix_scan_type(se["scan_definition"])
         new = {}
-        # 1) TS route reconstruction (only if the kind accepts it)
+        # 1) TS route: chemsmart AUTO-derives opt=(ts,calcfc,noeigentest) from a *.ts job (verified B1).
+        # Emitting the canonical route duplicates it AND renders the list as a literal -> BROKEN. So keep
+        # ONLY genuine EXTRA opts beyond the canonical triple; omit otherwise (let the runtime derive it).
         if isinstance(kind, str) and kind.endswith(".ts") and "additional_opt_options_in_route" in allowed:
-            r = _route_opts(se, is_ts=True)
-            if not r and kind == "gaussian.ts":
-                r = list(ROUTE)  # v9: inject the canonical route when the model emitted none
-            if r:
-                new["additional_opt_options_in_route"] = r
+            extras = [t for t in _route_opts(se, is_ts=False) if t not in ROUTE]
+            if extras:
+                new["additional_opt_options_in_route"] = extras
         # 2) keep only module-accepted keys; coerce + canonicalize
+        _ts = isinstance(kind, str) and kind.endswith(".ts")
         for k, v in se.items():
             if k not in allowed or k in new:
                 continue
+            if k == "additional_opt_options_in_route" and _ts:
+                continue  # handled in step 1 (extras only; canonical route is auto-derived)
             if k in _ARRAY_KEYS and isinstance(v, str):
                 v = _split(v)
             if k == "freq" and v is False:
@@ -134,32 +139,32 @@ def _selftest():
     import copy
     cases = [
         # (name, kind, in_settings, expected_out_settings)
-        ("nested ts blob", "gaussian.ts",
+        # --- B2: the canonical ts route is auto-derived -> DROP it (any mangled form); keep freq if present ---
+        ("ts nested blob -> route dropped", "gaussian.ts",
          {"ts": {"calcfc": True, "noeigentest": True, "additional_opt_options_in_route": "ts,calcfc,noeigentest"}, "freq": True},
-         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"], "freq": True}),
-        ("loose calcfc/noeig (+ts)", "gaussian.ts", {"calcfc": True, "noeigentest": True, "freq": True},
-         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"], "freq": True}),
-        ("string-valued ts key", "gaussian.ts", {"ts": "calcfc,noeigentest", "freq": True},
-         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"], "freq": True}),
-        ("route as string", "gaussian.ts", {"additional_opt_options_in_route": "ts,calcfc,noeigentest", "freq": True},
-         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"], "freq": True}),
+         {"freq": True}),
+        ("ts loose calcfc/noeig -> dropped", "gaussian.ts", {"calcfc": True, "noeigentest": True, "freq": True},
+         {"freq": True}),
+        ("ts string-valued key -> dropped", "gaussian.ts", {"ts": "calcfc,noeigentest", "freq": True},
+         {"freq": True}),
+        ("ts route-as-string -> dropped", "gaussian.ts", {"additional_opt_options_in_route": "ts,calcfc,noeigentest", "freq": True},
+         {"freq": True}),
+        ("ts canonical (no freq) -> empty", "gaussian.ts",
+         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"]}, None),
+        ("ts EXTRA opt kept", "gaussian.ts",
+         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest", "maxstep=15"]},
+         {"additional_opt_options_in_route": ["maxstep=15"]}),
         ("freq on nci", "gaussian.nci", {"freq": True}, None),
         ("recalc_hess on opt", "orca.opt", {"recalc_hess": True}, None),
         ("valid tddft kept", "gaussian.tddft", {"nstates": 3}, {"nstates": 3}),
         ("runtime-owned stripped", "gaussian.opt", {"functional": "B3LYP", "freq": True}, {"freq": True}),
-        ("already-correct ts", "gaussian.ts", {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc"]},
-         {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc"]}),
+        ("orca.opt freq KEPT (B2)", "orca.opt", {"freq": True}, {"freq": True}),
         # --- v9 hardening (CLI-verified, diversity-preserving) ---
         ("orca.ts bogus tssearch dropped", "orca.ts", {"tssearch_type": "tssearch"}, None),
         ("orca.ts default optts dropped", "orca.ts", {"tssearch_type": "optts"}, None),
         ("orca.ts scants KEPT (diversity)", "orca.ts", {"tssearch_type": "scants"}, {"tssearch_type": "scants"}),
         ("tddft real options KEPT (diversity)", "gaussian.tddft",
          {"nstates": 3, "root": 2}, {"nstates": 3, "root": 2}),
-        ("gaussian.ts freq forced when omitted", "gaussian.ts",
-         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"]},
-         {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"], "freq": True}),
-        ("gaussian.ts route forced when omitted", "gaussian.ts", {"freq": True},
-         {"freq": True, "additional_opt_options_in_route": ["ts", "calcfc", "noeigentest"]}),
         ("scan wrong type letter fixed", "gaussian.scan", {"scan_definition": "B 1 2 3 S 8 5.0"},
          {"scan_definition": "A 1 2 3 S 8 5.0"}),
     ]

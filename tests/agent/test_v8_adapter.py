@@ -5,8 +5,10 @@ from chemsmart.agent import v8_adapter
 from chemsmart.agent import synthesis as S
 
 
-def test_postprocess_strips_invalid_and_repairs_ts_route():
-    # `freq` is not a valid nci key -> stripped; a mangled TS route is repaired to the canonical list.
+def test_postprocess_strips_invalid_and_drops_auto_ts_route():
+    # `freq` is not a valid nci key -> stripped; the canonical TS route is AUTO-derived by chemsmart
+    # (B1-verified), so a *.ts job's canonical route is DROPPED (emitting it duplicates/breaks); only
+    # genuine EXTRA opts survive.
     spec = {
         "intent": "workflow",
         "jobs": [
@@ -14,11 +16,24 @@ def test_postprocess_strips_invalid_and_repairs_ts_route():
              "settings": {"freq": True}},
             {"id": 2, "kind": "gaussian.ts", "file": "b.xyz", "charge": 0, "mult": 1,
              "settings": {"ts": "calcfc,noeigentest", "freq": True}},
+            {"id": 3, "kind": "gaussian.ts", "file": "c.xyz", "charge": 0, "mult": 1,
+             "settings": {"additional_opt_options_in_route": ["ts", "calcfc", "noeigentest", "maxstep=15"]}},
         ],
     }
     out = v8_adapter.postprocess(spec)
-    assert "settings" not in out["jobs"][0]  # freq stripped from nci
-    assert out["jobs"][1]["settings"]["additional_opt_options_in_route"] == ["ts", "calcfc", "noeigentest"]
+    assert "settings" not in out["jobs"][0]                                    # freq stripped from nci
+    assert "additional_opt_options_in_route" not in (out["jobs"][1].get("settings") or {})  # canonical -> dropped
+    assert out["jobs"][1]["settings"]["freq"] is True                          # freq preserved
+    assert out["jobs"][2]["settings"]["additional_opt_options_in_route"] == ["maxstep=15"]  # extra kept
+
+
+def test_postprocess_freq_renders_via_route_param_not_jobtype():
+    spec = {"intent": "workflow", "jobs": [
+        {"id": 1, "kind": "orca.opt", "file": "m.xyz", "charge": 0, "mult": 1, "settings": {"freq": True}}]}
+    out = v8_adapter.adapt(json.dumps(spec))
+    assert out["valid"], out["errors"]
+    assert "--additional-route-parameters freq" in out["commands"][0]
+    assert "opt_freq" not in out["commands"][0] and "--freq" not in out["commands"][0]
 
 
 def test_adapt_renders_valid_chemsmart_command():

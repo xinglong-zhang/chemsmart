@@ -63,16 +63,19 @@ def _job_command(job, geom_of):
     parts.append(prog)
     settings = dict(job.get("settings", {}) or {})
     freq_true = settings.pop("freq", None) is True
+    # freq is a route token (verified B1: renders as " freq"); chemsmart has NO --freq flag and "opt_freq"
+    # is not a real jobtype. Express opt+freq via --additional-route-parameters (combined with any existing).
+    if freq_true and not kind.endswith(".freq"):
+        aro = settings.get("additional_route_parameters")
+        settings["additional_route_parameters"] = f"{aro} freq" if aro else "freq"
     for k, v in settings.items():
         flag = _FLAG.get(k)
         if flag:
             parts += [flag, _fmt(v)]
-    # subcommand: *.freq has no CLI subcommand -> run an opt job tagged as a frequency calc
+    # subcommand: *.freq has no standalone CLI subcommand -> run an opt job tagged as a frequency calc
     if kind.endswith(".freq"):
         parts += ["opt", "--jobtype", "freq"]
     else:
-        if freq_true:
-            parts += ["--jobtype", "opt_freq"] if kind.endswith(".opt") else []
         parts.append(_subcommand(kind))
     src = job.get("file") or geom_of.get(job.get("geom_from"), "<upstream-geometry>")
     parts += ["-f", shlex.quote(src)]
