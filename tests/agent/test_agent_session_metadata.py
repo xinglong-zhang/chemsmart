@@ -100,6 +100,9 @@ def test_session_metadata_json_is_written_with_required_keys(
         "schema_hash",
         "total_input_tokens",
         "total_output_tokens",
+        "harness_verdict",
+        "harness_issue_count",
+        "harness_failed_rule_ids",
     } <= metadata.keys()
     assert metadata["intent"] == "opt"
     assert metadata["plan_steps"] == 5
@@ -113,6 +116,10 @@ def test_session_metadata_json_is_written_with_required_keys(
     assert len(metadata["schema_hash"]) == 64
     assert metadata["total_input_tokens"] > 0
     assert metadata["total_output_tokens"] > 0
+    assert metadata["harness_verdict"] == "ok"
+    assert metadata["harness_issue_count"] == 0
+    assert metadata["harness_failed_rule_ids"] == []
+    assert (Path(result["session_dir"]) / "harness_result.json").exists()
 
 
 def test_tool_error_is_logged_before_runtime_error(
@@ -490,6 +497,9 @@ def test_session_metadata_has_all_required_fields(
         "critic_confidence": (int, float),
         "block_reason": str,
         "blocked": bool,
+        "harness_verdict": str,
+        "harness_issue_count": int,
+        "harness_failed_rule_ids": list,
         "exit_status": str,
     }
     for key, expected_type in required.items():

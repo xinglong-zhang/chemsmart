@@ -17,6 +17,9 @@ from typing import Any, Callable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.harness.models import HarnessResult
+from chemsmart.agent.harness.runner import evaluate_harness
+from chemsmart.agent.harness.trace import write_harness_result
 from chemsmart.agent.loop import (
     ToolLoop,
     ToolLoopBudgets,
@@ -207,6 +210,7 @@ class AgentSession:
         self._run_start_time: float | None = None
         self._llm_stats: list[dict[str, Any]] = []
         self._loop_mode_state: tuple[str, bool] | None = None
+        self._last_harness_result: HarnessResult | None = None
 
     @classmethod
     def load(
@@ -276,6 +280,7 @@ class AgentSession:
     ) -> dict[str, Any]:
         self._run_start_time = time.perf_counter()
         self._llm_stats = []
+        self._last_harness_result = None
         if self.state is None or self.session_dir is None:
             self._start_new_session(request)
         else:
@@ -321,6 +326,7 @@ class AgentSession:
     ) -> dict[str, Any]:
         self._run_start_time = time.perf_counter()
         self._llm_stats = []
+        self._last_harness_result = None
         if self.state is None or self.session_dir is None:
             self._start_new_session(request)
             continuing_ask_user = False
@@ -1220,6 +1226,9 @@ class AgentSession:
 
         primary_dry_run_result = _primary_dry_run_result(dry_run_results)
         schema_hash = _schema_hash(self.registry.openai_tool_defs())
+        harness_result = self._last_harness_result
+        if harness_result is not None:
+            write_harness_result(self.session_dir, harness_result)
         metadata = {
             "session_id": self.state.session_id,
             "request": self.state.request or "unknown",
@@ -1257,6 +1266,19 @@ class AgentSession:
             "total_input_tokens": summary["total_input_tokens"],
             "total_output_tokens": summary["total_output_tokens"],
             "tools_called": summary["tools_called"],
+            "harness_verdict": (
+                harness_result.verdict
+                if harness_result is not None
+                else "not_run"
+            ),
+            "harness_issue_count": (
+                len(harness_result.issues) if harness_result is not None else 0
+            ),
+            "harness_failed_rule_ids": (
+                harness_result.failed_rule_ids
+                if harness_result is not None
+                else []
+            ),
             "exit_status": summary["exit_status"],
             "advisory_only": advisory_only,
             "is_chitchat": is_chitchat,
@@ -1621,6 +1643,30 @@ class AgentSession:
             issues.extend(irc_keyword_issues)
             rationale_parts.append(
                 "IRC input route line missing required keyword"
+            )
+
+        harness_result = evaluate_harness(
+            plan=plan,
+            dry_run_results=dry_run_results,
+        )
+        self._last_harness_result = harness_result
+        if self.decision_log is not None:
+            self.decision_log.write(
+                "harness_result",
+                harness_result.to_dict(),
+                rationale=f"runtime harness verdict: {harness_result.verdict}",
+            )
+        if harness_result.verdict == "reject":
+            final_verdict = "reject"
+            issues.extend(_harness_issue_messages(harness_result))
+            rationale_parts.append(
+                "software invariant harness rejected generated input"
+            )
+        elif harness_result.verdict == "warn":
+            final_verdict = "warn" if final_verdict == "ok" else final_verdict
+            issues.extend(_harness_issue_messages(harness_result))
+            rationale_parts.append(
+                "software invariant harness warned on generated input"
             )
 
         if preview_submit is not None:
@@ -2348,3 +2394,7 @@ def _dedupe_strings(values: list[str]) -> list[str]:
             seen.add(value)
             deduped.append(value)
     return deduped
+
+
+def _harness_issue_messages(result: HarnessResult) -> list[str]:
+    return [f"{issue.rule_id}: {issue.message}" for issue in result.issues]
