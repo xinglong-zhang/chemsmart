@@ -37,7 +37,10 @@ def _iter_dry_run_kinds(
     plan: Any,
     dry_run_results: list[dict[str, Any]],
 ) -> list[tuple[str | None, dict[str, Any]]]:
-    steps = list(getattr(plan, "steps", []) or [])
+    if isinstance(plan, dict):
+        steps = list(plan.get("steps", []) or [])
+    else:
+        steps = list(getattr(plan, "steps", []) or [])
     dry_run_steps = [
         step for step in steps if _step_tool(step) == "dry_run_input"
     ]
