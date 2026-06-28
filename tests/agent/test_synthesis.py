@@ -260,17 +260,13 @@ def test_multiturn_clarification_is_carried_in_memory(
     session.run_interactive("optimize oxetane")
 
     assert len(provider.messages) == 2
-    # Native multi-turn: the second request is built as [system, user]. The clarification
-    # sub-turn carries no assistant SPEC, so its answers are folded into the follow-up user
-    # request rather than injected as a "Conversation memory" system blob.
     second_call = provider.messages[1]
-    assert [m["role"] for m in second_call] == ["system", "user"]
-    followup_user = second_call[-1]["content"]
-    assert "What basis set?: def2-svp" in followup_user
+    assert [message["role"] for message in second_call] == ["system", "user"]
+    assert "What basis set?: def2-svp" in second_call[-1]["content"]
 
 
 def test_agent_ask_e2e_uses_synthesis_session(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     provider = DummyProvider([_json_response(READY)])
     monkeypatch.setattr(
@@ -281,6 +277,10 @@ def test_agent_ask_e2e_uses_synthesis_session(
     monkeypatch.setattr(
         "chemsmart.agent.synthesis.subprocess.run",
         lambda args, check=False: calls.append(args),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.cli._agent_log_root",
+        lambda: tmp_path,
     )
 
     result = CliRunner().invoke(agent, ["ask", "make a ts job"], input="N\n")

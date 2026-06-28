@@ -1,11 +1,9 @@
-"""Translate V4 atomic planner JSON to ``chemsmart agent ask`` synthesis schema.
+"""Translate local planner JSON to ``chemsmart agent ask`` synthesis schema.
 
-The V4 LoRA emits ``{"steps":[...], "rationale": str, "intent": str}``; the
-``SynthesisSession`` consumer in :mod:`chemsmart.agent.synthesis` expects
-``{"status", "command", "explanation", "confidence", "missing_info",
-"alternatives"}``. This module builds a single ``chemsmart sub|run …`` command
-string from the canonical 10 ``build_job`` kinds and fails-closed on the 15
-non-canonical kinds (RESP/NCI/DIAS/TDDFT/MODRED/CREST/TRAJ/NEB/QMMM/QRC/WBI).
+The v13.1 model emits compact ``{"intent":"workflow","jobs":[...]}`` SPECs.
+Those route through :mod:`chemsmart.agent.v8_adapter`, which postprocesses and
+validates against the real CLI/parser contract. The older V4 ``steps`` shape is
+kept as a compatibility fallback for local experiments and old tests.
 
 The conversion is conservative: when arguments are missing or the kind is not
 yet wired into the CLI, the adapter returns ``status="needs_clarification"``
@@ -60,7 +58,7 @@ def plan_to_synthesis_result(
     user_query: str,
     use_submit: bool | None = None,
 ) -> dict[str, Any]:
-    """Convert a V4 planner JSON into a ``SynthesisSession``-shaped result.
+    """Convert local planner JSON into a ``SynthesisSession``-shaped result.
 
     Args:
         plan: Parsed planner dict, ideally already post-processed.
@@ -73,6 +71,9 @@ def plan_to_synthesis_result(
         :func:`chemsmart.agent.synthesis._normalize_result`. ``status`` is
         ``"ready"`` only when a single legal chemsmart command can be emitted.
     """
+    if _is_compact_spec(plan):
+        return _compact_spec_to_synthesis_result(plan)
+
     intent = str(plan.get("intent") or "").lower()
     if intent in {"decline", "infeasible", "out_of_scope"}:
         return _infeasible(
@@ -143,9 +144,7 @@ def plan_to_synthesis_result(
         tokens += ["-l", label]
     tokens.append(subcommand)
 
-    command = shlex.join(tokens) if hasattr(shlex, "join") else " ".join(
-        shlex.quote(t) for t in tokens
-    )
+    command = shlex.join(tokens)
     explanation = _build_explanation(plan, user_query, kind, settings)
     return {
         "status": "ready",
@@ -154,6 +153,65 @@ def plan_to_synthesis_result(
         "confidence": _confidence_for(plan, settings),
         "missing_info": [],
         "alternatives": [],
+    }
+
+
+def _is_compact_spec(plan: dict[str, Any]) -> bool:
+    intent = plan.get("intent")
+    return isinstance(intent, str) and (
+        intent in {"workflow", "advisory", "decline", "chitchat"}
+    ) and ("jobs" in plan or "message" in plan)
+
+
+def _compact_spec_to_synthesis_result(plan: dict[str, Any]) -> dict[str, Any]:
+    from chemsmart.agent.v8_adapter import adapt
+
+    adapted = adapt(plan, validate=True)
+    intent = str(adapted.get("intent") or plan.get("intent") or "")
+    if intent != "workflow":
+        message = str(adapted.get("message") or plan.get("message") or "")
+        status = "infeasible" if intent == "decline" else "needs_clarification"
+        if intent == "chitchat":
+            status = "infeasible"
+        return {
+            "status": status,
+            "command": "",
+            "explanation": message or "No executable workflow was requested.",
+            "confidence": "high",
+            "missing_info": [],
+            "alternatives": [],
+        }
+
+    commands = [
+        command
+        for command in adapted.get("commands", [])
+        if isinstance(command, str) and command.strip()
+    ]
+    if not commands:
+        errors = adapted.get("errors") or ["no commands rendered"]
+        return _needs_clarification(
+            "Planner SPEC could not be rendered: " + "; ".join(map(str, errors)),
+            ["jobs"],
+        )
+    if adapted.get("valid") is False:
+        return _needs_clarification(
+            "Rendered command failed chemsmart validation: "
+            + "; ".join(map(str, adapted.get("errors") or [])),
+            ["validated_cli_command"],
+        )
+
+    explanation = "Prepared chemsmart command from compact SPEC."
+    if len(commands) > 1:
+        explanation = (
+            "Prepared a multi-step chemsmart workflow from compact SPEC."
+        )
+    return {
+        "status": "ready",
+        "command": commands[0],
+        "explanation": explanation,
+        "confidence": "high" if adapted.get("valid") else "medium",
+        "missing_info": [],
+        "alternatives": commands[1:],
     }
 
 

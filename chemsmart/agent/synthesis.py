@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from chemsmart.agent.cli_schema import build_chemsmart_cli_schema
+from chemsmart.agent.kind_disambiguator import disambiguate
 from chemsmart.agent.prompts.synthesis import build_synthesis_system_prompt
 from chemsmart.agent.services.conversation_memory import (
     ConversationMemory,
@@ -55,9 +56,6 @@ class SynthesisSession:
         self.max_retries = max_retries
         self.debug = debug
         self.memory = ConversationMemory()
-        # The model's verbatim output from the most recent synthesize() call, recorded as the
-        # assistant turn for native multi-turn replay (see _messages_for_request). Kept off the
-        # result dict so the public synthesize() return shape is unchanged.
         self._last_raw_response = ""
 
     def synthesize(self, request: str) -> JsonDict:
@@ -71,17 +69,11 @@ class SynthesisSession:
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             response = self.provider.chat(messages)
-            # Record the model's verbatim output for native multi-turn replay; kept on the
-            # session (not the result dict) so synthesize()'s public shape is unchanged.
             self._last_raw_response = _extract_text(response)
             try:
                 parsed = _parse_json_response(response)
                 if _is_v8_spec(parsed):
-                    # deterministic kind-disambiguation backstop: the 3B model confuses a few kinds
-                    # (modredundant-constraint vs opt+freeze_atoms; Wiberg-bond-index vs DIAS) that no
-                    # amount of training data fixes; the user's request carries the disambiguating signal.
-                    from chemsmart.agent.kind_disambiguator import disambiguate
-                    parsed, _ = disambiguate(request, parsed)
+                    parsed, _changed = disambiguate(request, parsed)
                     return _normalize_v8_spec(parsed)
                 return _normalize_result(parsed)
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -91,7 +83,7 @@ class SynthesisSession:
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": _extract_text(response),
+                        "content": self._last_raw_response,
                     }
                 )
                 messages.append(
@@ -260,16 +252,7 @@ class SynthesisSession:
         return argv
 
     def _messages_for_request(self, request: str) -> list[dict[str, str]]:
-        """Build a NATIVE multi-turn message list: the system prompt, then each prior
-        turn replayed as real ``user``/``assistant`` messages, then the current request.
-
-        The assistant turns carry the model's verbatim SPEC (``assistant_message``), so a
-        follow-up like "change the charge to -1" lets the model edit its own prior spec in
-        context — the format it was effectively prompted with. Turns without an assistant
-        message (e.g. clarification sub-turns, whose content is folded into a later request)
-        are skipped to avoid duplicate/garbled user messages.
-        """
-        messages: list[dict[str, str]] = [
+        messages = [
             {
                 "role": "system",
                 "content": build_synthesis_system_prompt(self.schema),
@@ -286,7 +269,10 @@ class SynthesisSession:
         return messages
 
     def _remember_turn(
-        self, request: str, result: str, assistant_message: str = ""
+        self,
+        request: str,
+        result: str,
+        assistant_message: str = "",
     ) -> None:
         turn = ConversationTurn(
             turn_index=len(self.memory.turns) + 1,
@@ -312,53 +298,6 @@ def _parse_json_response(response: Any) -> JsonDict:
     if not isinstance(parsed, dict):
         raise ValueError("synthesis response must be a JSON object")
     return parsed
-
-
-_V8_INTENTS = {"workflow", "advisory", "decline", "chitchat"}
-
-
-def _is_v8_spec(parsed: JsonDict) -> bool:
-    """A v8 spec-emission model returns {"intent": ..., "jobs"/"message": ...} instead of the
-    {status, command, ...} synthesis shape."""
-    return (
-        isinstance(parsed, dict)
-        and parsed.get("intent") in _V8_INTENTS
-        and ("jobs" in parsed or "message" in parsed)
-        and "status" not in parsed
-    )
-
-
-def _normalize_v8_spec(parsed: JsonDict) -> JsonDict:
-    """Bridge a v8 job spec into the synthesis result shape via the deterministic v8 adapter
-    (parse -> postprocess -> render chemsmart command -> validate)."""
-    from chemsmart.agent import v8_adapter
-
-    out = v8_adapter.adapt(parsed)
-    if out["intent"] == "workflow":
-        commands = out.get("commands") or []
-        command = commands[0] if commands else ""
-        # a chain renders as multiple commands; the lead command is executed, the rest are surfaced
-        return _normalize_result(
-            {
-                "status": "ready" if command else "infeasible",
-                "confidence": "high" if out.get("valid") else "medium",
-                "command": command,
-                "explanation": ("multi-step: " + " ; ".join(commands)) if len(commands) > 1 else "",
-                "missing_info": [] if command else ["adapter produced no command"],
-                "alternatives": commands[1:],
-            }
-        )
-    status = "infeasible" if out["intent"] == "decline" else "needs_clarification"
-    return _normalize_result(
-        {
-            "status": status,
-            "confidence": "low",
-            "command": "",
-            "explanation": out.get("message") or "",
-            "missing_info": [],
-            "alternatives": [],
-        }
-    )
 
 
 def _extract_text(response: Any) -> str:
@@ -412,6 +351,57 @@ def _normalize_result(result: JsonDict) -> JsonDict:
     ):
         raise ValueError("ready command must start with 'chemsmart'")
     return normalized
+
+
+def _is_v8_spec(result: JsonDict) -> bool:
+    intent = result.get("intent")
+    return isinstance(intent, str) and (
+        intent in {"workflow", "advisory", "decline", "chitchat"}
+    ) and ("jobs" in result or "message" in result)
+
+
+def _normalize_v8_spec(result: JsonDict) -> JsonDict:
+    from chemsmart.agent.v8_adapter import adapt
+
+    adapted = adapt(result, validate=True)
+    intent = str(adapted.get("intent") or result.get("intent") or "")
+    if intent != "workflow":
+        message = str(adapted.get("message") or result.get("message") or "")
+        status = "infeasible" if intent == "decline" else "needs_clarification"
+        if intent == "chitchat":
+            status = "infeasible"
+        return {
+            "status": status,
+            "command": "",
+            "explanation": message or "No executable workflow was requested.",
+            "confidence": "high",
+            "missing_info": [],
+            "alternatives": [],
+        }
+
+    commands = [
+        command
+        for command in adapted.get("commands", [])
+        if isinstance(command, str) and command.strip()
+    ]
+    if not commands:
+        raise ValueError(
+            "v8 compact SPEC rendered no commands: "
+            + "; ".join(map(str, adapted.get("errors") or []))
+        )
+    if adapted.get("valid") is False:
+        raise ValueError(
+            "v8 compact SPEC failed chemsmart validation: "
+            + "; ".join(map(str, adapted.get("errors") or []))
+        )
+    return {
+        "status": "ready",
+        "command": commands[0],
+        "explanation": "Prepared chemsmart command from compact SPEC.",
+        "confidence": "high" if adapted.get("valid") else "medium",
+        "missing_info": [],
+        "alternatives": commands[1:],
+    }
 
 
 def _validate_tokens_against_schema(

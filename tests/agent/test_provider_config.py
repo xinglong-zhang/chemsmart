@@ -72,7 +72,7 @@ def test_load_active_provider_config_rejects_unknown_type(tmp_path):
 active: localish
 providers:
   localish:
-    type: local
+    type: localish
     api_key: key
     model: model
     base_url: ""
@@ -82,6 +82,37 @@ providers:
 
     with pytest.raises(AgentProviderConfigError):
         load_active_provider_config(yaml_path)
+
+
+def test_load_active_provider_config_accepts_local_provider(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("HF_TOKEN", "hf-test")
+    yaml_path = _write_agent_yaml(
+        tmp_path / "agent.yaml",
+        """
+active: local_chemsmart_v13_1
+providers:
+  local_chemsmart_v13_1:
+    type: local
+    model: chemsmart-qwen2.5-coder-3b-instruct-v13_1
+    base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1
+    adapter_repo_id: ""
+    hf_token_env: HF_TOKEN
+    hf_token: ""
+    runtime: ""
+""",
+    )
+
+    config = load_active_provider_config(yaml_path)
+
+    assert config is not None
+    assert config.type == "local"
+    assert config.hf_token == "hf-test"
+    assert (
+        config.base_model_id
+        == "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1"
+    )
 
 
 def test_load_active_provider_config_resolves_api_key_env(

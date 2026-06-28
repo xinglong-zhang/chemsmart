@@ -1,4 +1,4 @@
-"""OpenAI-compatible FastAPI server that fronts the V4 LoRA model.
+"""OpenAI-compatible FastAPI server that fronts the v13.1 local model.
 
 Exposes ``POST /v1/chat/completions`` so that ``chemsmart agent ask`` can call
 the local model with ``type: openai`` + a custom ``base_url`` in
@@ -15,11 +15,11 @@ Usage (Colab):
 
 Then in ``~/.chemsmart/agent/agent.yaml``::
 
-    active: local_chemsmart_v4
+    active: local_chemsmart_v13_1
     providers:
-      local_chemsmart_v4:
+      local_chemsmart_v13_1:
         type: openai
-        model: chemsmart-qwen2.5-7b-lora
+        model: chemsmart-qwen2.5-coder-3b-instruct-v13_1
         base_url: https://<ngrok-tunnel>/v1
         api_key: local-not-used
 """
@@ -34,7 +34,7 @@ from typing import Any
 from chemsmart.agent.local.adapter import plan_to_synthesis_result
 from chemsmart.agent.local.generator import generate_plan
 
-_MODEL_ID = "chemsmart-qwen2.5-7b-lora"
+_MODEL_ID = "chemsmart-qwen2.5-coder-3b-instruct-v13_1"
 
 
 def build_app(bundle: Any) -> Any:

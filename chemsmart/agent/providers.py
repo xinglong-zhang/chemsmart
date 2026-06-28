@@ -7,6 +7,7 @@ Dispatches on AI_PROVIDER env var; v1 supports Anthropic and OpenAI.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -25,18 +26,7 @@ _GATEWAY_URL_OPENAI = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 _GATEWAY_URL_ANTHROPIC = (
     "https://factchat-cloud.mindlogic.ai/v1/gateway/claude"
 )
-_AVAILABLE_MODELS = {
-    "openai": [
-        "gpt-5.4",
-        "gpt-5.4-mini",
-        "gpt-5.4-nano",
-        "gemini-3.1-pro-preview",
-        "grok-4",
-        "sonar-pro",
-    ],
-    "anthropic": ["claude-sonnet-4-6"],
-}
-_SUPPORTED = frozenset(_AVAILABLE_MODELS)
+_SUPPORTED = frozenset({"openai", "anthropic"})
 _PING_MESSAGES: Any = [{"role": "user", "content": "ping"}]
 DEFAULT_TIMEOUT_S = 30
 _OPENAI_USES_MCT = re.compile(r"^(gpt-5|o1|o3|o4)")
@@ -173,7 +163,7 @@ class OpenAIProvider:
 
 
 class LocalProvider:
-    """In-process V4 LoRA provider for ``type: local`` agent.yaml entries.
+    """In-process v13.1 local provider for ``type: local`` agent.yaml entries.
 
     Loads :mod:`chemsmart.agent.local` lazily on the first ``chat`` call so
     ``chemsmart agent doctor`` / ``chemsmart config agent`` stay fast and do
@@ -181,7 +171,7 @@ class LocalProvider:
     """
 
     name = "local"
-    default_model = "chemsmart-qwen2.5-7b-lora"
+    default_model = "chemsmart-qwen2.5-coder-3b-instruct-v13_1"
 
     def __init__(
         self,
@@ -252,8 +242,6 @@ class LocalProvider:
         except ValueError as exc:
             raise ProviderError(f"local provider decode failed: {exc}") from exc
         result = plan_to_synthesis_result(plan, user_query)
-        import json as _json
-
         return {
             "id": "local-completion",
             "model": self.default_model,
@@ -262,7 +250,7 @@ class LocalProvider:
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": _json.dumps(result, ensure_ascii=False),
+                        "content": json.dumps(result, ensure_ascii=False),
                     },
                     "finish_reason": "stop",
                 }
@@ -281,10 +269,10 @@ class LocalProvider:
             from transformers import AutoTokenizer  # type: ignore[import-not-found]
         except ImportError as exc:
             raise ProviderError(
-                "local provider requires transformers + peft + bitsandbytes. "
+                "local provider requires transformers; PEFT/bitsandbytes are "
+                "only needed when adapter_repo_id is set. "
                 "Install with: pip install 'huggingface_hub>=0.34.0,<1.0' "
-                "'transformers==4.56.2' 'peft==0.16.0' 'accelerate==1.10.0' "
-                "'bitsandbytes==0.47.0'"
+                "'transformers==4.56.2' 'accelerate==1.10.0'"
             ) from exc
 
         try:
@@ -325,7 +313,7 @@ def _resolve_api_env_path(explicit: str | None) -> str | None:
 
 def get_provider(
     env_path: Optional[str] = None,
-) -> AnthropicProvider | OpenAIProvider:
+) -> AnthropicProvider | OpenAIProvider | LocalProvider:
     """Return a configured provider instance; raises ProviderError on failure.
 
     Prefer ``~/.chemsmart/agent/agent.yaml``. If it is absent, fall back to the

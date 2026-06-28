@@ -1,8 +1,7 @@
-"""Greedy decode wrapper around the loaded V4 LoRA model.
+"""Greedy decode wrapper around the loaded v13.1 local model.
 
-Returns the parsed planner JSON (with the V4 postprocessor already applied).
-The synthesis layer can then translate the atomic plan into a single CLI
-command via :mod:`chemsmart.agent.local.adapter`.
+Returns the parsed compact SPEC with deterministic v13.1 postprocessing
+applied before the synthesis adapter renders chemsmart commands.
 """
 
 from __future__ import annotations
@@ -12,9 +11,9 @@ import re
 from importlib import resources
 from typing import Any
 
-from chemsmart.agent.local.postprocessor import postprocess
+from chemsmart.agent.postprocess_v8 import postprocess
 
-_DEFAULT_MAX_NEW_TOKENS = 1024
+_DEFAULT_MAX_NEW_TOKENS = 512
 _DEFAULT_TEMPERATURE = 0.0
 _SYSTEM_PROMPT_FILE = "planner_compact.md"
 
@@ -63,10 +62,10 @@ def generate_plan(
         history: Optional prior turns as Qwen chat messages.
         max_new_tokens: Cap on generated tokens.
         temperature: Decoding temperature; ``0.0`` triggers greedy.
-        apply_postprocessor: Whether to apply V4 token-level repairs.
+        apply_postprocessor: Whether to apply compact-SPEC repairs.
 
     Returns:
-        A planner dict ``{"steps": [...], "rationale": str, "intent": str}``,
+        A planner dict, usually ``{"intent":"workflow","jobs":[...]}``,
         optionally repaired in place by :func:`postprocess`.
 
     Raises:
