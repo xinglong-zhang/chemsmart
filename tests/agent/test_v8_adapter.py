@@ -159,3 +159,22 @@ def test_native_multiturn_history_is_replayed():
     assert seen["last"][2]["content"] == spec1          # the prior raw SPEC, verbatim
     assert seen["last"][3]["content"] == "change the charge to -1"
     assert r2["status"] == "ready" and "-1" in r2["command"]
+
+
+def test_index_settings_render_comma_and_fragment1_only():
+    """fragment_indices/high_level_atoms/freeze_atoms must render COMMA-separated (get_list_from_string_range),
+    and fragment_indices must be fragment-1 only (legacy [[f1],[f2]] -> f1)."""
+    from chemsmart.agent.v8_adapter import adapt
+    import json
+    # flat fragment-1
+    cmd = adapt(json.dumps({"intent": "workflow", "jobs": [{"id": 1, "kind": "gaussian.dias",
+        "file": "m.xyz", "charge": 0, "mult": 1, "settings": {"fragment_indices": [1, 2, 3, 4]}}]}))["commands"][0]
+    assert "--fragment-indices 1,2,3,4" in cmd, cmd
+    # legacy nested -> fragment 1 only
+    cmd = adapt(json.dumps({"intent": "workflow", "jobs": [{"id": 1, "kind": "gaussian.dias",
+        "file": "m.xyz", "charge": 0, "mult": 1, "settings": {"fragment_indices": [[1, 2], [3, 4, 5]]}}]}))["commands"][0]
+    assert "--fragment-indices 1,2" in cmd and "3,4,5" not in cmd, cmd
+    # qmmm + freeze comma
+    cmd = adapt(json.dumps({"intent": "workflow", "jobs": [{"id": 1, "kind": "gaussian.qmmm",
+        "file": "m.xyz", "charge": 0, "mult": 1, "settings": {"high_level_atoms": [1, 2, 3], "low_level_atoms": [9, 10]}}]}))["commands"][0]
+    assert "--high-level-atoms 1,2,3" in cmd and "--low-level-atoms 9,10" in cmd, cmd

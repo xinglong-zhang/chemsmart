@@ -53,6 +53,23 @@ def _fmt(v):
     return shlex.quote(str(v))
 
 
+# Settings whose CLI option is parsed by chemsmart.utils.get_list_from_string_range, which expects a
+# COMMA/range string ("1,2,3" or "1-3") — NOT space-separated. (verified: cli/gaussian/{dias,qmmm,opt,ts}.py,
+# cli/orca/opt.py, jobs/gaussian/dias.py). fragment_indices is fragment-1 ONLY (runtime derives fragment 2).
+_RANGE_KEYS = {"fragment_indices", "high_level_atoms", "low_level_atoms", "freeze_atoms"}
+
+
+def _fmt_range(v):
+    """Render an atom-index setting as a comma string the runtime range-parser accepts."""
+    if isinstance(v, str):
+        return shlex.quote(v)
+    if isinstance(v, list):
+        # legacy two-fragment form [[f1],[f2]] -> fragment 1 only (the runtime computes the complement)
+        flat = v[0] if (v and isinstance(v[0], list)) else v
+        return shlex.quote(",".join(str(x) for x in flat))
+    return shlex.quote(str(v))
+
+
 def _job_command(job, geom_of):
     """Render one job to a chemsmart command (geom_of: id -> upstream output reference for chains)."""
     kind = job["kind"]; prog = kind.split(".", 1)[0]
@@ -71,7 +88,7 @@ def _job_command(job, geom_of):
     for k, v in settings.items():
         flag = _FLAG.get(k)
         if flag:
-            parts += [flag, _fmt(v)]
+            parts += [flag, _fmt_range(v) if k in _RANGE_KEYS else _fmt(v)]
     # subcommand: *.freq has no standalone CLI subcommand -> run an opt job tagged as a frequency calc
     if kind.endswith(".freq"):
         parts += ["opt", "--jobtype", "freq"]

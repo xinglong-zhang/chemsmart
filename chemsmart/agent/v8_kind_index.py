@@ -35,7 +35,7 @@ KIND_SETTINGS = {
     "gaussian.resp":  {},
     "gaussian.tddft": {"nstates": "int", "states": "any", "root": "any", "eqsolv": "any",
                        "additional_route_parameters": "str"},
-    "gaussian.dias":  {"fragment_indices": "pairs"},
+    "gaussian.dias":  {"fragment_indices": "ints"},  # fragment 1 ONLY (runtime derives fragment 2 complement)
     "gaussian.crest": {"num_confs_to_run": "int", "grouping_strategy": "str", "num_groups": "int"},
     "gaussian.traj":  {"num_structures_to_run": "int", "proportion_structures_to_use": "num",
                        "grouping_strategy": "str"},
@@ -54,6 +54,12 @@ KIND_SETTINGS = {
     "orca.qmmm":      {"high_level_atoms": "ints"},
     "orca.qrc":       {},
 }
+# `additional_route_parameters` is a GROUP-LEVEL gaussian/orca CLI option (cli/gaussian/gaussian.py:578,
+# cli/orca/orca.py:444) -> valid on EVERY subcommand. Allow it on all kinds so the model can pass a real
+# route keyword (e.g. scf=tight) on sp/freq/etc. and the postprocessor does not silently drop it.
+for _kind in KIND_SETTINGS:
+    KIND_SETTINGS[_kind].setdefault("additional_route_parameters", "str")
+
 GEOM_KINDS = {"opt", "ts", "irc", "scan", "modred", "crest", "neb"}
 
 
