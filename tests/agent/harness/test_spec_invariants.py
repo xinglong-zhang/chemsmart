@@ -50,3 +50,12 @@ def test_missing_modred_atoms_requires_decline():
     )
 
     assert any(issue.rule_id == "spec.decline_contract" for issue in issues)
+
+
+def test_fragment_indices_with_underscore_counts_as_structural_slot():
+    issues = SI.check_spec(
+        _workflow("gaussian.dias", {"fragment_indices": [[1], [2]]}),
+        "Need a Gaussian DIAS job for mol.xyz; fragment_indices [[1], [2]].",
+    )
+
+    assert not [issue for issue in issues if issue.rule_id == "spec.decline_contract"]

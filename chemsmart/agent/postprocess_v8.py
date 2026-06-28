@@ -8,9 +8,10 @@ Fixes (the dominant failure classes from the eval):
     `calcfc`/`noeigentest`/`ts` keys, a nested `ts:{...}` blob, and any runtime-owned key);
   * reconstruct the TS route into the canonical LIST `additional_opt_options_in_route:["ts","calcfc",...]`
     from the mangled forms the model emits (a comma-string, loose booleans, or a nested `ts` dict);
-  * coerce other array-typed keys from string -> list; drop `freq:false` (the default).
-It does NOT change kind/file/charge/mult and cannot invent a missing setting or fix a wrong kind — those
-are model-quality issues. Importable + self-test."""
+  * coerce other array-typed keys from string -> list; drop `freq:false` (the default);
+  * canonicalize the known synthetic `*.opt+freq` / `*.opt.freq` kinds into `*.opt` with `freq:true`.
+It does NOT change file/charge/mult and cannot invent missing structural settings — those are model-quality
+issues. Importable + self-test."""
 from __future__ import annotations
 import re
 
@@ -38,6 +39,14 @@ _TSSEARCH_DROP = {"tssearch", "optts"}
 # B1 verified: bare `gaussian ts` already emits opt=(ts,calcfc,noeigentest) (calcfc = the Hessian); a TS
 # does NOT auto-imply a separate freq job. So do not force freq — the model emits freq only if requested.
 _FORCE_PRESENT = {}
+_KIND_CANON = {
+    "gaussian.opt+freq": "gaussian.opt",
+    "gaussian.opt.freq": "gaussian.opt",
+    "gaussian.opt_freq": "gaussian.opt",
+    "orca.opt+freq": "orca.opt",
+    "orca.opt.freq": "orca.opt",
+    "orca.opt_freq": "orca.opt",
+}
 
 
 def _split(s):
@@ -96,8 +105,14 @@ def postprocess(spec):
         return spec
     for job in spec.get("jobs", []):
         kind = job.get("kind")
-        allowed = set(KI.KIND_SETTINGS.get(kind, {}))
+        raw_kind = str(kind).strip().lower().replace(" ", "")
+        canon_kind = _KIND_CANON.get(raw_kind)
         se = dict(job.get("settings", {}) or {})
+        if canon_kind:
+            job["kind"] = canon_kind
+            kind = canon_kind
+            se["freq"] = True
+        allowed = set(KI.KIND_SETTINGS.get(kind, {}))
         # v9.0) drop the redundant-default / bogus orca.ts search type (keeps meaningful values e.g. scants)
         if kind == "orca.ts" and str(se.get("tssearch_type", "")).lower() in _TSSEARCH_DROP:
             se.pop("tssearch_type", None)
@@ -159,6 +174,9 @@ def _selftest():
         ("valid tddft kept", "gaussian.tddft", {"nstates": 3}, {"nstates": 3}),
         ("runtime-owned stripped", "gaussian.opt", {"functional": "B3LYP", "freq": True}, {"freq": True}),
         ("orca.opt freq KEPT (B2)", "orca.opt", {"freq": True}, {"freq": True}),
+        ("gaussian.opt+freq kind canonicalized", "gaussian.opt+freq", {}, {"freq": True}),
+        ("orca.opt.freq kind canonicalized", "orca.opt.freq", {"additional_route_parameters": "tightscf"},
+         {"additional_route_parameters": "tightscf", "freq": True}),
         # --- v9 hardening (CLI-verified, diversity-preserving) ---
         ("orca.ts bogus tssearch dropped", "orca.ts", {"tssearch_type": "tssearch"}, None),
         ("orca.ts default optts dropped", "orca.ts", {"tssearch_type": "optts"}, None),

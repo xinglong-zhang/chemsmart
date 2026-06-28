@@ -39,8 +39,10 @@ TS_RUNTIME_ROUTE = {"ts", "calcfc", "noeigentest"}
 KIND_CANON = {
     "gaussian.opt+freq": "gaussian.opt",
     "gaussian.opt.freq": "gaussian.opt",
+    "gaussian.opt_freq": "gaussian.opt",
     "orca.opt+freq": "orca.opt",
     "orca.opt.freq": "orca.opt",
+    "orca.opt_freq": "orca.opt",
     "gaussian.qm/mm": "gaussian.qmmm",
     "orca.qm/mm": "orca.qmmm",
 }
@@ -67,7 +69,7 @@ _COORD_SPEC = re.compile(r"\b[BAD]\s+\d+(?:\s+\d+)+\b")
 
 
 def query_specifies_atoms(query: str) -> bool:
-    text = query or ""
+    text = (query or "").replace("_", " ")
     return bool(_CUE.search(text) or _ATOM_PAIR.search(text) or _COORD_SPEC.search(text))
 
 

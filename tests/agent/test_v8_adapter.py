@@ -36,6 +36,27 @@ def test_postprocess_freq_renders_via_route_param_not_jobtype():
     assert "opt_freq" not in out["commands"][0] and "--freq" not in out["commands"][0]
 
 
+def test_postprocess_canonicalizes_opt_freq_kind():
+    spec = {"intent": "workflow", "jobs": [
+        {"id": 1, "kind": "gaussian.opt+freq", "file": "m.xyz", "charge": 0, "mult": 1},
+        {"id": 2, "kind": "orca.opt.freq", "file": "n.xyz", "charge": -1, "mult": 2,
+         "settings": {"additional_route_parameters": "tightscf"}},
+    ]}
+
+    out = v8_adapter.adapt(json.dumps(spec))
+
+    assert out["valid"], out["errors"]
+    assert out["spec"]["jobs"][0]["kind"] == "gaussian.opt"
+    assert out["spec"]["jobs"][0]["settings"] == {"freq": True}
+    assert out["spec"]["jobs"][1]["kind"] == "orca.opt"
+    assert out["spec"]["jobs"][1]["settings"] == {
+        "additional_route_parameters": "tightscf",
+        "freq": True,
+    }
+    assert "gaussian --additional-route-parameters freq opt" in out["commands"][0]
+    assert "orca --additional-route-parameters 'tightscf freq' opt" in out["commands"][1]
+
+
 def test_adapt_renders_valid_chemsmart_command():
     spec = {"intent": "workflow", "jobs": [
         {"id": 1, "kind": "gaussian.opt", "file": "mol/water.xyz", "charge": 0, "mult": 1,
