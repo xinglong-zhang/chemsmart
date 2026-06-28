@@ -50,7 +50,15 @@ _KIND_CANON = {
 
 
 def _split(s):
-    return [x for x in re.split(r"[,\s]+", str(s).strip()) if x]
+    # also split on "/" so mangled runtime-owned forms like "calcfc/noeigentest" decompose into tokens
+    return [x for x in re.split(r"[,\s/]+", str(s).strip()) if x]
+
+
+# genuine TS opt extras (mirror harness gaussian_ts._ALLOWED_EXTRA); anything else is dropped as junk/leak
+_ALLOWED_TS_EXTRA = re.compile(
+    r"^(calcall|cartesian|tight|(maxstep|maxcycles|maxcycle|recalcfc|maxmicroiterations)=\d+)$",
+    re.IGNORECASE,
+)
 
 
 def _fix_scan_type(sd):
@@ -77,7 +85,8 @@ def _route_opts(se, is_ts=False):
     if isinstance(aor, str):
         opts += _split(aor)
     elif isinstance(aor, list):
-        opts += [str(x) for x in aor]
+        for x in aor:
+            opts += _split(x)   # split each element too (absorbs "calcfc/noeigentest" list items)
     for key in ("ts", "calcfc", "noeigentest"):
         v = se.get(key, None)
         if v is None and key not in se:
@@ -123,7 +132,10 @@ def postprocess(spec):
         # Emitting the canonical route duplicates it AND renders the list as a literal -> BROKEN. So keep
         # ONLY genuine EXTRA opts beyond the canonical triple; omit otherwise (let the runtime derive it).
         if isinstance(kind, str) and kind.endswith(".ts") and "additional_opt_options_in_route" in allowed:
-            extras = [t for t in _route_opts(se, is_ts=False) if t not in ROUTE]
+            # drop the runtime-owned triple (ts/calcfc/noeigentest, now split out of mangled forms) AND
+            # any non-allowlisted junk (e.g. tssearch_type=1) -> keep ONLY genuine extras (maxstep=N, calcall)
+            extras = [t for t in _route_opts(se, is_ts=False)
+                      if t not in ROUTE and _ALLOWED_TS_EXTRA.match(t)]
             if extras:
                 new["additional_opt_options_in_route"] = extras
         # 2) keep only module-accepted keys; coerce + canonicalize
