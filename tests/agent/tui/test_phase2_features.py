@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from textual import events
 
 from chemsmart.agent.cli import agent
+from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 from chemsmart.agent.tui.app import ChemsmartTuiApp, launch_tui
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.popups import ApprovalOverlay, ApprovalResult
@@ -198,6 +199,17 @@ def test_agent_cli_ask_streams_without_tui_import(
     monkeypatch.setattr(
         "chemsmart.agent.core._default_session_root",
         lambda: str(tmp_path / "sessions"),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.cli._agent_log_root",
+        lambda: tmp_path,
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
 
     runner = CliRunner()

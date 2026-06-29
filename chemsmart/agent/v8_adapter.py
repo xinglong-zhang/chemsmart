@@ -50,6 +50,14 @@ _RANGE_SETTINGS = {
     "low_level_atoms",
     "freeze_atoms",
 }
+_SUBCOMMAND_SETTINGS = {
+    "freeze_atoms",
+    "recalc_hess",
+    "trust_radius",
+    "tssearch_type",
+    "scan_definition",
+    "modred",
+}
 
 
 def _subcommand(kind: str) -> str:
@@ -121,16 +129,19 @@ def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
         settings["additional_route_parameters"] = (
             f"{route} freq" if isinstance(route, str) and route else "freq"
         )
+    group_flags: list[str] = []
+    subcommand_flags: list[str] = []
     for key, value in settings.items():
         flag = _FLAG.get(key)
         if flag:
-            parts += [flag, _fmt_setting(key, value)]
+            target = (
+                subcommand_flags
+                if key in _SUBCOMMAND_SETTINGS
+                else group_flags
+            )
+            target += [flag, _fmt_setting(key, value)]
 
-    if kind.endswith(".freq"):
-        parts += ["opt", "--jobtype", "freq"]
-    else:
-        parts.append(_subcommand(kind))
-
+    parts += group_flags
     source = job.get("file") or geom_of.get(job.get("geom_from"))
     if not source:
         source = "<upstream-geometry>"
@@ -140,6 +151,11 @@ def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
     parts += ["-c", str(job["charge"]), "-m", str(job["mult"])]
     if job.get("label"):
         parts += ["-l", shlex.quote(str(job["label"]))]
+    if kind.endswith(".freq"):
+        parts += ["opt", "--jobtype", "freq"]
+    else:
+        parts.append(_subcommand(kind))
+    parts += subcommand_flags
     return " ".join(parts)
 
 

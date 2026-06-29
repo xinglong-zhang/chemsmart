@@ -10,6 +10,7 @@ from click.testing import CliRunner
 
 from chemsmart.agent.cli import agent
 from chemsmart.agent.core import Plan
+from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 
 from ._agent_session_helpers import FakeProvider
 from .tui._helpers import write_session_fixture
@@ -65,6 +66,13 @@ def test_agent_cli_run_prints_plan_and_writes_decision_log(
         "chemsmart.agent.cli._default_session_root",
         lambda: str(tmp_path / "sessions"),
     )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -88,6 +96,13 @@ def test_agent_tools_shows_descriptions(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         "chemsmart.agent.cli._default_session_root",
         lambda: str(tmp_path / "sessions"),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
 
     runner = CliRunner()
@@ -318,6 +333,13 @@ def test_ask_renders_advisory_plan(
     monkeypatch.setattr(
         "chemsmart.agent.cli._default_session_root",
         lambda: str(tmp_path / "sessions"),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
 
     runner = CliRunner()

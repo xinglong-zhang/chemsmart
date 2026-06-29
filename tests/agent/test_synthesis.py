@@ -8,6 +8,10 @@ from typing import Any
 import pytest
 from click.testing import CliRunner
 
+from chemsmart.agent.harness.command_semantics import (
+    CommandSemanticIssue,
+    CommandSemanticResult,
+)
 from chemsmart.agent.cli import agent
 from chemsmart.agent.synthesis import SynthesisSession
 
@@ -110,6 +114,107 @@ def test_validate_command_rejects_non_chemsmart_command() -> None:
 
     assert ok is False
     assert "chemsmart" in error
+
+
+def test_run_interactive_retries_after_runtime_semantic_reject(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    bad = {
+        "status": "ready",
+        "command": "chemsmart run orca opt -f water.xyz -c 0 -m 1",
+        "explanation": "Bad order.",
+        "confidence": "high",
+        "missing_info": [],
+        "alternatives": [],
+    }
+    repaired = {
+        "status": "ready",
+        "command": "chemsmart run orca -f water.xyz -c 0 -m 1 opt",
+        "explanation": "Repaired.",
+        "confidence": "high",
+        "missing_info": [],
+        "alternatives": [],
+    }
+    provider = DummyProvider([_json_response(bad), _json_response(repaired)])
+    session = SynthesisSession(provider=provider, max_retries=1)
+    semantic_calls: list[str] = []
+    confirmed: list[str] = []
+
+    def fake_semantic(command: str, **_kwargs: Any) -> CommandSemanticResult:
+        semantic_calls.append(command)
+        if len(semantic_calls) == 1:
+            return CommandSemanticResult(
+                verdict="reject",
+                command=command,
+                checked_argv=("chemsmart", "run", "orca", "opt"),
+                issues=(
+                    CommandSemanticIssue(
+                        rule_id="cmd.semantic.safe_execution_failed",
+                        severity="reject",
+                        message="No server implemented for local.yaml.",
+                        missing_info=(
+                            "valid chemsmart server configuration",
+                            "available servers: ['colab_orca']",
+                        ),
+                    ),
+                ),
+                stderr_tail=(
+                    "No server implemented for local.yaml.\n"
+                    "Currently available servers: ['colab_orca']"
+                ),
+            )
+        return CommandSemanticResult(verdict="ok", command=command)
+
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        fake_semantic,
+    )
+    monkeypatch.setattr(
+        session,
+        "confirm_and_execute",
+        lambda command, *_args: confirmed.append(command),
+    )
+
+    session.run_interactive("run ORCA water opt")
+
+    assert confirmed == ["chemsmart run orca -f water.xyz -c 0 -m 1 opt"]
+    assert "Notice: synthesized command failed runtime semantic validation" in (
+        capsys.readouterr().out
+    )
+    retry_prompt = provider.messages[1][-1]["content"]
+    assert "runtime semantic validation" in retry_prompt
+    assert "valid chemsmart server configuration" in retry_prompt
+    assert "available servers: ['colab_orca']" in retry_prompt
+
+
+def test_run_interactive_reports_final_runtime_semantic_reject(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    provider = DummyProvider([_json_response(READY)])
+    session = SynthesisSession(provider=provider, max_retries=0)
+
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="reject",
+            command=command,
+            issues=(
+                CommandSemanticIssue(
+                    rule_id="cmd.semantic.generated_input_missing",
+                    severity="reject",
+                    message="no input generated",
+                ),
+            ),
+        ),
+    )
+
+    session.run_interactive("make a ts job")
+
+    output = capsys.readouterr().out
+    assert "Notice: synthesized command failed runtime semantic validation" in output
+    assert "no input generated" in output
 
 
 def test_confirm_and_execute_inserts_test_only_for_sub(
@@ -252,7 +357,7 @@ def test_multiturn_clarification_is_carried_in_memory(
     provider = DummyProvider(
         [_json_response(clarification), _json_response(READY)]
     )
-    session = SynthesisSession(provider=provider)
+    session = SynthesisSession(provider=provider, semantic_gate=False)
 
     monkeypatch.setattr("click.prompt", lambda *_args, **_kwargs: "def2-svp")
     monkeypatch.setattr(session, "confirm_and_execute", lambda *_args: None)
@@ -277,6 +382,13 @@ def test_agent_ask_e2e_uses_synthesis_session(
     monkeypatch.setattr(
         "chemsmart.agent.synthesis.subprocess.run",
         lambda args, check=False: calls.append(args),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
     monkeypatch.setattr(
         "chemsmart.agent.cli._agent_log_root",
@@ -311,6 +423,13 @@ def test_agent_ask_debug_flag_plumbs_to_synthesis_session(
     monkeypatch.setattr(
         "chemsmart.agent.synthesis.subprocess.run",
         lambda args, check=False: calls.append(args),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
     )
 
     result = CliRunner().invoke(

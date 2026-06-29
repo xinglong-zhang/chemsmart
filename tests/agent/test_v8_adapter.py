@@ -115,6 +115,31 @@ def test_freq_renders_via_route_param_not_fake_flag():
     assert "--freq" not in out["commands"][0]
 
 
+def test_orca_program_options_render_before_job_subcommand():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "orca.opt",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+                "label": "water_orca_opt",
+                "settings": {"additional_route_parameters": "GridX7"},
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec))
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run orca --additional-route-parameters GridX7 -f water.xyz "
+        "-c 0 -m 1 -l water_orca_opt opt"
+    ]
+
+
 def test_adapt_chain_renders_ordered_commands():
     spec = {
         "intent": "workflow",

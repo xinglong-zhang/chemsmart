@@ -13,6 +13,10 @@ from rich.console import Console
 from rich.panel import Panel
 
 from chemsmart.agent.cli_schema import build_chemsmart_cli_schema
+from chemsmart.agent.harness.command_semantics import (
+    CommandSemanticResult,
+    evaluate_command_semantics,
+)
 from chemsmart.agent.kind_disambiguator import disambiguate
 from chemsmart.agent.prompts.synthesis import build_synthesis_system_prompt
 from chemsmart.agent.services.conversation_memory import (
@@ -34,6 +38,8 @@ class SynthesisSession:
         schema: JsonDict | None = None,
         max_retries: int = 2,
         debug: bool = False,
+        semantic_gate: bool = True,
+        semantic_timeout_s: float = 30.0,
     ) -> None:
         """Initialize a synthesis session.
 
@@ -45,6 +51,9 @@ class SynthesisSession:
             debug: When True, executed chemsmart subprocesses keep their
                 default ``--verbose`` behavior; when False (default), a
                 ``--no-verbose`` flag is injected so the child stays quiet.
+            semantic_gate: When True, ready run/sub commands must pass the
+                safe runtime semantic gate before user confirmation.
+            semantic_timeout_s: Timeout for the safe semantic validation run.
         """
 
         if provider is None:
@@ -55,8 +64,11 @@ class SynthesisSession:
         self.schema = schema or build_chemsmart_cli_schema()
         self.max_retries = max_retries
         self.debug = debug
+        self.semantic_gate = semantic_gate
+        self.semantic_timeout_s = semantic_timeout_s
         self.memory = ConversationMemory()
         self._last_raw_response = ""
+        self._last_semantic_result: CommandSemanticResult | None = None
 
     def synthesize(self, request: str) -> JsonDict:
         """Return a structured synthesis result for ``request``.
@@ -148,26 +160,10 @@ class SynthesisSession:
             click.echo(result.get("explanation") or "Request is infeasible.")
             return
 
+        result = self._repair_ready_result(current_request, result)
+        if result is None:
+            return
         command = str(result.get("command") or "")
-        valid, error = self.validate_command(command)
-        if not valid:
-            retry_request = (
-                f"Original request: {current_request}\n"
-                f"Your command failed validation: {error}\n"
-                "Return a corrected legal command."
-            )
-            result = self.synthesize(retry_request)
-            if result["status"] != "ready":
-                click.echo(
-                    result.get("explanation")
-                    or "Could not synthesize command."
-                )
-                return
-            command = str(result.get("command") or "")
-            valid, error = self.validate_command(command)
-            if not valid:
-                click.echo(f"Synthesized command is invalid: {error}")
-                return
 
         self._remember_turn(
             current_request,
@@ -179,6 +175,79 @@ class SynthesisSession:
             str(result.get("explanation") or ""),
             str(result.get("confidence") or "low"),
         )
+
+    def _repair_ready_result(
+        self,
+        current_request: str,
+        result: JsonDict,
+    ) -> JsonDict | None:
+        """Validate a ready result and ask the model to repair gate failures."""
+
+        semantic_retried = False
+        for attempt in range(self.max_retries + 1):
+            if result["status"] != "ready":
+                click.echo(
+                    result.get("explanation")
+                    or "Could not synthesize command."
+                )
+                return None
+
+            command = str(result.get("command") or "")
+            valid, error = self.validate_command(command)
+            retry_request: str | None = None
+            if not valid:
+                retry_request = (
+                    f"Original request: {current_request}\n"
+                    f"Your command failed validation: {error}\n"
+                    "Return a corrected legal command."
+                )
+            elif self.semantic_gate:
+                semantic_result = evaluate_command_semantics(
+                    command,
+                    timeout_s=self.semantic_timeout_s,
+                )
+                self._last_semantic_result = semantic_result
+                if semantic_result.verdict == "reject":
+                    semantic_retried = True
+                    click.echo(
+                        "Notice: synthesized command failed runtime semantic "
+                        "validation; asking the model to repair it."
+                    )
+                    retry_request = semantic_result.correction_prompt(
+                        current_request
+                    )
+                elif semantic_result.verdict == "warn":
+                    click.echo(
+                        "Notice: synthesized command passed with runtime "
+                        "semantic warnings."
+                    )
+                else:
+                    if semantic_retried:
+                        click.echo(
+                            "Notice: synthesized command was repaired after "
+                            "runtime semantic validation."
+                        )
+                    return result
+            else:
+                return result
+
+            if retry_request is None:
+                return result
+            if attempt >= self.max_retries:
+                if self.semantic_gate and self._last_semantic_result:
+                    click.echo(
+                        "Synthesized command failed runtime semantic "
+                        "validation: "
+                        + "; ".join(
+                            issue.message
+                            for issue in self._last_semantic_result.issues
+                        )
+                    )
+                else:
+                    click.echo(f"Synthesized command is invalid: {error}")
+                return None
+            result = self.synthesize(retry_request)
+        return None
 
     def confirm_and_execute(
         self,
