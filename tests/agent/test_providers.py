@@ -48,6 +48,36 @@ def test_get_provider_prefers_yaml_config(monkeypatch):
     }
 
 
+def test_get_provider_builds_mlx_local_provider(monkeypatch):
+    config = AgentProviderConfig(
+        name="local_chemsmart_v13_1_mlx4",
+        type="local",
+        api_key="hf-test",
+        model="chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit",
+        base_url="",
+        extra_headers={},
+        base_model_id=(
+            "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
+        ),
+        adapter_repo_id="",
+        hf_token="hf-test",
+        runtime="mlx",
+        project="test",
+    )
+    monkeypatch.setattr(
+        providers, "load_active_provider_config", lambda: config
+    )
+
+    provider = providers.get_provider()
+
+    assert isinstance(provider, providers.LocalProvider)
+    assert provider.default_model == (
+        "chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
+    )
+    assert provider._runtime == "mlx"
+    assert provider._project == "test"
+
+
 def test_get_provider_legacy_fallback_emits_deprecation_warning(
     monkeypatch, tmp_path
 ):

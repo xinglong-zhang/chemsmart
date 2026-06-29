@@ -28,6 +28,7 @@ class AgentProviderConfig:
     adapter_repo_id: str = ""
     hf_token: str = ""
     runtime: str = ""
+    project: str = ""
 
 
 class AgentProviderConfigError(Exception):
@@ -105,6 +106,7 @@ def load_active_provider_config(
     base_model_id = _optional_string_field(provider_entry, "base_model_id")
     adapter_repo_id = _optional_string_field(provider_entry, "adapter_repo_id")
     runtime = _optional_string_field(provider_entry, "runtime")
+    project = _optional_string_field(provider_entry, "project")
 
     if provider_type == "local":
         api_key = _resolve_local_hf_token(provider_entry)
@@ -122,6 +124,7 @@ def load_active_provider_config(
         adapter_repo_id=adapter_repo_id,
         hf_token=api_key if provider_type == "local" else "",
         runtime=runtime,
+        project=project,
     )
 
 

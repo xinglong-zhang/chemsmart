@@ -118,7 +118,11 @@ def _fmt_setting(key: str, value: Any) -> str:
     return shlex.quote(str(value))
 
 
-def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
+def _job_command(
+    job: dict[str, Any],
+    geom_of: dict[Any, str],
+    default_project: str | None = None,
+) -> str:
     kind = str(job["kind"])
     program = kind.split(".", 1)[0]
     verb = "sub" if job.get("execution") == "submit" else "run"
@@ -126,6 +130,9 @@ def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
     if job.get("server"):
         parts += ["-s", shlex.quote(str(job["server"]))]
     parts.append(program)
+    project = job.get("project") or default_project
+    if project:
+        parts += ["-p", shlex.quote(str(project))]
 
     settings = dict(job.get("settings", {}) or {})
     freq_true = settings.pop("freq", None) is True
@@ -164,7 +171,10 @@ def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
     return " ".join(parts)
 
 
-def spec_to_commands(spec: dict[str, Any]) -> list[str]:
+def spec_to_commands(
+    spec: dict[str, Any],
+    default_project: str | None = None,
+) -> list[str]:
     """Render a postprocessed workflow SPEC into ordered chemsmart commands."""
     if not isinstance(spec, dict) or spec.get("intent") != "workflow":
         return []
@@ -173,7 +183,7 @@ def spec_to_commands(spec: dict[str, Any]) -> list[str]:
     for job in spec.get("jobs", []):
         if not isinstance(job, dict):
             continue
-        commands.append(_job_command(job, geom_of))
+        commands.append(_job_command(job, geom_of, default_project))
         geom_of[job.get("id")] = (
             str(job.get("label"))
             if job.get("label")
@@ -182,7 +192,11 @@ def spec_to_commands(spec: dict[str, Any]) -> list[str]:
     return commands
 
 
-def adapt(model_text: str | dict[str, Any], validate: bool = True) -> dict[str, Any]:
+def adapt(
+    model_text: str | dict[str, Any],
+    validate: bool = True,
+    default_project: str | None = None,
+) -> dict[str, Any]:
     """Parse, postprocess, render, and optionally validate a compact SPEC."""
     out: dict[str, Any] = {
         "intent": None,
@@ -209,7 +223,7 @@ def adapt(model_text: str | dict[str, Any], validate: bool = True) -> dict[str, 
         out["valid"] = True if validate else None
         return out
 
-    out["commands"] = spec_to_commands(spec)
+    out["commands"] = spec_to_commands(spec, default_project=default_project)
     if validate:
         out["valid"], out["errors"] = _validate_all(out["commands"])
     return out

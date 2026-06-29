@@ -140,6 +140,28 @@ def test_orca_program_options_render_before_job_subcommand():
     ]
 
 
+def test_default_project_renders_as_runtime_owned_program_option():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.opt",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test -f water.xyz -c 0 -m 1 opt"
+    ]
+
+
 def test_gaussian_dias_fragment_indices_render_after_subcommand():
     spec = {
         "intent": "workflow",

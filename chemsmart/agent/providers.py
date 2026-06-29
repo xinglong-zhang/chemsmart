@@ -182,6 +182,7 @@ class LocalProvider:
         base_model_id: str = "",
         adapter_repo_id: str = "",
         runtime: str = "",
+        project: str = "",
     ) -> None:
         del base_url, extra_headers
         self.default_model = model or type(self).default_model
@@ -189,11 +190,24 @@ class LocalProvider:
         self._base_model_id = base_model_id
         self._adapter_repo_id = adapter_repo_id
         self._runtime = runtime or None
+        self._project = project
         self._bundle: Any = None
 
     def _ensure_loaded(self) -> Any:
         if self._bundle is not None:
             return self._bundle
+        if self._runtime == "mlx":
+            from chemsmart.agent.local.mlx_loader import (
+                MODEL_REPO_ID,
+                load_mlx_model,
+            )
+
+            self._bundle = load_mlx_model(
+                model_id=self._base_model_id or MODEL_REPO_ID,
+                hf_token=self._hf_token or None,
+            )
+            return self._bundle
+
         from chemsmart.agent.local.loader import (
             ADAPTER_REPO_ID,
             BASE_MODEL_ID,
@@ -241,7 +255,11 @@ class LocalProvider:
             plan = generate_plan(bundle, user_query, history=history)
         except ValueError as exc:
             raise ProviderError(f"local provider decode failed: {exc}") from exc
-        result = plan_to_synthesis_result(plan, user_query)
+        result = plan_to_synthesis_result(
+            plan,
+            user_query,
+            default_project=self._project or None,
+        )
         return {
             "id": "local-completion",
             "model": self.default_model,
@@ -260,6 +278,9 @@ class LocalProvider:
 
     def ping(self) -> dict[str, Any]:
         started = time.perf_counter()
+        if self._runtime == "mlx":
+            return self._ping_mlx(started)
+
         try:
             from chemsmart.agent.local.loader import BASE_MODEL_ID
         except Exception as exc:  # pragma: no cover - import guard
@@ -284,6 +305,27 @@ class LocalProvider:
             raise ProviderError(
                 f"local provider ping failed (cache missing? run "
                 f"`chemsmart config agent` to pre-fetch). underlying: {exc}"
+            ) from exc
+        return {
+            "ok": True,
+            "resolved_model": self.default_model,
+            "latency_ms": _latency_ms(started),
+        }
+
+    def _ping_mlx(self, started: float) -> dict[str, Any]:
+        try:
+            from chemsmart.agent.local.mlx_loader import MODEL_REPO_ID
+            from huggingface_hub import HfApi
+        except Exception as exc:  # pragma: no cover - optional runtime guard
+            raise ProviderError(f"MLX local provider ping failed: {exc}") from exc
+
+        repo_id = self._base_model_id or MODEL_REPO_ID
+        token = self._hf_token or None
+        try:
+            HfApi(token=token).model_info(repo_id)
+        except Exception as exc:
+            raise ProviderError(
+                f"MLX local provider ping failed for {repo_id!r}: {exc}"
             ) from exc
         return {
             "ok": True,
@@ -346,6 +388,7 @@ def get_provider(
                 base_model_id=config.base_model_id,
                 adapter_repo_id=config.adapter_repo_id,
                 runtime=config.runtime,
+                project=config.project,
             )
         raise ProviderError(f"provider type {config.type!r} is not supported")
 

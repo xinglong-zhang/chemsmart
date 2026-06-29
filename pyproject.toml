@@ -82,6 +82,14 @@ agent-tui = [
     "watchdog>=3,<5",
     "pyperclip",
 ]
+local-agent = [
+    "huggingface_hub>=0.34.0,<1.0",
+    "transformers==4.56.2",
+    "accelerate==1.10.0",
+]
+local-mlx = [
+    "mlx-lm==0.31.3",
+]
 
 [project.urls]
 ##"Documentation" = "https://documentation_url"

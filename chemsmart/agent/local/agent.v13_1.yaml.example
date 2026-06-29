@@ -10,5 +10,15 @@ providers:
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: ""
+    project: ""
+  local_chemsmart_v13_1_mlx4:
+    type: local
+    model: chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
+    base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
+    adapter_repo_id: ""
+    hf_token_env: HF_TOKEN
+    hf_token: ""
+    runtime: mlx
+    project: ""
     base_url: ""
     extra_headers: {}

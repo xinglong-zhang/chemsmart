@@ -19,6 +19,9 @@ user -> chemsmart agent ask
 
 - `loader.py` loads the merged v13.1 HF model by default. If
   `adapter_repo_id` is set, it falls back to the older base+PEFT LoRA path.
+- `mlx_loader.py` loads the converted 4-bit MLX model when `runtime: mlx`.
+  This is the Apple Silicon path; it keeps the same compact SPEC,
+  postprocessor, adapter, and harness.
 - `generator.py` greedy-decodes compact JSON SPEC.
 - `postprocess_v8.py` strips runtime-owned leaks, canonicalizes opt+freq, and
   removes TS route tokens that chemsmart derives itself.
@@ -42,6 +45,16 @@ providers:
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: ""
+    project: ""  # optional runtime-owned Gaussian/ORCA project, e.g. test
+  local_chemsmart_v13_1_mlx4:
+    type: local
+    model: chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
+    base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
+    adapter_repo_id: ""
+    hf_token_env: HF_TOKEN
+    hf_token: ""
+    runtime: mlx
+    project: ""  # optional runtime-owned Gaussian/ORCA project, e.g. test
 ```
 
 Install runtime dependencies once:
@@ -56,6 +69,23 @@ For PEFT adapter experiments, also install:
 ```bash
 pip install "peft==0.16.0" "bitsandbytes==0.47.0"
 ```
+
+For Apple Silicon MLX 4-bit inference, use a separate environment or accept
+the newer MLX stack pins:
+
+```bash
+pip install "mlx-lm==0.31.3"
+```
+
+`mlx-lm==0.31.3` currently depends on `transformers>=5` and
+`huggingface_hub>=1.5`, which intentionally differs from the PyTorch local
+provider stack. Select `active: local_chemsmart_v13_1_mlx4` to use the MLX
+runtime.
+
+If runtime semantic validation reports missing project settings, install a
+project YAML such as `~/.chemsmart/gaussian/test.yaml` and set
+`project: test` on the active local provider. This remains runtime-owned; the
+model target must not emit project/method/solvent fields.
 
 Then verify:
 

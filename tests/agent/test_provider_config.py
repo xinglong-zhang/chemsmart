@@ -115,6 +115,39 @@ providers:
     )
 
 
+def test_load_active_provider_config_accepts_mlx_runtime(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("HF_TOKEN", "hf-test")
+    yaml_path = _write_agent_yaml(
+        tmp_path / "agent.yaml",
+        """
+active: local_chemsmart_v13_1_mlx4
+providers:
+  local_chemsmart_v13_1_mlx4:
+    type: local
+    model: chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
+    base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
+    adapter_repo_id: ""
+    hf_token_env: HF_TOKEN
+    hf_token: ""
+    runtime: mlx
+    project: test
+""",
+    )
+
+    config = load_active_provider_config(yaml_path)
+
+    assert config is not None
+    assert config.type == "local"
+    assert config.runtime == "mlx"
+    assert (
+        config.base_model_id
+        == "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
+    )
+    assert config.project == "test"
+
+
 def test_load_active_provider_config_resolves_api_key_env(
     monkeypatch, tmp_path
 ):
