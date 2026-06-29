@@ -239,6 +239,11 @@ A natural-language agent that plans and executes Gaussian/ORCA workflows and HPC
 chemistry tools (input generation, dry-runs, submissions) with HPC inspection tools (scheduler state,
 job status, log tailing) under a permission model that keeps risky actions auditable.
 
+Current local-agent status and performance are tracked in
+[`docs/agent-current-status.md`](docs/agent-current-status.md). The v13.1 local
+model adapter, dataset evidence, and clean eval summary are tracked in
+[`docs/agent-v13_1-local-adapter.md`](docs/agent-v13_1-local-adapter.md).
+
 ### Setup
 
 ```bash

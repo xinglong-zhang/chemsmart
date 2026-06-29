@@ -95,6 +95,32 @@ Summary:
 The eval used the corrected v13.1 representative split, not the earlier v12
 full26 file that produced misleading harness rejects.
 
+## Runtime Smoke Evidence
+
+Colab session:
+`chemsmart-v131-agent-e2e-fixed-20260629-150553`
+
+Local artifact:
+`/private/tmp/chemsmart-v131-agent-e2e-fixed-20260629-150553/result.json`
+
+Key outcomes:
+
+- Gaussian one-turn local run with project config passed the runtime semantic
+  gate and generated `water_opt_fake.com`.
+- Missing server and missing project cases were rejected with explicit runtime
+  evidence instead of producing silently invalid commands.
+- `sub --test --fake` with server and project reached `status=ready` with
+  semantic verdict `warn`; the warning records that submit dry-run did not
+  leave a generated input artifact in the current working directory.
+- DIAS with explicit fragment atoms rendered `--fragment-indices` after the
+  `dias` subcommand and generated the expected fragment and full-system
+  Gaussian inputs.
+- DIAS/QM/MM requests without required atom selections still exposed model-side
+  hallucinated atom indices. Runtime missing-field gates must remain mandatory.
+
+The current detailed status report is maintained in
+`docs/agent-current-status.md`.
+
 ## Runtime Adapter Contract
 
 The model emits compact SPEC:
