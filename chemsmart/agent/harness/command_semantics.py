@@ -246,7 +246,11 @@ def evaluate_command_semantics(
                 missing_info=tuple(_missing_info_from_output(stderr_tail, stdout_tail)),
             )
         )
-    elif _is_software_command(tokens, top_index) and not generated_inputs:
+    elif (
+        top_level == "run"
+        and _is_software_command(tokens, top_index)
+        and not generated_inputs
+    ):
         issues.append(
             CommandSemanticIssue(
                 rule_id="cmd.semantic.generated_input_missing",
@@ -254,6 +258,18 @@ def evaluate_command_semantics(
                 message=(
                     "safe runtime validation succeeded but no Gaussian/ORCA "
                     "input file was generated"
+                ),
+                evidence={"cwd": str(workdir), "argv": safe_argv},
+            )
+        )
+    elif _is_software_command(tokens, top_index) and not generated_inputs:
+        issues.append(
+            CommandSemanticIssue(
+                rule_id="cmd.semantic.submit_generated_input_not_observed",
+                severity="warn",
+                message=(
+                    "safe submit validation succeeded but no Gaussian/ORCA "
+                    "input file was observed in the working directory"
                 ),
                 evidence={"cwd": str(workdir), "argv": safe_argv},
             )

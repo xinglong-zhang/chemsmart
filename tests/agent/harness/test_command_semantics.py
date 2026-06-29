@@ -129,3 +129,35 @@ def test_wrong_option_order_is_rejected_before_safe_execution(
 
     assert result.verdict == "reject"
     assert result.failed_rule_ids == ["cmd.semantic.option_order"]
+
+
+def test_submit_success_without_observed_input_warns(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def fake_run(argv, **_kwargs):
+        assert argv[:5] == [
+            sys.executable,
+            "-m",
+            "chemsmart.cli.main",
+            "--no-verbose",
+            "sub",
+        ]
+        assert "--test" in argv
+        assert "--fake" in argv
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(
+        "chemsmart.agent.harness.command_semantics.subprocess.run",
+        fake_run,
+    )
+
+    result = evaluate_command_semantics(
+        "chemsmart sub -s cluster gaussian -p test -f water.xyz -c 0 -m 1 opt",
+        cwd=tmp_path,
+    )
+
+    assert result.verdict == "warn"
+    assert result.failed_rule_ids == [
+        "cmd.semantic.submit_generated_input_not_observed"
+    ]
