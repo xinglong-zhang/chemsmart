@@ -12,6 +12,6 @@ Submodules:
 """
 
 from chemsmart.agent.local.adapter import plan_to_synthesis_result
-from chemsmart.agent.postprocess_v8 import postprocess
+from chemsmart.agent.local.postprocessor import postprocess
 
 __all__ = ["plan_to_synthesis_result", "postprocess"]

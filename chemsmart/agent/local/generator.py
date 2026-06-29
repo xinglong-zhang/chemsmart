@@ -11,7 +11,7 @@ import re
 from importlib import resources
 from typing import Any
 
-from chemsmart.agent.postprocess_v8 import postprocess
+from chemsmart.agent.local.postprocessor import postprocess
 
 _DEFAULT_MAX_NEW_TOKENS = 512
 _DEFAULT_TEMPERATURE = 0.0
