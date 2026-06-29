@@ -507,6 +507,11 @@ def _missing_info_from_output(*chunks: str) -> list[str]:
     if "Currently available servers:" in text:
         tail = text.split("Currently available servers:", 1)[1].splitlines()[0]
         missing.append(f"available servers: {tail.strip()}")
+    if "No project settings implemented" in text:
+        missing.append("valid chemsmart project configuration")
+    if "Currently available projects:" in text:
+        tail = text.split("Currently available projects:", 1)[1].splitlines()[0]
+        missing.append(f"available projects: {tail.strip()}")
     if "No such file or directory" in text or "FileNotFoundError" in text:
         missing.append("existing local input file path")
     return missing

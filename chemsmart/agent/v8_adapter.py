@@ -51,6 +51,11 @@ _RANGE_SETTINGS = {
     "freeze_atoms",
 }
 _SUBCOMMAND_SETTINGS = {
+    "fragment_indices",
+    "high_level_atoms",
+    "low_level_atoms",
+    "nimages",
+    "joboption",
     "freeze_atoms",
     "recalc_hess",
     "trust_radius",
@@ -147,7 +152,7 @@ def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
         source = "<upstream-geometry>"
     parts += ["-f", shlex.quote(str(source))]
     if kind == "orca.neb" and job.get("product_file"):
-        parts += ["-e", shlex.quote(str(job["product_file"]))]
+        subcommand_flags += ["-e", shlex.quote(str(job["product_file"]))]
     parts += ["-c", str(job["charge"]), "-m", str(job["mult"])]
     if job.get("label"):
         parts += ["-l", shlex.quote(str(job["label"]))]

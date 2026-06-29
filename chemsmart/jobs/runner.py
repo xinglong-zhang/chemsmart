@@ -271,6 +271,7 @@ class JobRunner(RegistryMixin):
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
 
+        matching = []
         for runner in runners:
             logger.debug(f"Checking runner: {runner} for job: {job}")
             runner_jobtypes = runner.JOBTYPES
@@ -280,19 +281,31 @@ class JobRunner(RegistryMixin):
                 runner_jobtypes = []
 
             if jobtype in runner_jobtypes:
-                logger.info(f"Using job runner: {runner} for job: {job}")
+                matching.append(runner)
 
-                # If scratch is None, use the runner's default scratch value
-                scratch = (
-                    scratch
-                    if scratch is not None
-                    else getattr(runner, "SCRATCH", None)
-                )
-                logger.info(
-                    f"Using scratch={scratch} for job runner: {runner}"
-                )
+        preferred = [
+            runner
+            for runner in matching
+            if bool(getattr(runner, "FAKE", False)) is bool(fake)
+        ]
+        if preferred:
+            runner = preferred[0]
+            logger.info(f"Using job runner: {runner} for job: {job}")
 
-                return runner(server=server, scratch=scratch, **kwargs)
+            # If scratch is None, use the runner's default scratch value
+            scratch = (
+                scratch
+                if scratch is not None
+                else getattr(runner, "SCRATCH", None)
+            )
+            logger.info(f"Using scratch={scratch} for job runner: {runner}")
+
+            return runner(
+                server=server,
+                scratch=scratch,
+                fake=fake,
+                **kwargs,
+            )
 
         raise ValueError(
             f"Could not find any runners for job: {job}. \n"

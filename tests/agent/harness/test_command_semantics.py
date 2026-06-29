@@ -82,6 +82,34 @@ def test_safe_execution_failure_reports_missing_runtime_info(
     assert "available servers: ['colab_orca']" in result.missing_info
 
 
+def test_safe_execution_failure_reports_missing_project_info(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def fake_run(argv, **_kwargs):
+        return subprocess.CompletedProcess(
+            argv,
+            1,
+            "",
+            "FileNotFoundError: No project settings implemented for test.\n"
+            "Currently available projects: []\n",
+        )
+
+    monkeypatch.setattr(
+        "chemsmart.agent.harness.command_semantics.subprocess.run",
+        fake_run,
+    )
+
+    result = evaluate_command_semantics(
+        "chemsmart run gaussian -p test -f water.xyz -c 0 -m 1 opt",
+        cwd=tmp_path,
+    )
+
+    assert result.verdict == "reject"
+    assert "valid chemsmart project configuration" in result.missing_info
+    assert "available projects: []" in result.missing_info
+
+
 def test_wrong_option_order_is_rejected_before_safe_execution(
     monkeypatch,
     tmp_path,

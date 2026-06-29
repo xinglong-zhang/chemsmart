@@ -140,6 +140,82 @@ def test_orca_program_options_render_before_job_subcommand():
     ]
 
 
+def test_gaussian_dias_fragment_indices_render_after_subcommand():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.dias",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"fragment_indices": [1, 2]},
+                "label": "water_dias",
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec))
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -f water.xyz -c 0 -m 1 "
+        "-l water_dias dias --fragment-indices 1,2"
+    ]
+
+
+def test_qmmm_atom_indices_render_after_subcommand():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.qmmm",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"high_level_atoms": [1], "low_level_atoms": [2, 3]},
+                "label": "water_qmmm",
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec))
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -f water.xyz -c 0 -m 1 "
+        "-l water_qmmm qmmm --high-level-atoms 1 --low-level-atoms 2,3"
+    ]
+
+
+def test_orca_neb_options_render_after_subcommand():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "orca.neb",
+                "file": "reactant.xyz",
+                "product_file": "product.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"nimages": 6, "joboption": "NEB-TS"},
+                "label": "neb_job",
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec))
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run orca -f reactant.xyz -c 0 -m 1 -l neb_job "
+        "neb --nimages 6 --joboption NEB-TS -e product.xyz"
+    ]
+
+
 def test_adapt_chain_renders_ordered_commands():
     spec = {
         "intent": "workflow",
