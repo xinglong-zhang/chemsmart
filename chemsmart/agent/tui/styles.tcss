@@ -1,0 +1,89 @@
+Screen {
+    background: $background;
+}
+
+Transcript {
+    margin: 1 1 0 1;
+}
+
+Composer {
+    margin: 1;
+}
+
+FooterWidget {
+    dock: bottom;
+}
+
+.user-cell {
+    border-left: outer $accent;
+}
+
+.user-request-cell {
+    width: auto;
+    max-width: 80%;
+}
+
+.agent-cell {
+    border-left: outer $primary;
+}
+
+.plan-cell {
+    border: round $warning;
+    padding: 0 1;
+}
+
+.dry-run-cell {
+    border-left: outer $success;
+}
+
+.method-cell {
+    border-left: outer $secondary;
+}
+
+.geometry-cell {
+    border-left: outer $accent;
+}
+
+.runtime-cell {
+    border-left: outer $warning;
+}
+
+.submission-cell {
+    border-left: outer $primary;
+}
+
+.critic-cell {
+    border: round $secondary;
+    padding: 0 1;
+}
+
+.job-status-cell {
+    border-left: outer $accent;
+}
+
+.run-result-cell {
+    border-left: outer $success;
+}
+
+.workflow-cell {
+    border-left: outer $primary;
+}
+
+.molecule-cell {
+    border-left: outer $secondary;
+}
+
+.error-cell {
+    border-left: outer $error;
+}
+
+ChemsmartHeader {
+    width: 1fr;
+    height: 1;
+    margin: 0 1 0 1;
+    padding: 0 1;
+    content-align: left middle;
+    overflow-x: hidden;
+    overflow-y: hidden;
+}
+

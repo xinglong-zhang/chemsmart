@@ -1,0 +1,14 @@
+# Copy into ~/.chemsmart/agent/agent.yaml or merge this provider into an
+# existing agent config.
+active: local_chemsmart_v13_1
+providers:
+  local_chemsmart_v13_1:
+    type: local
+    model: chemsmart-qwen2.5-coder-3b-instruct-v13_1
+    base_model_id: Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1
+    adapter_repo_id: ""
+    hf_token_env: HF_TOKEN
+    hf_token: ""
+    runtime: ""
+    base_url: ""
+    extra_headers: {}
