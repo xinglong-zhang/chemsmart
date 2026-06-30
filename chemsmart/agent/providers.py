@@ -255,6 +255,9 @@ class LocalProvider:
             plan = generate_plan(bundle, user_query, history=history)
         except ValueError as exc:
             raise ProviderError(f"local provider decode failed: {exc}") from exc
+        from chemsmart.agent.kind_disambiguator import disambiguate
+
+        plan, _changed = disambiguate(user_query, plan)
         result = plan_to_synthesis_result(
             plan,
             user_query,
@@ -273,6 +276,11 @@ class LocalProvider:
                     "finish_reason": "stop",
                 }
             ],
+            # The model's own SPEC (not the adapted status/command result) is what it
+            # must see as assistant history for multi-turn edits. The session replays
+            # this verbatim so follow-ups ("change the server", "make it a ts") carry
+            # context, matching the format the model was prompted/generalizes with.
+            "raw_plan": json.dumps(plan, ensure_ascii=False),
             "usage": {"prompt_tokens": 0, "completion_tokens": 0},
         }
 
