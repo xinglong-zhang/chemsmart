@@ -8,7 +8,10 @@ from typing import Any
 
 from chemsmart.agent.postprocess_v8 import postprocess
 
-_SUBCMD = {"sp": "singlepoint", "tddft": "td"}
+# Map SPEC kind suffixes to real CLI subcommands. Gaussian/ORCA single-point is
+# `sp` in the real CLI, not `singlepoint`; `*.freq` has no literal subcommand
+# and is routed through `opt` with a route-level freq keyword.
+_SUBCMD = {"tddft": "td", "freq": "opt"}
 _FLAG = {
     "additional_opt_options_in_route": "--additional-opt-options",
     "additional_route_parameters": "--additional-route-parameters",
@@ -62,6 +65,10 @@ _SUBCOMMAND_SETTINGS = {
     "tssearch_type",
     "scan_definition",
     "modred",
+    "nstates",
+    "states",
+    "root",
+    "eqsolv",
 }
 
 
@@ -135,8 +142,8 @@ def _job_command(
         parts += ["-p", shlex.quote(str(project))]
 
     settings = dict(job.get("settings", {}) or {})
-    freq_true = settings.pop("freq", None) is True
-    if freq_true and not kind.endswith(".freq"):
+    freq_true = settings.pop("freq", None) is True or kind.endswith(".freq")
+    if freq_true:
         route = settings.get("additional_route_parameters")
         settings["additional_route_parameters"] = (
             f"{route} freq" if isinstance(route, str) and route else "freq"
@@ -163,10 +170,7 @@ def _job_command(
     parts += ["-c", str(job["charge"]), "-m", str(job["mult"])]
     if job.get("label"):
         parts += ["-l", shlex.quote(str(job["label"]))]
-    if kind.endswith(".freq"):
-        parts += ["opt", "--jobtype", "freq"]
-    else:
-        parts.append(_subcommand(kind))
+    parts.append(_subcommand(kind))
     parts += subcommand_flags
     return " ".join(parts)
 

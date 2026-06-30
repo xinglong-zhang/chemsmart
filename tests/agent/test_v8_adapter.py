@@ -111,8 +111,80 @@ def test_freq_renders_via_route_param_not_fake_flag():
 
     assert out["valid"], out["errors"]
     assert "--additional-route-parameters freq" in out["commands"][0]
+    assert out["commands"][0].endswith(" opt")
     assert "opt_freq" not in out["commands"][0]
     assert "--freq" not in out["commands"][0]
+    assert "--jobtype" not in out["commands"][0]
+
+
+def test_gaussian_sp_renders_real_sp_subcommand():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.sp",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test -f water.xyz -c 0 -m 1 sp"
+    ]
+    assert "singlepoint" not in out["commands"][0]
+
+
+def test_orca_sp_renders_real_sp_subcommand():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "orca.sp",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run orca -p test -f water.xyz -c 0 -m 1 sp"
+    ]
+    assert "singlepoint" not in out["commands"][0]
+
+
+def test_gaussian_freq_renders_real_opt_route_freq():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.freq",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test --additional-route-parameters freq "
+        "-f water.xyz -c 0 -m 1 opt"
+    ]
+    assert "--jobtype" not in out["commands"][0]
 
 
 def test_orca_program_options_render_before_job_subcommand():
@@ -137,6 +209,30 @@ def test_orca_program_options_render_before_job_subcommand():
     assert out["commands"] == [
         "chemsmart run orca --additional-route-parameters GridX7 -f water.xyz "
         "-c 0 -m 1 -l water_orca_opt opt"
+    ]
+
+
+def test_gaussian_tddft_options_render_after_td_subcommand():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.tddft",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"nstates": 10, "root": 2, "eqsolv": True},
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test -f water.xyz -c 0 -m 1 td "
+        "--nstates 10 --root 2 --eqsolv true"
     ]
 
 
