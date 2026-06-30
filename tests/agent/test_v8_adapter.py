@@ -236,6 +236,30 @@ def test_gaussian_tddft_options_render_after_td_subcommand():
     ]
 
 
+def test_gaussian_tddft_drops_invalid_numeric_states_choice():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.tddft",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"nstates": 5, "states": 2, "root": 2},
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test -f water.xyz -c 0 -m 1 td "
+        "--nstates 5 --root 2"
+    ]
+
+
 def test_default_project_renders_as_runtime_owned_program_option():
     spec = {
         "intent": "workflow",
@@ -433,3 +457,53 @@ def test_kind_disambiguator_fixes_high_confidence_confusions():
     assert changed is True
     assert fixed["jobs"][0]["kind"] == "gaussian.modred"
     assert fixed["jobs"][0]["settings"]["modred"] == [[3, 4]]
+
+    orca_opt = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "orca.opt",
+                "file": "m.xyz",
+                "charge": 0,
+                "mult": 1,
+            }
+        ],
+    }
+    fixed, changed = disambiguate(
+        "Run ORCA OptTS locally for m.xyz, neutral singlet.",
+        copy.deepcopy(orca_opt),
+    )
+    assert changed is True
+    assert fixed["jobs"][0]["kind"] == "orca.ts"
+
+    plain_opt, changed = disambiguate(
+        "Run ORCA opt for m.xyz, neutral singlet.",
+        copy.deepcopy(orca_opt),
+    )
+    assert changed is False
+    assert plain_opt["jobs"][0]["kind"] == "orca.opt"
+
+
+def test_gaussian_modred_renders_python_list_literal_coordinates():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.modred",
+                "file": "examples/h2o.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"modred": [[1, 2]]},
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test -f examples/h2o.xyz -c 0 -m 1 "
+        "modred --coordinates '[[1,2]]'"
+    ]

@@ -111,6 +111,12 @@ def _pair_value(value: Any) -> str:
     return str(value)
 
 
+def _literal_list_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, separators=(",", ":"))
+
+
 def _fmt_setting(key: str, value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -118,7 +124,9 @@ def _fmt_setting(key: str, value: Any) -> str:
         return shlex.quote(_range_value(value, first_fragment_only=True))
     if key in _RANGE_SETTINGS:
         return shlex.quote(_range_value(value))
-    if key in {"modred", "scan_definition"}:
+    if key == "modred":
+        return shlex.quote(_literal_list_value(value))
+    if key == "scan_definition":
         return shlex.quote(_pair_value(value))
     if isinstance(value, list):
         return shlex.quote(",".join(str(item) for item in value))
