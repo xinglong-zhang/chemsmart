@@ -82,6 +82,13 @@ class SynthesisSession:
         for attempt in range(self.max_retries + 1):
             response = self.provider.chat(messages)
             self._last_raw_response = _extract_text(response)
+            # The local provider pre-adapts the model output into a status/command
+            # result; replay the model's raw SPEC (when provided) as assistant history
+            # so multi-turn follow-ups see the schema the model actually emits.
+            if isinstance(response, dict) and isinstance(
+                response.get("raw_plan"), str
+            ):
+                self._last_raw_response = response["raw_plan"]
             try:
                 parsed = _parse_json_response(response)
                 if _is_v8_spec(parsed):

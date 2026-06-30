@@ -8,7 +8,10 @@ from typing import Any
 
 from chemsmart.agent.postprocess_v8 import postprocess
 
-_SUBCMD = {"sp": "singlepoint", "tddft": "td"}
+# Map SPEC kind suffixes to real CLI subcommands. Gaussian/ORCA single-point is
+# `sp` in the real CLI, not `singlepoint`; `*.freq` has no literal subcommand
+# and is routed through `opt` with a route-level freq keyword.
+_SUBCMD = {"tddft": "td", "freq": "opt"}
 _FLAG = {
     "additional_opt_options_in_route": "--additional-opt-options",
     "additional_route_parameters": "--additional-route-parameters",
@@ -62,6 +65,10 @@ _SUBCOMMAND_SETTINGS = {
     "tssearch_type",
     "scan_definition",
     "modred",
+    "nstates",
+    "states",
+    "root",
+    "eqsolv",
 }
 
 
@@ -104,6 +111,12 @@ def _pair_value(value: Any) -> str:
     return str(value)
 
 
+def _literal_list_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, separators=(",", ":"))
+
+
 def _fmt_setting(key: str, value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -111,14 +124,20 @@ def _fmt_setting(key: str, value: Any) -> str:
         return shlex.quote(_range_value(value, first_fragment_only=True))
     if key in _RANGE_SETTINGS:
         return shlex.quote(_range_value(value))
-    if key in {"modred", "scan_definition"}:
+    if key == "modred":
+        return shlex.quote(_literal_list_value(value))
+    if key == "scan_definition":
         return shlex.quote(_pair_value(value))
     if isinstance(value, list):
         return shlex.quote(",".join(str(item) for item in value))
     return shlex.quote(str(value))
 
 
-def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
+def _job_command(
+    job: dict[str, Any],
+    geom_of: dict[Any, str],
+    default_project: str | None = None,
+) -> str:
     kind = str(job["kind"])
     program = kind.split(".", 1)[0]
     verb = "sub" if job.get("execution") == "submit" else "run"
@@ -126,10 +145,13 @@ def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
     if job.get("server"):
         parts += ["-s", shlex.quote(str(job["server"]))]
     parts.append(program)
+    project = job.get("project") or default_project
+    if project:
+        parts += ["-p", shlex.quote(str(project))]
 
     settings = dict(job.get("settings", {}) or {})
-    freq_true = settings.pop("freq", None) is True
-    if freq_true and not kind.endswith(".freq"):
+    freq_true = settings.pop("freq", None) is True or kind.endswith(".freq")
+    if freq_true:
         route = settings.get("additional_route_parameters")
         settings["additional_route_parameters"] = (
             f"{route} freq" if isinstance(route, str) and route else "freq"
@@ -156,15 +178,15 @@ def _job_command(job: dict[str, Any], geom_of: dict[Any, str]) -> str:
     parts += ["-c", str(job["charge"]), "-m", str(job["mult"])]
     if job.get("label"):
         parts += ["-l", shlex.quote(str(job["label"]))]
-    if kind.endswith(".freq"):
-        parts += ["opt", "--jobtype", "freq"]
-    else:
-        parts.append(_subcommand(kind))
+    parts.append(_subcommand(kind))
     parts += subcommand_flags
     return " ".join(parts)
 
 
-def spec_to_commands(spec: dict[str, Any]) -> list[str]:
+def spec_to_commands(
+    spec: dict[str, Any],
+    default_project: str | None = None,
+) -> list[str]:
     """Render a postprocessed workflow SPEC into ordered chemsmart commands."""
     if not isinstance(spec, dict) or spec.get("intent") != "workflow":
         return []
@@ -173,7 +195,7 @@ def spec_to_commands(spec: dict[str, Any]) -> list[str]:
     for job in spec.get("jobs", []):
         if not isinstance(job, dict):
             continue
-        commands.append(_job_command(job, geom_of))
+        commands.append(_job_command(job, geom_of, default_project))
         geom_of[job.get("id")] = (
             str(job.get("label"))
             if job.get("label")
@@ -182,7 +204,11 @@ def spec_to_commands(spec: dict[str, Any]) -> list[str]:
     return commands
 
 
-def adapt(model_text: str | dict[str, Any], validate: bool = True) -> dict[str, Any]:
+def adapt(
+    model_text: str | dict[str, Any],
+    validate: bool = True,
+    default_project: str | None = None,
+) -> dict[str, Any]:
     """Parse, postprocess, render, and optionally validate a compact SPEC."""
     out: dict[str, Any] = {
         "intent": None,
@@ -209,7 +235,7 @@ def adapt(model_text: str | dict[str, Any], validate: bool = True) -> dict[str, 
         out["valid"] = True if validate else None
         return out
 
-    out["commands"] = spec_to_commands(spec)
+    out["commands"] = spec_to_commands(spec, default_project=default_project)
     if validate:
         out["valid"], out["errors"] = _validate_all(out["commands"])
     return out

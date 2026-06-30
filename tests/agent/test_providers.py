@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from chemsmart.agent import providers
@@ -46,6 +48,80 @@ def test_get_provider_prefers_yaml_config(monkeypatch):
         "base_url": "https://example.test/v1",
         "extra_headers": {"X-Test": "value"},
     }
+
+
+def test_get_provider_builds_mlx_local_provider(monkeypatch):
+    config = AgentProviderConfig(
+        name="local_chemsmart_v13_1_mlx4",
+        type="local",
+        api_key="hf-test",
+        model="chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit",
+        base_url="",
+        extra_headers={},
+        base_model_id=(
+            "Smilesjs/chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
+        ),
+        adapter_repo_id="",
+        hf_token="hf-test",
+        runtime="mlx",
+        project="test",
+    )
+    monkeypatch.setattr(
+        providers, "load_active_provider_config", lambda: config
+    )
+
+    provider = providers.get_provider()
+
+    assert isinstance(provider, providers.LocalProvider)
+    assert provider.default_model == (
+        "chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit"
+    )
+    assert provider._runtime == "mlx"
+    assert provider._project == "test"
+
+
+def test_local_provider_applies_kind_disambiguator(monkeypatch):
+    import chemsmart.agent.local.generator as local_generator
+
+    def fake_generate_plan(*_args, **_kwargs):
+        return {
+            "intent": "workflow",
+            "jobs": [
+                {
+                    "id": 1,
+                    "kind": "gaussian.opt",
+                    "file": "examples/h2o.xyz",
+                    "charge": 0,
+                    "mult": 1,
+                    "settings": {"freeze_atoms": [3, 4]},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        providers.LocalProvider,
+        "_ensure_loaded",
+        lambda self: object(),
+    )
+    monkeypatch.setattr(local_generator, "generate_plan", fake_generate_plan)
+
+    provider = providers.LocalProvider(project="test")
+    response = provider.chat(
+        [
+            {
+                "role": "user",
+                "content": (
+                    "Run Gaussian constrained opt freezing the bond between "
+                    "3 and 4 for examples/h2o.xyz, charge 0 mult 1."
+                ),
+            }
+        ]
+    )
+
+    content = response["choices"][0]["message"]["content"]
+    result = json.loads(content)
+    assert result["status"] == "ready"
+    assert result["command"].endswith("modred --coordinates '[[3,4]]'")
 
 
 def test_get_provider_legacy_fallback_emits_deprecation_warning(

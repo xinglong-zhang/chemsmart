@@ -77,3 +77,52 @@ def test_generate_plan_calls_two_argument_local_postprocessor(
     )
 
     assert plan["steps"][0]["args"]["filepath"] == "examples/water.xyz"
+
+
+def test_generate_plan_supports_mlx_backend(monkeypatch) -> None:
+    class _Tokenizer:
+        def apply_chat_template(self, *_args: object, **_kwargs: object) -> str:
+            return "mlx prompt"
+
+    def _fake_mlx_generate(
+        model: object,
+        tokenizer: object,
+        prompt: str,
+        **kwargs: object,
+    ) -> str:
+        assert model == "model"
+        assert isinstance(tokenizer, _Tokenizer)
+        assert prompt == "mlx prompt"
+        assert kwargs["max_tokens"] == 512
+        assert kwargs["verbose"] is False
+        return json.dumps(
+            {
+                "intent": "workflow",
+                "jobs": [
+                    {
+                        "id": 1,
+                        "kind": "gaussian.opt",
+                        "file": "examples/wrong.xyz",
+                        "charge": 0,
+                        "mult": 1,
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "mlx_lm",
+        SimpleNamespace(generate=_fake_mlx_generate),
+    )
+
+    plan = generator.generate_plan(
+        SimpleNamespace(
+            backend="mlx",
+            tokenizer=_Tokenizer(),
+            model="model",
+        ),
+        "run examples/water.xyz",
+    )
+
+    assert plan["jobs"][0]["file"] == "examples/water.xyz"

@@ -15,6 +15,17 @@ _INTERNAL = re.compile(
     re.I,
 )
 _PAIR = re.compile(r"(\d+)\s*[-–to&,]+\s*(\d+)")
+_ORCA_TS = re.compile(
+    r"\borca\b(?=[^.]{0,120}\b("
+    r"opt[-\s]*ts|transition[-\s]*state|first[-\s]*order\s+saddle|"
+    r"saddle\s+(?:point\s+)?(?:search|optimization|opt|hunt)"
+    r")\b)"
+    r"|\b("
+    r"opt[-\s]*ts|transition[-\s]*state|first[-\s]*order\s+saddle|"
+    r"saddle\s+(?:point\s+)?(?:search|optimization|opt|hunt)"
+    r")\b(?=[^.]{0,120}\borca\b)",
+    re.I,
+)
 
 
 def _atoms_from_freeze(value: Any) -> list[int]:
@@ -50,6 +61,21 @@ def disambiguate(query: str, spec: dict[str, Any]) -> tuple[dict[str, Any], bool
             continue
         if kind.endswith(".wbi") and _WIBERG.search(query or ""):
             job.pop("settings", None)
+
+        if program == "orca" and not kind.endswith(".ts") and _ORCA_TS.search(
+            query or ""
+        ):
+            job["kind"] = "orca.ts"
+            allowed = {"recalc_hess", "trust_radius", "tssearch_type"}
+            job["settings"] = {
+                key: value
+                for key, value in settings.items()
+                if key in allowed
+            }
+            if not job["settings"]:
+                job.pop("settings", None)
+            changed = True
+            continue
 
         if (
             kind.endswith(".opt")

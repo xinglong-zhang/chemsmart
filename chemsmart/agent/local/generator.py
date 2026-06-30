@@ -72,6 +72,15 @@ def generate_plan(
         ValueError: If the model output cannot be parsed as JSON after a
             single recovery attempt.
     """
+    if getattr(bundle, "backend", "") == "mlx":
+        return _generate_plan_mlx(
+            bundle,
+            user_query,
+            history=history,
+            max_new_tokens=max_new_tokens,
+            apply_postprocessor=apply_postprocessor,
+        )
+
     import torch
 
     tokenizer = bundle.tokenizer
@@ -90,6 +99,32 @@ def generate_plan(
 
     generated = outputs[0][inputs["input_ids"].shape[1]:]
     raw = tokenizer.decode(generated, skip_special_tokens=True)
+    plan = _parse_planner_json(raw)
+    if apply_postprocessor:
+        plan = postprocess(plan, user_query)
+    return plan
+
+
+def _generate_plan_mlx(
+    bundle: Any,
+    user_query: str,
+    history: list[dict[str, str]] | None = None,
+    max_new_tokens: int = _DEFAULT_MAX_NEW_TOKENS,
+    apply_postprocessor: bool = True,
+) -> dict[str, Any]:
+    """Greedy-decode a compact SPEC through an MLX-LM model bundle."""
+    from mlx_lm import generate as mlx_generate
+
+    tokenizer = bundle.tokenizer
+    model = bundle.model
+    prompt = render_chat(tokenizer, user_query, history=history)
+    raw = mlx_generate(
+        model,
+        tokenizer,
+        prompt,
+        max_tokens=max_new_tokens,
+        verbose=False,
+    )
     plan = _parse_planner_json(raw)
     if apply_postprocessor:
         plan = postprocess(plan, user_query)

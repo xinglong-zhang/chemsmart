@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -117,6 +119,29 @@ class CommandSemanticResult:
         }
 
 
+def _absolutize_file_args(argv: list[str], base: Path) -> list[str]:
+    """Rewrite relative input-file tokens to absolute paths against ``base``.
+
+    Needed when the safe exec runs in an isolated temp cwd: a ``-f examples/x.xyz``
+    style token would not resolve there. Only file-looking tokens (with a path
+    separator or an extension) that actually exist are rewritten, so option values
+    like a project name (``-p test``) or charge/multiplicity are never touched.
+    """
+    out: list[str] = []
+    for tok in argv:
+        if (
+            tok
+            and not tok.startswith("-")
+            and not os.path.isabs(tok)
+            and (os.sep in tok or os.path.splitext(tok)[1])
+            and (base / tok).exists()
+        ):
+            out.append(str((base / tok).resolve()))
+        else:
+            out.append(tok)
+    return out
+
+
 def evaluate_command_semantics(
     command: str,
     *,
@@ -194,112 +219,126 @@ def evaluate_command_semantics(
         )
 
     safe_argv = _safe_execution_argv(tokens, top_index, top_level)
-    workdir = Path(cwd or os.getcwd())
-    before = _input_snapshot(workdir)
+    if cwd is None:
+        # Run in an isolated temp dir so a stale <label>.out in the real cwd cannot
+        # trigger chemsmart's skip-completed path (which writes no input and yields a
+        # false generated_input_missing reject). Absolutize input files so relative
+        # -f/-e tokens still resolve from the temp cwd.
+        workdir = Path(tempfile.mkdtemp(prefix="chemsmart-gate-"))
+        safe_argv = _absolutize_file_args(safe_argv, Path(os.getcwd()))
+        cleanup_dir: Path | None = workdir
+    else:
+        workdir = Path(cwd)
+        cleanup_dir = None
     try:
-        completed = subprocess.run(
-            safe_argv,
-            cwd=str(workdir),
-            env=_subprocess_env(),
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=timeout_s,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return CommandSemanticResult(
-            verdict="reject",
-            command=command,
-            checked_argv=tuple(safe_argv),
-            issues=(
-                CommandSemanticIssue(
-                    rule_id="cmd.semantic.timeout",
-                    severity="reject",
-                    message=f"safe runtime validation timed out after {timeout_s:g}s",
-                    evidence={"timeout_s": timeout_s},
+        before = _input_snapshot(workdir)
+        try:
+            completed = subprocess.run(
+                safe_argv,
+                cwd=str(workdir),
+                env=_subprocess_env(),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout_s,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return CommandSemanticResult(
+                verdict="reject",
+                command=command,
+                checked_argv=tuple(safe_argv),
+                issues=(
+                    CommandSemanticIssue(
+                        rule_id="cmd.semantic.timeout",
+                        severity="reject",
+                        message=f"safe runtime validation timed out after {timeout_s:g}s",
+                        evidence={"timeout_s": timeout_s},
+                    ),
                 ),
-            ),
-            stdout_tail=_tail(exc.stdout),
-            stderr_tail=_tail(exc.stderr),
-        )
+                stdout_tail=_tail(exc.stdout),
+                stderr_tail=_tail(exc.stderr),
+            )
 
-    stdout_tail = _tail(completed.stdout)
-    stderr_tail = _tail(completed.stderr)
-    generated_inputs = _generated_inputs(workdir, before)
-    issues: list[CommandSemanticIssue] = []
-    if completed.returncode != 0:
-        issues.append(
-            CommandSemanticIssue(
-                rule_id="cmd.semantic.safe_execution_failed",
-                severity="reject",
-                message=(
-                    "safe chemsmart runtime validation failed with exit code "
-                    f"{completed.returncode}"
-                ),
-                evidence={
-                    "returncode": completed.returncode,
-                    "argv": safe_argv,
-                    "stdout_tail": stdout_tail,
-                    "stderr_tail": stderr_tail,
-                },
-                missing_info=tuple(_missing_info_from_output(stderr_tail, stdout_tail)),
-            )
-        )
-    elif (
-        top_level == "run"
-        and _is_software_command(tokens, top_index)
-        and not generated_inputs
-    ):
-        issues.append(
-            CommandSemanticIssue(
-                rule_id="cmd.semantic.generated_input_missing",
-                severity="reject",
-                message=(
-                    "safe runtime validation succeeded but no Gaussian/ORCA "
-                    "input file was generated"
-                ),
-                evidence={"cwd": str(workdir), "argv": safe_argv},
-            )
-        )
-    elif _is_software_command(tokens, top_index) and not generated_inputs:
-        issues.append(
-            CommandSemanticIssue(
-                rule_id="cmd.semantic.submit_generated_input_not_observed",
-                severity="warn",
-                message=(
-                    "safe submit validation succeeded but no Gaussian/ORCA "
-                    "input file was observed in the working directory"
-                ),
-                evidence={"cwd": str(workdir), "argv": safe_argv},
-            )
-        )
-
-    for generated in generated_inputs:
-        if not generated.get("route"):
+        stdout_tail = _tail(completed.stdout)
+        stderr_tail = _tail(completed.stderr)
+        generated_inputs = _generated_inputs(workdir, before)
+        issues: list[CommandSemanticIssue] = []
+        if completed.returncode != 0:
             issues.append(
                 CommandSemanticIssue(
-                    rule_id="cmd.semantic.generated_route_missing",
+                    rule_id="cmd.semantic.safe_execution_failed",
                     severity="reject",
-                    message="generated computational input is missing a route line",
-                    evidence={"path": generated.get("path")},
+                    message=(
+                        "safe chemsmart runtime validation failed with exit code "
+                        f"{completed.returncode}"
+                    ),
+                    evidence={
+                        "returncode": completed.returncode,
+                        "argv": safe_argv,
+                        "stdout_tail": stdout_tail,
+                        "stderr_tail": stderr_tail,
+                    },
+                    missing_info=tuple(_missing_info_from_output(stderr_tail, stdout_tail)),
+                )
+            )
+        elif (
+            top_level == "run"
+            and _is_software_command(tokens, top_index)
+            and not generated_inputs
+        ):
+            issues.append(
+                CommandSemanticIssue(
+                    rule_id="cmd.semantic.generated_input_missing",
+                    severity="reject",
+                    message=(
+                        "safe runtime validation succeeded but no Gaussian/ORCA "
+                        "input file was generated"
+                    ),
+                    evidence={"cwd": str(workdir), "argv": safe_argv},
+                )
+            )
+        elif _is_software_command(tokens, top_index) and not generated_inputs:
+            issues.append(
+                CommandSemanticIssue(
+                    rule_id="cmd.semantic.submit_generated_input_not_observed",
+                    severity="warn",
+                    message=(
+                        "safe submit validation succeeded but no Gaussian/ORCA "
+                        "input file was observed in the working directory"
+                    ),
+                    evidence={"cwd": str(workdir), "argv": safe_argv},
                 )
             )
 
-    verdict: CommandSemanticVerdict = "ok"
-    if any(issue.severity == "reject" for issue in issues):
-        verdict = "reject"
-    elif issues:
-        verdict = "warn"
-    return CommandSemanticResult(
-        verdict=verdict,
-        command=command,
-        checked_argv=tuple(safe_argv),
-        issues=tuple(issues),
-        generated_inputs=tuple(generated_inputs),
-        stdout_tail=stdout_tail,
-        stderr_tail=stderr_tail,
-    )
+        for generated in generated_inputs:
+            if not generated.get("route"):
+                issues.append(
+                    CommandSemanticIssue(
+                        rule_id="cmd.semantic.generated_route_missing",
+                        severity="reject",
+                        message="generated computational input is missing a route line",
+                        evidence={"path": generated.get("path")},
+                    )
+                )
+
+        verdict: CommandSemanticVerdict = "ok"
+        if any(issue.severity == "reject" for issue in issues):
+            verdict = "reject"
+        elif issues:
+            verdict = "warn"
+        return CommandSemanticResult(
+            verdict=verdict,
+            command=command,
+            checked_argv=tuple(safe_argv),
+            issues=tuple(issues),
+            generated_inputs=tuple(generated_inputs),
+            stdout_tail=stdout_tail,
+            stderr_tail=stderr_tail,
+        )
+    finally:
+        if cleanup_dir is not None:
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
 
 
 def _strict_parser_issue(

@@ -57,6 +57,7 @@ def plan_to_synthesis_result(
     plan: dict[str, Any],
     user_query: str,
     use_submit: bool | None = None,
+    default_project: str | None = None,
 ) -> dict[str, Any]:
     """Convert local planner JSON into a ``SynthesisSession``-shaped result.
 
@@ -65,6 +66,8 @@ def plan_to_synthesis_result(
         user_query: Original user query (used only for the explanation).
         use_submit: Force ``sub`` (True) or ``run`` (False). When ``None`` the
             decision is taken from the presence of a ``submit_hpc`` step.
+        default_project: Runtime-owned chemsmart project name to inject into
+            compact-SPEC commands. The model must not emit this field.
 
     Returns:
         A dict matching the contract of
@@ -72,7 +75,10 @@ def plan_to_synthesis_result(
         ``"ready"`` only when a single legal chemsmart command can be emitted.
     """
     if _is_compact_spec(plan):
-        return _compact_spec_to_synthesis_result(plan)
+        return _compact_spec_to_synthesis_result(
+            plan,
+            default_project=default_project,
+        )
 
     intent = str(plan.get("intent") or "").lower()
     if intent in {"decline", "infeasible", "out_of_scope"}:
@@ -163,10 +169,13 @@ def _is_compact_spec(plan: dict[str, Any]) -> bool:
     ) and ("jobs" in plan or "message" in plan)
 
 
-def _compact_spec_to_synthesis_result(plan: dict[str, Any]) -> dict[str, Any]:
+def _compact_spec_to_synthesis_result(
+    plan: dict[str, Any],
+    default_project: str | None = None,
+) -> dict[str, Any]:
     from chemsmart.agent.v8_adapter import adapt
 
-    adapted = adapt(plan, validate=True)
+    adapted = adapt(plan, validate=True, default_project=default_project)
     intent = str(adapted.get("intent") or plan.get("intent") or "")
     if intent != "workflow":
         message = str(adapted.get("message") or plan.get("message") or "")

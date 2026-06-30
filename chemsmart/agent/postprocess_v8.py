@@ -10,6 +10,7 @@ from chemsmart.agent import v8_kind_index as KI
 ROUTE = ("ts", "calcfc", "noeigentest")
 _ARRAY_KEYS = {"additional_opt_options_in_route"}
 _TSSEARCH_DROP = {"tssearch", "optts"}
+_TDDFT_STATES = {"singlets", "triplets", "50-50"}
 _KIND_CANON = {
     "gaussian.opt+freq": "gaussian.opt",
     "gaussian.opt.freq": "gaussian.opt",
@@ -113,6 +114,10 @@ def postprocess(spec: dict[str, Any]) -> dict[str, Any]:
             settings["scan_definition"] = _fix_scan_type(
                 settings["scan_definition"]
             )
+        if kind == "gaussian.tddft" and "states" in settings:
+            states = str(settings["states"]).strip().lower()
+            if states not in _TDDFT_STATES:
+                settings.pop("states", None)
 
         new: dict[str, Any] = {}
         is_ts = isinstance(kind, str) and kind.endswith(".ts")

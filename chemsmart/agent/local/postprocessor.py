@@ -1,4 +1,4 @@
-"""Inference-time post-processing guardrails for chemsmart v4 planner JSON.
+"""Inference-time post-processing guardrails for local planner JSON.
 
 The public entry point is :func:`postprocess`, which returns a repaired deep copy of
 an already-parsed planner dictionary.  The function is intentionally conservative:
@@ -89,6 +89,10 @@ def postprocess(plan: dict[str, Any], user_query: str) -> dict[str, Any]:
     """
 
     repaired = copy.deepcopy(plan)
+    jobs = repaired.get("jobs")
+    if isinstance(jobs, list):
+        _repair_compact_job_filepaths(jobs, user_query)
+
     steps = repaired.get("steps")
     if not isinstance(steps, list):
         return repaired
@@ -97,6 +101,30 @@ def postprocess(plan: dict[str, Any], user_query: str) -> dict[str, Any]:
     _repair_step_refs(repaired)
     _repair_job_kinds_and_labels(steps)
     return repaired
+
+
+def _repair_compact_job_filepaths(jobs: list[Any], user_query: str) -> None:
+    paths = PATH_RE.findall(user_query or "")
+    if not paths:
+        return
+
+    source_job_by_id: dict[int, dict[str, Any]] = {}
+    for index, job in enumerate(jobs):
+        if not isinstance(job, dict):
+            continue
+        job_id = job.get("id")
+        if isinstance(job_id, int):
+            source_job_by_id[job_id] = job
+        if isinstance(job.get("file"), str):
+            job["file"] = paths[index] if index < len(paths) else paths[0]
+
+    for job in jobs:
+        if not isinstance(job, dict) or "file" in job:
+            continue
+        geom_from = job.get("geom_from")
+        if isinstance(geom_from, int) and geom_from in source_job_by_id:
+            continue
+        job["file"] = paths[0]
 
 
 def _repair_filepaths(steps: list[Any], user_query: str) -> None:
