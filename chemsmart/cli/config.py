@@ -312,6 +312,7 @@ class Config:
             ("Gaussian g16", "~/bin/g16", "Gaussian g16 folder"),
             ("ORCA", "~/bin/orca_6_0_0", "ORCA folder"),
             ("NCIPLOT", "~/bin/nciplot", "NCIPLOT folder"),
+            ("GROMACS", "~/bin/gromacs", "GROMACS folder"),
         ]:
             try:
                 folder = click.prompt(
@@ -566,6 +567,34 @@ def orca(ctx, folder):
     "--folder",
     type=str,
     required=True,
+    help="Path to the GROMACS folder.",
+)
+def gromacs(ctx, folder):
+    """
+    Configure paths to the GROMACS folder.
+
+    Replaces '~/bin/gromacs' with the specified folder in YAML files.
+
+    Examples:
+        chemsmart config gromacs --folder <GROMACSFOLDER>
+    """
+    cfg = ctx.obj["cfg"]
+    if "~" in folder:
+        gromacs_folder = os.path.expanduser(folder)
+        assert os.path.exists(
+            os.path.abspath(gromacs_folder)
+        ), f"GROMACS folder not found: {gromacs_folder}"
+    logger.info(f"Configuring GROMACS with folder: {folder}")
+    update_yaml_files(cfg.chemsmart_server, "~/bin/gromacs", folder)
+
+
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    required=True,
     help="Path to the NCIPLOT folder.",
 )
 def nciplot(ctx, folder):
@@ -590,6 +619,7 @@ def nciplot(ctx, folder):
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
+config.add_command(gromacs)
 config.add_command(nciplot)
 
 if __name__ == "__main__":
