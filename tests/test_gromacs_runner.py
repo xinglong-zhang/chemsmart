@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from chemsmart.jobs.gromacs.job import GromacsEMJob
+from chemsmart.jobs.gromacs.job import GromacsEMJob, GromacsNVTJob
 from chemsmart.jobs.gromacs.runner import GromacsJobRunner
 from chemsmart.settings.executable import GromacsExecutable
 
@@ -26,6 +26,7 @@ def _make_runner(gmx_executable="gmx"):
 
 def test_gromacs_em_job_type_matches_runner_jobtypes():
     assert GromacsEMJob.TYPE in GromacsJobRunner.JOBTYPES
+    assert GromacsNVTJob.TYPE in GromacsJobRunner.JOBTYPES
 
 
 def test_gromacs_em_job_stores_file_attributes(tmp_path):
@@ -359,6 +360,47 @@ def test_gromacs_runner_get_commands_for_prepared_workflow(tmp_path):
         ],
     ]
 
+def test_gromacs_runner_get_commands_for_nvt_prepared_workflow(tmp_path):
+    mdp_file = tmp_path / "nvt.mdp"
+    structure_file = tmp_path / "em.gro"
+    top_file = tmp_path / "topol.top"
+    tpr_file = tmp_path / "nvt.tpr"
+
+    job = GromacsNVTJob(
+        molecule=None,
+        label="nvt",
+        jobrunner=None,
+        mdp_file=mdp_file,
+        structure_file=structure_file,
+        top_file=top_file,
+        tpr_file=tpr_file,
+        workflow="prepared",
+    )
+
+    runner = _make_runner()
+
+    commands = runner._get_commands(job)
+
+    assert commands == [
+        [
+            "gmx",
+            "grompp",
+            "-f",
+            str(mdp_file),
+            "-c",
+            str(structure_file),
+            "-p",
+            str(top_file),
+            "-o",
+            str(tpr_file),
+        ],
+        [
+            "gmx",
+            "mdrun",
+            "-deffnm",
+            str(tmp_path / "nvt"),
+        ],
+    ]
 
 def test_gromacs_runner_accepts_custom_gmx_executable(tmp_path):
     tpr_file = tmp_path / "em.tpr"

@@ -4,5 +4,6 @@ from .runner import GromacsJobRunner
 __all__ = [
     "GromacsJob",
     "GromacsEMJob",
+    "GromacsNVTJob",
     "GromacsJobRunner",
 ]

@@ -10,17 +10,41 @@ class GromacsJobFactory:
 
     JOB_TYPE_MAP = {
         "em": GromacsEMJob,
+        "nvt": GromacsNVTJob,
     }
 
     @classmethod
-    def create_from_project_yaml(cls, project_yaml, molecule=None, label=None, jobrunner=None, **kwargs):
+    def create_from_project_yaml(
+            cls,
+            project_yaml,
+            molecule=None,
+            label=None,
+            jobrunner=None,
+            **kwargs):
         settings = GromacsProjectSettings.from_yaml(project_yaml)
-        return cls.create_from_settings(settings, molecule=molecule, label=label, jobrunner=jobrunner, **kwargs)
+        return cls.create_from_settings(
+            settings,
+            molecule=molecule,
+            label=label, jobrunner=jobrunner,
+            **kwargs)
 
     @classmethod
-    def create_from_settings(cls, settings, molecule=None, label=None, jobrunner=None, **kwargs):
+    def create_from_settings(
+        cls,
+        settings,
+        molecule=None,
+        label=None,
+        jobrunner=None,
+        **kwarg,
+    ):
         settings.validate()
         job_cls = cls.JOB_TYPE_MAP.get(settings.job_type)
         if job_cls is None:
             raise ValueError(f"Unsupported GROMACS job type: {settings.job_type}")
-        return job_cls.from_project_settings(settings=settings, molecule=molecule, label=label, jobrunner=jobrunner, **kwargs)
+        return job_cls.from_project_settings(
+            settings=settings,
+            molecule=molecule,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )
