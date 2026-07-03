@@ -11,6 +11,13 @@ ROUTE = ("ts", "calcfc", "noeigentest")
 _ARRAY_KEYS = {"additional_opt_options_in_route"}
 _TSSEARCH_DROP = {"tssearch", "optts"}
 _TDDFT_STATES = {"singlets", "triplets", "50-50"}
+_DB_SELECTOR_KEYS = {
+    "record_index",
+    "record_id",
+    "structure_index",
+    "structure_id",
+    "molecule_id",
+}
 _KIND_CANON = {
     "gaussian.opt+freq": "gaussian.opt",
     "gaussian.opt.freq": "gaussian.opt",
@@ -104,6 +111,9 @@ def postprocess(spec: dict[str, Any]) -> dict[str, Any]:
         settings = dict(job.get("settings", {}) or {})
         if raw_kind in _KIND_CANON:
             settings["freq"] = True
+        for key in _DB_SELECTOR_KEYS:
+            if key in settings and key not in job:
+                job[key] = settings.pop(key)
 
         allowed = set(KI.KIND_SETTINGS.get(kind, {}))
         if kind == "orca.ts" and str(

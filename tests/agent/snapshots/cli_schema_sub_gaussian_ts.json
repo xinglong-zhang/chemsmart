@@ -22,7 +22,6 @@
     {
       "choices": null,
       "default": null,
-      "default_is_callable": true,
       "help": "Indices of atoms to freeze for constrained optimization. 1-indexed.",
       "is_flag": false,
       "multiple": false,

@@ -68,6 +68,11 @@ class ParsedModelCommand:
     project_p_flag_meaning: str | None = None
     top_level_program: str | None = None
     filename: str | None = None
+    record_index: str | None = None
+    record_id: str | None = None
+    structure_index: str | None = None
+    structure_id: str | None = None
+    molecule_id: str | None = None
     label: str | None = None
     charge: str | None = None
     multiplicity: str | None = None
@@ -103,6 +108,11 @@ class ParsedModelCommand:
             "project_p_flag_meaning": self.project_p_flag_meaning,
             "top_level_program": self.top_level_program,
             "filename": self.filename,
+            "record_index": self.record_index,
+            "record_id": self.record_id,
+            "structure_index": self.structure_index,
+            "structure_id": self.structure_id,
+            "molecule_id": self.molecule_id,
             "label": self.label,
             "charge": self.charge,
             "multiplicity": self.multiplicity,
@@ -192,6 +202,22 @@ _PROGRAM_OPTIONS = {
     "--functional": _OptionSpec("functional"),
     "-b": _OptionSpec("basis"),
     "--basis": _OptionSpec("basis"),
+    "-B": _OptionSpec("aux_basis"),
+    "--aux-basis": _OptionSpec("aux_basis"),
+    "--extrapolation-basis": _OptionSpec("extrapolation_basis"),
+    "--defgrid": _OptionSpec("defgrid"),
+    "--scf-tol": _OptionSpec("scf_tol"),
+    "--scf-algorithm": _OptionSpec("scf_algorithm"),
+    "--ri": _OptionSpec("record_index"),
+    "--record-index": _OptionSpec("record_index"),
+    "--rid": _OptionSpec("record_id"),
+    "--record-id": _OptionSpec("record_id"),
+    "--si": _OptionSpec("structure_index"),
+    "--structure-index": _OptionSpec("structure_index"),
+    "--sid": _OptionSpec("structure_id"),
+    "--structure-id": _OptionSpec("structure_id"),
+    "--mid": _OptionSpec("molecule_id"),
+    "--molecule-id": _OptionSpec("molecule_id"),
     "-r": _OptionSpec("route_parameters"),
     "--additional-route-parameters": _OptionSpec("route_parameters"),
     "-o": _OptionSpec("opt_options"),
@@ -401,6 +427,11 @@ def parse_model_command(
         ),
         top_level_program=runner_opts.get("top_level_program"),
         filename=program_opts.get("filename"),
+        record_index=program_opts.get("record_index"),
+        record_id=program_opts.get("record_id"),
+        structure_index=program_opts.get("structure_index"),
+        structure_id=program_opts.get("structure_id"),
+        molecule_id=program_opts.get("molecule_id"),
         label=program_opts.get("label"),
         charge=program_opts.get("charge"),
         multiplicity=program_opts.get("multiplicity"),
@@ -488,6 +519,19 @@ def format_parsed_model_command(parsed: ParsedModelCommand) -> str:
             "- top-level `-p/--program`: "
             f"`{parsed.top_level_program}` (output-file processing target, not project)"
         )
+    db_bits = []
+    if parsed.record_index:
+        db_bits.append(f"record_index={parsed.record_index}")
+    if parsed.record_id:
+        db_bits.append(f"record_id={parsed.record_id}")
+    if parsed.structure_index:
+        db_bits.append(f"structure_index={parsed.structure_index}")
+    if parsed.structure_id:
+        db_bits.append(f"structure_id={parsed.structure_id}")
+    if parsed.molecule_id:
+        db_bits.append(f"molecule_id={parsed.molecule_id}")
+    if db_bits:
+        lines.append(f"- database selection: `{', '.join(db_bits)}`")
     lines.append(f"- resolved method: {method_text}")
     if parsed.solvent_model or parsed.solvent_id:
         lines.append(
@@ -723,7 +767,17 @@ def _project_method_name(*, program: str, job: str | None) -> str:
 def _apply_method_overrides(
     resolved: dict[str, str | None], overrides: dict[str, str]
 ) -> None:
-    for key in ("functional", "basis", "solvent_model", "solvent_id"):
+    for key in (
+        "functional",
+        "basis",
+        "aux_basis",
+        "extrapolation_basis",
+        "defgrid",
+        "scf_tol",
+        "scf_algorithm",
+        "solvent_model",
+        "solvent_id",
+    ):
         if overrides.get(key) is not None:
             resolved[key] = overrides[key]
 
