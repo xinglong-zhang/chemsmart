@@ -84,3 +84,21 @@ def test_parse_orca_sp_project_method_from_repo_fixture(tmp_path):
     assert "functional `m062x`" in text
     assert "basis `def2-tzvp`" in text
     assert "resolved solvent: `smd` / `cyclohexane`" in text
+
+
+def test_parse_database_selectors_and_orca_aux_basis(tmp_path):
+    parsed = parse_model_command(
+        "chemsmart run orca -p orca --record-id abc123 --structure-index 2 "
+        "-f results.db -c 0 -m 1 -B def2/J sp",
+        cwd=tmp_path,
+    )
+
+    assert parsed.parse_error is None
+    assert parsed.record_id == "abc123"
+    assert parsed.structure_index == "2"
+    assert parsed.filename == "results.db"
+    assert parsed.aux_basis == "def2/J"
+
+    text = format_model_command_explanation(parsed.command, cwd=tmp_path)
+    assert "database selection: `record_id=abc123, structure_index=2`" in text
+    assert "auxiliary basis `def2/J`" in text

@@ -57,6 +57,16 @@ REQUIRED_SLOT = {
     "orca.qmmm": "high_level_atoms",
 }
 
+DB_SELECTOR_KEYS = {
+    "record_index",
+    "record_id",
+    "structure_index",
+    "structure_id",
+    "molecule_id",
+}
+DB_RECORD_SELECTOR_KEYS = {"record_index", "record_id"}
+DB_TOP_LEVEL_SELECTOR_KEYS = {"record_index", "record_id", "structure_id"}
+
 _CUE = re.compile(
     r"\b(atom|atoms|fragment|fragments|bond|dihedral|angle|torsion|distance|"
     r"length|freeze|frozen|constrain|constraint|between|indices|index|"
@@ -107,6 +117,8 @@ def check_job(job: dict[str, Any], query: str) -> list[InvariantIssue]:
             )
         )
         return issues
+
+    issues.extend(_db_selector_issues(job, str(kind), evidence))
 
     settings = job.get("settings") or {}
     leaked = sorted(key for key in settings if _is_runtime_owned(key))
@@ -202,6 +214,67 @@ def check_job(job: dict[str, Any], query: str) -> list[InvariantIssue]:
     return issues
 
 
+def _db_selector_issues(
+    job: dict[str, Any],
+    kind: str,
+    evidence: dict[str, Any],
+) -> list[InvariantIssue]:
+    issues: list[InvariantIssue] = []
+    source = job.get("file")
+    is_db = isinstance(source, str) and source.lower().endswith(".db")
+    present = {
+        key: job.get(key)
+        for key in DB_SELECTOR_KEYS
+        if job.get(key) not in (None, "")
+    }
+    if not is_db and not present:
+        return issues
+
+    if present.get("molecule_id") is not None:
+        issues.append(
+            _issue(
+                "spec.db.molecule_id_job",
+                "molecule_id is not supported for Gaussian/ORCA job submission",
+                {**evidence, "selectors": sorted(present)},
+            )
+        )
+
+    if not is_db:
+        issues.append(
+            _issue(
+                "spec.db.selector_without_db",
+                "database selectors require a .db source file",
+                {**evidence, "file": source, "selectors": sorted(present)},
+            )
+        )
+        return issues
+
+    top_level = [key for key in DB_TOP_LEVEL_SELECTOR_KEYS if key in present]
+    if len(top_level) != 1:
+        issues.append(
+            _issue(
+                "spec.db.selector_cardinality",
+                (
+                    ".db job input must select exactly one of record_index, "
+                    "record_id, or structure_id"
+                ),
+                {**evidence, "selectors": sorted(present)},
+            )
+        )
+
+    if "structure_index" in present and not (
+        DB_RECORD_SELECTOR_KEYS & set(present)
+    ):
+        issues.append(
+            _issue(
+                "spec.db.structure_index_requires_record",
+                "structure_index requires record_index or record_id",
+                {**evidence, "selectors": sorted(present)},
+            )
+        )
+    return issues
+
+
 def _is_runtime_owned(key: str) -> bool:
     return key in RUNTIME_OWNED or key.startswith(_RUNTIME_OWNED_PREFIX)
 
@@ -222,6 +295,7 @@ def _issue(
 
 __all__ = [
     "CANON_KINDS",
+    "DB_SELECTOR_KEYS",
     "KIND_CANON",
     "REQUIRED_SLOT",
     "RUNTIME_OWNED",

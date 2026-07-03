@@ -53,6 +53,13 @@ _RANGE_SETTINGS = {
     "low_level_atoms",
     "freeze_atoms",
 }
+_DB_SELECTOR_FLAG = {
+    "record_index": "--record-index",
+    "record_id": "--record-id",
+    "structure_index": "--structure-index",
+    "structure_id": "--structure-id",
+    "molecule_id": "--molecule-id",
+}
 _SUBCOMMAND_SETTINGS = {
     "fragment_indices",
     "high_level_atoms",
@@ -117,6 +124,100 @@ def _literal_list_value(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"))
 
 
+def _parse_scan_definition(scan_definition: str) -> dict[str, list[Any]]:
+    lines = [
+        line.strip()
+        for chunk in str(scan_definition).splitlines()
+        for line in chunk.split(";")
+        if line.strip()
+    ]
+    if not lines:
+        raise ValueError("scan_definition cannot be empty")
+
+    atom_count_by_coordinate = {"B": 2, "A": 3, "D": 4}
+    coords: list[list[int]] = []
+    num_steps: list[int] = []
+    step_size: list[float] = []
+    constrained_coordinates: list[list[int]] = []
+
+    for line in lines:
+        tokens = line.split()
+        coordinate_type = tokens[0].upper()
+        expected_atoms = atom_count_by_coordinate.get(coordinate_type)
+        if expected_atoms is None:
+            raise ValueError(
+                f"scan_definition {line!r} must start with B, A, or D"
+            )
+        if len(tokens) < expected_atoms + 2:
+            raise ValueError(f"scan_definition {line!r} is incomplete")
+        try:
+            coordinate = [
+                int(token) for token in tokens[1 : 1 + expected_atoms]
+            ]
+        except ValueError as exc:
+            raise ValueError(
+                f"scan_definition {line!r} has non-integer atom indices"
+            ) from exc
+
+        directive = tokens[1 + expected_atoms].upper()
+        if directive == "F":
+            constrained_coordinates.append(coordinate)
+            continue
+        if directive != "S" or len(tokens) != expected_atoms + 4:
+            raise ValueError(
+                "scan_definition entries must look like "
+                "'D 1 2 3 4 S 10 36.0' or 'B 1 2 F'"
+            )
+        try:
+            steps = int(tokens[2 + expected_atoms])
+            size = float(tokens[3 + expected_atoms])
+        except ValueError as exc:
+            raise ValueError(
+                f"scan_definition {line!r} has invalid steps or step size"
+            ) from exc
+        coords.append(coordinate)
+        num_steps.append(steps)
+        step_size.append(size)
+
+    if not coords:
+        raise ValueError(
+            "scan_definition must include at least one S scan entry"
+        )
+    parsed: dict[str, list[Any]] = {
+        "coords": coords,
+        "num_steps": num_steps,
+        "step_size": step_size,
+    }
+    if constrained_coordinates:
+        parsed["constrained_coordinates"] = constrained_coordinates
+    return parsed
+
+
+def _fmt_scan_sequence(values: list[Any]) -> str:
+    if len(values) == 1:
+        return shlex.quote(str(values[0]))
+    return shlex.quote(json.dumps(values, separators=(",", ":")))
+
+
+def _gaussian_scan_flags(scan_definition: Any) -> list[str]:
+    parsed = _parse_scan_definition(str(scan_definition))
+    flags = [
+        "--coordinates",
+        shlex.quote(json.dumps(parsed["coords"], separators=(",", ":"))),
+        "--num-steps",
+        _fmt_scan_sequence(parsed["num_steps"]),
+        "--step-size",
+        _fmt_scan_sequence(parsed["step_size"]),
+    ]
+    constrained = parsed.get("constrained_coordinates")
+    if constrained:
+        flags += [
+            "--constrained-coordinates",
+            shlex.quote(json.dumps(constrained, separators=(",", ":"))),
+        ]
+    return flags
+
+
 def _fmt_setting(key: str, value: Any) -> str:
     if key == "eqsolv" and isinstance(value, bool):
         return "eqsolv" if value else "noneqsolv"
@@ -161,6 +262,9 @@ def _job_command(
     group_flags: list[str] = []
     subcommand_flags: list[str] = []
     for key, value in settings.items():
+        if kind == "gaussian.scan" and key == "scan_definition":
+            subcommand_flags += _gaussian_scan_flags(value)
+            continue
         flag = _FLAG.get(key)
         if flag:
             target = (
@@ -169,6 +273,11 @@ def _job_command(
                 else group_flags
             )
             target += [flag, _fmt_setting(key, value)]
+
+    for key, flag in _DB_SELECTOR_FLAG.items():
+        value = job.get(key)
+        if value is not None:
+            group_flags += [flag, shlex.quote(str(value))]
 
     parts += group_flags
     source = job.get("file") or geom_of.get(job.get("geom_from"))
@@ -237,7 +346,14 @@ def adapt(
         out["valid"] = True if validate else None
         return out
 
-    out["commands"] = spec_to_commands(spec, default_project=default_project)
+    try:
+        out["commands"] = spec_to_commands(
+            spec, default_project=default_project
+        )
+    except Exception as exc:
+        out["valid"] = False if validate else None
+        out["errors"].append(f"adapter render failed: {exc}")
+        return out
     if validate:
         out["valid"], out["errors"] = _validate_all(out["commands"])
     return out

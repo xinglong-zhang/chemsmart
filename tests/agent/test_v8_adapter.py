@@ -282,6 +282,143 @@ def test_default_project_renders_as_runtime_owned_program_option():
     ]
 
 
+def test_db_record_selector_renders_as_program_option():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.sp",
+                "file": "results.db",
+                "record_index": 1,
+                "structure_index": "2",
+                "charge": 0,
+                "mult": 1,
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test --record-index 1 "
+        "--structure-index 2 -f results.db -c 0 -m 1 sp"
+    ]
+
+
+def test_postprocess_promotes_db_selectors_from_settings():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "orca.sp",
+                "file": "results.db",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"record_id": "abc123", "structure_index": "1"},
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="orca")
+
+    assert out["valid"], out["errors"]
+    assert out["spec"]["jobs"][0]["record_id"] == "abc123"
+    assert out["spec"]["jobs"][0]["structure_index"] == "1"
+    assert "settings" not in out["spec"]["jobs"][0]
+    assert (
+        "chemsmart run orca -p orca --record-id abc123 --structure-index 1 "
+        "-f results.db -c 0 -m 1 sp"
+    ) == out["commands"][0]
+
+
+def test_gaussian_scan_definition_renders_runtime_scan_flags():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.scan",
+                "file": "anisole.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {
+                    "scan_definition": "B 1 2 S 12 0.08",
+                    "additional_route_parameters": "scf=tight",
+                },
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test --additional-route-parameters "
+        "scf=tight -f anisole.xyz -c 0 -m 1 scan --coordinates "
+        "'[[1,2]]' --num-steps 12 --step-size 0.08"
+    ]
+
+
+def test_gaussian_scan_definition_with_constraints_renders_runtime_flags():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.scan",
+                "file": "scan.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {
+                    "scan_definition": (
+                        "B 1 2 S 12 0.08\n"
+                        "A 3 4 5 S 8 2.0\n"
+                        "D 1 2 3 4 F"
+                    ),
+                },
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"], out["errors"]
+    assert out["commands"] == [
+        "chemsmart run gaussian -p test -f scan.xyz -c 0 -m 1 scan "
+        "--coordinates '[[1,2],[3,4,5]]' --num-steps '[12,8]' "
+        "--step-size '[0.08,2.0]' --constrained-coordinates "
+        "'[[1,2,3,4]]'"
+    ]
+
+
+def test_invalid_gaussian_scan_definition_returns_adapter_error():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "gaussian.scan",
+                "file": "scan.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"scan_definition": "B 1 2 F"},
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec), default_project="test")
+
+    assert out["valid"] is False
+    assert out["commands"] == []
+    assert out["errors"] == [
+        "adapter render failed: scan_definition must include at least one "
+        "S scan entry"
+    ]
+
+
 def test_gaussian_dias_fragment_indices_render_after_subcommand():
     spec = {
         "intent": "workflow",
