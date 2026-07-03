@@ -198,6 +198,26 @@ def build_gaussian_settings(
             )
         modred = _parse_gaussian_scan_definition(scan_definition)
 
+    # `ts`, `calcfc`, `noeigentest` are the transition-state route options the
+    # runtime auto-derives for a TS job (see jobs/gaussian/settings.py:627-631,
+    # which always renders `opt=(ts,calcfc,noeigentest,<extras>)`). They are
+    # never valid *manual* extras — supplying one duplicates the opt keyword,
+    # e.g. a caller passing `ts` yields `opt=(ts,calcfc,noeigentest,ts)`, which
+    # the runtime harness rejects (`gaussian.ts.route`). Strip them defensively
+    # so a redundant token from any caller does not corrupt the route. Genuine
+    # extras such as `maxstep=8` or `calcall` are preserved.
+    if additional_opt_options_in_route:
+        _runtime_ts_opts = {"ts", "calcfc", "noeigentest"}
+        _raw = additional_opt_options_in_route
+        if isinstance(_raw, (list, tuple)):
+            _raw = " ".join(str(x) for x in _raw)
+        _kept = [
+            tok
+            for tok in str(_raw).replace(",", " ").split()
+            if tok and tok.lower() not in _runtime_ts_opts
+        ]
+        additional_opt_options_in_route = ",".join(_kept) if _kept else None
+
     return GaussianJobSettings(
         functional=functional,
         basis=basis,

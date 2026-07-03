@@ -78,7 +78,12 @@ def click_gaussian_settings_options(f):
         "--additional-route-parameters",
         type=str,
         default=None,
-        help="Additional route parameters.",
+        help=(
+            "Extra keywords appended to the Gaussian route line. There is no "
+            "separate frequency subcommand or flag: to run an optimization + "
+            "frequency job, pass 'freq' here (adds ' freq' to the route). "
+            "Example: --additional-route-parameters freq."
+        ),
     )
     @click.option(
         "-A",

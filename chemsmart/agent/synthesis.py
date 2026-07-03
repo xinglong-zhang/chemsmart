@@ -17,7 +17,47 @@ from chemsmart.agent.harness.command_semantics import (
     CommandSemanticResult,
     evaluate_command_semantics,
 )
+from chemsmart.agent.harness.spec_invariants import check_spec
 from chemsmart.agent.kind_disambiguator import disambiguate
+
+# Structural spec-invariant rule ids that are reliable to enforce at synthesis
+# time. The query-heuristic rules (decline_contract / required_present / label)
+# are intentionally excluded here to avoid false rejects on well-formed specs.
+_RELIABLE_SPEC_REJECTS = frozenset({
+    "spec.kind.canonical",
+    "spec.runtime_owned.leak",
+    "spec.settings.allowed",
+    "spec.ts.runtime_freq",
+    "spec.ts.runtime_route",
+    "spec.ts.bad_extra",
+    "spec.jobs.empty",
+})
+
+
+def _apply_spec_invariants(
+    result: "JsonDict", spec: "JsonDict", query: str
+) -> None:
+    """Run the deterministic SPEC invariants on the model's v8 SPEC and, on a
+    reliable structural violation, downgrade a ``ready`` result so a malformed
+    spec (runtime-owned leak, disallowed setting, redundant TS route token, …)
+    is never surfaced as an executable command."""
+    try:
+        issues = check_spec(spec, query)
+    except Exception:  # pragma: no cover - never fail synthesis on the gate
+        return
+    reliable = [i for i in issues if i.rule_id in _RELIABLE_SPEC_REJECTS]
+    if not reliable:
+        return
+    ids = sorted({i.rule_id for i in reliable})
+    msgs = [f"{i.rule_id}: {i.message}" for i in reliable]
+    result["spec_invariant_failed"] = ids
+    if result.get("status") == "ready":
+        result["status"] = "infeasible"
+        result["explanation"] = (
+            (result.get("explanation") or "")
+            + " Spec-invariant check rejected: "
+            + "; ".join(msgs)
+        ).strip()
 from chemsmart.agent.prompts.synthesis import build_synthesis_system_prompt
 from chemsmart.agent.services.conversation_memory import (
     ConversationMemory,
@@ -93,7 +133,9 @@ class SynthesisSession:
                 parsed = _parse_json_response(response)
                 if _is_v8_spec(parsed):
                     parsed, _changed = disambiguate(request, parsed)
-                    return _normalize_v8_spec(parsed)
+                    result = _normalize_v8_spec(parsed)
+                    _apply_spec_invariants(result, parsed, request)
+                    return result
                 return _normalize_result(parsed)
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 last_error = exc
