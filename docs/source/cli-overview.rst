@@ -2,14 +2,14 @@
  Command Line Interface Overview
 #################################
 
-Chemsmart provides a comprehensive command-line interface for quantum chemistry calculations and molecular analysis.
+CHEMSMART provides a comprehensive command-line interface for quantum chemistry calculations and molecular analysis.
 This guide covers the fundamental CLI structure, execution modes, and common options.
 
 *************************
  Basic Command Structure
 *************************
 
-Chemsmart offers two main execution modes:
+CHEMSMART offers two main execution modes:
 
 -  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
@@ -170,5 +170,5 @@ For specific job types, see the detailed tutorials:
 
 .. note::
 
-   Chemsmart checks job name uniqueness. If a job with the same name is already running, submission will be blocked. Use
+   CHEMSMART checks job name uniqueness. If a job with the same name is already running, submission will be blocked. Use
    ``-a`` (append label) or ``-l`` (label) options to create unique job names.

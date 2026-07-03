@@ -283,13 +283,16 @@ class JobRunner(RegistryMixin):
             if jobtype in runner_jobtypes:
                 matching.append(runner)
 
-        preferred = [
-            runner
-            for runner in matching
-            if bool(getattr(runner, "FAKE", False)) is bool(fake)
-        ]
-        if preferred:
-            runner = preferred[0]
+        if matching:
+            runner = None
+            for candidate in matching:
+                if bool(getattr(candidate, "FAKE", False)) is bool(fake):
+                    runner = candidate
+                    break
+
+            if runner is None:
+                runner = matching[0]
+
             logger.info(f"Using job runner: {runner} for job: {job}")
 
             # If scratch is None, use the runner's default scratch value
@@ -333,6 +336,12 @@ class JobRunner(RegistryMixin):
         """Get the base filepath for the job to assist in file removal."""
         return Path(job.folder) / job.label
 
+    def _append_suffix_to_job_label(self, job, suffix):
+        """Append ``suffix`` to ``job.label`` once."""
+        if suffix and not job.label.endswith(suffix):
+            job.label = f"{job.label}{suffix}"
+        logger.debug(f"Job label: {job.label}")
+
     def _delete_scratch_directory(self):
         """
         Delete the scratch directory if it exists.
@@ -357,13 +366,12 @@ class JobRunner(RegistryMixin):
             # Basic sanity checks
             if not sd.exists() or not sd.is_dir():
                 logger.error(
-                    "scratch_dir %s doesn't exist or is not a directory; "
-                    "refusing to proceed.",
-                    sd,
+                    f"scratch_dir {sd} doesn't exist or is not a directory; "
+                    "refusing to proceed."
                 )
             elif rd == sd:
                 logger.warning(
-                    "Refusing to delete the scratch root itself: %s", sd
+                    f"Refusing to delete the scratch root itself: {sd}"
                 )
             # Python 3.9+: Path.is_relative_to
             elif rd.is_relative_to(sd):

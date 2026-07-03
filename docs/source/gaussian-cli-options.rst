@@ -56,10 +56,23 @@ Project and File Options
       -  string
       -  Query structure from PubChem (name, SMILES, CID)
 
+   -  -  ``--ri, --record-index``
+      -  int
+      -  Select a record from a chemsmart database by its 1-based index
+
+   -  -  ``--rid, --record-id``
+      -  string
+      -  Select a record from a chemsmart database by its ID
+
+   -  -  ``--sid, --structure-id``
+      -  string
+      -  Select a structure from a chemsmart database by its ID
+
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, or ``.out``.
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a chemsmart
+      database ``.db`` file.
 
 Specifying Output Filenames
 ---------------------------
@@ -87,13 +100,13 @@ Use ``-i`` to select a specific structure from multi-structure files:
 
 .. code:: bash
 
-   chemsmart sub gaussian -p test -f molecules.db -i 5 -c 0 -m 1 opt
+   chemsmart sub gaussian -p test -f molecules.xyz -i 5 -c 0 -m 1 opt
 
-This uses the 5th structure (1-indexed) from the ASE database file.
+This uses the 5th structure (1-indexed) from the XYZ file.
 
 .. warning::
 
-   Chemsmart uses 1-based indexing to match most molecular visualization software.
+   CHEMSMART uses 1-based indexing to match most molecular visualization software.
 
 Using PubChem
 -------------

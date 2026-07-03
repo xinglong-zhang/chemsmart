@@ -81,7 +81,7 @@ def make_thermochemistry_mock():
 
 
 ############ CLI Fixtures ##################
-@pytest.fixture()
+@pytest.fixture
 def make_cli_ctx_obj():
     """Factory for the minimal Click context object."""
 
@@ -329,6 +329,22 @@ def invoke_mol_with_visualize():
             mol_group.commands.pop("_test_noop", None)
 
         return result
+
+    return _invoke
+
+
+@pytest.fixture
+def invoke_mol_cli():
+    """Invoke ``mol`` CLI with provided args."""
+    from chemsmart.cli.mol.mol import mol as mol_group
+
+    def _invoke(cli_args, ctx_obj=None):
+        runner = CliRunner()
+        if ctx_obj is None:
+            ctx_obj = {}
+        return runner.invoke(
+            mol_group, cli_args, obj=ctx_obj, catch_exceptions=False
+        )
 
     return _invoke
 
@@ -673,6 +689,29 @@ def gaussian_ts_genecp_outfile(gaussian_outputs_test_directory):
     return gaussian_ts_genecp_output
 
 
+@pytest.fixture()
+def gaussian_pd_insertion_ts_r_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory, "Pd_insertion_ts_r.log"
+    )
+
+
+@pytest.fixture()
+def gaussian_full_gen_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "bromochloromethane_full_gen.log",
+    )
+
+
+@pytest.fixture()
+def gaussian_full_genecp_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "silver_chloride_full_genecp.log",
+    )
+
+
 # Gaussian output file for frozen coordinates
 @pytest.fixture()
 def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
@@ -717,6 +756,15 @@ def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
         "oxetane_rc_hirshfeld_sp_smd_n_n-DiMethylFormamide.log",
     )
     return gaussian_hirshfeld_outfile
+
+
+# Gaussian output file with custom (generic) SMD solvent
+@pytest.fixture()
+def gaussian_smd_generic_outfile(gaussian_outputs_test_directory):
+    return os.path.join(
+        gaussian_outputs_test_directory,
+        "benzoic_acid_opt_sp_smd_generic.log",
+    )
 
 
 @pytest.fixture()
@@ -1293,6 +1341,11 @@ def water_output_gas_path(orca_outputs_directory):
 @pytest.fixture()
 def orca_he_output_freq(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "He_freq.out")
+
+
+@pytest.fixture()
+def orca_he_output_freq_new(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "He_freq_new.out")
 
 
 @pytest.fixture()
@@ -2516,3 +2569,100 @@ def empty_pdb_file(tmpdir):
     with open(filepath, "w") as f:
         f.write("REMARK  This PDB has no atoms.\nEND\n")
     return filepath
+
+
+############ Canonical Geometry / Structure ID Fixtures ##################
+@pytest.fixture()
+def canonical_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "canonical")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_file(canonical_test_directory):
+    """Formaldehyde (CH2O) in its reference orientation — planar, C2v symmetry."""
+    return os.path.join(canonical_test_directory, "formaldehyde.xyz")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_trans_rot_file(canonical_test_directory):
+    """Formaldehyde translated and rotated from canonical_formaldehyde_file."""
+    return os.path.join(canonical_test_directory, "formaldehyde_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_perturbed_file(canonical_test_directory):
+    """Formaldehyde with coordinates perturbed at ~1e-7 Å level from canonical_formaldehyde_file."""
+    return os.path.join(canonical_test_directory, "formaldehyde_perturbed.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_file(canonical_test_directory):
+    """Methane (CH4) in its reference orientation — tetrahedral, Td symmetry."""
+    return os.path.join(canonical_test_directory, "methane.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_trans_rot_file(canonical_test_directory):
+    """Methane translated and rotated from canonical_methane_file."""
+    return os.path.join(canonical_test_directory, "methane_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_distorted_file(canonical_test_directory):
+    """Methane with one C-H bond elongated by ~2e-3 Å from canonical_methane_file."""
+    return os.path.join(canonical_test_directory, "methane_distorted.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_file(canonical_test_directory):
+    """3b (C17H17NOS) in its reference orientation — large, low-symmetry (C1) molecule."""
+    return os.path.join(canonical_test_directory, "3b.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_trans_rot_file(canonical_test_directory):
+    """3b translated and rotated from canonical_3b_file."""
+    return os.path.join(canonical_test_directory, "3b_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_permuted_file(canonical_test_directory):
+    """3b with input atom order permuted — same coordinates as canonical_3b_file."""
+    return os.path.join(canonical_test_directory, "3b_permuted.xyz")
+
+
+@pytest.fixture()
+def canonical_r_bromochlorofluoromethane_file(canonical_test_directory):
+    """(R)-Bromochlorofluoromethane — one enantiomer of a chiral CHBrClF molecule."""
+    return os.path.join(
+        canonical_test_directory, "R-Bromochlorofluoromethane.xyz"
+    )
+
+
+@pytest.fixture()
+def canonical_s_bromochlorofluoromethane_file(canonical_test_directory):
+    """(S)-Bromochlorofluoromethane — non-superimposable mirror image of the R enantiomer."""
+    return os.path.join(
+        canonical_test_directory, "S-Bromochlorofluoromethane.xyz"
+    )
+
+
+############ Database Fixtures ##################
+@pytest.fixture()
+def database_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "DatabaseTests")
+
+
+@pytest.fixture()
+def database_chemsmart_file(database_test_directory):
+    return os.path.join(database_test_directory, "chemsmart.db")
+
+
+@pytest.fixture()
+def database_ase_file(database_test_directory):
+    return os.path.join(database_test_directory, "ase.db")
+
+
+@pytest.fixture()
+def database_empty_file(database_test_directory):
+    return os.path.join(database_test_directory, "empty.db")

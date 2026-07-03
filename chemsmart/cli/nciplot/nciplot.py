@@ -195,8 +195,10 @@ def nciplot(
     - .wfn/.wfx files: Uses SCF wavefunction density
     - .xyz/.log/other files: Uses promolecular density approximation
 
-    When using promolecular density, the job label automatically gets
-    "_promolecular" appended to distinguish the output files.
+    This means the same molecular structure can generate different NCI plots
+    when provided in different input formats. For promolecular-density inputs,
+    the job label is automatically suffixed with "_promolecular" to keep the
+    output files distinguishable.
 
     Example usage:
         # Promolecular density (label will be "test_promolecular")

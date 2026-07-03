@@ -4,7 +4,7 @@
  ChemDraw Organometallic Complex Files
 #######################################
 
-Chemsmart can read organometallic complexes drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures
+CHEMSMART can read organometallic complexes drawn in ChemDraw (``.cdx`` and ``.cdxml``) and generate 3D structures
 suitable for quantum chemistry calculations with Gaussian or ORCA.
 
 .. note::
@@ -43,7 +43,7 @@ Organometallic complexes present several challenges when read from ChemDraw file
 -  ChemDraw can store aromatic ligands (e.g. Cp, benzene) as **separate fragments** that need to be combined with the
    metal fragment before 3D coordinates can be generated.
 
-Chemsmart handles all of these cases automatically. However, as much as our codes try to generate the right structures,
+CHEMSMART handles all of these cases automatically. However, as much as our codes try to generate the right structures,
 some complicated organometallic complexes with unusal ligands may not be interpreted perfectly based on chemdraw
 drawings.
 
@@ -93,14 +93,14 @@ Example usage:
 | (``obabel``)     |                                          |                                   |
 +------------------+------------------------------------------+-----------------------------------+
 
-If ``obabel`` is not installed and a ``.cdx`` file is provided, Chemsmart raises a ``ValueError`` with instructions to
+If ``obabel`` is not installed and a ``.cdx`` file is provided, CHEMSMART raises a ``ValueError`` with instructions to
 install Open Babel or re-save the file as ``.cdxml``.
 
 **************
  How It Works
 **************
 
-Chemsmart applies the following pipeline when reading ChemDraw files containing ring ligands:
+CHEMSMART applies the following pipeline when reading ChemDraw files containing ring ligands:
 
 #. **CDXML preprocessing – strip MultiAttachment nodes** – For ``.cdxml`` files, the XML is parsed directly to remove
    ``NodeType="MultiAttachment"`` atoms and their ``Display="Dash"`` bonds *before* RDKit reads the file. These are
@@ -115,7 +115,7 @@ Chemsmart applies the following pipeline when reading ChemDraw files containing 
    *pre-condition violation* errors before any further processing.
 
 #. **Combine metal and ligand fragments** – For Ir/Rh-type benzene complexes, ChemDraw stores a small metal stub
-   fragment separately from the free benzene ring fragments. Chemsmart detects this pattern and merges the fragments
+   fragment separately from the free benzene ring fragments. CHEMSMART detects this pattern and merges the fragments
    into a single molecule. Any residual degree-1 carbon stubs on the metal (from the original ChemDraw representation)
    are removed before merging.
 
@@ -179,7 +179,7 @@ A ChemDraw file containing TiCp₂Me₂ (two Cp rings and two methyl groups on T
    # Extract the first molecule and submit a Gaussian optimization
    chemsmart sub -s server gaussian -p project -f ti_complexes.cdxml -i 1 -c 0 -m 1 opt B3LYP/def2-SVP
 
-Chemsmart will:
+CHEMSMART will:
 
 #. Strip the MultiAttachment phantom atoms ChemDraw uses to draw the Cp–Ti hapticity lines.
 #. Reconnect each Cp ring to Ti via a single η5 anchor bond with alternating Cp ring bond orders.
@@ -207,7 +207,7 @@ For η6-arene complexes (two benzene ligands above and below the metal):
 
    chemsmart sub -s server gaussian -p project -f bis_benz_ir.cdxml -c 0 -m 1 opt B3LYP/def2-SVP
 
-Chemsmart combines the benzene ring fragments with the metal stub, sets alternating bond orders so that every ring
+CHEMSMART combines the benzene ring fragments with the metal stub, sets alternating bond orders so that every ring
 carbon retains one hydrogen, and repositions the rings at 1.75 Å from the metal centroid.
 
 Ansa-Bisindenyl Iron Complex (O-Bridged)

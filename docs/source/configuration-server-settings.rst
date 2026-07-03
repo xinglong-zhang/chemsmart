@@ -3,7 +3,7 @@
 #################
 
 Configure server-specific settings for your HPC cluster or local machine. Server configuration files are YAML files
-stored in the ``~/.chemsmart/server/`` directory that define how Chemsmart submits and executes computational chemistry
+stored in the ``~/.chemsmart/server/`` directory that define how CHEMSMART submits and executes computational chemistry
 jobs. This folder is created automatically when configuring CHEMSMART. Users can access and freely modify the contents
 in this folder without affecting the CHEMSMART codes.
 
@@ -228,6 +228,30 @@ to disable.
 
    USE_HOSTS: true
    USE_HOSTS: false
+
+EXTRA_SCHEDULER_DIRECTIVES
+--------------------------
+
+**Type:** Multiline string
+
+**Description:** Additional scheduler directives to inject into the submission script header. Use this for scheduler
+options that are not covered by built-in settings.
+
+**Examples:**
+
+.. code:: yaml
+
+   # For SLURM
+   EXTRA_SCHEDULER_DIRECTIVES: |
+       #SBATCH --reservation=xlzhang_1
+
+or
+
+.. code:: yaml
+
+   # For PBS/Torque
+   EXTRA_SCHEDULER_DIRECTIVES: |
+       #PBS -m abe
 
 EXTRA_COMMANDS
 --------------
@@ -774,7 +798,7 @@ After creating a custom server configuration file:
 
 #. Save it in ``~/.chemsmart/server/`` with a descriptive name (e.g., ``myserver.yaml``)
 
-#. Use it with Chemsmart commands via the ``-s`` flag:
+#. Use it with chemsmart commands via the ``-s`` flag:
 
    .. code:: bash
 
