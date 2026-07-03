@@ -680,3 +680,108 @@ def test_gromacs_executable_uses_executable_folder(tmp_path):
     executable = GromacsExecutable(executable_folder=tmp_path)
 
     assert executable.get_executable() == os.path.join(str(tmp_path), "gmx")
+def test_gromacs_writer_generates_em_mdp_when_missing(tmp_path):
+    job = GromacsEMJob(
+        molecule=None,
+        label="em",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=tmp_path / "input.gro",
+        top_file=tmp_path / "topol.top",
+        workflow="prepared",
+    )
+
+    job.set_folder(str(tmp_path))
+
+    runner = _make_runner()
+    runner._write_input(job)
+
+    assert job.mdp_file == tmp_path / "em.mdp"
+    assert job.mdp_file.exists()
+
+    content = job.mdp_file.read_text(encoding="utf-8")
+    assert "integrator" in content
+    assert "steep" in content
+    assert "emtol" in content
+
+
+def test_gromacs_writer_generates_nvt_mdp_when_missing(tmp_path):
+    job = GromacsNVTJob(
+        molecule=None,
+        label="nvt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=tmp_path / "em.gro",
+        top_file=tmp_path / "topol.top",
+        workflow="prepared",
+        temperature=310,
+        timestep=0.001,
+    )
+
+    job.set_folder(str(tmp_path))
+
+    runner = _make_runner()
+    runner._write_input(job)
+
+    assert job.mdp_file == tmp_path / "nvt.mdp"
+    assert job.mdp_file.exists()
+
+    content = job.mdp_file.read_text(encoding="utf-8")
+    assert "integrator" in content
+    assert "md" in content
+    assert "ref_t" in content
+    assert "310" in content
+    assert "dt" in content
+    assert "0.001" in content
+
+def test_gromacs_writer_does_not_overwrite_user_mdp(tmp_path):
+    mdp_file = tmp_path / "custom.mdp"
+    mdp_file.write_text("integrator = md\n; custom file\n", encoding="utf-8")
+
+    job = GromacsNVTJob(
+        molecule=None,
+        label="nvt",
+        jobrunner=None,
+        mdp_file=mdp_file,
+        structure_file=tmp_path / "em.gro",
+        top_file=tmp_path / "topol.top",
+        workflow="prepared",
+        temperature=310,
+    )
+
+    job.set_folder(str(tmp_path))
+
+    runner = _make_runner()
+    runner._write_input(job)
+
+    assert job.mdp_file == mdp_file
+    assert mdp_file.read_text(encoding="utf-8") == "integrator = md\n; custom file\n"
+    assert not (tmp_path / "nvt.mdp").exists()
+
+def test_gromacs_prerun_generates_missing_mdp_before_validation(tmp_path):
+    structure_file = tmp_path / "em.gro"
+    top_file = tmp_path / "topol.top"
+
+    structure_file.write_text("dummy structure\n", encoding="utf-8")
+    top_file.write_text("dummy topology\n", encoding="utf-8")
+
+    job = GromacsNVTJob(
+        molecule=None,
+        label="nvt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=structure_file,
+        top_file=top_file,
+        workflow="prepared",
+    )
+
+    job.set_folder(str(tmp_path))
+
+    runner = _make_runner()
+    runner._assemble_tpr = lambda job: None
+
+    runner._prerun(job)
+
+    assert job.mdp_file == tmp_path / "nvt.mdp"
+    assert job.mdp_file.exists()
+    assert "integrator" in job.mdp_file.read_text(encoding="utf-8")
