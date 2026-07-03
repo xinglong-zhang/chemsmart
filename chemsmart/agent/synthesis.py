@@ -183,6 +183,40 @@ class SynthesisSession:
             str(result.get("confidence") or "low"),
         )
 
+    def prepare_command(self, request: str) -> JsonDict:
+        """Synthesize and validate a command without prompting or executing.
+
+        This is the non-interactive half of ``run_interactive`` used by the TUI:
+        it lets the user chat with the active synthesis provider, then inspect
+        the rendered command and runtime semantic gate result before deciding
+        whether to move into the full harness workflow.
+        """
+
+        result = self.synthesize(request)
+        if result["status"] != "ready":
+            return result
+
+        repaired = self._repair_ready_result(request, result)
+        if repaired is None:
+            return {
+                "status": "infeasible",
+                "command": "",
+                "explanation": (
+                    "Synthesized command failed validation and could not be "
+                    "repaired."
+                ),
+                "confidence": "low",
+                "missing_info": [],
+                "alternatives": [],
+            }
+        command = str(repaired.get("command") or "")
+        self._remember_turn(
+            request,
+            command,
+            assistant_message=self._last_raw_response,
+        )
+        return repaired
+
     def _repair_ready_result(
         self,
         current_request: str,

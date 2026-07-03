@@ -76,6 +76,25 @@ def test_composer_large_paste_placeholder_and_external_editor(
     asyncio.run(scenario())
 
 
+def test_composer_paste_ignores_immediate_duplicate_key_stream(
+    tmp_path: Path,
+):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            composer = app.query_one(Composer)
+            await composer._on_paste(events.Paste("abc"))
+            for character in "abc":
+                await composer._on_key(events.Key(character, character))
+            assert composer.text == "abc"
+
+            await composer._on_key(events.Key("d", "d"))
+            assert composer.text == "abcd"
+
+    asyncio.run(scenario())
+
+
 def test_composer_submit_is_guarded_until_screen_handles_message(
     tmp_path: Path,
 ):

@@ -232,7 +232,7 @@ def test_gaussian_tddft_options_render_after_td_subcommand():
     assert out["valid"], out["errors"]
     assert out["commands"] == [
         "chemsmart run gaussian -p test -f water.xyz -c 0 -m 1 td "
-        "--nstates 10 --root 2 --eqsolv true"
+        "--nstates 10 --root 2 --eqsolv eqsolv"
     ]
 
 

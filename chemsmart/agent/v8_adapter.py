@@ -118,6 +118,8 @@ def _literal_list_value(value: Any) -> str:
 
 
 def _fmt_setting(key: str, value: Any) -> str:
+    if key == "eqsolv" and isinstance(value, bool):
+        return "eqsolv" if value else "noneqsolv"
     if isinstance(value, bool):
         return "true" if value else "false"
     if key == "fragment_indices":
@@ -175,7 +177,7 @@ def _job_command(
     parts += ["-f", shlex.quote(str(source))]
     if kind == "orca.neb" and job.get("product_file"):
         subcommand_flags += ["-e", shlex.quote(str(job["product_file"]))]
-    parts += ["-c", str(job["charge"]), "-m", str(job["mult"])]
+    parts += ["-c", str(job.get("charge", 0)), "-m", str(job.get("mult", 1))]
     if job.get("label"):
         parts += ["-l", shlex.quote(str(job["label"]))]
     parts.append(_subcommand(kind))

@@ -25,9 +25,16 @@ from chemsmart.agent.permissions import (
     PermissionPolicy,
     ResolvedDecision,
 )
+from chemsmart.agent.provider_config import (
+    AgentProviderConfig,
+    AgentProviderConfigError,
+    load_active_provider_config,
+)
+from chemsmart.agent.model_command_parser import parse_model_command
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.services.conversation_memory import ConversationMemory
+from chemsmart.agent.synthesis import SynthesisSession
 from chemsmart.agent.tui.events import (
     AssistantTurnEvent,
     CriticVerdictEvent,
@@ -70,6 +77,7 @@ from chemsmart.agent.tui.tool_meta import (
 )
 from chemsmart.agent.tui.widgets.cells import (
     AgentMessageCell,
+    CommandInterpretationCell,
     CriticVerdictCell,
     DryRunInputCell,
     ErrorCell,
@@ -97,8 +105,43 @@ from chemsmart.agent.tui.widgets.popups import (
     TextPromptOverlay,
     build_approval_overlay,
 )
+from chemsmart.agent.tui.widgets.slash_palette import SlashCommandPalette
 from chemsmart.agent.tui.widgets.transcript import Transcript
 from chemsmart.io.molecules.structure import Molecule
+
+_SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
+    ("/help", "show available commands"),
+    ("/jobs", "open the jobs panel"),
+    ("/queue", "show the current queue snapshot"),
+    ("/server", "switch the active HPC server"),
+    ("/molecule", "load and preview a molecule"),
+    ("/cancel", "cancel a queued or running job"),
+    ("/extract", "parse a final result"),
+    ("/dryrun", "regenerate the current dry-run"),
+    ("/allow", "allow the focused tool request once"),
+    ("/allow-session", "allow the focused tool for this session"),
+    ("/deny", "deny the focused tool request"),
+    ("/permissions", "toggle permission or driving mode"),
+    ("/yolo", "toggle risky-tool autonomy"),
+    ("/execute", "submit the dry-run to HPC for real"),
+    ("/submit", "backward-compatible submit approval"),
+    ("/run", "backward-compatible local-run approval"),
+    ("/critic", "show the current critic verdict"),
+    ("/plan", "show the current plan"),
+    ("/rationale", "show planner rationale"),
+    ("/clear", "clear the transcript"),
+    ("/sessions", "browse recent sessions"),
+    ("/resume", "load or continue a session"),
+    ("/tools", "list registered tools"),
+    ("/wizard", "probe server setup and render YAML"),
+    ("/wizard-refresh", "refresh node cache"),
+    ("/wizard-verify", "verify server transport wiring"),
+    ("/wizard-write", "write latest wizard YAML"),
+    ("/doctor", "run inline diagnostics"),
+    ("/mode", "switch ask/run interaction mode"),
+    ("/quit", "exit the TUI"),
+    ("/exit", "exit the TUI"),
+)
 
 
 class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
@@ -153,10 +196,16 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._active_server_name = self._default_active_server_name()
         self._latest_wizard_probe: dict[str, object] | None = None
         self._last_dry_run_session_id: str | None = None
+        self._active_provider_config = _load_tui_provider_config()
+        self._interaction_mode = _default_interaction_mode(
+            self._active_provider_config
+        )
+        self.active_synthesis_session: SynthesisSession | None = None
 
     def compose(self) -> ComposeResult:
         yield ChemsmartHeader(id="chat-header")
         yield Transcript(id="chat-body")
+        yield SlashCommandPalette(id="slash-palette")
         yield Composer()
         yield FooterWidget(id="status-footer")
 
@@ -171,7 +220,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             "Gaussian`"
         )
         self.focus_composer()
-        self.query_one(FooterWidget).update_draft("")
+        footer = self.query_one(FooterWidget)
+        self._sync_footer_provider()
+        footer.update_draft("")
         self.run_job_poller(self.job_poll_interval)
         self._refresh_job_snapshot()
 
@@ -179,6 +230,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         text = event.text.strip()
         event.composer.clear_text()
         self.query_one(FooterWidget).update_draft("")
+        self.query_one(SlashCommandPalette).hide()
         if text.startswith("/"):
             self._handle_slash_command(text)
             return
@@ -188,7 +240,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def on_text_area_changed(self, event) -> None:
         if getattr(event.text_area, "id", None) == "composer":
-            self.query_one(FooterWidget).update_draft(event.text_area.text)
+            text = event.text_area.text
+            self.query_one(FooterWidget).update_draft(text)
+            self._update_slash_palette(text)
 
     def on_job_poller_error(self, message: JobPollerError) -> None:
         self.post_error(
@@ -243,6 +297,40 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
         result["session_allow_tools"] = sorted(policy.session_allow)
         return result
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
+        name="agent-ask",
+    )
+    def run_synthesis_session(self, request: str) -> dict[str, object]:
+        try:
+            if self.active_synthesis_session is None:
+                self.active_synthesis_session = SynthesisSession()
+            result = self.active_synthesis_session.prepare_command(request)
+            semantic = self.active_synthesis_session._last_semantic_result
+        except Exception as exc:
+            return {
+                "synthesis": {
+                    "status": "infeasible",
+                    "command": "",
+                    "explanation": _format_synthesis_exception(exc),
+                    "confidence": "low",
+                    "missing_info": [],
+                    "alternatives": [],
+                },
+                "raw_response": "",
+                "semantic_result": None,
+            }
+        return {
+            "synthesis": result,
+            "raw_response": self.active_synthesis_session._last_raw_response,
+            "semantic_result": (
+                semantic.to_dict() if semantic is not None else None
+            ),
+        }
 
     @work(
         thread=True,
@@ -356,6 +444,12 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "Wait for the current request to finish before starting a new request.",
             )
             return
+        if self._interaction_mode == "ask":
+            self._start_synthesis_request(text)
+            return
+        self._start_harness_request(text)
+
+    def _start_harness_request(self, text: str) -> None:
         keep_conversational = self.active_agent_session is not None
         if not keep_conversational:
             self._stop_tailer()
@@ -374,6 +468,21 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._session_poll_timer = self.set_interval(
             0.1, self._attach_live_tailer, pause=False
         )
+
+    def _start_synthesis_request(self, text: str) -> None:
+        keep_conversational = self.active_synthesis_session is not None
+        if not keep_conversational:
+            self._stop_tailer()
+        self._reset_request_state(
+            clear_transcript=True,
+            keep_conversational=keep_conversational,
+        )
+        self._current_request = text
+        self.query_one(FooterWidget).set_phase(Phase.PLANNING)
+        self.query_one(FooterWidget).set_hint("Model is synthesizing…")
+        self.query_one(Transcript).add_cell(UserMessageCell(text))
+        self._user_requests.add(text)
+        self._current_worker = self.run_synthesis_session(text)
 
     @work(
         thread=True,
@@ -553,6 +662,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if event.state == WorkerState.SUCCESS:
             result = event.worker.result or {}
             self._current_worker = event.worker
+            if event.worker.name == "agent-ask":
+                self._publish_synthesis_result(result)
+                return
+            if self._tailer is not None:
+                self._tailer.read_available()
             self._session_allow_tools = set(
                 result.get("session_allow_tools") or []
             )
@@ -669,6 +783,92 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self, title: str, message: str, details: dict | None = None
     ) -> None:
         self.query_one(Transcript).add_cell(ErrorCell(title, message, details))
+
+    def _update_slash_palette(self, text: str) -> None:
+        palette = self.query_one(SlashCommandPalette)
+        raw = text.lstrip()
+        if not raw.startswith("/") or " " in raw:
+            palette.hide()
+            return
+        query = raw[1:].lower()
+        matches = [
+            item
+            for item in _SLASH_PALETTE_COMMANDS
+            if item[0][1:].startswith(query)
+        ]
+        palette.show_matches(query=query, matches=matches)
+
+    def _sync_footer_provider(self) -> None:
+        config = self._active_provider_config
+        if config is None:
+            return
+        self.query_one(FooterWidget).set_provider_model(
+            f"{self._interaction_mode}:{config.type}",
+            config.model,
+        )
+
+    def _publish_synthesis_result(self, result: dict[str, object]) -> None:
+        synthesis = result.get("synthesis")
+        if not isinstance(synthesis, dict):
+            self.post_error("Synthesis failed", "Provider returned no result.")
+            self.query_one(FooterWidget).set_phase(Phase.ERROR)
+            self.query_one(FooterWidget).set_hint("Synthesis failed")
+            return
+
+        status = str(synthesis.get("status") or "")
+        footer = self.query_one(FooterWidget)
+        if status == "ready":
+            command = str(synthesis.get("command") or "")
+            explanation = str(synthesis.get("explanation") or "")
+            confidence = str(synthesis.get("confidence") or "low")
+            semantic = result.get("semantic_result")
+            semantic_text = _format_semantic_result(
+                semantic if isinstance(semantic, dict) else None
+            )
+            self.post_agent_message(
+                (
+                    "```bash\n"
+                    f"{command}\n"
+                    "```\n\n"
+                    f"confidence: `{confidence}`\n\n"
+                    f"{explanation or 'Prepared chemsmart command.'}"
+                    f"{semantic_text}"
+                ),
+                title="Synthesis",
+            )
+            self.query_one(Transcript).add_cell(
+                CommandInterpretationCell(parse_model_command(command))
+            )
+            footer.set_phase(Phase.FINISHED)
+            footer.set_hint("Command ready — /mode run for full harness")
+            return
+
+        if status == "needs_clarification":
+            missing = synthesis.get("missing_info") or []
+            if not isinstance(missing, list):
+                missing = [str(missing)]
+            lines = "\n".join(f"- {item}" for item in missing) or "- details"
+            self.post_agent_message(
+                f"I need more information before making a command:\n\n{lines}",
+                title="Clarification",
+            )
+            footer.set_phase(Phase.IDLE)
+            footer.set_hint("Clarification needed")
+            return
+
+        explanation = str(
+            synthesis.get("explanation") or "No executable command was made."
+        )
+        semantic = result.get("semantic_result")
+        semantic_text = _format_semantic_result(
+            semantic if isinstance(semantic, dict) else None
+        )
+        self.post_agent_message(
+            f"{explanation}{semantic_text}",
+            title="Synthesis",
+        )
+        footer.set_phase(Phase.FINISHED)
+        footer.set_hint("No command generated")
 
     def open_file_picker(self) -> None:
         self.app.push_screen(
@@ -1245,6 +1445,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._run_inline_cli(["tools"], title="Tools")
         elif command == "/doctor":
             self._run_inline_cli(["doctor"], title="Doctor")
+        elif command == "/mode":
+            self._handle_mode_command(argument)
         elif command == "/wizard":
             self._handle_wizard_probe_command(argument)
         elif command == "/wizard-verify":
@@ -1798,6 +2000,62 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             AgentMessageCell(table, title="Help")
         )
 
+    def _handle_mode_command(self, argument: str) -> None:
+        value = argument.strip().lower()
+        if not value:
+            self.post_agent_message(
+                (
+                    "```\n"
+                    f"mode: {self._interaction_mode}\n"
+                    "ask: active synthesis provider + runtime semantic gate\n"
+                    "run: frontier AgentSession harness + tools/critic/dry-run\n"
+                    "```"
+                ),
+                title="Mode",
+            )
+            return
+        if value not in {"ask", "run"}:
+            self.post_error("Unknown mode", "Usage: /mode ask|run")
+            return
+        if (
+            value == "run"
+            and self._active_provider_config is not None
+            and self._active_provider_config.type == "local"
+        ):
+            self.post_error(
+                "Run mode unavailable for local provider",
+                "The local model only supports ask mode (single-shot command "
+                "synthesis + semantic gate). The run-mode harness needs a "
+                "tool-calling provider (anthropic/openai).",
+            )
+            return
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Mode switch unavailable",
+                "Wait for the current request to finish before switching mode.",
+            )
+            return
+        if value != self._interaction_mode:
+            self._reset_request_state(
+                clear_transcript=False,
+                clear_session=True,
+            )
+            self.active_synthesis_session = None
+        self._interaction_mode = value
+        self._sync_footer_provider()
+        self.post_agent_message(
+            (
+                "Ask mode uses the active provider for direct command "
+                "synthesis and semantic validation."
+                if value == "ask"
+                else (
+                    "Run mode uses the full frontier-agent harness with "
+                    "tools, critic, dry-run evidence, and execution approval."
+                )
+            ),
+            title="Mode",
+        )
+
     def _show_sessions_snapshot(self) -> None:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]
         if self.session_root.exists():
@@ -2080,6 +2338,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if clear_session:
             self.active_agent_session = None
             self.active_resume_id = None
+            self.active_synthesis_session = None
             self._session_allow_tools.clear()
             self._last_dry_run_session_id = None
         self._current_request = None
@@ -2102,6 +2361,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.IDLE)
         footer.set_hint("Enter to submit • /help for commands")
+        self._sync_footer_provider()
         footer.entity_status = None
         footer.reset_job_counts()
         if clear_transcript:
@@ -2319,3 +2579,94 @@ def _jobs_sort_key(job: dict) -> tuple[int, str, str]:
         str(job.get("raw_started") or ""),
         str(job.get("job_id") or ""),
     )
+
+
+def _load_tui_provider_config() -> AgentProviderConfig | None:
+    # Mirror ``get_provider``: the active ``agent.yaml`` config is the source of
+    # truth for which provider the harness/synthesis path actually builds. A
+    # stale ``AI_PROVIDER`` env var must NOT shadow it — otherwise the TUI picks
+    # a mode that does not match the provider it will instantiate (e.g. defaults
+    # to run/harness while ``get_provider`` returns a local provider, crashing
+    # with "Unsupported provider 'local'").
+    try:
+        return load_active_provider_config()
+    except AgentProviderConfigError:
+        return None
+
+
+def _default_interaction_mode(config: AgentProviderConfig | None) -> str:
+    requested = os.environ.get("CHEMSMART_AGENT_TUI_MODE", "").strip().lower()
+    if requested in {"ask", "run"}:
+        return requested
+    # The in-process local SPEC provider cannot drive the tool-calling run-mode
+    # harness; it only supports single-shot synthesis (ask mode). Default local
+    # configs to ask so the TUI works out of the box.
+    if config is not None and config.type == "local":
+        return "ask"
+    return "run"
+
+
+def _format_semantic_result(semantic: dict[str, object] | None) -> str:
+    if not semantic:
+        return ""
+    verdict = str(semantic.get("verdict") or "unknown")
+    failed = semantic.get("failed_rule_ids") or []
+    if isinstance(failed, list) and failed:
+        failed_text = ", ".join(str(item) for item in failed)
+    else:
+        failed_text = "none"
+    issues = semantic.get("issues") or []
+    issue_lines = []
+    if isinstance(issues, list):
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            rule = str(issue.get("rule_id") or "rule")
+            message = str(issue.get("message") or "")
+            issue_lines.append(f"- `{rule}`: {message}")
+    generated = semantic.get("generated_inputs") or []
+    generated_lines = []
+    if isinstance(generated, list):
+        for item in generated:
+            if not isinstance(item, dict):
+                continue
+            path = str(item.get("path") or "generated input")
+            route = str(item.get("route") or "").strip()
+            generated_lines.append(f"- `{path}` {route}".rstrip())
+    body = [
+        "",
+        "",
+        "runtime semantic gate:",
+        f"- verdict: `{verdict}`",
+        f"- failed_rule_ids: `{failed_text}`",
+    ]
+    if issue_lines:
+        body.append("- issues:")
+        body.extend(issue_lines)
+    if generated_lines:
+        body.append("- generated input evidence:")
+        body.extend(generated_lines[:3])
+    return "\n".join(body)
+
+
+def _format_synthesis_exception(exc: Exception) -> str:
+    message = str(exc) or exc.__class__.__name__
+    if "MLX runtime requires Apple Silicon/Metal and mlx-lm" in message:
+        return (
+            "The active local provider is configured for MLX, but this Python "
+            "environment cannot load `mlx_lm` or Apple Metal. Start the TUI "
+            "with the MLX-enabled interpreter, for example "
+            "`/Users/hongjiseung/developer/chemsmart/.venv-mlx/bin/python -m "
+            "chemsmart.cli.main agent`, or switch to `/mode run` with an API "
+            "frontier provider. Active-env install command: "
+            "`python -m pip install 'mlx-lm==0.31.3'`."
+        )
+    if "local provider" in message.lower() or "mlx" in message.lower():
+        return (
+            "The local model provider could not start.\n\n"
+            f"{message}\n\n"
+            "Use `/doctor` to inspect the active provider, run the TUI from the "
+            "MLX-enabled environment, or switch to `/mode run` with an API "
+            "frontier provider."
+        )
+    return message

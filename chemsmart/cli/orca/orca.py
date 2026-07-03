@@ -115,7 +115,7 @@ def click_orca_settings_options(f):
         type=click.Choice(
             ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
         ),
-        default="defgrid2",  # default used in ORCA is defgrid2
+        default=None,
         help="Grid for numerical integration. Choices are "
         "['defgrid1', 'defgrid2', 'defgrid3'].",
     )
