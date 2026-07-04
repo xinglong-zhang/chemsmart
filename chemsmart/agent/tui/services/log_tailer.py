@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 
 
 class _TailEventHandler(FileSystemEventHandler):
@@ -34,13 +34,16 @@ class LogTailer:
         self.path = Path(path)
         self.on_entry = on_entry
         self._offset = 0
-        self._observer: Observer | None = None
+        self._observer: PollingObserver | None = None
         self._handler = _TailEventHandler(self)
 
     def start(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.read_available()
-        observer = Observer()
+        # Polling avoids platform-native watcher crashes observed with macOS
+        # FSEvents during Textual test shutdown. Decision logs are small and
+        # append-only, so low-frequency polling is sufficient.
+        observer = PollingObserver(timeout=0.2)
         observer.schedule(
             self._handler, str(self.path.parent), recursive=False
         )
