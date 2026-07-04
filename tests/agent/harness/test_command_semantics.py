@@ -131,6 +131,96 @@ def test_wrong_option_order_is_rejected_before_safe_execution(
     assert result.failed_rule_ids == ["cmd.semantic.option_order"]
 
 
+def test_db_source_without_selector_rejects_before_safe_execution(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def should_not_run(*_args, **_kwargs):  # pragma: no cover - defensive
+        raise AssertionError("semantic gate should reject before subprocess")
+
+    monkeypatch.setattr(
+        "chemsmart.agent.harness.command_semantics.subprocess.run",
+        should_not_run,
+    )
+
+    result = evaluate_command_semantics(
+        "chemsmart run gaussian -f results.db -c 0 -m 1 sp",
+        cwd=tmp_path,
+    )
+
+    assert result.verdict == "reject"
+    assert result.failed_rule_ids == ["cmd.semantic.db_selector_cardinality"]
+
+
+def test_db_record_selector_shape_passes_to_safe_execution(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def fake_run(argv, **_kwargs):
+        assert "--record-index" in argv
+        assert "--structure-index" in argv
+        (tmp_path / "record_sp.com").write_text(
+            "# b3lyp/def2svp\n\nrecord\n\n0 1\nH 0 0 0\n\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(
+        "chemsmart.agent.harness.command_semantics.subprocess.run",
+        fake_run,
+    )
+
+    result = evaluate_command_semantics(
+        "chemsmart run gaussian --record-index 1 --structure-index 2 "
+        "-f results.db -c 0 -m 1 sp",
+        cwd=tmp_path,
+    )
+
+    assert result.verdict == "ok"
+
+
+def test_db_molecule_id_rejects_before_safe_execution(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def should_not_run(*_args, **_kwargs):  # pragma: no cover - defensive
+        raise AssertionError("semantic gate should reject before subprocess")
+
+    monkeypatch.setattr(
+        "chemsmart.agent.harness.command_semantics.subprocess.run",
+        should_not_run,
+    )
+
+    result = evaluate_command_semantics(
+        "chemsmart run orca --molecule-id mol-abc -f results.db -c 0 -m 1 sp",
+        cwd=tmp_path,
+    )
+
+    assert result.verdict == "reject"
+    assert "cmd.semantic.db_molecule_id_job" in result.failed_rule_ids
+
+
+def test_orca_stale_aux_basis_short_flag_rejects_before_safe_execution(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def should_not_run(*_args, **_kwargs):  # pragma: no cover - defensive
+        raise AssertionError("semantic gate should reject before subprocess")
+
+    monkeypatch.setattr(
+        "chemsmart.agent.harness.command_semantics.subprocess.run",
+        should_not_run,
+    )
+
+    result = evaluate_command_semantics(
+        "chemsmart run orca -a def2/J -f water.xyz -c 0 -m 1 sp",
+        cwd=tmp_path,
+    )
+
+    assert result.verdict == "reject"
+    assert result.failed_rule_ids == ["cmd.semantic.orca_aux_basis_short_flag"]
+
+
 def test_submit_success_without_observed_input_warns(
     monkeypatch,
     tmp_path,

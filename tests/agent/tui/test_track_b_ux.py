@@ -167,12 +167,18 @@ def test_dry_run_input_cell_shows_path_before_body():
     cell = DryRunInputCell(
         "%chk=water.chk\n# B3LYP/6-31G(d)\n",
         inputfile="/tmp/water.com",
+        command="chemsmart run gaussian -f water.xyz -c 0 -m 1 sp",
+        cli_grounded=True,
     )
 
     text = _render_plain(cell.renderable)
     assert "✓ water.com ready" in text
     assert "path: /tmp/water.com" in text
-    assert text.index("path: /tmp/water.com") < text.index("%chk=water.chk")
+    assert "Generated chemsmart CLI command" in text
+    assert "chemsmart run gaussian -f water.xyz -c 0 -m 1 sp" in text
+    assert text.index("Generated chemsmart CLI command") < text.index(
+        "%chk=water.chk"
+    )
 
 
 def test_plan_cell_renders_rationale_when_no_steps():

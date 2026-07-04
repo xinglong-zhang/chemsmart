@@ -84,3 +84,59 @@ def test_calcall_variant_passes_without_calcfc():
     )
 
     assert result.verdict == "ok"
+
+
+def test_duplicate_opt_block_via_route_params_rejects():
+    # Leak: a second opt=(...) block from --additional-route-parameters.
+    # The first block is canonical, so the old first-block-only check missed it.
+    result = check_gaussian_ts_route(
+        "# opt=(ts,calcfc,noeigentest) m062x 6-31G(d) "
+        "opt=(ts,calcfc,noeigentest)"
+    )
+
+    assert result.verdict == "reject"
+    assert any(
+        "more than one opt=(...) block" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_bare_ts_token_outside_opt_block_rejects():
+    # Leak: bare `ts` route token from --additional-route-parameters, outside
+    # the runtime-owned opt=(...) block.
+    result = check_gaussian_ts_route(
+        "# opt=(ts,calcfc,noeigentest) m062x 6-31G(d) ts"
+    )
+
+    assert result.verdict == "reject"
+    assert any(
+        "outside the opt=(...) block" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_bare_calcfc_noeigentest_outside_opt_block_rejects():
+    result = check_gaussian_ts_route(
+        "# opt=(ts,calcfc,noeigentest) m062x 6-31G(d) calcfc noeigentest"
+    )
+
+    assert result.verdict == "reject"
+    leaked = [
+        issue
+        for issue in result.issues
+        if "outside the opt=(...) block" in issue.message
+    ]
+    assert leaked
+    assert set(leaked[0].evidence["leaked_tokens"]) == {
+        "calcfc",
+        "noeigentest",
+    }
+
+
+def test_legit_extra_route_param_outside_opt_block_passes():
+    # A genuine non-runtime route extra outside the opt block is not a leak.
+    result = check_gaussian_ts_route(
+        "# opt=(ts,calcfc,noeigentest) m062x 6-31G(d) maxcycles=100"
+    )
+
+    assert result.verdict == "ok"

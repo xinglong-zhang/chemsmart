@@ -72,6 +72,8 @@ def test_warn_with_override_executes_but_warn_without_override_refuses(
     def fake_dry_run_input(job):
         return {
             "inputfile": str(Path(job.folder) / "override.com"),
+            "command": "chemsmart run gaussian -f override.xyz -c 0 -m 1 ts",
+            "cli_grounded": True,
             "content": "%chk=override.chk\nmissing route line\n",
         }
 
@@ -203,6 +205,8 @@ def test_harness_rejects_malformed_ts_route_even_when_critic_ok(
     def fake_dry_run_input(job):
         return {
             "inputfile": str(Path(job.folder) / "bad_ts.com"),
+            "command": "chemsmart run gaussian -f bad_ts.xyz -c 0 -m 1 ts",
+            "cli_grounded": True,
             "content": (
                 "%chk=bad_ts.chk\n"
                 "# b3lyp/6-31g* opt=(ts,calcfc,noeigentest,['ts'])\n\n"

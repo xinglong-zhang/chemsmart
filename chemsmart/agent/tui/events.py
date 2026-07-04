@@ -80,6 +80,9 @@ class DryRunInputEvent(AgentEvent):
     step_index: int
     inputfile: str | None
     content: str
+    command: str | None = None
+    cli_grounded: bool = False
+    cli_grounding_issue: str | None = None
 
 
 @dataclass(slots=True)
@@ -270,6 +273,11 @@ def parse_decision_event(
         if tool in {
             "build_molecule",
             "build_gaussian_settings",
+            "extract_project_protocol",
+            "render_project_yaml",
+            "validate_project_yaml",
+            "critic_project_yaml",
+            "write_project_yaml",
             "build_job",
             "run_local",
         }:
@@ -289,6 +297,17 @@ def parse_decision_event(
                 step_index=step_index,
                 inputfile=tool_payload.get("inputfile"),
                 content=str(tool_payload.get("content") or ""),
+                command=(
+                    str(tool_payload.get("command"))
+                    if tool_payload.get("command") is not None
+                    else None
+                ),
+                cli_grounded=bool(tool_payload.get("cli_grounded")),
+                cli_grounding_issue=(
+                    str(tool_payload.get("cli_grounding_issue"))
+                    if tool_payload.get("cli_grounding_issue") is not None
+                    else None
+                ),
             )
         if tool == "validate_runtime":
             return RuntimeValidationEvent(

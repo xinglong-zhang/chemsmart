@@ -58,7 +58,10 @@ def load_mlx_model(
             "an MLX-compatible environment with: pip install 'mlx-lm==0.31.3'"
         ) from exc
 
-    model, tokenizer = load(model_id)
+    model, tokenizer = load(
+        model_id,
+        tokenizer_config={"fix_mistral_regex": True},
+    )
     return LoadedMLXModel(
         model=model,
         tokenizer=tokenizer,

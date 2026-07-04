@@ -33,8 +33,18 @@ class ResolvedDecision(str, Enum):
 
 
 DRIVING_DEFAULT_DENY = {"run_local", "submit_hpc", "remote_probe"}
-ALWAYS_REQUIRE_APPROVAL = {"wizard_write"}
-READ_ONLY_TOOLS = {"read", "ssh_probe", "scheduler_query", "log_tail"}
+ALWAYS_REQUIRE_APPROVAL = {"wizard_write", "write_project_yaml"}
+READ_ONLY_TOOLS = {
+    "read",
+    "ssh_probe",
+    "scheduler_query",
+    "log_tail",
+    "extract_project_protocol",
+    "render_project_yaml",
+    "validate_project_yaml",
+    "critic_project_yaml",
+    "search_basis_sets",
+}
 EDIT_SAFE_TOOLS = {"edit", "write"}
 PLAN_MODE_REASON = "plan mode active"
 NEVER_AUTO_ALLOW_PATTERNS: list[tuple[str, re.Pattern[str]]] = [

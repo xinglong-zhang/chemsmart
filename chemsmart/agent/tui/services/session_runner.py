@@ -38,6 +38,26 @@ class SessionRunnerMixin:
         exclusive=True,
         exit_on_error=False,
         group="agent-session",
+        name="agent-build",
+    )
+    def run_build_session(self, request: str) -> dict[str, Any]:
+        """Run a request in project-YAML build mode (tool-loop harness)."""
+        self.active_resume_id = None
+        self.active_agent_session = AgentSession(
+            session_root=str(self.session_root),
+            stage_prompt="project_yaml_build.md",
+        )
+        return self.active_agent_session.run(
+            request,
+            dry_submit=True,
+            pause_before_risky=True,
+        )
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="agent-session",
         name="agent-resume",
     )
     def resume_agent_session(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+from time import monotonic
 from tempfile import NamedTemporaryFile
 
 from textual import events
@@ -46,15 +47,30 @@ class Composer(TextArea):
         self.border_title = "Request"
         self._large_paste_chunks: list[tuple[str, str]] = []
         self._submitting = False
+        self._paste_guard_text = ""
+        self._paste_guard_deadline = 0.0
 
     async def _on_paste(self, event: events.Paste) -> None:
+        event.stop()
+        event.prevent_default()
         if len(event.text) <= 10000:
-            await super()._on_paste(event)
+            if result := self._replace_via_keyboard(
+                event.text,
+                *self.selection,
+            ):
+                self.move_cursor(result.end_location)
+            self._arm_paste_guard(event.text)
             return
         placeholder = f"[Pasted {len(event.text)} chars]"
         self._large_paste_chunks.append((placeholder, event.text))
         if result := self._replace_via_keyboard(placeholder, *self.selection):
             self.move_cursor(result.end_location)
+        self._arm_paste_guard(event.text)
+
+    async def _on_key(self, event: events.Key) -> None:
+        if self._consume_duplicate_paste_key(event):
+            return
+        await super()._on_key(event)
 
     def action_submit(self) -> None:
         if self._submitting:
@@ -100,12 +116,38 @@ class Composer(TextArea):
             text = text.replace(placeholder, payload, 1)
         return text
 
+    def _arm_paste_guard(self, text: str) -> None:
+        # Some macOS terminal/Textual combinations deliver Cmd+V as both a
+        # bracketed paste event and an immediate printable key stream. Consume
+        # only the exact duplicate stream, and only for a short window.
+        self._paste_guard_text = text
+        self._paste_guard_deadline = monotonic() + 0.5
+
+    def _consume_duplicate_paste_key(self, event: events.Key) -> bool:
+        if not self._paste_guard_text:
+            return False
+        if monotonic() > self._paste_guard_deadline:
+            self._paste_guard_text = ""
+            return False
+        character = event.character
+        if not character or not event.is_printable:
+            return False
+        if not self._paste_guard_text.startswith(character):
+            self._paste_guard_text = ""
+            return False
+        self._paste_guard_text = self._paste_guard_text[len(character) :]
+        event.stop()
+        event.prevent_default()
+        return True
+
     def clear_text(self) -> None:
         self._large_paste_chunks.clear()
         self._submitting = False
+        self._paste_guard_text = ""
         self.load_text("")
 
     def load_text(self, text: str) -> None:
         self._large_paste_chunks.clear()
         self._submitting = False
+        self._paste_guard_text = ""
         super().load_text(text)

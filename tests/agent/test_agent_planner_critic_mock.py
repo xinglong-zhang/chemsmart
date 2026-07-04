@@ -160,6 +160,8 @@ def test_critic_blocks_malformed_input(
     def fake_dry_run_input(job):
         return {
             "inputfile": str(Path(job.folder) / "malformed.com"),
+            "command": "chemsmart run gaussian -f malformed.xyz -c 0 -m 1 opt",
+            "cli_grounded": True,
             "content": "%chk=bad.chk\nmissing route line\n",
         }
 
@@ -288,6 +290,8 @@ def test_critic_hard_rejects_irc_without_irc_keyword(
     def fake_dry_run_input(job):
         return {
             "inputfile": str(Path(job.folder) / "irc_case.com"),
+            "command": "chemsmart run gaussian -f irc_case.xyz -c 0 -m 1 irc",
+            "cli_grounded": True,
             "content": "#p b3lyp/6-31g* opt\n\nirc test\n\n0 1\nO 0.0 0.0 0.0\n",
         }
 

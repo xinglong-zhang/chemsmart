@@ -89,6 +89,61 @@ class ToolRegistry:
         tool_sources = [
             ("build_molecule", "chemsmart.agent.tools", None, None),
             ("recommend_method", "chemsmart.agent.tools", None, None),
+            (
+                "extract_project_protocol",
+                "chemsmart.agent.project_yaml",
+                "Extract chemsmart project-YAML method facts from a literature protocol or natural-language method description.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Extract project protocol facts",
+                ),
+            ),
+            (
+                "render_project_yaml",
+                "chemsmart.agent.project_yaml",
+                "Render a chemsmart Gaussian/ORCA project YAML candidate from extracted method facts.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Render project YAML {project_name}",
+                ),
+            ),
+            (
+                "validate_project_yaml",
+                "chemsmart.agent.project_yaml",
+                "Validate project YAML by loading it through chemsmart project settings.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Validate project YAML {project_name}",
+                ),
+            ),
+            (
+                "critic_project_yaml",
+                "chemsmart.agent.project_yaml",
+                "Critique whether project YAML matches a literature protocol and chemsmart runtime semantics.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Critique project YAML {project_name}",
+                ),
+            ),
+            (
+                "write_project_yaml",
+                "chemsmart.agent.project_yaml",
+                "Write a validated project YAML into ~/.chemsmart/<program> after explicit approval.",
+                RuntimeToolMetadata(
+                    read_only=False,
+                    ui_summary_template="Write project YAML {project_name}",
+                    side_effect="writes a user project YAML file",
+                ),
+            ),
+            (
+                "search_basis_sets",
+                "chemsmart.agent.harness.basis_sets.catalog",
+                "Search BSE-backed basis-set names for a short user phrase; returns top candidates only, never the full catalog.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Search basis sets {query}",
+                ),
+            ),
             ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
             ("build_orca_settings", "chemsmart.agent.tools", None, None),
             ("build_job", "chemsmart.agent.tools", None, None),

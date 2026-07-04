@@ -307,6 +307,18 @@ def _summarize_tool_result(
             return f"recommend_method suggested {method}."
         return None
 
+    if tool in {
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "write_project_yaml",
+    }:
+        summary = _project_yaml_summary(tool, result_payload)
+        if summary:
+            return summary
+        return None
+
     if tool in {"build_gaussian_settings", "build_orca_settings"}:
         method = _settings_summary(result_payload)
         if method:
@@ -554,6 +566,26 @@ def _settings_summary(payload: dict[str, Any]) -> str | None:
     return _method_summary(payload)
 
 
+def _project_yaml_summary(tool: str, payload: dict[str, Any]) -> str | None:
+    project = _string_value(payload.get("project_name")) or "project"
+    program = _string_value(payload.get("program")) or "program"
+    verdict = _string_value(payload.get("verdict"))
+    if verdict is None and isinstance(payload.get("validation"), dict):
+        verdict = _string_value(payload["validation"].get("verdict"))
+    if tool == "extract_project_protocol":
+        return f"extract_project_protocol extracted {program}:{project} method facts."
+    if tool == "render_project_yaml":
+        return f"render_project_yaml produced a {program}:{project} YAML candidate."
+    if tool == "write_project_yaml":
+        path = _string_value(payload.get("written_path"))
+        if path:
+            return f"write_project_yaml wrote {program}:{project} to {path}."
+        return f"write_project_yaml did not write {program}:{project}."
+    if verdict:
+        return f"{tool} returned {verdict} for {program}:{project}."
+    return None
+
+
 def _extract_route_line(content: Any) -> str | None:
     if not isinstance(content, str):
         return None
@@ -610,6 +642,21 @@ def _summarize_tool_use_result(
         method = _method_summary(inner) if isinstance(inner, dict) else None
         if method:
             return f"recommend_method suggested {method}."
+        return None
+
+    if tool in {
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "write_project_yaml",
+    }:
+        summary = _project_yaml_summary(
+            tool,
+            inner if isinstance(inner, dict) else {},
+        )
+        if summary:
+            return summary
         return None
 
     if tool in {"build_gaussian_settings", "build_orca_settings"}:

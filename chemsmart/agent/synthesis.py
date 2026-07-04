@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import click
@@ -17,7 +19,55 @@ from chemsmart.agent.harness.command_semantics import (
     CommandSemanticResult,
     evaluate_command_semantics,
 )
+from chemsmart.agent.command_answerer import (
+    ComposedAnswer,
+    compose_command_answer,
+    reason_missing_info,
+)
+from chemsmart.agent.harness.spec_invariants import check_spec
 from chemsmart.agent.kind_disambiguator import disambiguate
+from chemsmart.agent.model_command_parser import (
+    parse_model_command,
+)
+
+# Structural spec-invariant rule ids that are reliable to enforce at synthesis
+# time. The query-heuristic rules (decline_contract / required_present / label)
+# are intentionally excluded here to avoid false rejects on well-formed specs.
+_RELIABLE_SPEC_REJECTS = frozenset({
+    "spec.kind.canonical",
+    "spec.runtime_owned.leak",
+    "spec.settings.allowed",
+    "spec.ts.runtime_freq",
+    "spec.ts.runtime_route",
+    "spec.ts.bad_extra",
+    "spec.jobs.empty",
+})
+
+
+def _apply_spec_invariants(
+    result: "JsonDict", spec: "JsonDict", query: str
+) -> None:
+    """Run the deterministic SPEC invariants on the model's v8 SPEC and, on a
+    reliable structural violation, downgrade a ``ready`` result so a malformed
+    spec (runtime-owned leak, disallowed setting, redundant TS route token, …)
+    is never surfaced as an executable command."""
+    try:
+        issues = check_spec(spec, query)
+    except Exception:  # pragma: no cover - never fail synthesis on the gate
+        return
+    reliable = [i for i in issues if i.rule_id in _RELIABLE_SPEC_REJECTS]
+    if not reliable:
+        return
+    ids = sorted({i.rule_id for i in reliable})
+    msgs = [f"{i.rule_id}: {i.message}" for i in reliable]
+    result["spec_invariant_failed"] = ids
+    if result.get("status") == "ready":
+        result["status"] = "infeasible"
+        result["explanation"] = (
+            (result.get("explanation") or "")
+            + " Spec-invariant check rejected: "
+            + "; ".join(msgs)
+        ).strip()
 from chemsmart.agent.prompts.synthesis import build_synthesis_system_prompt
 from chemsmart.agent.services.conversation_memory import (
     ConversationMemory,
@@ -27,6 +77,34 @@ from chemsmart.agent.services.conversation_memory import (
 JsonDict = dict[str, Any]
 _ALLOWED_STATUSES = {"ready", "needs_clarification", "infeasible"}
 _ALLOWED_CONFIDENCE = {"low", "medium", "high"}
+_FRONTIER_PROVIDER_NAMES = {"openai", "anthropic"}
+_ROUTER_ACTIONS = {
+    "synthesize_command",
+    "explain_command",
+    "critique_command",
+    "repair_command",
+    "clarify",
+}
+_INTENT_ROUTER_SYSTEM_PROMPT = """You are the intent router for the ChemSmart agent UI.
+
+Return ONLY one JSON object with exactly these fields:
+{
+  "action": "synthesize_command" | "explain_command" | "critique_command" | "repair_command" | "clarify",
+  "target_command": "chemsmart ..." | "",
+  "confidence": "low" | "medium" | "high",
+  "missing_info": ["question", ...],
+  "decision_summary": "one short sentence",
+  "evidence": ["short observable reason", ...],
+  "rejected_actions": {"action_name": "short reason", ...}
+}
+
+Choose synthesize_command when the user asks to prepare, set up, run, submit, or change a computational job.
+Choose explain_command when the user asks what an existing command does, what it means, or how to read it.
+Choose critique_command when the user asks whether a command is valid, safe, correctly grounded, or will work.
+Choose repair_command when the user asks to fix a command or recover from a failed validation.
+Choose clarify only when neither the current request nor the last command is enough.
+
+Use target_command from the request if it contains one; otherwise use last_command when the user refers to "this command", "that", "it", or the previous result. Do not reveal hidden chain-of-thought."""
 
 
 class SynthesisSession:
@@ -40,6 +118,8 @@ class SynthesisSession:
         debug: bool = False,
         semantic_gate: bool = True,
         semantic_timeout_s: float = 30.0,
+        default_project: str | None = None,
+        enable_intent_router: bool | None = None,
     ) -> None:
         """Initialize a synthesis session.
 
@@ -54,21 +134,33 @@ class SynthesisSession:
             semantic_gate: When True, ready run/sub commands must pass the
                 safe runtime semantic gate before user confirmation.
             semantic_timeout_s: Timeout for the safe semantic validation run.
+            default_project: Runtime-owned Gaussian/ORCA project name to inject
+                when a synthesized command omits ``-p/--project``.
+            enable_intent_router: Enable the API/frontier-only intent router
+                that decides whether a turn should synthesize, explain, critique,
+                or repair a command before the command-synthesis schema runs.
         """
 
         if provider is None:
             from chemsmart.agent import providers
 
             provider = providers.get_provider()
+            if default_project is None:
+                default_project = resolve_default_project()
         self.provider = provider
+        self.default_project = (default_project or "").strip()
         self.schema = schema or build_chemsmart_cli_schema()
         self.max_retries = max_retries
         self.debug = debug
         self.semantic_gate = semantic_gate
         self.semantic_timeout_s = semantic_timeout_s
+        if enable_intent_router is None:
+            enable_intent_router = _is_frontier_provider(provider)
+        self.enable_intent_router = bool(enable_intent_router)
         self.memory = ConversationMemory()
         self._last_raw_response = ""
         self._last_semantic_result: CommandSemanticResult | None = None
+        self._last_decision_trace: JsonDict | None = None
 
     def synthesize(self, request: str) -> JsonDict:
         """Return a structured synthesis result for ``request``.
@@ -93,8 +185,13 @@ class SynthesisSession:
                 parsed = _parse_json_response(response)
                 if _is_v8_spec(parsed):
                     parsed, _changed = disambiguate(request, parsed)
-                    return _normalize_v8_spec(parsed)
-                return _normalize_result(parsed)
+                    result = _normalize_v8_spec(
+                        parsed,
+                        default_project=self.default_project or None,
+                    )
+                    _apply_spec_invariants(result, parsed, request)
+                    return self._apply_default_project(result)
+                return self._apply_default_project(_normalize_result(parsed))
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
@@ -182,6 +279,207 @@ class SynthesisSession:
             str(result.get("explanation") or ""),
             str(result.get("confidence") or "low"),
         )
+
+    def prepare_command(self, request: str) -> JsonDict:
+        """Synthesize and validate a command without prompting or executing.
+
+        This is the non-interactive half of ``run_interactive`` used by the TUI:
+        it lets the user chat with the active synthesis provider, then inspect
+        the rendered command and runtime semantic gate result before deciding
+        whether to move into the full harness workflow.
+        """
+
+        self._last_semantic_result = None
+        self._last_decision_trace = None
+        routed = self._route_frontier_request(request)
+        if routed is not None:
+            return routed
+
+        result = self.synthesize(request)
+        if result["status"] != "ready":
+            return self._attach_decision_trace(result)
+
+        repaired = self._repair_ready_result(request, result)
+        if repaired is None:
+            return self._attach_decision_trace({
+                "status": "infeasible",
+                "command": "",
+                "explanation": (
+                    "Synthesized command failed validation and could not be "
+                    "repaired."
+                ),
+                "confidence": "low",
+                "missing_info": [],
+                "alternatives": [],
+            })
+        command = str(repaired.get("command") or "")
+        self._remember_turn(
+            request,
+            command,
+            assistant_message=self._last_raw_response,
+        )
+        return self._attach_decision_trace(repaired)
+
+    def _route_frontier_request(self, request: str) -> JsonDict | None:
+        if not self.enable_intent_router:
+            return None
+        decision = self._frontier_intent_decision(request)
+        if decision is None:
+            return None
+        action = str(decision.get("action") or "synthesize_command")
+        target_command = _extract_command_from_text(request) or str(
+            decision.get("target_command") or ""
+        ).strip() or self._last_ready_command()
+        self._last_decision_trace = _build_decision_trace(
+            decision=decision,
+            action=action,
+            request=request,
+            target_command=target_command,
+            default_project=self.default_project,
+            last_command=self._last_ready_command(),
+        )
+        if action == "synthesize_command":
+            return None
+        if action in {"explain_command", "critique_command", "repair_command"}:
+            if not target_command:
+                return self._attach_decision_trace({
+                    "status": "needs_clarification",
+                    "command": "",
+                    "explanation": "No previous chemsmart command is available.",
+                    "confidence": "medium",
+                    "missing_info": [
+                        "Paste the chemsmart command you want me to explain or critique."
+                    ],
+                    "alternatives": [],
+                    "action": action,
+                })
+            target_command = _ensure_program_project(
+                target_command,
+                self.default_project,
+            )
+            if self._last_decision_trace is not None:
+                self._last_decision_trace["target_command"] = target_command
+            parsed_command = parse_model_command(target_command)
+            semantic_summary: JsonDict | None = None
+            if action in {"critique_command", "repair_command"}:
+                self._last_semantic_result = evaluate_command_semantics(
+                    target_command,
+                    timeout_s=self.semantic_timeout_s,
+                )
+                semantic_summary = self._last_semantic_result.to_dict()
+            # The deterministic parser + semantic gate are the grounding tools;
+            # the provider composes the user-facing answer in the user's own
+            # language, and the grounding harness rejects any contradiction.
+            composed = compose_command_answer(
+                self.provider,
+                request=request,
+                action=action,
+                parsed=parsed_command,
+                semantic_summary=semantic_summary,
+                timeout_s=self.semantic_timeout_s,
+            )
+            self._record_answer_reasoning(composed)
+            return self._attach_decision_trace({
+                "status": "informational",
+                "command": target_command,
+                "explanation": composed.answer,
+                "confidence": str(decision.get("confidence") or "high"),
+                "missing_info": [],
+                "alternatives": [],
+                "action": action,
+                "project": self.default_project,
+                "reasoning": list(composed.reasoning),
+                "caveats": list(composed.caveats),
+                "grounded": composed.grounded,
+            })
+        if action == "clarify":
+            missing = decision.get("missing_info")
+            if not isinstance(missing, list) or not missing:
+                missing = []
+            summary = str(decision.get("decision_summary") or "")
+            reasoning: list[str] = []
+            cot = reason_missing_info(
+                self.provider,
+                request=request,
+                hints=tuple(str(item) for item in missing),
+                timeout_s=self.semantic_timeout_s,
+            )
+            if cot is not None:
+                if cot.questions:
+                    missing = list(cot.questions)
+                reasoning = list(cot.reasoning)
+                if cot.reasoning and self._last_decision_trace is not None:
+                    self._last_decision_trace["reasoning"] = reasoning
+            if not missing:
+                missing = ["What command or calculation should I work with?"]
+            return self._attach_decision_trace({
+                "status": "needs_clarification",
+                "command": "",
+                "explanation": summary,
+                "confidence": str(decision.get("confidence") or "medium"),
+                "missing_info": missing,
+                "alternatives": [],
+                "action": action,
+                "reasoning": reasoning,
+            })
+        return None
+
+    def _record_answer_reasoning(self, composed: ComposedAnswer) -> None:
+        """Surface the composed answer's public reasoning on the trace."""
+
+        if self._last_decision_trace is None:
+            return
+        if composed.reasoning:
+            self._last_decision_trace["reasoning"] = list(composed.reasoning)
+        if composed.caveats:
+            self._last_decision_trace["caveats"] = list(composed.caveats)
+        self._last_decision_trace["answer_grounded"] = composed.grounded
+        if composed.fallback_used and composed.fallback_reason:
+            self._last_decision_trace["fallback_reason"] = (
+                composed.fallback_reason
+            )
+
+    def _attach_decision_trace(self, result: JsonDict) -> JsonDict:
+        if not self._last_decision_trace:
+            return result
+        normalized = dict(result)
+        normalized.setdefault("decision_trace", self._last_decision_trace)
+        return normalized
+
+    def _frontier_intent_decision(self, request: str) -> JsonDict | None:
+        last_command = self._last_ready_command()
+        messages = [
+            {
+                "role": "system",
+                "content": _INTENT_ROUTER_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "request": request,
+                        "last_command": last_command,
+                        "default_project": self.default_project,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ]
+        try:
+            parsed = _parse_json_response(self.provider.chat(messages))
+        except Exception:
+            return None
+        action = str(parsed.get("action") or "")
+        if action not in _ROUTER_ACTIONS:
+            return None
+        return parsed
+
+    def _last_ready_command(self) -> str:
+        for turn in reversed(self.memory.turns):
+            command = str(turn.plan_rationale or "").strip()
+            if command.startswith("chemsmart "):
+                return command
+        return ""
 
     def _repair_ready_result(
         self,
@@ -344,6 +642,30 @@ class SynthesisSession:
         messages.append({"role": "user", "content": request})
         return messages
 
+    def _apply_default_project(self, result: JsonDict) -> JsonDict:
+        """Attach the active runtime project to ready Gaussian/ORCA commands."""
+
+        if result.get("status") != "ready" or not self.default_project:
+            return result
+        normalized = dict(result)
+        command = str(normalized.get("command") or "")
+        normalized["command"] = _ensure_program_project(
+            command,
+            self.default_project,
+        )
+        alternatives = normalized.get("alternatives") or []
+        if isinstance(alternatives, list):
+            normalized["alternatives"] = [
+                (
+                    _ensure_program_project(str(item), self.default_project)
+                    if isinstance(item, str)
+                    else item
+                )
+                for item in alternatives
+            ]
+        normalized["project"] = self.default_project
+        return normalized
+
     def _remember_turn(
         self,
         request: str,
@@ -436,10 +758,14 @@ def _is_v8_spec(result: JsonDict) -> bool:
     ) and ("jobs" in result or "message" in result)
 
 
-def _normalize_v8_spec(result: JsonDict) -> JsonDict:
+def _normalize_v8_spec(
+    result: JsonDict,
+    *,
+    default_project: str | None = None,
+) -> JsonDict:
     from chemsmart.agent.v8_adapter import adapt
 
-    adapted = adapt(result, validate=True)
+    adapted = adapt(result, validate=True, default_project=default_project)
     intent = str(adapted.get("intent") or result.get("intent") or "")
     if intent != "workflow":
         message = str(adapted.get("message") or result.get("message") or "")
@@ -478,6 +804,199 @@ def _normalize_v8_spec(result: JsonDict) -> JsonDict:
         "missing_info": [],
         "alternatives": commands[1:],
     }
+
+
+def resolve_default_project() -> str:
+    env_project = os.environ.get("CHEMSMART_AGENT_PROJECT", "").strip()
+    if env_project:
+        return env_project
+    try:
+        from chemsmart.agent.provider_config import load_active_provider_config
+
+        config = load_active_provider_config()
+    except Exception:
+        config = None
+    if config is not None and config.project:
+        return config.project.strip()
+    return _single_available_project()
+
+
+def _single_available_project() -> str:
+    candidates: set[str] = set()
+    for folder_name in ("gaussian", "orca"):
+        folder = Path.home() / ".chemsmart" / folder_name
+        if not folder.is_dir():
+            continue
+        for path in folder.iterdir():
+            if path.is_file() and path.suffix.lower() in {".yaml", ".yml"}:
+                candidates.add(path.stem)
+    return next(iter(candidates)) if len(candidates) == 1 else ""
+
+
+def _is_frontier_provider(provider: Any) -> bool:
+    return str(getattr(provider, "name", "")).lower() in _FRONTIER_PROVIDER_NAMES
+
+
+def _extract_command_from_text(text: str) -> str:
+    if "chemsmart" not in text:
+        return ""
+    for line in text.splitlines():
+        stripped = line.strip().strip("`")
+        if stripped.startswith("chemsmart "):
+            return stripped
+    match = re.search(r"(chemsmart\s+.+)", text)
+    if not match:
+        return ""
+    command = match.group(1).strip().strip("`")
+    return command
+
+
+def _build_decision_trace(
+    *,
+    decision: JsonDict,
+    action: str,
+    request: str,
+    target_command: str,
+    default_project: str,
+    last_command: str,
+) -> JsonDict:
+    evidence = decision.get("evidence")
+    if not isinstance(evidence, list):
+        evidence = []
+    rejected = decision.get("rejected_actions")
+    if not isinstance(rejected, dict):
+        rejected = {}
+    trace: JsonDict = {
+        "router": "api_frontier_intent_router",
+        "action": action,
+        "confidence": str(decision.get("confidence") or "medium"),
+        "decision_summary": str(decision.get("decision_summary") or ""),
+        "target_command": target_command,
+        "default_project": default_project,
+        "last_command_available": bool(last_command),
+        "request_excerpt": request[:240],
+        "evidence": [str(item) for item in evidence if str(item).strip()],
+        "rejected_actions": {
+            str(key): str(value) for key, value in rejected.items()
+        },
+        "note": (
+            "This is a public decision trace, not hidden chain-of-thought. "
+            "It records observable routing evidence for user audit."
+        ),
+    }
+    if not trace["decision_summary"]:
+        trace["decision_summary"] = _fallback_decision_summary(action)
+    if not trace["evidence"]:
+        trace["evidence"] = _fallback_decision_evidence(
+            action,
+            target_command=target_command,
+            last_command=last_command,
+        )
+    if not trace["rejected_actions"]:
+        trace["rejected_actions"] = _fallback_rejected_actions(action)
+    return trace
+
+
+def _fallback_decision_summary(action: str) -> str:
+    summaries = {
+        "synthesize_command": "The user requested a computational job command.",
+        "explain_command": "The user asked to interpret an existing command.",
+        "critique_command": "The user asked to judge command validity.",
+        "repair_command": "The user asked to fix a command or validation failure.",
+        "clarify": "The request does not contain enough command or job detail.",
+    }
+    return summaries.get(action, "The request was routed by the API intent gate.")
+
+
+def _fallback_decision_evidence(
+    action: str,
+    *,
+    target_command: str,
+    last_command: str,
+) -> list[str]:
+    evidence = [f"Selected action: {action}."]
+    if target_command:
+        evidence.append("A chemsmart command is available for this turn.")
+    elif last_command:
+        evidence.append("A previous chemsmart command is available in memory.")
+    else:
+        evidence.append("No chemsmart command was available in memory.")
+    return evidence
+
+
+def _fallback_rejected_actions(action: str) -> dict[str, str]:
+    rejected: dict[str, str] = {}
+    if action != "synthesize_command":
+        rejected["synthesize_command"] = (
+            "The request was not primarily asking for a new CLI command."
+        )
+    if action != "explain_command":
+        rejected["explain_command"] = (
+            "The request was not primarily asking for a command explanation."
+        )
+    if action != "critique_command":
+        rejected["critique_command"] = (
+            "The request was not primarily asking for validation judgment."
+        )
+    if action != "repair_command":
+        rejected["repair_command"] = (
+            "The request was not primarily asking for command repair."
+        )
+    return rejected
+
+
+def _ensure_program_project(command: str, project: str) -> str:
+    project = project.strip()
+    if not project:
+        return command
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return command
+    program_index = _find_program_index(tokens)
+    if program_index is None:
+        return command
+    if _program_has_project(tokens, program_index):
+        return command
+    updated = list(tokens)
+    updated[program_index + 1 : program_index + 1] = ["-p", project]
+    return shlex.join(updated)
+
+
+def _find_program_index(tokens: list[str]) -> int | None:
+    if not tokens or tokens[0] != "chemsmart":
+        return None
+    top_index = None
+    for index, token in enumerate(tokens[1:], start=1):
+        if token in {"run", "sub"}:
+            top_index = index
+            break
+    if top_index is None:
+        return None
+
+    index = top_index + 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in {"gaussian", "orca"}:
+            return index
+        if token.startswith("-"):
+            index += 1 if token in _TOP_LEVEL_FLAGS else 2
+            continue
+        return None
+    return None
+
+
+_TOP_LEVEL_FLAGS = {
+    "--fake",
+    "--no-fake",
+    "--scratch",
+    "--no-scratch",
+    "--test",
+}
+
+
+def _program_has_project(tokens: list[str], program_index: int) -> bool:
+    return any(token in {"-p", "--project"} for token in tokens[program_index + 1 :])
 
 
 def _validate_tokens_against_schema(

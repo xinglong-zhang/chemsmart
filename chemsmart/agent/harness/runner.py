@@ -3,11 +3,23 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from chemsmart.agent.harness.extractors import extract_gaussian_route
+from chemsmart.agent.harness.extractors import (
+    extract_gaussian_route,
+    extract_orca_route,
+)
 from chemsmart.agent.harness.invariants.gaussian_ts import (
     check_gaussian_ts_route,
 )
-from chemsmart.agent.harness.models import HarnessResult, InvariantResult
+from chemsmart.agent.harness.invariants.route_checks import (
+    check_freq_route,
+    check_irc_route,
+    check_orca_ts_route,
+)
+from chemsmart.agent.harness.models import (
+    HarnessResult,
+    InvariantIssue,
+    InvariantResult,
+)
 
 _STEP_REF_RE = re.compile(r"^\$step(?P<index>\d+)(?:\..*)?$")
 
@@ -20,17 +32,103 @@ def evaluate_harness(
     for result_index, (kind, result) in enumerate(
         _iter_dry_run_kinds(plan, dry_run_results)
     ):
-        if kind != "gaussian.ts":
-            continue
-        route = extract_gaussian_route(result.get("content"))
         rule_results.append(
-            check_gaussian_ts_route(
-                route,
-                inputfile=_string_or_none(result.get("inputfile")),
-                result_index=result_index,
-            )
+            _check_cli_grounding(result, result_index=result_index)
         )
+        if not kind:
+            continue
+        content = result.get("content")
+        inputfile = _string_or_none(result.get("inputfile"))
+        software = "orca" if str(kind).startswith("orca") else "gaussian"
+        route = (
+            extract_orca_route(content)
+            if software == "orca"
+            else extract_gaussian_route(content)
+        )
+        # transition-state route invariants (per software)
+        if kind == "gaussian.ts":
+            rule_results.append(
+                check_gaussian_ts_route(
+                    route, inputfile=inputfile, result_index=result_index
+                )
+            )
+        elif kind == "orca.ts":
+            rule_results.append(
+                check_orca_ts_route(
+                    route, inputfile=inputfile, result_index=result_index
+                )
+            )
+        # frequency route invariant: a *.freq job must actually request Freq
+        if str(kind).endswith(".freq"):
+            rule_results.append(
+                check_freq_route(
+                    route,
+                    software=software,
+                    inputfile=inputfile,
+                    result_index=result_index,
+                )
+            )
+        # IRC route invariant: an *.irc job must contain the IRC keyword
+        if str(kind).endswith(".irc"):
+            rule_results.append(
+                check_irc_route(
+                    route,
+                    software=software,
+                    inputfile=inputfile,
+                    result_index=result_index,
+                )
+            )
     return HarnessResult.from_rule_results(rule_results)
+
+
+def _check_cli_grounding(
+    result: dict[str, Any], *, result_index: int
+) -> InvariantResult:
+    command = result.get("command")
+    if not isinstance(command, str) or not command.strip():
+        return InvariantResult(
+            rule_id="cli.grounding",
+            verdict="reject",
+            issues=(
+                InvariantIssue(
+                    rule_id="cli.grounding.missing",
+                    severity="reject",
+                    message=(
+                        "dry-run input is missing the generated chemsmart "
+                        "CLI command evidence"
+                    ),
+                    evidence={"result_index": result_index},
+                ),
+            ),
+        )
+    stripped = command.strip()
+    if not (
+        stripped.startswith("chemsmart run ")
+        or stripped.startswith("chemsmart sub ")
+    ):
+        return InvariantResult(
+            rule_id="cli.grounding",
+            verdict="reject",
+            issues=(
+                InvariantIssue(
+                    rule_id="cli.grounding.invalid",
+                    severity="reject",
+                    message=(
+                        "generated dry-run command must start with "
+                        "`chemsmart run` or `chemsmart sub`"
+                    ),
+                    evidence={
+                        "result_index": result_index,
+                        "command": command,
+                    },
+                ),
+            ),
+        )
+    return InvariantResult(
+        rule_id="cli.grounding",
+        verdict="ok",
+        context={"result_index": result_index, "command": command},
+    )
 
 
 def _iter_dry_run_kinds(

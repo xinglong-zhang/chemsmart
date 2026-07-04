@@ -23,6 +23,30 @@ from chemsmart.utils.utils import (
 
 logger = logging.getLogger(__name__)
 
+_ORCA_FREQ_RE = re.compile(r"\b(?:num|an)?freq\b", re.IGNORECASE)
+
+
+def _drop_duplicate_route_freq(
+    additional_route_parameters: str,
+    route_string: str,
+    *,
+    has_frequency: bool = False,
+) -> str:
+    """Strip a redundant ``freq`` token from ORCA extra route parameters.
+
+    Mirrors the Gaussian helper: if the jobtype route already carries a
+    frequency keyword (``Freq``/``NumFreq`` from ``self.freq``/``self.numfreq``),
+    remove a duplicate ``freq`` token from ``additional_route_parameters`` so it
+    is not written twice. When the route has no frequency keyword yet (the agent
+    adapter injects freq for ``*.freq`` jobs purely via route params), the token
+    is preserved so the frequency calculation is actually requested.
+    """
+    if not has_frequency and not _ORCA_FREQ_RE.search(route_string):
+        return additional_route_parameters
+    tokens = additional_route_parameters.split()
+    filtered = [t for t in tokens if not _ORCA_FREQ_RE.fullmatch(t)]
+    return " ".join(filtered)
+
 
 class ORCAJobSettings(MolecularJobSettings):
     """
@@ -619,6 +643,19 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string = deduplicate_string_keywords(
                 route_string, self.solvent_model
             )
+
+        # Append user/agent-supplied extra route parameters (e.g. a route-level
+        # ``freq`` the agent adapter injects for ``orca.freq`` jobs). ORCA's
+        # jobtype route never rendered these, so a route-param freq silently
+        # vanished; mirror Gaussian's append + freq de-duplication.
+        if self.additional_route_parameters is not None:
+            extra = _drop_duplicate_route_freq(
+                str(self.additional_route_parameters),
+                route_string,
+                has_frequency=bool(self.freq or self.numfreq),
+            ).strip()
+            if extra:
+                route_string += f" {extra}"
 
         return route_string
 
@@ -2130,5 +2167,18 @@ class ORCANEBJobSettings(ORCAJobSettings):
             route_string = deduplicate_string_keywords(
                 route_string, self.solvent_model
             )
+
+        # Append user/agent-supplied extra route parameters (e.g. a route-level
+        # ``freq`` the agent adapter injects for ``orca.freq`` jobs). ORCA's
+        # jobtype route never rendered these, so a route-param freq silently
+        # vanished; mirror Gaussian's append + freq de-duplication.
+        if self.additional_route_parameters is not None:
+            extra = _drop_duplicate_route_freq(
+                str(self.additional_route_parameters),
+                route_string,
+                has_frequency=bool(self.freq or self.numfreq),
+            ).strip()
+            if extra:
+                route_string += f" {extra}"
 
         return route_string

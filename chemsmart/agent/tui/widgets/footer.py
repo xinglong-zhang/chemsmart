@@ -54,6 +54,7 @@ class FooterWidget(Static):
         provider = (os.environ.get("AI_PROVIDER") or "").strip().lower()
         self._provider = provider or "offline"
         self._model = _DEFAULT_MODELS.get(provider, "auto")
+        self._project = ""
         self._draft_tokens = 0
         spinner = Spinner("arc")
         self._spinner_frames = tuple(spinner.frames)
@@ -115,11 +116,14 @@ class FooterWidget(Static):
         self,
         provider: str | None = None,
         model: str | None = None,
+        project: str | None = None,
     ) -> None:
         if provider:
             self._provider = provider
         if model:
             self._model = model
+        if project is not None:
+            self._project = project
         self._refresh_text()
 
     def update_draft(self, text: str) -> None:
@@ -218,6 +222,10 @@ class FooterWidget(Static):
         text.append(self._provider, style="dim")
         text.append("/", style="dim")
         text.append(self._model, style="dim")
+        if self._project:
+            text.append(" • ", style="dim")
+            text.append("project ", style="dim")
+            text.append(self._project, style="accent")
         text.append(" • ", style="dim")
         text.append(f"tok {self._draft_tokens}", style="dim")
         if self.entity_status:

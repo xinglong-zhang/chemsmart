@@ -21,6 +21,7 @@ def test_live_run_renders_plan_dry_run_and_critic_cells(
     single_molecule_xyz_file,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     import chemsmart.agent.tools as agent_tools
 
     plan = planner_plan(single_molecule_xyz_file, "tui_case")

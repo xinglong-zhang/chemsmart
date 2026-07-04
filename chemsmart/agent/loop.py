@@ -457,6 +457,11 @@ class ToolLoop:
             )
         if _is_tool_error(result):
             error = result.get("error") or {}
+            if not isinstance(error, dict):
+                error = {
+                    "type": "ToolError",
+                    "message": str(error or f"{request.name} failed"),
+                }
             return self._error_outcome(
                 step,
                 request,

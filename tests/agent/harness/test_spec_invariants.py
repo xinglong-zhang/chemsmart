@@ -3,7 +3,11 @@ from __future__ import annotations
 from chemsmart.agent.harness import spec_invariants as SI
 
 
-def _workflow(kind: str, settings: dict | None = None) -> dict:
+def _workflow(
+    kind: str,
+    settings: dict | None = None,
+    **job_overrides,
+) -> dict:
     job = {
         "id": 1,
         "kind": kind,
@@ -11,6 +15,7 @@ def _workflow(kind: str, settings: dict | None = None) -> dict:
         "charge": 0,
         "mult": 1,
     }
+    job.update(job_overrides)
     if settings is not None:
         job["settings"] = settings
     return {"intent": "workflow", "jobs": [job]}
@@ -59,3 +64,56 @@ def test_fragment_indices_with_underscore_counts_as_structural_slot():
     )
 
     assert not [issue for issue in issues if issue.rule_id == "spec.decline_contract"]
+
+
+def test_db_record_selector_passes_for_db_file():
+    issues = SI.check_spec(
+        _workflow(
+            "gaussian.sp",
+            file="results.db",
+            record_index=1,
+            structure_index="2",
+        ),
+        "Run a Gaussian single point from structure 2 of record 1 in results.db",
+    )
+
+    assert not [issue for issue in issues if issue.rule_id.startswith("spec.db.")]
+
+
+def test_db_selector_cardinality_rejects_missing_selector_for_db_file():
+    issues = SI.check_spec(
+        _workflow("orca.sp", file="results.db"),
+        "Run an ORCA single point from results.db",
+    )
+
+    assert any(issue.rule_id == "spec.db.selector_cardinality" for issue in issues)
+
+
+def test_db_molecule_id_rejects_for_job_submission():
+    issues = SI.check_spec(
+        _workflow("orca.sp", file="results.db", molecule_id="mol-abc"),
+        "Run an ORCA single point from molecule mol-abc in results.db",
+    )
+
+    assert any(issue.rule_id == "spec.db.molecule_id_job" for issue in issues)
+
+
+def test_db_structure_index_without_record_rejects():
+    issues = SI.check_spec(
+        _workflow("gaussian.sp", file="results.db", structure_index="2"),
+        "Run Gaussian on structure 2 from results.db",
+    )
+
+    assert any(
+        issue.rule_id == "spec.db.structure_index_requires_record"
+        for issue in issues
+    )
+
+
+def test_db_selector_without_db_file_rejects():
+    issues = SI.check_spec(
+        _workflow("gaussian.sp", record_index=1),
+        "Run Gaussian single point for mol.xyz",
+    )
+
+    assert any(issue.rule_id == "spec.db.selector_without_db" for issue in issues)

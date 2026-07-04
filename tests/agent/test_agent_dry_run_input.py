@@ -62,6 +62,8 @@ class TestDryRunInput:
 
         assert first_result["content"] == second_result["content"]
         assert Path(first_result["inputfile"]).is_absolute()
+        assert first_result["cli_grounded"] is True
+        assert first_result["command"].startswith("chemsmart run gaussian ")
 
     def test_dry_run_only_touches_tmp_path(
         self,
@@ -96,3 +98,34 @@ class TestDryRunInput:
         }
         assert Path(result["inputfile"]).parent == tmp_path
         assert created_paths == {Path(result["inputfile"]).name}
+
+    def test_gaussian_scan_dry_run_includes_cli_grounding_command(
+        self,
+        tmp_path: Path,
+        single_molecule_xyz_file,
+    ):
+        from chemsmart.agent.tools import build_gaussian_settings
+
+        molecule = build_molecule(single_molecule_xyz_file)
+        settings = build_gaussian_settings(
+            "B3LYP",
+            "6-31G(d)",
+            scan_definition="B 1 2 S 10 0.05\nB 1 3 F",
+        )
+        job = build_job(
+            "gaussian.scan",
+            molecule=molecule,
+            settings=settings,
+            label="h2o_scan",
+        )
+        job.set_folder(str(tmp_path))
+
+        result = dry_run_input(job)
+
+        assert result["cli_grounded"] is True
+        assert result["command"] == (
+            "chemsmart run gaussian -c 0 -m 1 -x B3LYP -b '6-31G(d)' "
+            f"-f {single_molecule_xyz_file} -l h2o_scan scan --coordinates "
+            "'[[1,2]]' --num-steps 10 --step-size 0.05 "
+            "--constrained-coordinates '[[1,3]]'"
+        )
