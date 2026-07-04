@@ -268,6 +268,16 @@ class Server(RegistryMixin):
         """
         return self.kwargs.get("EXTRA_COMMANDS", None)
 
+    @cached_property
+    def extra_scheduler_directives(self):
+        """
+        Get additional scheduler directives for submission scripts.
+
+        Returns:
+            str or list or None: Additional scheduler directives or None.
+        """
+        return self.kwargs.get("EXTRA_SCHEDULER_DIRECTIVES", None)
+
     def _get_submit_command(self):
         """
         Obtain job submission command based on scheduler type.

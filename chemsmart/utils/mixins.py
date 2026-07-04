@@ -18,12 +18,14 @@ Key mixin classes:
 import inspect
 import os
 import re
+from datetime import datetime
 from functools import cached_property
 
 from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.utils.repattern import gaussian_date_pattern, orca_date_pattern
 
 
 class FileMixin:
@@ -402,6 +404,39 @@ class GaussianFileMixin(FileMixin):
     Handles Gaussian input/output file formats and job parameters.
     """
 
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for i, line in enumerate(self.contents):
+            if (
+                "******************************************" in line
+                and i + 1 < len(self.contents)
+            ):
+                next_line = self.contents[i + 1]
+                if "Gaussian" in next_line:
+                    version_line = next_line
+                    version = version_line.split()[2].split("-")[1]
+                    return version
+        return None
+
+    @property
+    def file_date(self):
+        if not self.contents:
+            return None
+        last_line = self.contents[-1]
+        match = re.search(gaussian_date_pattern, last_line)
+        if match:
+            time_info = match.group(1)
+            try:
+                return datetime.strptime(
+                    time_info, "%a %b %d %H:%M:%S %Y"
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        return None
+
     def _get_chk(self):
         """
         Check if checkpoint file directive is present.
@@ -718,6 +753,11 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.functional
 
     @property
+    def method(self):
+        """Get the computational method from route string."""
+        return self.route_object.method
+
+    @property
     def basis(self):
         """
         Get basis set from route string.
@@ -889,6 +929,32 @@ class ORCAFileMixin(FileMixin):
     extraction. Handles ORCA input/output file formats and job settings.
     """
 
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "Program Version" in line:
+                version = line.split()[2]
+                return version
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "Starting time:" in line:
+                match = re.search(orca_date_pattern, line)
+                if match:
+                    time_info = match.group(1)
+                    try:
+                        return datetime.strptime(
+                            time_info, "%a %b %d %H:%M:%S %Y"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
     @cached_property
     def contents_string(self):
         """
@@ -948,6 +1014,10 @@ class ORCAFileMixin(FileMixin):
                         c_idx = l_elem.index("density")
                         return l_elem[c_idx + 1]
         return None
+
+    @property
+    def solvent_on(self):
+        return self.solvent_model is not None and self.solvent_id is not None
 
     @property
     def solvent_model(self):
@@ -1105,6 +1175,11 @@ class ORCAFileMixin(FileMixin):
             str or None: Ab initio method name or None if not specified.
         """
         return self.route_object.ab_initio
+
+    @property
+    def method(self):
+        """Get the computational method from ORCA route string."""
+        return self.route_object.method
 
     @property
     def dispersion(self):

@@ -291,8 +291,10 @@ class PyMOLJobRunner(JobRunner):
         Raises:
             FileNotFoundError: If the required .chk file is not found.
         """
-        chk_file_path = os.path.join(job.folder, f"{job.label}.chk")
-        fchk_file_path = os.path.join(job.folder, f"{job.label}.fchk")
+        chk_file_path = os.path.join(job.folder, f"{job.source_basename}.chk")
+        fchk_file_path = os.path.join(
+            job.folder, f"{job.source_basename}.fchk"
+        )
         if not os.path.exists(chk_file_path) and not os.path.exists(
             fchk_file_path
         ):
@@ -303,14 +305,16 @@ class PyMOLJobRunner(JobRunner):
         gaussian_exe = self._get_gaussian_executable(job)
         if os.path.exists(fchk_file_path):
             logger.info(
-                f".fchk file {job.label}.fchk already exists.\n"
+                f".fchk file {job.source_basename}.fchk already exists.\n"
                 f"Skipping generation of .fchk file."
             )
             pass
         else:
             # generate .fchk file from .chk file
-            logger.info(f"Generating .fchk file from {job.label}.chk")
-            fchk_command = f"{gaussian_exe}/formchk {job.label}.chk"
+            logger.info(
+                f"Generating .fchk file from {job.source_basename}.chk"
+            )
+            fchk_command = f"{gaussian_exe}/formchk {job.source_basename}.chk"
             run_command(fchk_command)
 
     def _write_input(self, job):
@@ -1305,8 +1309,12 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
         Raises:
             AssertionError: If required cube files are not found.
         """
-        dens_file = os.path.join(job.folder, f"{job.label}-dens.cube")
-        grad_file = os.path.join(job.folder, f"{job.label}-grad.cube")
+        dens_file = os.path.join(
+            job.folder, f"{job.source_basename}-dens.cube"
+        )
+        grad_file = os.path.join(
+            job.folder, f"{job.source_basename}-grad.cube"
+        )
         assert os.path.exists(
             dens_file
         ), f"Density cube file {dens_file} not found!"
@@ -1335,11 +1343,11 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             str: Command string with NCI visualization command.
         """
         if job.binary:
-            command += f"; nci_binary {job.label}"
+            command += f"; nci_binary {job.source_basename}"
         elif job.intermediate:
-            command += f"; nci_intermediate {job.label}"
+            command += f"; nci_intermediate {job.source_basename}"
         else:
-            command += f"; nci {job.label}"
+            command += f"; nci {job.source_basename}"
         return command
 
 
@@ -1389,7 +1397,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             run cubegen_command and returns None
             cubegen_command generatess the appropriate .cube file
             based on the job type (job.job_basename; nci/spin etc)
-            from job.label.fchk file.
+            from job.source_basename.fchk file.
         """
         gaussian_exe = self._get_gaussian_executable(job)
 
@@ -1426,7 +1434,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             )
 
         cubegen_command = (
-            f"{gaussian_exe}/cubegen 0 MO={mo_type} {job.label}.fchk "
+            f"{gaussian_exe}/cubegen 0 MO={mo_type} {job.source_basename}.fchk "
             f"{job.job_basename}.cube 0 h"
         )
 
@@ -1580,7 +1588,7 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         """
         gaussian_exe = self._get_gaussian_executable(job)
 
-        cubegen_command = f"{gaussian_exe}/cubegen 0 spin {job.label}.fchk {job.job_basename}.cube {job.npts}"
+        cubegen_command = f"{gaussian_exe}/cubegen 0 spin {job.source_basename}.fchk {job.job_basename}.cube {job.npts}"
         run_command(cubegen_command)
 
     def _write_spin_density_pml(self, job):
