@@ -2539,6 +2539,10 @@ class Gaussian16Output(GaussianFileMixin):
     def rotational_temperatures(self):
         """
         Rotational temperatures in Kelvin, as a list.
+
+        For linear molecules Gaussian may print '***...' when the rotational
+        temperature along the molecular axis overflows the output field width.
+        Such tokens are skipped; only finite values are returned.
         """
         rot_temps = []
         for line in reversed(self.contents):
@@ -2546,21 +2550,28 @@ class Gaussian16Output(GaussianFileMixin):
             if "Rotational temperature" in line and "(Kelvin)" in line:
                 for rot_temp in line.split("(Kelvin)")[-1].split():
                     # linear molecules may have only one rot temp,
-                    # non-linear has three
-                    rot_temps.append(float(rot_temp))
+                    # non-linear has three; skip overflow tokens ('***...')
+                    if "*" not in rot_temp:
+                        rot_temps.append(float(rot_temp))
                 return rot_temps
 
     @cached_property
     def rotational_constants_in_Hz(self):
         """
         Rotational constants in Hz, as a list.
+
+        For linear molecules Gaussian may print '***...' when the rotational
+        constant along the molecular axis overflows the output field width.
+        Such tokens are skipped; only finite values are returned.
         """
         rot_consts = []
         for line in reversed(self.contents):
             # take from the end of outputfile
             if "Rotational constant" in line and "(GHZ):" in line:
                 for rot_const in line.split("(GHZ):")[-1].split():
-                    rot_consts.append(float(rot_const) * 1e9)
+                    # skip overflow tokens ('***...') for linear molecules
+                    if "*" not in rot_const:
+                        rot_consts.append(float(rot_const) * 1e9)
                 return rot_consts
 
     @cached_property
@@ -2568,12 +2579,23 @@ class Gaussian16Output(GaussianFileMixin):
         """
         List of rotational constants (np.array in Hz) for each geometry step,
         in the order they appear in the file.
+
+        For linear molecules Gaussian may print '***...' when the rotational
+        constant along the molecular axis overflows the output field width.
+        Such tokens are replaced with ``np.inf``.
         """
         result = []
         for line in self.contents:
             if "Rotational constants (GHZ):" in line:
                 vals = line.split("(GHZ):")[-1].split()
-                result.append(np.array([float(v) * 1e9 for v in vals]))
+                result.append(
+                    np.array(
+                        [
+                            np.inf if "*" in v else float(v) * 1e9
+                            for v in vals
+                        ]
+                    )
+                )
         return result
 
     @cached_property

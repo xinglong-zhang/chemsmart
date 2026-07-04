@@ -887,15 +887,25 @@ class Molecule:
         """
         Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
+
+        For linear molecules the moment of inertia along the molecular axis
+        is zero (or effectively zero), giving an infinite rotational
+        temperature. ``np.inf`` is returned for those components.
         """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2
             for i in self.moments_of_inertia
         ]
-        return [
-            units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k)
-            for i in range(3)
-        ]
+        result = []
+        for moi in moi_in_SI_units:
+            if moi == 0.0:
+                result.append(np.inf)
+            else:
+                result.append(
+                    units._hplanck**2
+                    / (8 * np.pi**2 * moi * units._k)
+                )
+        return result
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """

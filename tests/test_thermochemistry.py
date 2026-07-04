@@ -1422,6 +1422,117 @@ class TestThermochemistryCO2:
         )
 
 
+class TestThermochemistryKOH:
+    """KOH is a linear heteronuclear triatomic molecule whose Gaussian output
+    prints '****...' instead of a numeric value for the rotational constant
+    and temperature along the molecular axis (because the moment of inertia
+    for that axis is zero, making the rotational constant effectively
+    infinite). This class verifies that parsing and thermochemistry
+    calculations work correctly in that situation."""
+
+    def test_koh_parsing_does_not_raise(self, gaussian_koh_opt_outfile):
+        """Parsing a KOH log file must not raise ValueError for '****...'."""
+        assert os.path.exists(gaussian_koh_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        assert g16_output.normal_termination
+
+        # This previously raised:
+        # ValueError: could not convert string to float: '************'
+        mol = g16_output.molecule
+        assert mol is not None
+
+    def test_koh_molecule_is_linear(self, gaussian_koh_opt_outfile):
+        """KOH must be identified as a linear molecule."""
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        mol = g16_output.molecule
+        assert mol.is_linear
+        assert not mol.is_monoatomic
+
+    def test_koh_rotational_constants_skip_overflow(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Rotational constants in Hz must only return finite (non-overflow)
+        values; '****...' tokens must be skipped."""
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        rot_consts = g16_output.rotational_constants_in_Hz
+        assert rot_consts is not None
+        # '****' for the molecular-axis constant is skipped;
+        # only the two finite perpendicular constants are returned.
+        assert len(rot_consts) == 2
+        assert all(np.isfinite(c) for c in rot_consts)
+        assert np.allclose(rot_consts, [8.30647e9, 8.30647e9], rtol=1e-4)
+
+    def test_koh_rotational_temperatures_skip_overflow(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Rotational temperatures must only return finite values; '****...'
+        tokens must be skipped."""
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        rot_temps = g16_output.rotational_temperatures
+        assert rot_temps is not None
+        # '****' for the molecular-axis temperature is skipped;
+        # only the two finite perpendicular temperatures are returned.
+        assert len(rot_temps) == 2
+        assert all(np.isfinite(t) for t in rot_temps)
+        assert np.allclose(rot_temps, [0.39865, 0.39865], atol=1e-4)
+
+    def test_koh_all_rotational_constants_uses_inf(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Per-step rotational constants must replace '****...' with np.inf
+        so that the array has the same number of elements as other molecules
+        (one per principal axis)."""
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        all_rot_consts = g16_output.all_rotational_constants
+        assert len(all_rot_consts) > 0
+        for step_consts in all_rot_consts:
+            assert len(step_consts) == 3
+            # The first element (along molecular axis) should be inf
+            assert np.isinf(step_consts[0])
+            # The other two should be finite and positive
+            assert np.isfinite(step_consts[1])
+            assert np.isfinite(step_consts[2])
+
+    def test_koh_molecule_rotational_temperatures_linear(
+        self, gaussian_koh_opt_outfile
+    ):
+        """The Molecule.rotational_temperatures property must not raise
+        ZeroDivisionError for a linear molecule and must return np.inf for
+        the zero-MOI axis."""
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        mol = g16_output.molecule
+        # Must not raise ZeroDivisionError
+        rot_temps = mol.rotational_temperatures
+        assert len(rot_temps) == 3
+        # One axis has zero MOI → infinite rotational temperature
+        assert np.isinf(rot_temps[0])
+        # The other two axes have finite rotational temperatures
+        assert np.isfinite(rot_temps[1])
+        assert np.isfinite(rot_temps[2])
+        assert np.isclose(rot_temps[1], rot_temps[2])
+
+    def test_koh_thermochemistry_runs_without_error(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Running the full thermochemistry calculation for KOH must succeed."""
+        thermochem = Thermochemistry(
+            filename=gaussian_koh_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+        )
+        # Basic sanity checks on the computed quantities
+        assert thermochem.molecule.is_linear
+        assert thermochem.rotational_symmetry_number == 1
+        # Rotational partition function for a linear molecule
+        assert np.isfinite(thermochem.rotational_partition_function)
+        assert thermochem.rotational_partition_function > 0
+        # Enthalpy, entropy and Gibbs free energy must all be finite
+        assert np.isfinite(thermochem.enthalpy)
+        assert np.isfinite(thermochem.total_entropy)
+        assert np.isfinite(thermochem.gibbs_free_energy)
+
+
 class TestThermochemistryHe:
     """He is used as an example to test the
     thermochemical properties of monoatomic molecules."""
