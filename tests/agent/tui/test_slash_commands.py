@@ -31,6 +31,7 @@ def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
     monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
     monkeypatch.setenv("AI_PROVIDER", "openai")
     monkeypatch.setenv("ai_api_key", "test-key")
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
 
     async def snapshot_for(
         command: str, name: str, *, patch_exit: bool = False
@@ -62,3 +63,66 @@ def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
         await snapshot_for("/quit", "slash_quit", patch_exit=True)
 
     asyncio.run(scenario())
+
+
+def test_init_enters_project_yaml_build_mode(monkeypatch, tmp_path):
+    session_root = tmp_path / "sessions"
+    write_session_fixture(session_root)
+
+    def fake_get_provider():
+        return FakeProvider([])
+
+    monkeypatch.setattr(
+        "chemsmart.agent.providers.get_provider", fake_get_provider
+    )
+    monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setenv("ai_api_key", "test-key")
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
+
+    class _FakeWorker:
+        is_finished = True
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=session_root)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            screen = app.chat_screen
+            captured: list[str] = []
+            monkeypatch.setattr(
+                screen,
+                "run_build_session",
+                lambda text: captured.append(text) or _FakeWorker(),
+            )
+
+            # Bare /init enters a persistent build mode.
+            _set_composer_text(app, "/init")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert screen._build_mode is True
+
+            # A subsequent message routes to the project-YAML build harness.
+            _set_composer_text(
+                app, "Optimize in water with B3LYP-D3BJ/def2-SVP, call it h2o."
+            )
+            await pilot.press("enter")
+            await pilot.pause()
+            assert captured == [
+                "Optimize in water with B3LYP-D3BJ/def2-SVP, call it h2o."
+            ]
+            assert screen._build_mode is True
+
+            # /mode leaves build mode.
+            _set_composer_text(app, "/mode ask")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert screen._build_mode is False
+
+    asyncio.run(scenario())
+
+
+def test_init_slash_command_is_registered_in_palette():
+    from chemsmart.agent.tui.screens.chat import _SLASH_PALETTE_COMMANDS
+
+    commands = {name for name, _desc in _SLASH_PALETTE_COMMANDS}
+    assert "/init" in commands

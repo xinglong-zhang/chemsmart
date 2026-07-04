@@ -1,13 +1,8 @@
-# chemsmart agent TUI (Phase 1)
+# chemsmart agent TUI
 
-Phase 1 adds an interactive Textual interface to `chemsmart agent` while
-keeping the existing one-shot agent subcommands unchanged.
-
-## Install
-
-```bash
-pip install -e ".[agent-tui]"
-```
+The Textual TUI is the recommended interactive surface for `chemsmart agent`.
+It keeps the CLI workflow visible while adding conversation memory, runtime
+evidence, slash commands, and resumable sessions.
 
 ## Launch
 
@@ -16,28 +11,100 @@ chemsmart agent
 chemsmart agent --plain
 ```
 
-`--plain` keeps the TUI inline, disables mouse support, and turns off
-animations for conservative terminal environments such as HPC login nodes.
+`--plain` keeps the UI inline and conservative for terminals such as HPC login
+nodes.
 
-## Phase 1 commands
+![chemsmart agent dry-run TUI](../tests/agent/tui/snapshots/dry_run_input.svg)
 
-- `/help`
-- `/quit`
-- `/clear`
-- `/sessions`
-- `/resume <session-id>`
-- `/tools`
-- `/doctor`
+## Slash Palette
 
-## Live transcript cells
+Type `/` to open the command palette. Continue typing to filter commands; for
+example `/d` shows matching commands such as `/doctor`, `/dryrun`, and `/deny`.
 
-Phase 1 renders these decision-log artifacts as typed transcript cells:
+![chemsmart slash command palette](../tests/agent/tui/snapshots/slash_help.svg)
 
-- user request
-- plan
-- dry-run input
-- critic verdict
-- error
+Current high-value commands:
 
-The TUI reads the same `decision_log.jsonl` files written by
-`AgentSession.run(...)`, so `chemsmart agent run ...` remains unchanged.
+| Command | Purpose |
+|---|---|
+| `/mode ask` | Command synthesis, explanation, critique, and repair |
+| `/mode run` | Full tool-loop harness mode |
+| `/init` | Build and validate a project YAML from a reported method |
+| `/tools` | List registered tools |
+| `/doctor` | Run provider/runtime diagnostics |
+| `/sessions` | Browse saved sessions |
+| `/resume <session-id>` | Resume a saved session |
+| `/run`, `/submit` | Continue a prepared session toward execution/submission |
+
+## Rendering Model Outputs
+
+For command-generation turns, the TUI must show the generated CHEMSMART CLI
+command before generated input contents. This keeps the agent grounded to the
+same command shape a chemist can run manually:
+
+```text
+chemsmart run gaussian -p test -f examples/h2o.xyz -c 0 -m 1 opt
+```
+
+The transcript can then render:
+
+- runtime semantic gate verdict and generated input evidence;
+- dry-run `.com` / `.inp` contents;
+- deterministic command interpretation;
+- public decision trace;
+- session completion and blocked/warn/reject summaries.
+
+## Command Interpretation
+
+The deterministic command parser expands a generated command into user-facing
+facts:
+
+- workspace;
+- run vs submit execution;
+- program and job type;
+- server and dry-run status;
+- input file and runtime-derived label;
+- charge/multiplicity;
+- project and the meaning of `-p`;
+- functional, basis, auxiliary basis, and solvent when present;
+- route parameters and job-specific options;
+- one final English summary sentence.
+
+This parser is deterministic and independent of the provider model.
+
+## Public Decision Trace
+
+API/frontier-provider turns may include a collapsible decision trace. This is
+not hidden chain-of-thought. It records observable routing evidence:
+
+- selected action: synthesize, explain, critique, repair, or clarify;
+- confidence;
+- target command;
+- default project;
+- short public reasoning/caveats when provided;
+- rejected action classes.
+
+The goal is auditability without relying on uninspectable model reasoning.
+
+## Project YAML Build Mode
+
+`/init` switches into project-YAML build mode. A user can paste a reported
+computational-method paragraph and ask for a project file such as `co2.yaml`.
+The tool path is:
+
+```text
+extract_project_protocol
+  -> render_project_yaml
+  -> validate_project_yaml
+  -> critic_project_yaml
+  -> write_project_yaml  # after explicit approval
+```
+
+Project YAML creation does not require a structure file. Valid output uses
+CHEMSMART project-settings shape with top-level `gas:` and/or `solv:` blocks.
+
+## Active Project Display
+
+The footer shows provider mode/model information and the active project when
+available from `~/.chemsmart/agent/agent.yaml`. The same project should be used
+for generated commands unless the user explicitly selects another project.

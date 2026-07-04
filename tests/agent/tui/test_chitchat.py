@@ -26,6 +26,7 @@ def test_chitchat_input_renders_single_reply_cell_only(
     monkeypatch,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     provider = FakeProvider(
         [
             {
@@ -79,6 +80,7 @@ def test_chemistry_request_keeps_full_workflow_rendering(
     single_molecule_xyz_file,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     import chemsmart.agent.tools as agent_tools
 
     plan = planner_plan(single_molecule_xyz_file, "workflow_case")

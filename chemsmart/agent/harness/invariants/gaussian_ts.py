@@ -45,6 +45,27 @@ def check_gaussian_ts_route(
             )
         )
 
+    # A ts job renders exactly one runtime-owned opt=(...) block. A second one
+    # (or bare ts/calcfc/noeigentest tokens outside the block) is a model leak
+    # via --additional-route-parameters that would corrupt the route.
+    opt_blocks = _OPT_BLOCK_RE.findall(route)
+    if len(opt_blocks) > 1:
+        issues.append(
+            _reject(
+                "Gaussian TS route contains more than one opt=(...) block",
+                {**evidence, "opt_block_count": len(opt_blocks)},
+            )
+        )
+    leaked_outside = _leaked_ts_tokens_outside_opt_block(route)
+    if leaked_outside:
+        issues.append(
+            _reject(
+                "Gaussian TS route leaks runtime-owned TS token(s) outside "
+                "the opt=(...) block",
+                {**evidence, "leaked_tokens": sorted(leaked_outside)},
+            )
+        )
+
     match = _OPT_BLOCK_RE.search(route)
     if match is None:
         issues.append(
@@ -105,6 +126,17 @@ def _opt_tokens(body: str) -> list[str]:
         for token in re.split(r"[,\s]+", body)
         if token.strip()
     ]
+
+
+def _leaked_ts_tokens_outside_opt_block(route: str) -> set[str]:
+    """Return runtime-owned TS tokens that appear outside any opt=(...) block."""
+    remainder = _OPT_BLOCK_RE.sub(" ", route)
+    tokens = {
+        token.strip().lower()
+        for token in re.split(r"[,\s]+", remainder)
+        if token.strip()
+    }
+    return tokens & _CANON
 
 
 def _reject(message: str, evidence: dict[str, Any]) -> InvariantIssue:

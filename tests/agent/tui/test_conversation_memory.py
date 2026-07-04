@@ -65,6 +65,7 @@ def test_second_tui_request_includes_prior_turn_memory(
     single_molecule_xyz_file,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     import chemsmart.agent.tools as agent_tools
 
     first_request = f"build water from {single_molecule_xyz_file}"
@@ -172,6 +173,7 @@ def test_clear_resets_transcript_and_session(
     single_molecule_xyz_file,
     tmp_path: Path,
 ):
+    monkeypatch.setenv("CHEMSMART_AGENT_TUI_MODE", "run")
     import chemsmart.agent.tools as agent_tools
 
     plan = planner_plan(single_molecule_xyz_file, "tui_memory_opt")

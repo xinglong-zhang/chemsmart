@@ -45,6 +45,13 @@ def test_parse_top_level_program_p_is_not_project(tmp_path):
     assert "top-level `-p/--program`" in text
     assert "program-level -p/--project" in text
     assert text.splitlines()[-1].startswith("Summary: This command will")
+    # A Markdown renderer must not lazily glue the Summary onto the last
+    # bullet: there must be a blank line separating them.
+    text_lines = text.splitlines()
+    summary_index = next(
+        i for i, line in enumerate(text_lines) if line.startswith("Summary:")
+    )
+    assert text_lines[summary_index - 1] == ""
 
 
 def test_parse_submission_dry_run_and_structural_options(tmp_path):

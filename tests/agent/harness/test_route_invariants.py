@@ -20,7 +20,17 @@ def _plan(kind: str) -> dict:
 
 
 def _run(kind: str, content: str):
-    result = evaluate_harness(_plan(kind), [{"content": content, "inputfile": "x"}])
+    result = evaluate_harness(
+        _plan(kind),
+        [
+            {
+                "content": content,
+                "inputfile": "x",
+                "command": "chemsmart run orca -f x.xyz -c 0 -m 1 opt",
+                "cli_grounded": True,
+            }
+        ],
+    )
     return result.verdict, result.failed_rule_ids
 
 

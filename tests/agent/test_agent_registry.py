@@ -112,11 +112,23 @@ def test_registry_default_registration_sets_read_tool_metadata():
     ssh_probe_tool = registry.get_tool("ssh_probe")
     scheduler_query_tool = registry.get_tool("scheduler_query")
     log_tail_tool = registry.get_tool("log_tail")
+    project_tools = {
+        name: registry.get_tool(name)
+        for name in {
+            "extract_project_protocol",
+            "render_project_yaml",
+            "validate_project_yaml",
+            "critic_project_yaml",
+            "write_project_yaml",
+            "search_basis_sets",
+        }
+    }
 
     assert read_tool is not None
     assert ssh_probe_tool is not None
     assert scheduler_query_tool is not None
     assert log_tail_tool is not None
+    assert all(tool is not None for tool in project_tools.values())
     assert read_tool.metadata == RuntimeToolMetadata(
         read_only=True,
         ui_summary_template="Read {path} L{start_line}-{end_line}",
@@ -134,11 +146,31 @@ def test_registry_default_registration_sets_read_tool_metadata():
         read_only=True,
         ui_summary_template="Tail {path} on {server} ({lines}L)",
     )
+    assert project_tools["extract_project_protocol"].metadata.read_only is True
+    assert project_tools["render_project_yaml"].metadata.read_only is True
+    assert project_tools["validate_project_yaml"].metadata.read_only is True
+    assert project_tools["critic_project_yaml"].metadata.read_only is True
+    assert project_tools["write_project_yaml"].metadata.read_only is False
+    assert project_tools["search_basis_sets"].metadata == RuntimeToolMetadata(
+        read_only=True,
+        ui_summary_template="Search basis sets {query}",
+    )
     assert all(
         tool.metadata == RuntimeToolMetadata()
         for tool in registry.list_tools()
         if tool.name
-        not in {"read", "ssh_probe", "scheduler_query", "log_tail"}
+        not in {
+            "read",
+            "ssh_probe",
+            "scheduler_query",
+            "log_tail",
+            "extract_project_protocol",
+            "render_project_yaml",
+            "validate_project_yaml",
+            "critic_project_yaml",
+            "write_project_yaml",
+            "search_basis_sets",
+        }
     )
 
 

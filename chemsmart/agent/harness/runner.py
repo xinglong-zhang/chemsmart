@@ -15,7 +15,11 @@ from chemsmart.agent.harness.invariants.route_checks import (
     check_irc_route,
     check_orca_ts_route,
 )
-from chemsmart.agent.harness.models import HarnessResult, InvariantResult
+from chemsmart.agent.harness.models import (
+    HarnessResult,
+    InvariantIssue,
+    InvariantResult,
+)
 
 _STEP_REF_RE = re.compile(r"^\$step(?P<index>\d+)(?:\..*)?$")
 
@@ -28,6 +32,9 @@ def evaluate_harness(
     for result_index, (kind, result) in enumerate(
         _iter_dry_run_kinds(plan, dry_run_results)
     ):
+        rule_results.append(
+            _check_cli_grounding(result, result_index=result_index)
+        )
         if not kind:
             continue
         content = result.get("content")
@@ -72,6 +79,56 @@ def evaluate_harness(
                 )
             )
     return HarnessResult.from_rule_results(rule_results)
+
+
+def _check_cli_grounding(
+    result: dict[str, Any], *, result_index: int
+) -> InvariantResult:
+    command = result.get("command")
+    if not isinstance(command, str) or not command.strip():
+        return InvariantResult(
+            rule_id="cli.grounding",
+            verdict="reject",
+            issues=(
+                InvariantIssue(
+                    rule_id="cli.grounding.missing",
+                    severity="reject",
+                    message=(
+                        "dry-run input is missing the generated chemsmart "
+                        "CLI command evidence"
+                    ),
+                    evidence={"result_index": result_index},
+                ),
+            ),
+        )
+    stripped = command.strip()
+    if not (
+        stripped.startswith("chemsmart run ")
+        or stripped.startswith("chemsmart sub ")
+    ):
+        return InvariantResult(
+            rule_id="cli.grounding",
+            verdict="reject",
+            issues=(
+                InvariantIssue(
+                    rule_id="cli.grounding.invalid",
+                    severity="reject",
+                    message=(
+                        "generated dry-run command must start with "
+                        "`chemsmart run` or `chemsmart sub`"
+                    ),
+                    evidence={
+                        "result_index": result_index,
+                        "command": command,
+                    },
+                ),
+            ),
+        )
+    return InvariantResult(
+        rule_id="cli.grounding",
+        verdict="ok",
+        context={"result_index": result_index, "command": command},
+    )
 
 
 def _iter_dry_run_kinds(

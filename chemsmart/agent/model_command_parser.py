@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 _TOP_LEVEL_COMMANDS = {"run", "sub"}
 _PROGRAMS = {"gaussian", "orca", "nciplot", "mol"}
 _GAUSSIAN_SUBCOMMANDS = {
@@ -255,7 +254,9 @@ _SUBCOMMAND_OPTIONS = {
     "--root": _OptionSpec("root"),
     "--nstates": _OptionSpec("nstates"),
     "--eqsolv": _OptionSpec("eqsolv", takes_value=False, flag_value="true"),
-    "--no-eqsolv": _OptionSpec("eqsolv", takes_value=False, flag_value="false"),
+    "--no-eqsolv": _OptionSpec(
+        "eqsolv", takes_value=False, flag_value="false"
+    ),
     "--recalc-hess": _OptionSpec("recalc_hess"),
     "--trust-radius": _OptionSpec("trust_radius"),
     "--tssearch-type": _OptionSpec("tssearch_type"),
@@ -355,7 +356,9 @@ def parse_model_command(
     )
     warnings.extend(runner_warnings)
 
-    subcommand_index = _find_subcommand_index(tokens, program, program_index + 1)
+    subcommand_index = _find_subcommand_index(
+        tokens, program, program_index + 1
+    )
     if subcommand_index is None:
         subcommand_index = len(tokens)
         job = None
@@ -384,15 +387,12 @@ def parse_model_command(
 
     server = runner_opts.get("server")
     dry_run = (
-        runner_opts.get("fake") == "true"
-        or runner_opts.get("test") == "true"
+        runner_opts.get("fake") == "true" or runner_opts.get("test") == "true"
     )
     structural_options = {
         key: value
         for key, value in subcommand_opts.items()
-        if value is not None
-        and key
-        not in {"skip_completed"}
+        if value is not None and key not in {"skip_completed"}
     }
     resources = {
         key: value
@@ -467,6 +467,9 @@ def format_parsed_model_command(parsed: ParsedModelCommand) -> str:
                 "deterministic command parser:",
                 f"- parse status: `error` ({parsed.parse_error})",
                 f"- workspace: `{parsed.workspace}`",
+                # Blank line so a Markdown renderer does not lazily glue the
+                # Summary line onto the preceding bullet list.
+                "",
                 f"Summary: This command could not be deterministically parsed: {parsed.parse_error}.",
             ]
         )
@@ -546,7 +549,9 @@ def format_parsed_model_command(parsed: ParsedModelCommand) -> str:
     if parsed.scf_algorithm:
         route_control_bits.append(f"scf_algorithm={parsed.scf_algorithm}")
     if route_control_bits:
-        lines.append(f"- resolved route controls: `{', '.join(route_control_bits)}`")
+        lines.append(
+            f"- resolved route controls: `{', '.join(route_control_bits)}`"
+        )
     if parsed.route_parameters:
         lines.append(f"- route parameters: `{parsed.route_parameters}`")
     if parsed.opt_options:
@@ -576,6 +581,9 @@ def format_parsed_model_command(parsed: ParsedModelCommand) -> str:
         summary_action = (
             f"run a {program_text} {job_label} job for `{target}` locally"
         )
+    # Blank line so a Markdown renderer does not lazily glue the Summary line
+    # onto the preceding bullet list (the "explanation stuck to the command" bug).
+    lines.append("")
     lines.append(
         "Summary: This command will "
         f"{summary_action} from `{parsed.workspace}` using project "

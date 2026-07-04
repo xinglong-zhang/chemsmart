@@ -34,7 +34,7 @@ from chemsmart.agent.model_command_parser import parse_model_command
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.services.conversation_memory import ConversationMemory
-from chemsmart.agent.synthesis import SynthesisSession
+from chemsmart.agent.synthesis import SynthesisSession, resolve_default_project
 from chemsmart.agent.tui.events import (
     AssistantTurnEvent,
     CriticVerdictEvent,
@@ -79,6 +79,7 @@ from chemsmart.agent.tui.widgets.cells import (
     AgentMessageCell,
     CommandInterpretationCell,
     CriticVerdictCell,
+    DecisionTraceCell,
     DryRunInputCell,
     ErrorCell,
     GeometryHandoffCell,
@@ -139,6 +140,7 @@ _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
     ("/wizard-write", "write latest wizard YAML"),
     ("/doctor", "run inline diagnostics"),
     ("/mode", "switch ask/run interaction mode"),
+    ("/init", "build a project YAML from a reported method"),
     ("/quit", "exit the TUI"),
     ("/exit", "exit the TUI"),
 )
@@ -200,6 +202,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._interaction_mode = _default_interaction_mode(
             self._active_provider_config
         )
+        self._build_mode = False
         self.active_synthesis_session: SynthesisSession | None = None
 
     def compose(self) -> ComposeResult:
@@ -444,10 +447,35 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "Wait for the current request to finish before starting a new request.",
             )
             return
+        if self._build_mode:
+            self._start_build_request(text)
+            return
         if self._interaction_mode == "ask":
             self._start_synthesis_request(text)
             return
         self._start_harness_request(text)
+
+    def _start_build_request(self, text: str) -> None:
+        keep_conversational = self.active_agent_session is not None
+        if not keep_conversational:
+            self._stop_tailer()
+        self._reset_request_state(
+            clear_transcript=True,
+            keep_conversational=keep_conversational,
+        )
+        self._current_request = text
+        self.query_one(FooterWidget).set_phase(Phase.PLANNING)
+        self.query_one(FooterWidget).set_hint(
+            "Project YAML build mode — using the project-YAML harness…"
+        )
+        self.query_one(Transcript).add_cell(UserMessageCell(text))
+        self._user_requests.add(text)
+        self._current_worker = self.run_build_session(text)
+        if self._session_poll_timer is not None:
+            self._session_poll_timer.stop()
+        self._session_poll_timer = self.set_interval(
+            0.1, self._attach_live_tailer, pause=False
+        )
 
     def _start_harness_request(self, text: str) -> None:
         keep_conversational = self.active_agent_session is not None
@@ -805,6 +833,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self.query_one(FooterWidget).set_provider_model(
             f"{self._interaction_mode}:{config.type}",
             config.model,
+            project=config.project or resolve_default_project(),
         )
 
     def _publish_synthesis_result(self, result: dict[str, object]) -> None:
@@ -821,9 +850,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             command = str(synthesis.get("command") or "")
             explanation = str(synthesis.get("explanation") or "")
             confidence = str(synthesis.get("confidence") or "low")
+            project = str(synthesis.get("project") or "")
             semantic = result.get("semantic_result")
             semantic_text = _format_semantic_result(
                 semantic if isinstance(semantic, dict) else None
+            )
+            project_text = (
+                f"\nactive project: `{project}`\n\n" if project else "\n"
             )
             self.post_agent_message(
                 (
@@ -831,16 +864,50 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     f"{command}\n"
                     "```\n\n"
                     f"confidence: `{confidence}`\n\n"
+                    f"{project_text}"
                     f"{explanation or 'Prepared chemsmart command.'}"
                     f"{semantic_text}"
                 ),
                 title="Synthesis",
             )
+            self._publish_decision_trace(synthesis)
             self.query_one(Transcript).add_cell(
                 CommandInterpretationCell(parse_model_command(command))
             )
             footer.set_phase(Phase.FINISHED)
             footer.set_hint("Command ready — /mode run for full harness")
+            return
+
+        if status == "informational":
+            command = str(synthesis.get("command") or "")
+            explanation = str(synthesis.get("explanation") or "")
+            action = str(synthesis.get("action") or "explain_command")
+            semantic = result.get("semantic_result")
+            semantic_text = _format_semantic_result(
+                semantic if isinstance(semantic, dict) else None
+            )
+            title = {
+                "explain_command": "Command Explanation",
+                "critique_command": "Command Critic",
+                "repair_command": "Command Repair",
+            }.get(action, "Command Analysis")
+            self.post_agent_message(
+                (
+                    "```bash\n"
+                    f"{command}\n"
+                    "```\n\n"
+                    f"{explanation or 'No explanation was generated.'}"
+                    f"{semantic_text}"
+                ),
+                title=title,
+            )
+            self._publish_decision_trace(synthesis)
+            if command:
+                self.query_one(Transcript).add_cell(
+                    CommandInterpretationCell(parse_model_command(command))
+                )
+            footer.set_phase(Phase.FINISHED)
+            footer.set_hint("Command analysis ready")
             return
 
         if status == "needs_clarification":
@@ -852,6 +919,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 f"I need more information before making a command:\n\n{lines}",
                 title="Clarification",
             )
+            self._publish_decision_trace(synthesis)
             footer.set_phase(Phase.IDLE)
             footer.set_hint("Clarification needed")
             return
@@ -867,8 +935,14 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             f"{explanation}{semantic_text}",
             title="Synthesis",
         )
+        self._publish_decision_trace(synthesis)
         footer.set_phase(Phase.FINISHED)
         footer.set_hint("No command generated")
+
+    def _publish_decision_trace(self, synthesis: dict[str, object]) -> None:
+        trace = synthesis.get("decision_trace")
+        if isinstance(trace, dict) and trace:
+            self.query_one(Transcript).add_cell(DecisionTraceCell(trace))
 
     def open_file_picker(self) -> None:
         self.app.push_screen(
@@ -1167,6 +1241,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     event.content,
                     inputfile=event.inputfile,
                     previous_content=self._latest_dry_run_content,
+                    command=event.command,
+                    cli_grounded=event.cli_grounded,
+                    cli_grounding_issue=event.cli_grounding_issue,
                 )
             )
             self._latest_dry_run_content = event.content
@@ -1301,6 +1378,35 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 ),
             )
         )
+        if event.tool == "dry_run_input" and event.status == "ok":
+            summary = _tool_use_summary_payload(event.payload)
+            if summary is not None:
+                content = str(summary.get("content") or "")
+                inputfile = (
+                    str(summary.get("inputfile"))
+                    if summary.get("inputfile") is not None
+                    else None
+                )
+                command = (
+                    str(summary.get("command"))
+                    if summary.get("command") is not None
+                    else None
+                )
+                transcript.add_cell(
+                    DryRunInputCell(
+                        content,
+                        inputfile=inputfile,
+                        previous_content=self._latest_dry_run_content,
+                        command=command,
+                        cli_grounded=bool(summary.get("cli_grounded")),
+                        cli_grounding_issue=(
+                            str(summary.get("cli_grounding_issue"))
+                            if summary.get("cli_grounding_issue") is not None
+                            else None
+                        ),
+                    )
+                )
+                self._latest_dry_run_content = content
 
         if event.status == "pending":
             self._pending_approval_description = (
@@ -1447,6 +1553,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._run_inline_cli(["doctor"], title="Doctor")
         elif command == "/mode":
             self._handle_mode_command(argument)
+        elif command == "/init":
+            self._handle_init_command(argument)
         elif command == "/wizard":
             self._handle_wizard_probe_command(argument)
         elif command == "/wizard-verify":
@@ -2007,8 +2115,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 (
                     "```\n"
                     f"mode: {self._interaction_mode}\n"
-                    "ask: active synthesis provider + runtime semantic gate\n"
-                    "run: frontier AgentSession harness + tools/critic/dry-run\n"
+                    "ask: CLI-first synthesis + runtime semantic gate\n"
+                    "run: explicit internal tool harness + critic/dry-run\n"
                     "```"
                 ),
                 title="Mode",
@@ -2035,26 +2143,75 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "Wait for the current request to finish before switching mode.",
             )
             return
-        if value != self._interaction_mode:
+        if value != self._interaction_mode or self._build_mode:
             self._reset_request_state(
                 clear_transcript=False,
                 clear_session=True,
             )
             self.active_synthesis_session = None
+        self._build_mode = False
         self._interaction_mode = value
         self._sync_footer_provider()
         self.post_agent_message(
             (
-                "Ask mode uses the active provider for direct command "
-                "synthesis and semantic validation."
+                "Ask mode uses the active provider for CLI-first command "
+                "synthesis, semantic validation, and repair."
                 if value == "ask"
                 else (
-                    "Run mode uses the full frontier-agent harness with "
-                    "tools, critic, dry-run evidence, and execution approval."
+                    "Run mode uses the explicit internal tool harness. "
+                    "Dry-run artifacts must still include generated "
+                    "chemsmart CLI command evidence."
                 )
             ),
             title="Mode",
         )
+
+    def _handle_init_command(self, argument: str) -> None:
+        # Project-YAML build mode drives the tool-loop harness, which needs a
+        # tool-calling frontier provider (the local model is ask-only).
+        if (
+            self._active_provider_config is not None
+            and self._active_provider_config.type == "local"
+        ):
+            self.post_error(
+                "Init unavailable for local provider",
+                "Project YAML build mode uses the tool-loop harness, which "
+                "needs a tool-calling provider (anthropic/openai).",
+            )
+            return
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before starting "
+                "project YAML build mode.",
+            )
+            return
+        argument = argument.strip()
+        self._build_mode = True
+        self._sync_footer_provider()
+        if argument:
+            # `/init <reported method>` builds immediately.
+            self.start_request(argument)
+            return
+        self.post_agent_message(
+            (
+                "**Project YAML build mode** is active.\n\n"
+                "Paste your reported computational method (a paper's "
+                "*Computational Details*, a method sentence, or a few facts) "
+                "and I will use the project-YAML harness to "
+                "`extract → render → validate → critique` a chemsmart project "
+                "YAML, then `write` it into `~/.chemsmart/<program>/` once you "
+                "approve.\n\n"
+                'Tip: name the project (e.g. "call it co2") and say the '
+                "program (Gaussian or ORCA). Use `/mode ask` or `/mode run` to "
+                "leave build mode."
+            ),
+            title="Init: Project YAML",
+        )
+        self.query_one(FooterWidget).set_hint(
+            "Project YAML build mode — paste your reported method"
+        )
+        self.focus_composer()
 
     def _show_sessions_snapshot(self) -> None:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]
@@ -2572,6 +2729,17 @@ def _tool_use_payload_summary(payload: object) -> str | None:
     return None
 
 
+def _tool_use_summary_payload(payload: object) -> dict[str, object] | None:
+    if not isinstance(payload, dict):
+        return None
+    summary = payload.get("summary")
+    if isinstance(summary, dict):
+        return summary
+    if "content" in payload or "inputfile" in payload:
+        return payload
+    return None
+
+
 def _jobs_sort_key(job: dict) -> tuple[int, str, str]:
     order = {"running": 0, "queued": 1, "failed": 2, "cancelled": 3, "done": 4}
     return (
@@ -2598,12 +2766,10 @@ def _default_interaction_mode(config: AgentProviderConfig | None) -> str:
     requested = os.environ.get("CHEMSMART_AGENT_TUI_MODE", "").strip().lower()
     if requested in {"ask", "run"}:
         return requested
-    # The in-process local SPEC provider cannot drive the tool-calling run-mode
-    # harness; it only supports single-shot synthesis (ask mode). Default local
-    # configs to ask so the TUI works out of the box.
-    if config is not None and config.type == "local":
-        return "ask"
-    return "run"
+    # CLI command synthesis is the user-facing source of truth for both local
+    # and API/frontier providers. The tool-calling harness remains available
+    # through explicit `/mode run`, but it is no longer the default entry path.
+    return "ask"
 
 
 def _format_semantic_result(semantic: dict[str, object] | None) -> str:

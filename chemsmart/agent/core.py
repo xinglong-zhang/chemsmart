@@ -196,10 +196,12 @@ class AgentSession:
         registry: ToolRegistry | None = None,
         session_root: str | os.PathLike[str] | None = None,
         transport: Any | None = None,
+        stage_prompt: str = "tool_loop.md",
     ) -> None:
         self._provider = provider
         self.registry = registry or ToolRegistry.default()
         self.transport = transport
+        self._stage_prompt = stage_prompt
         self.session_root = Path(session_root or _default_session_root())
         self.session_root.mkdir(parents=True, exist_ok=True)
         self.state: SessionState | None = None
@@ -1249,6 +1251,11 @@ class AgentSession:
                 for result in dry_run_results
                 if result.get("inputfile")
             ],
+            "generated_commands": [
+                str(result.get("command"))
+                for result in dry_run_results
+                if result.get("command")
+            ],
             "critic_verdict": (
                 verdict.verdict if verdict is not None else "unknown"
             ),
@@ -1443,7 +1450,7 @@ class AgentSession:
         current_turn_index = self.state.turn_index if self.state else None
         return build_system_prompt(
             registry=self.registry,
-            stage_instructions=load_prompt("tool_loop.md"),
+            stage_instructions=load_prompt(self._stage_prompt),
             session_meta=self._prompt_session_meta(
                 stage="tool_loop",
                 approval_mode=policy.mode.value,

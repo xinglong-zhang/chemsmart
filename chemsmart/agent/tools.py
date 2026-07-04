@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import json
 import os
 import re
 import shutil
+import shlex
 import traceback
 from types import SimpleNamespace
 from typing import Any, Literal
@@ -159,11 +161,17 @@ _ORCA_AB_INITIO_EXACT_METHODS = {"HF", "RHF", "UHF", "ROHF"}
 
 def build_molecule(filepath: str, index: str = "-1") -> Molecule:
     """Load one molecule from a structure file using chemsmart parsing."""
-    return Molecule.from_filepath(
+    molecule = Molecule.from_filepath(
         filepath=filepath,
         index=index,
         return_list=False,
     )
+    # Molecule objects do not preserve their source path. The agent harness
+    # needs it to keep every generated input grounded in an equivalent
+    # `chemsmart run/sub ...` command.
+    setattr(molecule, "_agent_source_filepath", filepath)
+    setattr(molecule, "_agent_source_index", index)
+    return molecule
 
 
 def build_gaussian_settings(
@@ -461,16 +469,25 @@ def build_job(
             "'D 1 2 3 4 S 10 36.0' or 'B 1 2 S 10 0.05'."
         )
 
-    return job_class(
+    job = job_class(
         molecule=molecule,
         settings=job_settings,
         label=label,
         jobrunner=jobrunner,
     )
+    source_filepath = getattr(molecule, "_agent_source_filepath", None)
+    source_index = getattr(molecule, "_agent_source_index", None)
+    if source_filepath is not None:
+        setattr(job, "_agent_source_filepath", source_filepath)
+    if source_index is not None:
+        setattr(job, "_agent_source_index", source_index)
+    setattr(job, "_agent_kind", normalized_kind)
+    return job
 
 
-def dry_run_input(job: Job) -> dict[str, str]:
+def dry_run_input(job: Job) -> dict[str, Any]:
     """Render a job input file and return its absolute path and contents."""
+    command = _reconstruct_run_cli_command(job)
     target_directory = os.path.abspath(job.folder)
     job.set_folder(target_directory)
     if job.jobrunner is None:
@@ -490,7 +507,223 @@ def dry_run_input(job: Job) -> dict[str, str]:
     inputfile = os.path.abspath(job.inputfile)
     with open(inputfile) as file:
         content = file.read()
-    return {"inputfile": inputfile, "content": content}
+    result = {
+        "inputfile": inputfile,
+        "content": content,
+        "command": command,
+        "cli_grounded": command is not None,
+    }
+    if command is None:
+        result["cli_grounding_issue"] = (
+            "dry_run_input could not reconstruct an equivalent "
+            "chemsmart CLI command for this job"
+        )
+    return result
+
+
+def _reconstruct_run_cli_command(job: Job) -> str | None:
+    """Return an equivalent user-facing `chemsmart run ...` command.
+
+    The tool-call harness may internally hold Python Job objects, but every
+    dry-run artifact exposed to the user must remain grounded in the real CLI.
+    If the original molecule source is missing, return None so deterministic
+    gates can reject the ungrounded dry run.
+    """
+
+    try:
+        argv = _reconstruct_run_cli_args(job)
+    except Exception:
+        return None
+    if not argv:
+        return None
+    return " ".join(shlex.quote(str(part)) for part in argv)
+
+
+def _reconstruct_run_cli_args(job: Job) -> list[str] | None:
+    source_filepath = getattr(job, "_agent_source_filepath", None)
+    if not isinstance(source_filepath, str) or not source_filepath.strip():
+        return None
+
+    settings = getattr(job, "settings", None)
+    program_name = getattr(job, "PROGRAM", None)
+    if not isinstance(program_name, str):
+        return None
+    program = program_name.lower()
+    if program not in {"gaussian", "orca"}:
+        return None
+
+    cli_jobtype = _run_cli_jobtype_name(job)
+    argv = ["chemsmart", "run", program]
+    argv.extend(
+        _program_cli_args(
+            settings,
+            force_route_freq=_jobtype_name_for_settings(job) == "freq",
+        )
+    )
+    argv.extend(["-f", source_filepath])
+    index = _agent_source_index_for_cli(job)
+    if index is not None:
+        argv.extend(["-i", index])
+    label = getattr(job, "label", None)
+    if isinstance(label, str) and label.strip():
+        argv.extend(["-l", label])
+    argv.append(cli_jobtype)
+    argv.extend(_jobtype_cli_args(job))
+    return argv
+
+
+def _program_cli_args(
+    settings: Any, *, force_route_freq: bool = False
+) -> list[str]:
+    if settings is None:
+        return []
+    flag_map = [
+        ("charge", "-c"),
+        ("multiplicity", "-m"),
+        ("functional", "-x"),
+        ("basis", "-b"),
+        ("semiempirical", "--semiempirical"),
+        ("additional_route_parameters", "--additional-route-parameters"),
+        ("additional_opt_options_in_route", "--additional-opt-options"),
+        ("solvent_model", "-sm"),
+        ("solvent_id", "-si"),
+        ("custom_solvent", "--custom-solvent"),
+        ("heavy_elements", "--heavy-elements"),
+        ("heavy_elements_basis", "--heavy-elements-basis"),
+        ("title", "--title"),
+        ("ab_initio", "--ab-initio"),
+        ("dispersion", "-D"),
+        ("aux_basis", "-B"),
+        ("extrapolation_basis", "-e"),
+        ("defgrid", "--defgrid"),
+        ("scf_tol", "--scf-tol"),
+        ("scf_algorithm", "--scf-algorithm"),
+        ("scf_maxiter", "--scf-maxiter"),
+        ("scf_convergence", "--scf-convergence"),
+    ]
+    argv: list[str] = []
+    for name, flag in flag_map:
+        if not hasattr(settings, name):
+            continue
+        value = getattr(settings, name)
+        if value is None or value is False:
+            continue
+        if isinstance(value, (list, tuple)):
+            value = ",".join(str(item) for item in value)
+        if name == "additional_route_parameters" and force_route_freq:
+            tokens = str(value).replace(",", " ").split()
+            if not any(token.lower() == "freq" for token in tokens):
+                value = f"{value} freq"
+            force_route_freq = False
+        argv.extend([flag, str(value)])
+    if force_route_freq:
+        argv.extend(["--additional-route-parameters", "freq"])
+    return argv
+
+
+def _agent_source_index_for_cli(job: Job) -> str | None:
+    index = getattr(job, "_agent_source_index", None)
+    if not isinstance(index, str):
+        return None
+    # build_molecule's default "-1" means "last molecule" internally. Omit it
+    # from reconstructed commands so single-structure inputs stay natural.
+    return None if index == "-1" else index
+
+
+def _jobtype_cli_args(job: Job) -> list[str]:
+    jobtype = _run_cli_jobtype_name(job)
+    settings = getattr(job, "settings", None)
+    if settings is None:
+        return []
+    if jobtype == "scan":
+        return _dict_to_cli_args(_scan_cli_overrides(settings))
+    if jobtype == "modred":
+        modred = getattr(settings, "modred", None)
+        if isinstance(modred, dict) and modred.get("coords") is not None:
+            return ["--coordinates", _json_cli_value(modred["coords"])]
+    return []
+
+
+def _run_cli_jobtype_name(job: Job) -> str:
+    jobtype = _jobtype_name_for_settings(job)
+    if jobtype == "singlepoint":
+        return "sp"
+    if jobtype == "freq":
+        # There is no literal Gaussian/ORCA `freq` CLI subcommand. The
+        # command-grounded representation follows the adapter contract:
+        # route-level `freq` attached to the executable `opt` subcommand.
+        return "opt"
+    if jobtype not in _SUPPORTED_SUBMIT_JOBTYPES:
+        supported = ", ".join(sorted({*_SUPPORTED_SUBMIT_JOBTYPES, "freq"}))
+        raise ValueError(
+            f"Unsupported run jobtype {jobtype!r}. Supported: {supported}"
+        )
+    return jobtype
+
+
+def _jobtype_name_for_settings(job: Job) -> str:
+    job_settings = getattr(job, "settings", None)
+    jobtype = getattr(job_settings, "jobtype", None)
+    if not isinstance(jobtype, str):
+        raise ValueError(f"Job {job!r} is missing settings.jobtype.")
+    return jobtype.lower()
+
+
+def _dict_to_cli_args(values: dict[str, Any]) -> list[str]:
+    argv: list[str] = []
+    flag_map = {
+        "coordinates": "--coordinates",
+        "num_steps": "--num-steps",
+        "step_size": "--step-size",
+        "constrained_coordinates": "--constrained-coordinates",
+        "dist_start": "--dist-start",
+        "dist_end": "--dist-end",
+    }
+    for key, value in values.items():
+        flag = flag_map.get(key)
+        if flag and value is not None:
+            argv.extend([flag, str(value)])
+    return argv
+
+
+def _scan_cli_overrides(settings: Any) -> dict[str, Any]:
+    modred = getattr(settings, "modred", None)
+    if not isinstance(modred, dict):
+        return {}
+    overrides: dict[str, Any] = {}
+    coords = modred.get("coords")
+    if coords is not None:
+        overrides["coordinates"] = _json_cli_value(coords)
+    if modred.get("num_steps") is not None:
+        overrides["num_steps"] = _scalar_or_json_cli_value(
+            modred["num_steps"]
+        )
+    if modred.get("step_size") is not None:
+        overrides["step_size"] = _scalar_or_json_cli_value(
+            modred["step_size"]
+        )
+    if modred.get("constrained_coordinates") is not None:
+        overrides["constrained_coordinates"] = _json_cli_value(
+            modred["constrained_coordinates"]
+        )
+    # ORCA scan uses distance start/end names rather than Gaussian step_size.
+    if modred.get("dist_start") is not None:
+        overrides["dist_start"] = _scalar_or_json_cli_value(
+            modred["dist_start"]
+        )
+    if modred.get("dist_end") is not None:
+        overrides["dist_end"] = _scalar_or_json_cli_value(modred["dist_end"])
+    return overrides
+
+
+def _json_cli_value(value: Any) -> str:
+    return json.dumps(value, separators=(",", ":"))
+
+
+def _scalar_or_json_cli_value(value: Any) -> str:
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        return str(value[0])
+    return _json_cli_value(value)
 
 
 def validate_runtime(

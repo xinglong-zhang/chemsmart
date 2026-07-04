@@ -2,8 +2,54 @@
 
 Date: 2026-06-29
 
+Latest documentation addendum: 2026-07-04
+
 This document summarizes the current local chemsmart CLI agent state after the
 v13.1 model integration, runtime semantic gate work, and Colab smoke testing.
+
+## 2026-07-04 Addendum
+
+The newest changes since the v13.1 local-agent report are mostly runtime,
+adapter, and TUI grounding improvements rather than a new model-performance
+benchmark:
+
+- job-synthesis output remains CHEMSMART CLI first: user-facing job setup must
+  produce a `chemsmart run ...` or `chemsmart sub ...` command before generated
+  input evidence;
+- API/frontier providers can explain, critique, or repair a generated command,
+  but their answer is grounded by the deterministic command parser and runtime
+  semantic gate;
+- the TUI now renders a deterministic command interpretation cell and a
+  collapsible public decision trace for API-routed turns;
+- `/` opens a slash-command palette with prefix filtering, including `/init`
+  for project-YAML build mode;
+- project-YAML tools can extract a literature protocol, render CHEMSMART
+  `gas:`/`solv:` YAML, validate it, critique it, and write it only after
+  approval;
+- basis-set phrase resolution is now a read-only `search_basis_sets` tool backed
+  by a Basis Set Exchange catalog, returning compact top-k candidates instead
+  of injecting all basis names into the prompt;
+- Gaussian TS route invariants now reject duplicate `opt=(...)` blocks and
+  runtime-owned TS tokens leaked outside the TS opt block.
+
+Focused local verification for the latest doc update:
+
+```text
+74 passed
+```
+
+from:
+
+```text
+tests/agent/harness/test_basis_catalog.py
+tests/agent/test_command_answerer.py
+tests/agent/test_model_command_parser.py
+tests/agent/test_project_yaml_tools.py
+tests/agent/test_synthesis.py
+tests/agent/tui/test_synthesis_mode.py
+tests/agent/tui/test_slash_commands.py
+tests/agent/tui/test_track_b_ux.py
+```
 
 ## Executive Summary
 
@@ -175,4 +221,3 @@ Use v13.1 locally in review-and-approve mode. Treat `semantic_verdict=ok` as
 usable evidence, `warn` as user-review required, and `reject` as a hard block.
 Do not enable unattended submit execution until missing structural input
 declines and submit artifact evidence are fully covered by runtime gates.
-

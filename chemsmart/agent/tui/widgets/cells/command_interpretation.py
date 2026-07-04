@@ -5,6 +5,7 @@ from __future__ import annotations
 from rich.console import Group
 from rich.table import Table
 from rich.text import Text
+from textual.events import Click
 
 from chemsmart.agent.model_command_parser import (
     ParsedModelCommand,
@@ -15,13 +16,61 @@ from .base import BaseCell
 
 
 class CommandInterpretationCell(BaseCell):
+    """Collapsible deterministic grounding for a synthesized command.
+
+    Collapsed by default so the agent's composed answer stays the focus; the
+    full deterministic fact table is available on demand for user audit.
+    """
+
     def __init__(self, parsed: ParsedModelCommand) -> None:
+        self.parsed = parsed
+        self.expanded = False
         self.source_text = format_parsed_model_command(parsed)
         super().__init__(
-            _render_command_interpretation(parsed),
-            title="Command Interpretation",
+            _render_collapsed_interpretation(parsed),
+            title="Command Interpretation ▸",
             classes="agent-cell command-interpretation-cell",
         )
+
+    def on_click(self, _event: Click) -> None:
+        self.toggle()
+
+    def action_toggle(self) -> None:
+        self.toggle()
+
+    def toggle(self) -> None:
+        self.expanded = not self.expanded
+        self.border_title = (
+            "Command Interpretation ▾"
+            if self.expanded
+            else "Command Interpretation ▸"
+        )
+        self.update(
+            _render_command_interpretation(self.parsed)
+            if self.expanded
+            else _render_collapsed_interpretation(self.parsed)
+        )
+
+
+def _render_collapsed_interpretation(parsed: ParsedModelCommand) -> Group:
+    if parsed.parse_error:
+        return Group(
+            Text.assemble(
+                ("grounded facts: ", "dim"),
+                ("parse error", "bold red"),
+            ),
+            Text(parsed.parse_error, style="red"),
+            Text("click to show details", style="dim"),
+        )
+    headline = Text.assemble(
+        ("grounded facts: ", "dim"),
+        (parsed.program or "unknown", "bold cyan"),
+        (" · ", "dim"),
+        (_job_label(parsed), "bold"),
+        (" · ", "dim"),
+        (parsed.filename or "runtime input", "green"),
+    )
+    return Group(headline, Text("click to show grounded facts", style="dim"))
 
 
 def _render_command_interpretation(parsed: ParsedModelCommand) -> Group:

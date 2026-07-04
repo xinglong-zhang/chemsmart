@@ -9,6 +9,7 @@ from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.widgets.cells import (
     AgentMessageCell,
     CommandInterpretationCell,
+    DecisionTraceCell,
     ErrorCell,
     UserMessageCell,
 )
@@ -27,6 +28,18 @@ def _local_config() -> AgentProviderConfig:
         base_url="",
         extra_headers={},
         runtime="mlx",
+        project="test",
+    )
+
+
+def _openai_config() -> AgentProviderConfig:
+    return AgentProviderConfig(
+        name="frontier_openai",
+        type="openai",
+        api_key="test-key",
+        model="gpt-test",
+        base_url="https://api.example.test/v1",
+        extra_headers={},
         project="test",
     )
 
@@ -80,6 +93,7 @@ class _FakeSynthesisSession:
             ),
             "explanation": "Prepared chemsmart command from compact SPEC.",
             "confidence": "high",
+            "project": "test",
             "missing_info": [],
             "alternatives": [],
         }
@@ -103,6 +117,50 @@ class _RejectingSynthesisSession:
             "confidence": "low",
             "missing_info": [],
             "alternatives": [],
+        }
+
+
+class _InformationalSynthesisSession:
+    requests: list[str] = []
+
+    def __init__(self) -> None:
+        self._last_semantic_result = None
+        self._last_raw_response = (
+            '{"action":"explain_command","decision_summary":"explain previous"}'
+        )
+
+    def prepare_command(self, request: str) -> dict:
+        self.requests.append(request)
+        return {
+            "status": "informational",
+            "command": (
+                "chemsmart run gaussian -p test -f examples/h2o.xyz "
+                "-c 0 -m 1 opt"
+            ),
+            "explanation": "deterministic command parser:\n- program: gaussian",
+            "confidence": "high",
+            "project": "test",
+            "missing_info": [],
+            "alternatives": [],
+            "action": "explain_command",
+            "decision_trace": {
+                "router": "api_frontier_intent_router",
+                "action": "explain_command",
+                "confidence": "high",
+                "decision_summary": "The user asked what the command does.",
+                "target_command": (
+                    "chemsmart run gaussian -p test -f examples/h2o.xyz "
+                    "-c 0 -m 1 opt"
+                ),
+                "default_project": "test",
+                "last_command_available": True,
+                "request_excerpt": request,
+                "evidence": ["The request asks for command meaning."],
+                "rejected_actions": {
+                    "synthesize_command": "No new job setup was requested."
+                },
+                "note": "public trace",
+            },
         }
 
 
@@ -187,12 +245,103 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
             assert "runtime semantic gate:" in synthesis.source_text
             assert "verdict: `ok`" in synthesis.source_text
             interpretation = cells[2]
-            assert interpretation.border_title == "Command Interpretation"
+            assert interpretation.border_title == "Command Interpretation ▸"
             assert "deterministic command parser:" in interpretation.source_text
             assert "- program: `gaussian`" in interpretation.source_text
             assert "- job: `sp` (single-point energy)" in interpretation.source_text
             assert "- `-p` meaning: program-level -p/--project" in interpretation.source_text
             assert interpretation.source_text.splitlines()[-1].startswith("Summary:")
+
+    asyncio.run(scenario())
+
+
+def test_frontier_provider_defaults_to_cli_first_synthesis_mode(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.delenv("CHEMSMART_AGENT_TUI_MODE", raising=False)
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        lambda: _openai_config(),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        _FakeSynthesisSession,
+    )
+    _FakeSynthesisSession.requests = []
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app.chat_screen._interaction_mode == "ask"
+            footer_text = str(app.query_one(FooterWidget).renderable)
+            assert "ask:openai" in footer_text
+            assert "project test" in footer_text
+
+            composer = app.query_one(Composer)
+            composer.load_text("single-point on examples/h2o.xyz with Gaussian")
+            await pilot.press("enter")
+            for _ in range(30):
+                await pilot.pause(0.1)
+                if app.query_one(FooterWidget).phase == Phase.FINISHED:
+                    break
+
+            assert _FakeSynthesisSession.requests == [
+                "single-point on examples/h2o.xyz with Gaussian"
+            ]
+            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            assert [type(cell) for cell in cells] == [
+                UserMessageCell,
+                AgentMessageCell,
+                CommandInterpretationCell,
+            ]
+            assert "chemsmart run gaussian" in cells[1].source_text
+            assert "active project: `test`" in cells[1].source_text
+
+    asyncio.run(scenario())
+
+
+def test_frontier_informational_result_renders_decision_trace(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.delenv("CHEMSMART_AGENT_TUI_MODE", raising=False)
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.screens.chat.load_active_provider_config",
+        lambda: _openai_config(),
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        _InformationalSynthesisSession,
+    )
+    _InformationalSynthesisSession.requests = []
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            composer = app.query_one(Composer)
+            composer.load_text("이 명령이 수행하는 작업은 뭐야?")
+            await pilot.press("enter")
+            for _ in range(30):
+                await pilot.pause(0.1)
+                if app.query_one(FooterWidget).phase == Phase.FINISHED:
+                    break
+
+            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            assert [type(cell) for cell in cells] == [
+                UserMessageCell,
+                AgentMessageCell,
+                DecisionTraceCell,
+                CommandInterpretationCell,
+            ]
+            explanation = cells[1]
+            assert explanation.border_title == "Command Explanation"
+            assert "runtime semantic gate:" not in explanation.source_text
+            trace = cells[2]
+            assert trace.border_title == "Decision Trace ▸"
+            assert "action: `explain_command`" in trace.source_text
+            trace.toggle()
+            assert trace.border_title == "Decision Trace ▾"
 
     asyncio.run(scenario())
 

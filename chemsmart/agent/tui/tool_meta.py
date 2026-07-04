@@ -23,6 +23,36 @@ _TOOL_META = {
         "style": "warning",
         "summary": "computes an advisory method recommendation",
     },
+    "extract_project_protocol": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "extracts project YAML method facts",
+    },
+    "render_project_yaml": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "renders a project YAML candidate",
+    },
+    "validate_project_yaml": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "validates project YAML with chemsmart loaders",
+    },
+    "critic_project_yaml": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "critiques project YAML against protocol facts",
+    },
+    "write_project_yaml": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "writes a user project YAML config",
+    },
     "build_gaussian_settings": {
         "risk": "read-only",
         "read_only": True,
@@ -236,6 +266,14 @@ def render_tool_result_summary(
         return _render_scheduler_query_summary(payload)
     if tool_name == "log_tail":
         return _render_log_tail_summary(payload)
+    if tool_name in {
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "write_project_yaml",
+    }:
+        return _render_project_yaml_summary(tool_name, payload)
     return None
 
 
@@ -269,6 +307,14 @@ def render_tool_result_detail(
         return _render_scheduler_query_detail(payload)
     if tool_name == "log_tail":
         return _render_log_tail_detail(payload)
+    if tool_name in {
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "write_project_yaml",
+    }:
+        return _render_project_yaml_detail(payload)
     return None
 
 
@@ -319,6 +365,27 @@ def _render_log_tail_summary(payload: dict[str, Any]) -> str | None:
             kinds.append(kind)
     top_kinds = ", ".join(kinds) if kinds else "none"
     return f"{lines_returned}L, {len(errors)} errors: {top_kinds}"
+
+
+def _render_project_yaml_summary(
+    tool_name: str,
+    payload: dict[str, Any],
+) -> str | None:
+    project = _string_or_none(payload.get("project_name")) or "project"
+    program = _string_or_none(payload.get("program")) or "program"
+    verdict = _string_or_none(payload.get("verdict"))
+    if verdict is None and isinstance(payload.get("validation"), dict):
+        verdict = _string_or_none(payload["validation"].get("verdict"))
+    if tool_name == "extract_project_protocol":
+        return f"{program}:{project} facts extracted"
+    if tool_name == "render_project_yaml":
+        return f"{program}:{project} YAML rendered"
+    if tool_name == "write_project_yaml":
+        path = _string_or_none(payload.get("written_path"))
+        return f"{program}:{project} written" + (f" to {path}" if path else "")
+    if verdict is not None:
+        return f"{program}:{project} verdict={verdict}"
+    return f"{program}:{project}"
 
 
 def _render_read_detail(payload: dict[str, Any]) -> list[Text] | None:
@@ -391,6 +458,29 @@ def _render_log_tail_detail(payload: dict[str, Any]) -> list[Text] | None:
         line_no = _string_or_none(item.get("line_no")) or "?"
         lines.append(Text(f"L{line_no} {kind}: {line}", style="error"))
     return _finalize_detail_lines(lines, truncated=len(errors) > 3)
+
+
+def _render_project_yaml_detail(payload: dict[str, Any]) -> list[Text] | None:
+    lines: list[Text] = []
+    yaml_text = _string_or_none(payload.get("yaml_text"))
+    if yaml_text is not None:
+        lines.extend(Text(line, style="dim") for line in yaml_text.splitlines()[:6])
+    summary = _string_or_none(payload.get("summary"))
+    if summary is not None:
+        lines.append(Text(summary, style="dim"))
+    issues = payload.get("issues")
+    if not isinstance(issues, list) and isinstance(payload.get("validation"), dict):
+        issues = payload["validation"].get("issues")
+    if isinstance(issues, list):
+        for issue in issues[:4]:
+            if not isinstance(issue, dict):
+                continue
+            rule = _string_or_none(issue.get("rule_id")) or "issue"
+            severity = _string_or_none(issue.get("severity")) or "warn"
+            message = _string_or_none(issue.get("message")) or ""
+            style = "error" if severity == "reject" else "warning"
+            lines.append(Text(f"{rule}: {message}", style=style))
+    return _finalize_detail_lines(lines, truncated=len(lines) > 6)
 
 
 def _finalize_detail_lines(

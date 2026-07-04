@@ -513,5 +513,10 @@ def test_runtime_permission_mode_placeholders_are_stable():
         "ssh_probe",
         "scheduler_query",
         "log_tail",
+        "extract_project_protocol",
+        "render_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "search_basis_sets",
     }
     assert EDIT_SAFE_TOOLS == {"edit", "write"}

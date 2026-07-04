@@ -3,6 +3,7 @@
 from .agent_message import AgentMessageCell
 from .command_interpretation import CommandInterpretationCell
 from .critic_verdict import CriticVerdictCell
+from .decision_trace import DecisionTraceCell
 from .dry_run_input import DryRunInputCell
 from .error import ErrorCell
 from .geometry_handoff import GeometryHandoffCell
@@ -21,6 +22,7 @@ __all__ = [
     "AgentMessageCell",
     "CommandInterpretationCell",
     "CriticVerdictCell",
+    "DecisionTraceCell",
     "DryRunInputCell",
     "ErrorCell",
     "GeometryHandoffCell",
