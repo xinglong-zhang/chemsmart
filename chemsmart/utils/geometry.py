@@ -18,7 +18,7 @@ import math
 import numpy as np
 
 
-def is_collinear(coords, tol=1e-5):
+def is_collinear(coords, tol=1e-2):
     """
     Check if three points are collinear using cross product method.
 
