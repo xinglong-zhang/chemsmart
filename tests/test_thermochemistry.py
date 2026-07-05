@@ -1451,30 +1451,32 @@ class TestThermochemistryKOH:
     def test_koh_rotational_constants_skip_overflow(
         self, gaussian_koh_opt_outfile
     ):
-        """Rotational constants in Hz must only return finite (non-overflow)
-        values; '****...' tokens must be skipped."""
+        """Rotational constants in Hz must only return one unique finite value;
+        '****...' tokens must be skipped and the two degenerate B = C values
+        for a linear molecule collapsed to a single entry."""
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         rot_consts = g16_output.rotational_constants_in_Hz
         assert rot_consts is not None
-        # '****' for the molecular-axis constant is skipped;
-        # only the two finite perpendicular constants are returned.
-        assert len(rot_consts) == 2
+        # '****' for the molecular-axis constant is skipped; the two degenerate
+        # perpendicular constants are collapsed to one unique value.
+        assert len(rot_consts) == 1
         assert all(np.isfinite(c) for c in rot_consts)
-        assert np.allclose(rot_consts, [8.30647e9, 8.30647e9], rtol=1e-4)
+        assert np.allclose(rot_consts, [8.18754e9], rtol=1e-4)
 
     def test_koh_rotational_temperatures_skip_overflow(
         self, gaussian_koh_opt_outfile
     ):
-        """Rotational temperatures must only return finite values; '****...'
-        tokens must be skipped."""
+        """Rotational temperatures must return one unique finite value;
+        '****...' tokens must be skipped and the two degenerate B = C
+        temperatures for a linear molecule collapsed to a single entry."""
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         rot_temps = g16_output.rotational_temperatures
         assert rot_temps is not None
-        # '****' for the molecular-axis temperature is skipped;
-        # only the two finite perpendicular temperatures are returned.
-        assert len(rot_temps) == 2
+        # '****' for the molecular-axis temperature is skipped; the two
+        # degenerate perpendicular temperatures are collapsed to one.
+        assert len(rot_temps) == 1
         assert all(np.isfinite(t) for t in rot_temps)
-        assert np.allclose(rot_temps, [0.39865, 0.39865], atol=1e-4)
+        assert np.allclose(rot_temps, [0.39294], atol=1e-4)
 
     def test_koh_all_rotational_constants_uses_inf(
         self, gaussian_koh_opt_outfile
@@ -1531,6 +1533,99 @@ class TestThermochemistryKOH:
         assert np.isfinite(thermochem.enthalpy)
         assert np.isfinite(thermochem.total_entropy)
         assert np.isfinite(thermochem.gibbs_free_energy)
+
+    def test_koh_thermochemistry_matches_log(self, gaussian_koh_opt_outfile):
+        """Thermochemistry values calculated from the molecular structure must
+        match the reference values recorded in the KOH log file.
+
+        Log-file reference (thermochemistry section of koh.log):
+            Rotational constants (GHZ): *** 8.18754  (B = 8.18754 GHz)
+            Rotational temperatures (Kelvin): *** 0.39294 K
+            Rotational partition function: 758.77
+            Rotational entropy: 15.166 cal mol⁻¹ K⁻¹
+            Rotational internal energy: 0.592 kcal mol⁻¹
+            Rotational heat capacity: 1.987 cal mol⁻¹ K⁻¹
+            Translational entropy: 37.988 cal mol⁻¹ K⁻¹
+            Vibrational entropy: 4.362 cal mol⁻¹ K⁻¹
+            Vibrational internal energy: 7.451 kcal mol⁻¹
+            Vibrational heat capacity: 4.900 cal mol⁻¹ K⁻¹
+            Total entropy: 57.515 cal mol⁻¹ K⁻¹
+            Total internal energy: 8.932 kcal mol⁻¹
+            Total heat capacity: 9.868 cal mol⁻¹ K⁻¹
+        """
+        from chemsmart.utils.constants import cal_to_joules
+
+        thermochem = Thermochemistry(
+            filename=gaussian_koh_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+        )
+
+        # Rotational partition function matches log (q_r = 758.77)
+        assert np.isclose(
+            thermochem.rotational_partition_function, 758.77, rtol=1e-3
+        )
+        # Rotational entropy matches log (15.166 cal/mol/K)
+        assert np.isclose(
+            thermochem.rotational_entropy / cal_to_joules,
+            15.166,
+            atol=0.01,
+        )
+        # Rotational internal energy matches log (0.592 kcal/mol)
+        assert np.isclose(
+            thermochem.rotational_internal_energy / (cal_to_joules * 1000),
+            0.592,
+            atol=1e-3,
+        )
+        # Rotational heat capacity matches log (1.987 cal/mol/K)
+        assert np.isclose(
+            thermochem.rotational_heat_capacity / cal_to_joules,
+            1.987,
+            atol=1e-3,
+        )
+        # Translational entropy matches log (37.988 cal/mol/K)
+        assert np.isclose(
+            thermochem.translational_entropy / cal_to_joules,
+            37.988,
+            atol=0.01,
+        )
+        # Vibrational entropy matches log (4.362 cal/mol/K)
+        assert np.isclose(
+            thermochem.vibrational_entropy / cal_to_joules,
+            4.362,
+            atol=0.01,
+        )
+        # Vibrational internal energy matches log (7.451 kcal/mol)
+        assert np.isclose(
+            thermochem.vibrational_internal_energy / (cal_to_joules * 1000),
+            7.451,
+            atol=0.01,
+        )
+        # Vibrational heat capacity matches log (4.900 cal/mol/K)
+        assert np.isclose(
+            thermochem.vibrational_heat_capacity / cal_to_joules,
+            4.900,
+            atol=0.01,
+        )
+        # Total entropy matches log (57.515 cal/mol/K)
+        assert np.isclose(
+            thermochem.total_entropy / cal_to_joules,
+            57.515,
+            atol=0.02,
+        )
+        # Total internal energy matches log (8.932 kcal/mol)
+        assert np.isclose(
+            thermochem.total_internal_energy / (cal_to_joules * 1000),
+            8.932,
+            atol=0.01,
+        )
+        # Total heat capacity matches log (9.868 cal/mol/K)
+        assert np.isclose(
+            thermochem.total_heat_capacity / cal_to_joules,
+            9.868,
+            atol=0.01,
+        )
 
 
 class TestThermochemistryHe:

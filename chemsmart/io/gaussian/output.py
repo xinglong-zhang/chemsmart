@@ -2542,17 +2542,31 @@ class Gaussian16Output(GaussianFileMixin):
 
         For linear molecules Gaussian may print '***...' when the rotational
         temperature along the molecular axis overflows the output field width.
-        Such tokens are skipped; only finite values are returned.
+        Such tokens are skipped; only finite values are returned.  For linear
+        molecules the two remaining perpendicular-axis values are degenerate
+        (B = C); duplicates are collapsed to a single value so that one unique
+        rotational temperature is returned.
         """
         rot_temps = []
         for line in reversed(self.contents):
             # take from the end of outputfile
             if "Rotational temperature" in line and "(Kelvin)" in line:
+                has_overflow = False
                 for rot_temp in line.split("(Kelvin)")[-1].split():
                     # linear molecules may have only one rot temp,
                     # non-linear has three; skip overflow tokens ('***...')
-                    if "*" not in rot_temp:
+                    if "*" in rot_temp:
+                        has_overflow = True
+                    else:
                         rot_temps.append(float(rot_temp))
+                # For linear molecules Gaussian prints the same B value twice
+                # (degenerate perpendicular axes); collapse to unique values.
+                if has_overflow:
+                    seen: list[float] = []
+                    for v in rot_temps:
+                        if v not in seen:
+                            seen.append(v)
+                    rot_temps = seen
                 return rot_temps
 
     @cached_property
@@ -2562,16 +2576,30 @@ class Gaussian16Output(GaussianFileMixin):
 
         For linear molecules Gaussian may print '***...' when the rotational
         constant along the molecular axis overflows the output field width.
-        Such tokens are skipped; only finite values are returned.
+        Such tokens are skipped; only finite values are returned.  For linear
+        molecules the two remaining perpendicular-axis values are degenerate
+        (B = C); duplicates are collapsed to a single value so that one unique
+        rotational constant is returned.
         """
         rot_consts = []
         for line in reversed(self.contents):
             # take from the end of outputfile
             if "Rotational constant" in line and "(GHZ):" in line:
+                has_overflow = False
                 for rot_const in line.split("(GHZ):")[-1].split():
                     # skip overflow tokens ('***...') for linear molecules
-                    if "*" not in rot_const:
+                    if "*" in rot_const:
+                        has_overflow = True
+                    else:
                         rot_consts.append(float(rot_const) * 1e9)
+                # For linear molecules Gaussian prints the same B value twice
+                # (degenerate perpendicular axes); collapse to unique values.
+                if has_overflow:
+                    seen: list[float] = []
+                    for v in rot_consts:
+                        if v not in seen:
+                            seen.append(v)
+                    rot_consts = seen
                 return rot_consts
 
     @cached_property

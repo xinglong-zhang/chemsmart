@@ -126,49 +126,49 @@
  Atom     1 has atomic number 19 and mass  38.96371
  Atom     2 has atomic number  8 and mass  15.99491
  Atom     3 has atomic number  1 and mass   1.00783
- Molecular mass:    56.95645 amu.
+ Molecular mass:    55.96645 amu.
  Principal axes and moments of inertia in atomic units:
                            1         2         3
-     Eigenvalues --     0.00000 241.32154 241.32154
+     Eigenvalues --     0.00000 220.42544 220.42544
            X            0.00000   1.00000  -0.00000
            Y            0.00000   0.00000   1.00000
            Z            1.00000   0.00000  -0.00000
  This molecule is a prolate symmetric top.
  Rotational symmetry number  1.
- Rotational temperatures (Kelvin) ************     0.39865     0.39865
- Rotational constants (GHZ):      ************     8.30647     8.30647
- Zero-point vibrational energy      25187.5 (Joules/Mol)
-                                    6.01981 (Kcal/Mol)
- Vibrational temperatures:    347.12   347.12   657.30  5353.49
+ Rotational temperatures (Kelvin) ************     0.39294     0.39294
+ Rotational constants (GHZ):      ************     8.18754     8.18754
+ Zero-point vibrational energy      27878.3 (Joules/Mol)
+                                    6.66308 (Kcal/Mol)
+ Vibrational temperatures:    347.22   347.22   657.21  5354.33
           (Kelvin)
 
- Zero-point correction=                           0.009592 (Hartree/Particle)
- Thermal correction to Energy=                    0.012963
- Thermal correction to Enthalpy=                  0.013907
- Thermal correction to Gibbs Free Energy=        -0.011234
- Sum of electronic and zero-point Energies=           -674.565299
- Sum of electronic and thermal Energies=              -674.561928
- Sum of electronic and thermal Enthalpies=            -674.560984
- Sum of electronic and thermal Free Energies=         -674.586125
+ Zero-point correction=                           0.010618 (Hartree/Particle)
+ Thermal correction to Energy=                    0.014234
+ Thermal correction to Enthalpy=                  0.015179
+ Thermal correction to Gibbs Free Energy=        -0.012149
+ Sum of electronic and zero-point Energies=           -674.564273
+ Sum of electronic and thermal Energies=              -674.560657
+ Sum of electronic and thermal Enthalpies=            -674.559713
+ Sum of electronic and thermal Free Energies=         -674.587040
 
                      E (Thermal)             CV                S
                       KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
- Total                    8.134              7.196             51.863
+ Total                    8.932              9.868             57.515
  Electronic               0.000              0.000              0.000
- Translational            0.889              2.981             38.072
- Rotational               0.592              1.987             10.121
- Vibrational              6.653              2.228              3.670
+ Translational            0.889              2.981             37.988
+ Rotational               0.592              1.987             15.166
+ Vibrational              7.451              4.900              4.362
                        Q            Log10(Q)             Ln(Q)
- Total Bot       0.112453D+06          5.051000         11.630000
- Total V=0       0.223891D+11         10.350000         23.831000
- Vib (Bot)       0.218334D-05         -5.661000        -13.032000
- Vib (V=0)       0.435316D+00         -0.361000         -0.831000
+ Total Bot       0.387295D+06          5.588000         12.867000
+ Total V=0       0.296560D+11         10.472000         24.113000
+ Vib (Bot)       0.310161D-04         -4.508000        -10.381000
+ Vib (V=0)       0.237497D+01          0.376000          0.865000
  Electronic      0.100000D+01          0.000000          0.000000
- Translational   0.143844D+08          7.158000         16.481000
- Rotational      0.734412D+02          1.866000          4.296000
+ Translational   0.164568D+08          7.216000         16.616000
+ Rotational      0.758768D+03          2.880000          6.632000
  1\1\GINC-NODE\Freq\RB3LYP\def2SVP\H1K1O1\USER\04-Jul-2026\0\\# Geom=A
  llCheck Guess=TCheck freq RB3LYP/def2SVP\\KOH\\0,1\K,0.,0.,-0.681203\O
  ,0.,0.,1.528416\H,0.,0.,2.496831\\Version=ES64L-G16RevB.01\State=1-SGS
- \HF=-674.574891234\RMSD=5.0e-09\RMSF=1.0e-06\ZeroPoint=0.009592\Therm
- al=0.012963\PG=C*V [C*(H1O1K1)]\NImag=0\\...
+ \HF=-674.574891234\RMSD=5.0e-09\RMSF=1.0e-06\ZeroPoint=0.010618\Therm
+ al=0.014234\PG=C*V [C*(H1O1K1)]\NImag=0\\...
  Normal termination of Gaussian 16 at Fri Jul  4 22:29:10 2026.
