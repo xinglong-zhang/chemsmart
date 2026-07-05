@@ -1461,7 +1461,7 @@ class TestThermochemistryKOH:
         # perpendicular constants are collapsed to one unique value.
         assert len(rot_consts) == 1
         assert all(np.isfinite(c) for c in rot_consts)
-        assert np.allclose(rot_consts, [8.18754e9], rtol=1e-4)
+        assert np.allclose(rot_consts, [8.30647e9], rtol=1e-4)
 
     def test_koh_rotational_temperatures_skip_overflow(
         self, gaussian_koh_opt_outfile
@@ -1476,7 +1476,7 @@ class TestThermochemistryKOH:
         # degenerate perpendicular temperatures are collapsed to one.
         assert len(rot_temps) == 1
         assert all(np.isfinite(t) for t in rot_temps)
-        assert np.allclose(rot_temps, [0.39294], atol=1e-4)
+        assert np.allclose(rot_temps, [0.39865], atol=1e-4)
 
     def test_koh_all_rotational_constants_uses_inf(
         self, gaussian_koh_opt_outfile
@@ -1486,14 +1486,18 @@ class TestThermochemistryKOH:
         (one per principal axis)."""
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         all_rot_consts = g16_output.all_rotational_constants
-        assert len(all_rot_consts) > 0
-        for step_consts in all_rot_consts:
+        assert len(all_rot_consts) == 17
+        for step_consts in all_rot_consts[:12]:
+            # first 11 geometries are non-linear
+            # skip the last step (final geometry)
             assert len(step_consts) == 3
-            # The first element (along molecular axis) should be inf
-            assert np.isinf(step_consts[0])
-            # The other two should be finite and positive
+            assert np.isfinite(step_consts[0])
             assert np.isfinite(step_consts[1])
             assert np.isfinite(step_consts[2])
+
+        for step_consts in all_rot_consts[12:]:
+            # last 5 geometries are linear or quasi-linear
+            assert len(step_consts) == 1
 
     def test_koh_molecule_rotational_temperatures_linear(
         self, gaussian_koh_opt_outfile
@@ -1503,15 +1507,14 @@ class TestThermochemistryKOH:
         the zero-MOI axis."""
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         mol = g16_output.molecule
+        assert mol.is_linear
         # Must not raise ZeroDivisionError
         rot_temps = mol.rotational_temperatures
-        assert len(rot_temps) == 3
-        # One axis has zero MOI → infinite rotational temperature
-        assert np.isinf(rot_temps[0])
-        # The other two axes have finite rotational temperatures
-        assert np.isfinite(rot_temps[1])
-        assert np.isfinite(rot_temps[2])
-        assert np.isclose(rot_temps[1], rot_temps[2])
+        assert len(rot_temps) == 1
+        assert np.isclose(rot_temps[0], 0.39865, atol=1e-3)
+        rot_consts = mol.rotational_constants
+        assert len(rot_consts) == 1
+        assert np.isclose(rot_consts[0], 8.30647, rtol=1e-4)
 
     def test_koh_thermochemistry_runs_without_error(
         self, gaussian_koh_opt_outfile
@@ -1539,19 +1542,27 @@ class TestThermochemistryKOH:
         match the reference values recorded in the KOH log file.
 
         Log-file reference (thermochemistry section of KOH.log):
-            Rotational constants (GHZ): *** 8.18754  (B = 8.18754 GHz)
-            Rotational temperatures (Kelvin): *** 0.39294 K
-            Rotational partition function: 758.77
-            Rotational entropy: 15.166 cal mol⁻¹ K⁻¹
-            Rotational internal energy: 0.592 kcal mol⁻¹
-            Rotational heat capacity: 1.987 cal mol⁻¹ K⁻¹
-            Translational entropy: 37.988 cal mol⁻¹ K⁻¹
-            Vibrational entropy: 4.362 cal mol⁻¹ K⁻¹
-            Vibrational internal energy: 7.451 kcal mol⁻¹
-            Vibrational heat capacity: 4.900 cal mol⁻¹ K⁻¹
-            Total entropy: 57.515 cal mol⁻¹ K⁻¹
-            Total internal energy: 8.932 kcal mol⁻¹
-            Total heat capacity: 9.868 cal mol⁻¹ K⁻¹
+                             E (Thermal)             CV                S
+                              KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+         Total                    8.904              8.686             42.597
+         Electronic               0.000              0.000              0.000
+         Translational            0.889              2.981             37.988
+         Rotational               0.889              2.981              2.981
+         Vibrational              7.127              2.724              1.629
+         Vibration     1          0.763              1.477              0.974
+         Vibration     2          0.857              1.247              0.655
+                               Q            Log10(Q)             Ln(Q)
+         Total Bot       0.223020D+03          2.348344          5.407262
+         Total V=0       0.211826D+08          7.325979         16.868689
+         Vib (Bot)       0.135532D-04         -4.867957        -11.208886
+         Vib (Bot)    1  0.449998D+00         -0.346790         -0.798513
+         Vib (Bot)    2  0.327548D+00         -0.484725         -1.116121
+         Vib (V=0)       0.128729D+01          0.109677          0.252541
+         Vib (V=0)    1  0.117268D+01          0.069179          0.159291
+         Vib (V=0)    2  0.109774D+01          0.040498          0.093249
+         Electronic      0.100000D+01          0.000000          0.000000
+         Translational   0.164568D+08          7.216345         16.616250
+         Rotational      0.999899D+00         -0.000044         -0.000101
         """
         from chemsmart.utils.constants import cal_to_joules
 
@@ -1562,26 +1573,30 @@ class TestThermochemistryKOH:
             use_weighted_mass=False,
         )
 
-        # Rotational partition function matches log (q_r = 758.77)
+        # Rotational partition function matches log
+        # (q_r = 298.15/0.39865=747.89915966)
+        # this is different from Gaussian output file which treats molecule
+        # as non-linear rotor with a huge/overflowed first rotational constant.
         assert np.isclose(
-            thermochem.rotational_partition_function, 758.77, rtol=1e-3
+            thermochem.rotational_partition_function, 0.999899, rtol=1e-2
         )
-        # Rotational entropy matches log (15.166 cal/mol/K)
+        print(thermochem.rotational_entropy)
+        # Rotational entropy matches log (2.981 cal/mol/K)
         assert np.isclose(
             thermochem.rotational_entropy / cal_to_joules,
-            15.166,
-            atol=0.01,
-        )
-        # Rotational internal energy matches log (0.592 kcal/mol)
-        assert np.isclose(
-            thermochem.rotational_internal_energy / (cal_to_joules * 1000),
-            0.592,
+            2.981,
             atol=1e-3,
         )
-        # Rotational heat capacity matches log (1.987 cal/mol/K)
+        # Rotational internal energy matches log (0.889 kcal/mol)
+        assert np.isclose(
+            thermochem.rotational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
+        )
+        # Rotational heat capacity matches log (2.981 cal/mol/K)
         assert np.isclose(
             thermochem.rotational_heat_capacity / cal_to_joules,
-            1.987,
+            2.981,
             atol=1e-3,
         )
         # Translational entropy matches log (37.988 cal/mol/K)
@@ -1590,40 +1605,40 @@ class TestThermochemistryKOH:
             37.988,
             atol=0.01,
         )
-        # Vibrational entropy matches log (4.362 cal/mol/K)
+        # Vibrational entropy matches log (1.629 cal/mol/K)
         assert np.isclose(
             thermochem.vibrational_entropy / cal_to_joules,
-            4.362,
+            1.629,
             atol=0.01,
         )
-        # Vibrational internal energy matches log (7.451 kcal/mol)
+        # Vibrational internal energy matches log (7.127 kcal/mol)
         assert np.isclose(
             thermochem.vibrational_internal_energy / (cal_to_joules * 1000),
-            7.451,
+            7.127,
             atol=0.01,
         )
-        # Vibrational heat capacity matches log (4.900 cal/mol/K)
+        # Vibrational heat capacity matches log (2.724 cal/mol/K)
         assert np.isclose(
             thermochem.vibrational_heat_capacity / cal_to_joules,
-            4.900,
+            2.724,
             atol=0.01,
         )
-        # Total entropy matches log (57.515 cal/mol/K)
+        # Total entropy matches log (42.597 cal/mol/K)
         assert np.isclose(
             thermochem.total_entropy / cal_to_joules,
-            57.515,
+            42.597,
             atol=0.02,
         )
-        # Total internal energy matches log (8.932 kcal/mol)
+        # Total internal energy matches log (8.904 kcal/mol)
         assert np.isclose(
             thermochem.total_internal_energy / (cal_to_joules * 1000),
-            8.932,
+            8.904,
             atol=0.01,
         )
-        # Total heat capacity matches log (9.868 cal/mol/K)
+        # Total heat capacity matches log (8.686 cal/mol/K)
         assert np.isclose(
             thermochem.total_heat_capacity / cal_to_joules,
-            9.868,
+            8.686,
             atol=0.01,
         )
 

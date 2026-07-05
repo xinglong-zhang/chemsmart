@@ -2605,22 +2605,41 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def all_rotational_constants(self):
         """
-        List of rotational constants (np.array in Hz) for each geometry step,
-        in the order they appear in the file.
+        List of rotational constants for each geometry step, in the order they
+        appear in the Gaussian output.
 
-        For linear molecules Gaussian may print '***...' when the rotational
-        constant along the molecular axis overflows the output field width.
-        Such tokens are replaced with ``np.inf``.
+        Units are preserved from Gaussian output, usually GHz.
+
+        Nonlinear geometry:
+            np.array([A, B, C])
+
+        Linear or quasi-linear geometry:
+            np.array([B])
+
+        Gaussian may print '********' when the axial rotational constant overflows.
+        Such tokens are replaced with np.inf and then cleaned according to the
+        molecular geometry.
         """
+
+        from chemsmart.utils.geometry import (
+            clean_rotational_constants_by_geometry,
+        )
+
         result = []
+
         for line in self.contents:
             if "Rotational constants (GHZ):" in line:
-                vals = line.split("(GHZ):")[-1].split()
-                result.append(
-                    np.array(
-                        [np.inf if "*" in v else float(v) * 1e9 for v in vals]
-                    )
+                vals = line.split("(GHZ):", 1)[-1].split()
+
+                vals_ghz = np.array(
+                    [np.inf if "*" in v else float(v) for v in vals],
+                    dtype=float,
                 )
+
+                vals_ghz, _ = clean_rotational_constants_by_geometry(vals_ghz)
+
+                result.append(vals_ghz)
+
         return result
 
     @cached_property

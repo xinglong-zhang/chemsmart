@@ -815,6 +815,7 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            logger.info(f"Moments of inertia (weighted mass): {eigenvalues}.")
             return eigenvalues
 
     @property
@@ -826,6 +827,9 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            logger.info(
+                f"Moments of inertia (most abundant mass): {eigenvalues}."
+            )
             return eigenvalues
 
     @property
@@ -904,6 +908,9 @@ class Molecule:
                 result.append(
                     units._hplanck**2 / (8 * np.pi**2 * moi * units._k)
                 )
+        if self.is_linear:
+            # for linear molecule, has only one rotational temperature
+            return [result[-1]]
         return result
 
     def get_chemical_formula(self, mode="hill", empirical=False):
