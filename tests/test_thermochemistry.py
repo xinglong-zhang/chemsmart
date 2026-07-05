@@ -1538,7 +1538,7 @@ class TestThermochemistryKOH:
         """Thermochemistry values calculated from the molecular structure must
         match the reference values recorded in the KOH log file.
 
-        Log-file reference (thermochemistry section of koh.log):
+        Log-file reference (thermochemistry section of KOH.log):
             Rotational constants (GHZ): *** 8.18754  (B = 8.18754 GHz)
             Rotational temperatures (Kelvin): *** 0.39294 K
             Rotational partition function: 758.77
