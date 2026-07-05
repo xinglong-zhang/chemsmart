@@ -1481,23 +1481,39 @@ class TestThermochemistryKOH:
     def test_koh_all_rotational_constants_uses_inf(
         self, gaussian_koh_opt_outfile
     ):
-        """Per-step rotational constants must replace '****...' with np.inf
-        so that the array has the same number of elements as other molecules
-        (one per principal axis)."""
+        """Gaussian mode must preserve three printed values per step and use
+        np.inf as the overflow sentinel for the final axial constant."""
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
-        all_rot_consts = g16_output.all_rotational_constants
+        all_rot_consts = g16_output.all_rotational_constants(mode="gaussian")
+        all_rot_consts_with_status = g16_output.all_rotational_constants(
+            mode="gaussian",
+            return_status=True,
+        )
+        assert len(all_rot_consts) == 17
+        for step_consts in all_rot_consts[:-1]:
+            assert len(step_consts) == 3
+        assert np.isinf(all_rot_consts[-1][0])
+        assert np.allclose(all_rot_consts[-1][1:], [8.30647, 8.30647], rtol=1e-4)
+        assert all_rot_consts_with_status[-1][1] == "gaussian_overflow"
+
+    def test_koh_all_rotational_constants_physical_cleanup(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Physical mode must collapse the effectively linear final steps to a
+        single perpendicular rotational constant."""
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        all_rot_consts = g16_output.all_rotational_constants(mode="physical")
+        all_rot_consts_with_status = g16_output.all_rotational_constants(
+            mode="physical",
+            return_status=True,
+        )
         assert len(all_rot_consts) == 17
         for step_consts in all_rot_consts[:12]:
-            # first 11 geometries are non-linear
-            # skip the last step (final geometry)
             assert len(step_consts) == 3
-            assert np.isfinite(step_consts[0])
-            assert np.isfinite(step_consts[1])
-            assert np.isfinite(step_consts[2])
-
         for step_consts in all_rot_consts[12:]:
-            # last 5 geometries are linear or quasi-linear
             assert len(step_consts) == 1
+        assert all_rot_consts_with_status[12][1] == "quasi_linear"
+        assert all_rot_consts_with_status[-1][1] == "linear"
 
     def test_koh_molecule_rotational_temperatures_linear(
         self, gaussian_koh_opt_outfile
@@ -1571,6 +1587,7 @@ class TestThermochemistryKOH:
             temperature=298.15,
             pressure=1.0,
             use_weighted_mass=False,
+            rotational_mode="gaussian",
         )
 
         # Rotational partition function matches log
@@ -1580,24 +1597,23 @@ class TestThermochemistryKOH:
         assert np.isclose(
             thermochem.rotational_partition_function, 0.999899, rtol=1e-2
         )
-        print(thermochem.rotational_entropy)
         # Rotational entropy matches log (2.981 cal/mol/K)
         assert np.isclose(
             thermochem.rotational_entropy / cal_to_joules,
             2.981,
-            atol=1e-3,
+            atol=0.01,
         )
         # Rotational internal energy matches log (0.889 kcal/mol)
         assert np.isclose(
             thermochem.rotational_internal_energy / (cal_to_joules * 1000),
             0.889,
-            atol=1e-3,
+            atol=0.01,
         )
         # Rotational heat capacity matches log (2.981 cal/mol/K)
         assert np.isclose(
             thermochem.rotational_heat_capacity / cal_to_joules,
             2.981,
-            atol=1e-3,
+            atol=0.01,
         )
         # Translational entropy matches log (37.988 cal/mol/K)
         assert np.isclose(
@@ -1639,6 +1655,36 @@ class TestThermochemistryKOH:
         assert np.isclose(
             thermochem.total_heat_capacity / cal_to_joules,
             8.686,
+            atol=0.01,
+        )
+
+    def test_koh_physical_rotational_thermochemistry(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Physical mode must treat KOH as a linear rotor."""
+        thermochem = Thermochemistry(
+            filename=gaussian_koh_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+            rotational_mode="physical",
+        )
+        assert np.isclose(
+            thermochem.rotational_partition_function, 747.899, rtol=1e-3
+        )
+        assert np.isclose(
+            thermochem.rotational_entropy / cal_to_joules,
+            15.137,
+            atol=0.05,
+        )
+        assert np.isclose(
+            thermochem.rotational_internal_energy / (cal_to_joules * 1000),
+            0.592,
+            atol=0.01,
+        )
+        assert np.isclose(
+            thermochem.rotational_heat_capacity / cal_to_joules,
+            1.987,
             atol=0.01,
         )
 

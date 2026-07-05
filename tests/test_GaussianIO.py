@@ -731,8 +731,8 @@ class TestGaussian16Output:
         )
         assert g16_output.all_point_groups[-1] == "C1"
         assert np.allclose(
-            g16_output.all_rotational_constants[-1],
-            np.array([1.6245e8, 7.3820e7, 5.3320e7]),
+            g16_output.all_rotational_constants()[-1],
+            np.array([0.16245, 0.07382, 0.05332]),
             rtol=1e-4,
         )
 
@@ -806,8 +806,8 @@ class TestGaussian16Output:
         )
         assert g16_output.all_point_groups[-1] == "C1"
         assert np.allclose(
-            g16_output.all_rotational_constants[-1],
-            np.array([6.2290e7, 5.5130e7, 4.6900e7]),
+            g16_output.all_rotational_constants()[-1],
+            np.array([0.06229, 0.05513, 0.04690]),
             rtol=1e-4,
         )
 
