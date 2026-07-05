@@ -902,8 +902,7 @@ class Molecule:
                 result.append(np.inf)
             else:
                 result.append(
-                    units._hplanck**2
-                    / (8 * np.pi**2 * moi * units._k)
+                    units._hplanck**2 / (8 * np.pi**2 * moi * units._k)
                 )
         return result
 

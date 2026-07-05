@@ -2618,10 +2618,7 @@ class Gaussian16Output(GaussianFileMixin):
                 vals = line.split("(GHZ):")[-1].split()
                 result.append(
                     np.array(
-                        [
-                            np.inf if "*" in v else float(v) * 1e9
-                            for v in vals
-                        ]
+                        [np.inf if "*" in v else float(v) * 1e9 for v in vals]
                     )
                 )
         return result
