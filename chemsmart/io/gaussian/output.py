@@ -2608,10 +2608,7 @@ class Gaussian16Output(GaussianFileMixin):
         appear in the Gaussian output.
 
         Units are preserved from Gaussian output, usually GHz.
-
-        Gaussian may print '********' when the axial rotational constant
-        overflows its fixed-width field. Such tokens are parsed as ``np.inf``.
-
+        
         Parameters
         ----------
         mode : {"gaussian", "physical"}, optional
@@ -2619,8 +2616,12 @@ class Gaussian16Output(GaussianFileMixin):
             except that overflow tokens become ``np.inf``. ``"physical"``
             collapses effectively linear or quasi-linear triples to one
             perpendicular rotational constant.
-        return_status : bool, optional
-            If ``True``, return ``(constants, status)`` tuples for each step.
+            
+
+        Gaussian may print '********' when the axial rotational constant overflows.
+        Such tokens are replaced with np.inf and then cleaned according to the
+        molecular geometry.
+        Return rotational constants in Hz.
         """
 
         from chemsmart.utils.geometry import (
@@ -2638,12 +2639,13 @@ class Gaussian16Output(GaussianFileMixin):
                     dtype=float,
                 )
 
-                cleaned = clean_rotational_constants_by_geometry(
-                    vals_ghz,
-                    mode=mode,
-                    return_status=return_status,
+                vals_ghz, _ = clean_rotational_constants_by_geometry(
+                  vals_ghz,
+                  mode=mode,
                 )
-                result.append(cleaned)
+
+                result.append(vals_ghz * 1e9)
+
 
         return result
 

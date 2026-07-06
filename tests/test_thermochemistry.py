@@ -1481,8 +1481,10 @@ class TestThermochemistryKOH:
     def test_koh_all_rotational_constants_uses_inf(
         self, gaussian_koh_opt_outfile
     ):
-        """Gaussian mode must preserve three printed values per step and use
-        np.inf as the overflow sentinel for the final axial constant."""
+        """Per-step rotational constants must handle '****...' overflow tokens.
+        Linear/quasi-linear geometries should be collapsed to a single perpendicular
+        constant (degenerate B = C) without raising parsing errors."""
+        
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         all_rot_consts = g16_output.all_rotational_constants(mode="gaussian")
         all_rot_consts_with_status = g16_output.all_rotational_constants(
@@ -1519,8 +1521,8 @@ class TestThermochemistryKOH:
         self, gaussian_koh_opt_outfile
     ):
         """The Molecule.rotational_temperatures property must not raise
-        ZeroDivisionError for a linear molecule and must return np.inf for
-        the zero-MOI axis."""
+        ZeroDivisionError for a linear molecule and must return the finite
+         perpendicular-axis rotational temperature."""
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         mol = g16_output.molecule
         assert mol.is_linear
