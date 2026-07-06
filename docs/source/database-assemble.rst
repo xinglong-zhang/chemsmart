@@ -2,8 +2,8 @@
  Assembling Records
 ####################
 
-The ``assemble`` subcommand scans a project directory for supported quantum chemistry output files, parses the extracted
-calculation data, and stores the results as records in a CHEMSMART database.
+The ``assemble`` subcommand scans a project directory for supported quantum chemistry output files and calculation
+folders, parses the available calculation data, and stores the results as records in a CHEMSMART database.
 
 Each record is uniquely identified by its ``record_id``. If a newly parsed output file generates a ``record_id`` that
 already exists in the database, the existing record is updated with the newly parsed data rather than duplicated. This
@@ -16,7 +16,7 @@ existing output files have been updated.
 
 .. code:: text
 
-   chemsmart run database assemble [-d path/to/directory] [-p gaussian|orca]
+   chemsmart run database assemble [-d path/to/directory] [-p gaussian|orca|xtb]
                                    [-i index] [-o outfile.db] [--include-failed]
 
 *********
@@ -33,12 +33,13 @@ existing output files have been updated.
 
    -  -  ``-d, --directory``
       -  string
-      -  Root directory to scan recursively for supported output files. Defaults to the current working directory.
+      -  Root directory to scan recursively for supported output files and folders. Defaults to the current working
+         directory.
 
    -  -  ``-p, --program``
       -  string
-      -  Restrict parsing to output files from a specific program. Supported values are ``gaussian`` and ``orca``. If
-         omitted, outputs from all supported programs are scanned.
+      -  Restrict parsing to output files/folders from a specific program. Supported values are ``gaussian``, ``orca``,
+         and ``xtb``. If omitted, outputs from all supported programs are scanned.
 
    -  -  ``-i, --index``
       -  string
@@ -70,6 +71,25 @@ existing output files have been updated.
 .. code:: bash
 
    chemsmart run database assemble -d results/ -p gaussian -o gaussian_results.db
+
+**Assemble only xTB calculation outputs from a project directory:**
+
+For xTB calculations, ``assemble`` can scan a parent directory containing multiple xTB calculation folders. Each
+recognized xTB calculation folder is treated as one record.
+
+Example directory layout:
+
+.. code::
+
+   xtb_results/
+   ├── molecule1_ohess/
+   ├── molecule2_hess/
+   ├── molecule3_opt/
+   └── molecule4_sp/
+
+.. code:: bash
+
+   chemsmart run database assemble -d xtb_results/ -p xtb -o xtb_results.db
 
 **Assemble only the final structure from each file:**
 
