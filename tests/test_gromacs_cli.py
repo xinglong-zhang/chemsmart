@@ -1,11 +1,9 @@
-
 import importlib
 
 import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.gromacs.gromacs import gromacs
-
 
 em_module = importlib.import_module("chemsmart.cli.gromacs.em")
 

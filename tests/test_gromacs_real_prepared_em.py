@@ -1,13 +1,11 @@
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from chemsmart.jobs.gromacs.job import GromacsEMJob
 from chemsmart.jobs.gromacs.runner import GromacsJobRunner
 from chemsmart.settings.gromacs import GromacsProjectSettings
-
 
 pytestmark = pytest.mark.skipif(
     shutil.which("gmx") is None,

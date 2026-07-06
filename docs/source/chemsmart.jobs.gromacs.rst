@@ -1,79 +1,78 @@
-GROMACS Jobs
-============
+##############
+ GROMACS Jobs
+##############
 
-This module provides the initial GROMACS job and runner structure for
-executing prepared molecular dynamics workflows in ChemSmart.
+This module provides the initial GROMACS job and runner structure for executing prepared molecular dynamics workflows in
+ChemSmart.
 
-Current Scope
--------------
+***************
+ Current Scope
+***************
 
-The current implementation focuses on prepared GROMACS workflows, where the
-user provides the required GROMACS input files:
+The current implementation focuses on prepared GROMACS workflows, where the user provides the required GROMACS input
+files:
 
-- MDP file
-- structure file, such as GRO or PDB
-- topology file
-- optional ITP files
-- optional index file
+-  MDP file
+-  structure file, such as GRO or PDB
+-  topology file
+-  optional ITP files
+-  optional index file
 
-For the prepared workflow, the runner assembles the TPR file using ``grompp``
-and then executes the simulation using ``mdrun``:
+For the prepared workflow, the runner assembles the TPR file using ``grompp`` and then executes the simulation using
+``mdrun``:
 
-.. code-block:: text
+.. code:: text
 
    grompp -> mdrun
 
-Runner Design
--------------
+***************
+ Runner Design
+***************
 
-The GROMACS runner separates different GROMACS subcommands into individual
-command builders. This allows different workflows to reuse and combine
-commands as needed.
+The GROMACS runner separates different GROMACS subcommands into individual command builders. This allows different
+workflows to reuse and combine commands as needed.
 
 Current command builders include:
 
-- ``_get_grompp_command()``
-- ``_get_mdrun_command()``
-- ``_get_pdb2gmx_command()``
-- ``_get_editconf_command()``
-- ``_get_solvate_command()``
-- ``_get_genion_command()``
+-  ``_get_grompp_command()``
+-  ``_get_mdrun_command()``
+-  ``_get_pdb2gmx_command()``
+-  ``_get_editconf_command()``
+-  ``_get_solvate_command()``
+-  ``_get_genion_command()``
 
 The current stable workflow is the prepared workflow:
 
-.. code-block:: text
+.. code:: text
 
    grompp -> mdrun
 
-Other workflows, such as full system setup, are planned but not fully
-implemented yet.
+Other workflows, such as full system setup, are planned but not fully implemented yet.
 
-Executable Configuration
-------------------------
+**************************
+ Executable Configuration
+**************************
 
-The GROMACS executable is handled through ``GromacsExecutable`` and used by
-the GROMACS runner. The default executable is:
+The GROMACS executable is handled through ``GromacsExecutable`` and used by the GROMACS runner. The default executable
+is:
 
-.. code-block:: text
+.. code:: text
 
    gmx
 
-A custom executable path can also be provided to the runner. In future
-server-specific workflows, this can be further connected to ChemSmart server
-YAML settings so that the same workflow can run on local machines, clusters,
-or servers.
+A custom executable path can also be provided to the runner. In future server-specific workflows, this can be further
+connected to ChemSmart server YAML settings so that the same workflow can run on local machines, clusters, or servers.
 
-Project Settings
-----------------
+******************
+ Project Settings
+******************
 
-GROMACS project-level settings are represented by
-``GromacsProjectSettings``. These settings are designed to store reusable
-project information, including input files, workflow type, and simulation
-parameters.
+GROMACS project-level settings are represented by ``GromacsProjectSettings``. These settings are designed to store
+reusable project information, including input files, workflow type, and simulation parameters.
 
 The settings can be created from a dictionary:
 
-.. code-block:: python
+.. code:: python
 
    from chemsmart.settings.gromacs import GromacsProjectSettings
 
@@ -91,17 +90,16 @@ The settings can be created from a dictionary:
 
 They can also be created from a YAML file:
 
-.. code-block:: python
+.. code:: python
 
    settings = GromacsProjectSettings.from_yaml("project.yaml")
 
-When settings are loaded from YAML, relative input paths are resolved against
-the directory containing the YAML file. This allows a GROMACS project folder to
-be moved or executed from a different working directory more safely.
+When settings are loaded from YAML, relative input paths are resolved against the directory containing the YAML file.
+This allows a GROMACS project folder to be moved or executed from a different working directory more safely.
 
 Example YAML structure:
 
-.. code-block:: yaml
+.. code:: yaml
 
    project:
      name: prepared_em
@@ -129,12 +127,13 @@ Example YAML structure:
        - forcefield.itp
        - ligand.itp
 
-Job Creation from Settings
---------------------------
+****************************
+ Job Creation from Settings
+****************************
 
 Project settings can be converted into GROMACS jobs:
 
-.. code-block:: python
+.. code:: python
 
    from chemsmart.jobs.gromacs.job import GromacsEMJob
 
@@ -144,24 +143,21 @@ Project settings can be converted into GROMACS jobs:
        jobrunner=None,
    )
 
-This provides a direct path from project configuration to executable job
-objects:
+This provides a direct path from project configuration to executable job objects:
 
-.. code-block:: text
+.. code:: text
 
    project.yaml
        -> GromacsProjectSettings
        -> GromacsEMJob
        -> GromacsJobRunner
 
+*******
+ Notes
+*******
 
-Notes
------
+The project settings do not automatically decide simulation parameters. Instead, they record user-defined settings
+explicitly and make the workflow easier to reproduce and automate.
 
-The project settings do not automatically decide simulation parameters.
-Instead, they record user-defined settings explicitly and make the workflow
-easier to reproduce and automate.
-
-The current stable workflow is the prepared workflow, where users provide
-existing MDP, structure, and topology files. Full system setup is planned but
-not fully implemented yet.
+The current stable workflow is the prepared workflow, where users provide existing MDP, structure, and topology files.
+Full system setup is planned but not fully implemented yet.

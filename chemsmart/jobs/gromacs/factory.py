@@ -1,7 +1,4 @@
-from pathlib import Path
-from typing import Any, Optional
-
-from chemsmart.jobs.gromacs.job import GromacsEMJob
+from chemsmart.jobs.gromacs.job import GromacsEMJob, GromacsNVTJob
 from chemsmart.settings.gromacs import GromacsProjectSettings
 
 
@@ -12,6 +9,7 @@ class GromacsJobFactory:
 
     JOB_TYPE_MAP = {
         "em": GromacsEMJob,
+        "nvt": GromacsNVTJob,
     }
 
     @classmethod

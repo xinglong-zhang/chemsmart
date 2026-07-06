@@ -1,11 +1,11 @@
-# chemsmart/jobs/gromacs/state.py
+"""Workflow state for GROMACS multi-step setup jobs."""
+
 from __future__ import annotations
 
-"""
-Workflow state for GROMACS multi-step setup jobs.
-"""
 from dataclasses import dataclass
 from pathlib import Path
+
+from chemsmart.jobs.gromacs.job import GromacsJob
 
 
 @dataclass(slots=True)
@@ -16,6 +16,7 @@ class GromacsWorkflowState:
     Keeping these files in one state object avoids spreading intermediate file
     names across job, runner and CLI layers.
     """
+
     working_dir: Path
     label: str
 
@@ -27,10 +28,10 @@ class GromacsWorkflowState:
     em_tpr_file: Path
 
     @classmethod
-    def from_job(cls, job) -> "GromacsWorkflowState":
+    def from_job(cls, job: GromacsJob) -> GromacsWorkflowState:
         """
-         Build workflow state from a GROMACS job.
-         """
+        Build workflow state from a GROMACS job.
+        """
         working_dir = Path(job.folder).resolve()
         label = job.label
 
@@ -38,27 +39,17 @@ class GromacsWorkflowState:
             working_dir=working_dir,
             label=label,
             processed_structure_file=Path(
-                getattr(job, "processed_structure_file", None)
-                or working_dir / "processed.gro"
+                job.processed_structure_file or working_dir / "processed.gro"
             ),
             boxed_structure_file=Path(
-                getattr(job, "boxed_structure_file", None)
-                or working_dir / "boxed.gro"
+                job.boxed_structure_file or working_dir / "boxed.gro"
             ),
             solvated_structure_file=Path(
-                getattr(job, "solvated_structure_file", None)
-                or working_dir / "solvated.gro"
+                job.solvated_structure_file or working_dir / "solvated.gro"
             ),
-            ions_tpr_file=Path(
-                getattr(job, "ions_tpr_file", None)
-                or working_dir / "ions.tpr"
-            ),
+            ions_tpr_file=Path(job.ions_tpr_file or working_dir / "ions.tpr"),
             ionized_structure_file=Path(
-                getattr(job, "ionized_structure_file", None)
-                or working_dir / "ionized.gro"
+                job.ionized_structure_file or working_dir / "ionized.gro"
             ),
-            em_tpr_file=Path(
-                getattr(job, "tpr_file", None)
-                or working_dir / f"{label}.tpr"
-            ),
+            em_tpr_file=Path(job.tpr_file or working_dir / f"{label}.tpr"),
         )

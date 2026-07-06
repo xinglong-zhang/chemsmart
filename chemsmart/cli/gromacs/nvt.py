@@ -1,9 +1,9 @@
 """
-GROMACS energy minimization CLI command.
+GROMACS NVT equilibration CLI command.
 
 This command supports two creation modes:
-1. YAML-driven mode: chemsmart run gromacs -p project.yaml em
-2. Direct CLI mode: chemsmart run gromacs em --mdp em.mdp --structure input.gro --top topol.top
+1. YAML-driven mode: chemsmart run gromacs -p project.yaml nvt
+2. Direct CLI mode: chemsmart run gromacs nvt --mdp nvt.mdp --structure em.gro --top topol.top
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ import click
 
 from chemsmart.cli.gromacs.gromacs import gromacs
 from chemsmart.cli.job import click_job_options
-from chemsmart.jobs.gromacs.job import GromacsEMJob
+from chemsmart.jobs.gromacs.job import GromacsNVTJob
 from chemsmart.utils.cli import MyGroup
 
 logger = logging.getLogger(__name__)
 
 
-@gromacs.group("em", cls=MyGroup, invoke_without_command=True)
+@gromacs.group("nvt", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click.option(
     "--mdp",
@@ -33,19 +33,7 @@ logger = logging.getLogger(__name__)
         path_type=Path,
     ),
     default=None,
-    help="GROMACS .mdp file for energy minimization.",
-)
-@click.option(
-    "--ions-mdp",
-    "ions_mdp",
-    type=click.Path(
-        exists=True,
-        dir_okay=False,
-        resolve_path=True,
-        path_type=Path,
-    ),
-    default=None,
-    help="Optional .mdp file used to generate ions.tpr in full_setup workflow.",
+    help="GROMACS .mdp file for NVT equilibration.",
 )
 @click.option(
     "--structure",
@@ -58,7 +46,7 @@ logger = logging.getLogger(__name__)
         path_type=Path,
     ),
     default=None,
-    help="Input structure file, such as .gro or .pdb.",
+    help="Input structure file for NVT equilibration, such as EM output .gro.",
 )
 @click.option(
     "--input-pdb",
@@ -115,11 +103,10 @@ logger = logging.getLogger(__name__)
     help="GROMACS workflow mode.",
 )
 @click.pass_context
-def em(
+def nvt(
     ctx,
     skip_completed,
     mdp,
-    ions_mdp,
     structure,
     input_pdb,
     top,
@@ -130,7 +117,7 @@ def em(
     **kwargs,
 ):
     """
-    CLI subcommand for running GROMACS energy minimization.
+    CLI subcommand for running GROMACS NVT equilibration.
     """
 
     jobrunner = ctx.obj.get("jobrunner", None)
@@ -144,7 +131,6 @@ def em(
     if project_settings is not None:
         settings = project_settings.with_overrides(
             mdp_file=Path(mdp) if mdp else None,
-            ions_mdp_file=Path(ions_mdp) if ions_mdp else None,
             structure_file=Path(structure) if structure else None,
             input_pdb=Path(input_pdb) if input_pdb else None,
             top_file=Path(top) if top else None,
@@ -156,11 +142,12 @@ def em(
         settings.validate()
 
         logger.info(
-            "Creating GROMACS EM job from project YAML: %s", project_yaml
+            "Creating GROMACS NVT job from project YAML: %s",
+            project_yaml,
         )
 
         if ctx.invoked_subcommand is None:
-            return GromacsEMJob.from_project_settings(
+            return GromacsNVTJob.from_project_settings(
                 settings=settings,
                 molecule=molecule,
                 jobrunner=jobrunner,
@@ -170,26 +157,25 @@ def em(
         return None
 
     # direct CLI mode
-    label = "gromacs_em"
+    label = "gromacs_nvt"
     if structure is not None:
-        label = Path(structure).stem + "_em"
+        label = Path(structure).stem + "_nvt"
 
     workflow = workflow or "prepared"
 
-    logger.info("Creating GROMACS EM job from direct CLI options.")
-    logger.info("GROMACS EM structure file: %s", structure)
-    logger.info("GROMACS EM mdp file: %s", mdp)
-    logger.info("GROMACS EM topology file: %s", top)
-    logger.info("GROMACS EM itp files: %s", itp)
-    logger.info("GROMACS EM workflow: %s", workflow)
+    logger.info("Creating GROMACS NVT job from direct CLI options.")
+    logger.info("GROMACS NVT structure file: %s", structure)
+    logger.info("GROMACS NVT mdp file: %s", mdp)
+    logger.info("GROMACS NVT topology file: %s", top)
+    logger.info("GROMACS NVT itp files: %s", itp)
+    logger.info("GROMACS NVT workflow: %s", workflow)
 
     if ctx.invoked_subcommand is None:
-        return GromacsEMJob(
+        return GromacsNVTJob(
             molecule=molecule,
             label=label,
             jobrunner=jobrunner,
             mdp_file=Path(mdp) if mdp else None,
-            ions_mdp_file=Path(ions_mdp) if ions_mdp else None,
             structure_file=Path(structure) if structure else None,
             input_pdb=Path(input_pdb) if input_pdb else None,
             top_file=Path(top) if top else None,
