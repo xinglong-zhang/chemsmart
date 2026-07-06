@@ -251,7 +251,9 @@ class Thermochemistry:
                 return np.asarray(
                     self.geometry_rotational_constants_in_Hz, dtype=float
                 )
-            return np.asarray(self.gaussian_rotational_constants_in_Hz, dtype=float)
+            return np.asarray(
+                self.gaussian_rotational_constants_in_Hz, dtype=float
+            )
         raise ValueError(
             f"Unsupported rotational thermochemistry mode: "
             f"{self.rotational_mode!r}."
@@ -275,7 +277,9 @@ class Thermochemistry:
     @property
     def is_linear_rotor(self):
         rotational_constants = self.effective_rotational_constants_in_Hz
-        return rotational_constants is not None and len(rotational_constants) == 1
+        return (
+            rotational_constants is not None and len(rotational_constants) == 1
+        )
 
     @property
     def rotational_symmetry_number(self):

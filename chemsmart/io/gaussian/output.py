@@ -639,7 +639,9 @@ class Gaussian16Output(GaussianFileMixin):
 
         energies = list(self.energies) if self.energies else None
         forces = list(self.forces) if self.forces else None
-        rot_consts = list(self.all_rotational_constants(mode="physical")) or None
+        rot_consts = (
+            list(self.all_rotational_constants(mode="physical")) or None
+        )
         point_groups = list(self.all_point_groups) or None
 
         # Helper to drop the first item across all arrays (when present)
@@ -2608,7 +2610,7 @@ class Gaussian16Output(GaussianFileMixin):
         appear in the Gaussian output.
 
         Units are preserved from Gaussian output, usually GHz.
-        
+
         Parameters
         ----------
         mode : {"gaussian", "physical"}, optional
@@ -2616,7 +2618,7 @@ class Gaussian16Output(GaussianFileMixin):
             except that overflow tokens become ``np.inf``. ``"physical"``
             collapses effectively linear or quasi-linear triples to one
             perpendicular rotational constant.
-            
+
 
         Gaussian may print '********' when the axial rotational constant overflows.
         Such tokens are replaced with np.inf and then cleaned according to the
@@ -2640,12 +2642,11 @@ class Gaussian16Output(GaussianFileMixin):
                 )
 
                 vals_ghz, _ = clean_rotational_constants_by_geometry(
-                  vals_ghz,
-                  mode=mode,
+                    vals_ghz,
+                    mode=mode,
                 )
 
                 result.append(vals_ghz * 1e9)
-
 
         return result
 

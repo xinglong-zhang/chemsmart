@@ -1484,7 +1484,7 @@ class TestThermochemistryKOH:
         """Per-step rotational constants must handle '****...' overflow tokens.
         Linear/quasi-linear geometries should be collapsed to a single perpendicular
         constant (degenerate B = C) without raising parsing errors."""
-        
+
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         all_rot_consts = g16_output.all_rotational_constants(mode="gaussian")
         all_rot_consts_with_status = g16_output.all_rotational_constants(
@@ -1495,7 +1495,9 @@ class TestThermochemistryKOH:
         for step_consts in all_rot_consts[:-1]:
             assert len(step_consts) == 3
         assert np.isinf(all_rot_consts[-1][0])
-        assert np.allclose(all_rot_consts[-1][1:], [8.30647, 8.30647], rtol=1e-4)
+        assert np.allclose(
+            all_rot_consts[-1][1:], [8.30647, 8.30647], rtol=1e-4
+        )
         assert all_rot_consts_with_status[-1][1] == "gaussian_overflow"
 
     def test_koh_all_rotational_constants_physical_cleanup(
