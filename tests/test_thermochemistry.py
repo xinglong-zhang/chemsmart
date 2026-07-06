@@ -1484,20 +1484,40 @@ class TestThermochemistryKOH:
         """Per-step rotational constants must handle '****...' overflow tokens.
         Linear/quasi-linear geometries should be collapsed to a single perpendicular
         constant (degenerate B = C) without raising parsing errors."""
+
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
-        all_rot_consts = g16_output.all_rotational_constants
+        all_rot_consts = g16_output.all_rotational_constants(mode="gaussian")
+        all_rot_consts_with_status = g16_output.all_rotational_constants(
+            mode="gaussian",
+            return_status=True,
+        )
+        assert len(all_rot_consts) == 17
+        for step_consts in all_rot_consts[:-1]:
+            assert len(step_consts) == 3
+        assert np.isinf(all_rot_consts[-1][0])
+        assert np.allclose(
+            all_rot_consts[-1][1:], [8.30647, 8.30647], rtol=1e-4
+        )
+        assert all_rot_consts_with_status[-1][1] == "gaussian_overflow"
+
+    def test_koh_all_rotational_constants_physical_cleanup(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Physical mode must collapse the effectively linear final steps to a
+        single perpendicular rotational constant."""
+        g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        all_rot_consts = g16_output.all_rotational_constants(mode="physical")
+        all_rot_consts_with_status = g16_output.all_rotational_constants(
+            mode="physical",
+            return_status=True,
+        )
         assert len(all_rot_consts) == 17
         for step_consts in all_rot_consts[:12]:
-            # first 11 geometries are non-linear
-            # skip the last step (final geometry)
             assert len(step_consts) == 3
-            assert np.isfinite(step_consts[0])
-            assert np.isfinite(step_consts[1])
-            assert np.isfinite(step_consts[2])
-
         for step_consts in all_rot_consts[12:]:
-            # last 5 geometries are linear or quasi-linear
             assert len(step_consts) == 1
+        assert all_rot_consts_with_status[12][1] == "quasi_linear"
+        assert all_rot_consts_with_status[-1][1] == "linear"
 
     def test_koh_molecule_rotational_temperatures_linear(
         self, gaussian_koh_opt_outfile
@@ -1536,6 +1556,141 @@ class TestThermochemistryKOH:
         assert np.isfinite(thermochem.enthalpy)
         assert np.isfinite(thermochem.total_entropy)
         assert np.isfinite(thermochem.gibbs_free_energy)
+
+    def test_koh_thermochemistry_matches_log(self, gaussian_koh_opt_outfile):
+        """Thermochemistry values calculated from the molecular structure must
+        match the reference values recorded in the KOH log file.
+
+        Log-file reference (thermochemistry section of KOH.log):
+                             E (Thermal)             CV                S
+                              KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+         Total                    8.904              8.686             42.597
+         Electronic               0.000              0.000              0.000
+         Translational            0.889              2.981             37.988
+         Rotational               0.889              2.981              2.981
+         Vibrational              7.127              2.724              1.629
+         Vibration     1          0.763              1.477              0.974
+         Vibration     2          0.857              1.247              0.655
+                               Q            Log10(Q)             Ln(Q)
+         Total Bot       0.223020D+03          2.348344          5.407262
+         Total V=0       0.211826D+08          7.325979         16.868689
+         Vib (Bot)       0.135532D-04         -4.867957        -11.208886
+         Vib (Bot)    1  0.449998D+00         -0.346790         -0.798513
+         Vib (Bot)    2  0.327548D+00         -0.484725         -1.116121
+         Vib (V=0)       0.128729D+01          0.109677          0.252541
+         Vib (V=0)    1  0.117268D+01          0.069179          0.159291
+         Vib (V=0)    2  0.109774D+01          0.040498          0.093249
+         Electronic      0.100000D+01          0.000000          0.000000
+         Translational   0.164568D+08          7.216345         16.616250
+         Rotational      0.999899D+00         -0.000044         -0.000101
+        """
+        from chemsmart.utils.constants import cal_to_joules
+
+        thermochem = Thermochemistry(
+            filename=gaussian_koh_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+            rotational_mode="gaussian",
+        )
+
+        # Rotational partition function matches log
+        # (q_r = 298.15/0.39865=747.89915966)
+        # this is different from Gaussian output file which treats molecule
+        # as non-linear rotor with a huge/overflowed first rotational constant.
+        assert np.isclose(
+            thermochem.rotational_partition_function, 0.999899, rtol=1e-2
+        )
+        # Rotational entropy matches log (2.981 cal/mol/K)
+        assert np.isclose(
+            thermochem.rotational_entropy / cal_to_joules,
+            2.981,
+            atol=0.01,
+        )
+        # Rotational internal energy matches log (0.889 kcal/mol)
+        assert np.isclose(
+            thermochem.rotational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=0.01,
+        )
+        # Rotational heat capacity matches log (2.981 cal/mol/K)
+        assert np.isclose(
+            thermochem.rotational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=0.01,
+        )
+        # Translational entropy matches log (37.988 cal/mol/K)
+        assert np.isclose(
+            thermochem.translational_entropy / cal_to_joules,
+            37.988,
+            atol=0.01,
+        )
+        # Vibrational entropy matches log (1.629 cal/mol/K)
+        assert np.isclose(
+            thermochem.vibrational_entropy / cal_to_joules,
+            1.629,
+            atol=0.01,
+        )
+        # Vibrational internal energy matches log (7.127 kcal/mol)
+        assert np.isclose(
+            thermochem.vibrational_internal_energy / (cal_to_joules * 1000),
+            7.127,
+            atol=0.01,
+        )
+        # Vibrational heat capacity matches log (2.724 cal/mol/K)
+        assert np.isclose(
+            thermochem.vibrational_heat_capacity / cal_to_joules,
+            2.724,
+            atol=0.01,
+        )
+        # Total entropy matches log (42.597 cal/mol/K)
+        assert np.isclose(
+            thermochem.total_entropy / cal_to_joules,
+            42.597,
+            atol=0.02,
+        )
+        # Total internal energy matches log (8.904 kcal/mol)
+        assert np.isclose(
+            thermochem.total_internal_energy / (cal_to_joules * 1000),
+            8.904,
+            atol=0.01,
+        )
+        # Total heat capacity matches log (8.686 cal/mol/K)
+        assert np.isclose(
+            thermochem.total_heat_capacity / cal_to_joules,
+            8.686,
+            atol=0.01,
+        )
+
+    def test_koh_physical_rotational_thermochemistry(
+        self, gaussian_koh_opt_outfile
+    ):
+        """Physical mode must treat KOH as a linear rotor."""
+        thermochem = Thermochemistry(
+            filename=gaussian_koh_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+            rotational_mode="physical",
+        )
+        assert np.isclose(
+            thermochem.rotational_partition_function, 747.899, rtol=1e-3
+        )
+        assert np.isclose(
+            thermochem.rotational_entropy / cal_to_joules,
+            15.137,
+            atol=0.05,
+        )
+        assert np.isclose(
+            thermochem.rotational_internal_energy / (cal_to_joules * 1000),
+            0.592,
+            atol=0.01,
+        )
+        assert np.isclose(
+            thermochem.rotational_heat_capacity / cal_to_joules,
+            1.987,
+            atol=0.01,
+        )
 
 
 class TestThermochemistryHe:
