@@ -447,7 +447,9 @@ class Thermochemistry:
             Θ_r = h^2 / (8 * pi^2 * I * k_B)
             I = moment of inertia (kg m^2)
         """
+        # for linear molecule or quasi-linear, use the last value of I
         theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[-1] * units._k)
+        logger.debug(f"Rotational temperature Θ_r = {theta_r:.4f} K")
         return (1 / self.rotational_symmetry_number) * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
@@ -482,10 +484,16 @@ class Thermochemistry:
         if self.molecule.is_monoatomic:
             return 1
         elif self.molecule.is_linear:
+            logger.debug(
+                "Calculate rotational partition function for linear molecule."
+            )
             return (
                 self._calculate_rotational_partition_function_for_linear_molecule()
             )
         else:
+            logger.debug(
+                "Calculate rotational partition function for non-linear molecule."
+            )
             return (
                 self._calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule()
             )
@@ -502,8 +510,12 @@ class Thermochemistry:
         if self.molecule.is_monoatomic:
             return 0
         elif self.molecule.is_linear:
+            logger.debug("Calculate rotational entropy for linear molecule.")
             return R * (np.log(self.rotational_partition_function) + 1)
         else:
+            logger.debug(
+                "Calculate rotational entropy for non-linear molecule."
+            )
             return R * (np.log(self.rotational_partition_function) + 3 / 2)
 
     @property

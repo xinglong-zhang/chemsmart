@@ -13,12 +13,13 @@ Key functionality includes:
 - Molecular volume calculations using various methods
 """
 
+import logging
 import math
 
 import numpy as np
 
 
-def is_collinear(coords, tol=1e-5):
+def is_collinear(coords, tol=1e-2):
     """
     Check if three points are collinear using cross product method.
 
@@ -30,7 +31,7 @@ def is_collinear(coords, tol=1e-5):
         coords (array-like): List or array of three coordinate points,
             each containing [x, y, z] coordinates.
         tol (float, optional): Tolerance for collinearity test.
-            Defaults to 1e-5.
+            Defaults to 1e-2.
 
     Returns:
         bool: True if points are collinear within tolerance, False otherwise.
@@ -695,3 +696,179 @@ def calculate_grid_vdw_volume(coords, radii, grid_spacing=0.2):
     points_inside = np.sum(inside_any)
     volume_per_point = grid_spacing**3
     return points_inside * volume_per_point
+
+
+def clean_rotational_constants_by_geometry(
+    rotational_constants,
+    linear_rel_tol=1e-4,
+    linear_abs_tol=1e-6,
+    zero_abs_tol=1e-12,
+    quasi_linear_ratio=1e4,
+):
+    """
+    Clean Gaussian rotational constants according to molecular geometry.
+
+    Units are preserved. For Gaussian output, this usually means GHz.
+
+    Expected Gaussian-style order:
+
+        [A, B, C]
+
+    Cases handled:
+
+        [A, B, C]
+            Nonlinear rotor. Returned unchanged unless the geometry is judged
+            to be quasi-linear.
+
+        [huge, B, C]
+            Quasi-linear rotor. If A is much larger than B and C, and B ≈ C,
+            the constants are collapsed to one perpendicular constant.
+
+        [inf, B, C]
+            Linear rotor where Gaussian printed ******** for the axial
+            rotational constant and it has been parsed as np.inf.
+
+        [0.0, B, C]
+            Linear rotor where the axial rotational constant is represented
+            as zero.
+
+        [B]
+            Already linear. Returned unchanged.
+
+    Collapse rule:
+
+        If A is inf, i.e. Gaussian printed ********, and B == C exactly:
+            return [C]
+
+        If A is inf and B and C are different but close:
+            return [(B + C) / 2]
+
+        If A is zero or huge, and B and C are equal or close:
+            collapse to one perpendicular rotational constant.
+
+        If B and C are not close:
+            do not collapse.
+
+    Parameters
+    ----------
+    rotational_constants : array-like
+        Rotational constants from one geometry step. For Gaussian output,
+        these are usually in GHz. No unit conversion is performed.
+
+    linear_rel_tol : float, optional
+        Relative tolerance used to decide whether B and C are close.
+
+    linear_abs_tol : float, optional
+        Absolute tolerance used to decide whether B and C are close. This is
+        in the same units as `rotational_constants`.
+
+    zero_abs_tol : float, optional
+        Absolute tolerance used to decide whether A is effectively zero.
+
+    quasi_linear_ratio : float, optional
+        If A / B_perp exceeds this value and B ≈ C, the geometry is treated
+        as quasi-linear.
+
+    Returns
+    -------
+    np.ndarray
+        Cleaned rotational constants with the same units as the input.
+
+        Nonlinear:
+            np.array([A, B, C])
+
+        Linear or quasi-linear:
+            np.array([B_perp])
+
+    tuple[np.ndarray, str]
+        Always returned as ``(cleaned_constants, status)``.
+    """
+
+    vals = np.asarray(rotational_constants, dtype=float)
+
+    if vals.size == 1:
+        cleaned = vals
+        status = "linear"
+
+    elif vals.size != 3:
+        cleaned = vals
+        status = "unknown"
+
+    else:
+        A, B, C = vals
+
+        if not (np.isfinite(B) and np.isfinite(C)):
+            cleaned = vals
+            status = "unknown"
+
+        else:
+            axial_overflow = np.isinf(A)
+
+            # Case 1:
+            # Gaussian printed ******** for A, parsed as np.inf.
+            # If B == C exactly, return C directly.
+            if axial_overflow and B == C:
+                cleaned = np.array([C])
+                status = "linear"
+
+            # Case 2:
+            # Gaussian printed ******** for A, but B and C differ slightly.
+            # Use their average only if they are close.
+            elif axial_overflow and np.isclose(
+                B,
+                C,
+                rtol=linear_rel_tol,
+                atol=linear_abs_tol,
+            ):
+                cleaned = np.array([0.5 * (B + C)])
+                status = "linear"
+
+            else:
+                # For [0.0, B, C] or [huge, B, C], first decide whether
+                # B and C can be collapsed.
+                if B == C:
+                    B_perp = C
+                    bc_collapsible = True
+
+                elif np.isclose(
+                    B,
+                    C,
+                    rtol=linear_rel_tol,
+                    atol=linear_abs_tol,
+                ):
+                    B_perp = 0.5 * (B + C)
+                    bc_collapsible = True
+
+                else:
+                    B_perp = None
+                    bc_collapsible = False
+
+                if not bc_collapsible:
+                    cleaned = vals
+                    status = "nonlinear"
+
+                else:
+                    axial_zero = np.isfinite(A) and abs(A) <= zero_abs_tol
+
+                    axial_huge = (
+                        np.isfinite(A)
+                        and A > 0.0
+                        and B_perp > 0.0
+                        and A / B_perp > quasi_linear_ratio
+                    )
+
+                    if axial_zero:
+                        cleaned = np.array([B_perp])
+                        status = "linear"
+
+                    elif axial_huge:
+                        cleaned = np.array([B_perp])
+                        status = "quasi_linear"
+
+                    else:
+                        cleaned = vals
+                        status = "nonlinear"
+
+    logging.info(f"Cleaned rotational constants: {cleaned}, status: {status}")
+
+    return cleaned, status
