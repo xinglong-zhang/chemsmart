@@ -35,6 +35,7 @@ class GromacsJobRunner(JobRunner):
         "gromacs",
         "gmxem",
         "gmxnvt",
+        "gmxnpt",
     ]
 
     PROGRAM = "gromacs"

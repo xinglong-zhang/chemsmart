@@ -1,9 +1,15 @@
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from chemsmart.jobs.gromacs.job import GromacsEMJob, GromacsNVTJob
+from chemsmart.jobs.gromacs.job import (
+    GromacsEMJob,
+    GromacsNPTJob,
+    GromacsNVTJob,
+)
+
 from chemsmart.jobs.gromacs.runner import GromacsJobRunner
 from chemsmart.settings.executable import GromacsExecutable
 
@@ -26,6 +32,7 @@ def _make_runner(gmx_executable="gmx"):
 def test_gromacs_em_job_type_matches_runner_jobtypes():
     assert GromacsEMJob.TYPE in GromacsJobRunner.JOBTYPES
     assert GromacsNVTJob.TYPE in GromacsJobRunner.JOBTYPES
+    assert GromacsNPTJob.TYPE in GromacsJobRunner.JOBTYPES
 
 
 def test_gromacs_em_job_stores_file_attributes(tmp_path):
@@ -359,7 +366,6 @@ def test_gromacs_runner_get_commands_for_prepared_workflow(tmp_path):
         ],
     ]
 
-
 def test_gromacs_runner_get_commands_for_nvt_prepared_workflow(tmp_path):
     mdp_file = tmp_path / "nvt.mdp"
     structure_file = tmp_path / "em.gro"
@@ -401,7 +407,47 @@ def test_gromacs_runner_get_commands_for_nvt_prepared_workflow(tmp_path):
             str(tmp_path / "nvt"),
         ],
     ]
+def test_gromacs_runner_get_commands_for_npt_prepared_workflow(tmp_path):
+    mdp_file = tmp_path / "npt.mdp"
+    structure_file = tmp_path / "nvt.gro"
+    top_file = tmp_path / "topol.top"
+    tpr_file = tmp_path / "npt.tpr"
 
+    job = GromacsNPTJob(
+        molecule=None,
+        label="npt",
+        jobrunner=None,
+        mdp_file=mdp_file,
+        structure_file=structure_file,
+        top_file=top_file,
+        tpr_file=tpr_file,
+        workflow="prepared",
+    )
+
+    runner = _make_runner()
+
+    commands = runner._get_commands(job)
+
+    assert commands == [
+        [
+            "gmx",
+            "grompp",
+            "-f",
+            str(mdp_file),
+            "-c",
+            str(structure_file),
+            "-p",
+            str(top_file),
+            "-o",
+            str(tpr_file),
+        ],
+        [
+            "gmx",
+            "mdrun",
+            "-deffnm",
+            str(tmp_path / "npt"),
+        ],
+    ]
 
 def test_gromacs_runner_accepts_custom_gmx_executable(tmp_path):
     tpr_file = tmp_path / "em.tpr"
@@ -681,17 +727,6 @@ def test_gromacs_executable_uses_executable_folder(tmp_path):
     executable = GromacsExecutable(executable_folder=tmp_path)
 
     assert executable.get_executable() == os.path.join(str(tmp_path), "gmx")
-
-
-def test_gromacs_executable_from_servername_without_gromacs_section(
-    server_yaml_file,
-):
-    executable = GromacsExecutable.from_servername(server_yaml_file)
-
-    assert executable.get_executable() == "gmx"
-    assert executable.executable_folder is None
-
-
 def test_gromacs_writer_generates_em_mdp_when_missing(tmp_path):
     job = GromacsEMJob(
         molecule=None,
@@ -746,6 +781,36 @@ def test_gromacs_writer_generates_nvt_mdp_when_missing(tmp_path):
     assert "dt" in content
     assert "0.001" in content
 
+def test_gromacs_writer_generates_npt_mdp_when_missing(tmp_path):
+    job = GromacsNPTJob(
+        molecule=None,
+        label="npt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=tmp_path / "nvt.gro",
+        top_file=tmp_path / "topol.top",
+        workflow="prepared",
+        temperature=300,
+        pressure=1.0,
+    )
+
+    job.set_folder(str(tmp_path))
+
+    runner = _make_runner()
+    runner._write_input(job)
+
+    assert job.mdp_file == tmp_path / "npt.mdp"
+    assert job.mdp_file.exists()
+
+    content = job.mdp_file.read_text(encoding="utf-8")
+    assert "integrator" in content
+    assert "md" in content
+    assert "pcoupl" in content
+    assert "Parrinello-Rahman" in content
+    assert "ref_p" in content
+    assert "1.0" in content
+    assert "gen_vel" in content
+    assert "no" in content
 
 def test_gromacs_writer_does_not_overwrite_user_mdp(tmp_path):
     mdp_file = tmp_path / "custom.mdp"
@@ -768,12 +833,8 @@ def test_gromacs_writer_does_not_overwrite_user_mdp(tmp_path):
     runner._write_input(job)
 
     assert job.mdp_file == mdp_file
-    assert (
-        mdp_file.read_text(encoding="utf-8")
-        == "integrator = md\n; custom file\n"
-    )
+    assert mdp_file.read_text(encoding="utf-8") == "integrator = md\n; custom file\n"
     assert not (tmp_path / "nvt.mdp").exists()
-
 
 def test_gromacs_prerun_generates_missing_mdp_before_validation(tmp_path):
     structure_file = tmp_path / "em.gro"

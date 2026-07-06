@@ -70,6 +70,9 @@ class GromacsInputWriter:
         elif job_type == "gmxnvt":
             mdp_path = folder / "nvt.mdp"
             content = self._build_nvt_mdp()
+        elif job_type == "gmxnpt":
+            mdp_path = folder / "npt.mdp"
+            content = self._build_npt_mdp()
         else:
             raise ValueError(
                 f"Unsupported GROMACS job type for MDP writing: {job_type}"
@@ -142,6 +145,50 @@ class GromacsInputWriter:
             }
         )
 
+    def _build_npt_mdp(self):
+        """
+        Build a default NPT .mdp file.
+        """
+        temperature = self._get("temperature", 300)
+        pressure = self._get("pressure", 1.0)
+        timestep = self._get("timestep", 0.002)
+        nsteps = self._get("nsteps", self._get("npt_nsteps", 50000))
+        constraints = self._get("constraints", "h-bonds")
+        constraint_algorithm = self._get("constraint_algorithm", "lincs")
+        thermostat = self._get("thermostat", "V-rescale")
+        barostat = self._get("barostat", "Parrinello-Rahman")
+        tau_t = self._get("tau_t", 0.1)
+        tc_grps = self._get("tc_grps", "System")
+        tau_p = self._get("tau_p", 2.0)
+        compressibility = self._get("compressibility", "4.5e-5")
+
+        return self._format_mdp(
+            {
+                "integrator": "md",
+                "nsteps": nsteps,
+                "dt": timestep,
+                "continuation": "yes",
+                "constraint_algorithm": constraint_algorithm,
+                "constraints": constraints,
+                "cutoff-scheme": "Verlet",
+                "nstlist": 10,
+                "rcoulomb": 1.0,
+                "rvdw": 1.0,
+                "coulombtype": "PME",
+                "pbc": "xyz",
+                "tcoupl": thermostat,
+                "tc-grps": tc_grps,
+                "tau_t": tau_t,
+                "ref_t": temperature,
+                "pcoupl": barostat,
+                "pcoupltype": "isotropic",
+                "tau_p": tau_p,
+                "ref_p": pressure,
+                "compressibility": compressibility,
+                "gen_vel": "no",
+            }
+        )
+    
     def _get(self, name, default=None):
         """
         Read an optional job attribute with a default fallback.
