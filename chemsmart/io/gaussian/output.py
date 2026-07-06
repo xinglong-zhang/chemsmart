@@ -2619,6 +2619,7 @@ class Gaussian16Output(GaussianFileMixin):
         Gaussian may print '********' when the axial rotational constant overflows.
         Such tokens are replaced with np.inf and then cleaned according to the
         molecular geometry.
+        Return rotational constants in Hz.
         """
 
         from chemsmart.utils.geometry import (
@@ -2638,7 +2639,7 @@ class Gaussian16Output(GaussianFileMixin):
 
                 vals_ghz, _ = clean_rotational_constants_by_geometry(vals_ghz)
 
-                result.append(vals_ghz)
+                result.append(vals_ghz * 1e9)
 
         return result
 

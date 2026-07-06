@@ -892,9 +892,9 @@ class Molecule:
         Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
 
-        For linear molecules the moment of inertia along the molecular axis
-        is zero (or effectively zero), giving an infinite rotational
-        temperature. ``np.inf`` is returned for those components.
+        For linear molecules the moment of inertia along the molecular axis is
+         (effectively) zero, so the axial rotational temperature is infinite. For
+         linear molecules this property returns only the finite perpendicular-axis value.
         """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2

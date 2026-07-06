@@ -31,7 +31,7 @@ def is_collinear(coords, tol=1e-2):
         coords (array-like): List or array of three coordinate points,
             each containing [x, y, z] coordinates.
         tol (float, optional): Tolerance for collinearity test.
-            Defaults to 1e-5.
+            Defaults to 1e-2.
 
     Returns:
         bool: True if points are collinear within tolerance, False otherwise.
@@ -781,7 +781,7 @@ def clean_rotational_constants_by_geometry(
             np.array([B_perp])
 
     tuple[np.ndarray, str]
-        Returned only when ``return_status=True``.
+        Always returned as ``(cleaned_constants, status)``.
     """
 
     vals = np.asarray(rotational_constants, dtype=float)
@@ -820,8 +820,7 @@ def clean_rotational_constants_by_geometry(
                 rtol=linear_rel_tol,
                 atol=linear_abs_tol,
             ):
-                decimal_places = len(str(B).split(".")[1])
-                cleaned = np.array([round(0.5 * (B + C), decimal_places)])
+                cleaned = np.array([0.5 * (B + C)])
                 status = "linear"
 
             else:
