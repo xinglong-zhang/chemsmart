@@ -2,8 +2,8 @@
  Thermochemistry Analysis
 ##########################
 
-CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian, ORCA, and
-xTB output files.
+CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
+output files and xTB calculation folders.
 
 *******************************
  Thermochemistry Analysis Jobs
