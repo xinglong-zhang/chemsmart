@@ -1430,8 +1430,10 @@ class TestThermochemistryKOH:
     infinite). This class verifies that parsing and thermochemistry
     calculations work correctly in that situation."""
 
-    def test_koh_parsing_does_not_raise(self, gaussian_koh_opt_outfile):
-        """Parsing a KOH log file must not raise ValueError for '****...'."""
+    def test_koh_parsing_does_not_raise(
+        self, gaussian_koh_opt_outfile, orca_koh_output
+    ):
+        """Ensure KOH outputs from Gaussian and ORCA can be parsed successfully."""
         assert os.path.exists(gaussian_koh_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
         assert g16_output.normal_termination
@@ -1441,12 +1443,25 @@ class TestThermochemistryKOH:
         mol = g16_output.molecule
         assert mol is not None
 
-    def test_koh_molecule_is_linear(self, gaussian_koh_opt_outfile):
+        assert os.path.exists(orca_koh_output)
+        orca_out = ORCAOutput(filename=orca_koh_output)
+        assert orca_out.normal_termination
+        mol = orca_out.molecule
+        assert mol is not None
+
+    def test_koh_molecule_is_linear(
+        self, gaussian_koh_opt_outfile, orca_koh_output
+    ):
         """KOH must be identified as a linear molecule."""
         g16_output = Gaussian16Output(filename=gaussian_koh_opt_outfile)
-        mol = g16_output.molecule
-        assert mol.is_linear
-        assert not mol.is_monoatomic
+        mol_gaussian = g16_output.molecule
+        assert mol_gaussian.is_linear
+        assert not mol_gaussian.is_monoatomic
+
+        orca_out = ORCAOutput(filename=orca_koh_output)
+        mol_orca = orca_out.molecule
+        assert mol_orca.is_linear
+        assert not mol_orca.is_monoatomic
 
     def test_koh_rotational_constants_skip_overflow(
         self, gaussian_koh_opt_outfile
@@ -1537,51 +1552,84 @@ class TestThermochemistryKOH:
         assert np.isclose(rot_consts[0], 8.30647 * 1e9, rtol=1e-4)
 
     def test_koh_thermochemistry_runs_without_error(
-        self, gaussian_koh_opt_outfile
+        self, gaussian_koh_opt_outfile, orca_koh_output
     ):
         """Running the full thermochemistry calculation for KOH must succeed."""
-        thermochem = Thermochemistry(
+        thermochem_gaussian = Thermochemistry(
             filename=gaussian_koh_opt_outfile,
             temperature=298.15,
             pressure=1.0,
             use_weighted_mass=False,
         )
         # Basic sanity checks on the computed quantities
-        assert thermochem.molecule.is_linear
-        assert thermochem.rotational_symmetry_number == 1
+        assert thermochem_gaussian.molecule.is_linear
+        assert thermochem_gaussian.rotational_symmetry_number == 1
         # Rotational partition function for a linear molecule
-        assert np.isfinite(thermochem.rotational_partition_function)
-        assert thermochem.rotational_partition_function > 0
+        assert np.isfinite(thermochem_gaussian.rotational_partition_function)
+        assert thermochem_gaussian.rotational_partition_function > 0
         # Enthalpy, entropy and Gibbs free energy must all be finite
-        assert np.isfinite(thermochem.enthalpy)
-        assert np.isfinite(thermochem.total_entropy)
-        assert np.isfinite(thermochem.gibbs_free_energy)
+        assert np.isfinite(thermochem_gaussian.enthalpy)
+        assert np.isfinite(thermochem_gaussian.total_entropy)
+        assert np.isfinite(thermochem_gaussian.gibbs_free_energy)
+
+        thermochem_orca = Thermochemistry(
+            filename=orca_koh_output,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+        )
+        assert thermochem_orca.molecule.is_linear
+        assert thermochem_orca.rotational_symmetry_number == 1
+        assert np.isfinite(thermochem_orca.rotational_partition_function)
+        assert thermochem_orca.rotational_partition_function > 0
+        assert np.isfinite(thermochem_orca.enthalpy)
+        assert np.isfinite(thermochem_orca.total_entropy)
+        assert np.isfinite(thermochem_orca.gibbs_free_energy)
 
     def test_koh_physical_mode_pads_degenerate_bending_frequency(
-        self, gaussian_koh_opt_outfile
+        self, gaussian_koh_opt_outfile, orca_koh_output
     ):
         """In physical mode, quasi-linear KOH has only 3N-6 = 3 frequencies
-        from Gaussian, but linear treatment requires 3N-5 = 4. The
+        from Gaussian/ORCA, but linear treatment requires 3N-5 = 4. The
         cleaned_frequencies property must duplicate the lowest positive
         frequency to supply the missing degenerate bending mode.
-
-        KOH.log raw frequencies: [396.9613, 501.2227, 3851.9955]
-        After padding:           [396.9613, 501.2227, 3851.9955, 396.9613]
         """
-        thermochem = Thermochemistry(
+        # KOH.log raw frequencies: [396.9613, 501.2227, 3851.9955]
+        # After padding:           [396.9613, 501.2227, 3851.9955, 396.9613]
+        thermochem_gaussian = Thermochemistry(
             filename=gaussian_koh_opt_outfile,
             temperature=298.15,
             pressure=1.0,
             use_weighted_mass=False,
             rotational_mode="physical",
         )
-        raw = thermochem.vibrational_frequencies
-        assert len(raw) == 3
-
-        cleaned = thermochem.cleaned_frequencies
-        assert len(cleaned) == 4
+        raw_gaussian = thermochem_gaussian.vibrational_frequencies
+        assert len(raw_gaussian) == 3
+        cleaned_gaussian = thermochem_gaussian.cleaned_frequencies
+        assert len(cleaned_gaussian) == 4
         assert np.allclose(
-            cleaned, [396.9613, 501.2227, 3851.9955, 396.9613], rtol=1e-4
+            cleaned_gaussian,
+            [396.9613, 501.2227, 3851.9955, 396.9613],
+            rtol=1e-4,
+        )
+
+        # KOH.out raw frequencies: [394.53, 501.16, 3846.03]
+        # After padding:           [394.53, 501.16, 3846.03, 394.53]
+        thermochem_orca = Thermochemistry(
+            filename=orca_koh_output,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+            rotational_mode="physical",
+        )
+        raw_orca = thermochem_orca.vibrational_frequencies
+        assert len(raw_orca) == 3
+        cleaned_orca = thermochem_orca.cleaned_frequencies
+        assert len(cleaned_orca) == 4
+        assert np.allclose(
+            cleaned_orca,
+            [394.53, 501.16, 3846.03, 394.53],
+            rtol=1e-4,
         )
 
     def test_gaussian_mode_does_not_pad_frequencies(

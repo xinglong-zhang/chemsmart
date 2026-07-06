@@ -1372,6 +1372,11 @@ def orca_co2_output(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_koh_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "KOH.out")
+
+
+@pytest.fixture()
 def orca_sn2_ts_output(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "sn2_ts.out")
 
