@@ -217,7 +217,7 @@ class Thermochemistry:
         )
         if not all_constants:
             return None
-        return np.asarray(all_constants[-1], dtype=float) * 1e9
+        return np.asarray(all_constants[-1], dtype=float)
 
     @cached_property
     def effective_rotational_constants_in_Hz(self):

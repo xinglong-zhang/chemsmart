@@ -1496,7 +1496,7 @@ class TestThermochemistryKOH:
             assert len(step_consts) == 3
         assert np.isinf(all_rot_consts[-1][0])
         assert np.allclose(
-            all_rot_consts[-1][1:], [8.30647, 8.30647], rtol=1e-4
+            all_rot_consts[-1][1:], [8.30647 * 1e9, 8.30647 * 1e9], rtol=1e-4
         )
         assert all_rot_consts_with_status[-1][1] == "gaussian_overflow"
 
@@ -1534,7 +1534,7 @@ class TestThermochemistryKOH:
         assert np.isclose(rot_temps[0], 0.39865, atol=1e-3)
         rot_consts = mol.rotational_constants
         assert len(rot_consts) == 1
-        assert np.isclose(rot_consts[0], 8.30647, rtol=1e-4)
+        assert np.isclose(rot_consts[0], 8.30647 * 1e9, rtol=1e-4)
 
     def test_koh_thermochemistry_runs_without_error(
         self, gaussian_koh_opt_outfile
