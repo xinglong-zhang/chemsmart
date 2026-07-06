@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.option(
     "--mdp",
-    "mdp_file",
+    "mdp",
     type=click.Path(
         exists=True,
         dir_okay=False,
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--structure",
     "-s",
-    "structure_file",
+    "structure",
     type=click.Path(
         exists=True,
         dir_okay=False,
@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--top",
-    "top_file",
+    "top",
     type=click.Path(
         exists=True,
         dir_okay=False,
@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--index",
-    "index_file",
+    "index",
     type=click.Path(
         exists=True,
         dir_okay=False,
@@ -86,7 +86,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--itp",
-    "itp_files",
+    "itp",
     multiple=True,
     type=click.Path(
         exists=True,
@@ -106,12 +106,12 @@ logger = logging.getLogger(__name__)
 def nvt(
     ctx,
     skip_completed,
-    mdp_file,
-    structure_file,
+    mdp,
+    structure,
     input_pdb,
-    top_file,
-    index_file,
-    itp_files,
+    top,
+    index,
+    itp,
     workflow,
     molecule=None,
     **kwargs,
@@ -125,18 +125,18 @@ def nvt(
     project_settings = ctx.obj.get("project_settings", None)
     filename = ctx.obj.get("filename", None)
 
-    if structure_file is None:
-        structure_file = filename
+    if structure is None:
+        structure = filename
 
     if project_settings is not None:
         settings = project_settings.with_overrides(
-            mdp_file=Path(mdp_file) if mdp_file else None,
-            structure_file=Path(structure_file) if structure_file else None,
+            mdp_file=Path(mdp) if mdp else None,
+            structure_file=Path(structure) if structure else None,
             input_pdb=Path(input_pdb) if input_pdb else None,
-            top_file=Path(top_file) if top_file else None,
-            index_file=Path(index_file) if index_file else None,
+            top_file=Path(top) if top else None,
+            index_file=Path(index) if index else None,
             workflow=workflow,
-            itp_files=list(itp_files) if itp_files else None,
+            itp_files=list(itp) if itp else None,
         )
 
         settings.validate()
@@ -158,16 +158,16 @@ def nvt(
 
     # direct CLI mode
     label = "gromacs_nvt"
-    if structure_file is not None:
-        label = Path(structure_file).stem + "_nvt"
+    if structure is not None:
+        label = Path(structure).stem + "_nvt"
 
     workflow = workflow or "prepared"
 
     logger.info("Creating GROMACS NVT job from direct CLI options.")
-    logger.info("GROMACS NVT structure file: %s", structure_file)
-    logger.info("GROMACS NVT mdp file: %s", mdp_file)
-    logger.info("GROMACS NVT topology file: %s", top_file)
-    logger.info("GROMACS NVT itp files: %s", itp_files)
+    logger.info("GROMACS NVT structure file: %s", structure)
+    logger.info("GROMACS NVT mdp file: %s", mdp)
+    logger.info("GROMACS NVT topology file: %s", top)
+    logger.info("GROMACS NVT itp files: %s", itp)
     logger.info("GROMACS NVT workflow: %s", workflow)
 
     if ctx.invoked_subcommand is None:
@@ -175,12 +175,12 @@ def nvt(
             molecule=molecule,
             label=label,
             jobrunner=jobrunner,
-            mdp_file=Path(mdp_file) if mdp_file else None,
-            structure_file=Path(structure_file) if structure_file else None,
+            mdp_file=Path(mdp) if mdp else None,
+            structure_file=Path(structure) if structure else None,
             input_pdb=Path(input_pdb) if input_pdb else None,
-            top_file=Path(top_file) if top_file else None,
-            itp_files=list(itp_files) if itp_files else [],
-            index_file=Path(index_file) if index_file else None,
+            top_file=Path(top) if top else None,
+            itp_files=list(itp) if itp else [],
+            index_file=Path(index) if index else None,
             workflow=workflow,
             skip_completed=skip_completed,
             **kwargs,
