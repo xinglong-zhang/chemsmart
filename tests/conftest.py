@@ -784,6 +784,14 @@ def gaussian_co2_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_koh_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_koh_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "KOH.log"
+    )
+    return gaussian_koh_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_he_opt_outfile(gaussian_outputs_test_directory):
     gaussian_he_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "he.log"
