@@ -313,6 +313,11 @@ class Thermochemistry:
 
         Frequencies returned by this property remain in cm^-1.
 
+        When rotational_mode="physical" and the molecule is treated as a linear
+        rotor but has fewer than 3N-5 vibrational frequencies (quasi-linear case),
+        the lowest positive frequency is duplicated to supply the missing
+        degenerate bending mode(s).
+
         If self.check_imaginary_frequencies is True:
             - TS jobs must have exactly one imaginary frequency.
             - Non-TS jobs must have no imaginary frequencies.
@@ -331,6 +336,19 @@ class Thermochemistry:
             return None
 
         frequencies = list(self.vibrational_frequencies)
+
+        # Quasi-linear correction: Gaussian gives 3N-6 frequencies for
+        # non-linear molecules; pad to 3N-5 for linear treatment.
+        if self.rotational_mode == "physical" and self.is_linear_rotor:
+            expected = 3 * self.molecule.num_atoms - 5
+            if frequencies and len(frequencies) == expected - 1:
+                lowest = min(f for f in frequencies if f > 0)
+                frequencies.append(lowest)
+                logger.info(
+                    f"Quasi-linear molecule: padded one degenerate bending "
+                    f"mode at {lowest:.1f} cm^-1 for linear treatment."
+                )
+
         imaginary_indices = [
             i for i, freq in enumerate(frequencies) if freq < 0.0
         ]
