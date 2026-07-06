@@ -213,31 +213,31 @@ Select files by extension only:
  Linear and Quasi-Linear Molecule Handling
 *******************************************
 
-CHEMSMART correctly handles linear and quasi-linear molecules when computing
-rotational thermochemistry. The ``Thermochemistry`` Python class exposes a
-``rotational_mode`` parameter that controls how rotational constants are
+CHEMSMART correctly handles linear and quasi-linear molecules when computing rotational thermochemistry. The
+``Thermochemistry`` Python class exposes a ``rotational_mode`` parameter that controls how rotational constants are
 treated.
 
 Why This Matters
 ================
 
-Gaussian may print an overflow token (``*************``) for the axial
-rotational constant of a linear or near-linear molecule because the field
-width in the output is too narrow. CHEMSMART converts such tokens to
-``numpy.inf`` during parsing and can then recover physically meaningful
-rotational constants from the molecular geometry.
+Gaussian may print an overflow token (``*************``) for the axial rotational constant of a linear or near-linear
+molecule because the field width in the output is too narrow. CHEMSMART converts such tokens to ``numpy.inf`` during
+parsing and can then recover physically meaningful rotational constants from the molecular geometry.
 
-Additionally, a molecule whose bond angle is very close to 180° (e.g. a
-quasi-linear triatomic with a 179.99° angle) may still print three finite
-rotational constants in the Gaussian output; the axial constant will simply be
-many orders of magnitude larger than the perpendicular constant. CHEMSMART
-detects this quasi-linear case and handles it correctly in ``"physical"`` mode.
+Additionally, a molecule whose bond angle is very close to 180° (e.g. a quasi-linear triatomic with a 179.99° angle) may
+still print three finite rotational constants in the Gaussian output; the axial constant will simply be many orders of
+magnitude larger than the perpendicular constant. CHEMSMART detects this quasi-linear case and handles it correctly in
+``"physical"`` mode.
+
+When a quasi-linear species is treated as a linear rotor, its vibrational degrees of freedom should be 3N-5, but
+Gaussian and ORCA typically report only 3N-6 frequencies (e.g. three modes for a triatomic). In ``"physical"`` mode,
+CHEMSMART pads ``cleaned_frequencies`` by duplicating the lowest positive frequency to restore the missing degenerate
+bending mode.
 
 Rotational Modes
 ================
 
-Two modes are available via the ``rotational_mode`` argument of
-``Thermochemistry``:
+Two modes are available via the ``rotational_mode`` argument of ``Thermochemistry``:
 
 .. list-table::
    :header-rows: 1
@@ -247,15 +247,15 @@ Two modes are available via the ``rotational_mode`` argument of
       -  Description
 
    -  -  ``"physical"`` *(default)*
-      -  Derives rotational constants from the molecular geometry. Collapses
-         effectively linear or quasi-linear ``[A, B, C]`` triples to the
-         single perpendicular constant ``[B_perp]``, treating the molecule as
-         a linear rotor. Nonlinear molecules are kept unchanged.
+
+      -  Derives rotational constants from the molecular geometry. Collapses effectively linear or quasi-linear ``[A, B,
+         C]`` triples to the single perpendicular constant ``[B_perp]``, treating the molecule as a linear rotor.
+         Nonlinear molecules are kept unchanged. For quasi-linear species, also pads vibrational frequencies from 3N-6
+         to 3N-5 when needed.
 
    -  -  ``"gaussian"``
-      -  Preserves the rotational constants exactly as printed in the Gaussian
-         output. If Gaussian overflowed one or more values (``*************``),
-         CHEMSMART falls back to geometry-derived constants automatically.
+      -  Preserves the rotational constants exactly as printed in the Gaussian output. If Gaussian overflowed one or
+         more values (``*************``), CHEMSMART falls back to geometry-derived constants automatically.
 
 Python API Examples
 ===================
@@ -273,8 +273,8 @@ Python API Examples
    )
    print(thermo.rotational_partition_function)
 
-The molecule is analysed geometrically; any near-linear or truly linear
-structure is automatically collapsed to a linear-rotor model.
+The molecule is analysed geometrically; any near-linear or truly linear structure is automatically collapsed to a
+linear-rotor model.
 
 **Gaussian mode — reproduce Gaussian output file values:**
 
@@ -287,16 +287,14 @@ structure is automatically collapsed to a linear-rotor model.
    )
    print(thermo.rotational_partition_function)
 
-This mode matches the partition function and thermochemical corrections that
-Gaussian itself would report. When Gaussian printed overflow tokens for the
-axial constant, CHEMSMART silently falls back to geometry-derived constants to
-avoid a division-by-zero error while keeping the nonlinear-rotor model.
+This mode matches the partition function and thermochemical corrections that Gaussian itself would report. When Gaussian
+printed overflow tokens for the axial constant, CHEMSMART silently falls back to geometry-derived constants to avoid a
+division-by-zero error while keeping the nonlinear-rotor model.
 
 .. note::
 
-   ``rotational_mode`` is a Python-API parameter of ``Thermochemistry`` and is
-   not yet exposed as a CLI option.  The ``chemsmart run thermochemistry``
-   command always uses the ``"physical"`` mode.
+   ``rotational_mode`` is a Python-API parameter of ``Thermochemistry`` and is not yet exposed as a CLI option. The
+   ``chemsmart run thermochemistry`` command always uses the ``"physical"`` mode.
 
 ***********************************
  Boltzmann Weighted Averaging Jobs
