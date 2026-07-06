@@ -67,6 +67,7 @@ def make_thermochemistry_mock():
         check_imaginary_frequencies=True,
         s_freq_cutoff_cm=None,
         h_freq_cutoff_cm=None,
+        rotational_mode="gaussian",
     ):
         mock = MagicMock(spec=Thermochemistry)
         mock.vibrational_frequencies = vibrational_frequencies
@@ -74,6 +75,7 @@ def make_thermochemistry_mock():
         mock.check_imaginary_frequencies = check_imaginary_frequencies
         mock.s_freq_cutoff_cm = s_freq_cutoff_cm
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
+        mock.rotational_mode = rotational_mode
         mock.filename = "dummy.log"
         return mock
 
