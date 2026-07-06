@@ -294,3 +294,75 @@ class GromacsNVTJob(GromacsJob):
             **kwargs,
         )
 
+class GromacsNPTJob(GromacsJob):
+    """
+    NPT equilibration job for GROMACS.
+    """
+
+    TYPE = "gmxnpt"
+
+    def __init__(
+        self,
+        molecule=None,
+        label="gromacs_npt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=None,
+        input_pdb=None,
+        top_file=None,
+        tpr_file=None,
+        itp_files=None,
+        index_file=None,
+        workflow="prepared",
+        **kwargs,
+    ):
+        super().__init__(
+            molecule=molecule,
+            label=label,
+            jobrunner=jobrunner,
+            mdp_file=mdp_file,
+            structure_file=structure_file,
+            input_pdb=input_pdb,
+            top_file=top_file,
+            tpr_file=tpr_file,
+            itp_files=itp_files,
+            index_file=index_file,
+            workflow=workflow,
+            **kwargs,
+        )
+class GromacsNPTJob(GromacsJob):
+    """
+    NPT equilibration job for GROMACS.
+    """
+
+    TYPE = "gmxnpt"
+
+    def __init__(
+        self,
+        molecule=None,
+        label="gromacs_npt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=None,
+        input_pdb=None,
+        top_file=None,
+        tpr_file=None,
+        itp_files=None,
+        index_file=None,
+        workflow="prepared",
+        **kwargs,
+    ):
+        super().__init__(
+            molecule=molecule,
+            label=label,
+            jobrunner=jobrunner,
+            mdp_file=mdp_file,
+            structure_file=structure_file,
+            input_pdb=input_pdb,
+            top_file=top_file,
+            tpr_file=tpr_file,
+            itp_files=itp_files,
+            index_file=index_file,
+            workflow=workflow,
+            **kwargs,
+        )

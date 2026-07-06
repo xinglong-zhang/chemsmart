@@ -5,5 +5,6 @@ __all__ = [
     "GromacsJob",
     "GromacsEMJob",
     "GromacsNVTJob",
+    "GromacsNPTJob",
     "GromacsJobRunner",
 ]
