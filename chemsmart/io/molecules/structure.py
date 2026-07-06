@@ -815,7 +815,7 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
-            logger.info(f"Moments of inertia (weighted mass): {eigenvalues}.")
+            logger.debug(f"Moments of inertia (weighted mass): {eigenvalues}.")
             return eigenvalues
 
     @property
@@ -827,7 +827,7 @@ class Molecule:
             return [0.0, 0.0, 0.0]
         else:
             _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
-            logger.info(
+            logger.debug(
                 f"Moments of inertia (most abundant mass): {eigenvalues}."
             )
             return eigenvalues
