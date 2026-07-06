@@ -1,4 +1,4 @@
-from chemsmart.jobs.gromacs.job import GromacsEMJob
+from chemsmart.jobs.gromacs.job import GromacsEMJob, GromacsNVTJob
 from chemsmart.settings.gromacs import GromacsProjectSettings
 
 
@@ -9,6 +9,7 @@ class GromacsJobFactory:
 
     JOB_TYPE_MAP = {
         "em": GromacsEMJob,
+        "nvt": GromacsNVTJob,
     }
 
     @classmethod
@@ -26,7 +27,12 @@ class GromacsJobFactory:
 
     @classmethod
     def create_from_settings(
-        cls, settings, molecule=None, label=None, jobrunner=None, **kwargs
+        cls,
+        settings,
+        molecule=None,
+        label=None,
+        jobrunner=None,
+        **kwargs,
     ):
         settings.validate()
         job_cls = cls.JOB_TYPE_MAP.get(settings.job_type)

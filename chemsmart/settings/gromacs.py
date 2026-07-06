@@ -219,8 +219,6 @@ class GromacsProjectSettings:
         """
         missing = []
 
-        if self.mdp_file is None:
-            missing.append("mdp_file")
         if self.structure_file is None:
             missing.append("structure_file")
         if self.top_file is None:
@@ -243,8 +241,6 @@ class GromacsProjectSettings:
 
         if self.input_pdb is None and self.structure_file is None:
             missing.append("input_pdb|structure_file")
-        if self.mdp_file is None:
-            missing.append("mdp_file")
         if self.force_field is None:
             missing.append("force_field")
         if self.water_model is None:

@@ -83,6 +83,11 @@ class GromacsJobRunner(JobRunner):
         """
         self._assign_variables(job)
 
+        # Generate missing GROMACS input files before validation.
+        # For example, if job.mdp_file is None, this can write em.mdp / nvt.mdp
+        # and assign the generated file back to job.mdp_file.
+        self._write_input(job)
+
         workflow = job.workflow
 
         if workflow == "prepared":
@@ -116,11 +121,15 @@ class GromacsJobRunner(JobRunner):
 
     def _write_input(self, job):
         """
-        GROMACS input writing is not required for prepared workflows.
+        Write missing GROMACS input files.
 
-        MDP auto-writing can be added later through chemsmart.jobs.gromacs.writer.
+        If the user already supplied an MDP file, it is respected. Otherwise,
+        ChemSmart generates a default MDP file from the GROMACS job settings.
         """
-        pass
+        from chemsmart.jobs.gromacs.writer import GromacsInputWriter
+
+        writer = GromacsInputWriter(job=job, jobrunner=self)
+        writer.write(target_directory=job.folder)
 
     def _get_executable(self):
         """
