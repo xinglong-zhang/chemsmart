@@ -111,7 +111,6 @@ class Thermochemistry:
             i * (units._amu * (units.Ang / units.m) ** 2)
             for i in self.moments_of_inertia
         ]
-        print(f"Moments of inertia: {self.I}")
 
         # convert the unit of moments of inertia
         # from amu Ang^2 to kg m^2

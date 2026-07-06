@@ -799,7 +799,7 @@ class TestGaussian16Output:
         assert np.allclose(
             g16_output.all_dipole_moments[-1],
             np.array([-1.6500, -5.4954, -2.3627]),
-            rtol=1e0,
+            rtol=1e-4,
         )
         assert np.isclose(
             g16_output.all_dipole_moment_magnitudes[-1], 6.2052, rtol=1e-4
@@ -808,7 +808,7 @@ class TestGaussian16Output:
         assert np.allclose(
             g16_output.all_rotational_constants[-1],
             np.array([6.2290e7, 5.5130e7, 4.6900e7]),
-            rtol=1e0,
+            rtol=1e-4,
         )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
