@@ -13,6 +13,7 @@ Output analysis (analyze, batch-analyze, thermo) lives in the
 backend-independent ``chemsmart run pka`` command.
 """
 
+import copy
 import logging
 import os
 from pathlib import Path
@@ -276,8 +277,6 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             lambda ctx, **invoke_kwargs: ctx.invoke(submit, **invoke_kwargs),
             **kwargs,
         )
-
-    import copy
 
     from chemsmart.jobs.orca.pka import ORCApKaJob
     from chemsmart.utils.utils import (
