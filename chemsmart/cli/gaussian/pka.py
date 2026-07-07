@@ -109,7 +109,7 @@ def pka(
     ctx.obj["pka_color_code"] = color_code
 
     if ctx.invoked_subcommand is None:
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         if PKaTableEntry.is_submission_table(ctx.obj.get("filename")):
             return ctx.invoke(batch, skip_completed=skip_completed)
@@ -144,7 +144,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
     filename = ctx.obj.get("filename")
     jobrunner = ctx.obj["jobrunner"]
 
-    from chemsmart.utils.utils import PKaTableEntry
+    from chemsmart.utils.datasets import PKaTableEntry
 
     if PKaTableEntry.is_submission_table(filename):
         return ctx.invoke(batch, skip_completed=skip_completed)
@@ -188,7 +188,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
         pka_settings, source_hint=f"input file {filename}"
     )
 
-    _log_pka_settings(pka_settings, proton_index, shared)
+    log_pka_settings(pka_settings, proton_index, shared)
 
     # ── create job(s) ──
     molecule_indices = ctx.obj.get("molecule_indices")
@@ -246,10 +246,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             lambda ctx, **invoke_kwargs: ctx.invoke(submit, **invoke_kwargs),
             **kwargs,
         )
-    from chemsmart.utils.utils import (
-        PKaOutputTable,
-        PKaTableEntry,
-    )
+    from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
 
     try:
         entries = PKaTableEntry.parse_pka_table(input_table_path)
@@ -434,7 +431,7 @@ def _create_pka_jobs_from_molecules(
     return jobs
 
 
-def _log_pka_settings(pka_settings, proton_index, shared):
+def log_pka_settings(pka_settings, proton_index, shared):
     """Emit informational log messages for a pKa job."""
     logger.info(f"Proton index to remove: {proton_index}")
     logger.info(f"Thermodynamic cycle: {shared['scheme']}")

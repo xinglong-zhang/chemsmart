@@ -896,8 +896,8 @@ def validate_direct_analyze_files(ha, a, ha_solv, a_solv):
 
 def _auto_discover_direct_pka_files(ha_gas_path, program=None):
     """Infer A- and solvent SP paths from the HA gas-phase output path."""
+    from chemsmart.utils.datasets import PKA_TARGET_SUFFIX_HELP
     from chemsmart.utils.io import discover_pka_target_companion_outputs
-    from chemsmart.utils.utils import PKA_TARGET_SUFFIX_HELP
 
     results = discover_pka_target_companion_outputs(
         ha_gas_path, program=program
@@ -1053,7 +1053,7 @@ def _validate_pka_table_program(pka_table, program):
 
 def _is_existing_output_path(value):
     """Return True when *value* is a non-empty path to an existing file."""
-    from chemsmart.utils.utils import normalize_table_cell
+    from chemsmart.utils.datasets import normalize_table_cell
 
     path = normalize_table_cell(value)
     if path is None:
@@ -1107,12 +1107,12 @@ def validate_analyze_files(
 
 def _auto_discover_pka_files(ha_gas_path, href_gas_path, program=None):
     """Infer companion output paths from HA and HRef gas-phase paths."""
-    from chemsmart.utils.io import discover_pka_target_companion_outputs
-    from chemsmart.utils.utils import (
+    from chemsmart.utils.datasets import (
         PKA_REFERENCE_SUFFIX_HELP,
         PKA_TARGET_SUFFIX_HELP,
         discover_pka_reference_companion_outputs,
     )
+    from chemsmart.utils.io import discover_pka_target_companion_outputs
 
     if program is None:
         program = get_program_type_from_file(ha_gas_path)
@@ -1355,7 +1355,7 @@ def batch_analyze(ctx, output_table, output_results, program, **kwargs):
         shared.get("scheme"), shared.get("delta_g_proton")
     )
 
-    from chemsmart.utils.utils import PKaOutputTable
+    from chemsmart.utils.datasets import PKaOutputTable
 
     logger.info(f"Reading pKa output table: {output_table}")
     try:

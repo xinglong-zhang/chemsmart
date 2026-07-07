@@ -599,7 +599,7 @@ class PKaCDXFile(CDXFile):
                 "-cc/--color-code can only be used with .cdx/.cdxml files."
             )
 
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         if PKaTableEntry.is_submission_table(filename):
             raise ValueError(

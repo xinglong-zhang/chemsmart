@@ -1391,7 +1391,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_txt(self, tmp_path):
         """Test parsing a whitespace-delimited .txt table file."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         table_file = tmp_path / "molecules.txt"
         table_file.write_text(
@@ -1419,7 +1419,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_csv(self, tmp_path):
         """Test parsing a comma-delimited .csv table file."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         table_file = tmp_path / "molecules.csv"
         table_file.write_text(
@@ -1441,7 +1441,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_skip_comments_and_empty_lines(self, tmp_path):
         """Test that comments and empty lines are skipped."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         table_file = tmp_path / "molecules.txt"
         table_file.write_text(
@@ -1459,7 +1459,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_invalid_column_count(self, tmp_path):
         """Test that invalid column count raises ValueError."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         table_file = tmp_path / "bad.txt"
         table_file.write_text(
@@ -1472,7 +1472,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_invalid_integer(self, tmp_path):
         """Test that invalid integer values raise ValueError."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         table_file = tmp_path / "bad.txt"
         table_file.write_text(
@@ -1487,7 +1487,7 @@ class TestPKaTableParsing:
         self, tmp_path, colored_proton_cdxml_file
     ):
         """Blank proton_index is allowed for single-molecule CDXML table rows."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         table_file = tmp_path / "table.csv"
         table_file.write_text(
@@ -1502,7 +1502,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_blank_proton_index_for_xyz_raises(self, tmp_path):
         """Blank proton_index is rejected for non-CDXML table rows."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         xyz_file = tmp_path / "acid.xyz"
         xyz_file.write_text("2\nacid\nC 0 0 0\nH 0 0 1\n")
@@ -1516,7 +1516,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_empty_raises(self, tmp_path):
         """Test that empty table raises ValueError."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         table_file = tmp_path / "empty.txt"
         table_file.write_text("# Only comments\n")
@@ -1526,14 +1526,14 @@ class TestPKaTableParsing:
 
     def test_parse_pka_table_file_not_found(self):
         """Test that missing file raises FileNotFoundError."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         with pytest.raises(FileNotFoundError):
             PKaTableEntry.parse_pka_table("/nonexistent/path/molecules.txt")
 
     def test_pka_table_entry_validate_missing_file(self, tmp_path):
         """Test PKaTableEntry validation catches missing files."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         entry = PKaTableEntry(
             filepath="/nonexistent/file.xyz",
@@ -1548,7 +1548,7 @@ class TestPKaTableParsing:
 
     def test_pka_table_entry_validate_invalid_proton_index(self, tmp_path):
         """Test PKaTableEntry validation catches invalid proton_index."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         # Create a real file for this test
         test_file = tmp_path / "test.xyz"
@@ -1566,7 +1566,7 @@ class TestPKaTableParsing:
 
     def test_pka_table_entry_validate_invalid_multiplicity(self, tmp_path):
         """Test PKaTableEntry validation catches invalid multiplicity."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         test_file = tmp_path / "test.xyz"
         test_file.write_text("1\n\nH 0 0 0\n")
@@ -1583,10 +1583,7 @@ class TestPKaTableParsing:
 
     def test_validate_pka_table_entries(self, tmp_path):
         """Test batch validation of PKaTableEntry list."""
-        from chemsmart.utils.utils import (
-            PKaOutputTable,
-            PKaTableEntry,
-        )
+        from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
 
         # Create test files
         file1 = tmp_path / "mol1.xyz"
@@ -1607,7 +1604,7 @@ class TestPKaTableParsing:
 
     def test_pka_table_entry_repr(self):
         """Test PKaTableEntry string representation."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         entry = PKaTableEntry(
             filepath="mol.xyz",
@@ -1624,7 +1621,7 @@ class TestPKaTableParsing:
         assert "'multiplicity': 1" in repr_str
 
     def test_pka_table_entry_from_headers_and_row_dynamic(self):
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         headers = ["ha_file", "proton_index", "charge", "mult", "route"]
         row = ["mol.xyz", "10", "0", "1", "opt freq"]
@@ -1641,7 +1638,7 @@ class TestPKaTableParsing:
 
     def test_pka_table_entry_dict_and_kwargs_helpers(self):
         """to_dict/to_kwargs should support forwarding to downstream settings."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         entry = PKaTableEntry(
             {
@@ -1665,7 +1662,7 @@ class TestPKaTableParsing:
 
     def test_pka_table_entry_alias_resolution(self, tmp_path):
         """Alias resolution should keep backward-compatible attribute access."""
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         test_file = tmp_path / "test.xyz"
         test_file.write_text("1\n\nH 0 0 0\n")
@@ -1692,7 +1689,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_output_table_csv(self, tmp_path):
         """Test parsing a CSV output table with canonical column names."""
-        from chemsmart.utils.utils import parse_pka_output_table
+        from chemsmart.utils.datasets import parse_pka_output_table
 
         # Create dummy output files
         for name in [
@@ -1724,7 +1721,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_output_table_alias_columns(self, tmp_path):
         """Test that aliased column names (e.g., HA_optimization_output) work."""
-        from chemsmart.utils.utils import parse_pka_output_table
+        from chemsmart.utils.datasets import parse_pka_output_table
 
         for name in [
             "a.log",
@@ -1758,7 +1755,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_output_table_empty_cells_become_none(self, tmp_path):
         """Blank CSV cells must not remain as float NaN in parsed entries."""
-        from chemsmart.utils.utils import parse_pka_output_table
+        from chemsmart.utils.datasets import parse_pka_output_table
 
         ref_log = tmp_path / "ref_HA_opt.log"
         ref_log.write_text("dummy")
@@ -1775,7 +1772,7 @@ class TestPKaTableParsing:
 
     def test_parse_pka_output_table_empty(self, tmp_path):
         """Test that an empty output table raises ValueError."""
-        from chemsmart.utils.utils import parse_pka_output_table
+        from chemsmart.utils.datasets import parse_pka_output_table
 
         table_file = tmp_path / "empty.csv"
         table_file.write_text("# comment only\n")
@@ -1785,14 +1782,14 @@ class TestPKaTableParsing:
 
     def test_parse_pka_output_table_file_not_found(self):
         """Test that a missing table file raises FileNotFoundError."""
-        from chemsmart.utils.utils import parse_pka_output_table
+        from chemsmart.utils.datasets import parse_pka_output_table
 
         with pytest.raises(FileNotFoundError):
             parse_pka_output_table("/nonexistent/path.csv")
 
     def test_resolve_pka_output_references_carry_forward(self, tmp_path):
         """Test that blank reference cells are filled from the previous row."""
-        from chemsmart.utils.utils import (
+        from chemsmart.utils.datasets import (
             PKaOutputTableEntry,
             resolve_pka_output_references,
         )
@@ -1841,7 +1838,7 @@ class TestPKaTableParsing:
 
     def test_resolve_pka_output_references_first_row_blank_raises(self):
         """Test that blank reference in first row raises ValueError."""
-        from chemsmart.utils.utils import (
+        from chemsmart.utils.datasets import (
             PKaOutputTableEntry,
             resolve_pka_output_references,
         )
@@ -1869,7 +1866,7 @@ class TestPKaTableParsing:
 
     def test_resolve_pka_output_references_partial_carry_forward(self):
         """Test carry-forward when only some ref columns are blank."""
-        from chemsmart.utils.utils import (
+        from chemsmart.utils.datasets import (
             PKaOutputTableEntry,
             resolve_pka_output_references,
         )
@@ -1938,7 +1935,7 @@ class TestPKaTableParsing:
 
     def test_discover_pka_reference_companion_outputs(self, tmp_path):
         """analyze should discover HRef companion files from the HRef gas output."""
-        from chemsmart.utils.utils import (
+        from chemsmart.utils.datasets import (
             discover_pka_reference_companion_outputs,
         )
 
@@ -1965,7 +1962,7 @@ class TestPKaTableParsing:
         self, tmp_path, monkeypatch
     ):
         """Blank result-file cells resolve to Gaussian <basename>_<suffix>.log files."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         monkeypatch.chdir(tmp_path)
         for name in [
@@ -1997,7 +1994,7 @@ class TestPKaTableParsing:
         self, tmp_path, monkeypatch
     ):
         """Blank result-file cells resolve to ORCA <basename>_<suffix>.out files."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         monkeypatch.chdir(tmp_path)
         for name in [
@@ -2029,7 +2026,7 @@ class TestPKaTableParsing:
         self, tmp_path, monkeypatch
     ):
         """ORCA reference paths default missing basename outputs to .out."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         monkeypatch.chdir(tmp_path)
         (tmp_path / "6a_HA_opt.out").write_text("* O   R   C   A *\n")
@@ -2056,7 +2053,7 @@ class TestPKaTableParsing:
         self, tmp_path, monkeypatch
     ):
         """prepare() auto-discovers output files and carries forward references."""
-        from chemsmart.utils.utils import PKaOutputTable
+        from chemsmart.utils.datasets import PKaOutputTable
 
         monkeypatch.chdir(tmp_path)
         for basename in ("pka_scale_frag1", "pka_scale_frag2"):
@@ -2100,7 +2097,7 @@ class TestPKaTableParsing:
 
     def test_pka_output_table_entry_validate_valid(self, tmp_path):
         """Test validation passes for a complete, valid entry."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         for name in [
             "a.log",
@@ -2135,7 +2132,7 @@ class TestPKaTableParsing:
 
     def test_pka_output_table_entry_validate_missing_file(self, tmp_path):
         """Test validation catches missing files."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         entry = PKaOutputTableEntry(
             {
@@ -2158,7 +2155,7 @@ class TestPKaTableParsing:
 
     def test_pka_output_table_entry_validate_missing_basename(self):
         """Test validation catches missing basename."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         entry = PKaOutputTableEntry(
             {
@@ -2181,7 +2178,7 @@ class TestPKaTableParsing:
 
     def test_pka_output_table_entry_repr(self):
         """Test PKaOutputTableEntry string representation."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         entry = PKaOutputTableEntry(
             {"basename": "my_system", "ha_gas": "a.log"},
@@ -2195,7 +2192,7 @@ class TestPKaTableParsing:
 
     def test_pka_output_table_entry_to_dict(self):
         """Test to_dict returns all stored data."""
-        from chemsmart.utils.utils import PKaOutputTableEntry
+        from chemsmart.utils.datasets import PKaOutputTableEntry
 
         data = {"basename": "sys", "ha_gas": "a.log", "pka_ref": 6.75}
         entry = PKaOutputTableEntry(data)
@@ -2206,7 +2203,7 @@ class TestPKaTableParsing:
 
     def test_export_pka_results_table_matches_stdout_format(self, tmp_path):
         """-O output should match the formatted batch table printed to stdout."""
-        from chemsmart.utils.utils import (
+        from chemsmart.utils.datasets import (
             PKaOutputTable,
             PKaOutputTableEntry,
             export_pka_results_table,
@@ -2258,7 +2255,7 @@ class TestPKaTableParsing:
 
     def test_export_pka_results_table_direct_scheme(self, tmp_path):
         """Direct-cycle export uses the ΔG_diss column label."""
-        from chemsmart.utils.utils import (
+        from chemsmart.utils.datasets import (
             PKaOutputTableEntry,
             export_pka_results_table,
         )
@@ -2298,7 +2295,10 @@ class TestPKaTableParsing:
         self, tmp_path
     ):
         """batch-analyze -O should write the same table echoed to stdout."""
-        from chemsmart.utils.utils import PKaOutputTable, PKaOutputTableEntry
+        from chemsmart.utils.datasets import (
+            PKaOutputTable,
+            PKaOutputTableEntry,
+        )
 
         entries = [
             PKaOutputTableEntry(
@@ -2340,7 +2340,7 @@ class TestPKaTableParsing:
 
     def test_parse_and_resolve_multi_row_table(self, tmp_path):
         """End-to-end test: parse → resolve → validate on a multi-row table."""
-        from chemsmart.utils.utils import (
+        from chemsmart.utils.datasets import (
             parse_pka_output_table,
             resolve_pka_output_references,
         )
@@ -2393,7 +2393,7 @@ class TestPKaTableParsing:
 
     def test_pka_output_table_run_pka(self, tmp_path):
         """PKaOutputTable owns parsing, validation, and pKa execution."""
-        from chemsmart.utils.utils import PKaOutputTable
+        from chemsmart.utils.datasets import PKaOutputTable
 
         for name in [
             "ha.log",
@@ -2450,7 +2450,7 @@ class TestPKaTableParsing:
 
     def test_pka_output_table_run_pka_direct(self, tmp_path):
         """PKaOutputTable supports direct-cycle batch analysis."""
-        from chemsmart.utils.utils import PKaOutputTable
+        from chemsmart.utils.datasets import PKaOutputTable
 
         for name in ["ha.log", "a.log", "ha_sp.log", "a_sp.log"]:
             (tmp_path / name).write_text("dummy")

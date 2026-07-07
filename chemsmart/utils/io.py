@@ -420,7 +420,7 @@ def detect_program_type_from_files(filepaths, allowed_programs=None):
 
 def discover_pka_target_companion_outputs(ha_gas_path, program=None):
     """Infer A- and solvent SP paths from a HA gas-phase output file."""
-    from chemsmart.utils.utils import (
+    from chemsmart.utils.datasets import (
         discover_pka_output_path,
         pka_output_basename_from_path,
     )

@@ -130,7 +130,7 @@ def pka(
     ctx.obj["pka_color_code"] = color_code
 
     if ctx.invoked_subcommand is None:
-        from chemsmart.utils.utils import PKaTableEntry
+        from chemsmart.utils.datasets import PKaTableEntry
 
         if PKaTableEntry.is_submission_table(ctx.obj.get("filename")):
             return ctx.invoke(batch, skip_completed=skip_completed)
@@ -164,7 +164,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
     filename = ctx.obj.get("filename")
     jobrunner = ctx.obj["jobrunner"]
 
-    from chemsmart.utils.utils import PKaTableEntry
+    from chemsmart.utils.datasets import PKaTableEntry
 
     if PKaTableEntry.is_submission_table(filename):
         return ctx.invoke(batch, skip_completed=skip_completed)
@@ -279,10 +279,7 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
         )
 
     from chemsmart.jobs.orca.pka import ORCApKaJob
-    from chemsmart.utils.utils import (
-        PKaOutputTable,
-        PKaTableEntry,
-    )
+    from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
 
     logger.info(f"Reading ORCA pKa jobs from table: {input_table_path}")
     try:
