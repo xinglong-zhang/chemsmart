@@ -60,7 +60,7 @@ def _pka_thermochemistry_kwargs(
     }
 
 
-def _require_thermochemistry_property(thermo, filepath, attr, label):
+def _extract_thermochemistry_property(thermo, filepath, attr, label):
     value = getattr(thermo, attr)
     if value is None:
         raise ValueError(f"Could not extract {label} from file: {filepath}")
@@ -88,13 +88,13 @@ def pka_gas_phase_data(
             entropy_method,
         ),
     )
-    electronic_energy_j_mol = _require_thermochemistry_property(
+    electronic_energy_j_mol = _extract_thermochemistry_property(
         thermo,
         filepath,
         "electronic_energy",
         "SCF energy",
     )
-    qh_gibbs_j_mol = _require_thermochemistry_property(
+    qh_gibbs_j_mol = _extract_thermochemistry_property(
         thermo,
         filepath,
         "qrrho_gibbs_free_energy",
@@ -110,7 +110,7 @@ def pka_gas_phase_data(
 def pka_solvent_scf_energy(filepath):
     """Return solvent-phase SCF energy in Hartree."""
     thermo = Thermochemistry.from_filepath(filepath)
-    electronic_energy_j_mol = _require_thermochemistry_property(
+    electronic_energy_j_mol = _extract_thermochemistry_property(
         thermo,
         filepath,
         "electronic_energy",
@@ -264,7 +264,7 @@ def compute_pka(
 def _thermochemistry_value_in_units(
     thermo, filepath, attr, energy_units, label
 ):
-    value_j_mol = _require_thermochemistry_property(
+    value_j_mol = _extract_thermochemistry_property(
         thermo, filepath, attr, label
     )
     return energy_conversion("j/mol", energy_units, value_j_mol)
@@ -303,46 +303,46 @@ def compute_pka_thermochemistry(
         entropy_method,
     )
 
-    def get_species_thermo(file_path, name):
-        if file_path is None:
+    def get_species_thermo(filepath, name):
+        if filepath is None:
             return None
-        thermo = Thermochemistry.from_filepath(file_path, **thermo_kwargs)
+        thermo = Thermochemistry.from_filepath(filepath, **thermo_kwargs)
         return {
             "name": name,
             "E": _thermochemistry_value_in_units(
                 thermo,
-                file_path,
+                filepath,
                 "electronic_energy",
                 energy_units,
                 "SCF energy",
             ),
             "qh_G": _thermochemistry_value_in_units(
                 thermo,
-                file_path,
+                filepath,
                 "qrrho_gibbs_free_energy",
                 energy_units,
                 "quasi-harmonic Gibbs free energy",
             ),
             "ZPE": _thermochemistry_value_in_units(
                 thermo,
-                file_path,
+                filepath,
                 "zero_point_energy",
                 energy_units,
                 "zero-point energy",
             ),
             "H": _thermochemistry_value_in_units(
-                thermo, file_path, "enthalpy", energy_units, "enthalpy"
+                thermo, filepath, "enthalpy", energy_units, "enthalpy"
             ),
             "qh_H": _thermochemistry_value_in_units(
                 thermo,
-                file_path,
+                filepath,
                 "qrrho_enthalpy",
                 energy_units,
                 "quasi-harmonic enthalpy",
             ),
             "G": _thermochemistry_value_in_units(
                 thermo,
-                file_path,
+                filepath,
                 "gibbs_free_energy",
                 energy_units,
                 "Gibbs free energy",
