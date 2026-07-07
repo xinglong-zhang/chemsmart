@@ -3318,8 +3318,10 @@ class TestORCApKaOutput:
             outputs["A"].electronic_energy_in_units, self.L2_A_E, rtol=1e-8
         )
 
-    def test_from_pka_settings_classmethod(self, orca_outputs_directory):
-        """Test from_pka_settings class method."""
+    def test_for_pka_species_with_job_settings_thermo(
+        self, orca_outputs_directory
+    ):
+        """Test for_pka_species with thermochemistry params from job settings."""
         from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 
         files = self._files(orca_outputs_directory)
@@ -3333,10 +3335,14 @@ class TestORCApKaOutput:
             multiplicity=1,
         )
 
-        outputs = ORCApKaOutput.from_pka_settings(
-            settings=settings,
+        outputs = ORCApKaOutput.for_pka_species(
             ha_file=files["ha_gas"],
             a_file=files["a_gas"],
+            temperature=settings.temperature,
+            concentration=settings.concentration,
+            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=settings.cutoff_enthalpy,
+            energy_units=settings.energy_units,
         )
 
         assert "HA" in outputs

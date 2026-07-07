@@ -535,83 +535,48 @@ class PKaCDXFile(CDXFile):
     ionizable sites and their associated protons can be identified reliably.
     """
 
-    @staticmethod
-    def resolve_proton_index(filename, proton_index, color_code=None):
-        """Resolve the proton index for deprotonation, optionally via CDXML.
-
-        If a proton index is provided, it is returned directly. For CDX/CDXML
-        inputs, the proton can be auto-detected from a color code; a
-        multi-fragment file yields a list of per-fragment molecules, which is
-        returned as the second tuple element while the proton index is set to
-        ``None`` so callers can branch to per-molecule job creation.
+    def _resolve_proton_from_cdxml(self, color_code=None):
+        """Auto-detect proton index from CDX/CDXML colour markup.
 
         Args:
-            filename: Input structure file path, used to detect CDX/CDXML inputs.
-            proton_index: 1-based proton index supplied by the user, if any.
             color_code: CDXML color-table index used for auto-detection.
 
         Returns:
             tuple[int | None, list | None]:
                 - Proton index when a single molecule is resolved.
                 - ``None`` for the index with a list of per-fragment molecules
-                  when multiple molecules are detected in CDX/CDXML.
+                  when multiple molecules are detected.
 
         Raises:
-            ValueError: If required inputs are missing or inconsistent with the
-                file type.
+            ValueError: If CDXML colour parsing fails.
         """
-        if proton_index is not None:
-            return proton_index, None
+        try:
+            pka_mols = self.get_pka_molecules(
+                color_code=color_code, index=":", return_list=True
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Could not auto-detect proton from CDXML colour: "
+                f"{exc}\n"
+                "Use -pi/--proton-index to specify the proton explicitly."
+            ) from exc
 
-        filename = str(filename)
-        if filename and filename.endswith((".cdx", ".cdxml")):
-            cdx_file = PKaCDXFile(filename)
-            try:
-                pka_mols = cdx_file.get_pka_molecules(
-                    color_code=color_code, index=":", return_list=True
-                )
-            except ValueError as exc:
-                raise ValueError(
-                    "Could not auto-detect proton from CDXML colour: "
-                    f"{exc}\n"
-                    "Use -pi/--proton-index to specify the proton explicitly."
-                ) from exc
-
-            if len(pka_mols) > 1:
-                logger.info(
-                    "Detected %s molecules with per-fragment proton "
-                    "auto-detection in %s.",
-                    len(pka_mols),
-                    filename,
-                )
-                return None, pka_mols
-
-            proton_index = pka_mols[0].proton_index
+        if len(pka_mols) > 1:
             logger.info(
-                "Detected proton index %s from CDXML colour in %s.",
-                proton_index,
-                filename,
+                "Detected %s molecules with per-fragment proton "
+                "auto-detection in %s.",
+                len(pka_mols),
+                self.filename,
             )
-            return proton_index, None
+            return None, pka_mols
 
-        if color_code is not None:
-            raise ValueError(
-                "-cc/--color-code can only be used with .cdx/.cdxml files."
-            )
-
-        from chemsmart.utils.datasets import PKaTableEntry
-
-        if PKaTableEntry.is_submission_table(filename):
-            raise ValueError(
-                "Table input detected for pKa job submission. "
-                "Use the 'batch' subcommand to process each table row, e.g. "
-                "'pka -s direct batch' (proton_index is read from the table)."
-            )
-
-        raise ValueError(
-            "-pi/--proton-index is required when launching new pKa "
-            "calculations (or use a .cdxml file with a coloured proton)."
+        proton_index = pka_mols[0].proton_index
+        logger.info(
+            "Detected proton index %s from CDXML colour in %s.",
+            proton_index,
+            self.filename,
         )
+        return proton_index, None
 
     @staticmethod
     def resolve_reference_proton(

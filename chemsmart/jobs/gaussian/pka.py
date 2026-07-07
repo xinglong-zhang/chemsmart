@@ -609,12 +609,17 @@ class GaussianpKaJob(GaussianJob):
 
         ha_file, a_file, href_file, ref_file = self._pka_output_files()
 
-        return Gaussian16pKaOutput.from_pka_settings(
-            settings=self.settings,
+        return Gaussian16pKaOutput.for_pka_species(
             ha_file=ha_file,
             a_file=a_file,
             href_file=href_file,
             ref_file=ref_file,
+            temperature=self.settings.temperature,
+            concentration=self.settings.concentration,
+            pressure=self.settings.pressure,
+            cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=self.settings.cutoff_enthalpy,
+            energy_units=self.settings.energy_units,
         )
 
     def compute_thermochemistry(self):

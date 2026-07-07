@@ -1369,11 +1369,9 @@ class TestPKa:
         assert all("_frag" in label for label in captured["labels"])
 
     def test_pka_resolve_proton_index_accepts_explicit_index(self):
-        from chemsmart.io.file import PKaCDXFile
+        from chemsmart.cli.pka import resolve_proton_index
 
-        proton_index, molecules = PKaCDXFile.resolve_proton_index(
-            "acid.xyz", 8, None
-        )
+        proton_index, molecules = resolve_proton_index("acid.xyz", 8, None)
         assert proton_index == 8
         assert molecules is None
 

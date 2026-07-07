@@ -29,6 +29,7 @@ from chemsmart.cli.pka import (
     require_pka_charge_multiplicity,
     resolve_pka_batch_row,
     resolve_pka_submit_proton_options,
+    resolve_proton_index,
     validate_reference_options,
 )
 from chemsmart.io.file import PKaCDXFile
@@ -154,7 +155,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
     )
 
     # ── resolve proton index (CDXML auto-detect) ──
-    proton_index, pka_molecules = PKaCDXFile.resolve_proton_index(
+    proton_index, pka_molecules = resolve_proton_index(
         filename, proton_index, color_code
     )
 

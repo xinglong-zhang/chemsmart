@@ -2794,12 +2794,12 @@ class TestGaussian16pKaOutput:
         assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
         assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
 
-    def test_from_pka_settings_classmethod(
+    def test_for_pka_species_with_job_settings_thermo(
         self,
         gaussian_pKa_HA_optimization_outputfile,
         gaussian_pKa_A_optimization_outputfile,
     ):
-        """Test from_pka_settings class method."""
+        """Test for_pka_species with thermochemistry params from job settings."""
         from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 
         settings = GaussianpKaJobSettings(
@@ -2812,10 +2812,14 @@ class TestGaussian16pKaOutput:
             multiplicity=1,
         )
 
-        outputs = Gaussian16pKaOutput.from_pka_settings(
-            settings=settings,
+        outputs = Gaussian16pKaOutput.for_pka_species(
             ha_file=gaussian_pKa_HA_optimization_outputfile,
             a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=settings.temperature,
+            concentration=settings.concentration,
+            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=settings.cutoff_enthalpy,
+            energy_units=settings.energy_units,
         )
 
         assert "HA" in outputs

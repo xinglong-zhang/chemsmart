@@ -626,6 +626,59 @@ def is_pka_cdxml_input(filename):
     )
 
 
+def resolve_proton_index(filename, proton_index, color_code=None):
+    """Resolve the proton index for deprotonation, optionally via CDXML.
+
+    If a proton index is provided, it is returned directly. For CDX/CDXML
+    inputs, the proton can be auto-detected from a color code; a
+    multi-fragment file yields a list of per-fragment molecules, which is
+    returned as the second tuple element while the proton index is set to
+    ``None`` so callers can branch to per-molecule job creation.
+
+    Args:
+        filename: Input structure file path, used to detect CDX/CDXML inputs.
+        proton_index: 1-based proton index supplied by the user, if any.
+        color_code: CDXML color-table index used for auto-detection.
+
+    Returns:
+        tuple[int | None, list | None]:
+            - Proton index when a single molecule is resolved.
+            - ``None`` for the index with a list of per-fragment molecules
+              when multiple molecules are detected in CDX/CDXML.
+
+    Raises:
+        ValueError: If required inputs are missing or inconsistent with the
+            file type.
+    """
+    if proton_index is not None:
+        return proton_index, None
+
+    filename = str(filename)
+    if is_pka_cdxml_input(filename):
+        from chemsmart.io.file import PKaCDXFile
+
+        return PKaCDXFile(filename)._resolve_proton_from_cdxml(color_code)
+
+    if color_code is not None:
+        raise ValueError(
+            "-cc/--color-code can only be used with .cdx/.cdxml files."
+        )
+
+    from chemsmart.utils.datasets import PKaTableEntry
+
+    if PKaTableEntry.is_submission_table(filename):
+        raise ValueError(
+            "Table input detected for pKa job submission. "
+            "Use the 'batch' subcommand to process each table row, e.g. "
+            "'pka -s direct batch' (proton_index is read from the table)."
+        )
+
+    raise ValueError(
+        "-pi/--proton-index is required when launching new pKa "
+        "calculations (or use a .cdxml file with a coloured proton)."
+    )
+
+
 def apply_pka_molecule_charge_multiplicity(opt_settings, molecule):
     """Use charge/multiplicity from *molecule* when absent on *opt_settings*."""
     import copy
@@ -733,13 +786,11 @@ def batch_pka_jobs_from_cdxml(
     **kwargs,
 ):
     """Create pKa jobs from a CDXML batch input via coloured-proton detection."""
-    from chemsmart.io.file import PKaCDXFile
-
     filename = ctx.obj.get("filename")
     shared = ctx.obj["pka_shared"]
     proton_index, color_code = resolve_pka_submit_proton_options(ctx)
     try:
-        proton_index, pka_molecules = PKaCDXFile.resolve_proton_index(
+        proton_index, pka_molecules = resolve_proton_index(
             filename, proton_index, color_code
         )
     except ValueError as exc:
