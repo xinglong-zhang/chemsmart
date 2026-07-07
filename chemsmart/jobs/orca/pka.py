@@ -674,31 +674,6 @@ class ORCApKaJob(ORCAJob):
             ref_file = self.ref_conjugate_base_job.outputfile
         return ha_file, a_file, href_file, ref_file
 
-    def get_pka_outputs(self):
-        """Get ORCApKaOutput objects for completed pKa jobs."""
-        from chemsmart.io.orca.output import ORCApKaOutput
-
-        if not self._opt_jobs_are_complete():
-            raise ValueError(
-                "Cannot get thermochemistry: optimization jobs are not complete. "
-                "Run the pKa jobs first using job.run()."
-            )
-
-        ha_file, a_file, href_file, ref_file = self._pka_output_files()
-
-        return ORCApKaOutput.for_pka_species(
-            ha_file=ha_file,
-            a_file=a_file,
-            href_file=href_file,
-            ref_file=ref_file,
-            temperature=self.settings.temperature,
-            concentration=self.settings.concentration,
-            pressure=self.settings.pressure,
-            cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
-            cutoff_enthalpy=self.settings.cutoff_enthalpy,
-            energy_units=self.settings.energy_units,
-        )
-
     def compute_thermochemistry(self):
         """Compute and return thermochemistry results for all species."""
         from chemsmart.io.orca.output import ORCApKaOutput

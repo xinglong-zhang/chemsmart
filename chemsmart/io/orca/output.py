@@ -3843,42 +3843,8 @@ class ORCApKaOutput(ORCAOutput):
         }
 
     # ------------------------------------------------------------------
-    # Factory methods
+    # Multi-species pKa thermochemistry
     # ------------------------------------------------------------------
-
-    @classmethod
-    def for_pka_species(
-        cls,
-        ha_file=None,
-        a_file=None,
-        href_file=None,
-        ref_file=None,
-        temperature=298.15,
-        concentration=1.0,
-        pressure=1.0,
-        cutoff_entropy_grimme=100.0,
-        cutoff_enthalpy=100.0,
-        energy_units="hartree",
-    ):
-        """Create ORCApKaOutput objects for multiple pKa species."""
-        outputs = {}
-        kw = dict(
-            temperature=temperature,
-            concentration=concentration,
-            pressure=pressure,
-            cutoff_entropy_grimme=cutoff_entropy_grimme,
-            cutoff_enthalpy=cutoff_enthalpy,
-            energy_units=energy_units,
-        )
-        if ha_file is not None:
-            outputs["HA"] = cls(filename=ha_file, **kw)
-        if a_file is not None:
-            outputs["A"] = cls(filename=a_file, **kw)
-        if href_file is not None:
-            outputs["HRef"] = cls(filename=href_file, **kw)
-        if ref_file is not None:
-            outputs["Ref"] = cls(filename=ref_file, **kw)
-        return outputs
 
     @staticmethod
     def compute_pka_thermochemistry(

@@ -570,58 +570,6 @@ class GaussianpKaJob(GaussianJob):
             )
         return ha_file, a_file, href_file, ref_file
 
-    def get_pka_outputs(self):
-        """
-        Get Gaussian16pKaOutput objects for completed pKa jobs.
-
-        Creates Gaussian16pKaOutput objects using the output files from
-        completed optimization jobs. This provides access to electronic
-        energies (E) and quasi-harmonic Gibbs free energies (qh-G(T)) for
-        all species.
-
-        Returns:
-            dict: Dictionary with Gaussian16pKaOutput objects:
-                - 'HA': Output for protonated acid
-                - 'A': Output for conjugate base
-                - 'HRef': Output for reference acid (if available)
-                - 'Ref': Output for reference conjugate base (if available)
-
-        Raises:
-            ValueError: If optimization jobs are not complete.
-
-        Example:
-            job = GaussianpKaJob(...)
-            job.run()  # Run all jobs
-
-            outputs = job.get_pka_outputs()
-            print(f"E(HA) = {outputs['HA'].electronic_energy_in_units}")
-            print(f"qh-G(HA) = {outputs['HA'].qh_gibbs_free_energy}")
-            print(f"E(A-) = {outputs['A'].electronic_energy_in_units}")
-            print(f"qh-G(A-) = {outputs['A'].qh_gibbs_free_energy}")
-        """
-        from chemsmart.io.gaussian.output import Gaussian16pKaOutput
-
-        if not self._opt_jobs_are_complete():
-            raise ValueError(
-                "Cannot get thermochemistry: optimization jobs are not complete. "
-                "Run the pKa jobs first using job.run()."
-            )
-
-        ha_file, a_file, href_file, ref_file = self._pka_output_files()
-
-        return Gaussian16pKaOutput.for_pka_species(
-            ha_file=ha_file,
-            a_file=a_file,
-            href_file=href_file,
-            ref_file=ref_file,
-            temperature=self.settings.temperature,
-            concentration=self.settings.concentration,
-            pressure=self.settings.pressure,
-            cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
-            cutoff_enthalpy=self.settings.cutoff_enthalpy,
-            energy_units=self.settings.energy_units,
-        )
-
     def compute_thermochemistry(self):
         """
         Compute and return thermochemistry results for all species.

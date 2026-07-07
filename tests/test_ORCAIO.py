@@ -3297,64 +3297,6 @@ class TestORCApKaOutput:
             b.qh_gibbs_free_energy, self.PHENOL_B_QH_G, rtol=1e-8
         )
 
-    def test_for_pka_species_ha_and_a(self, orca_outputs_directory):
-        """Test for_pka_species with HA and A- files."""
-        files = self._files(orca_outputs_directory)
-        outputs = ORCApKaOutput.for_pka_species(
-            ha_file=files["ha_gas"],
-            a_file=files["a_gas"],
-            temperature=298.15,
-        )
-
-        assert "HA" in outputs
-        assert "A" in outputs
-        assert "HRef" not in outputs
-        assert "Ref" not in outputs
-
-        assert np.isclose(
-            outputs["HA"].electronic_energy_in_units, self.L2_HA_E, rtol=1e-8
-        )
-        assert np.isclose(
-            outputs["A"].electronic_energy_in_units, self.L2_A_E, rtol=1e-8
-        )
-
-    def test_for_pka_species_with_job_settings_thermo(
-        self, orca_outputs_directory
-    ):
-        """Test for_pka_species with thermochemistry params from job settings."""
-        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
-
-        files = self._files(orca_outputs_directory)
-        settings = ORCApKaJobSettings(
-            proton_index=1,
-            temperature=298.15,
-            concentration=1.0,
-            cutoff_entropy_grimme=100.0,
-            cutoff_enthalpy=100.0,
-            charge=0,
-            multiplicity=1,
-        )
-
-        outputs = ORCApKaOutput.for_pka_species(
-            ha_file=files["ha_gas"],
-            a_file=files["a_gas"],
-            temperature=settings.temperature,
-            concentration=settings.concentration,
-            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
-            cutoff_enthalpy=settings.cutoff_enthalpy,
-            energy_units=settings.energy_units,
-        )
-
-        assert "HA" in outputs
-        assert "A" in outputs
-        assert outputs["HA"].temperature == 298.15
-        assert np.isclose(
-            outputs["HA"].electronic_energy_in_units, self.L2_HA_E, rtol=1e-8
-        )
-        assert np.isclose(
-            outputs["A"].electronic_energy_in_units, self.L2_A_E, rtol=1e-8
-        )
-
     def test_compute_pka_thermochemistry_ha_and_a(
         self, orca_outputs_directory
     ):

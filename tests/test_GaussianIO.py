@@ -2660,37 +2660,6 @@ class TestGaussian16pKaOutput:
             result["qh_gibbs_free_energy"], self.HA_QH_G, rtol=1e-5
         )
 
-    def test_for_pka_species_ha_and_a(
-        self,
-        gaussian_pKa_HA_optimization_outputfile,
-        gaussian_pKa_A_optimization_outputfile,
-    ):
-        """Test for_pka_species with HA and A- files."""
-        outputs = Gaussian16pKaOutput.for_pka_species(
-            ha_file=gaussian_pKa_HA_optimization_outputfile,
-            a_file=gaussian_pKa_A_optimization_outputfile,
-            temperature=373.15,
-            concentration=1.0,
-            cutoff_entropy_grimme=100.0,
-            cutoff_enthalpy=100.0,
-        )
-
-        assert "HA" in outputs
-        assert "A" in outputs
-        assert "HRef" not in outputs
-        assert "Ref" not in outputs
-
-        # Verify HA values
-        assert np.isclose(
-            outputs["HA"].electronic_energy_in_units,
-            self.HA_E,
-            rtol=1e-6,
-        )
-        # Verify A- values
-        assert np.isclose(
-            outputs["A"].electronic_energy_in_units, self.A_E, rtol=1e-6
-        )
-
     def test_compute_pka_thermochemistry_ha_and_a(
         self,
         gaussian_pKa_HA_optimization_outputfile,
@@ -2793,49 +2762,6 @@ class TestGaussian16pKaOutput:
         # Verify A- values match reference
         assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
         assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
-
-    def test_for_pka_species_with_job_settings_thermo(
-        self,
-        gaussian_pKa_HA_optimization_outputfile,
-        gaussian_pKa_A_optimization_outputfile,
-    ):
-        """Test for_pka_species with thermochemistry params from job settings."""
-        from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
-
-        settings = GaussianpKaJobSettings(
-            proton_index=1,
-            temperature=373.15,
-            concentration=1.0,
-            cutoff_entropy_grimme=100.0,
-            cutoff_enthalpy=100.0,
-            charge=0,
-            multiplicity=1,
-        )
-
-        outputs = Gaussian16pKaOutput.for_pka_species(
-            ha_file=gaussian_pKa_HA_optimization_outputfile,
-            a_file=gaussian_pKa_A_optimization_outputfile,
-            temperature=settings.temperature,
-            concentration=settings.concentration,
-            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
-            cutoff_enthalpy=settings.cutoff_enthalpy,
-            energy_units=settings.energy_units,
-        )
-
-        assert "HA" in outputs
-        assert "A" in outputs
-        assert outputs["HA"].temperature == 373.15
-        assert outputs["A"].temperature == 373.15
-
-        # Verify values match reference
-        assert np.isclose(
-            outputs["HA"].electronic_energy_in_units,
-            self.HA_E,
-            rtol=1e-6,
-        )
-        assert np.isclose(
-            outputs["A"].electronic_energy_in_units, self.A_E, rtol=1e-6
-        )
 
     def test_thermochemistry_property_caching(
         self, gaussian_pKa_HA_optimization_outputfile
