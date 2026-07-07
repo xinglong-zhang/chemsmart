@@ -12,6 +12,7 @@ Gaussian calculations in computational workflows.
 """
 
 from .crest import GaussianCrestJob
+from .external import GaussianExternalJob
 from .custom import GaussianCustomJob
 from .dias import GaussianDIASJob
 from .irc import GaussianIRCJob
@@ -37,6 +38,7 @@ jobs = GaussianJob.subclasses()
 
 __all__ = [
     "GaussianCrestJob",
+    "GaussianExternalJob",
     "GaussianCustomJob",
     "GaussianDIASJob",
     "GaussianIRCJob",
