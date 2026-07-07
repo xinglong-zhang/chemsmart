@@ -18,6 +18,15 @@ from chemsmart.utils.utils import string2index_1based
 logger = logging.getLogger(__name__)
 
 
+def _find_element_parent(root, target):
+    """Return the parent element of *target* inside *root*, or None."""
+    for parent in root.iter():
+        for child in parent:
+            if child is target:
+                return parent
+    return None
+
+
 class SDFFile(FileMixin):
     """
     SDF file object.
@@ -693,15 +702,6 @@ class PKaCDXFile(CDXFile):
 
         return list_of_elements
 
-    @staticmethod
-    def _find_parent(root, target):
-        """Return the parent element of *target* inside *root*, or None."""
-        for parent in root.iter():
-            for child in parent:
-                if child is target:
-                    return parent
-        return None
-
     def _parse_cdxml_root(self):
         """Parse CDXML and return the XML root element."""
         try:
@@ -715,7 +715,7 @@ class PKaCDXFile(CDXFile):
     def _iter_top_level_fragments(self, root):
         """Yield top-level fragment elements, excluding nested node fragments."""
         for fragment in root.iter("fragment"):
-            parent = self._find_parent(root, fragment)
+            parent = _find_element_parent(root, fragment)
             if parent is not None and parent.tag == "n":
                 continue
             yield fragment
