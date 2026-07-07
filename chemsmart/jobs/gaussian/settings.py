@@ -11,6 +11,7 @@ parameter combinations, and conversion to/from various input formats.
 """
 
 import copy
+import inspect
 import logging
 import os
 import re
@@ -1182,6 +1183,73 @@ class GaussianpKaJobSettings(GaussianJobSettings):
             self.delta_G_proton = delta_G_proton
         else:
             self.delta_G_proton = self.DEFAULT_DELTA_G_PROTON
+
+    @classmethod
+    def build_gaussian_pka_settings(
+        cls, proton_index, shared, opt_settings, sp_settings=None
+    ):
+        """Build settings from CLI shared options and merged opt settings."""
+        cli_only = {"reference_color_code", "skip_completed"}
+        rename = {
+            "reference": "reference_file",
+            "delta_g_proton": "delta_G_proton",
+        }
+
+        pka_kwargs = {}
+        for key, value in shared.items():
+            if key in cli_only:
+                continue
+            pka_kwargs[rename.get(key, key)] = value
+
+        gs_params = {
+            name
+            for name, param in inspect.signature(
+                GaussianJobSettings.__init__
+            ).parameters.items()
+            if name != "self"
+            and param.kind
+            not in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            )
+        }
+        opt_kwargs = {
+            key: value
+            for key, value in vars(opt_settings).items()
+            if key in gs_params and value is not None and key not in pka_kwargs
+        }
+
+        def _first_non_none(*values):
+            for val in values:
+                if val is not None:
+                    return val
+            return None
+
+        solvent_model = _first_non_none(
+            pka_kwargs.get("solvent_model"),
+            getattr(opt_settings, "solvent_model", None),
+            (
+                getattr(sp_settings, "solvent_model", None)
+                if sp_settings
+                else None
+            ),
+            "SMD",
+        )
+        solvent_id = _first_non_none(
+            pka_kwargs.get("solvent_id"),
+            getattr(opt_settings, "solvent_id", None),
+            getattr(sp_settings, "solvent_id", None) if sp_settings else None,
+            "water",
+        )
+
+        pka_kwargs["solvent_model"] = solvent_model
+        pka_kwargs["solvent_id"] = solvent_id
+
+        return cls(
+            proton_index=proton_index,
+            **pka_kwargs,
+            **opt_kwargs,
+        )
 
     @property
     def has_reference_file(self):
