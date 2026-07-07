@@ -340,7 +340,7 @@ class GaussianpKaJob(GaussianJob):
             logger.info(opt_transition.message)
             return
 
-        # Run gas phase optimization jobs for reference acid (HB, B-) if provided
+        # Run gas phase optimization jobs for reference acid (HRef, Ref-) if provided
         if self.has_reference_jobs:
             self._run_ref_opt_jobs()
             ref_opt_transition = decide_phase_transition(
@@ -542,10 +542,10 @@ class GaussianpKaJob(GaussianJob):
     # =========================================================================
 
     def _pka_output_files(self):
-        """Return (ha_file, a_file, hb_file, b_file) output-path tuple.
+        """Return (ha_file, a_file, href_file, ref_file) output-path tuple.
 
         Centralises the repeated logic of resolving output file paths from
-        the four pKa species jobs.  Reference paths (hb_file, b_file) are
+        the four pKa species jobs.  Reference paths (href_file, ref_file) are
         only populated when reference jobs exist *and* their opt phase is
         complete; otherwise they are ``None``.
         """
@@ -557,18 +557,18 @@ class GaussianpKaJob(GaussianJob):
             if self.conjugate_base_job
             else None
         )
-        hb_file = None
-        b_file = None
+        href_file = None
+        ref_file = None
         if self.has_reference_jobs and self._ref_opt_jobs_are_complete():
-            hb_file = (
+            href_file = (
                 self.ref_acid_job.outputfile if self.ref_acid_job else None
             )
-            b_file = (
+            ref_file = (
                 self.ref_conjugate_base_job.outputfile
                 if self.ref_conjugate_base_job
                 else None
             )
-        return ha_file, a_file, hb_file, b_file
+        return ha_file, a_file, href_file, ref_file
 
     def get_pka_outputs(self):
         """
@@ -583,8 +583,8 @@ class GaussianpKaJob(GaussianJob):
             dict: Dictionary with Gaussian16pKaOutput objects:
                 - 'HA': Output for protonated acid
                 - 'A': Output for conjugate base
-                - 'HB': Output for reference acid (if available)
-                - 'B': Output for reference conjugate base (if available)
+                - 'HRef': Output for reference acid (if available)
+                - 'Ref': Output for reference conjugate base (if available)
 
         Raises:
             ValueError: If optimization jobs are not complete.
@@ -607,14 +607,14 @@ class GaussianpKaJob(GaussianJob):
                 "Run the pKa jobs first using job.run()."
             )
 
-        ha_file, a_file, hb_file, b_file = self._pka_output_files()
+        ha_file, a_file, href_file, ref_file = self._pka_output_files()
 
         return Gaussian16pKaOutput.from_pka_settings(
             settings=self.settings,
             ha_file=ha_file,
             a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
+            href_file=href_file,
+            ref_file=ref_file,
         )
 
     def compute_thermochemistry(self):
@@ -636,13 +636,13 @@ class GaussianpKaJob(GaussianJob):
                 "Run the pKa jobs first using job.run()."
             )
 
-        ha_file, a_file, hb_file, b_file = self._pka_output_files()
+        ha_file, a_file, href_file, ref_file = self._pka_output_files()
 
         return Gaussian16pKaOutput.compute_pka_thermochemistry(
             ha_file=ha_file,
             a_file=a_file,
-            href_file=hb_file,
-            ref_file=b_file,
+            href_file=href_file,
+            ref_file=ref_file,
             temperature=self.settings.temperature,
             concentration=self.settings.concentration,
             pressure=self.settings.pressure,
@@ -661,18 +661,47 @@ class GaussianpKaJob(GaussianJob):
                 "Run the pKa jobs first using job.run()."
             )
 
-        ha_file, a_file, hb_file, b_file = self._pka_output_files()
+        ha_gas, a_gas, href_gas, ref_gas = self._pka_output_files()
+        ha_solv = (
+            self.protonated_sp_job.outputfile
+            if self.protonated_sp_job
+            else None
+        )
+        a_solv = (
+            self.conjugate_base_sp_job.outputfile
+            if self.conjugate_base_sp_job
+            else None
+        )
+        href_solv = ref_solv = None
+        if self.has_reference_jobs:
+            href_solv = (
+                self.ref_acid_sp_job.outputfile
+                if self.ref_acid_sp_job
+                else None
+            )
+            ref_solv = (
+                self.ref_conjugate_base_sp_job.outputfile
+                if self.ref_conjugate_base_sp_job
+                else None
+            )
 
         Gaussian16pKaOutput.print_pka_summary(
-            ha_gas_file=ha_file,
-            a_gas_file=a_file,
-            href_gas_file=hb_file,
-            ref_gas_file=b_file,
+            ha_gas_file=ha_gas,
+            a_gas_file=a_gas,
+            href_gas_file=href_gas,
+            ref_gas_file=ref_gas,
+            ha_solv_file=ha_solv,
+            a_solv_file=a_solv,
+            href_solv_file=href_solv,
+            ref_solv_file=ref_solv,
+            pka_reference=getattr(self.settings, "reference_pka", None),
             temperature=self.settings.temperature,
             concentration=self.settings.concentration,
             pressure=self.settings.pressure,
             cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
             cutoff_enthalpy=self.settings.cutoff_enthalpy,
+            scheme=self.settings.scheme,
+            delta_G_proton=getattr(self.settings, "delta_G_proton", None),
         )
 
     @property

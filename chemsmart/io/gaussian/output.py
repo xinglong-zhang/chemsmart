@@ -3351,8 +3351,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
         settings,
         ha_file=None,
         a_file=None,
-        hb_file=None,
-        b_file=None,
+        href_file=None,
+        ref_file=None,
     ):
         """
         Create ``Gaussian16pKaOutput`` objects for a pKa thermochemistry set.
@@ -3363,7 +3363,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
 
         Like :meth:`from_settings`, this cannot build output objects from
         settings alone. At least one species output path (``ha_file``,
-        ``a_file``, ``hb_file``, or ``b_file``) must be provided because
+        ``a_file``, ``href_file``, or ``ref_file``) must be provided because
         computed energies and frequencies are always read from completed
         Gaussian logs on disk.
 
@@ -3383,7 +3383,7 @@ class Gaussian16pKaOutput(Gaussian16Output):
         the output parsers. In particular, ``reference_file`` in settings
         refers to an input geometry for job submission, not to a completed
         Gaussian output log; reference-species logs must still be passed
-        explicitly via ``hb_file`` / ``b_file``.
+        explicitly via ``href_file`` / ``ref_file``.
 
         Note:
             ``entropy_method`` is not currently stored on
@@ -3397,20 +3397,20 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 parameters shared across species.
             ha_file (str, optional): Path to HA (protonated acid) output file.
             a_file (str, optional): Path to A- (conjugate base) output file.
-            hb_file (str, optional): Path to HB (reference acid) output file.
-            b_file (str, optional): Path to B- (reference conjugate base)
+            href_file (str, optional): Path to HRef (reference acid) output file.
+            ref_file (str, optional): Path to Ref- (reference conjugate base)
                 output file.
 
         Returns:
             dict: ``Gaussian16pKaOutput`` objects keyed by species label
-            (``"HA"``, ``"A"``, ``"HB"``, ``"B"``). Only keys with a
+            (``"HA"``, ``"A"``, ``"HRef"``, ``"Ref"``). Only keys with a
             corresponding file argument are included.
         """
         return cls.for_pka_species(
             ha_file=ha_file,
             a_file=a_file,
-            hb_file=hb_file,
-            b_file=b_file,
+            href_file=href_file,
+            ref_file=ref_file,
             temperature=settings.temperature,
             concentration=settings.concentration,
             pressure=settings.pressure,
@@ -3424,8 +3424,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
         cls,
         ha_file=None,
         a_file=None,
-        hb_file=None,
-        b_file=None,
+        href_file=None,
+        ref_file=None,
         temperature=298.15,
         concentration=1.0,
         pressure=1.0,
@@ -3437,13 +3437,15 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Create Gaussian16pKaOutput objects for multiple pKa species.
 
         Factory method that creates output objects for all species involved
-        in pKa calculations: HA, A-, and optionally HB, B- for proton exchange.
+        in pKa calculations: HA, A-, and optionally HRef, Ref- for proton
+        exchange.
 
         Args:
             ha_file (str, optional): Path to HA (protonated acid) output file.
             a_file (str, optional): Path to A- (conjugate base) output file.
-            hb_file (str, optional): Path to HB (reference acid) output file.
-            b_file (str, optional): Path to B- (reference conjugate base) output file.
+            href_file (str, optional): Path to HRef (reference acid) output file.
+            ref_file (str, optional): Path to Ref- (reference conjugate base)
+                output file.
             temperature (float): Temperature in Kelvin. Default 298.15 K.
             concentration (float): Concentration in mol/L. Default 1.0 mol/L.
             pressure (float): Pressure in atm. Default 1.0 atm.
@@ -3455,8 +3457,8 @@ class Gaussian16pKaOutput(Gaussian16Output):
             dict: Dictionary with Gaussian16pKaOutput objects:
                 - 'HA': Output for protonated acid (if ha_file provided)
                 - 'A': Output for conjugate base (if a_file provided)
-                - 'HB': Output for reference acid (if hb_file provided)
-                - 'B': Output for reference conjugate base (if b_file provided)
+                - 'HRef': Output for reference acid (if href_file provided)
+                - 'Ref': Output for reference conjugate base (if ref_file provided)
 
         Example:
             outputs = Gaussian16pKaOutput.for_pka_species(
@@ -3481,10 +3483,10 @@ class Gaussian16pKaOutput(Gaussian16Output):
             outputs["HA"] = cls(filename=ha_file, **common_kwargs)
         if a_file is not None:
             outputs["A"] = cls(filename=a_file, **common_kwargs)
-        if hb_file is not None:
-            outputs["HB"] = cls(filename=hb_file, **common_kwargs)
-        if b_file is not None:
-            outputs["B"] = cls(filename=b_file, **common_kwargs)
+        if href_file is not None:
+            outputs["HRef"] = cls(filename=href_file, **common_kwargs)
+        if ref_file is not None:
+            outputs["Ref"] = cls(filename=ref_file, **common_kwargs)
 
         return outputs
 

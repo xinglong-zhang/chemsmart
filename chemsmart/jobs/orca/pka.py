@@ -649,54 +649,109 @@ class ORCApKaJob(ORCAJob):
     # Thermochemistry
     # ------------------------------------------------------------------
 
+    def _opt_jobs_are_complete(self):
+        """Return True when both target gas-phase optimization jobs finished."""
+        if not self.opt_jobs:
+            return False
+        return all(job.is_complete() for job in self.opt_jobs)
+
+    def _ref_opt_jobs_are_complete(self):
+        """Return True when reference opt jobs finished or are not configured."""
+        if not self.has_reference_jobs:
+            return True
+        if not self.ref_opt_jobs:
+            return False
+        return all(job.is_complete() for job in self.ref_opt_jobs)
+
+    def _pka_output_files(self):
+        """Return (ha_file, a_file, href_file, ref_file) output-path tuple."""
+        ha_file = self.protonated_job.outputfile
+        a_file = self.conjugate_base_job.outputfile
+        href_file = None
+        ref_file = None
+        if self.has_reference_jobs and self._ref_opt_jobs_are_complete():
+            href_file = self.ref_acid_job.outputfile
+            ref_file = self.ref_conjugate_base_job.outputfile
+        return ha_file, a_file, href_file, ref_file
+
     def get_pka_outputs(self):
         """Get ORCApKaOutput objects for completed pKa jobs."""
         from chemsmart.io.orca.output import ORCApKaOutput
 
-        ha_file = self.protonated_job.outputfile
-        a_file = self.conjugate_base_job.outputfile
-        hb_file = None
-        b_file = None
-        if self.has_reference_jobs:
-            hb_file = self.ref_acid_job.outputfile
-            b_file = self.ref_conjugate_base_job.outputfile
+        if not self._opt_jobs_are_complete():
+            raise ValueError(
+                "Cannot get thermochemistry: optimization jobs are not complete. "
+                "Run the pKa jobs first using job.run()."
+            )
+
+        ha_file, a_file, href_file, ref_file = self._pka_output_files()
 
         return ORCApKaOutput.from_pka_settings(
             settings=self.settings,
             ha_file=ha_file,
             a_file=a_file,
-            href_file=hb_file,
-            ref_file=b_file,
+            href_file=href_file,
+            ref_file=ref_file,
+        )
+
+    def compute_thermochemistry(self):
+        """Compute and return thermochemistry results for all species."""
+        from chemsmart.io.orca.output import ORCApKaOutput
+
+        if not self._opt_jobs_are_complete():
+            raise ValueError(
+                "Cannot compute thermochemistry: optimization jobs are not complete. "
+                "Run the pKa jobs first using job.run()."
+            )
+
+        ha_file, a_file, href_file, ref_file = self._pka_output_files()
+
+        return ORCApKaOutput.compute_pka_thermochemistry(
+            ha_file=ha_file,
+            a_file=a_file,
+            href_file=href_file,
+            ref_file=ref_file,
+            temperature=self.settings.temperature,
+            concentration=self.settings.concentration,
+            pressure=self.settings.pressure,
+            cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
+            cutoff_enthalpy=self.settings.cutoff_enthalpy,
+            energy_units=self.settings.energy_units,
         )
 
     def print_thermochemistry(self):
         """Print formatted thermochemistry summary to stdout."""
         from chemsmart.io.orca.output import ORCApKaOutput
 
-        ha_gas = self.protonated_job.outputfile
-        a_gas = self.conjugate_base_job.outputfile
+        if not self._opt_jobs_are_complete():
+            raise ValueError(
+                "Cannot print thermochemistry: optimization jobs are not complete. "
+                "Run the pKa jobs first using job.run()."
+            )
+
+        ha_gas, a_gas, href_gas, ref_gas = self._pka_output_files()
         ha_solv = self.protonated_sp_job.outputfile
         a_solv = self.conjugate_base_sp_job.outputfile
-        hb_gas = hb_solv = b_gas = b_solv = None
+        href_solv = ref_solv = None
         if self.has_reference_jobs:
-            hb_gas = self.ref_acid_job.outputfile
-            b_gas = self.ref_conjugate_base_job.outputfile
-            hb_solv = self.ref_acid_sp_job.outputfile
-            b_solv = self.ref_conjugate_base_sp_job.outputfile
+            href_solv = self.ref_acid_sp_job.outputfile
+            ref_solv = self.ref_conjugate_base_sp_job.outputfile
 
         ORCApKaOutput.print_pka_summary(
             ha_gas_file=ha_gas,
             a_gas_file=a_gas,
-            href_gas_file=hb_gas,
-            ref_gas_file=b_gas,
+            href_gas_file=href_gas,
+            ref_gas_file=ref_gas,
             ha_solv_file=ha_solv,
             a_solv_file=a_solv,
-            href_solv_file=hb_solv,
-            ref_solv_file=b_solv,
+            href_solv_file=href_solv,
+            ref_solv_file=ref_solv,
             pka_reference=self.settings.reference_pka,
             temperature=self.settings.temperature,
             concentration=self.settings.concentration,
             pressure=self.settings.pressure,
             cutoff_entropy_grimme=self.settings.cutoff_entropy_grimme,
             cutoff_enthalpy=self.settings.cutoff_enthalpy,
+            scheme=self.settings.scheme,
+            delta_G_proton=getattr(self.settings, "delta_G_proton", None),
         )

@@ -3848,7 +3848,44 @@ class ORCApKaOutput(ORCAOutput):
 
     @classmethod
     def from_settings(cls, filename, settings):
-        """Create from ORCApKaJobSettings."""
+        """
+        Create an ``ORCApKaOutput`` using thermochemistry settings.
+
+        This factory copies the thermochemistry-related fields from
+        ``ORCApKaJobSettings`` onto an output parser for a single ORCA output
+        file. It does **not** construct an output object from settings alone:
+        ``filename`` is always required because energies and frequencies are
+        read from the completed ORCA output on disk.
+
+        Mapped without loss from ``ORCApKaJobSettings``:
+
+        * ``temperature``
+        * ``concentration``
+        * ``pressure``
+        * ``cutoff_entropy_grimme``
+        * ``cutoff_enthalpy``
+        * ``energy_units``
+
+        Job-submission fields on the settings object (for example
+        ``proton_index``, ``scheme``, reference-acid options, charge, basis,
+        solvent model for follow-up SP jobs) are intentionally not stored on
+        the output parser because they do not affect parsing of an existing
+        output file.
+
+        Note:
+            ``entropy_method`` is not currently stored on
+            ``ORCApKaJobSettings``; the output parser therefore uses its
+            default (``"grimme"``). Post-processing via ``chemsmart run pka``
+            passes ``entropy_method`` directly from CLI options instead.
+
+        Args:
+            filename (str): Path to a completed ORCA output file.
+            settings (ORCApKaJobSettings): pKa job settings containing
+                thermochemistry parameters.
+
+        Returns:
+            ORCApKaOutput: Configured output object.
+        """
         return cls(
             filename=filename,
             temperature=settings.temperature,
@@ -3868,7 +3905,58 @@ class ORCApKaOutput(ORCAOutput):
         href_file=None,
         ref_file=None,
     ):
-        """Create ORCApKaOutput objects for pKa species."""
+        """
+        Create ``ORCApKaOutput`` objects for a pKa thermochemistry set.
+
+        Batch wrapper around :meth:`for_pka_species` that applies shared
+        thermochemistry parameters from ``ORCApKaJobSettings`` to one output
+        parser per supplied species output file.
+
+        Like :meth:`from_settings`, this cannot build output objects from
+        settings alone. At least one species output path (``ha_file``,
+        ``a_file``, ``href_file``, or ``ref_file``) must be provided because
+        computed energies and frequencies are always read from completed ORCA
+        outputs on disk.
+
+        Mapped without loss from ``ORCApKaJobSettings`` (shared by all
+        returned species):
+
+        * ``temperature``
+        * ``concentration``
+        * ``pressure``
+        * ``cutoff_entropy_grimme``
+        * ``cutoff_enthalpy``
+        * ``energy_units``
+
+        Job-submission fields on the settings object (for example
+        ``proton_index``, ``scheme``, ``reference_file``, charge, basis,
+        solvent model for follow-up SP jobs) are intentionally not stored on
+        the output parsers. In particular, ``reference_file`` in settings
+        refers to an input geometry for job submission, not to a completed
+        ORCA output file; reference-species outputs must still be passed
+        explicitly via ``href_file`` / ``ref_file``.
+
+        Note:
+            ``entropy_method`` is not currently stored on
+            ``ORCApKaJobSettings``; each output parser therefore uses its
+            default (``"grimme"``). Post-processing via
+            ``chemsmart run pka`` passes ``entropy_method`` directly from
+            CLI options instead.
+
+        Args:
+            settings: ``ORCApKaJobSettings`` with thermochemistry parameters
+                shared across species.
+            ha_file (str, optional): Path to HA (protonated acid) output file.
+            a_file (str, optional): Path to A- (conjugate base) output file.
+            href_file (str, optional): Path to HRef (reference acid) output file.
+            ref_file (str, optional): Path to Ref- (reference conjugate base)
+                output file.
+
+        Returns:
+            dict: ``ORCApKaOutput`` objects keyed by species label
+            (``"HA"``, ``"A"``, ``"HRef"``, ``"Ref"``). Only keys with a
+            corresponding file argument are included.
+        """
         return cls.for_pka_species(
             ha_file=ha_file,
             a_file=a_file,
@@ -3896,6 +3984,7 @@ class ORCApKaOutput(ORCAOutput):
         cutoff_enthalpy=100.0,
         energy_units="hartree",
     ):
+        """Create ORCApKaOutput objects for multiple pKa species."""
         outputs = {}
         kw = dict(
             temperature=temperature,

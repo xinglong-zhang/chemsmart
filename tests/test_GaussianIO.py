@@ -2677,8 +2677,8 @@ class TestGaussian16pKaOutput:
 
         assert "HA" in outputs
         assert "A" in outputs
-        assert "HB" not in outputs
-        assert "B" not in outputs
+        assert "HRef" not in outputs
+        assert "Ref" not in outputs
 
         # Verify HA values
         assert np.isclose(
