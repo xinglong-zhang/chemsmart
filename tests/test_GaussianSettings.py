@@ -3,6 +3,7 @@ import pytest
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.jobs.gaussian.settings import (
+    GaussianIRCJobSettings,
     GaussianJobSettings,
     GaussianLinkJobSettings,
     GaussianQMMMJobSettings,
@@ -11,6 +12,21 @@ from chemsmart.jobs.settings import read_molecular_job_yaml
 
 
 class TestGaussianJobSettings:
+    def test_irc_route_uses_default_keyword_bundle(self):
+        settings = GaussianIRCJobSettings(
+            functional="B3LYP",
+            basis="6-31G*",
+            charge=0,
+            multiplicity=1,
+            jobtype="irc",
+        )
+
+        assert "irc=(" in settings.route_string
+        assert "calcfc" in settings.route_string
+        assert "stepsize=10" in settings.route_string
+        assert "maxpoints=20" in settings.route_string
+        assert "None" not in settings.route_string
+
     def test_merge_dict(self):
         settings = GaussianJobSettings.default()
         settings.charge = None

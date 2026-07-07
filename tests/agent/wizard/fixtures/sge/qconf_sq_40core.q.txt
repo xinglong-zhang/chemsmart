@@ -1,0 +1,5 @@
+qname 40core.q
+slots 40
+h_rt 86400
+h_vmem 187.4G
+state enabled

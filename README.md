@@ -233,6 +233,128 @@ Finally one can clean up by running
 make clean
 ``` -->
 
+## AI Agent (`chemsmart agent`)
+
+`chemsmart agent` is a natural-language layer for preparing, checking, and
+explaining CHEMSMART Gaussian/ORCA workflows. It is intentionally
+CLI-grounded: when the request is to create or run a job, the primary artifact
+is a real `chemsmart run ...` or `chemsmart sub ...` command, followed by
+parser facts, safe dry-run evidence, and user-visible warnings or rejects.
+
+Current local-agent status and performance are tracked in
+[`docs/agent-current-status.md`](docs/agent-current-status.md). The v13.1 local
+model adapter, dataset evidence, and clean eval summary are tracked in
+[`docs/agent-v13_1-local-adapter.md`](docs/agent-v13_1-local-adapter.md). The
+agent implementation map is in [`chemsmart/agent/README.md`](chemsmart/agent/README.md).
+
+### TUI preview
+
+The TUI renders the generated command, runtime semantic evidence, deterministic
+command interpretation, and collapsible public decision trace.
+
+![chemsmart agent dry-run TUI](tests/agent/tui/snapshots/dry_run_input.svg)
+
+Typing `/` opens the slash-command palette; typing more characters filters the
+available commands.
+
+![chemsmart agent slash command list](tests/agent/tui/snapshots/slash_help.svg)
+
+### Setup
+
+```bash
+pip install -e ".[agent-tui]"            # interactive TUI extra (Textual/Rich)
+cp api.env.example api.env               # then set ai_api_key=...
+chemsmart agent doctor                   # verify provider, SSH, permissions
+```
+
+Modern provider configuration is read from
+`~/.chemsmart/agent/agent.yaml`. The active provider may be API-backed
+(`openai`/`anthropic`) or local (`local` with PyTorch or MLX). If a provider
+entry sets `project: test`, that project is runtime-owned and automatically
+attached to generated commands unless the user explicitly chooses another
+project.
+
+### Entry points
+
+| Command | Purpose |
+|---|---|
+| `chemsmart agent` | Launch the Textual TUI (`--plain` for conservative terminals) |
+| `chemsmart agent ask "..."` | One-shot synthesis/explanation request |
+| `chemsmart agent run --dry-submit "..."` | Full agent loop with dry-run previews and no remote submit |
+| `chemsmart agent resume <session-id>` | Continue a paused/audited session |
+| `chemsmart agent sessions` | List recent sessions |
+| `chemsmart agent tools` | Show registered runtime tools |
+| `chemsmart agent doctor` | Provider/SSH/permission health check |
+
+Inside the TUI, use `/mode ask` for command synthesis and command explanation,
+`/mode run` for the full tool-loop harness, and `/init` to build a project YAML
+from a reported computational method.
+
+### Current agent behavior
+
+- **CLI-first job synthesis.** Job requests produce real CHEMSMART commands
+  before explanation. Frontier/API providers may explain, critique, or repair a
+  command, but the deterministic parser and runtime semantic gate remain the
+  source of truth.
+- **Deterministic command parser.** The UI explains workspace, execution mode,
+  program, job type, server, dry-run status, input file, charge/multiplicity,
+  project, method/basis, solvent, route parameters, and job-specific options.
+- **Runtime semantic gate.** Generated commands are checked through safe fake or
+  dry-run execution and, when possible, generated `.com`/`.inp` evidence.
+  Gaussian TS routes reject duplicate runtime-owned TS tokens and malformed
+  `opt=(...)` blocks.
+- **Project YAML harness.** The agent can extract a literature protocol, render
+  CHEMSMART `gas:`/`solv:` YAML, validate it through project settings, critique
+  it, and write it only after approval.
+- **Basis-set lookup.** The `search_basis_sets` tool uses a local
+  Basis-Set-Exchange-derived catalog and returns only top-k candidates. It
+  handles common phrases such as "Karlsruhe triple zeta diffuse",
+  "RI fit for def2-TZVP", and "six thirty one star" without injecting the full
+  basis catalog into the prompt.
+- **Public decision trace.** API-routed TUI turns expose a collapsible routing
+  trace with action, confidence, observable evidence, rejected action classes,
+  and caveats. This is user-auditable routing evidence, not hidden
+  chain-of-thought.
+
+### Permission modes
+
+The agent is gated by a runtime permission mode. Pick the mode that matches how
+much autonomy you want:
+
+| Mode | Auto-allowed | Requires approval |
+|---|---|---|
+| `read-only` | `read`, `ssh_probe`, `scheduler_query`, `log_tail`, project-YAML validation/critique, `search_basis_sets` | edits, local runs, remote submits, project YAML writes |
+| `accept-edits` | read-only set + edit-safe writes | `run_local`, `submit_hpc`, always-approval tools |
+| `bypass` | everything except the `NEVER_AUTO_ALLOW` denylist (`sudo`, `rm -rf /`, `curl \| sh`, etc.) | commands matching never-auto-allow patterns |
+| `plan` | no runtime tools | every tool |
+
+### Tool catalog
+
+The default registry currently exposes 24 tools:
+
+| Group | Tools | What they do |
+|---|---|---|
+| Chemistry | `build_molecule`, `recommend_method`, `build_gaussian_settings`, `build_orca_settings`, `build_job`, `dry_run_input`, `extract_optimized_geometry`, `validate_runtime` | Compose and validate Gaussian/ORCA jobs from natural language |
+| Command grounding | `search_basis_sets` | Resolve basis-set phrases to compact BSE-backed top-k candidates |
+| Project YAML | `extract_project_protocol`, `render_project_yaml`, `validate_project_yaml`, `critic_project_yaml`, `write_project_yaml` | Build and audit CHEMSMART project settings from reported methods |
+| Execution | `run_local`, `submit_hpc`, `wizard_probe`, `wizard_refresh`, `wizard_verify`, `wizard_write` | Run locally, submit to HPC, or profile server YAMLs interactively |
+| HPC inspection | `read`, `ssh_probe`, `scheduler_query`, `log_tail` | Read local files, run safelisted SSH probes, query schedulers, and tail remote logs |
+| Control flow | `ask_user` (virtual) | Ask for missing structured slots such as server, job ID, log path, or scheduler kind |
+
+### Session artifacts
+
+Every turn writes `~/.chemsmart/agent/sessions/<id>/`:
+
+- `decision_log.jsonl` — append-only event log: requests, tool calls, outcomes,
+  approvals, semantic evidence, and critic/trace data
+- `session_metadata.json` — intent, timing, blocked status, model usage, and
+  harness verdict metadata
+- `harness_result.json` when the runtime harness evaluates generated inputs
+- Generated `.com` / `.inp` files for dry-run or submitted jobs
+
+Resume with `chemsmart agent resume <id>` — conversation memory and entity slots
+reload from the decision log.
+
 ## Testing Installations
 
 Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 

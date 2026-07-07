@@ -81,24 +81,15 @@ class Executable(RegistryMixin):
         server_yaml = YAMLFile(filename=server_yaml_file)
 
         # Extract configuration for the specific program
-        executable_folder = os.path.expanduser(
-            server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
-        )
-        local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "LOCAL_RUN", False
-        )
-        conda_env = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "CONDA_ENV", None
-        )
-        modules = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "MODULES", None
-        )
-        scripts = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "SCRIPTS", None
-        )
-        envars = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
-            "ENVARS", None
-        )
+        program_config = server_yaml.yaml_contents_dict.get(cls.PROGRAM, {})
+        executable_folder = program_config.get("EXEFOLDER")
+        if executable_folder is not None:
+            executable_folder = os.path.expanduser(executable_folder)
+        local_run = program_config.get("LOCAL_RUN", False)
+        conda_env = program_config.get("CONDA_ENV", None)
+        modules = program_config.get("MODULES", None)
+        scripts = program_config.get("SCRIPTS", None)
+        envars = program_config.get("ENVARS", None)
 
         # Strip comments from configuration strings
         if conda_env is not None:

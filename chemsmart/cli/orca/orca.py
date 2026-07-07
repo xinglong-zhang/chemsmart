@@ -117,7 +117,7 @@ def click_orca_settings_options(f):
         type=click.Choice(
             ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
         ),
-        default="defgrid2",  # default used in ORCA is defgrid2
+        default=None,
         help="Grid for numerical integration. Choices are "
         "['defgrid1', 'defgrid2', 'defgrid3'].",
     )
@@ -192,7 +192,12 @@ def click_orca_settings_options(f):
         "--additional-route-parameters",
         type=str,
         default=None,
-        help="Additional route parameters.",
+        help=(
+            "Extra keywords appended to the ORCA simple-input ('!') line. "
+            "ORCA has no separate frequency subcommand or flag: to run an "
+            "optimization + frequency job, pass 'freq' here (the opt job then "
+            "renders '! Opt Freq ...'). Example: --additional-route-parameters freq."
+        ),
     )
     @click.option(
         "--forces/--no-forces",

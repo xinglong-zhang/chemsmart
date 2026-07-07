@@ -86,6 +86,11 @@ class Server(RegistryMixin):
         """
         return f"Server(name={self.name})"
 
+    @property
+    def config(self):
+        """Return the underlying server configuration dictionary."""
+        return self.kwargs
+
     @classmethod
     def from_dict(cls, d):
         """

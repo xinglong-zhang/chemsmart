@@ -95,7 +95,7 @@ class JobRunner(RegistryMixin):
     def scratch_dir(self, value):
         """Allow explicit setting of scratch_dir."""
         if value is not None:
-            value = os.path.expanduser(value)  # Expand '~' to absolute path
+            value = self._normalize_path_string(value)
             if not os.path.exists(value):
                 raise FileNotFoundError(
                     f"Specified scratch dir does not exist: {value}"
@@ -103,10 +103,10 @@ class JobRunner(RegistryMixin):
         self._scratch_dir = value
 
     @lru_cache(maxsize=12)
-    def _set_scratch(self):
-        """Determine the scratch directory, considering multiple sources."""
+    def _resolve_scratch_dir_candidate(self):
+        """Return the scratch-dir candidate using production precedence."""
         if self._scratch_dir is not None:
-            return self._scratch_dir  # Use explicitly set directory
+            return self._scratch_dir
 
         scratch_dir = None
         if self.executable is not None:
@@ -132,13 +132,27 @@ class JobRunner(RegistryMixin):
                 f"Could not determine scratch dir for {self}. Not using scratch."
             )
             self.scratch = False
-        else:
-            # check that the scratch folder exists
-            scratch_dir = os.path.expanduser(scratch_dir)
-            if not os.path.exists(scratch_dir):
-                raise FileNotFoundError(
-                    f"Specified scratch dir does not exist: {scratch_dir}"
-                )
+        return scratch_dir
+
+    @staticmethod
+    def _normalize_path_string(path):
+        """Expand user and environment variables in a path string."""
+        if path is None:
+            return None
+        return os.path.expanduser(os.path.expandvars(path))
+
+    @lru_cache(maxsize=12)
+    def _set_scratch(self):
+        """Determine the scratch directory, considering multiple sources."""
+        scratch_dir = self._resolve_scratch_dir_candidate()
+        if scratch_dir is None:
+            return scratch_dir
+
+        scratch_dir = self._normalize_path_string(scratch_dir)
+        if not os.path.exists(scratch_dir):
+            raise FileNotFoundError(
+                f"Specified scratch dir does not exist: {scratch_dir}"
+            )
         return scratch_dir
 
     def __repr__(self):
@@ -256,8 +270,8 @@ class JobRunner(RegistryMixin):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
-        candidate_runners = []
 
+        matching = []
         for runner in runners:
             logger.debug(f"Checking runner: {runner} for job: {job}")
             runner_jobtypes = runner.JOBTYPES
@@ -267,31 +281,33 @@ class JobRunner(RegistryMixin):
                 runner_jobtypes = []
 
             if jobtype in runner_jobtypes:
-                candidate_runners.append(runner)
+                matching.append(runner)
 
-        if candidate_runners:
-            selected_runner = None
-            for runner in candidate_runners:
-                if runner.FAKE == fake:
-                    selected_runner = runner
+        if matching:
+            runner = None
+            for candidate in matching:
+                if bool(getattr(candidate, "FAKE", False)) is bool(fake):
+                    runner = candidate
                     break
 
-            if selected_runner is None:
-                selected_runner = candidate_runners[0]
+            if runner is None:
+                runner = matching[0]
 
-            logger.info(f"Using job runner: {selected_runner} for job: {job}")
+            logger.info(f"Using job runner: {runner} for job: {job}")
 
             # If scratch is None, use the runner's default scratch value
-            if scratch is not None:
-                scratch = scratch
-            else:
-                scratch = selected_runner.SCRATCH
-            logger.info(
-                f"Using scratch={scratch} for job runner: {selected_runner}"
+            scratch = (
+                scratch
+                if scratch is not None
+                else getattr(runner, "SCRATCH", None)
             )
+            logger.info(f"Using scratch={scratch} for job runner: {runner}")
 
-            return selected_runner(
-                server=server, scratch=scratch, fake=fake, **kwargs
+            return runner(
+                server=server,
+                scratch=scratch,
+                fake=fake,
+                **kwargs,
             )
 
         raise ValueError(
