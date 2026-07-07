@@ -845,9 +845,7 @@ def clean_rotational_constants_by_geometry(
                     cleaned = vals.copy()
                     status = "nonlinear"
 
-    logger.debug(
-        "Cleaned rotational constants: %s, status: %s", cleaned, status
-    )
+    logger.debug(f"Cleaned rotational constants: {cleaned}, status: {status}")
     if return_status:
         return cleaned, status
     return cleaned
