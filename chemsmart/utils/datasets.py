@@ -685,7 +685,9 @@ class PKaOutputTableEntry:
 
     def _detect_output_program(self, suffix_candidates):
         """Detect Gaussian/ORCA from basename outputs or explicit row paths."""
-        from chemsmart.utils.io import detect_program_type_from_files
+        from chemsmart.utils.io import get_program_type_from_file
+
+        allowed_programs = {"gaussian", "orca"}
 
         for path_group in (
             self._basename_output_paths(suffix_candidates),
@@ -693,13 +695,21 @@ class PKaOutputTableEntry:
         ):
             if not path_group:
                 continue
-            try:
-                return detect_program_type_from_files(
-                    path_group,
-                    allowed_programs={"gaussian", "orca"},
-                )
-            except ValueError:
+
+            programs = set()
+            for fp in path_group:
+                detected = get_program_type_from_file(fp)
+                if detected != "unknown":
+                    programs.add(detected)
+
+            if len(programs) != 1:
                 continue
+
+            program = next(iter(programs))
+            if program not in allowed_programs:
+                continue
+            return program
+
         return None
 
     def _resolve_filenames(self):

@@ -373,51 +373,6 @@ def get_program_type_from_file(filepath):
     return "unknown"
 
 
-def detect_program_type_from_files(filepaths, allowed_programs=None):
-    """Detect a single QC program type from multiple output files.
-
-    Args:
-        filepaths (Iterable[str]): Output file paths to inspect.
-        allowed_programs (set[str] | None): If provided, require the detected
-            program to be a member of this set.
-
-    Returns:
-        str: Detected program name.
-
-    Raises:
-        ValueError: If no program can be detected, multiple programs are
-            detected, or the program is not in ``allowed_programs``.
-    """
-    detected = {}
-    programs = set()
-    for fp in filepaths:
-        program = get_program_type_from_file(fp)
-        detected[fp] = program
-        if program != "unknown":
-            programs.add(program)
-
-    if not programs:
-        raise ValueError(
-            "Could not detect output-file program type from supplied "
-            "files. Supported: Gaussian and ORCA output files."
-        )
-    if len(programs) > 1:
-        pairs = ", ".join(f"{k}: {v}" for k, v in detected.items())
-        raise ValueError(
-            "Supplied files contain mixed program types. "
-            "Use outputs from a single QC program.\n"
-            f"Detected: {pairs}"
-        )
-
-    program = next(iter(programs))
-    if allowed_programs is not None and program not in allowed_programs:
-        raise ValueError(
-            f"Detected unsupported program '{program}'. "
-            f"Only {sorted(allowed_programs)} are supported."
-        )
-    return program
-
-
 def discover_pka_target_companion_outputs(ha_gas_path, program=None):
     """Infer A- and solvent SP paths from a HA gas-phase output file."""
     from chemsmart.utils.datasets import (
