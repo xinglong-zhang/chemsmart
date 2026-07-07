@@ -3265,10 +3265,37 @@ class Gaussian16pKaOutput(Gaussian16Output):
     @classmethod
     def from_settings(cls, filename, settings):
         """
-        Create a Gaussian16pKaOutput from GaussianpKaJobSettings.
+        Create a ``Gaussian16pKaOutput`` using thermochemistry settings.
+
+        This factory copies the thermochemistry-related fields from
+        ``GaussianpKaJobSettings`` onto an output parser for a single
+        Gaussian log file. It does **not** construct an output object from
+        settings alone: ``filename`` is always required because energies and
+        frequencies are read from the completed Gaussian output on disk.
+
+        Mapped without loss from ``GaussianpKaJobSettings``:
+
+        * ``temperature``
+        * ``concentration``
+        * ``pressure``
+        * ``cutoff_entropy_grimme``
+        * ``cutoff_enthalpy``
+        * ``energy_units``
+
+        Job-submission fields on the settings object (for example
+        ``proton_index``, ``scheme``, reference-acid options, charge, basis,
+        solvent model for follow-up SP jobs) are intentionally not stored on
+        the output parser because they do not affect parsing of an existing
+        log file.
+
+        Note:
+            ``entropy_method`` is not currently stored on
+            ``GaussianpKaJobSettings``; the output parser therefore uses its
+            default (``"grimme"``). Post-processing via ``chemsmart run pka``
+            passes ``entropy_method`` directly from CLI options instead.
 
         Args:
-            filename (str): Path to Gaussian output file.
+            filename (str): Path to a completed Gaussian output file.
             settings (GaussianpKaJobSettings): pKa job settings containing
                 thermochemistry parameters.
 
@@ -3328,21 +3355,23 @@ class Gaussian16pKaOutput(Gaussian16Output):
         b_file=None,
     ):
         """
-        Create Gaussian16pKaOutput objects from GaussianpKaJobSettings.
+        Create ``Gaussian16pKaOutput`` objects from ``GaussianpKaJobSettings``.
 
-        Factory method that creates output objects for pKa species using
-        settings from a GaussianpKaJobSettings object.
+        Like :meth:`from_settings`, this requires explicit output file paths
+        for each species. Settings supply shared thermochemistry parameters
+        only; computed energies still come from the Gaussian logs.
 
         Args:
-            settings: GaussianpKaJobSettings object containing thermochemistry
-                parameters (temperature, concentration, cutoffs, etc.).
+            settings: ``GaussianpKaJobSettings`` with thermochemistry
+                parameters shared across species.
             ha_file (str, optional): Path to HA (protonated acid) output file.
             a_file (str, optional): Path to A- (conjugate base) output file.
             hb_file (str, optional): Path to HB (reference acid) output file.
-            b_file (str, optional): Path to B- (reference conjugate base) output file.
+            b_file (str, optional): Path to B- (reference conjugate base)
+                output file.
 
         Returns:
-            dict: Dictionary with Gaussian16pKaOutput objects for each species.
+            dict: ``Gaussian16pKaOutput`` objects keyed by species label.
         """
         return cls.for_pka_species(
             ha_file=ha_file,
