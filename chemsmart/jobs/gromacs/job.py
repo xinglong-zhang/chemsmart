@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+"""
+GROMACS job definitions.
+"""
+
 from pathlib import Path
-from types import SimpleNamespace
 
 from chemsmart.jobs.job import Job
 
@@ -46,6 +49,13 @@ class GromacsJob(Job):
         barostat=None,
         constraints=None,
         constraint_algorithm=None,
+        nsteps=None,
+        emtol=None,
+        emstep=None,
+        tau_t=None,
+        tc_grps=None,
+        tau_p=None,
+        compressibility=None,
         box_type="cubic",
         box_distance=1.0,
         solvent_file=None,
@@ -92,14 +102,20 @@ class GromacsJob(Job):
             else None
         )
         self.boxed_structure_file = (
-            Path(boxed_structure_file) if boxed_structure_file else None
+            Path(boxed_structure_file)
+            if boxed_structure_file
+            else None
         )
         self.solvated_structure_file = (
-            Path(solvated_structure_file) if solvated_structure_file else None
+            Path(solvated_structure_file)
+            if solvated_structure_file
+            else None
         )
         self.ions_tpr_file = Path(ions_tpr_file) if ions_tpr_file else None
         self.ionized_structure_file = (
-            Path(ionized_structure_file) if ionized_structure_file else None
+            Path(ionized_structure_file)
+            if ionized_structure_file
+            else None
         )
 
         self.force_field = force_field
@@ -112,6 +128,14 @@ class GromacsJob(Job):
         self.barostat = barostat
         self.constraints = constraints
         self.constraint_algorithm = constraint_algorithm
+
+        self.nsteps = nsteps
+        self.emtol = emtol
+        self.emstep = emstep
+        self.tau_t = tau_t
+        self.tc_grps = tc_grps
+        self.tau_p = tau_p
+        self.compressibility = compressibility
 
         self.box_type = box_type
         self.box_distance = box_distance
@@ -180,7 +204,8 @@ class GromacsJob(Job):
         ]
 
         return all(
-            path is not None and Path(path).exists() for path in required_files
+            path is not None and Path(path).exists()
+            for path in required_files
         )
 
     def has_required_full_setup_inputs(self):
@@ -206,17 +231,6 @@ class GromacsJob(Job):
 
         if self._use_default_tpr_file:
             self.tpr_file = Path(self.folder) / f"{self.label}.tpr"
-
-    def _output(self):
-        if self.tpr_file is None:
-            return None
-        log_file = Path(self.tpr_file).with_suffix(".log")
-        if not log_file.exists():
-            return None
-        text = log_file.read_text(encoding="utf-8", errors="ignore")
-        return SimpleNamespace(
-            normal_termination="Finished mdrun" in text,
-        )
 
 
 class GromacsEMJob(GromacsJob):
@@ -270,6 +284,44 @@ class GromacsNVTJob(GromacsJob):
         self,
         molecule=None,
         label="gromacs_nvt",
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=None,
+        input_pdb=None,
+        top_file=None,
+        tpr_file=None,
+        itp_files=None,
+        index_file=None,
+        workflow="prepared",
+        **kwargs,
+    ):
+        super().__init__(
+            molecule=molecule,
+            label=label,
+            jobrunner=jobrunner,
+            mdp_file=mdp_file,
+            structure_file=structure_file,
+            input_pdb=input_pdb,
+            top_file=top_file,
+            tpr_file=tpr_file,
+            itp_files=itp_files,
+            index_file=index_file,
+            workflow=workflow,
+            **kwargs,
+        )
+
+
+class GromacsNPTJob(GromacsJob):
+    """
+    NPT equilibration job for GROMACS.
+    """
+
+    TYPE = "gmxnpt"
+
+    def __init__(
+        self,
+        molecule=None,
+        label="gromacs_npt",
         jobrunner=None,
         mdp_file=None,
         structure_file=None,

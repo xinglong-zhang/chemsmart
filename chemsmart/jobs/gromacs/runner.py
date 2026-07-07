@@ -1,12 +1,13 @@
-"""GROMACS job runner for executing molecular dynamics workflows."""
-
 from __future__ import annotations
+
+"""
+GROMACS job runner for executing molecular dynamics workflows.
+"""
 
 import logging
 import os
 import shlex
 import subprocess
-from functools import lru_cache
 from pathlib import Path
 
 from chemsmart.jobs.gromacs.state import GromacsWorkflowState
@@ -71,12 +72,11 @@ class GromacsJobRunner(JobRunner):
         self.gmx_source_scripts = list(gmx_source_scripts or [])
 
     @property
-    @lru_cache(maxsize=12)
     def executable(self):
         """
-        Return the GROMACS executable configuration for the current server.
+        Return the configured GROMACS executable.
         """
-        return GromacsExecutable.from_servername(servername=self.server.name)
+        return self._get_executable()
 
     def _prerun(self, job):
         """
@@ -89,7 +89,7 @@ class GromacsJobRunner(JobRunner):
         # and assign the generated file back to job.mdp_file.
         self._write_input(job)
 
-        workflow = job.workflow
+        workflow =job.workflow
 
         if workflow == "prepared":
             self._validate_gromacs_inputs(job)
@@ -139,10 +139,10 @@ class GromacsJobRunner(JobRunner):
         The direct runner option has the highest priority. If it is not given,
         fall back to GromacsExecutable.
         """
-        if self.gmx_executable is not None:
+        if getattr(self, "gmx_executable", None) is not None:
             return self.gmx_executable
 
-        return self.executable.get_executable()
+        return GromacsExecutable().get_executable()
 
     def _get_grompp_command(
         self,
@@ -170,7 +170,7 @@ class GromacsJobRunner(JobRunner):
         if job.index_file is not None:
             command.extend(["-n", str(job.index_file)])
 
-        if job.grompp_maxwarn is not None:
+        if getattr(job, "grompp_maxwarn", None) is not None:
             command.extend(["-maxwarn", str(job.grompp_maxwarn)])
 
         return command
@@ -186,16 +186,16 @@ class GromacsJobRunner(JobRunner):
             str(Path(job.tpr_file).with_suffix("")),
         ]
 
-        if job.mdrun_threads is not None:
+        if getattr(job, "mdrun_threads", None) is not None:
             command.extend(["-nt", str(job.mdrun_threads)])
 
-        if job.mdrun_ntmpi is not None:
+        if getattr(job, "mdrun_ntmpi", None) is not None:
             command.extend(["-ntmpi", str(job.mdrun_ntmpi)])
 
-        if job.mdrun_ntomp is not None:
+        if getattr(job, "mdrun_ntomp", None) is not None:
             command.extend(["-ntomp", str(job.mdrun_ntomp)])
 
-        command.extend(job.mdrun_extra_args)
+        command.extend(getattr(job, "mdrun_extra_args", []) or [])
 
         return command
 
@@ -203,13 +203,15 @@ class GromacsJobRunner(JobRunner):
         """
         Build the GROMACS pdb2gmx command.
         """
-        input_pdb = job.input_pdb
+        input_pdb = getattr(job, "input_pdb", None)
         if input_pdb is None:
-            input_pdb = job.structure_file
+            input_pdb = getattr(job, "structure_file", None)
 
-        output_gro = job.processed_structure_file
+        output_gro = getattr(job, "processed_structure_file", None)
         if output_gro is None:
-            output_gro = job.structure_file
+            output_gro = getattr(job, "output_gro", None)
+        if output_gro is None:
+            output_gro = getattr(job, "structure_file", None)
 
         command = [
             self._get_executable(),
@@ -222,10 +224,10 @@ class GromacsJobRunner(JobRunner):
             str(job.top_file),
         ]
 
-        if job.force_field is not None:
+        if getattr(job, "force_field", None) is not None:
             command.extend(["-ff", str(job.force_field)])
 
-        if job.water_model is not None:
+        if getattr(job, "water_model", None) is not None:
             command.extend(["-water", str(job.water_model)])
 
         return command
@@ -234,11 +236,15 @@ class GromacsJobRunner(JobRunner):
         """
         Build the GROMACS editconf command.
         """
-        input_structure = job.processed_structure_file
+        input_structure = getattr(job, "editconf_input_file", None)
         if input_structure is None:
-            input_structure = job.structure_file
+            input_structure = getattr(job, "processed_structure_file", None)
+        if input_structure is None:
+            input_structure = getattr(job, "structure_file", None)
 
-        output_structure = job.boxed_structure_file
+        output_structure = getattr(job, "editconf_output_file", None)
+        if output_structure is None:
+            output_structure = getattr(job, "boxed_structure_file", None)
 
         command = [
             self._get_executable(),
@@ -249,10 +255,10 @@ class GromacsJobRunner(JobRunner):
             str(output_structure),
         ]
 
-        if job.box_type is not None:
+        if getattr(job, "box_type", None) is not None:
             command.extend(["-bt", str(job.box_type)])
 
-        if job.box_distance is not None:
+        if getattr(job, "box_distance", None) is not None:
             command.extend(["-d", str(job.box_distance)])
 
         return command
@@ -261,8 +267,13 @@ class GromacsJobRunner(JobRunner):
         """
         Build the GROMACS solvate command.
         """
-        input_structure = job.boxed_structure_file
-        output_structure = job.solvated_structure_file
+        input_structure = getattr(job, "solvate_input_file", None)
+        if input_structure is None:
+            input_structure = getattr(job, "boxed_structure_file", None)
+
+        output_structure = getattr(job, "solvate_output_file", None)
+        if output_structure is None:
+            output_structure = getattr(job, "solvated_structure_file", None)
 
         command = [
             self._get_executable(),
@@ -275,7 +286,7 @@ class GromacsJobRunner(JobRunner):
             str(job.top_file),
         ]
 
-        if job.solvent_file is not None:
+        if getattr(job, "solvent_file", None) is not None:
             command.extend(["-cs", str(job.solvent_file)])
 
         return command
@@ -284,11 +295,13 @@ class GromacsJobRunner(JobRunner):
         """
         Build the GROMACS genion command.
         """
-        input_tpr = job.ions_tpr_file
+        input_tpr = getattr(job, "ions_tpr_file", None)
         if input_tpr is None:
-            input_tpr = job.tpr_file
+            input_tpr = getattr(job, "tpr_file", None)
 
-        output_structure = job.ionized_structure_file
+        output_structure = getattr(job, "ions_output_file", None)
+        if output_structure is None:
+            output_structure = getattr(job, "ionized_structure_file", None)
 
         command = [
             self._get_executable(),
@@ -301,16 +314,16 @@ class GromacsJobRunner(JobRunner):
             str(job.top_file),
         ]
 
-        if job.index_file is not None:
+        if getattr(job, "index_file", None) is not None:
             command.extend(["-n", str(job.index_file)])
 
-        if job.positive_ion is not None:
+        if getattr(job, "positive_ion", None) is not None:
             command.extend(["-pname", str(job.positive_ion)])
 
-        if job.negative_ion is not None:
+        if getattr(job, "negative_ion", None) is not None:
             command.extend(["-nname", str(job.negative_ion)])
 
-        if job.neutral:
+        if getattr(job, "neutral", None):
             command.append("-neutral")
 
         return command
@@ -358,7 +371,7 @@ class GromacsJobRunner(JobRunner):
         if workflow == "full_setup":
             self._bind_workflow_state(job)
 
-            ions_mdp_file = job.ions_mdp_file or job.mdp_file
+            ions_mdp_file = getattr(job, "ions_mdp_file", None) or job.mdp_file
 
             return [
                 self._get_pdb2gmx_command(job),
@@ -401,7 +414,7 @@ class GromacsJobRunner(JobRunner):
         Prepare environment variables for subprocess execution.
         """
         run_env = os.environ.copy()
-        run_env.update(self.gmx_env)
+        run_env.update(getattr(self, "gmx_env", {}) or {})
 
         if env is not None:
             run_env.update(env)
@@ -412,8 +425,8 @@ class GromacsJobRunner(JobRunner):
         """
         Wrap command with bash when modules or source scripts are required.
         """
-        modules = self.gmx_modules
-        source_scripts = self.gmx_source_scripts
+        modules = getattr(self, "gmx_modules", []) or []
+        source_scripts = getattr(self, "gmx_source_scripts", []) or []
 
         if not modules and not source_scripts:
             return list(command)
@@ -469,7 +482,7 @@ class GromacsJobRunner(JobRunner):
             self._format_command_for_log(command),
         )
 
-        if self.fake:
+        if getattr(self, "fake", False):
             return subprocess.CompletedProcess(
                 args=command,
                 returncode=0,
@@ -598,7 +611,7 @@ class GromacsJobRunner(JobRunner):
             stage="solvate",
         )
 
-        ions_mdp_file = job.ions_mdp_file or job.mdp_file
+        ions_mdp_file = getattr(job, "ions_mdp_file", None) or job.mdp_file
 
         self._run_command(
             self._get_grompp_command(
@@ -633,9 +646,9 @@ class GromacsJobRunner(JobRunner):
         Validate required GROMACS input files for prepared workflow.
         """
         required_files = {
-            "mdp_file": job.mdp_file,
-            "structure_file": job.structure_file,
-            "top_file": job.top_file,
+            "mdp_file": getattr(job, "mdp_file", None),
+            "structure_file": getattr(job, "structure_file", None),
+            "top_file": getattr(job, "top_file", None),
         }
 
         missing = [
@@ -646,18 +659,23 @@ class GromacsJobRunner(JobRunner):
 
         if missing:
             raise FileNotFoundError(
-                "Missing required GROMACS input files: " + ", ".join(missing)
+                "Missing required GROMACS input files: "
+                + ", ".join(missing)
             )
 
     def _validate_full_setup_inputs(self, job):
         """
         Validate required inputs for full setup workflow.
         """
-        input_file = job.input_pdb or job.structure_file
+        input_file = getattr(job, "input_pdb", None) or getattr(
+            job,
+            "structure_file",
+            None,
+        )
 
         required_files = {
             "input_pdb|structure_file": input_file,
-            "mdp_file": job.mdp_file,
+            "mdp_file": getattr(job, "mdp_file", None),
         }
 
         missing = [
@@ -666,10 +684,10 @@ class GromacsJobRunner(JobRunner):
             if path is None or not Path(path).exists()
         ]
 
-        if job.force_field is None:
+        if getattr(job, "force_field", None) is None:
             missing.append("force_field")
 
-        if job.water_model is None:
+        if getattr(job, "water_model", None) is None:
             missing.append("water_model")
 
         if missing:

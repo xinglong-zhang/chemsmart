@@ -53,6 +53,14 @@ class GromacsProjectSettings:
     constraints: Optional[str] = None
     constraint_algorithm: Optional[str] = None
 
+    nsteps: Optional[int] = None
+    emtol: Optional[float] = None
+    emstep: Optional[float] = None
+    tau_t: Optional[float] = None
+    tc_grps: Optional[str] = None
+    tau_p: Optional[float] = None
+    compressibility: Optional[str] = None
+
     box_type: Optional[str] = "cubic"
     box_distance: Optional[float] = 1.0
     solvent_file: Optional[Path] = None
@@ -105,6 +113,13 @@ class GromacsProjectSettings:
             "barostat": data.get("barostat"),
             "constraints": data.get("constraints"),
             "constraint_algorithm": data.get("constraint_algorithm"),
+            "nsteps": data.get("nsteps"),
+            "emtol": data.get("emtol"),
+            "emstep": data.get("emstep"),
+            "tau_t": data.get("tau_t"),
+            "tc_grps": data.get("tc_grps"),
+            "tau_p": data.get("tau_p"),
+            "compressibility": data.get("compressibility"),
             "box_type": data.get("box_type", "cubic"),
             "box_distance": data.get("box_distance", 1.0),
             "solvent_file": data.get("solvent_file"),
@@ -309,6 +324,13 @@ class GromacsProjectSettings:
             "barostat": self.barostat,
             "constraints": self.constraints,
             "constraint_algorithm": self.constraint_algorithm,
+            "nsteps": self.nsteps,
+            "emtol": self.emtol,
+            "emstep": self.emstep,
+            "tau_t": self.tau_t,
+            "tc_grps": self.tc_grps,
+            "tau_p": self.tau_p,
+            "compressibility": self.compressibility,
             "box_type": self.box_type,
             "box_distance": self.box_distance,
             "solvent_file": self.solvent_file,
