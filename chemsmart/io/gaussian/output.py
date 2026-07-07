@@ -3262,56 +3262,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
             "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
         }
 
-    @classmethod
-    def from_settings(cls, filename, settings):
-        """
-        Create a ``Gaussian16pKaOutput`` using thermochemistry settings.
-
-        This factory copies the thermochemistry-related fields from
-        ``GaussianpKaJobSettings`` onto an output parser for a single
-        Gaussian log file. It does **not** construct an output object from
-        settings alone: ``filename`` is always required because energies and
-        frequencies are read from the completed Gaussian output on disk.
-
-        Mapped without loss from ``GaussianpKaJobSettings``:
-
-        * ``temperature``
-        * ``concentration``
-        * ``pressure``
-        * ``cutoff_entropy_grimme``
-        * ``cutoff_enthalpy``
-        * ``energy_units``
-
-        Job-submission fields on the settings object (for example
-        ``proton_index``, ``scheme``, reference-acid options, charge, basis,
-        solvent model for follow-up SP jobs) are intentionally not stored on
-        the output parser because they do not affect parsing of an existing
-        log file.
-
-        Note:
-            ``entropy_method`` is not currently stored on
-            ``GaussianpKaJobSettings``; the output parser therefore uses its
-            default (``"grimme"``). Post-processing via ``chemsmart run pka``
-            passes ``entropy_method`` directly from CLI options instead.
-
-        Args:
-            filename (str): Path to a completed Gaussian output file.
-            settings (GaussianpKaJobSettings): pKa job settings containing
-                thermochemistry parameters.
-
-        Returns:
-            Gaussian16pKaOutput: Configured output object.
-        """
-        return cls(
-            filename=filename,
-            temperature=settings.temperature,
-            concentration=settings.concentration,
-            pressure=settings.pressure,
-            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
-            cutoff_enthalpy=settings.cutoff_enthalpy,
-            energy_units=settings.energy_units,
-        )
-
     # =========================================================================
     # Multi-file pKa thermochemistry support
     # =========================================================================
@@ -3361,11 +3311,10 @@ class Gaussian16pKaOutput(Gaussian16Output):
         thermochemistry parameters from ``GaussianpKaJobSettings`` to one
         output parser per supplied species log file.
 
-        Like :meth:`from_settings`, this cannot build output objects from
-        settings alone. At least one species output path (``ha_file``,
-        ``a_file``, ``href_file``, or ``ref_file``) must be provided because
-        computed energies and frequencies are always read from completed
-        Gaussian logs on disk.
+        This cannot build output objects from settings alone. At least one
+        species output path (``ha_file``, ``a_file``, ``href_file``, or
+        ``ref_file``) must be provided because computed energies and
+        frequencies are always read from completed Gaussian logs on disk.
 
         Mapped without loss from ``GaussianpKaJobSettings`` (shared by all
         returned species):

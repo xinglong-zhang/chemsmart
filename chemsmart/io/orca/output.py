@@ -3847,56 +3847,6 @@ class ORCApKaOutput(ORCAOutput):
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_settings(cls, filename, settings):
-        """
-        Create an ``ORCApKaOutput`` using thermochemistry settings.
-
-        This factory copies the thermochemistry-related fields from
-        ``ORCApKaJobSettings`` onto an output parser for a single ORCA output
-        file. It does **not** construct an output object from settings alone:
-        ``filename`` is always required because energies and frequencies are
-        read from the completed ORCA output on disk.
-
-        Mapped without loss from ``ORCApKaJobSettings``:
-
-        * ``temperature``
-        * ``concentration``
-        * ``pressure``
-        * ``cutoff_entropy_grimme``
-        * ``cutoff_enthalpy``
-        * ``energy_units``
-
-        Job-submission fields on the settings object (for example
-        ``proton_index``, ``scheme``, reference-acid options, charge, basis,
-        solvent model for follow-up SP jobs) are intentionally not stored on
-        the output parser because they do not affect parsing of an existing
-        output file.
-
-        Note:
-            ``entropy_method`` is not currently stored on
-            ``ORCApKaJobSettings``; the output parser therefore uses its
-            default (``"grimme"``). Post-processing via ``chemsmart run pka``
-            passes ``entropy_method`` directly from CLI options instead.
-
-        Args:
-            filename (str): Path to a completed ORCA output file.
-            settings (ORCApKaJobSettings): pKa job settings containing
-                thermochemistry parameters.
-
-        Returns:
-            ORCApKaOutput: Configured output object.
-        """
-        return cls(
-            filename=filename,
-            temperature=settings.temperature,
-            concentration=settings.concentration,
-            pressure=settings.pressure,
-            cutoff_entropy_grimme=settings.cutoff_entropy_grimme,
-            cutoff_enthalpy=settings.cutoff_enthalpy,
-            energy_units=settings.energy_units,
-        )
-
-    @classmethod
     def from_pka_settings(
         cls,
         settings,
@@ -3912,11 +3862,10 @@ class ORCApKaOutput(ORCAOutput):
         thermochemistry parameters from ``ORCApKaJobSettings`` to one output
         parser per supplied species output file.
 
-        Like :meth:`from_settings`, this cannot build output objects from
-        settings alone. At least one species output path (``ha_file``,
-        ``a_file``, ``href_file``, or ``ref_file``) must be provided because
-        computed energies and frequencies are always read from completed ORCA
-        outputs on disk.
+        This cannot build output objects from settings alone. At least one
+        species output path (``ha_file``, ``a_file``, ``href_file``, or
+        ``ref_file``) must be provided because computed energies and
+        frequencies are always read from completed ORCA outputs on disk.
 
         Mapped without loss from ``ORCApKaJobSettings`` (shared by all
         returned species):

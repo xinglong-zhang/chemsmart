@@ -2794,38 +2794,6 @@ class TestGaussian16pKaOutput:
         assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
         assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
 
-    def test_from_settings_classmethod(
-        self, gaussian_pKa_HA_optimization_outputfile
-    ):
-        """Test from_settings class method with GaussianpKaJobSettings."""
-        from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
-
-        settings = GaussianpKaJobSettings(
-            proton_index=1,
-            temperature=373.15,
-            concentration=1.0,
-            cutoff_entropy_grimme=100.0,
-            cutoff_enthalpy=100.0,
-            charge=0,
-            multiplicity=1,
-        )
-
-        output = Gaussian16pKaOutput.from_settings(
-            filename=gaussian_pKa_HA_optimization_outputfile,
-            settings=settings,
-        )
-
-        assert output.temperature == 373.15
-        assert output.concentration == 1.0
-        assert output.cutoff_entropy_grimme == 100.0
-        assert output.cutoff_enthalpy == 100.0
-
-        # Verify values match reference
-        assert np.isclose(
-            output.electronic_energy_in_units, self.HA_E, rtol=1e-6
-        )
-        assert np.isclose(output.qh_gibbs_free_energy, self.HA_QH_G, rtol=1e-5)
-
     def test_from_pka_settings_classmethod(
         self,
         gaussian_pKa_HA_optimization_outputfile,

@@ -3318,34 +3318,6 @@ class TestORCApKaOutput:
             outputs["A"].electronic_energy_in_units, self.L2_A_E, rtol=1e-8
         )
 
-    def test_from_settings_classmethod(self, orca_outputs_directory):
-        """Test from_settings with ORCApKaJobSettings."""
-        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
-
-        files = self._files(orca_outputs_directory)
-        settings = ORCApKaJobSettings(
-            proton_index=1,
-            temperature=298.15,
-            concentration=1.0,
-            cutoff_entropy_grimme=100.0,
-            cutoff_enthalpy=100.0,
-            charge=0,
-            multiplicity=1,
-        )
-
-        output = ORCApKaOutput.from_settings(
-            filename=files["ha_gas"],
-            settings=settings,
-        )
-
-        assert output.temperature == 298.15
-        assert np.isclose(
-            output.electronic_energy_in_units, self.L2_HA_E, rtol=1e-8
-        )
-        assert np.isclose(
-            output.qh_gibbs_free_energy, self.L2_HA_QH_G, rtol=1e-8
-        )
-
     def test_from_pka_settings_classmethod(self, orca_outputs_directory):
         """Test from_pka_settings class method."""
         from chemsmart.jobs.orca.settings import ORCApKaJobSettings
