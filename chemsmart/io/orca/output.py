@@ -8,7 +8,11 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.constants import au_to_debye, joule_per_mol_to_hartree
+from chemsmart.utils.constants import (
+    au_to_debye,
+    energy_conversion,
+    joule_per_mol_to_hartree,
+)
 from chemsmart.utils.io import (
     clean_duplicate_structure,
     create_molecule_list,
@@ -3743,8 +3747,6 @@ class ORCApKaOutput(ORCAOutput):
     @property
     def electronic_energy_in_units(self):
         """Electronic energy (E) in specified units."""
-        from chemsmart.utils.constants import energy_conversion
-
         return energy_conversion(
             "j/mol",
             self.energy_units,
@@ -3754,8 +3756,6 @@ class ORCApKaOutput(ORCAOutput):
     @property
     def qh_gibbs_free_energy(self):
         """Quasi-harmonic Gibbs free energy qh-G(T) in specified units."""
-        from chemsmart.utils.constants import energy_conversion
-
         qh_gibbs_j_mol = self.thermochemistry.qrrho_gibbs_free_energy
         if qh_gibbs_j_mol is None:
             raise ValueError(
@@ -3766,8 +3766,6 @@ class ORCApKaOutput(ORCAOutput):
 
     @property
     def zero_point_energy_in_units(self):
-        from chemsmart.utils.constants import energy_conversion
-
         zpe = self.thermochemistry.zero_point_energy
         if zpe is None:
             raise ValueError(f"Cannot compute ZPE for {self.filename}.")
@@ -3775,8 +3773,6 @@ class ORCApKaOutput(ORCAOutput):
 
     @property
     def enthalpy_in_units(self):
-        from chemsmart.utils.constants import energy_conversion
-
         h = self.thermochemistry.enthalpy
         if h is None:
             raise ValueError(f"Cannot compute enthalpy for {self.filename}.")
@@ -3784,8 +3780,6 @@ class ORCApKaOutput(ORCAOutput):
 
     @property
     def qh_enthalpy_in_units(self):
-        from chemsmart.utils.constants import energy_conversion
-
         qh_h = self.thermochemistry.qrrho_enthalpy
         if qh_h is None:
             raise ValueError(
@@ -3795,8 +3789,6 @@ class ORCApKaOutput(ORCAOutput):
 
     @property
     def gibbs_free_energy_in_units(self):
-        from chemsmart.utils.constants import energy_conversion
-
         g = self.thermochemistry.gibbs_free_energy
         if g is None:
             raise ValueError(
@@ -3818,8 +3810,6 @@ class ORCApKaOutput(ORCAOutput):
     def compute_thermochemistry(self):
         """Compute all thermochemistry properties."""
         import os
-
-        from chemsmart.utils.constants import energy_conversion
 
         thermo = self.thermochemistry
         structure = os.path.splitext(os.path.basename(self.filename))[0]
@@ -4043,7 +4033,3 @@ class ORCApKaOutput(ORCAOutput):
             scheme=scheme,
             delta_G_proton=delta_G_proton,
         )
-
-    # Aliases for backward compatibility
-    print_pka_dual_level_summary = print_pka_summary
-    compute_pka_dual_level = compute_pka

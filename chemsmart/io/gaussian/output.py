@@ -3355,11 +3355,42 @@ class Gaussian16pKaOutput(Gaussian16Output):
         b_file=None,
     ):
         """
-        Create ``Gaussian16pKaOutput`` objects from ``GaussianpKaJobSettings``.
+        Create ``Gaussian16pKaOutput`` objects for a pKa thermochemistry set.
 
-        Like :meth:`from_settings`, this requires explicit output file paths
-        for each species. Settings supply shared thermochemistry parameters
-        only; computed energies still come from the Gaussian logs.
+        Batch wrapper around :meth:`for_pka_species` that applies shared
+        thermochemistry parameters from ``GaussianpKaJobSettings`` to one
+        output parser per supplied species log file.
+
+        Like :meth:`from_settings`, this cannot build output objects from
+        settings alone. At least one species output path (``ha_file``,
+        ``a_file``, ``hb_file``, or ``b_file``) must be provided because
+        computed energies and frequencies are always read from completed
+        Gaussian logs on disk.
+
+        Mapped without loss from ``GaussianpKaJobSettings`` (shared by all
+        returned species):
+
+        * ``temperature``
+        * ``concentration``
+        * ``pressure``
+        * ``cutoff_entropy_grimme``
+        * ``cutoff_enthalpy``
+        * ``energy_units``
+
+        Job-submission fields on the settings object (for example
+        ``proton_index``, ``scheme``, ``reference_file``, charge, basis,
+        solvent model for follow-up SP jobs) are intentionally not stored on
+        the output parsers. In particular, ``reference_file`` in settings
+        refers to an input geometry for job submission, not to a completed
+        Gaussian output log; reference-species logs must still be passed
+        explicitly via ``hb_file`` / ``b_file``.
+
+        Note:
+            ``entropy_method`` is not currently stored on
+            ``GaussianpKaJobSettings``; each output parser therefore uses
+            its default (``"grimme"``). Post-processing via
+            ``chemsmart run pka`` passes ``entropy_method`` directly from
+            CLI options instead.
 
         Args:
             settings: ``GaussianpKaJobSettings`` with thermochemistry
@@ -3371,7 +3402,9 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 output file.
 
         Returns:
-            dict: ``Gaussian16pKaOutput`` objects keyed by species label.
+            dict: ``Gaussian16pKaOutput`` objects keyed by species label
+            (``"HA"``, ``"A"``, ``"HB"``, ``"B"``). Only keys with a
+            corresponding file argument are included.
         """
         return cls.for_pka_species(
             ha_file=ha_file,
@@ -3549,7 +3582,3 @@ class Gaussian16pKaOutput(Gaussian16Output):
             scheme=scheme,
             delta_G_proton=delta_G_proton,
         )
-
-    # Alias for backward compatibility
-    print_pka_dual_level_summary = print_pka_summary
-    compute_pka_dual_level = compute_pka
