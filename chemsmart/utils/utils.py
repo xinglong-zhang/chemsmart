@@ -2123,7 +2123,7 @@ class PKaTableEntry:
     @staticmethod
     def parse_table(table_path, delimiter=None, comment="#"):
         """Backward-compatible shim for generic table parsing."""
-        from chemsmart.utils.io import TabularDataset
+        from chemsmart.io.datasets import TabularDataset
 
         return TabularDataset.parse_table(
             table_path=table_path,
@@ -2309,7 +2309,7 @@ class PKaTableEntry:
     @staticmethod
     def is_submission_table(table_path) -> bool:
         """Return True when *table_path* has pKa submission-table columns."""
-        from chemsmart.utils.io import TabularDataset
+        from chemsmart.io.datasets import TabularDataset
 
         if not table_path:
             return False
@@ -2333,7 +2333,7 @@ class PKaTableEntry:
         skip_header: bool = True,
     ) -> list:
         """Thin pKa adapter on top of the generic tabular parser layer."""
-        from chemsmart.utils.io import TabularDataset
+        from chemsmart.io.datasets import TabularDataset
 
         dataset = TabularDataset.parse_table(
             table_path=table_path,
@@ -2864,7 +2864,7 @@ class PKaOutputTable:
         """Parse an output-table file into :class:`PKaOutputTableEntry` rows."""
         import pandas as pd
 
-        from chemsmart.utils.io import TabularDataset
+        from chemsmart.io.datasets import TabularDataset
 
         dataset = TabularDataset.parse_table(
             table_path=table_path,
