@@ -639,7 +639,9 @@ class Gaussian16Output(GaussianFileMixin):
 
         energies = list(self.energies) if self.energies else None
         forces = list(self.forces) if self.forces else None
-        rot_consts = list(self.all_rotational_constants) or None
+        rot_consts = (
+            list(self.all_rotational_constants(mode="physical")) or None
+        )
         point_groups = list(self.all_point_groups) or None
 
         # Helper to drop the first item across all arrays (when present)
@@ -2602,19 +2604,18 @@ class Gaussian16Output(GaussianFileMixin):
                     rot_consts = seen
                 return rot_consts
 
-    @cached_property
-    def all_rotational_constants(self):
+    def all_rotational_constants(self, mode="gaussian", return_status=False):
         """
         List of rotational constants for each geometry step, in the order they
         appear in the Gaussian output.
 
-        Units are preserved from Gaussian output, usually GHz.
-
-        Nonlinear geometry:
-            np.array([A, B, C])
-
-        Linear or quasi-linear geometry:
-            np.array([B])
+        Parameters
+        ----------
+        mode : {"gaussian", "physical"}, optional
+            ``"gaussian"`` preserves the printed Gaussian values for each step,
+            except that overflow tokens become ``np.inf``. ``"physical"``
+            collapses effectively linear or quasi-linear triples to one
+            perpendicular rotational constant.
 
         Gaussian may print '********' when the axial rotational constant overflows.
         Such tokens are replaced with np.inf and then cleaned according to the
@@ -2637,9 +2638,18 @@ class Gaussian16Output(GaussianFileMixin):
                     dtype=float,
                 )
 
-                vals_ghz, _ = clean_rotational_constants_by_geometry(vals_ghz)
-
-                result.append(vals_ghz * 1e9)
+                if return_status:
+                    vals_ghz, status = clean_rotational_constants_by_geometry(
+                        vals_ghz,
+                        mode=mode,
+                        return_status=True,
+                    )
+                    result.append((vals_ghz * 1e9, status))
+                else:
+                    vals_ghz = clean_rotational_constants_by_geometry(
+                        vals_ghz, mode=mode
+                    )
+                    result.append(vals_ghz * 1e9)
 
         return result
 
