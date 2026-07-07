@@ -8,6 +8,7 @@ from ase import units
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.constants import (
     cal_to_joules,
+    energy_conversion,
     joule_per_mol_to_hartree,
     kcal_per_mol_to_hartree,
 )
@@ -3086,8 +3087,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Returns:
             float: Electronic energy in specified units (default: hartree).
         """
-        from chemsmart.utils.constants import energy_conversion
-
         # Get electronic energy in J/mol from thermochemistry
         electronic_energy_j_mol = self.thermochemistry.electronic_energy
         # Convert to specified units
@@ -3115,8 +3114,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Raises:
             ValueError: If the file doesn't contain frequency data.
         """
-        from chemsmart.utils.constants import energy_conversion
-
         # Get qh-G in J/mol from thermochemistry
         qh_gibbs_j_mol = self.thermochemistry.qrrho_gibbs_free_energy
         if qh_gibbs_j_mol is None:
@@ -3135,8 +3132,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Returns:
             float: Zero-point energy in specified units (default: hartree).
         """
-        from chemsmart.utils.constants import energy_conversion
-
         zpe_j_mol = self.thermochemistry.zero_point_energy
         if zpe_j_mol is None:
             raise ValueError(
@@ -3153,8 +3148,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Returns:
             float: Enthalpy in specified units (default: hartree).
         """
-        from chemsmart.utils.constants import energy_conversion
-
         enthalpy_j_mol = self.thermochemistry.enthalpy
         if enthalpy_j_mol is None:
             raise ValueError(
@@ -3171,8 +3164,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Returns:
             float: Quasi-harmonic enthalpy in specified units (default: hartree).
         """
-        from chemsmart.utils.constants import energy_conversion
-
         qh_enthalpy_j_mol = self.thermochemistry.qrrho_enthalpy
         if qh_enthalpy_j_mol is None:
             raise ValueError(
@@ -3191,8 +3182,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
         Returns:
             float: Gibbs free energy in specified units (default: hartree).
         """
-        from chemsmart.utils.constants import energy_conversion
-
         gibbs_j_mol = self.thermochemistry.gibbs_free_energy
         if gibbs_j_mol is None:
             raise ValueError(
@@ -3241,8 +3230,6 @@ class Gaussian16pKaOutput(Gaussian16Output):
                 - qh_gibbs_free_energy: qh-G(T) in specified units
         """
         import os
-
-        from chemsmart.utils.constants import energy_conversion
 
         thermo = self.thermochemistry
         structure = os.path.splitext(os.path.basename(self.filename))[0]
