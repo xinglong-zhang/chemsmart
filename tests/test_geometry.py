@@ -10,6 +10,7 @@ from chemsmart.utils.geometry import (
     calculate_moments_of_inertia,
     calculate_vdw_volume,
     canonicalize_positions,
+    clean_rotational_constants_by_geometry,
     is_collinear,
 )
 
@@ -124,6 +125,76 @@ class TestCalculateMomentsOfInertia:
         moi_tensor, evals, evecs = calculate_moments_of_inertia(mass, coords)
 
         assert all(e >= -1e-10 for e in evals)
+
+
+class TestCleanRotationalConstantsByGeometry:
+    def test_gaussian_mode_preserves_values(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [10.0, 2.0, 1.5],
+            mode="gaussian",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [10.0, 2.0, 1.5])
+        assert status == "gaussian"
+
+    def test_gaussian_mode_preserves_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 8.30647],
+            mode="gaussian",
+            return_status=True,
+        )
+        assert np.isinf(cleaned[0])
+        assert np.allclose(cleaned[1:], [8.30647, 8.30647])
+        assert status == "gaussian_overflow"
+
+    def test_physical_mode_exact_linear_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_near_linear_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.306470, 8.306471],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [0.5 * (8.306470 + 8.306471)])
+        assert status == "linear"
+
+    def test_physical_mode_huge_axial_constant(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [10919209500.9483, 8.3064670, 8.3064670],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.3064670])
+        assert status == "quasi_linear"
+
+    def test_physical_mode_zero_axial_constant(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [0.0, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_nonlinear(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [609.8308225, 5.8331025, 5.7778368],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [609.8308225, 5.8331025, 5.7778368])
+        assert status == "nonlinear"
+
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValueError):
+            clean_rotational_constants_by_geometry([1.0, 2.0, 3.0], mode="bad")
 
 
 class TestCalculateCrudeOccupiedVolume:

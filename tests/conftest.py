@@ -67,6 +67,7 @@ def make_thermochemistry_mock():
         check_imaginary_frequencies=True,
         s_freq_cutoff_cm=None,
         h_freq_cutoff_cm=None,
+        rotational_mode="gaussian",
     ):
         mock = MagicMock(spec=Thermochemistry)
         mock.vibrational_frequencies = vibrational_frequencies
@@ -74,6 +75,7 @@ def make_thermochemistry_mock():
         mock.check_imaginary_frequencies = check_imaginary_frequencies
         mock.s_freq_cutoff_cm = s_freq_cutoff_cm
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
+        mock.rotational_mode = rotational_mode
         mock.filename = "dummy.log"
         return mock
 
@@ -792,6 +794,14 @@ def gaussian_koh_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_koh_linear_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_koh_linear_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "KOH_linear.log"
+    )
+    return gaussian_koh_linear_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_he_opt_outfile(gaussian_outputs_test_directory):
     gaussian_he_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "he.log"
@@ -1359,6 +1369,11 @@ def orca_he_output_freq_new(orca_outputs_directory):
 @pytest.fixture()
 def orca_co2_output(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "CO2.out")
+
+
+@pytest.fixture()
+def orca_koh_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "KOH.out")
 
 
 @pytest.fixture()

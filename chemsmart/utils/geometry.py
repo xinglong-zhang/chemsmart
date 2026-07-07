@@ -18,6 +18,8 @@ import math
 
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 
 def is_collinear(coords, tol=1e-2):
     """
@@ -700,121 +702,104 @@ def calculate_grid_vdw_volume(coords, radii, grid_spacing=0.2):
 
 def clean_rotational_constants_by_geometry(
     rotational_constants,
+    mode="physical",
     linear_rel_tol=1e-4,
     linear_abs_tol=1e-6,
     zero_abs_tol=1e-12,
     quasi_linear_ratio=1e4,
+    return_status=False,
 ):
-    """
-    Clean Gaussian rotational constants according to molecular geometry.
+    """Clean Gaussian-style rotational constants without changing units.
 
-    Units are preserved. For Gaussian output, this usually means GHz.
+    Gaussian prints rotational constants as ``A, B, C`` on lines such as::
 
-    Expected Gaussian-style order:
+        Rotational constants (GHZ):   A   B   C
 
-        [A, B, C]
+    For ordinary nonlinear molecules, three finite constants are printed.
+    For linear and quasi-linear molecules, Gaussian may instead print an
+    overflow token such as ``*************`` for the axial constant, a huge
+    finite axial constant, or ``0.0`` for the axial constant while still
+    printing two perpendicular constants. Physically, only one perpendicular
+    rotational constant is meaningful for a linear rotor.
 
-    Cases handled:
+    This helper supports two modes:
 
-        [A, B, C]
-            Nonlinear rotor. Returned unchanged unless the geometry is judged
-            to be quasi-linear.
+    ``mode="gaussian"``
+        Preserve Gaussian's printed values exactly, except that overflow
+        tokens should already have been converted to ``np.inf`` by the parser.
+        Here ``np.inf`` is only a sentinel for an overflowed/unknown printed
+        value; it is not a true known physical infinity.
 
-        [huge, B, C]
-            Quasi-linear rotor. If A is much larger than B and C, and B ≈ C,
-            the constants are collapsed to one perpendicular constant.
+    ``mode="physical"``
+        Collapse effectively linear or quasi-linear ``[A, B, C]`` triples to a
+        single perpendicular constant ``[B_perp]`` while keeping nonlinear
+        triples unchanged.
 
-        [inf, B, C]
-            Linear rotor where Gaussian printed ******** for the axial
-            rotational constant and it has been parsed as np.inf.
-
-        [0.0, B, C]
-            Linear rotor where the axial rotational constant is represented
-            as zero.
-
-        [B]
-            Already linear. Returned unchanged.
-
-    Collapse rule:
-
-        If A is inf, i.e. Gaussian printed ********, and B == C exactly:
-            return [C]
-
-        If A is inf and B and C are different but close:
-            return [(B + C) / 2]
-
-        If A is zero or huge, and B and C are equal or close:
-            collapse to one perpendicular rotational constant.
-
-        If B and C are not close:
-            do not collapse.
+    Units are preserved. For Gaussian output this usually means GHz, but this
+    utility performs no unit conversion and can be used with any consistent
+    units.
 
     Parameters
     ----------
     rotational_constants : array-like
-        Rotational constants from one geometry step. For Gaussian output,
-        these are usually in GHz. No unit conversion is performed.
-
+        Rotational constants in Gaussian order ``A, B, C`` or an already
+        cleaned single-value linear-rotor representation.
+    mode : {"gaussian", "physical"}, optional
+        Cleanup mode. ``"gaussian"`` preserves the parsed values; ``"physical"``
+        applies linear/quasi-linear cleanup rules.
     linear_rel_tol : float, optional
-        Relative tolerance used to decide whether B and C are close.
-
+        Relative tolerance for deciding whether ``B`` and ``C`` are close.
     linear_abs_tol : float, optional
-        Absolute tolerance used to decide whether B and C are close. This is
-        in the same units as `rotational_constants`.
-
+        Absolute tolerance for deciding whether ``B`` and ``C`` are close, in
+        the same units as ``rotational_constants``.
     zero_abs_tol : float, optional
-        Absolute tolerance used to decide whether A is effectively zero.
-
+        Absolute tolerance for deciding whether the axial constant ``A`` is
+        effectively zero.
     quasi_linear_ratio : float, optional
-        If A / B_perp exceeds this value and B ≈ C, the geometry is treated
-        as quasi-linear.
+        If ``A / B_perp`` exceeds this value and ``B``/``C`` are collapsible,
+        the rotor is treated as quasi-linear in physical mode.
+    return_status : bool, optional
+        If ``True``, also return a status string describing how the values were
+        interpreted.
 
     Returns
     -------
     np.ndarray
-        Cleaned rotational constants with the same units as the input.
-
-        Nonlinear:
-            np.array([A, B, C])
-
-        Linear or quasi-linear:
-            np.array([B_perp])
-
+        Cleaned rotational constants in the same units as the input.
     tuple[np.ndarray, str]
+
         Always returned as ``(cleaned_constants, status)``.
+        The status is one of
+        ``"gaussian"``, ``"gaussian_overflow"``, ``"linear"``,
+        ``"quasi_linear"``, ``"nonlinear"``, or ``"unknown"``.
+
     """
 
     vals = np.asarray(rotational_constants, dtype=float)
 
-    if vals.size == 1:
-        cleaned = vals
+    if mode == "gaussian":
+        status = "gaussian_overflow" if np.isinf(vals).any() else "gaussian"
+        cleaned = vals.copy()
+    elif mode != "physical":
+        raise ValueError(
+            f"Unsupported rotational-constant cleanup mode: {mode!r}."
+        )
+    elif vals.size == 1:
+        cleaned = vals.copy()
         status = "linear"
-
     elif vals.size != 3:
-        cleaned = vals
+        cleaned = vals.copy()
         status = "unknown"
-
     else:
         A, B, C = vals
-
         if not (np.isfinite(B) and np.isfinite(C)):
-            cleaned = vals
+            cleaned = vals.copy()
             status = "unknown"
-
-        else:
-            axial_overflow = np.isinf(A)
-
-            # Case 1:
-            # Gaussian printed ******** for A, parsed as np.inf.
-            # If B == C exactly, return C directly.
-            if axial_overflow and B == C:
-                cleaned = np.array([C])
+        elif np.isinf(A):
+            if B == C:
+                cleaned = np.array([C], dtype=float)
                 status = "linear"
-
-            # Case 2:
-            # Gaussian printed ******** for A, but B and C differ slightly.
-            # Use their average only if they are close.
-            elif axial_overflow and np.isclose(
+            elif np.isclose(
                 B,
                 C,
                 rtol=linear_rel_tol,
@@ -822,53 +807,47 @@ def clean_rotational_constants_by_geometry(
             ):
                 cleaned = np.array([0.5 * (B + C)])
                 status = "linear"
-
             else:
-                # For [0.0, B, C] or [huge, B, C], first decide whether
-                # B and C can be collapsed.
-                if B == C:
-                    B_perp = C
-                    bc_collapsible = True
+                cleaned = vals.copy()
+                status = "nonlinear"
+        else:
+            if B == C:
+                B_perp = C
+                bc_collapsible = True
+            elif np.isclose(
+                B,
+                C,
+                rtol=linear_rel_tol,
+                atol=linear_abs_tol,
+            ):
+                B_perp = 0.5 * (B + C)
+                bc_collapsible = True
+            else:
+                cleaned = vals.copy()
+                status = "nonlinear"
+                bc_collapsible = False
 
-                elif np.isclose(
-                    B,
-                    C,
-                    rtol=linear_rel_tol,
-                    atol=linear_abs_tol,
-                ):
-                    B_perp = 0.5 * (B + C)
-                    bc_collapsible = True
-
+            if bc_collapsible:
+                axial_zero = np.isfinite(A) and abs(A) <= zero_abs_tol
+                axial_huge = (
+                    np.isfinite(A)
+                    and A > 0.0
+                    and B_perp > 0.0
+                    and A / B_perp > quasi_linear_ratio
+                )
+                if axial_zero:
+                    cleaned = np.array([B_perp], dtype=float)
+                    status = "linear"
+                elif axial_huge:
+                    cleaned = np.array([B_perp], dtype=float)
+                    status = "quasi_linear"
                 else:
-                    B_perp = None
-                    bc_collapsible = False
-
-                if not bc_collapsible:
-                    cleaned = vals
+                    cleaned = vals.copy()
                     status = "nonlinear"
 
-                else:
-                    axial_zero = np.isfinite(A) and abs(A) <= zero_abs_tol
-
-                    axial_huge = (
-                        np.isfinite(A)
-                        and A > 0.0
-                        and B_perp > 0.0
-                        and A / B_perp > quasi_linear_ratio
-                    )
-
-                    if axial_zero:
-                        cleaned = np.array([B_perp])
-                        status = "linear"
-
-                    elif axial_huge:
-                        cleaned = np.array([B_perp])
-                        status = "quasi_linear"
-
-                    else:
-                        cleaned = vals
-                        status = "nonlinear"
-
-    logging.info(f"Cleaned rotational constants: {cleaned}, status: {status}")
-
-    return cleaned, status
+    logger.debug(
+        "Cleaned rotational constants: %s, status: %s", cleaned, status
+    )
+    if return_status:
+        return cleaned, status
+    return cleaned
