@@ -58,11 +58,12 @@ class BaseAssembler:
     @property
     def molecules_list(self):
         if self.FOLDER_BASED:
-            return Molecule.from_directorypath(
+            molecules = Molecule.from_directorypath(
                 self.folder,
                 program=self.PROGRAM.lower(),
                 index=self.index,
             )
+            return molecules if isinstance(molecules, list) else [molecules]
         return Molecule.from_filepath(
             self.filename, index=self.index, return_list=True
         )
