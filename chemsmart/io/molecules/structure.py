@@ -1127,7 +1127,7 @@ class Molecule:
                 return cls._read_gaussian_logfile(filepath, index, **kwargs)
             raise ValueError(
                 f"Unsupported .out file program type: {program}. "
-                "Only Gaussian and ORCA are currently supported."
+                "Only Gaussian, ORCA, and xTB are currently supported."
             )
 
         if basename.endswith(".gro"):
@@ -1274,7 +1274,9 @@ class Molecule:
         Read XTB output from a calculation directory.
 
         Args:
-            filepath (str): Path to xTB calculation directory
+            filepath (str): Path to an xTB main output (.out) file or to the
+            xTB calculation directory. xTB output discovery is directory-based,
+            so a file path is resolved to its parent directory before parsing.
             index (str or int): Index for multi-structure files
 
         Returns:
@@ -1282,7 +1284,10 @@ class Molecule:
         """
         from chemsmart.io.xtb.output import XTBOutput
 
-        xtb_output = XTBOutput(folder=filepath)
+        folder = (
+            filepath if os.path.isdir(filepath) else os.path.dirname(filepath)
+        )
+        xtb_output = XTBOutput(folder=folder)
         return xtb_output.get_molecule(index=index)
 
     @classmethod
