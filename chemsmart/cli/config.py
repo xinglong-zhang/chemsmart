@@ -609,9 +609,11 @@ def scratch(ctx, folder):
     cfg = ctx.obj["cfg"]
     if "~" in folder:
         scratch_folder = os.path.expanduser(folder)
-        assert os.path.exists(
-            os.path.abspath(scratch_folder)
-        ), f"SCRATCH folder not found: {scratch_folder}"
+        assert os.path.exists(os.path.abspath(scratch_folder)), (
+            f"SCRATCH folder not found: {scratch_folder}.\n"
+            f"You may set up scratch folder in home directory by creating a symbolic link via:\n"
+            f"`ln -s /path/to/your/scratch ~/scratch`"
+        )
     logger.info(f"Configuring SCRATCH with folder: {folder}")
     update_yaml_files(cfg.chemsmart_server, "~/scratch", folder)
 
