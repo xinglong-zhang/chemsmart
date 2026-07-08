@@ -140,9 +140,7 @@ class TestGetOutfileFormat:
         assert result == "unknown"
         os.unlink(f.name)
 
-    def test_thermochemistry_from_filepath_gaussian(
-        self, gaussian_singlet_opt_outfile
-    ):
+    def test_thermochemistry_init_gaussian(self, gaussian_singlet_opt_outfile):
         from chemsmart.analysis.thermochemistry import Thermochemistry
 
         thermo = Thermochemistry(filename=gaussian_singlet_opt_outfile)
