@@ -640,7 +640,9 @@ class Gaussian16Output(GaussianFileMixin):
 
         energies = list(self.energies) if self.energies else None
         forces = list(self.forces) if self.forces else None
-        rot_consts = list(self.all_rotational_constants) or None
+        rot_consts = (
+            list(self.all_rotational_constants(mode="physical")) or None
+        )
         point_groups = list(self.all_point_groups) or None
 
         # Helper to drop the first item across all arrays (when present)
@@ -763,6 +765,15 @@ class Gaussian16Output(GaussianFileMixin):
                     is_optimized[idx] = True
         elif self.normal_termination:
             is_optimized[-1] = True
+
+        # For opt+freq-like tails, keep both optimized tags when the final
+        # frame is a duplicate of the previous optimized geometry.
+        if num_structures_to_use >= 2 and is_optimized[-1]:
+            idx_last = num_structures_to_use - 1
+            if np.allclose(
+                orientations[idx_last], orientations[idx_last - 1], rtol=1e-5
+            ):
+                is_optimized[idx_last - 1] = True
 
         # 5) Build Molecule list
         create_kwargs = dict(
@@ -1493,7 +1504,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def electronic_entropy(self):
         """
-        Electronic entropy in Hartree.
+        Electronic entropy in Hartree/K.
         """
         if self.electronic_entropy_no_temperature_in_SI is not None:
             electronic_entropy_hartree = (
@@ -1518,7 +1529,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_entropy(self):
         """
-        Vibrational entropy in Hartree.
+        Vibrational entropy in Hartree/K.
         """
         if self.vibrational_entropy_no_temperature_in_SI is not None:
             vibrational_entropy_hartree = (
@@ -1543,7 +1554,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def rotational_entropy(self):
         """
-        Rotational entropy in Hartree.
+        Rotational entropy in Hartree/K.
         """
         if self.rotational_entropy_no_temperature_in_SI is not None:
             rotational_entropy_hartree = (
@@ -1568,7 +1579,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def translational_entropy(self):
         """
-        Translational entropy in Hartree.
+        Translational entropy in Hartree/K.
         """
         if self.translational_entropy_no_temperature_in_SI is not None:
             translational_entropy_hartree = (
@@ -1593,7 +1604,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def entropy(self):
         """
-        Total entropy in Hartree.
+        Total entropy in Hartree/K.
         """
         if self.entropy_in_J_per_mol_per_K is not None:
             total_entropy_hartree = (
@@ -2531,41 +2542,116 @@ class Gaussian16Output(GaussianFileMixin):
     def rotational_temperatures(self):
         """
         Rotational temperatures in Kelvin, as a list.
+
+        For linear molecules Gaussian may print '***...' when the rotational
+        temperature along the molecular axis overflows the output field width.
+        Such tokens are skipped; only finite values are returned.  For linear
+        molecules the two remaining perpendicular-axis values are degenerate
+        (B = C); duplicates are collapsed to a single value so that one unique
+        rotational temperature is returned.
         """
         rot_temps = []
         for line in reversed(self.contents):
             # take from the end of outputfile
             if "Rotational temperature" in line and "(Kelvin)" in line:
+                has_overflow = False
                 for rot_temp in line.split("(Kelvin)")[-1].split():
                     # linear molecules may have only one rot temp,
-                    # non-linear has three
-                    rot_temps.append(float(rot_temp))
+                    # non-linear has three; skip overflow tokens ('***...')
+                    if "*" in rot_temp:
+                        has_overflow = True
+                    else:
+                        rot_temps.append(float(rot_temp))
+                # For linear molecules Gaussian prints the same B value twice
+                # (degenerate perpendicular axes); collapse to unique values.
+                if has_overflow:
+                    seen: list[float] = []
+                    for v in rot_temps:
+                        if v not in seen:
+                            seen.append(v)
+                    rot_temps = seen
                 return rot_temps
 
     @cached_property
     def rotational_constants_in_Hz(self):
         """
         Rotational constants in Hz, as a list.
+
+        For linear molecules Gaussian may print '***...' when the rotational
+        constant along the molecular axis overflows the output field width.
+        Such tokens are skipped; only finite values are returned.  For linear
+        molecules the two remaining perpendicular-axis values are degenerate
+        (B = C); duplicates are collapsed to a single value so that one unique
+        rotational constant is returned.
         """
         rot_consts = []
         for line in reversed(self.contents):
             # take from the end of outputfile
             if "Rotational constant" in line and "(GHZ):" in line:
+                has_overflow = False
                 for rot_const in line.split("(GHZ):")[-1].split():
-                    rot_consts.append(float(rot_const) * 1e9)
+                    # skip overflow tokens ('***...') for linear molecules
+                    if "*" in rot_const:
+                        has_overflow = True
+                    else:
+                        rot_consts.append(float(rot_const) * 1e9)
+                # For linear molecules Gaussian prints the same B value twice
+                # (degenerate perpendicular axes); collapse to unique values.
+                if has_overflow:
+                    seen: list[float] = []
+                    for v in rot_consts:
+                        if v not in seen:
+                            seen.append(v)
+                    rot_consts = seen
                 return rot_consts
 
-    @cached_property
-    def all_rotational_constants(self):
+    def all_rotational_constants(self, mode="gaussian", return_status=False):
         """
-        List of rotational constants (np.array in Hz) for each geometry step,
-        in the order they appear in the file.
+        List of rotational constants for each geometry step, in the order they
+        appear in the Gaussian output.
+
+        Parameters
+        ----------
+        mode : {"gaussian", "physical"}, optional
+            ``"gaussian"`` preserves the printed Gaussian values for each step,
+            except that overflow tokens become ``np.inf``. ``"physical"``
+            collapses effectively linear or quasi-linear triples to one
+            perpendicular rotational constant.
+
+        Gaussian may print '********' when the axial rotational constant overflows.
+        Such tokens are replaced with np.inf and then cleaned according to the
+        molecular geometry.
+        Return rotational constants in Hz.
         """
+
+        from chemsmart.utils.geometry import (
+            clean_rotational_constants_by_geometry,
+        )
+
         result = []
+
         for line in self.contents:
             if "Rotational constants (GHZ):" in line:
-                vals = line.split("(GHZ):")[-1].split()
-                result.append(np.array([float(v) * 1e9 for v in vals]))
+                vals = line.split("(GHZ):", 1)[-1].split()
+
+                vals_ghz = np.array(
+                    [np.inf if "*" in v else float(v) for v in vals],
+                    dtype=float,
+                )
+
+                if return_status:
+                    vals_ghz, status = clean_rotational_constants_by_geometry(
+                        vals_ghz,
+                        mode=mode,
+                        return_status=True,
+                    )
+                    result.append((vals_ghz * 1e9, status))
+                else:
+                    vals_ghz = clean_rotational_constants_by_geometry(
+                        vals_ghz, mode=mode
+                    )
+                    result.append(vals_ghz * 1e9)
+
         return result
 
     @cached_property
