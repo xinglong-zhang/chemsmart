@@ -312,6 +312,7 @@ class Config:
             ("Gaussian g16", "~/bin/g16", "Gaussian g16 folder"),
             ("ORCA", "~/bin/orca_6_0_0", "ORCA folder"),
             ("NCIPLOT", "~/bin/nciplot", "NCIPLOT folder"),
+            ("scratch", "~/scratch", "SCRATCH folder"),
         ]:
             try:
                 folder = click.prompt(
@@ -587,10 +588,38 @@ def nciplot(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/bin/nciplot", folder)
 
 
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    required=True,
+    help="Path to the Scratch folder.",
+)
+def scratch(ctx, folder):
+    """
+    Configure paths to the Scratch folder.
+    Replaces '~/scratch' with the specified folder in YAML files.
+
+    Examples:
+        chemsmart config scratch --folder <SCRATCHFOLDER>
+    """
+    cfg = ctx.obj["cfg"]
+    if "~" in folder:
+        scratch_folder = os.path.expanduser(folder)
+        assert os.path.exists(
+            os.path.abspath(scratch_folder)
+        ), f"SCRATCH folder not found: {scratch_folder}"
+    logger.info(f"Configuring SCRATCH with folder: {folder}")
+    update_yaml_files(cfg.chemsmart_server, "~/scratch", folder)
+
+
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
 config.add_command(nciplot)
+config.add_command(scratch)
 
 if __name__ == "__main__":
     config()
