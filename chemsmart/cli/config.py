@@ -297,15 +297,16 @@ class Config:
     def configure_paths_interactively(self) -> None:
         """Interactively prompt for optional software folder paths.
 
-        Prompts the user for the Gaussian g16, ORCA, and NCIPLOT
-        installation folders.  Pressing Enter skips a prompt.
+        Prompts the user for the Gaussian g16, ORCA, NCIPLOT, and customized
+        scratch folders.
+        Pressing Enter skips a prompt.
 
         Uses :func:`click.prompt` so the prompts work correctly on all
         platforms — Linux, macOS, Windows Git Bash, and Conda PowerShell —
         without any shell-specific ``read`` syntax in the Makefile.
         """
         click.echo(
-            "\nConfigure optional software paths "
+            "\nConfigure optional software and scratch paths "
             "(press Enter to skip each):"
         )
         for sw_name, placeholder, label in [
