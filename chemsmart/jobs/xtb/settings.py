@@ -66,10 +66,8 @@ class XTBJobSettings:
     def _warn_if_unknown(value, known_values, label):
         if value is not None and value not in known_values:
             logger.warning(
-                "%s %r is not in the known xTB values: %s",
-                label,
-                value,
-                known_values,
+                f"{label} {value!r} is not in the known xTB values: "
+                f"{known_values}"
             )
 
     @classmethod
@@ -93,7 +91,7 @@ class XTBJobSettings:
         if merge_all:
             merged_dict = self.__dict__.copy()
             merged_dict.update(other_dict)
-            logger.debug("Merged all xTB settings: %s", merged_dict)
+            logger.debug(f"Merged all xTB settings: {merged_dict}")
             return type(self)(**merged_dict)
 
         if keywords is not None:
@@ -105,9 +103,7 @@ class XTBJobSettings:
         merged_dict = self.__dict__.copy()
         merged_dict.update(other_dict)
         logger.debug(
-            "Merged xTB settings with keywords %s: %s",
-            keywords,
-            merged_dict,
+            f"Merged xTB settings with keywords {keywords}: {merged_dict}"
         )
         return type(self)(**merged_dict)
 

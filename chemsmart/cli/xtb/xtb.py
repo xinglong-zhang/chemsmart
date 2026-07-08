@@ -16,6 +16,16 @@ from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 logger = logging.getLogger(__name__)
 
 
+def require_xtb_filename(ctx):
+    """Reject real xTB executions started without -f/--filename.
+
+    The group callback defers this check so that `chemsmart run xtb <job>
+    --help` still renders; the leaf commands call this once to enforce it.
+    """
+    if ctx.obj.get("xtb_missing_filename"):
+        raise ValueError("xTB jobs require -f/--filename.")
+
+
 def click_xtb_options(f):
     @click.option(
         "--project", "-p", type=str, default=None, help="Project settings."
@@ -50,24 +60,6 @@ def click_xtb_settings_options(f):
         ),
         default=None,
         help="GFN-xTB method version.",
-    )
-    @click.option(
-        "--optimization-level",
-        type=click.Choice(
-            [
-                "crude",
-                "sloppy",
-                "loose",
-                "lax",
-                "normal",
-                "tight",
-                "vtight",
-                "extreme",
-            ],
-            case_sensitive=False,
-        ),
-        default=None,
-        help="xTB optimization convergence level.",
     )
     @click.option(
         "-sm",
@@ -111,7 +103,6 @@ def xtb(
     charge,
     multiplicity,
     gfn_version,
-    optimization_level,
     solvent_model,
     solvent_id,
     grad,
@@ -123,7 +114,8 @@ def xtb(
     ctx.ensure_object(dict)
     if filename is None:
         # Let `chemsmart run xtb <job> --help` render without requiring
-        # molecular input, while still failing clearly for real executions.
+        # molecular input. Real executions are rejected once in the leaf
+        # command via require_xtb_filename() so the check lives in one place.
         ctx.obj["xtb_missing_filename"] = True
         return
 
@@ -141,9 +133,6 @@ def xtb(
     if gfn_version is not None:
         job_settings.gfn_version = gfn_version.lower()
         keywords.append("gfn_version")
-    if optimization_level is not None:
-        job_settings.optimization_level = optimization_level.lower()
-        keywords.append("optimization_level")
     if solvent_model is not None:
         job_settings.solvent_model = solvent_model.lower()
         keywords.append("solvent_model")
@@ -188,12 +177,12 @@ def xtb(
         ):
             molecule_indices = [molecule_indices]
 
-    logger.debug("xTB project settings: %s", project_settings)
-    logger.debug("xTB job settings before merge: %s", job_settings.__dict__)
-    logger.debug("xTB merge keywords: %s", keywords)
-    logger.debug("xTB selected molecule count: %s", len(molecules))
-    logger.debug("xTB selected molecule indices: %s", molecule_indices)
-    logger.debug("xTB job label: %s", label)
+    logger.debug(f"xTB project settings: {project_settings}")
+    logger.debug(f"xTB job settings before merge: {job_settings.__dict__}")
+    logger.debug(f"xTB merge keywords: {keywords}")
+    logger.debug(f"xTB selected molecule count: {len(molecules)}")
+    logger.debug(f"xTB selected molecule indices: {molecule_indices}")
+    logger.debug(f"xTB job label: {label}")
 
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings

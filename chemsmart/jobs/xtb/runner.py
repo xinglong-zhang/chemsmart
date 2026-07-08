@@ -32,29 +32,27 @@ class XTBJobRunner(JobRunner):
             fake=fake,
             **kwargs,
         )
-        logger.debug("xTB jobrunner server: %s", self.server)
-        logger.debug("xTB jobrunner num cores: %s", self.num_cores)
-        logger.debug("xTB jobrunner num hours: %s", self.num_hours)
-        logger.debug("xTB jobrunner num gpus: %s", self.num_gpus)
-        logger.debug("xTB jobrunner mem gb: %s", self.mem_gb)
-        logger.debug("xTB jobrunner num threads: %s", self.num_threads)
-        logger.debug("xTB jobrunner scratch: %s", self.scratch)
-        logger.debug("xTB jobrunner delete_scratch: %s", self.delete_scratch)
+        logger.debug(f"xTB jobrunner server: {self.server}")
+        logger.debug(f"xTB jobrunner num cores: {self.num_cores}")
+        logger.debug(f"xTB jobrunner num hours: {self.num_hours}")
+        logger.debug(f"xTB jobrunner num gpus: {self.num_gpus}")
+        logger.debug(f"xTB jobrunner mem gb: {self.mem_gb}")
+        logger.debug(f"xTB jobrunner num threads: {self.num_threads}")
+        logger.debug(f"xTB jobrunner scratch: {self.scratch}")
+        logger.debug(f"xTB jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
     def executable(self):
         try:
             logger.info(
-                "Obtaining xTB executable from server: %s", self.server.name
+                f"Obtaining xTB executable from server: {self.server.name}"
             )
             return XTBExecutable.from_servername(servername=self.server.name)
         except FileNotFoundError as exc:
             logger.error(
-                "No server file %s is found for xTB: %s\nAvailable servers: %s",
-                self.server,
-                exc,
-                XTBExecutable.available_servers,
+                f"No server file {self.server} is found for xTB: {exc}\n"
+                f"Available servers: {XTBExecutable.available_servers}"
             )
             raise
 
@@ -71,13 +69,13 @@ class XTBJobRunner(JobRunner):
             self._set_up_variables_in_job_directory(job)
 
         if self.executable and self.executable.local_run is not None:
-            logger.info("xTB local run is %s.", self.executable.local_run)
+            logger.info(f"xTB local run is {self.executable.local_run}.")
             job.local = self.executable.local_run
 
-        logger.debug("xTB running directory: %s", self.running_directory)
-        logger.debug("xTB geometry input path: %s", self.job_xyzfile)
-        logger.debug("xTB output path: %s", self.job_outputfile)
-        logger.debug("xTB error path: %s", self.job_errfile)
+        logger.debug(f"xTB running directory: {self.running_directory}")
+        logger.debug(f"xTB geometry input path: {self.job_xyzfile}")
+        logger.debug(f"xTB output path: {self.job_outputfile}")
+        logger.debug(f"xTB error path: {self.job_errfile}")
 
     def _set_up_variables_in_scratch(self, job):
         scratch_job_dir = os.path.join(self.scratch_dir, job.label)
@@ -96,14 +94,14 @@ class XTBJobRunner(JobRunner):
         self.job_errfile = os.path.abspath(job.errfile)
 
     def _write_input(self, job):
-        logger.info("Writing xTB geometry input file to: %s", self.job_xyzfile)
+        logger.info(f"Writing xTB geometry input file to: {self.job_xyzfile}")
         job.molecule.write_xyz(self.job_xyzfile, mode="w")
 
     def _get_command(self, job):
         executable = self.executable.get_executable()
         command = [executable, self.job_xyzfile]
         command.extend(self._settings_args(job.settings))
-        logger.debug("Generated xTB command: %s", command)
+        logger.debug(f"Generated xTB command: {command}")
         return command
 
     def _settings_args(self, settings):
@@ -143,13 +141,11 @@ class XTBJobRunner(JobRunner):
 
     def _create_process(self, job, command, env):
         logger.info(
-            "Executing xTB command: %s\nWriting output file to: %s\n"
-            "Writing err file to: %s",
-            " ".join(command),
-            self.job_outputfile,
-            self.job_errfile,
+            f"Executing xTB command: {' '.join(command)}\n"
+            f"Writing output file to: {self.job_outputfile}\n"
+            f"Writing err file to: {self.job_errfile}"
         )
-        logger.debug("xTB run environment updates: %s", self.executable.env)
+        logger.debug(f"xTB run environment updates: {self.executable.env}")
         with (
             open(self.job_outputfile, "w") as out,
             open(self.job_errfile, "w") as err,
@@ -166,13 +162,13 @@ class XTBJobRunner(JobRunner):
         if not self.scratch:
             return
         logger.debug(
-            "Copying xTB scratch files from: %s", self.running_directory
+            f"Copying xTB scratch files from: {self.running_directory}"
         )
         for filepath in glob(os.path.join(self.running_directory, "*")):
             destination = os.path.join(job.folder, os.path.basename(filepath))
             if os.path.abspath(filepath) == os.path.abspath(destination):
                 continue
-            logger.info("Copying xTB file %s to %s", filepath, job.folder)
+            logger.info(f"Copying xTB file {filepath} to {job.folder}")
             with suppress(IsADirectoryError):
                 copy(filepath, job.folder)
 

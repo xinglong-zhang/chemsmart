@@ -139,9 +139,8 @@ class YamlXTBProjectSettingsBuilder:
         config = self._read_config().get(jobtype, {})
         if not config:
             logger.warning(
-                "No xTB configuration found for %s in %s. Using defaults.",
-                jobtype,
-                self.filename,
+                f"No xTB configuration found for {jobtype} in "
+                f"{self.filename}. Using defaults."
             )
         config = dict(config)
         config.setdefault("jobtype", jobtype)

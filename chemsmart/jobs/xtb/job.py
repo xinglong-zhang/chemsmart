@@ -78,7 +78,7 @@ class XTBJob(Job):
 
     def _output(self):
         if not os.path.exists(self.outputfile):
-            logger.debug("xTB output file not found: %s", self.outputfile)
+            logger.debug(f"xTB output file not found: {self.outputfile}")
             return None
         try:
             from chemsmart.io.xtb.output import XTBOutput
@@ -86,14 +86,12 @@ class XTBJob(Job):
             return XTBOutput(folder=self.folder)
         except Exception as exc:
             logger.error(
-                "Error reading xTB output folder %s: %s", self.folder, exc
+                f"Error reading xTB output folder {self.folder}: {exc}"
             )
             return None
 
     def _run(self, **kwargs):
-        logger.info(
-            "Running XTBJob %s with jobrunner %s", self, self.jobrunner
-        )
+        logger.info(f"Running XTBJob {self} with jobrunner {self.jobrunner}")
         self.jobrunner.run(self, **kwargs)
 
     @classmethod

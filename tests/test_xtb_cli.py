@@ -92,9 +92,9 @@ class TestXTBCLISettings:
                 "test",
                 "-f",
                 single_molecule_xyz_file,
+                "opt",
                 "--optimization-level",
                 "loose",
-                "opt",
             ],
         )
         assert result.exit_code == 0, result.output
