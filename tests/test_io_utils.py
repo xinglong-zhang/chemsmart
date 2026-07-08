@@ -149,7 +149,7 @@ class TestGetOutfileFormat:
         assert thermo.filename == gaussian_singlet_opt_outfile
         assert thermo.electronic_energy is not None
 
-    def test_thermochemistry_from_filepath_orca(self, water_output_gas_path):
+    def test_thermochemistry_init_orca(self, water_output_gas_path):
         from chemsmart.analysis.thermochemistry import Thermochemistry
 
         thermo = Thermochemistry(filename=water_output_gas_path)
