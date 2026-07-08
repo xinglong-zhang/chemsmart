@@ -525,7 +525,7 @@ def convert_string_index_from_1_based_to_0_based(
                                 0-based indexing.
 
     Raises:
-        ValueError: If index is 0 (invalid for 1-based indexing).
+        ValueError: If index is 0 or has invalid format.
     """
     # If already an int or slice, handle directly
     if isinstance(index, int):

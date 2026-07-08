@@ -67,6 +67,7 @@ def make_thermochemistry_mock():
         check_imaginary_frequencies=True,
         s_freq_cutoff_cm=None,
         h_freq_cutoff_cm=None,
+        rotational_mode="gaussian",
     ):
         mock = MagicMock(spec=Thermochemistry)
         mock.vibrational_frequencies = vibrational_frequencies
@@ -74,6 +75,7 @@ def make_thermochemistry_mock():
         mock.check_imaginary_frequencies = check_imaginary_frequencies
         mock.s_freq_cutoff_cm = s_freq_cutoff_cm
         mock.h_freq_cutoff_cm = h_freq_cutoff_cm
+        mock.rotational_mode = rotational_mode
         mock.filename = "dummy.log"
         mock.target = "dummy.log"
         return mock
@@ -793,6 +795,14 @@ def gaussian_koh_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_koh_linear_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_koh_linear_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "KOH_linear.log"
+    )
+    return gaussian_koh_linear_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_he_opt_outfile(gaussian_outputs_test_directory):
     gaussian_he_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "he.log"
@@ -832,6 +842,73 @@ def gaussian_oniom_outputfile(gaussian_outputs_test_directory):
         gaussian_outputs_test_directory, "failed_oniom_b3lypd3_in_uff.log"
     )
     return gaussian_oniom_outfile
+
+
+# Gaussian output files for pKa calculations
+@pytest.fixture()
+def gaussian_pKa_HA_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_ha_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "5PQ_Me_ts1_no_pd_opt.log"
+    )
+    return gaussian_pka_ha_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_A_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_a_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "5PQ_Me_ts1_b_no_pd_opt.log"
+    )
+    return gaussian_pka_a_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HA_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_ha_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "5PQ_Me_ts1_no_pd_opt_sp_smd_generic.log",
+    )
+    return gaussian_pka_ha_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_A_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_a_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "5PQ_Me_ts1_b_no_pd_opt_sp_smd_generic.log",
+    )
+    return gaussian_pka_a_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HB_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_hb_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine-H_opt.log"
+    )
+    return gaussian_pka_hb_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_B_optimization_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_b_optimization_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine_opt.log"
+    )
+    return gaussian_pka_b_optimization_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_HB_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_hb_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine-H_opt_sp_smd_generic.log"
+    )
+    return gaussian_pka_hb_single_point_outputfile
+
+
+@pytest.fixture()
+def gaussian_pKa_B_single_point_outputfile(gaussian_outputs_test_directory):
+    gaussian_pka_b_single_point_outputfile = os.path.join(
+        gaussian_outputs_test_directory, "collidine_opt_sp_smd_generic.log"
+    )
+    return gaussian_pka_b_single_point_outputfile
 
 
 # Gaussian pbc input files
@@ -1363,6 +1440,11 @@ def orca_co2_output(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_koh_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "KOH.out")
+
+
+@pytest.fixture()
 def orca_sn2_ts_output(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "sn2_ts.out")
 
@@ -1796,6 +1878,22 @@ def expected_complex_molecule_com(chemdraw_expected_directory):
 @pytest.fixture()
 def metal_ligand_molecules_cdxml_file(chemdraw_directory):
     return os.path.join(chemdraw_directory, "metal_ligands.cdxml")
+
+
+@pytest.fixture()
+def colored_proton_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "phenol.cdxml")
+
+
+@pytest.fixture()
+def colored_implicit_proton_cdxml_file(chemdraw_directory):
+    """Returns the path to a CDXML file with a colored implicit proton, which should be treated as a colored explicit proton."""
+    return os.path.join(chemdraw_directory, "phenol_implicit_proton.cdxml")
+
+
+@pytest.fixture()
+def colored_proton_two_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "phenol_two_molecule.cdxml")
 
 
 @pytest.fixture()

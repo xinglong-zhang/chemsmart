@@ -8,6 +8,7 @@ from ase import units
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.constants import (
     cal_to_joules,
+    energy_conversion,
     joule_per_mol_to_hartree,
     kcal_per_mol_to_hartree,
 )
@@ -639,7 +640,9 @@ class Gaussian16Output(GaussianFileMixin):
 
         energies = list(self.energies) if self.energies else None
         forces = list(self.forces) if self.forces else None
-        rot_consts = list(self.all_rotational_constants) or None
+        rot_consts = (
+            list(self.all_rotational_constants(mode="physical")) or None
+        )
         point_groups = list(self.all_point_groups) or None
 
         # Helper to drop the first item across all arrays (when present)
@@ -2602,19 +2605,18 @@ class Gaussian16Output(GaussianFileMixin):
                     rot_consts = seen
                 return rot_consts
 
-    @cached_property
-    def all_rotational_constants(self):
+    def all_rotational_constants(self, mode="gaussian", return_status=False):
         """
         List of rotational constants for each geometry step, in the order they
         appear in the Gaussian output.
 
-        Units are preserved from Gaussian output, usually GHz.
-
-        Nonlinear geometry:
-            np.array([A, B, C])
-
-        Linear or quasi-linear geometry:
-            np.array([B])
+        Parameters
+        ----------
+        mode : {"gaussian", "physical"}, optional
+            ``"gaussian"`` preserves the printed Gaussian values for each step,
+            except that overflow tokens become ``np.inf``. ``"physical"``
+            collapses effectively linear or quasi-linear triples to one
+            perpendicular rotational constant.
 
         Gaussian may print '********' when the axial rotational constant overflows.
         Such tokens are replaced with np.inf and then cleaned according to the
@@ -2637,9 +2639,18 @@ class Gaussian16Output(GaussianFileMixin):
                     dtype=float,
                 )
 
-                vals_ghz, _ = clean_rotational_constants_by_geometry(vals_ghz)
-
-                result.append(vals_ghz * 1e9)
+                if return_status:
+                    vals_ghz, status = clean_rotational_constants_by_geometry(
+                        vals_ghz,
+                        mode=mode,
+                        return_status=True,
+                    )
+                    result.append((vals_ghz * 1e9, status))
+                else:
+                    vals_ghz = clean_rotational_constants_by_geometry(
+                        vals_ghz, mode=mode
+                    )
+                    result.append(vals_ghz * 1e9)
 
         return result
 
@@ -3048,3 +3059,419 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
                         all_cells.append(tv_vector)
                 return np.array(all_cells)
         return None
+
+
+class Gaussian16pKaOutput(Gaussian16Output):
+    """
+    Extended Gaussian16Output for pKa calculations with thermochemistry support.
+
+    This class provides methods to extract electronic energy and quasi-harmonic
+    Gibbs free energy from Gaussian optimization output files, which are essential
+    for pKa calculations using thermodynamic cycles.
+
+    The thermochemistry calculations use Grimme's quasi-RRHO method for entropy
+    and Head-Gordon's quasi-RRHO method for enthalpy corrections, matching the
+    behavior of:
+        chemsmart run thermochemistry -f <file> -T <temp> -c <conc> -csg <cutoff> -ch <cutoff>
+
+    Attributes:
+        filename (str): Path to the Gaussian output file.
+        temperature (float): Temperature in Kelvin for thermochemistry. Default 298.15 K.
+        concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+        pressure (float): Pressure in atm. Default 1.0 atm.
+        cutoff_entropy_grimme (float): Cutoff frequency for entropy (cm^-1). Default 100.0.
+        cutoff_enthalpy (float): Cutoff frequency for enthalpy (cm^-1). Default 100.0.
+        energy_units (str): Energy units for output. Default 'hartree'.
+
+    Example:
+        output = Gaussian16pKaOutput(
+            "acetic_acid_opt.log",
+            temperature=333.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100,
+            cutoff_enthalpy=100
+        )
+        E = output.electronic_energy_in_units  # E in hartree
+        G = output.qh_gibbs_free_energy  # qh-G(T) in hartree
+    """
+
+    def __init__(
+        self,
+        filename,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        entropy_method="grimme",
+        energy_units="hartree",
+    ):
+        """
+        Initialize Gaussian16pKaOutput with thermochemistry settings.
+
+        Args:
+            filename (str): Path to Gaussian output file.
+            temperature (float): Temperature in Kelvin. Default 298.15 K.
+            concentration (float): Concentration in mol/L. Default 1.0 mol/L.
+            pressure (float): Pressure in atm. Default 1.0 atm.
+            cutoff_entropy_grimme (float): Cutoff frequency for entropy
+                in cm^-1 using Grimme's quasi-RRHO method. Default 100.0.
+            cutoff_enthalpy (float): Cutoff frequency for enthalpy
+                in cm^-1 using Head-Gordon's method. Default 100.0.
+            entropy_method (str): Entropy quasi-RRHO method ('grimme' or
+                'truhlar'). Default 'grimme'.
+            energy_units (str): Energy units for output values.
+                Options: 'hartree', 'eV', 'kcal/mol', 'kJ/mol'. Default 'hartree'.
+        """
+        super().__init__(filename=filename)
+        self.temperature = temperature
+        self.concentration = concentration
+        self.pressure = pressure
+        self.cutoff_entropy_grimme = cutoff_entropy_grimme
+        self.cutoff_enthalpy = cutoff_enthalpy
+        self.entropy_method = entropy_method
+        self.energy_units = energy_units.lower()
+        self._thermochemistry = None
+
+    @property
+    def thermochemistry(self):
+        """
+        Get or create the Thermochemistry analysis object.
+
+        Returns:
+            Thermochemistry: Configured thermochemistry analysis object.
+
+        Raises:
+            ValueError: If the output file did not terminate normally.
+        """
+        if self._thermochemistry is None:
+            from chemsmart.analysis.thermochemistry import Thermochemistry
+
+            self._thermochemistry = Thermochemistry(
+                filename=self.filename,
+                temperature=self.temperature,
+                concentration=self.concentration,
+                pressure=self.pressure,
+                use_weighted_mass=False,
+                alpha=4,
+                s_freq_cutoff=self.cutoff_entropy_grimme,
+                entropy_method=self.entropy_method,
+                h_freq_cutoff=self.cutoff_enthalpy,
+                energy_units=self.energy_units,
+                check_imaginary_frequencies=True,
+            )
+        return self._thermochemistry
+
+    @property
+    def electronic_energy_in_units(self):
+        """
+        Get the electronic energy (E) in specified units.
+
+        This is the raw SCF energy from the Gaussian calculation,
+        converted to the specified energy units.
+
+        Returns:
+            float: Electronic energy in specified units (default: hartree).
+        """
+        # Get electronic energy in J/mol from thermochemistry
+        electronic_energy_j_mol = self.thermochemistry.electronic_energy
+        # Convert to specified units
+        return energy_conversion(
+            "j/mol", self.energy_units, electronic_energy_j_mol
+        )
+
+    @property
+    def qh_gibbs_free_energy(self):
+        """
+        Get the quasi-harmonic Gibbs free energy qh-G(T) in specified units.
+
+        This uses Grimme's quasi-RRHO method for entropy and Head-Gordon's
+        quasi-RRHO method for enthalpy corrections, which is equivalent to
+        running:
+            chemsmart run thermochemistry -f <file> -T <temp> -c <conc> -csg <cutoff> -ch <cutoff>
+
+        The qh-G(T) value corresponds to the quasi-RRHO corrected Gibbs free energy
+        that accounts for low-frequency vibrations using interpolation to free rotor
+        entropy and enthalpy.
+
+        Returns:
+            float: Quasi-harmonic Gibbs free energy in specified units (default: hartree).
+
+        Raises:
+            ValueError: If the file doesn't contain frequency data.
+        """
+        # Get qh-G in J/mol from thermochemistry
+        qh_gibbs_j_mol = self.thermochemistry.qrrho_gibbs_free_energy
+        if qh_gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        # Convert to specified units
+        return energy_conversion("j/mol", self.energy_units, qh_gibbs_j_mol)
+
+    @property
+    def zero_point_energy_in_units(self):
+        """
+        Get the zero-point energy (ZPE) in specified units.
+
+        Returns:
+            float: Zero-point energy in specified units (default: hartree).
+        """
+        zpe_j_mol = self.thermochemistry.zero_point_energy
+        if zpe_j_mol is None:
+            raise ValueError(
+                f"Cannot compute zero-point energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, zpe_j_mol)
+
+    @property
+    def enthalpy_in_units(self):
+        """
+        Get the enthalpy (H) in specified units.
+
+        Returns:
+            float: Enthalpy in specified units (default: hartree).
+        """
+        enthalpy_j_mol = self.thermochemistry.enthalpy
+        if enthalpy_j_mol is None:
+            raise ValueError(
+                f"Cannot compute enthalpy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, enthalpy_j_mol)
+
+    @property
+    def qh_enthalpy_in_units(self):
+        """
+        Get the quasi-harmonic enthalpy qh-H(T) in specified units.
+
+        Returns:
+            float: Quasi-harmonic enthalpy in specified units (default: hartree).
+        """
+        qh_enthalpy_j_mol = self.thermochemistry.qrrho_enthalpy
+        if qh_enthalpy_j_mol is None:
+            raise ValueError(
+                f"Cannot compute qh-enthalpy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, qh_enthalpy_j_mol)
+
+    @property
+    def gibbs_free_energy_in_units(self):
+        """
+        Get the standard Gibbs free energy G(T) in specified units.
+
+        This is the uncorrected Gibbs free energy without quasi-RRHO corrections.
+
+        Returns:
+            float: Gibbs free energy in specified units (default: hartree).
+        """
+        gibbs_j_mol = self.thermochemistry.gibbs_free_energy
+        if gibbs_j_mol is None:
+            raise ValueError(
+                f"Cannot compute Gibbs free energy for {self.filename}. "
+                "The file may not contain frequency calculation data."
+            )
+        return energy_conversion("j/mol", self.energy_units, gibbs_j_mol)
+
+    @property
+    def thermochemical_properties(self):
+        """
+        Compute and return all thermochemical properties.
+
+        Returns:
+            dict: Dictionary containing thermochemical properties:
+                - electronic_energy: Electronic energy in specified units
+                - zero_point_energy: Zero-point energy in specified units
+                - enthalpy: Enthalpy in specified units
+                - qh_enthalpy: Quasi-harmonic enthalpy in specified units
+                - gibbs_free_energy: Gibbs free energy in specified units
+                - qh_gibbs_free_energy: Quasi-harmonic Gibbs free energy in specified units
+        """
+        return {
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    def compute_thermochemistry(self):
+        """
+        Compute all thermochemistry properties.
+
+        Returns:
+            dict: Dictionary containing all thermochemistry values:
+                - structure: Base filename
+                - electronic_energy: E in specified units
+                - zero_point_energy: ZPE in specified units
+                - enthalpy: H in specified units
+                - qh_enthalpy: qh-H(T) in specified units
+                - entropy_times_temperature: T*S in specified units
+                - qh_entropy_times_temperature: T*qh-S in specified units
+                - gibbs_free_energy: G(T) in specified units
+                - qh_gibbs_free_energy: qh-G(T) in specified units
+        """
+        import os
+
+        thermo = self.thermochemistry
+        structure = os.path.splitext(os.path.basename(self.filename))[0]
+
+        return {
+            "structure": structure,
+            "electronic_energy": self.electronic_energy_in_units,
+            "zero_point_energy": self.zero_point_energy_in_units,
+            "enthalpy": self.enthalpy_in_units,
+            "qh_enthalpy": self.qh_enthalpy_in_units,
+            "entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.entropy_times_temperature,
+                )
+                if thermo.entropy_times_temperature
+                else None
+            ),
+            "qh_entropy_times_temperature": (
+                energy_conversion(
+                    "j/mol",
+                    self.energy_units,
+                    thermo.qrrho_entropy_times_temperature,
+                )
+                if thermo.qrrho_entropy_times_temperature
+                else None
+            ),
+            "gibbs_free_energy": self.gibbs_free_energy_in_units,
+            "qh_gibbs_free_energy": self.qh_gibbs_free_energy,
+        }
+
+    # =========================================================================
+    # Multi-file pKa thermochemistry support
+    # =========================================================================
+
+    @staticmethod
+    def compute_pka_thermochemistry(
+        ha_file=None,
+        a_file=None,
+        href_file=None,
+        ref_file=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        energy_units="hartree",
+    ):
+        """Compute thermochemistry for pKa species (HA, A-, HRef, Ref-)."""
+        from chemsmart.cli.pka import compute_pka_thermochemistry
+
+        return compute_pka_thermochemistry(
+            ha_file=ha_file,
+            a_file=a_file,
+            href_file=href_file,
+            ref_file=ref_file,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            energy_units=energy_units,
+        )
+
+    @staticmethod
+    def compute_pka(
+        ha_gas_file,
+        a_gas_file,
+        href_gas_file=None,
+        ref_gas_file=None,
+        ha_solv_file=None,
+        a_solv_file=None,
+        href_solv_file=None,
+        ref_solv_file=None,
+        pka_reference=None,
+        temperature=298.15,
+        concentration=1.0,
+        pressure=1.0,
+        cutoff_entropy_grimme=100.0,
+        cutoff_enthalpy=100.0,
+        entropy_method="grimme",
+        scheme="proton exchange",
+        delta_G_proton=None,
+    ):
+        """
+        Compute pKa using a dual-level thermodynamic cycle.
+
+        **Proton exchange** (default): HA + Ref⁻ → A⁻ + HRef
+            pKa = pKa_ref + ΔG_soln / (RT × ln10)
+
+        **Direct dissociation** (``scheme='direct'``): HA → A⁻ + H⁺
+            ΔG_diss = G_soln(A⁻) + G_soln(H⁺) - G_soln(HA)
+            pKa = ΔG_diss / (2.303 × R × T)
+        """
+        from chemsmart.cli.pka import compute_pka
+
+        return compute_pka(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
+        )
+
+    @staticmethod
+    def print_pka_summary(
+        ha_gas_file,
+        a_gas_file,
+        href_gas_file,
+        ref_gas_file,
+        ha_solv_file,
+        a_solv_file,
+        href_solv_file,
+        ref_solv_file,
+        pka_reference,
+        temperature: float = 298.15,
+        concentration: float = 1.0,
+        pressure: float = 1.0,
+        cutoff_entropy_grimme: float = 100.0,
+        cutoff_enthalpy: float = 100.0,
+        entropy_method: str = "grimme",
+        scheme="proton exchange",
+        delta_G_proton=None,
+    ):
+        """Print a formatted summary of a dual-level pKa calculation."""
+        from chemsmart.cli.pka import print_pka_summary as _print_pka_summary
+
+        return _print_pka_summary(
+            ha_gas_file=ha_gas_file,
+            a_gas_file=a_gas_file,
+            href_gas_file=href_gas_file,
+            ref_gas_file=ref_gas_file,
+            ha_solv_file=ha_solv_file,
+            a_solv_file=a_solv_file,
+            href_solv_file=href_solv_file,
+            ref_solv_file=ref_solv_file,
+            pka_reference=pka_reference,
+            temperature=temperature,
+            concentration=concentration,
+            pressure=pressure,
+            cutoff_entropy_grimme=cutoff_entropy_grimme,
+            cutoff_enthalpy=cutoff_enthalpy,
+            entropy_method=entropy_method,
+            scheme=scheme,
+            delta_G_proton=delta_G_proton,
+        )
