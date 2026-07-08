@@ -8,6 +8,7 @@ from chemsmart.jobs.gaussian.runner import (
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner, ORCAJobRunner
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
 
 
 class DummyORCAJob:
@@ -67,6 +68,14 @@ class TestJobRunnerSelection:
         assert isinstance(runner, FakeORCAJobRunner)
         assert runner.fake is True
 
+    def test_fake_xtb_runner_selected_when_fake_enabled(self, pbs_server):
+        job = SimpleNamespace(TYPE="xtbhess")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=True
+        )
+        assert isinstance(runner, FakeXTBJobRunner)
+        assert runner.fake is True
+
     def test_real_runner_selected_when_fake_disabled(self, pbs_server):
         gaussian_job = SimpleNamespace(TYPE="g16opt")
         gaussian_runner = JobRunner.from_job(
@@ -79,6 +88,12 @@ class TestJobRunnerSelection:
             job=orca_job, server=pbs_server, scratch=False, fake=False
         )
         assert isinstance(orca_runner, ORCAJobRunner)
+
+        xtb_job = SimpleNamespace(TYPE="xtbsp")
+        xtb_runner = JobRunner.from_job(
+            job=xtb_job, server=pbs_server, scratch=False, fake=False
+        )
+        assert isinstance(xtb_runner, XTBJobRunner)
 
     def test_fake_flag_propagates_when_no_fake_runner_exists(self, pbs_server):
         job = SimpleNamespace(TYPE="iterate")

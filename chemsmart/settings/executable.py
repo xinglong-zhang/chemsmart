@@ -81,8 +81,13 @@ class Executable(RegistryMixin):
         server_yaml = YAMLFile(filename=server_yaml_file)
 
         # Extract configuration for the specific program
-        executable_folder = os.path.expanduser(
-            server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
+        executable_folder_raw = server_yaml.yaml_contents_dict[cls.PROGRAM][
+            "EXEFOLDER"
+        ]
+        executable_folder = (
+            os.path.expanduser(executable_folder_raw)
+            if executable_folder_raw
+            else None
         )
         local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "LOCAL_RUN", False
@@ -237,6 +242,38 @@ class ORCAExecutable(Executable):
         if self.executable_folder is not None:
             executable_path = os.path.join(self.executable_folder, "orca")
             return executable_path
+
+
+class XTBExecutable(Executable):
+    """
+    Executable handler for xTB semiempirical quantum chemistry software.
+    """
+
+    PROGRAM = "XTB"
+
+    def __init__(self, executable_folder=None, **kwargs):
+        """
+        Initialize XTBExecutable instance.
+
+        Args:
+            executable_folder (str, optional):
+            Path to xTB executable directory. If omitted, ``xtb`` is resolved
+            from PATH, e.g. from an activated conda environment.
+            **kwargs: Additional arguments passed to parent Executable class.
+        """
+        super().__init__(executable_folder=executable_folder, **kwargs)
+
+    def get_executable(self):
+        """
+        Get the full path to the xTB executable.
+
+        Returns:
+            str: Full path to xtb if executable_folder is set, otherwise
+            ``xtb`` to use PATH resolution.
+        """
+        if self.executable_folder is not None:
+            return os.path.join(self.executable_folder, "xtb")
+        return "xtb"
 
 
 class NCIPLOTExecutable(Executable):

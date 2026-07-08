@@ -1,7 +1,11 @@
 import os
 from io import StringIO
 
-from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
+from chemsmart.settings.executable import (
+    GaussianExecutable,
+    ORCAExecutable,
+    XTBExecutable,
+)
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import PBSSubmitter, SLURMSubmitter
 
@@ -79,6 +83,20 @@ export g16root=~/programs/g16
 export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
 """
         assert orca_executable.envars == orca_envars
+
+    def test_xtb_executable(self, server_yaml_file):
+        xtb_executable = XTBExecutable.from_servername(server_yaml_file)
+        assert xtb_executable.executable_folder is None
+        assert xtb_executable.get_executable() == "xtb"
+        assert xtb_executable.local_run is True
+
+        xtb_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/chemsmart
+"""
+        assert xtb_executable.conda_env == xtb_conda_env
+        assert xtb_executable.modules is None
+        assert xtb_executable.scripts is None
+        assert xtb_executable.envars == "export SCRATCH=~/scratch\n"
 
     def test_slurm_submitter_writes_extra_scheduler_directives(self):
         server = Server(
