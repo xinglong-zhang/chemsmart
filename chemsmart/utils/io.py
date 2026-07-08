@@ -350,7 +350,7 @@ def get_program_type_from_file(filepath):
     """
     max_lines = 200
     try:
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for i, line in enumerate(f):
                 if i >= max_lines:
                     break

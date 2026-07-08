@@ -90,7 +90,7 @@ class FileMixin:
         Returns:
             list: List of strings, each representing a line from the file.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return [line.strip() for line in f.readlines()]
 
     @cached_property
@@ -101,7 +101,7 @@ class FileMixin:
         Returns:
             str: Complete file contents as a single string.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return f.read()
 
     @cached_property
