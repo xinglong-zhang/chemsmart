@@ -273,7 +273,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("docs/source/_static/structure_styles/crest_best"),
+        default=Path("docs/source/_static/pymol_styles"),
         help="Directory for exported PNG images.",
     )
     parser.add_argument(
@@ -285,14 +285,12 @@ def parse_args(argv=None):
     parser.add_argument(
         "--rst-file",
         type=Path,
-        default=Path(
-            "docs/source/_static/structure_styles/crest_best_styles.rst"
-        ),
+        default=Path("docs/source/pymol_styles_examples.rst"),
         help="Output reStructuredText snippet path.",
     )
     parser.add_argument(
         "--rst-image-prefix",
-        default="_static/structure_styles/crest_best",
+        default="_static/pymol_styles",
         help="Relative image path prefix used in .. figure:: directives.",
     )
     parser.add_argument(

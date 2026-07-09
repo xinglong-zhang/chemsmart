@@ -257,7 +257,7 @@ Slide / presentation (dark background):
 Example
 =======
 
-.. figure:: _static/structure_styles/crest_best/style_glossy.png
+.. figure:: _static/pymol_styles/style_glossy.png
    :alt: Glossy semi-metallic visualization example
    :align: center
    :width: 70%
@@ -314,7 +314,7 @@ Dark background:
 Example
 =======
 
-.. figure:: _static/structure_styles/crest_best/style_comic.png
+.. figure:: _static/pymol_styles/style_comic.png
    :alt: Comic visualization example
    :align: center
    :width: 70%
@@ -366,7 +366,7 @@ Slide / presentation (dark background):
 Example
 =======
 
-.. figure:: _static/structure_styles/crest_best/style_soft_cartoon.png
+.. figure:: _static/pymol_styles/style_soft_cartoon.png
    :alt: Soft cartoon visualization example
    :align: center
    :width: 70%
@@ -440,7 +440,7 @@ The figures below were generated from ``tests/data/StructuresTests/xyz/crest_bes
 Editorial minimal
 -----------------
 
-.. figure:: _static/structure_styles/crest_best/style_editorial_minimal.png
+.. figure:: _static/pymol_styles/style_editorial_minimal.png
    :alt: Editorial minimal visualization example
    :align: center
    :width: 70%
@@ -450,7 +450,7 @@ Editorial minimal
 Black-gold cover
 ----------------
 
-.. figure:: _static/structure_styles/crest_best/style_black_gold_cover.png
+.. figure:: _static/pymol_styles/style_black_gold_cover.png
    :alt: Black-gold cover visualization example
    :align: center
    :width: 70%
@@ -460,7 +460,7 @@ Black-gold cover
 Neon coordination core
 ----------------------
 
-.. figure:: _static/structure_styles/crest_best/style_neon_coordination_core.png
+.. figure:: _static/pymol_styles/style_neon_coordination_core.png
    :alt: Neon coordination core visualization example
    :align: center
    :width: 70%
@@ -470,7 +470,7 @@ Neon coordination core
 Matte clay
 ----------
 
-.. figure:: _static/structure_styles/crest_best/style_matte_clay.png
+.. figure:: _static/pymol_styles/style_matte_clay.png
    :alt: Matte clay visualization example
    :align: center
    :width: 70%
@@ -480,7 +480,7 @@ Matte clay
 X-ray wire
 ----------
 
-.. figure:: _static/structure_styles/crest_best/style_xray_wire.png
+.. figure:: _static/pymol_styles/style_xray_wire.png
    :alt: X-ray wire visualization example
    :align: center
    :width: 70%
@@ -490,7 +490,7 @@ X-ray wire
 Steric surface
 --------------
 
-.. figure:: _static/structure_styles/crest_best/style_steric_surface.png
+.. figure:: _static/pymol_styles/style_steric_surface.png
    :alt: Steric surface visualization example
    :align: center
    :width: 70%
@@ -500,7 +500,7 @@ Steric surface
 Quasi-ChemDraw bold
 -------------------
 
-.. figure:: _static/structure_styles/crest_best/style_quasi_chemdraw_bold.png
+.. figure:: _static/pymol_styles/style_quasi_chemdraw_bold.png
    :alt: Quasi-ChemDraw bold visualization example
    :align: center
    :width: 70%
@@ -510,7 +510,7 @@ Quasi-ChemDraw bold
 Labeled coordination core
 -------------------------
 
-.. figure:: _static/structure_styles/crest_best/style_labeled_coordination_core.png
+.. figure:: _static/pymol_styles/style_labeled_coordination_core.png
    :alt: Labeled coordination core visualization example
    :align: center
    :width: 70%
