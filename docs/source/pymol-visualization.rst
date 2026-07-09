@@ -254,6 +254,17 @@ Slide / presentation (dark background):
 
    chemsmart run mol -f mn_complex.xyz visualize -s glossy --style-background dark
 
+Example
+=======
+
+.. figure:: _static/structure_styles/crest_best/style_glossy.png
+   :alt: Glossy semi-metallic visualization example
+   :align: center
+   :width: 70%
+
+   Glossy semi-metallic style applied to ``crest_best`` via
+   ``chemsmart run mol -f crest_best.xyz visualize -s glossy``.
+
 Manual PyMOL usage
 ==================
 
@@ -300,6 +311,17 @@ Dark background:
 
    chemsmart run mol -f mn_complex.xyz visualize -s comic --style-background dark
 
+Example
+=======
+
+.. figure:: _static/structure_styles/crest_best/style_comic.png
+   :alt: Comic visualization example
+   :align: center
+   :width: 70%
+
+   Comic style applied to ``crest_best`` via
+   ``chemsmart run mol -f crest_best.xyz visualize -s comic``.
+
 Manual PyMOL usage
 ==================
 
@@ -340,6 +362,17 @@ Slide / presentation (dark background):
 .. code:: bash
 
    chemsmart run mol -f mn_complex.xyz visualize -s soft-cartoon --style-background dark
+
+Example
+=======
+
+.. figure:: _static/structure_styles/crest_best/style_soft_cartoon.png
+   :alt: Soft cartoon visualization example
+   :align: center
+   :width: 70%
+
+   Soft cartoon style applied to ``crest_best`` via
+   ``chemsmart run mol -f crest_best.xyz visualize -s soft-cartoon``.
 
 Manual PyMOL usage
 ==================
@@ -398,6 +431,91 @@ Basic Usage
    chemsmart run mol -f mn_complex.xyz visualize -s editorial-minimal
    chemsmart run mol -f mn_complex.xyz visualize -s black-gold-cover
    chemsmart run mol -f mn_complex.xyz visualize -s labeled-coordination-core
+
+Examples
+========
+
+The figures below were generated from ``tests/data/StructuresTests/xyz/crest_best.xyz``.
+
+Editorial minimal
+-----------------
+
+.. figure:: _static/structure_styles/crest_best/style_editorial_minimal.png
+   :alt: Editorial minimal visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s editorial-minimal``
+
+Black-gold cover
+----------------
+
+.. figure:: _static/structure_styles/crest_best/style_black_gold_cover.png
+   :alt: Black-gold cover visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s black-gold-cover``
+
+Neon coordination core
+----------------------
+
+.. figure:: _static/structure_styles/crest_best/style_neon_coordination_core.png
+   :alt: Neon coordination core visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s neon-coordination-core``
+
+Matte clay
+----------
+
+.. figure:: _static/structure_styles/crest_best/style_matte_clay.png
+   :alt: Matte clay visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s matte-clay``
+
+X-ray wire
+----------
+
+.. figure:: _static/structure_styles/crest_best/style_xray_wire.png
+   :alt: X-ray wire visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s xray-wire``
+
+Steric surface
+--------------
+
+.. figure:: _static/structure_styles/crest_best/style_steric_surface.png
+   :alt: Steric surface visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s steric-surface``
+
+Quasi-ChemDraw bold
+-------------------
+
+.. figure:: _static/structure_styles/crest_best/style_quasi_chemdraw_bold.png
+   :alt: Quasi-ChemDraw bold visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s quasi-chemdraw-bold``
+
+Labeled coordination core
+-------------------------
+
+.. figure:: _static/structure_styles/crest_best/style_labeled_coordination_core.png
+   :alt: Labeled coordination core visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f crest_best.xyz visualize -s labeled-coordination-core``
 
 Manual PyMOL usage
 ==================
