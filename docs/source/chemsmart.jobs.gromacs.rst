@@ -1,163 +1,317 @@
-##############
- GROMACS Jobs
-##############
+GROMACS jobs
+============
 
-This module provides the initial GROMACS job and runner structure for executing prepared molecular dynamics workflows in
-ChemSmart.
+ChemSmart provides initial support for prepared GROMACS workflows.
 
-***************
- Current Scope
-***************
+The implementation follows the standard GROMACS workflow pattern used in the
+official GROMACS tutorials: a simulation step is prepared with ``gmx grompp``
+and then executed with ``gmx mdrun``. In GROMACS, ``grompp`` assembles the
+simulation parameter file, structure file and topology file into a binary
+``.tpr`` run input file. The ``mdrun`` command then runs the calculation from
+that ``.tpr`` input.
 
-The current implementation focuses on prepared GROMACS workflows, where the user provides the required GROMACS input
-files:
+The current ChemSmart implementation focuses on a simplified prepared workflow.
+Users provide a prepared structure file and a matching topology file. ChemSmart
+can generate a default ``.mdp`` file when it is not provided, call ``grompp`` to
+generate a ``.tpr`` file, and then call ``mdrun``.
 
--  MDP file
--  structure file, such as GRO or PDB
--  topology file
--  optional ITP files
--  optional index file
+Supported job types
+-------------------
 
-For the prepared workflow, the runner assembles the TPR file using ``grompp`` and then executes the simulation using
-``mdrun``:
+.. list-table::
+   :header-rows: 1
+   :widths: 15 25 35 25 35
 
-.. code:: text
+   * - Job type
+     - CLI command
+     - Required prepared inputs
+     - Auto-generated MDP
+     - Notes
+   * - EM
+     - ``chemsmart run gromacs em``
+     - ``structure_file``, ``topology_file`` / ``top_file``
+     - ``em.mdp``
+     - Energy minimization.
+   * - NVT
+     - ``chemsmart run gromacs nvt``
+     - ``structure_file``, ``topology_file`` / ``top_file``
+     - ``nvt.mdp``
+     - Constant-volume equilibration.
+   * - NPT
+     - ``chemsmart run gromacs npt``
+     - ``structure_file``, ``topology_file`` / ``top_file``
+     - ``npt.mdp``
+     - Constant-pressure equilibration.
 
-   grompp -> mdrun
+Relationship to the official GROMACS tutorial
+---------------------------------------------
 
-***************
- Runner Design
-***************
+The official GROMACS introductory tutorial uses the following general sequence:
 
-The GROMACS runner separates different GROMACS subcommands into individual command builders. This allows different
-workflows to reuse and combine commands as needed.
+.. list-table::
+   :header-rows: 1
+   :widths: 15 45 45
 
-Current command builders include:
+   * - Step
+     - Official tutorial pattern
+     - Current ChemSmart prepared workflow
+   * - EM
+     - ``grompp`` with an EM ``.mdp``, structure and topology, followed by
+       ``mdrun``.
+     - Supported. ChemSmart can generate ``em.mdp`` if ``mdp_file`` is not
+       provided.
+   * - NVT
+     - ``grompp`` with an NVT ``.mdp``, ``em.gro``, topology and often a
+       restraint reference structure through ``-r``, followed by ``mdrun``.
+     - Supported in simplified form. ChemSmart currently uses the prepared
+       structure and topology, and can generate ``nvt.mdp``.
+   * - NPT
+     - ``grompp`` with an NPT ``.mdp``, ``nvt.gro``, topology and often the
+       NVT checkpoint through ``-t nvt.cpt``, followed by ``mdrun``.
+     - Supported in simplified form. ChemSmart currently uses the prepared
+       structure and topology, and can generate ``npt.mdp``.
 
--  ``_get_grompp_command()``
--  ``_get_mdrun_command()``
--  ``_get_pdb2gmx_command()``
--  ``_get_editconf_command()``
--  ``_get_solvate_command()``
--  ``_get_genion_command()``
+The current prepared workflow does not yet automatically manage all optional
+tutorial files, such as restraint reference structures passed with ``-r`` or
+checkpoint continuation files passed with ``-t``. These can be added in future
+workflow extensions.
 
-The current stable workflow is the prepared workflow:
+Prepared workflow
+-----------------
 
-.. code:: text
+In a prepared workflow, ChemSmart expects the GROMACS structure and topology
+to already be consistent with each other.
 
-   grompp -> mdrun
+The minimum required inputs are:
 
-Other workflows, such as full system setup, are planned but not fully implemented yet.
+.. code-block:: yaml
 
-**************************
- Executable Configuration
-**************************
+   inputs:
+     structure_file: input.gro
+     topology_file: topol.top
 
-The GROMACS executable is handled through ``GromacsExecutable`` and used by the GROMACS runner. The default executable
-is:
+The ``topology_file`` key is accepted as an alias for ``top_file`` in project
+YAML files.
 
-.. code:: text
+If ``topol.top`` includes additional files such as ``.itp`` or ``posre.itp``,
+those files must also be available in the working directory or otherwise
+resolvable by GROMACS when ``grompp`` is executed.
 
-   gmx
+Automatic topology generation is not included in the prepared workflow yet.
 
-A custom executable path can also be provided to the runner. In future server-specific workflows, this can be further
-connected to ChemSmart server YAML settings so that the same workflow can run on local machines, clusters, or servers.
+MDP generation
+--------------
 
-******************
- Project Settings
-******************
+If an ``mdp_file`` is provided, ChemSmart uses it directly and does not
+overwrite it.
 
-GROMACS project-level settings are represented by ``GromacsProjectSettings``. These settings are designed to store
-reusable project information, including input files, workflow type, and simulation parameters.
+If no ``mdp_file`` is provided, ChemSmart generates a default MDP file according
+to the selected job type.
 
-The settings can be created from a dictionary:
+.. list-table::
+   :header-rows: 1
+   :widths: 20 30 35
 
-.. code:: python
+   * - Job type
+     - Generated file
+     - Generated by
+   * - EM
+     - ``em.mdp``
+     - ``GromacsInputWriter``
+   * - NVT
+     - ``nvt.mdp``
+     - ``GromacsInputWriter``
+   * - NPT
+     - ``npt.mdp``
+     - ``GromacsInputWriter``
 
-   from chemsmart.settings.gromacs import GromacsProjectSettings
+Project YAML structure
+----------------------
 
-   settings = GromacsProjectSettings.from_dict(
-       {
-           "project_name": "prepared_em",
-           "workflow": "prepared",
-           "mdp_file": "em.mdp",
-           "structure_file": "input.gro",
-           "top_file": "topol.top",
-           "tpr_file": "em.tpr",
-           "itp_files": ["forcefield.itp"],
-       }
-   )
+A GROMACS project YAML file contains three main sections:
 
-They can also be created from a YAML file:
+``project``
+   Defines the project name, job type and workflow mode.
 
-.. code:: python
+``gromacs_settings``
+   Stores common GROMACS settings shared across job types.
 
-   settings = GromacsProjectSettings.from_yaml("project.yaml")
+``inputs``
+   Stores concrete input files for the selected workflow.
 
-When settings are loaded from YAML, relative input paths are resolved against the directory containing the YAML file.
-This allows a GROMACS project folder to be moved or executed from a different working directory more safely.
+The ``gromacs_settings`` section should contain common GROMACS settings only.
+Task-specific MDP defaults are handled inside ``GromacsInputWriter`` and should
+not be duplicated in the project YAML.
 
-Example YAML structure:
+Common GROMACS settings
+-----------------------
 
-.. code:: yaml
+.. list-table::
+   :header-rows: 1
+   :widths: 30 25 45
+
+   * - Setting
+     - Example
+     - Description
+   * - ``force_field``
+     - ``user_provided``
+     - Force field name or marker for user-provided topology.
+   * - ``water_model``
+     - ``spc``
+     - Water model used for setup workflows.
+   * - ``timestep``
+     - ``0.001``
+     - MD timestep in ps.
+   * - ``temperature``
+     - ``300.0``
+     - Reference temperature in K.
+   * - ``pressure``
+     - ``1.0``
+     - Reference pressure in bar.
+   * - ``constraints``
+     - ``none``
+     - Constraint setting used by generated MDP files.
+   * - ``thermostat``
+     - ``V-rescale``
+     - Temperature coupling method used by generated MDP files.
+   * - ``barostat``
+     - ``Parrinello-Rahman``
+     - Pressure coupling method used by generated MDP files.
+   * - ``grompp_maxwarn``
+     - ``0``
+     - Optional ``grompp -maxwarn`` value.
+   * - ``mdrun_threads``
+     - ``1``
+     - Optional ``mdrun -nt`` value.
+
+Example prepared EM project
+---------------------------
+
+.. code-block:: yaml
 
    project:
-     name: prepared_em
+     name: water_prepared_em
      type: gromacs
+     job_type: em
      mode: prepared
 
    gromacs_settings:
      force_field: user_provided
-     water_model: user_provided
-     timestep: 0.002
+     water_model: spc
+     timestep: 0.001
      temperature: 300.0
      pressure: 1.0
-     thermostat: V-rescale
-     barostat: Parrinello-Rahman
-     constraints: h-bonds
-     constraint_algorithm: LINCS
+     constraints: none
+     grompp_maxwarn: 0
+     mdrun_threads: 1
 
    inputs:
-     mdp_file: em.mdp
-     structure_file: input.gro
+     structure_file: water.gro
      topology_file: topol.top
-     tpr_file: em.tpr
-     index_file: index.ndx
-     itp_files:
-       - forcefield.itp
-       - ligand.itp
 
-****************************
- Job Creation from Settings
-****************************
+Example prepared NVT project
+----------------------------
 
-Project settings can be converted into GROMACS jobs:
+.. code-block:: yaml
 
-.. code:: python
+   project:
+     name: water_prepared_nvt
+     type: gromacs
+     job_type: nvt
+     mode: prepared
 
-   from chemsmart.jobs.gromacs.job import GromacsEMJob
+   gromacs_settings:
+     force_field: user_provided
+     water_model: spc
+     timestep: 0.001
+     temperature: 300.0
+     pressure: 1.0
+     constraints: none
+     thermostat: V-rescale
+     grompp_maxwarn: 0
+     mdrun_threads: 1
 
-   job = GromacsEMJob.from_project_settings(
-       settings=settings,
-       molecule=None,
-       jobrunner=None,
-   )
+   inputs:
+     structure_file: em.gro
+     topology_file: topol.top
 
-This provides a direct path from project configuration to executable job objects:
+Example prepared NPT project
+----------------------------
 
-.. code:: text
+.. code-block:: yaml
 
-   project.yaml
-       -> GromacsProjectSettings
-       -> GromacsEMJob
-       -> GromacsJobRunner
+   project:
+     name: water_prepared_npt
+     type: gromacs
+     job_type: npt
+     mode: prepared
 
-*******
- Notes
-*******
+   gromacs_settings:
+     force_field: user_provided
+     water_model: spc
+     timestep: 0.001
+     temperature: 300.0
+     pressure: 1.0
+     constraints: none
+     thermostat: V-rescale
+     barostat: Parrinello-Rahman
+     grompp_maxwarn: 0
+     mdrun_threads: 1
 
-The project settings do not automatically decide simulation parameters. Instead, they record user-defined settings
-explicitly and make the workflow easier to reproduce and automate.
+   inputs:
+     structure_file: nvt.gro
+     topology_file: topol.top
 
-The current stable workflow is the prepared workflow, where users provide existing MDP, structure, and topology files.
-Full system setup is planned but not fully implemented yet.
+Direct CLI examples
+-------------------
+
+Run EM with an automatically generated ``em.mdp``:
+
+.. code-block:: bash
+
+   chemsmart run gromacs em \
+     --structure input.gro \
+     --top topol.top \
+     --workflow prepared
+
+Run NVT with an automatically generated ``nvt.mdp``:
+
+.. code-block:: bash
+
+   chemsmart run gromacs nvt \
+     --structure em.gro \
+     --top topol.top \
+     --workflow prepared
+
+Run NPT with an automatically generated ``npt.mdp``:
+
+.. code-block:: bash
+
+   chemsmart run gromacs npt \
+     --structure nvt.gro \
+     --top topol.top \
+     --workflow prepared
+
+Use a custom MDP file:
+
+.. code-block:: bash
+
+   chemsmart run gromacs nvt \
+     --mdp nvt.mdp \
+     --structure em.gro \
+     --top topol.top \
+     --workflow prepared
+
+Current limitations
+-------------------
+
+The current implementation does not yet generate topology files automatically.
+
+For prepared workflows, users must provide a structure file and a matching
+topology file. If the topology includes additional ``.itp`` files, these files
+must also be available to GROMACS during ``grompp``.
+
+The current NVT and NPT prepared workflows follow the common ``grompp`` to
+``mdrun`` pattern, but they do not yet automatically manage all optional
+tutorial files such as position-restraint reference structures or checkpoint
+continuation files.
