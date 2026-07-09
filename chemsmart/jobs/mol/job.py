@@ -50,6 +50,7 @@ class PyMOLJob(Job):
         jobrunner=None,
         pymol_script=None,
         style=None,
+        style_background="white",
         trace=None,
         vdw=None,
         quiet_mode=True,
@@ -99,6 +100,7 @@ class PyMOLJob(Job):
         self.source_basename = source_basename
         self.pymol_script = pymol_script
         self.style = style
+        self.style_background = style_background
         self.trace = trace
         self.vdw = vdw
         self.quiet_mode = quiet_mode

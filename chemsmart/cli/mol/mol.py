@@ -35,10 +35,20 @@ def click_pymol_visualization_options(f):
     @click.option(
         "-s",
         "--style",
-        type=click.Choice(["pymol", "cylview"], case_sensitive=False),
+        type=click.Choice(
+            ["pymol", "cylview", "glossy"], case_sensitive=False
+        ),
         default=None,
-        help='PyMOL render style. Choices include "pymol" or "cylview" when '
-        "using zhang_group_pymol_style.",
+        help='PyMOL render style. Choices include "pymol", "cylview", or '
+        '"glossy" (uses glossy_metal_style.py).',
+    )
+    @click.option(
+        "--style-background",
+        type=click.Choice(["white", "dark"], case_sensitive=False),
+        default="white",
+        show_default=True,
+        help="Background for the glossy style: white for publication figures "
+        "or dark for high-contrast slides.",
     )
     @click.option(
         "-t/",

@@ -39,6 +39,36 @@ pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
+PYMOL_STYLE_TEMPLATES = {
+    "pymol": "zhang_group_pymol_style.py",
+    "cylview": "zhang_group_pymol_style.py",
+    "glossy": "glossy_metal_style.py",
+}
+
+
+def normalize_pymol_style(style):
+    """Return a supported PyMOL style keyword."""
+    normalized = (style or "pymol").lower()
+    if normalized not in PYMOL_STYLE_TEMPLATES:
+        raise ValueError(f"The style {style} is not available!")
+    return normalized
+
+
+def get_pymol_style_template_filename(style):
+    """Return the template filename for a ChemSmart PyMOL style."""
+    return PYMOL_STYLE_TEMPLATES[normalize_pymol_style(style)]
+
+
+def format_pymol_style_command(job, selection):
+    """Build the PyMOL -d style command for one selection."""
+    style = normalize_pymol_style(job.style)
+    if style == "glossy":
+        background = getattr(job, "style_background", None) or "white"
+        return f"glossy_complex {selection}, {background}"
+    if style == "cylview":
+        return f"cylview_style {selection}"
+    return f"pymol_style {selection}"
+
 
 class PyMOLJobRunner(JobRunner):
     """
@@ -163,12 +193,11 @@ class PyMOLJobRunner(JobRunner):
         """
         Generate or copy the PyMOL visualization style script.
 
-        Copies the default Zhang group PyMOL style script to the job
-        directory. Modify the PyMOL style script for job (calls
-        self._modify_job_pymol_script() if job.isosurface_value
-        or job.range is not None.
-        Works for using default zhang_group_pymol_style.py.
-        Overwrites existing zhang_group_pymol_style.py style.
+        Copies the PyMOL style script for the selected job style to the
+        job directory. Modify the Zhang group script when isosurface or
+        color range overrides are requested.
+        Works for zhang_group_pymol_style.py and glossy_metal_style.py.
+        Overwrites an existing style file in the job folder.
 
         Args:
             job: PyMOL job object containing folder information.
@@ -176,13 +205,9 @@ class PyMOLJobRunner(JobRunner):
         Returns:
             str: Path to the style script file in the job directory.
         """
-        # Define the source and destination file paths
-        source_style_file = (
-            self.pymol_templates_path / "zhang_group_pymol_style.py"
-        )
-        dest_style_file = os.path.join(
-            job.folder, "zhang_group_pymol_style.py"
-        )
+        template_filename = get_pymol_style_template_filename(job.style)
+        source_style_file = self.pymol_templates_path / template_filename
+        dest_style_file = os.path.join(job.folder, template_filename)
 
         # Check if the style file already exists in the current working
         # directory
@@ -204,10 +229,12 @@ class PyMOLJobRunner(JobRunner):
         logger.debug(f"Job isosurface_value: {job.isosurface_value}")
         logger.debug(f"Job color_range: {job.color_range}")
 
-        if job.isosurface_value is None and job.color_range is None:
-            return dest_style_file
-        else:
+        if template_filename == "zhang_group_pymol_style.py" and (
+            job.isosurface_value is not None or job.color_range is not None
+        ):
             return self._modify_job_pymol_script(job, dest_style_file)
+
+        return dest_style_file
 
     def _modify_job_pymol_script(self, job, style_file_path=None):
         """Modify the PyMOL style script for the job.
@@ -431,19 +458,13 @@ class PyMOLJobRunner(JobRunner):
         # Handle the -d argument (PyMOL commands)
 
         if job.style is None:
-            # defaults to using zhang_group_pymol_style if not specified
-            if os.path.exists("zhang_group_pymol_style.py"):
-                command += f' -d "pymol_style {job.label}'
+            style_file = get_pymol_style_template_filename(None)
+            if os.path.exists(style_file):
+                command += f' -d "{format_pymol_style_command(job, job.label)}'
             else:
-                # no render style and no style file present
                 command += ' -d "'
         else:
-            if job.style.lower() == "pymol":
-                command += f' -d "pymol_style {job.label}'
-            elif job.style.lower() == "cylview":
-                command += f' -d "cylview_style {job.label}'
-            else:
-                raise ValueError(f"The style {job.style} is not available!")
+            command += f' -d "{format_pymol_style_command(job, job.label)}'
 
         return command
 
@@ -1815,10 +1836,7 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             # First batch: apply style and alignment to all molecules
             # Apply style to each molecule
             for name in batch_names:
-                if job.style is None or job.style.lower() == "pymol":
-                    pymol_commands.append(f"pymol_style {name}")
-                elif job.style.lower() == "cylview":
-                    pymol_commands.append(f"cylview_style {name}")
+                pymol_commands.append(format_pymol_style_command(job, name))
 
             # Alignment commands - align all to GLOBAL
             # first molecule (not batch first molecule)
@@ -1840,10 +1858,7 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                 pymol_commands.append(f"load {quote_path(path)}")
                 # Apply style to each newly loaded molecule
                 name = batch_names[i]
-                if job.style is None or job.style.lower() == "pymol":
-                    pymol_commands.append(f"pymol_style {name}")
-                elif job.style.lower() == "cylview":
-                    pymol_commands.append(f"cylview_style {name}")
+                pymol_commands.append(format_pymol_style_command(job, name))
 
             # Align to global first molecule (job.mol_names[0])
             global_ref = job.mol_names[0]
@@ -1891,7 +1906,8 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
         """Add style script to command"""
         if job.pymol_script is None:
             style_file_path = os.path.join(
-                job.folder, "zhang_group_pymol_style.py"
+                job.folder,
+                get_pymol_style_template_filename(job.style),
             )
             if os.path.exists(style_file_path):
                 job_pymol_script = style_file_path
@@ -1936,20 +1952,11 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
 
     def _setup_style(self, job, command):
         """Set up style commands"""
-        if job.style is None or job.style.lower() == "pymol":
-            molnames = job.mol_names
-            style_cmds = "; ".join(
-                [f"pymol_style {name}" for name in molnames]
-            )
-            command += f' -d "{style_cmds}'
-        elif job.style.lower() == "cylview":
-            molnames = job.mol_names
-            style_cmds = "; ".join(
-                [f"cylview_style {name}" for name in molnames]
-            )
-            command += f' -d "{style_cmds}'
-        else:
-            raise ValueError(f"The style {job.style} is not available!")
+        molnames = job.mol_names
+        style_cmds = "; ".join(
+            format_pymol_style_command(job, name) for name in molnames
+        )
+        command += f' -d "{style_cmds}'
         return command
 
     def _job_specific_commands(self, job, command):
