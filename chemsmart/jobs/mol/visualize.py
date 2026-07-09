@@ -173,17 +173,17 @@ class PyMOLGlossyVisualizationJob(PyMOLVisualizationJob):
             self.label += "_glossy_visualization"
 
 
-class PyMOLComicBallstickVisualizationJob(PyMOLVisualizationJob):
+class PyMOLComicVisualizationJob(PyMOLVisualizationJob):
     """
-    PyMOL job for comic ball-and-stick molecular visualization.
+    PyMOL job for comic molecular visualization.
 
     Extends :class:`PyMOLVisualizationJob` to apply the bundled
-    ``comic_ballstick_style.py`` template via ``render_comic_metallic_labeled_final``.
-    Selected from the CLI with ``-s comic_ballstick`` or ``-s hybrid``
-    on the ``visualize`` subcommand.
+    ``comic_style.py`` template via ``render_comic_metallic_labeled_final``.
+    Selected from the CLI with ``-s comic`` or ``-s hybrid`` on the
+    ``visualize`` subcommand.
     """
 
-    TYPE = "pymol_comic_ballstick_visualization"
+    TYPE = "pymol_comic_visualization"
 
     def __init__(
         self,
@@ -191,7 +191,7 @@ class PyMOLComicBallstickVisualizationJob(PyMOLVisualizationJob):
         **kwargs,
     ):
         """
-        Initialize a comic ball-and-stick visualization job.
+        Initialize a comic visualization job.
 
         Args:
             style_background (str): Background for rendering, ``white`` or
@@ -199,10 +199,10 @@ class PyMOLComicBallstickVisualizationJob(PyMOLVisualizationJob):
             **kwargs: Additional arguments passed to parent PyMOLJob.
         """
         super().__init__(
-            style="comic_ballstick",
+            style="comic",
             style_background=style_background,
             **kwargs,
         )
 
         if self.label is not None:
-            self.label += "_comic_ballstick_visualization"
+            self.label += "_comic_visualization"

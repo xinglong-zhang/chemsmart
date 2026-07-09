@@ -1,7 +1,7 @@
 """
-Shared element color palette for glossy and comic_ballstick PyMOL styles.
+Shared element color palette for glossy and comic PyMOL styles.
 
-Both ``glossy_metal_style.py`` and ``comic_ballstick_style.py`` import this
+Both ``glossy_metal_style.py`` and ``comic_style.py`` import this
 module so every element renders with identical colors in either style.
 """
 

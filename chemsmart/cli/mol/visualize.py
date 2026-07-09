@@ -62,9 +62,8 @@ def visualize(
     enabled. Example usage:
         chemsmart run mol -f complex.xyz visualize -s glossy --style-background dark
 
-    When -s comic_ballstick is used, the flat comic ball-and-stick mode is
-    enabled. Example usage:
-        chemsmart run mol -f complex.xyz visualize -s comic_ballstick --style-background dark
+    When -s comic is used, the comic illustration mode is enabled. Example usage:
+        chemsmart run mol -f complex.xyz visualize -s comic --style-background dark
     """
 
     molecules = ctx.obj["molecules"]
@@ -89,8 +88,8 @@ def visualize(
         normalized_style = normalize_pymol_style(style)
 
     is_glossy = normalized_style == "glossy"
-    is_comic_ballstick = normalized_style == "comic_ballstick"
-    is_special_style = is_glossy or is_comic_ballstick
+    is_comic = normalized_style == "comic"
+    is_special_style = is_glossy or is_comic
 
     style_background_explicit = (
         ctx.get_parameter_source("style_background") != ParameterSource.DEFAULT
@@ -104,12 +103,12 @@ def visualize(
 
     if style_background_explicit and not is_special_style:
         raise click.UsageError(
-            "'--style-background' can only be used with '-s glossy' or "
-            "'-s comic_ballstick' (or '-s hybrid')."
+            "'--style-background' can only be used with '-s glossy', "
+            "'-s comic', or '-s hybrid' (alias for comic)."
         )
 
     from chemsmart.jobs.mol.visualize import (
-        PyMOLComicBallstickVisualizationJob,
+        PyMOLComicVisualizationJob,
         PyMOLGlossyVisualizationJob,
         PyMOLHybridVisualizationJob,
         PyMOLVisualizationJob,
@@ -119,8 +118,8 @@ def visualize(
         visualization_job = PyMOLHybridVisualizationJob
     elif is_glossy:
         visualization_job = PyMOLGlossyVisualizationJob
-    elif is_comic_ballstick:
-        visualization_job = PyMOLComicBallstickVisualizationJob
+    elif is_comic:
+        visualization_job = PyMOLComicVisualizationJob
     else:
         visualization_job = PyMOLVisualizationJob
 

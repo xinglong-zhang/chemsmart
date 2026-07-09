@@ -30,10 +30,10 @@ def click_pymol_visualization_options(
         style_choices = ["pymol", "cylview"]
         style_help = 'PyMOL render style. Choices include "pymol" or "cylview"'
         if include_visualize_styles:
-            style_choices.extend(["glossy", "comic_ballstick", "hybrid"])
+            style_choices.extend(["glossy", "comic", "hybrid"])
             style_help += (
-                ', "glossy", "comic_ballstick", or "hybrid" '
-                "(visualize subcommand only; hybrid is an alias for comic_ballstick)"
+                ', "glossy", "comic", or "hybrid" '
+                "(visualize subcommand only; hybrid is an alias for comic)"
             )
 
         @click.option(
@@ -102,7 +102,7 @@ def click_pymol_visualization_options(
                 type=click.Choice(["white", "dark"], case_sensitive=False),
                 default="white",
                 show_default=True,
-                help="Background for -s glossy, -s comic_ballstick, or -s hybrid: "
+                help="Background for -s glossy, -s comic, or -s hybrid: "
                 "white for publication figures or dark for high-contrast slides.",
             )
             @functools.wraps(f)

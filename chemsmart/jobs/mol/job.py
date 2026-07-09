@@ -78,7 +78,7 @@ class PyMOLJob(Job):
             jobrunner: Runner for executing the job (default: None).
             pymol_script: Custom PyMOL script path (default: None).
             style: Visualization style: ``pymol`` or ``cylview`` (default: None).
-                Use dedicated visualize jobs for ``glossy`` or ``comic_ballstick``.
+                Use dedicated visualize jobs for ``glossy`` or ``comic``.
             style_background: Background for glossy rendering: ``white`` or
                 ``dark`` (default: ``white``).
             trace: Whether to trace molecular paths (default: None).

@@ -1,12 +1,12 @@
 """
 Comic metallic ball-and-stick PyMOL style with ray-traced outlines and labels.
 
-ChemSmart applies this template when ``visualize -s comic_ballstick`` is used.
+ChemSmart applies this template when ``visualize -s comic`` is used.
 Alias: ``-s hybrid``.
 
 In PyMOL directly::
 
-    run comic_ballstick_style.py
+    run comic_style.py
     render_comic_metallic_labeled_final all
     render_comic_metallic_labeled_final all, white
 """
@@ -58,17 +58,14 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
 
     cmd.delete(metal_name)
 
-    # 1. Reset and show basic representation
     cmd.hide("everything", sel)
     cmd.show("sticks", sel)
     cmd.show("spheres", sel)
 
-    # 2. Geometry scale adjustments
     _safe_set("stick_radius", 0.14, sel)
     _safe_set("sphere_scale", 0.25, f"{sel} and elem C+N+O+S+P")
     _safe_set("sphere_scale", 0.15, f"{sel} and elem H")
 
-    # 3. Handle and scale metal center
     cmd.select(
         metal_name,
         f"{sel} and (elem Mn or elem Fe or elem Co or elem Ni or elem Ru or elem Rh)",
@@ -82,13 +79,11 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
         metal_color=DEFAULT_METAL_COLOR,
     )
 
-    # 4. Force coordination bonds
     if cmd.count_atoms(metal_name) > 0:
         cmd.bond(metal_name, f"{sel} and elem N")
         cmd.bond(metal_name, f"{sel} and elem P")
         cmd.bond(metal_name, f"{sel} and elem S")
 
-    # 5. Metallic render style settings
     _safe_set("specular", 0.85)
     _safe_set("spec_power", 300)
     _safe_set("spec_reflect", 0.70)
@@ -96,12 +91,10 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
     _safe_set("direct", 0.75)
     _safe_set("shininess", 90)
 
-    # 6. Comic/illustrative black outlines
     _safe_set("ray_trace_mode", 1)
     _safe_set("ray_trace_color", "black")
     _safe_set("ray_trace_gain", 0.6)
 
-    # 7. Labels and text layer overrides (crucial for ray tracing)
     cmd.label(sel, '""')
     if cmd.count_atoms(metal_name) > 0:
         metal_label = _metal_element_label(metal_name)
@@ -117,7 +110,6 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
     _safe_set("label_color", "white")
     _safe_set("label_size", 28)
 
-    # 8. Viewport settings
     bg = str(background).lower()
     if bg in ["dark", "black", "presentation", "slide"]:
         cmd.bg_color("black")
@@ -137,23 +129,14 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
     )
 
 
-def comic_ballstick_render(
-    selection="all", background="white", *_args, **_kwargs
-):
-    """
-    ChemSmart entry point for the comic ball-and-stick style.
-
-    Extra positional arguments are accepted for backward compatibility with
-    older command strings but are ignored.
-    """
+def comic_render(selection="all", background="white", *_args, **_kwargs):
+    """ChemSmart entry point for the comic style."""
     render_comic_metallic_labeled_final(
         selection=selection, background=background
     )
 
 
-def comic_ballstick_png(
-    filename="comic_ballstick.png", width=2400, height=1800, dpi=300
-):
+def comic_png(filename="comic.png", width=2400, height=1800, dpi=300):
     """Ray-trace and save a high-resolution PNG."""
     cmd.ray(int(width), int(height))
     cmd.png(filename, dpi=int(dpi))
@@ -162,5 +145,5 @@ def comic_ballstick_png(
 cmd.extend(
     "render_comic_metallic_labeled_final", render_comic_metallic_labeled_final
 )
-cmd.extend("comic_ballstick_render", comic_ballstick_render)
-cmd.extend("comic_ballstick_png", comic_ballstick_png)
+cmd.extend("comic_render", comic_render)
+cmd.extend("comic_png", comic_png)

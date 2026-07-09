@@ -42,19 +42,19 @@ logger = logging.getLogger(__name__)
 _PYMOL_TEMPLATES_PATH = Path(__file__).resolve().parent / "templates"
 
 PYMOL_STYLE_ALIASES = {
-    "hybrid": "comic_ballstick",
+    "hybrid": "comic",
 }
 
 PYMOL_STYLE_TEMPLATES = {
     "pymol": "zhang_group_pymol_style.py",
     "cylview": "zhang_group_pymol_style.py",
     "glossy": "glossy_metal_style.py",
-    "comic_ballstick": "comic_ballstick_style.py",
+    "comic": "comic_style.py",
 }
 
 PYMOL_STYLE_SHARED_TEMPLATES = {
     "glossy": ["metallic_element_colors.py", "pymol_style_imports.py"],
-    "comic_ballstick": [
+    "comic": [
         "metallic_element_colors.py",
         "pymol_style_imports.py",
     ],
@@ -101,7 +101,7 @@ def format_pymol_style_command(job, selection):
             f"metallic_poster_render {selection}, elem Mn, None, 2.6, "
             f"N+O+S+P+H, {background}"
         )
-    if style == "comic_ballstick":
+    if style == "comic":
         background = getattr(job, "style_background", None) or "dark"
         return f"render_comic_metallic_labeled_final {selection}, {background}"
     if style == "cylview":
@@ -1089,10 +1089,10 @@ class PyMOLGlossyVisualizationJobRunner(PyMOLVisualizationJobRunner):
     JOBTYPES = ["pymol_glossy_visualization"]
 
 
-class PyMOLComicBallstickVisualizationJobRunner(PyMOLVisualizationJobRunner):
-    """PyMOL job runner for comic ball-and-stick visualization jobs."""
+class PyMOLComicVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """PyMOL job runner for comic visualization jobs."""
 
-    JOBTYPES = ["pymol_comic_ballstick_visualization"]
+    JOBTYPES = ["pymol_comic_visualization"]
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):

@@ -32,8 +32,8 @@ Visualization Options
 
    -  -  ``-s, --style``
       -  string
-      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic_ballstick``, or
-         ``hybrid`` (see below)
+      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, or ``hybrid`` (see
+         below)
 
    -  -  ``-t, --trace/--no-trace``
       -  bool
@@ -269,18 +269,18 @@ When editing a saved ``.pse`` session:
 For Mn coordination complexes and fac/mer comparisons, pass additional arguments to ``metallic_poster_render`` directly
 in PyMOL. See ``glossy_metal_style.py`` for the full command signature.
 
-.. _comic-ballstick-visualization:
+.. _comic-visualization:
 
-************************************
- Comic Ball-and-Stick Visualization
-************************************
+*********************
+ Comic Visualization
+*********************
 
-Create flat, illustrated comic ball-and-stick figures for metal complexes using ``-s comic_ballstick`` (alias ``-s
-hybrid``) on the ``visualize`` subcommand. Like glossy and hybrid modes, this selects a dedicated job type.
+Create flat, illustrated comic figures for metal complexes using ``-s comic`` (alias ``-s hybrid``) on the ``visualize``
+subcommand. Like glossy and group-hybrid modes, this selects a dedicated job type.
 
 .. code:: bash
 
-   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s comic_ballstick [SUBCMD_OPTIONS]
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s comic [SUBCMD_OPTIONS]
 
 The style renders thick sticks and scaled spheres with black ray-traced outlines, centered element labels on the metal
 and donor atoms, and an orthoscopic (flat) camera view.
@@ -292,20 +292,20 @@ White background (default in the PyMOL script):
 
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s comic_ballstick --style-background white
+   chemsmart run mol -f mn_complex.xyz visualize -s comic --style-background white
 
 Dark background:
 
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s comic_ballstick --style-background dark
+   chemsmart run mol -f mn_complex.xyz visualize -s comic --style-background dark
 
 Manual PyMOL usage
 ==================
 
 .. code:: text
 
-   run comic_ballstick_style.py
+   run comic_style.py
    render_comic_metallic_labeled_final all
    render_comic_metallic_labeled_final all, white
    ray 1200, 1200

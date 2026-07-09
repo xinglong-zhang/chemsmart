@@ -15,7 +15,7 @@ from .nci import PyMOLNCIJob
 from .runner import PyMOLJobRunner
 from .spin import PyMOLSpinJob
 from .visualize import (
-    PyMOLComicBallstickVisualizationJob,
+    PyMOLComicVisualizationJob,
     PyMOLGlossyVisualizationJob,
     PyMOLHybridVisualizationJob,
     PyMOLVisualizationJob,
@@ -28,7 +28,7 @@ __all__ = [
     "PyMOLAlignJob",
     "PyMOLIRCMovieJob",
     "PyMOLVisualizationJob",
-    "PyMOLComicBallstickVisualizationJob",
+    "PyMOLComicVisualizationJob",
     "PyMOLGlossyVisualizationJob",
     "PyMOLHybridVisualizationJob",
     "PyMOLJobRunner",
