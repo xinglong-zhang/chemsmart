@@ -5,7 +5,7 @@ GROMACS job definitions.
 """
 
 from pathlib import Path
-
+from types import SimpleNamespace
 from chemsmart.jobs.job import Job
 
 
@@ -180,6 +180,17 @@ class GromacsJob(Job):
 
     def _run(self, **kwargs):
         self.jobrunner.run(self, **kwargs)
+
+    def _output(self):
+        if self.tpr_file is None:
+            return None
+        log_file = Path(self.tpr_file).with_suffix(".log")
+        if not log_file.exists():
+            return None
+        text = log_file.read_text(encoding="utf-8", errors="ignore")
+        return SimpleNamespace(
+            normal_termination="Finished mdrun" in text,
+        )
 
     def has_tpr(self):
         """
