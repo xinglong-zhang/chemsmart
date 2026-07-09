@@ -45,12 +45,52 @@ PYMOL_STYLE_ALIASES = {
     "hybrid": "comic",
 }
 
+PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
+    "glossy": "metallic_poster_render",
+    "comic": "render_comic_metallic_labeled_final",
+    "soft_cartoon": "render_soft_cartoon",
+    "editorial_minimal": "render_editorial_minimal",
+    "black_gold_cover": "render_black_gold_cover",
+    "neon_coordination_core": "render_neon_coordination_core",
+    "matte_clay": "render_matte_clay",
+    "xray_wire": "render_xray_wire",
+    "steric_surface": "render_steric_surface",
+    "quasi_chemdraw_bold": "render_quasi_chemdraw_bold",
+    "labeled_coordination_core": "render_labeled_coordination_core",
+}
+
+PYMOL_STYLE_DEFAULT_BACKGROUNDS = {
+    "glossy": "white",
+    "comic": "dark",
+    "soft_cartoon": "white",
+}
+
+PYMOL_STYLES_WITH_BACKGROUND = frozenset(PYMOL_STYLE_DEFAULT_BACKGROUNDS)
+
+PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
+    "glossy",
+    "comic",
+    "hybrid",
+    "soft-cartoon",
+    "editorial-minimal",
+    "black-gold-cover",
+    "neon-coordination-core",
+    "matte-clay",
+    "xray-wire",
+    "steric-surface",
+    "quasi-chemdraw-bold",
+    "labeled-coordination-core",
+]
+
+_SCIENTIFIC_STYLE_TEMPLATE = "scientific_styles.py"
+
 PYMOL_STYLE_TEMPLATES = {
     "pymol": "zhang_group_pymol_style.py",
     "cylview": "zhang_group_pymol_style.py",
-    "glossy": "glossy_metal_style.py",
-    "comic": "comic_style.py",
-    "soft_cartoon": "soft_cartoon_style.py",
+    **dict.fromkeys(
+        PYMOL_SCIENTIFIC_STYLE_COMMANDS,
+        _SCIENTIFIC_STYLE_TEMPLATE,
+    ),
 }
 
 PYMOL_STYLE_SHARED_TEMPLATES = {
@@ -69,6 +109,13 @@ def normalize_pymol_style(style):
     if normalized not in PYMOL_STYLE_TEMPLATES:
         raise ValueError(f"The style {style} is not available!")
     return normalized
+
+
+def is_pymol_derived_style(style):
+    """Return True when ``style`` maps to ``scientific_styles.py``."""
+    if style is None:
+        return False
+    return normalize_pymol_style(style) in PYMOL_SCIENTIFIC_STYLE_COMMANDS
 
 
 def get_pymol_style_template_filename(style):
@@ -96,18 +143,19 @@ def copy_pymol_style_shared_templates(job):
 def format_pymol_style_command(job, selection):
     """Build the PyMOL -d style command for one selection."""
     style = normalize_pymol_style(job.style)
-    if style == "glossy":
+    render_command = PYMOL_SCIENTIFIC_STYLE_COMMANDS.get(style)
+    if render_command == "metallic_poster_render":
         return (
             f"metallic_poster_render {selection}, elem Mn, None, 2.6, "
             f"N+O+S+P+H, {job.style_background}"
         )
-    if style == "comic":
-        return (
-            f"render_comic_metallic_labeled_final {selection}, "
-            f"{job.style_background}"
-        )
-    if style == "soft_cartoon":
-        return f"render_soft_cartoon {selection}, {job.style_background}"
+    if render_command in (
+        "render_comic_metallic_labeled_final",
+        "render_soft_cartoon",
+    ):
+        return f"{render_command} {selection}, {job.style_background}"
+    if render_command is not None:
+        return f"{render_command} {selection}"
     if style == "cylview":
         return f"cylview_style {selection}"
     return f"pymol_style {selection}"
@@ -239,7 +287,7 @@ class PyMOLJobRunner(JobRunner):
         Copies the PyMOL style script for the selected job style to the
         job directory. Modify the Zhang group script when isosurface or
         color range overrides are requested.
-        Works for zhang_group_pymol_style.py and glossy_metal_style.py.
+        Works for zhang_group_pymol_style.py and scientific_styles.py.
         Overwrites an existing style file in the job folder.
 
         Args:
@@ -1087,22 +1135,10 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         )
 
 
-class PyMOLGlossyVisualizationJobRunner(PyMOLVisualizationJobRunner):
-    """PyMOL job runner for glossy semi-metallic visualization jobs."""
+class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """PyMOL job runner for derived scientific_styles.py visualization jobs."""
 
-    JOBTYPES = ["pymol_glossy_visualization"]
-
-
-class PyMOLComicVisualizationJobRunner(PyMOLVisualizationJobRunner):
-    """PyMOL job runner for comic visualization jobs."""
-
-    JOBTYPES = ["pymol_comic_visualization"]
-
-
-class PyMOLSoftCartoonVisualizationJobRunner(PyMOLVisualizationJobRunner):
-    """PyMOL job runner for soft cartoon visualization jobs."""
-
-    JOBTYPES = ["pymol_soft_cartoon_visualization"]
+    JOBTYPES = ["pymol_scientific_style_visualization"]
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):

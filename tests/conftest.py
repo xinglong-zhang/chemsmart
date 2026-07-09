@@ -22,13 +22,11 @@ from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
-    PyMOLComicVisualizationJobRunner,
-    PyMOLGlossyVisualizationJobRunner,
     PyMOLHybridVisualizationJobRunner,
     PyMOLIRCMovieJobRunner,
     PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
-    PyMOLSoftCartoonVisualizationJobRunner,
+    PyMOLScientificStyleVisualizationJobRunner,
     PyMOLVisualizationJobRunner,
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
@@ -1888,18 +1886,8 @@ def pymol_hybrid_visualization_jobrunner(pbs_server):
 
 
 @pytest.fixture()
-def pymol_glossy_visualization_jobrunner(pbs_server):
-    return PyMOLGlossyVisualizationJobRunner(server=pbs_server, scratch=False)
-
-
-@pytest.fixture()
-def pymol_comic_visualization_jobrunner(pbs_server):
-    return PyMOLComicVisualizationJobRunner(server=pbs_server, scratch=False)
-
-
-@pytest.fixture()
-def pymol_soft_cartoon_visualization_jobrunner(pbs_server):
-    return PyMOLSoftCartoonVisualizationJobRunner(
+def pymol_scientific_style_visualization_jobrunner(pbs_server):
+    return PyMOLScientificStyleVisualizationJobRunner(
         server=pbs_server, scratch=False
     )
 

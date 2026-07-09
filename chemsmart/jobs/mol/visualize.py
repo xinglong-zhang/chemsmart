@@ -10,6 +10,10 @@ infrastructure for file management and execution via job runners.
 import logging
 
 from chemsmart.jobs.mol.job import PyMOLJob
+from chemsmart.jobs.mol.runner import (
+    PYMOL_STYLE_DEFAULT_BACKGROUNDS,
+    normalize_pymol_style,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +79,7 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
     - Accepts an arbitrary number of highlight groups.
     - Assign independent colors to each group (optional).
     - Render background atoms using a faded color palette.
-    - Optionally customize surface color and transparency.
+    - Optionally customize surface appearance and transparency.
     - Override default atomic colors (C, N,
     O, S, P) with user-specified RGB values.
 
@@ -140,104 +144,37 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         self.new_color_sulfur = new_color_sulfur
 
 
-class PyMOLGlossyVisualizationJob(PyMOLVisualizationJob):
+class PyMOLScientificStyleVisualizationJob(PyMOLVisualizationJob):
     """
-    PyMOL job for glossy semi-metallic molecular visualization.
+    PyMOL job for derived ``scientific_styles.py`` visualization.
 
-    Extends :class:`PyMOLVisualizationJob` to apply the bundled
-    ``glossy_metal_style.py`` template via the ``metallic_poster_render`` command.
-    This mode is selected from the CLI with ``-s glossy`` on the
-    ``visualize`` subcommand.
+    Applies bundled styles selected via ``-s`` on the ``visualize`` subcommand,
+    including ``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``,
+    and related derivatives.
     """
 
-    TYPE = "pymol_glossy_visualization"
+    TYPE = "pymol_scientific_style_visualization"
 
-    def __init__(
-        self,
-        style_background="white",
-        **kwargs,
-    ):
+    def __init__(self, style_background=None, **kwargs):
         """
-        Initialize a glossy visualization job.
+        Initialize a derived scientific style visualization job.
 
         Args:
-            style_background (str): Background for glossy rendering, either
-                ``white`` or ``dark``.
-            **kwargs: Additional arguments passed to parent PyMOLJob.
+            style_background (str, optional): Background override for styles
+                that support it, such as ``glossy`` or ``comic``.
+            **kwargs: Must include ``style`` and other PyMOLJob arguments.
         """
-        super().__init__(
-            style="glossy", style_background=style_background, **kwargs
-        )
+        style = kwargs.get("style")
+        if style is not None:
+            kwargs["style"] = normalize_pymol_style(style)
 
-        if self.label is not None:
-            self.label += "_glossy_visualization"
+        normalized_style = kwargs.get("style")
+        if style_background is None and normalized_style is not None:
+            style_background = PYMOL_STYLE_DEFAULT_BACKGROUNDS.get(
+                normalized_style, "white"
+            )
 
+        super().__init__(style_background=style_background, **kwargs)
 
-class PyMOLComicVisualizationJob(PyMOLVisualizationJob):
-    """
-    PyMOL job for comic molecular visualization.
-
-    Extends :class:`PyMOLVisualizationJob` to apply the bundled
-    ``comic_style.py`` template via ``render_comic_metallic_labeled_final``.
-    Selected from the CLI with ``-s comic`` or ``-s hybrid`` on the
-    ``visualize`` subcommand.
-    """
-
-    TYPE = "pymol_comic_visualization"
-
-    def __init__(
-        self,
-        style_background="dark",
-        **kwargs,
-    ):
-        """
-        Initialize a comic visualization job.
-
-        Args:
-            style_background (str): Background for rendering, ``white`` or
-                ``dark`` (default: ``dark``).
-            **kwargs: Additional arguments passed to parent PyMOLJob.
-        """
-        super().__init__(
-            style="comic",
-            style_background=style_background,
-            **kwargs,
-        )
-
-        if self.label is not None:
-            self.label += "_comic_visualization"
-
-
-class PyMOLSoftCartoonVisualizationJob(PyMOLVisualizationJob):
-    """
-    PyMOL job for soft cartoon molecular visualization.
-
-    Extends :class:`PyMOLVisualizationJob` to apply the bundled
-    ``soft_cartoon_style.py`` template via ``render_soft_cartoon``.
-    Selected from the CLI with ``-s soft-cartoon`` on the
-    ``visualize`` subcommand.
-    """
-
-    TYPE = "pymol_soft_cartoon_visualization"
-
-    def __init__(
-        self,
-        style_background="white",
-        **kwargs,
-    ):
-        """
-        Initialize a soft cartoon visualization job.
-
-        Args:
-            style_background (str): Background for rendering, ``white`` or
-                ``dark`` (default: ``white``).
-            **kwargs: Additional arguments passed to parent PyMOLJob.
-        """
-        super().__init__(
-            style="soft_cartoon",
-            style_background=style_background,
-            **kwargs,
-        )
-
-        if self.label is not None:
-            self.label += "_soft_cartoon_visualization"
+        if self.label is not None and self.style is not None:
+            self.label += f"_{self.style}_visualization"

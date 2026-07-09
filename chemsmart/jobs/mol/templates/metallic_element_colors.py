@@ -1,8 +1,8 @@
 """
 Shared element color palette for glossy and comic PyMOL styles.
 
-Both ``glossy_metal_style.py`` and ``comic_style.py`` import this
-module so every element renders with identical colors in either style.
+Shared element color palette for glossy and comic PyMOL styles in
+``scientific_styles.py``.
 """
 
 from pymol import cmd

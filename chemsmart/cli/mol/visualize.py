@@ -10,7 +10,11 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
-from chemsmart.jobs.mol.runner import normalize_pymol_style
+from chemsmart.jobs.mol.runner import (
+    PYMOL_STYLES_WITH_BACKGROUND,
+    is_pymol_derived_style,
+    normalize_pymol_style,
+)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -58,16 +62,10 @@ def visualize(
     chemsmart run mol -f 'structure_file' visualize
     -G '233,468-512' -G '308,397-414,416-423'
 
-    When -s glossy is used, the glossy semi-metallic visualization mode is
-    enabled. Example usage:
+    Derived styles from scientific_styles.py are selected with -s. Examples:
         chemsmart run mol -f complex.xyz visualize -s glossy --style-background dark
-
-    When -s comic is used, the comic illustration mode is enabled. Example usage:
-        chemsmart run mol -f complex.xyz visualize -s comic --style-background dark
-
-    When -s soft-cartoon is used, the soft cartoon illustration mode is enabled.
-    Example usage:
-        chemsmart run mol -f complex.xyz visualize -s soft-cartoon --style-background white
+        chemsmart run mol -f complex.xyz visualize -s comic
+        chemsmart run mol -f complex.xyz visualize -s editorial-minimal
     """
 
     molecules = ctx.obj["molecules"]
@@ -91,43 +89,38 @@ def visualize(
     if style is not None:
         normalized_style = normalize_pymol_style(style)
 
-    is_glossy = normalized_style == "glossy"
-    is_comic = normalized_style == "comic"
-    is_soft_cartoon = normalized_style == "soft_cartoon"
-    is_special_style = is_glossy or is_comic or is_soft_cartoon
+    is_derived_style = is_pymol_derived_style(normalized_style)
 
     style_background_explicit = (
         ctx.get_parameter_source("style_background") != ParameterSource.DEFAULT
     )
 
-    if hybrid and is_special_style:
+    if hybrid and is_derived_style:
         raise click.UsageError(
             "Hybrid visualization (-H/--hybrid) cannot be combined with "
             f"-s {style}."
         )
 
-    if style_background_explicit and not is_special_style:
+    if (
+        style_background_explicit
+        and normalized_style not in PYMOL_STYLES_WITH_BACKGROUND
+    ):
         raise click.UsageError(
-            "'--style-background' can only be used with '-s glossy', "
-            "'-s comic', '-s hybrid' (alias for comic), or '-s soft-cartoon'."
+            "'--style-background' can only be used with derived styles that "
+            "support backgrounds: '-s glossy', '-s comic', '-s hybrid' "
+            "(alias for comic), or '-s soft-cartoon'."
         )
 
     from chemsmart.jobs.mol.visualize import (
-        PyMOLComicVisualizationJob,
-        PyMOLGlossyVisualizationJob,
         PyMOLHybridVisualizationJob,
-        PyMOLSoftCartoonVisualizationJob,
+        PyMOLScientificStyleVisualizationJob,
         PyMOLVisualizationJob,
     )
 
     if hybrid:
         visualization_job = PyMOLHybridVisualizationJob
-    elif is_glossy:
-        visualization_job = PyMOLGlossyVisualizationJob
-    elif is_comic:
-        visualization_job = PyMOLComicVisualizationJob
-    elif is_soft_cartoon:
-        visualization_job = PyMOLSoftCartoonVisualizationJob
+    elif is_derived_style:
+        visualization_job = PyMOLScientificStyleVisualizationJob
     else:
         visualization_job = PyMOLVisualizationJob
 
@@ -185,9 +178,14 @@ def visualize(
         **kwargs,
     )
 
-    if is_special_style:
-        job_kwargs["style_background"] = style_background
-    else:
+    if is_derived_style:
+        job_kwargs["style"] = normalized_style
+        if (
+            normalized_style in PYMOL_STYLES_WITH_BACKGROUND
+            and style_background_explicit
+        ):
+            job_kwargs["style_background"] = style_background
+    elif style is not None:
         job_kwargs["style"] = style
 
     job = visualization_job(**job_kwargs)

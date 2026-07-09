@@ -15,6 +15,7 @@ from chemsmart.cli.job import (
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
+from chemsmart.jobs.mol.runner import PYMOL_VISUALIZE_STYLE_CLI_CHOICES
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label, select_items_by_index
 
@@ -30,9 +31,9 @@ def click_pymol_visualization_options(
         style_choices = ["pymol", "cylview"]
         style_help = 'PyMOL render style. Choices include "pymol" or "cylview"'
         if include_visualize_styles:
-            style_choices.extend(["glossy", "comic", "hybrid", "soft-cartoon"])
+            style_choices.extend(PYMOL_VISUALIZE_STYLE_CLI_CHOICES)
             style_help += (
-                ', "glossy", "comic", "hybrid", or "soft-cartoon" '
+                ', or any scientific style such as "editorial-minimal" '
                 "(visualize subcommand only; hybrid is an alias for comic)"
             )
 

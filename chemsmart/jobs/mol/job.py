@@ -78,10 +78,11 @@ class PyMOLJob(Job):
             jobrunner: Runner for executing the job (default: None).
             pymol_script: Custom PyMOL script path (default: None).
             style: Visualization style: ``pymol`` or ``cylview`` (default: None).
-                Use dedicated visualize jobs for ``glossy``, ``comic``, or
-                ``soft_cartoon``.
-            style_background: Background for glossy, comic, or soft cartoon
-                rendering: ``white`` or ``dark`` (default: ``white``).
+                Use :class:`PyMOLScientificStyleVisualizationJob` for derived
+                ``scientific_styles.py`` options such as ``glossy`` or
+                ``editorial_minimal``.
+            style_background: Background override for derived styles that
+                support it, such as ``glossy`` or ``comic`` (default: ``white``).
             trace: Whether to trace molecular paths (default: None).
             vdw: Van der Waals representation settings (default: None).
             quiet_mode: Run PyMOL in quiet mode (default: True).

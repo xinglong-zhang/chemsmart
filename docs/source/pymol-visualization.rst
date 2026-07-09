@@ -32,8 +32,8 @@ Visualization Options
 
    -  -  ``-s, --style``
       -  string
-      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, ``hybrid``, or
-         ``soft-cartoon`` (see below)
+      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, ``hybrid``,
+         ``soft-cartoon``, and scientific styles (see below)
 
    -  -  ``-t, --trace/--no-trace``
       -  bool
@@ -209,8 +209,7 @@ Example
 **********************
 
 Create semi-metallic publication-style figures for metal complexes using ``-s glossy`` on the ``visualize`` subcommand.
-Like hybrid mode, glossy mode selects a dedicated job type and accepts additional options that are only valid when the
-glossy style is active.
+Like other derived styles, glossy uses :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. code:: bash
 
@@ -237,8 +236,8 @@ Glossy Options
 
 .. note::
 
-   ``--style-background`` can only be used with ``-s glossy``. Hybrid mode (``-H/--hybrid``) and glossy mode cannot be
-   combined.
+   ``--style-background`` applies only to derived styles that support it (``glossy``, ``comic``, ``hybrid``, and
+   ``soft-cartoon``). Hybrid mode (``-H/--hybrid``) and derived ``-s`` styles cannot be combined.
 
 Basic Usage
 ===========
@@ -262,12 +261,12 @@ When editing a saved ``.pse`` session:
 
 .. code:: text
 
-   run glossy_metal_style.py
+   run scientific_styles.py
    metallic_poster_render all
    metallic_poster_render all, elem Mn, None, 2.6, N+O+S+P+H, dark
 
 For Mn coordination complexes and fac/mer comparisons, pass additional arguments to ``metallic_poster_render`` directly
-in PyMOL. See ``glossy_metal_style.py`` for the full command signature.
+in PyMOL. See ``scientific_styles.py`` for the full command signature.
 
 .. _comic-visualization:
 
@@ -276,7 +275,8 @@ in PyMOL. See ``glossy_metal_style.py`` for the full command signature.
 *********************
 
 Create flat, illustrated comic figures for metal complexes using ``-s comic`` (alias ``-s hybrid``) on the ``visualize``
-subcommand. Like glossy and group-hybrid modes, this selects a dedicated job type.
+subcommand. Like other derived styles, comic uses
+:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. code:: bash
 
@@ -305,7 +305,7 @@ Manual PyMOL usage
 
 .. code:: text
 
-   run comic_style.py
+   run scientific_styles.py
    render_comic_metallic_labeled_final all
    render_comic_metallic_labeled_final all, white
    ray 1200, 1200
@@ -346,9 +346,68 @@ Manual PyMOL usage
 
 .. code:: text
 
-   run soft_cartoon_style.py
+   run scientific_styles.py
    render_soft_cartoon all
    render_soft_cartoon all, white
+   ray 1200, 1200
+
+.. _scientific-visualization:
+
+**************************
+ Scientific Visualization
+**************************
+
+All derived ``-s`` styles are implemented in ``scientific_styles.py`` and routed through
+:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`. Use ``--style-background`` only with
+``glossy``, ``comic``, ``hybrid`` (alias for comic), or ``soft-cartoon``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   -  -  ``-s`` value
+      -  Description
+   -  -  ``glossy``
+      -  Semi-metallic poster rendering with optional white or dark background
+   -  -  ``comic`` / ``hybrid``
+      -  Comic ball-and-stick rendering with black outlines and labels
+   -  -  ``soft-cartoon``
+      -  Soft premium ball-and-stick rendering with light metallic shading
+   -  -  ``editorial-minimal``
+      -  Matte minimal white style for main-text mechanistic figures
+   -  -  ``black-gold-cover``
+      -  High-impact black background with gold metal highlights
+   -  -  ``neon-coordination-core``
+      -  Neon coordination-core emphasis for reactive centers and TSs
+   -  -  ``matte-clay``
+      -  Soft clay/plastic look for graphical abstracts
+   -  -  ``xray-wire``
+      -  Monochrome wire style for SI structure verification
+   -  -  ``steric-surface``
+      -  Transparent molecular surface for steric enclosure
+   -  -  ``quasi-chemdraw-bold``
+      -  Bold schematic 3D style with ChemDraw-like clarity
+   -  -  ``labeled-coordination-core``
+      -  Coordination core with explicit element labels
+
+Basic Usage
+===========
+
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s editorial-minimal
+   chemsmart run mol -f mn_complex.xyz visualize -s black-gold-cover
+   chemsmart run mol -f mn_complex.xyz visualize -s labeled-coordination-core
+
+Manual PyMOL usage
+==================
+
+.. code:: text
+
+   run scientific_styles.py
+   render_editorial_minimal all
+   render_black_gold_cover all
+   render_labeled_coordination_core all
    ray 1200, 1200
 
 .. note::
