@@ -77,7 +77,10 @@ class PyMOLJob(Job):
                 used for processing steps like chk/fchk/cube handling.
             jobrunner: Runner for executing the job (default: None).
             pymol_script: Custom PyMOL script path (default: None).
-            style: Visualization style settings (default: None).
+            style: Visualization style: ``pymol`` or ``cylview`` (default: None).
+                Use dedicated visualize jobs for ``glossy`` or ``comic_ballstick``.
+            style_background: Background for glossy rendering: ``white`` or
+                ``dark`` (default: ``white``).
             trace: Whether to trace molecular paths (default: None).
             vdw: Van der Waals representation settings (default: None).
             quiet_mode: Run PyMOL in quiet mode (default: True).

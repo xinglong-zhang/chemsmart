@@ -32,7 +32,8 @@ Visualization Options
 
    -  -  ``-s, --style``
       -  string
-      -  Render style: pymol or cylview
+      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic_ballstick``, or
+         ``hybrid`` (see below)
 
    -  -  ``-t, --trace/--no-trace``
       -  bool
@@ -200,6 +201,119 @@ Example
 .. image:: _static/B_in_R.png
    :width: 60%
    :align: center
+
+.. _glossy-visualization:
+
+**********************
+ Glossy Visualization
+**********************
+
+Create semi-metallic publication-style figures for metal complexes using ``-s glossy`` on the ``visualize`` subcommand.
+Like hybrid mode, glossy mode selects a dedicated job type and accepts additional options that are only valid when the
+glossy style is active.
+
+.. code:: bash
+
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s glossy [SUBCMD_OPTIONS]
+
+Glossy Options
+==============
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 15 60
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-s glossy``
+      -  string
+      -  Enable glossy semi-metallic visualization mode
+
+   -  -  ``--style-background``
+      -  string
+      -  Background: ``white`` (publication) or ``dark`` (slides). Default: ``white``
+
+.. note::
+
+   ``--style-background`` can only be used with ``-s glossy``. Hybrid mode (``-H/--hybrid``) and glossy mode cannot be
+   combined.
+
+Basic Usage
+===========
+
+Publication figure (white background):
+
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s glossy --style-background white
+
+Slide / presentation (dark background):
+
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s glossy --style-background dark
+
+Manual PyMOL usage
+==================
+
+When editing a saved ``.pse`` session:
+
+.. code:: text
+
+   run glossy_metal_style.py
+   metallic_poster_render all
+   metallic_poster_render all, elem Mn, None, 2.6, N+O+S+P+H, dark
+
+For Mn coordination complexes and fac/mer comparisons, pass additional arguments to ``metallic_poster_render`` directly
+in PyMOL. See ``glossy_metal_style.py`` for the full command signature.
+
+.. _comic-ballstick-visualization:
+
+************************************
+ Comic Ball-and-Stick Visualization
+************************************
+
+Create flat, illustrated comic ball-and-stick figures for metal complexes using ``-s comic_ballstick`` (alias ``-s
+hybrid``) on the ``visualize`` subcommand. Like glossy and hybrid modes, this selects a dedicated job type.
+
+.. code:: bash
+
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s comic_ballstick [SUBCMD_OPTIONS]
+
+The style renders thick sticks and scaled spheres with black ray-traced outlines, centered element labels on the metal
+and donor atoms, and an orthoscopic (flat) camera view.
+
+Basic Usage
+===========
+
+White background (default in the PyMOL script):
+
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s comic_ballstick --style-background white
+
+Dark background:
+
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s comic_ballstick --style-background dark
+
+Manual PyMOL usage
+==================
+
+.. code:: text
+
+   run comic_ballstick_style.py
+   render_comic_metallic_labeled_final all
+   render_comic_metallic_labeled_final all, white
+   ray 1200, 1200
+
+.. note::
+
+   ``--style-background``, ``-H/--hybrid``, and special ``-s`` styles are mutually exclusive where noted. Only one
+   visualization mode can be active.
 
 ************
  Align Jobs

@@ -39,16 +39,32 @@ pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
+_PYMOL_TEMPLATES_PATH = Path(__file__).resolve().parent / "templates"
+
+PYMOL_STYLE_ALIASES = {
+    "hybrid": "comic_ballstick",
+}
+
 PYMOL_STYLE_TEMPLATES = {
     "pymol": "zhang_group_pymol_style.py",
     "cylview": "zhang_group_pymol_style.py",
     "glossy": "glossy_metal_style.py",
+    "comic_ballstick": "comic_ballstick_style.py",
+}
+
+PYMOL_STYLE_SHARED_TEMPLATES = {
+    "glossy": ["metallic_element_colors.py", "pymol_style_imports.py"],
+    "comic_ballstick": [
+        "metallic_element_colors.py",
+        "pymol_style_imports.py",
+    ],
 }
 
 
 def normalize_pymol_style(style):
     """Return a supported PyMOL style keyword."""
     normalized = (style or "pymol").lower()
+    normalized = PYMOL_STYLE_ALIASES.get(normalized, normalized)
     if normalized not in PYMOL_STYLE_TEMPLATES:
         raise ValueError(f"The style {style} is not available!")
     return normalized
@@ -59,12 +75,35 @@ def get_pymol_style_template_filename(style):
     return PYMOL_STYLE_TEMPLATES[normalize_pymol_style(style)]
 
 
+def copy_pymol_style_shared_templates(job):
+    """Copy shared helper scripts required by a PyMOL style template."""
+    style = normalize_pymol_style(job.style)
+    shared_templates = PYMOL_STYLE_SHARED_TEMPLATES.get(style, [])
+    copied = []
+    for template_filename in shared_templates:
+        source_style_file = _PYMOL_TEMPLATES_PATH / template_filename
+        dest_style_file = os.path.join(job.folder, template_filename)
+        logger.debug(
+            f"Copying shared style file from {source_style_file} "
+            f"to {dest_style_file}."
+        )
+        shutil.copy(source_style_file, dest_style_file)
+        copied.append(dest_style_file)
+    return copied
+
+
 def format_pymol_style_command(job, selection):
     """Build the PyMOL -d style command for one selection."""
     style = normalize_pymol_style(job.style)
     if style == "glossy":
         background = getattr(job, "style_background", None) or "white"
-        return f"glossy_complex {selection}, {background}"
+        return (
+            f"metallic_poster_render {selection}, elem Mn, None, 2.6, "
+            f"N+O+S+P+H, {background}"
+        )
+    if style == "comic_ballstick":
+        background = getattr(job, "style_background", None) or "dark"
+        return f"render_comic_metallic_labeled_final {selection}, {background}"
     if style == "cylview":
         return f"cylview_style {selection}"
     return f"pymol_style {selection}"
@@ -219,6 +258,7 @@ class PyMOLJobRunner(JobRunner):
             f"Copying file from {source_style_file} to {dest_style_file}."
         )
         shutil.copy(source_style_file, dest_style_file)
+        copy_pymol_style_shared_templates(job)
 
         # check if job has attribute of isosurface_value or color_range
         if not hasattr(job, "isosurface_value"):
@@ -1041,6 +1081,18 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             f"set surface_color, {surface_color}, all\n"
             f"set transparency, {surface_transparency}, all\n"
         )
+
+
+class PyMOLGlossyVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """PyMOL job runner for glossy semi-metallic visualization jobs."""
+
+    JOBTYPES = ["pymol_glossy_visualization"]
+
+
+class PyMOLComicBallstickVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """PyMOL job runner for comic ball-and-stick visualization jobs."""
+
+    JOBTYPES = ["pymol_comic_ballstick_visualization"]
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):

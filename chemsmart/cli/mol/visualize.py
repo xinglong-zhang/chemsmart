@@ -2,6 +2,7 @@ import ast
 import logging
 
 import click
+from click.core import ParameterSource
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
@@ -9,6 +10,7 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
+from chemsmart.jobs.mol.runner import normalize_pymol_style
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
     context_settings=dict(allow_extra_args=True),
 )
 @click_job_options
-@click_pymol_visualization_options
+@click_pymol_visualization_options(include_visualize_styles=True)
 @click_pymol_hybrid_visualization_options
 @click.pass_context
 def visualize(
@@ -55,13 +57,19 @@ def visualize(
     Example usage:
     chemsmart run mol -f 'structure_file' visualize
     -G '233,468-512' -G '308,397-414,416-423'
+
+    When -s glossy is used, the glossy semi-metallic visualization mode is
+    enabled. Example usage:
+        chemsmart run mol -f complex.xyz visualize -s glossy --style-background dark
+
+    When -s comic_ballstick is used, the flat comic ball-and-stick mode is
+    enabled. Example usage:
+        chemsmart run mol -f complex.xyz visualize -s comic_ballstick --style-background dark
     """
 
-    # get molecule
     molecules = ctx.obj["molecules"]
     logger.info(f"Visualizing molecule(s): {molecules}.")
 
-    # get label for the job
     label = ctx.obj["label"]
     if coordinates is not None:
         logger.debug(f"Coordinates for visualization: {coordinates}")
@@ -75,14 +83,46 @@ def visualize(
                 "Invalid coordinates input. Please provide a valid Python "
                 "literal."
             )
+
+    normalized_style = None
+    if style is not None:
+        normalized_style = normalize_pymol_style(style)
+
+    is_glossy = normalized_style == "glossy"
+    is_comic_ballstick = normalized_style == "comic_ballstick"
+    is_special_style = is_glossy or is_comic_ballstick
+
+    style_background_explicit = (
+        ctx.get_parameter_source("style_background") != ParameterSource.DEFAULT
+    )
+
+    if hybrid and is_special_style:
+        raise click.UsageError(
+            "Hybrid visualization (-H/--hybrid) cannot be combined with "
+            f"-s {style}."
+        )
+
+    if style_background_explicit and not is_special_style:
+        raise click.UsageError(
+            "'--style-background' can only be used with '-s glossy' or "
+            "'-s comic_ballstick' (or '-s hybrid')."
+        )
+
     from chemsmart.jobs.mol.visualize import (
+        PyMOLComicBallstickVisualizationJob,
+        PyMOLGlossyVisualizationJob,
         PyMOLHybridVisualizationJob,
         PyMOLVisualizationJob,
     )
 
-    visualization_job = (
-        PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
-    )
+    if hybrid:
+        visualization_job = PyMOLHybridVisualizationJob
+    elif is_glossy:
+        visualization_job = PyMOLGlossyVisualizationJob
+    elif is_comic_ballstick:
+        visualization_job = PyMOLComicBallstickVisualizationJob
+    else:
+        visualization_job = PyMOLVisualizationJob
 
     hybrid_opts = {}
 
@@ -91,8 +131,6 @@ def visualize(
     colors = kwargs.pop("colors", ())
     hybrid_opts["colors"] = colors
 
-    # raise error if -G/-C/-sc/-st or new_color_*
-    # is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
         "colors",
@@ -112,7 +150,6 @@ def visualize(
             "with '-H/--hybrid'."
         )
 
-    # Include new_color_* options if specified
     for hybrid_opt in [
         "surface_color",
         "surface_transparency",
@@ -126,12 +163,11 @@ def visualize(
             hybrid_opts[hybrid_opt] = kwargs.pop(hybrid_opt)
 
     logger.info(f"Hybrid visualization job options: {hybrid_opts}")
-    job = visualization_job(
+
+    job_kwargs = dict(
         molecule=molecules,
         label=label,
         pymol_script=file,
-        style=style,
-        style_background=style_background,
         trace=trace,
         vdw=vdw,
         quiet_mode=quiet,
@@ -141,5 +177,12 @@ def visualize(
         **hybrid_opts,
         **kwargs,
     )
+
+    if is_special_style:
+        job_kwargs["style_background"] = style_background
+    else:
+        job_kwargs["style"] = style
+
+    job = visualization_job(**job_kwargs)
 
     return job

@@ -138,3 +138,71 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         self.new_color_oxygen = new_color_oxygen
         self.new_color_phosphorus = new_color_phosphorus
         self.new_color_sulfur = new_color_sulfur
+
+
+class PyMOLGlossyVisualizationJob(PyMOLVisualizationJob):
+    """
+    PyMOL job for glossy semi-metallic molecular visualization.
+
+    Extends :class:`PyMOLVisualizationJob` to apply the bundled
+    ``glossy_metal_style.py`` template via the ``metallic_poster_render`` command.
+    This mode is selected from the CLI with ``-s glossy`` on the
+    ``visualize`` subcommand.
+    """
+
+    TYPE = "pymol_glossy_visualization"
+
+    def __init__(
+        self,
+        style_background="white",
+        **kwargs,
+    ):
+        """
+        Initialize a glossy visualization job.
+
+        Args:
+            style_background (str): Background for glossy rendering, either
+                ``white`` or ``dark``.
+            **kwargs: Additional arguments passed to parent PyMOLJob.
+        """
+        super().__init__(
+            style="glossy", style_background=style_background, **kwargs
+        )
+
+        if self.label is not None:
+            self.label += "_glossy_visualization"
+
+
+class PyMOLComicBallstickVisualizationJob(PyMOLVisualizationJob):
+    """
+    PyMOL job for comic ball-and-stick molecular visualization.
+
+    Extends :class:`PyMOLVisualizationJob` to apply the bundled
+    ``comic_ballstick_style.py`` template via ``render_comic_metallic_labeled_final``.
+    Selected from the CLI with ``-s comic_ballstick`` or ``-s hybrid``
+    on the ``visualize`` subcommand.
+    """
+
+    TYPE = "pymol_comic_ballstick_visualization"
+
+    def __init__(
+        self,
+        style_background="dark",
+        **kwargs,
+    ):
+        """
+        Initialize a comic ball-and-stick visualization job.
+
+        Args:
+            style_background (str): Background for rendering, ``white`` or
+                ``dark`` (default: ``dark``).
+            **kwargs: Additional arguments passed to parent PyMOLJob.
+        """
+        super().__init__(
+            style="comic_ballstick",
+            style_background=style_background,
+            **kwargs,
+        )
+
+        if self.label is not None:
+            self.label += "_comic_ballstick_visualization"

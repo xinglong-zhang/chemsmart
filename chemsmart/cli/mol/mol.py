@@ -21,80 +21,106 @@ from chemsmart.utils.io import clean_label, select_items_by_index
 logger = logging.getLogger(__name__)
 
 
-def click_pymol_visualization_options(f):
+def click_pymol_visualization_options(
+    func=None, *, include_visualize_styles=False
+):
     """Common click options for PyMOL visualization."""
 
-    @click.option(
-        "-f",
-        "--file",
-        type=str,
-        default=None,
-        help="PyMOL file script or style. If not specified, defaults to "
-        "zhang_group_pymol_style.py.",
-    )
-    @click.option(
-        "-s",
-        "--style",
-        type=click.Choice(
-            ["pymol", "cylview", "glossy"], case_sensitive=False
-        ),
-        default=None,
-        help='PyMOL render style. Choices include "pymol", "cylview", or '
-        '"glossy" (uses glossy_metal_style.py).',
-    )
-    @click.option(
-        "--style-background",
-        type=click.Choice(["white", "dark"], case_sensitive=False),
-        default="white",
-        show_default=True,
-        help="Background for the glossy style: white for publication figures "
-        "or dark for high-contrast slides.",
-    )
-    @click.option(
-        "-t/",
-        "--trace/--no-trace",
-        type=bool,
-        default=True,
-        help="PyMOL option to ray trace or not. Defaults to True.",
-    )
-    @click.option(
-        "-v",
-        "--vdw",
-        is_flag=True,
-        default=False,
-        help="Add Van der Waals surface. Defaults to False.",
-    )
-    @click.option(
-        "-q",
-        "--quiet",
-        is_flag=True,
-        default=False,
-        help="Run PyMOL in quiet mode. Defaults to False.",
-    )
-    @click.option(
-        "--command-line-only/--no-command-line-only",
-        is_flag=True,
-        default=True,
-        help="Run PyMOL in command line only mode. Defaults to True.",
-    )
-    @click.option(
-        "-c",
-        "--coordinates",
-        default=None,
-        help="List of coordinates (bonds, angles, and dihedrals) for "
-        "labelling. 1-indexed.",
-    )
-    @click.option(
-        "--label-offset",
-        type=str,
-        default=None,
-        help="Tuple for offsetting label position in mol jobs.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
+    def decorator(f):
+        style_choices = ["pymol", "cylview"]
+        style_help = 'PyMOL render style. Choices include "pymol" or "cylview"'
+        if include_visualize_styles:
+            style_choices.extend(["glossy", "comic_ballstick", "hybrid"])
+            style_help += (
+                ', "glossy", "comic_ballstick", or "hybrid" '
+                "(visualize subcommand only; hybrid is an alias for comic_ballstick)"
+            )
 
-    return wrapper_common_options
+        @click.option(
+            "-f",
+            "--file",
+            type=str,
+            default=None,
+            help="PyMOL file script or style. If not specified, defaults to "
+            "zhang_group_pymol_style.py.",
+        )
+        @click.option(
+            "-s",
+            "--style",
+            type=click.Choice(style_choices, case_sensitive=False),
+            default=None,
+            help=style_help + ".",
+        )
+        @click.option(
+            "-t/",
+            "--trace/--no-trace",
+            type=bool,
+            default=True,
+            help="PyMOL option to ray trace or not. Defaults to True.",
+        )
+        @click.option(
+            "-v",
+            "--vdw",
+            is_flag=True,
+            default=False,
+            help="Add Van der Waals surface. Defaults to False.",
+        )
+        @click.option(
+            "-q",
+            "--quiet",
+            is_flag=True,
+            default=False,
+            help="Run PyMOL in quiet mode. Defaults to False.",
+        )
+        @click.option(
+            "--command-line-only/--no-command-line-only",
+            is_flag=True,
+            default=True,
+            help="Run PyMOL in command line only mode. Defaults to True.",
+        )
+        @click.option(
+            "-c",
+            "--coordinates",
+            default=None,
+            help="List of coordinates (bonds, angles, and dihedrals) for "
+            "labelling. 1-indexed.",
+        )
+        @click.option(
+            "--label-offset",
+            type=str,
+            default=None,
+            help="Tuple for offsetting label position in mol jobs.",
+        )
+        @functools.wraps(f)
+        def wrapper_common_options(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        if include_visualize_styles:
+
+            @click.option(
+                "--style-background",
+                type=click.Choice(["white", "dark"], case_sensitive=False),
+                default="white",
+                show_default=True,
+                help="Background for -s glossy, -s comic_ballstick, or -s hybrid: "
+                "white for publication figures or dark for high-contrast slides.",
+            )
+            @functools.wraps(f)
+            def wrapper_style_background_options(*args, **kwargs):
+                return wrapper_common_options(*args, **kwargs)
+
+            return wrapper_style_background_options
+
+        return wrapper_common_options
+
+    if func is not None:
+        return decorator(func)
+    return decorator
+
+
+def click_pymol_glossy_visualization_options(f):
+    """Deprecated alias kept for backward compatibility."""
+    return f
 
 
 def click_pymol_hybrid_visualization_options(f):

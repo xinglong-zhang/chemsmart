@@ -14,7 +14,12 @@ from .movie import PyMOLMovieJob
 from .nci import PyMOLNCIJob
 from .runner import PyMOLJobRunner
 from .spin import PyMOLSpinJob
-from .visualize import PyMOLHybridVisualizationJob, PyMOLVisualizationJob
+from .visualize import (
+    PyMOLComicBallstickVisualizationJob,
+    PyMOLGlossyVisualizationJob,
+    PyMOLHybridVisualizationJob,
+    PyMOLVisualizationJob,
+)
 
 # Get all available PyMOL job subclasses
 jobs = PyMOLJob.subclasses()
@@ -23,6 +28,8 @@ __all__ = [
     "PyMOLAlignJob",
     "PyMOLIRCMovieJob",
     "PyMOLVisualizationJob",
+    "PyMOLComicBallstickVisualizationJob",
+    "PyMOLGlossyVisualizationJob",
     "PyMOLHybridVisualizationJob",
     "PyMOLJobRunner",
     "PyMOLMOJob",
