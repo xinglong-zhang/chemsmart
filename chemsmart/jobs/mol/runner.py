@@ -50,6 +50,7 @@ PYMOL_STYLE_TEMPLATES = {
     "cylview": "zhang_group_pymol_style.py",
     "glossy": "glossy_metal_style.py",
     "comic": "comic_style.py",
+    "soft_cartoon": "soft_cartoon_style.py",
 }
 
 PYMOL_STYLE_SHARED_TEMPLATES = {
@@ -63,7 +64,7 @@ PYMOL_STYLE_SHARED_TEMPLATES = {
 
 def normalize_pymol_style(style):
     """Return a supported PyMOL style keyword."""
-    normalized = (style or "pymol").lower()
+    normalized = (style or "pymol").lower().replace("-", "_")
     normalized = PYMOL_STYLE_ALIASES.get(normalized, normalized)
     if normalized not in PYMOL_STYLE_TEMPLATES:
         raise ValueError(f"The style {style} is not available!")
@@ -96,14 +97,17 @@ def format_pymol_style_command(job, selection):
     """Build the PyMOL -d style command for one selection."""
     style = normalize_pymol_style(job.style)
     if style == "glossy":
-        background = getattr(job, "style_background", None) or "white"
         return (
             f"metallic_poster_render {selection}, elem Mn, None, 2.6, "
-            f"N+O+S+P+H, {background}"
+            f"N+O+S+P+H, {job.style_background}"
         )
     if style == "comic":
-        background = getattr(job, "style_background", None) or "dark"
-        return f"render_comic_metallic_labeled_final {selection}, {background}"
+        return (
+            f"render_comic_metallic_labeled_final {selection}, "
+            f"{job.style_background}"
+        )
+    if style == "soft_cartoon":
+        return f"render_soft_cartoon {selection}, {job.style_background}"
     if style == "cylview":
         return f"cylview_style {selection}"
     return f"pymol_style {selection}"
@@ -1093,6 +1097,12 @@ class PyMOLComicVisualizationJobRunner(PyMOLVisualizationJobRunner):
     """PyMOL job runner for comic visualization jobs."""
 
     JOBTYPES = ["pymol_comic_visualization"]
+
+
+class PyMOLSoftCartoonVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """PyMOL job runner for soft cartoon visualization jobs."""
+
+    JOBTYPES = ["pymol_soft_cartoon_visualization"]
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):

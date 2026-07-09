@@ -32,8 +32,8 @@ Visualization Options
 
    -  -  ``-s, --style``
       -  string
-      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, or ``hybrid`` (see
-         below)
+      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, ``hybrid``, or
+         ``soft-cartoon`` (see below)
 
    -  -  ``-t, --trace/--no-trace``
       -  bool
@@ -308,6 +308,47 @@ Manual PyMOL usage
    run comic_style.py
    render_comic_metallic_labeled_final all
    render_comic_metallic_labeled_final all, white
+   ray 1200, 1200
+
+.. _soft-cartoon-visualization:
+
+****************************
+ Soft Cartoon Visualization
+****************************
+
+Create soft premium ball-and-stick figures for metal complexes using ``-s soft-cartoon`` on the ``visualize``
+subcommand. Like glossy and comic modes, this selects a dedicated job type.
+
+.. code:: bash
+
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s soft-cartoon [SUBCMD_OPTIONS]
+
+The style renders scaled sticks and spheres with soft metallic shading, light ray shadows, and a perspective camera
+view. White backgrounds use a transparent viewport for compositing.
+
+Basic Usage
+===========
+
+Publication figure (white background, default):
+
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s soft-cartoon --style-background white
+
+Slide / presentation (dark background):
+
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s soft-cartoon --style-background dark
+
+Manual PyMOL usage
+==================
+
+.. code:: text
+
+   run soft_cartoon_style.py
+   render_soft_cartoon all
+   render_soft_cartoon all, white
    ray 1200, 1200
 
 .. note::

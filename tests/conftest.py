@@ -28,6 +28,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLIRCMovieJobRunner,
     PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
+    PyMOLSoftCartoonVisualizationJobRunner,
     PyMOLVisualizationJobRunner,
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
@@ -1894,6 +1895,13 @@ def pymol_glossy_visualization_jobrunner(pbs_server):
 @pytest.fixture()
 def pymol_comic_visualization_jobrunner(pbs_server):
     return PyMOLComicVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_soft_cartoon_visualization_jobrunner(pbs_server):
+    return PyMOLSoftCartoonVisualizationJobRunner(
+        server=pbs_server, scratch=False
+    )
 
 
 @pytest.fixture()

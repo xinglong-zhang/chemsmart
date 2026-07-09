@@ -18,6 +18,7 @@ from .visualize import (
     PyMOLComicVisualizationJob,
     PyMOLGlossyVisualizationJob,
     PyMOLHybridVisualizationJob,
+    PyMOLSoftCartoonVisualizationJob,
     PyMOLVisualizationJob,
 )
 
@@ -31,6 +32,7 @@ __all__ = [
     "PyMOLComicVisualizationJob",
     "PyMOLGlossyVisualizationJob",
     "PyMOLHybridVisualizationJob",
+    "PyMOLSoftCartoonVisualizationJob",
     "PyMOLJobRunner",
     "PyMOLMOJob",
     "PyMOLMovieJob",

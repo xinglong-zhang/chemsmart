@@ -206,3 +206,38 @@ class PyMOLComicVisualizationJob(PyMOLVisualizationJob):
 
         if self.label is not None:
             self.label += "_comic_visualization"
+
+
+class PyMOLSoftCartoonVisualizationJob(PyMOLVisualizationJob):
+    """
+    PyMOL job for soft cartoon molecular visualization.
+
+    Extends :class:`PyMOLVisualizationJob` to apply the bundled
+    ``soft_cartoon_style.py`` template via ``render_soft_cartoon``.
+    Selected from the CLI with ``-s soft-cartoon`` on the
+    ``visualize`` subcommand.
+    """
+
+    TYPE = "pymol_soft_cartoon_visualization"
+
+    def __init__(
+        self,
+        style_background="white",
+        **kwargs,
+    ):
+        """
+        Initialize a soft cartoon visualization job.
+
+        Args:
+            style_background (str): Background for rendering, ``white`` or
+                ``dark`` (default: ``white``).
+            **kwargs: Additional arguments passed to parent PyMOLJob.
+        """
+        super().__init__(
+            style="soft_cartoon",
+            style_background=style_background,
+            **kwargs,
+        )
+
+        if self.label is not None:
+            self.label += "_soft_cartoon_visualization"

@@ -64,6 +64,10 @@ def visualize(
 
     When -s comic is used, the comic illustration mode is enabled. Example usage:
         chemsmart run mol -f complex.xyz visualize -s comic --style-background dark
+
+    When -s soft-cartoon is used, the soft cartoon illustration mode is enabled.
+    Example usage:
+        chemsmart run mol -f complex.xyz visualize -s soft-cartoon --style-background white
     """
 
     molecules = ctx.obj["molecules"]
@@ -89,7 +93,8 @@ def visualize(
 
     is_glossy = normalized_style == "glossy"
     is_comic = normalized_style == "comic"
-    is_special_style = is_glossy or is_comic
+    is_soft_cartoon = normalized_style == "soft_cartoon"
+    is_special_style = is_glossy or is_comic or is_soft_cartoon
 
     style_background_explicit = (
         ctx.get_parameter_source("style_background") != ParameterSource.DEFAULT
@@ -104,13 +109,14 @@ def visualize(
     if style_background_explicit and not is_special_style:
         raise click.UsageError(
             "'--style-background' can only be used with '-s glossy', "
-            "'-s comic', or '-s hybrid' (alias for comic)."
+            "'-s comic', '-s hybrid' (alias for comic), or '-s soft-cartoon'."
         )
 
     from chemsmart.jobs.mol.visualize import (
         PyMOLComicVisualizationJob,
         PyMOLGlossyVisualizationJob,
         PyMOLHybridVisualizationJob,
+        PyMOLSoftCartoonVisualizationJob,
         PyMOLVisualizationJob,
     )
 
@@ -120,6 +126,8 @@ def visualize(
         visualization_job = PyMOLGlossyVisualizationJob
     elif is_comic:
         visualization_job = PyMOLComicVisualizationJob
+    elif is_soft_cartoon:
+        visualization_job = PyMOLSoftCartoonVisualizationJob
     else:
         visualization_job = PyMOLVisualizationJob
 
