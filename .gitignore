@@ -6,6 +6,8 @@ __pycache__/
 .idea/*
 *.idea/
 *.idea/*
+*.vscode/
+*.vscode/*
 
 
 # C extensions
