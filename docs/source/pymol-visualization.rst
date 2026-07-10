@@ -293,22 +293,22 @@ other derived styles, comic uses :class:`~chemsmart.jobs.mol.visualize.PyMOLScie
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s comic [SUBCMD_OPTIONS]
 
 The style renders thick sticks and scaled spheres with black ray-traced outlines, centered element labels on the metal
-and donor atoms, and an orthoscopic (flat) camera view.
+and donor atoms, and an orthoscopic (flat) camera view. Ray-traced PNG export uses a transparent background for
+compositing into manuscripts or slides.
 
 Basic Usage
 ===========
 
-White background (default in the PyMOL script):
+.. code:: bash
+
+   chemsmart run mol -f mn_complex.xyz visualize -s comic
+
+Highlight specific metal-ligand bonds in coordination-core styling with ``-c`` (distance labels are suppressed for comic
+by default):
 
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s comic --style-background white
-
-Dark background:
-
-.. code:: bash
-
-   chemsmart run mol -f mn_complex.xyz visualize -s comic --style-background dark
+   chemsmart run mol -f mn_complex.xyz visualize -s comic -c '[[1,8],[1,15],[1,36]]'
 
 Example
 =======
@@ -318,7 +318,7 @@ Example
    :align: center
    :width: 70%
 
-   Comic style applied to ``crest_best`` via
+   Comic style applied to ``crest_best`` with a transparent background via
    ``chemsmart run mol -f crest_best.xyz visualize -s comic``.
 
 Manual PyMOL usage
@@ -328,8 +328,8 @@ Manual PyMOL usage
 
    run scientific_styles.py
    render_comic_metallic_labeled_final all
-   render_comic_metallic_labeled_final all, white
    ray 1200, 1200
+   png comic.png, dpi=300
 
 .. _soft-cartoon-visualization:
 
