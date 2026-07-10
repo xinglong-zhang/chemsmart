@@ -40,7 +40,7 @@ class TestGaussianCLIPubChemOptCommand:
                 "chemsmart.jobs.gaussian.opt.GaussianOptJob",
                 [
                     "-p",
-                    "test",
+                    "gas_solv",
                     "--pubchem",
                     "222",
                     "-l",
