@@ -1314,6 +1314,196 @@ class TestMoleculeAdvanced:
         assert last_model.residue_numbers == [2]
 
 
+class TestDescriptors:
+    from dbstep import Dbstep
+    from rdkit.Chem import AllChem, Descriptors
+
+    @staticmethod
+    def _rdkit_embed_and_optimize(smiles, seed=1):
+        """Return an RDKit Mol with a single optimized 3D conformer (Hs added)."""
+        m = Chem.MolFromSmiles(smiles)
+        # fixed seed for deterministic embedding
+        params = Chem.AllChem.ETKDGv3()
+        params.randomSeed = seed
+        Chem.AllChem.EmbedMolecule(m, params)
+        Chem.AllChem.UFFOptimizeMolecule(m)
+        return m
+
+    def test_2d_descriptors_match_rdkit(self):
+        """2D Descriptors should match the result from rdkit"""
+
+        from rdkit.Chem import Descriptors, Fragments
+
+        smiles = "CCO"  # Ethanol
+        rdkit_mol = self._rdkit_embed_and_optimize(smiles=smiles)
+
+        mol = Molecule.from_rdkit_mol(rdkit_mol)
+
+        desc2D = mol.twod_descriptors
+        expected = {
+            # Few important descriptors
+            "MolWt": Descriptors.MolWt(rdkit_mol),
+            "HeavyAtomMolWt": Descriptors.HeavyAtomMolWt(rdkit_mol),
+            "NumValenceElectrons": Descriptors.NumValenceElectrons(rdkit_mol),
+            "fr_Al_OH": Fragments.fr_Al_OH(rdkit_mol),
+        }
+
+        assert isinstance(desc2D, dict)
+        for k, v in expected.items():
+            assert k in desc2D
+            assert isinstance(desc2D[k], (int, float))
+            assert np.isclose(desc2D[k], v)
+
+    def test_3d_descriptors_rotation_and_translation_invariance(self):
+        """3D descriptors should be invariant to rigid transforms (rotation+translation)."""
+        import math
+
+        smiles = "CCO"  # ethanol with a 3D conformer
+        rd_m = self._rdkit_embed_and_optimize(smiles, seed=42)
+        mol = Molecule.from_rdkit_mol(rd_m)
+        desc3_a = mol.threed_descriptors
+        assert isinstance(desc3_a, dict)
+        # basic value types
+        for k, v in desc3_a.items():
+            assert isinstance(v, (int, float))
+
+        # apply a random rigid rotation + translation to positions
+        pos = np.array(mol.positions, dtype=float)
+        # random rotation with deterministic seed
+        rng = np.random.RandomState(42)
+        theta = rng.rand() * 2 * math.pi
+        u = rng.randn(3)
+        u /= np.linalg.norm(u)
+        # Rodrigues' rotation formula
+        K = np.array([[0, -u[2], u[1]], [u[2], 0, -u[0]], [-u[1], u[0], 0]])
+        R = np.eye(3) + math.sin(theta) * K + (1 - math.cos(theta)) * (K @ K)
+        pos_rot = (pos @ R.T) + np.array([3.2, -1.7, 0.5])  # translate
+
+        mol2 = Molecule(symbols=mol.symbols, positions=pos_rot)
+        desc3_b = mol2.threed_descriptors
+
+        # same keys and numerically close values (allow small numerical tolerance)
+        assert set(desc3_a.keys()) == set(desc3_b.keys())
+        for k in desc3_a:
+            assert np.isclose(
+                desc3_a[k], desc3_b[k], rtol=1e-5, atol=1e-5
+            ), f"3D descriptor {k} changed under rigid transform: {desc3_a[k]} vs {desc3_b[k]}"
+
+    def test_descriptors_repeatability(self):
+        """Repeated access returns identical results (no caching flakiness)."""
+        rd_m = self._rdkit_embed_and_optimize("c1ccccc1")  # benzene
+        mol = Molecule.from_rdkit_mol(rd_m)
+        d1 = mol.twod_descriptors
+        d2 = mol.twod_descriptors
+        assert d1 == d2
+        e1 = mol.threed_descriptors
+        e2 = mol.threed_descriptors
+        # compare floats within tolerance
+        assert set(e1.keys()) == set(e2.keys())
+        for k in e1:
+            assert np.isclose(e1[k], e2[k], rtol=1e-5, atol=1e-5)
+
+    @pytest.mark.parametrize("grid_measure", [False, True])
+    def test_compute_sterimol_parameters_modes_and_invariance(
+        self, grid_measure
+    ):
+        """
+        Verifies compute_sterimol_parameters works for both analytical (False)
+        and grid-based (True) modes, verifies property caching, and checks
+        geometric transform invariance.
+        """
+
+        import math
+
+        # 1. Setup a valid 3D molecule (Isobutane / Isopropyl attachment)
+        smiles = "CCO"
+        rd_m = self._rdkit_embed_and_optimize(smiles=smiles, seed=42)
+        mol = Molecule.from_rdkit_mol(rd_m)
+
+        # Define directional vectors for the Sterimol axis
+        # e.g., Atom 1 (C) -> Atom 2 (C)
+        atom1, atom2 = 1, 2
+
+        # 2. Before computation, the property should return None
+        assert mol.sterimol_parameters is None
+
+        # 3. Compute Sterimol parameters
+        db_obj = mol.compute_sterimol_parameters(
+            atom1=atom1, atom2=atom2, grid_measure=grid_measure
+        )
+
+        # 4. Verify the property now caches and exposes the exact same object
+        assert mol.sterimol_parameters is not None
+        assert mol.sterimol_parameters == db_obj
+
+        # 5. Extract and validate values directly from the DBSTEP object attributes
+        # DBSTEP objects typically expose L, Bmin (B1), and Bmax (B5) as attributes
+        l_val = db_obj.L
+        bmin_val = db_obj.Bmin
+        bmax_val = db_obj.Bmax
+
+        for val, name in [
+            (l_val, "L"),
+            (bmin_val, "Bmin"),
+            (bmax_val, "Bmax"),
+        ]:
+            assert isinstance(val, (int, float)), f"{name} should be numeric"
+            assert (
+                val > 0.0
+            ), f"{name} should be a positive geometric dimension"
+
+        # 6. Test Rigid Invariance (Transform the coordinates)
+        pos = np.array(mol.positions, dtype=float)
+        rng = np.random.RandomState(999)
+        phi = rng.rand() * 2 * math.pi
+        axis = np.array([1.0, 0.0, 0.0])
+
+        K = np.array(
+            [
+                [0, -axis[2], axis[1]],
+                [axis[2], 0, -axis[0]],
+                [-axis[1], axis[0], 0],
+            ]
+        )
+        R = np.eye(3) + math.sin(phi) * K + (1 - math.cos(phi)) * (K @ K)
+        pos_rot = (pos @ R.T) + np.array([1.0, 2.0, 3.0])
+
+        # Instantiate the transformed molecule
+        mol_rot = Molecule(symbols=mol.symbols, positions=pos_rot)
+        db_obj_rot = mol_rot.compute_sterimol_parameters(
+            atom1=atom1, atom2=atom2, grid_measure=grid_measure
+        )
+
+        # 7. Check if geometric values are invariant under rotation + translation
+        # Note: Analytical mode (grid_measure=False) is highly precise (atol=1e-4).
+        # Grid mode (grid_measure=True) can have slight grid alignment variance depending
+        # on orientation, so a slightly relaxed tolerance (atol=1e-2) ensures it won't flake.
+        tol = 1e-2 if grid_measure else 1e-4
+
+        assert np.isclose(
+            db_obj.L, db_obj_rot.L, atol=tol
+        ), f"L changed in mode grid_measure={grid_measure}"
+        assert np.isclose(
+            db_obj.Bmin, db_obj_rot.Bmin, atol=tol
+        ), f"Bmin changed in mode grid_measure={grid_measure}"
+        assert np.isclose(
+            db_obj.Bmax, db_obj_rot.Bmax, atol=tol
+        ), f"Bmax changed in mode grid_measure={grid_measure}"
+
+    def test_sterimol_invalid_input_raises(self):
+        """Validates that bad atom selections or out-of-bounds indices throw errors."""
+        rd_m = self._rdkit_embed_and_optimize(
+            "CC"
+        )  # Ethane (2 heavy atoms, plus Hs)
+        mol = Molecule.from_rdkit_mol(rd_m)
+
+        # Attempting to call with an index that does not exist in the molecule matrix
+        with pytest.raises((ValueError, IndexError)):
+            mol.compute_sterimol_parameters(
+                atom1=0, atom2=999, grid_measure=False
+            )
+
+
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
         """Test parsing of mixed coordinate formats."""

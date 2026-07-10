@@ -13,7 +13,7 @@ from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
 from rdkit import Chem
-from rdkit.Chem import rdchem
+from rdkit.Chem import Descriptors, Descriptors3D, rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
@@ -81,6 +81,12 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
+    twod_descriptors: dict | None
+        The full set of 2D descriptors for a molecule.
+    threed_descriptors: dict | None
+        Descriptors derived from a molecule’s 3D structure
+    sterimol_parameter: dbstep.dbstep | None
+        A DBSTEP results object containing directional steric descriptors (L, Bmin, Bmax).
     """
 
     def __init__(
@@ -896,6 +902,77 @@ class Molecule:
             units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k)
             for i in range(3)
         ]
+
+    @property
+    def sterimol_parameters(self):
+        """dbstep.dbstep | None: Holds the most recently computed DBSTEP results object,
+        or None if no compute_sterimol_parameters() has been run yet."""
+        return getattr(self, "_sterimol_parameters", None)
+
+    def compute_sterimol_parameters(
+        self, atom1: int, atom2: int, grid_measure: bool = False
+    ):
+        """Calculate sterimol parameters.
+        If grid_measure=True, a grid-based (voxelized) approach is used instead of the classical analytical method.
+        This is ideal for processing quantum-mechanical electron density surfaces,
+        though it is more computationally intensive.
+
+        Args:
+            atom1 (int): The index of the anchor atom (1-based depending on framework).
+            atom2 (int): The index of the directional atom establishing the measurement axis.
+            grid_measure (bool): Toggle between classical analytical or cubic grid-based measurements.
+
+        Returns:
+            dbstep.dbstep: A DBSTEP object containing the computed L, Bmin, and Bmax parameters.
+        """
+
+        import dbstep.Dbstep as db
+
+        mol = self.to_rdkit()
+
+        # Saves to the instance attribute which is immediately visible to the @property
+        self._sterimol_parameters = db.dbstep(
+            mol,
+            atom1=atom1,
+            atom2=atom2,
+            sterimol=True,
+            grid_measure=grid_measure,
+        )
+        return self._sterimol_parameters
+
+    @property
+    def twod_descriptors(self):
+        """A list of 2D descriptors"""
+        if getattr(self, "_twod_descriptors", None) is None:
+            self._twod_descriptors = Descriptors.CalcMolDescriptors(
+                self.to_rdkit()
+            )
+        return self._twod_descriptors
+
+    @property
+    def threed_descriptors(self):
+        """
+        Calculate 3D descriptors for the molecule.
+
+        Returns:
+            dict: Dictionary containing 3D descriptors.
+        """
+        if getattr(self, "_threed_descriptors", None) is None:
+            self.calculate_3d_descriptors()
+        return self._threed_descriptors
+
+    def calculate_3d_descriptors(self):
+        """
+        Calculate 3D descriptors for the molecule.
+
+        Returns:
+            dict: Dictionary containing 3D descriptors.
+        """
+        rdmol = self.to_rdkit(
+            add_bonds=True, bond_cutoff_buffer=0.1, adjust_H=True
+        )
+        self._threed_descriptors = Descriptors3D.CalcMolDescriptors3D(rdmol)
+        return self._threed_descriptors
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
