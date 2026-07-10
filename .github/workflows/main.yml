@@ -1,20 +1,26 @@
 name: CI
-
 # Controls when the workflow will run
 on:
   # Triggers the workflow on push or pull request events but only for the main branch
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
@@ -22,32 +28,38 @@ jobs:
           python-version: "3.10"
           environment-file: environment.yml
           activate-environment: chemsmart
+
       - name: Install dependencies
         shell: bash -l {0}
         run: |
           conda activate chemsmart
           python -m pip install --upgrade pip
           pip install pre-commit
-          pip install .[dev,test,docs]  # Install dev dependencies from pyproject.toml
+          pip install .[dev,test,docs]
+
       - name: Show formatter versions
         run: |
           conda run -n chemsmart python -V
           conda run -n chemsmart black --version
           conda run -n chemsmart isort --version-number
+
       - name: Run pre-commit
         shell: bash -l {0}
         run: pre-commit run --all-files
 
   build:
+    runs-on: ubuntu-latest
+
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Clear existing cache
-        shell: bash -l {0}
+        shell: bash
         run: |
           rm -rf ~/.cache/pip
           rm -rf ./.gradle/caches/
@@ -61,105 +73,140 @@ jobs:
           environment-file: environment.yml
           activate-environment: chemsmart
 
-      - name: Install dependencies
+      - name: Install build tools
         shell: bash -l {0}
         run: |
           python -m pip install --upgrade pip
-          make install-dev  # install in dev mode for all tests and docs
+          python -m pip install build twine
 
-      - name: Test with pytest and calculate coverage
+      - name: Build package
         shell: bash -l {0}
         run: |
-          make test
-          
-      - name: Check if only docs changed
+          rm -rf build dist
+          python -m build
+
+      - name: Check package
+        shell: bash -l {0}
+        run: |
+          python -m twine check dist/*
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  tests_linux:
+    needs: [pre-commit, build]
+    if: ${{ success() }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10"]
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check if only documentation changed
         id: changed-files
-        uses: tj-actions/changed-files@v44
+        uses: tj-actions/changed-files@v46
         with:
           files: |
             docs/**
             *.md
 
-      - name: Skip tests if only docs changed
+      - name: Report documentation-only change
         if: steps.changed-files.outputs.only_changed == 'true'
-        run: echo "Only documentation files changed, skipping tests and coverage." && exit 0
+        run: |
+          echo "Only documentation files changed; tests and coverage will be skipped."
+
+      - name: Set up Conda
+        if: steps.changed-files.outputs.only_changed != 'true'
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+          environment-file: environment.yml
+          activate-environment: chemsmart
+
+      - name: Install project
+        if: steps.changed-files.outputs.only_changed != 'true'
+        shell: bash -l {0}
+        run: make install-dev
+
+      - name: Run tests
+        if: steps.changed-files.outputs.only_changed != 'true'
+        shell: bash -l {0}
+        run: make test
 
       - name: Upload coverage artifacts
-        if: always()
+        if: always() && steps.changed-files.outputs.only_changed != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ runner.os }}-build
+          name: coverage-${{ runner.os }}
           path: |
             coverage.xml
             htmlcov/**
           if-no-files-found: ignore
 
-      - name: Create Coverage
+      - name: Upload coverage to Codecov
+        if: >
+          steps.changed-files.outputs.only_changed != 'true' &&
+          hashFiles('coverage.xml') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
 
+      - name: Create coverage report
         if: >
           github.event_name == 'pull_request' &&
           !github.event.pull_request.head.repo.fork &&
+          steps.changed-files.outputs.only_changed != 'true' &&
           hashFiles('coverage.xml') != ''
         uses: orgoro/coverage@v3
         with:
           coverageFile: coverage.xml
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  tests_linux:
-    needs: [pre-commit, build]
-    if: ${{ success() && needs.build.result == 'success' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10"]
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Conda
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          auto-update-conda: true
-          python-version: ${{ matrix.python-version }}
-          environment-file: environment.yml
-          activate-environment: chemsmart
-
-      - name: Install project
-        shell: bash -l {0}
-        run: make install-dev
-
-      - name: Run tests
-        shell: bash -l {0}
-        run: make test
-
-      - name: Upload coverage artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ runner.os }}
-          path: |
-            coverage.xml
-            htmlcov/**
-          if-no-files-found: ignore
-
-      - name: Upload coverage to Codecov
-        if: ${{ hashFiles('coverage.xml') != '' }}
-        uses: codecov/codecov-action@v5
-
   tests_mac:
-    needs: [pre-commit, build]  # Add build as a dependency
-    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
+    needs: [pre-commit, build]
+    if: ${{ success() }}
+
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10"]
         os: [macos-latest]
+
     runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check if only documentation changed
+        id: changed-files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            docs/**
+            *.md
+
+      - name: Report documentation-only change
+        if: steps.changed-files.outputs.only_changed == 'true'
+        run: |
+          echo "Only documentation files changed; tests and coverage will be skipped."
 
       - name: Set up Conda
+        if: steps.changed-files.outputs.only_changed != 'true'
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
@@ -168,15 +215,17 @@ jobs:
           activate-environment: chemsmart
 
       - name: Install project
+        if: steps.changed-files.outputs.only_changed != 'true'
         shell: bash -l {0}
         run: make install-dev
 
       - name: Run tests
+        if: steps.changed-files.outputs.only_changed != 'true'
         shell: bash -l {0}
         run: make test
 
       - name: Upload coverage artifacts
-        if: always()
+        if: always() && steps.changed-files.outputs.only_changed != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ runner.os }}
@@ -186,22 +235,47 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload coverage to Codecov
-        if: ${{ hashFiles('coverage.xml') != '' }}
+        if: >
+          steps.changed-files.outputs.only_changed != 'true' &&
+          hashFiles('coverage.xml') != ''
         uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
 
   tests_win:
-    needs: [pre-commit, build]  # Add build as a dependency
-    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
+    needs: [pre-commit, build]
+    if: ${{ success() }}
+
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10"]
         os: [windows-latest]
+
     runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check if only documentation changed
+        id: changed-files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            docs/**
+            *.md
+
+      - name: Report documentation-only change
+        if: steps.changed-files.outputs.only_changed == 'true'
+        shell: pwsh
+        run: |
+          Write-Host "Only documentation files changed; tests and coverage will be skipped."
 
       - name: Set up Conda
+        if: steps.changed-files.outputs.only_changed != 'true'
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
@@ -211,24 +285,27 @@ jobs:
           channels: conda-forge,defaults
 
       - name: Install make
+        if: steps.changed-files.outputs.only_changed != 'true'
         shell: cmd
         run: |
           choco install make --force
 
       - name: Install project
+        if: steps.changed-files.outputs.only_changed != 'true'
         shell: cmd
         run: |
           call "%CONDA%\Scripts\activate.bat" chemsmart
           make install-dev
 
       - name: Run tests
+        if: steps.changed-files.outputs.only_changed != 'true'
         shell: cmd
         run: |
           call "%CONDA%\Scripts\activate.bat" chemsmart
           make test
 
       - name: Upload coverage artifacts
-        if: always()
+        if: always() && steps.changed-files.outputs.only_changed != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ runner.os }}
@@ -238,6 +315,12 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload coverage to Codecov
-        if: ${{ hashFiles('coverage.xml') != '' }}
+        if: >
+          steps.changed-files.outputs.only_changed != 'true' &&
+          hashFiles('coverage.xml') != ''
         uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
 
