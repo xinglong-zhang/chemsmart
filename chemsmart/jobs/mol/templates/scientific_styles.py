@@ -3,7 +3,7 @@ PyMOL visualization styles for publication, cover, and presentation figures.
 
 ChemSmart applies this template for ``visualize -s`` choices including
 ``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``, and
-``black-gold-cover``.
+``black-gold-cover``etc.
 In PyMOL directly::
 
     run scientific_styles.py
@@ -49,6 +49,12 @@ def _normalize_none(value):
     if str(value).lower() in ["none", "null", "false", ""]:
         return None
     return value
+
+
+def _set_transparent_background():
+    """Configure ray-traced PNG export with a transparent background."""
+    cmd.bg_color("white")
+    _safe_set("ray_opaque_background", 0)
 
 
 def _make_centered_element_labels(
@@ -162,26 +168,10 @@ def metallic_poster_render(
 
     core = f"({metal}) or ({coord})"
 
-    bg = str(background).lower()
-
-    if bg in ["dark", "black", "presentation", "slide"]:
-        cmd.bg_color("black")
-        _safe_set("ray_opaque_background", 1)
-        _safe_set("ambient", 0.12)
-        _safe_set("direct", 0.88)
-        _safe_set("fog_start", 0.25)
-    elif bg in ["offwhite", "cream", "paper"]:
-        cmd.bg_color("white")
-        _safe_set("ray_opaque_background", 0)
-        _safe_set("ambient", 0.22)
-        _safe_set("direct", 0.82)
-        _safe_set("fog_start", 0.60)
-    else:
-        cmd.bg_color("white")
-        _safe_set("ray_opaque_background", 0)
-        _safe_set("ambient", 0.22)
-        _safe_set("direct", 0.82)
-        _safe_set("fog_start", 0.60)
+    _set_transparent_background()
+    _safe_set("ambient", 0.22)
+    _safe_set("direct", 0.82)
+    _safe_set("fog_start", 0.60)
 
     _safe_set("orthoscopic", 1)
     _safe_set("field_of_view", 35)
@@ -253,14 +243,6 @@ def metallic_poster_render(
     cmd.rebuild()
 
 
-def metallic_poster_png(
-    filename="metallic_poster.png", width=2400, height=1800, dpi=300
-):
-    """Ray-trace and save a high-resolution PNG."""
-    cmd.ray(int(width), int(height))
-    cmd.png(filename, dpi=int(dpi))
-
-
 def _metal_element_label(metal_selection):
     """Return the element symbol of the first atom in a metal selection."""
     model = cmd.get_model(metal_selection)
@@ -270,7 +252,58 @@ def _metal_element_label(metal_selection):
     return symbol or "Mn"
 
 
-def render_comic_metallic_labeled_final(selection="all", background="white"):
+def _parse_highlight_bond_pairs(highlight_bonds):
+    """Parse ChemSmart-encoded bond pairs such as ``1-8+1-15+1-36``."""
+    highlight_bonds = _normalize_none(highlight_bonds)
+    if not highlight_bonds:
+        return []
+
+    pairs = []
+    for token in str(highlight_bonds).split("+"):
+        token = token.strip()
+        if not token:
+            continue
+        if "," in token:
+            parts = [part.strip() for part in token.split(",")]
+        elif "-" in token:
+            parts = [part.strip() for part in token.split("-")]
+        else:
+            continue
+        if len(parts) != 2:
+            continue
+        pairs.append((int(parts[0]), int(parts[1])))
+    return pairs
+
+
+def _apply_comic_highlight_bonds(highlight_bonds, sel, metal_name):
+    """Style ``-c`` bond pairs like coordination-core S-Mn bonds in comic mode."""
+    pairs = _parse_highlight_bond_pairs(highlight_bonds)
+    if not pairs:
+        return
+
+    for atom_a, atom_b in pairs:
+        cmd.bond(f"id {atom_a}", f"id {atom_b}")
+
+    highlight_atoms = " or ".join(
+        f"(id {atom_a} or id {atom_b})" for atom_a, atom_b in pairs
+    )
+    _safe_set("stick_radius", 0.18, highlight_atoms)
+    _safe_set(
+        "sphere_scale",
+        0.34,
+        f"({highlight_atoms}) and not ({metal_name})",
+    )
+    if cmd.count_atoms(metal_name) > 0:
+        _safe_set(
+            "sphere_scale",
+            0.42,
+            f"({highlight_atoms}) and ({metal_name})",
+        )
+
+
+def render_comic_metallic_labeled_final(
+    selection="all", highlight_bonds="", background=None
+):
     """Apply comic metallic ball-and-stick rendering with black outlines."""
     sel = f"({selection})"
     metal_name = "comic_metal_atom"
@@ -303,6 +336,8 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
         cmd.bond(metal_name, f"{sel} and elem P")
         cmd.bond(metal_name, f"{sel} and elem S")
 
+    _apply_comic_highlight_bonds(highlight_bonds, sel, metal_name)
+
     _safe_set("specular", 0.85)
     _safe_set("spec_power", 300)
     _safe_set("spec_reflect", 0.70)
@@ -329,13 +364,7 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
     _safe_set("label_color", "white")
     _safe_set("label_size", 28)
 
-    bg = str(background).lower()
-    if bg in ["dark", "black", "presentation", "slide"]:
-        cmd.bg_color("black")
-        _safe_set("ray_opaque_background", 1)
-    else:
-        cmd.bg_color("white")
-        _safe_set("ray_opaque_background", 1)
+    _set_transparent_background()
 
     _safe_set("orthoscopic", 1)
     _safe_set("antialias", 2)
@@ -348,20 +377,17 @@ def render_comic_metallic_labeled_final(selection="all", background="white"):
     )
 
 
-def comic_render(selection="all", background="white", *_args, **_kwargs):
+def comic_render(
+    selection="all", highlight_bonds="", background=None, *_args, **_kwargs
+):
     """ChemSmart entry point for the comic style."""
     render_comic_metallic_labeled_final(
-        selection=selection, background=background
+        selection=selection,
+        highlight_bonds=highlight_bonds,
     )
 
 
-def comic_png(filename="comic.png", width=2400, height=1800, dpi=300):
-    """Ray-trace and save a high-resolution PNG."""
-    cmd.ray(int(width), int(height))
-    cmd.png(filename, dpi=int(dpi))
-
-
-def render_soft_cartoon(selection="all", background="white"):
+def render_soft_cartoon(selection="all", background=None):
     """Apply soft cartoon ball-and-stick rendering with premium cover colors."""
     sel = f"({selection})"
     metal_name = "soft_cartoon_metal_atom"
@@ -428,13 +454,7 @@ def render_soft_cartoon(selection="all", background="white"):
 
     cmd.label(sel, '""')
 
-    bg = str(background).lower()
-    if bg in ["dark", "black", "presentation", "slide"]:
-        cmd.bg_color("black")
-        _safe_set("ray_opaque_background", 1)
-    else:
-        cmd.bg_color("white")
-        _safe_set("ray_opaque_background", "off")
+    _set_transparent_background()
 
     _safe_set("orthoscopic", 0)
     _safe_set("field_of_view", 35)
@@ -448,19 +468,9 @@ def render_soft_cartoon(selection="all", background="white"):
     print("Soft cartoon style applied.")
 
 
-def soft_cartoon_render(
-    selection="all", background="white", *_args, **_kwargs
-):
+def soft_cartoon_render(selection="all", background=None, *_args, **_kwargs):
     """ChemSmart entry point for the soft cartoon style."""
-    render_soft_cartoon(selection=selection, background=background)
-
-
-def soft_cartoon_png(
-    filename="soft_cartoon.png", width=2400, height=1800, dpi=300
-):
-    """Ray-trace and save a high-resolution PNG."""
-    cmd.ray(int(width), int(height))
-    cmd.png(filename, dpi=int(dpi))
+    render_soft_cartoon(selection=selection)
 
 
 def _common_select_core(selection="all", cutoff=2.6):
@@ -573,8 +583,7 @@ def render_editorial_minimal(selection="all"):
     cmd.set("direct", 0.62)
     cmd.set("reflect", 0.05)
 
-    cmd.bg_color("white")
-    cmd.set("ray_opaque_background", "off")
+    _set_transparent_background()
     cmd.set("orthoscopic", 1)
     cmd.set("field_of_view", 25)
     cmd.set("fog_start", 0.65)
@@ -620,8 +629,7 @@ def render_black_gold_cover(selection="all"):
     cmd.set("reflect", 0.52)
     cmd.set("shininess", 95)
 
-    cmd.bg_color("black")
-    cmd.set("ray_opaque_background", "on")
+    _set_transparent_background()
     cmd.set("orthoscopic", 0)
     cmd.set("field_of_view", 38)
     cmd.set("depth_cue", 1)
@@ -668,8 +676,7 @@ def render_neon_coordination_core(selection="all"):
     cmd.set("direct", 0.95)
     cmd.set("reflect", 0.28)
 
-    cmd.bg_color("black")
-    cmd.set("ray_opaque_background", "on")
+    _set_transparent_background()
     cmd.set("orthoscopic", 0)
     cmd.set("field_of_view", 42)
     cmd.set("depth_cue", 1)
@@ -716,8 +723,7 @@ def render_matte_clay(selection="all"):
     cmd.set("direct", 0.48)
     cmd.set("reflect", 0.03)
 
-    cmd.bg_color("white")
-    cmd.set("ray_opaque_background", "off")
+    _set_transparent_background()
     cmd.set("orthoscopic", 1)
     cmd.set("field_of_view", 28)
     cmd.set("depth_cue", 1)
@@ -758,8 +764,7 @@ def render_xray_wire(selection="all"):
     cmd.set("direct", 0.35)
     cmd.set("reflect", 0.00)
 
-    cmd.bg_color("white")
-    cmd.set("ray_opaque_background", "off")
+    _set_transparent_background()
     cmd.set("orthoscopic", 1)
     cmd.set("field_of_view", 18)
     cmd.set("ray_shadow", "off")
@@ -805,8 +810,7 @@ def render_steric_surface(selection="all"):
     cmd.set("direct", 0.74)
     cmd.set("reflect", 0.20)
 
-    cmd.bg_color("white")
-    cmd.set("ray_opaque_background", "off")
+    _set_transparent_background()
     cmd.set("orthoscopic", 1)
     cmd.set("field_of_view", 30)
     cmd.set("depth_cue", 1)
@@ -855,8 +859,7 @@ def render_quasi_chemdraw_bold(selection="all"):
     cmd.set("direct", 0.42)
     cmd.set("reflect", 0.02)
 
-    cmd.bg_color("white")
-    cmd.set("ray_opaque_background", "off")
+    _set_transparent_background()
     cmd.set("orthoscopic", 1)
     cmd.set("field_of_view", 12)
     cmd.set("depth_cue", 0)
@@ -893,8 +896,7 @@ def render_labeled_coordination_core(selection="all"):
     cmd.set("direct", 0.70)
     cmd.set("reflect", 0.18)
 
-    cmd.bg_color("white")
-    cmd.set("ray_opaque_background", "off")
+    _set_transparent_background()
     cmd.set("orthoscopic", 1)
     cmd.set("field_of_view", 28)
     cmd.set("depth_cue", 1)
@@ -917,15 +919,12 @@ def render_labeled_coordination_core(selection="all"):
 
 
 cmd.extend("metallic_poster_render", metallic_poster_render)
-cmd.extend("metallic_poster_png", metallic_poster_png)
 cmd.extend(
     "render_comic_metallic_labeled_final", render_comic_metallic_labeled_final
 )
 cmd.extend("comic_render", comic_render)
-cmd.extend("comic_png", comic_png)
 cmd.extend("render_soft_cartoon", render_soft_cartoon)
 cmd.extend("soft_cartoon_render", soft_cartoon_render)
-cmd.extend("soft_cartoon_png", soft_cartoon_png)
 cmd.extend("render_editorial_minimal", render_editorial_minimal)
 cmd.extend("render_black_gold_cover", render_black_gold_cover)
 cmd.extend("render_neon_coordination_core", render_neon_coordination_core)

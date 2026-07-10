@@ -41,10 +41,6 @@ logger = logging.getLogger(__name__)
 
 _PYMOL_TEMPLATES_PATH = Path(__file__).resolve().parent / "templates"
 
-PYMOL_STYLE_ALIASES = {
-    "hybrid": "comic",
-}
-
 PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
     "glossy": "metallic_poster_render",
     "comic": "render_comic_metallic_labeled_final",
@@ -59,18 +55,11 @@ PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
     "labeled_coordination_core": "render_labeled_coordination_core",
 }
 
-PYMOL_STYLE_DEFAULT_BACKGROUNDS = {
-    "glossy": "white",
-    "comic": "dark",
-    "soft_cartoon": "white",
-}
-
-PYMOL_STYLES_WITH_BACKGROUND = frozenset(PYMOL_STYLE_DEFAULT_BACKGROUNDS)
+_SCIENTIFIC_STYLE_TEMPLATE = "scientific_styles.py"
 
 PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
     "glossy",
     "comic",
-    "hybrid",
     "soft-cartoon",
     "editorial-minimal",
     "black-gold-cover",
@@ -81,8 +70,6 @@ PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
     "quasi-chemdraw-bold",
     "labeled-coordination-core",
 ]
-
-_SCIENTIFIC_STYLE_TEMPLATE = "scientific_styles.py"
 
 PYMOL_STYLE_TEMPLATES = {
     "pymol": "zhang_group_pymol_style.py",
@@ -105,7 +92,6 @@ PYMOL_STYLE_SHARED_TEMPLATES = {
 def normalize_pymol_style(style):
     """Return a supported PyMOL style keyword."""
     normalized = (style or "pymol").lower().replace("-", "_")
-    normalized = PYMOL_STYLE_ALIASES.get(normalized, normalized)
     if normalized not in PYMOL_STYLE_TEMPLATES:
         raise ValueError(f"The style {style} is not available!")
     return normalized
@@ -140,6 +126,32 @@ def copy_pymol_style_shared_templates(job):
     return copied
 
 
+def parse_pymol_coordinate_bonds(coordinates):
+    """Return 2-atom bond pairs from visualize ``-c`` coordinate specs."""
+    if not coordinates:
+        return []
+
+    prepend_string_list = get_prepend_string_list_from_modred_free_format(
+        input_modred=coordinates,
+        program="pymol",
+    )
+    bonds = []
+    for prepend_string in prepend_string_list:
+        if prepend_string.startswith("B"):
+            indices = [int(value) for value in prepend_string.split()[1:]]
+            if len(indices) == 2:
+                bonds.append((indices[0], indices[1]))
+    return bonds
+
+
+def format_comic_highlight_bonds(coordinates):
+    """Encode bond pairs for ``render_comic_metallic_labeled_final``."""
+    bonds = parse_pymol_coordinate_bonds(coordinates)
+    if not bonds:
+        return ""
+    return "+".join(f"{atom_a}-{atom_b}" for atom_a, atom_b in bonds)
+
+
 def format_pymol_style_command(job, selection):
     """Build the PyMOL -d style command for one selection."""
     style = normalize_pymol_style(job.style)
@@ -147,13 +159,16 @@ def format_pymol_style_command(job, selection):
     if render_command == "metallic_poster_render":
         return (
             f"metallic_poster_render {selection}, elem Mn, None, 2.6, "
-            f"N+O+S+P+H, {job.style_background}"
+            f"N+O+S+P+H"
         )
-    if render_command in (
-        "render_comic_metallic_labeled_final",
-        "render_soft_cartoon",
-    ):
-        return f"{render_command} {selection}, {job.style_background}"
+    if render_command == "render_comic_metallic_labeled_final":
+        command = f"{render_command} {selection}"
+        highlight_bonds = format_comic_highlight_bonds(job.coordinates)
+        if highlight_bonds:
+            command += f", {highlight_bonds}"
+        return command
+    if render_command == "render_soft_cartoon":
+        return f"{render_command} {selection}"
     if render_command is not None:
         return f"{render_command} {selection}"
     if style == "cylview":
@@ -631,10 +646,12 @@ class PyMOLJobRunner(JobRunner):
                         [int(i) for i in prepend_string.split()[1:]]
                     )
 
-            for i, distance in enumerate(distances):
-                command += (
-                    f"; distance d{i+1}, id {distance[0]}, id {distance[1]}"
-                )
+            hide_bond_distance_labels = (
+                normalize_pymol_style(getattr(job, "style", None)) == "comic"
+            )
+            if not hide_bond_distance_labels:
+                for i, distance in enumerate(distances):
+                    command += f"; distance d{i+1}, id {distance[0]}, id {distance[1]}"
             for i, angle in enumerate(angles):
                 command += f"; angle a{i+1}, id {angle[0]}, id {angle[1]}, id {angle[2]}"
             for i, dihedral in enumerate(dihedrals):

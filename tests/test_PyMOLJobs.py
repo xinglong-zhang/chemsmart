@@ -1,5 +1,6 @@
 import os.path
 import shutil
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,7 +13,12 @@ from chemsmart.jobs.mol.movie import PyMOLMovieJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
 from chemsmart.jobs.mol.runner import (
     PyMOLNCIJobRunner,
+    PyMOLScientificStyleVisualizationJobRunner,
     PyMOLSpinJobRunner,
+    format_comic_highlight_bonds,
+    format_pymol_style_command,
+    normalize_pymol_style,
+    parse_pymol_coordinate_bonds,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
@@ -880,3 +886,72 @@ class TestPyMOLFileProcessingUsesSourceFilename:
         assert f"load {quote_path(dens_file)}" in command
         assert f"load {quote_path(grad_file)}" in command
         assert "; nci benzene_opt" in command
+
+
+class TestPyMOLStyleCommands:
+    def test_parse_pymol_coordinate_bonds_extracts_bond_pairs(self):
+        coordinates = [[1, 8], [1, 15], [1, 36], [2, 3, 4]]
+
+        assert parse_pymol_coordinate_bonds(coordinates) == [
+            (1, 8),
+            (1, 15),
+            (1, 36),
+        ]
+
+    def test_format_comic_highlight_bonds_encodes_bond_pairs(self):
+        coordinates = [[1, 8], [1, 15], [1, 36]]
+
+        assert format_comic_highlight_bonds(coordinates) == "1-8+1-15+1-36"
+
+    def test_format_pymol_style_command_passes_highlight_bonds_for_comic(self):
+        job = SimpleNamespace(
+            style="comic",
+            coordinates=[[1, 8], [1, 15], [1, 36]],
+        )
+
+        command = format_pymol_style_command(job, "1-mer")
+
+        assert (
+            command
+            == "render_comic_metallic_labeled_final 1-mer, 1-8+1-15+1-36"
+        )
+
+    def test_format_pymol_style_command_omits_highlight_bonds_without_coordinates(
+        self,
+    ):
+        job = SimpleNamespace(
+            style="comic",
+            coordinates=None,
+        )
+
+        command = format_pymol_style_command(job, "1-mer")
+
+        assert command == "render_comic_metallic_labeled_final 1-mer"
+
+    def test_hybrid_is_not_a_derived_style(self):
+        with pytest.raises(ValueError, match="not available"):
+            normalize_pymol_style("hybrid")
+
+    def test_comic_style_skips_bond_distance_labels_from_coordinates(self):
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        job = SimpleNamespace(
+            style="comic",
+            coordinates=[[1, 8], [1, 15], [2, 3, 4]],
+        )
+
+        command = runner._add_coordinates_labels(job, "cmd")
+
+        assert "distance d" not in command
+        assert "angle a1" in command
+
+    def test_non_comic_style_keeps_bond_distance_labels(self):
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        job = SimpleNamespace(style="pymol", coordinates=[[1, 8]])
+
+        command = runner._add_coordinates_labels(job, "cmd")
+
+        assert "distance d1, id 1, id 8" in command

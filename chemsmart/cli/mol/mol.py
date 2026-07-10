@@ -34,7 +34,7 @@ def click_pymol_visualization_options(
             style_choices.extend(PYMOL_VISUALIZE_STYLE_CLI_CHOICES)
             style_help += (
                 ', or any scientific style such as "editorial-minimal" '
-                "(visualize subcommand only; hybrid is an alias for comic)"
+                "(visualize subcommand only; use -H/--hybrid for group highlighting)"
             )
 
         @click.option(
@@ -95,23 +95,6 @@ def click_pymol_visualization_options(
         @functools.wraps(f)
         def wrapper_common_options(*args, **kwargs):
             return f(*args, **kwargs)
-
-        if include_visualize_styles:
-
-            @click.option(
-                "--style-background",
-                type=click.Choice(["white", "dark"], case_sensitive=False),
-                default="white",
-                show_default=True,
-                help="Background for -s glossy, -s comic, -s hybrid, or "
-                "-s soft-cartoon: white for publication figures or dark "
-                "for high-contrast slides.",
-            )
-            @functools.wraps(f)
-            def wrapper_style_background_options(*args, **kwargs):
-                return wrapper_common_options(*args, **kwargs)
-
-            return wrapper_style_background_options
 
         return wrapper_common_options
 

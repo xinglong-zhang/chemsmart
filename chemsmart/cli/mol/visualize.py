@@ -2,7 +2,6 @@ import ast
 import logging
 
 import click
-from click.core import ParameterSource
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
@@ -11,7 +10,6 @@ from chemsmart.cli.mol.mol import (
     mol,
 )
 from chemsmart.jobs.mol.runner import (
-    PYMOL_STYLES_WITH_BACKGROUND,
     is_pymol_derived_style,
     normalize_pymol_style,
 )
@@ -33,7 +31,6 @@ def visualize(
     ctx,
     file,
     style,
-    style_background,
     trace,
     vdw,
     quiet,
@@ -63,7 +60,7 @@ def visualize(
     -G '233,468-512' -G '308,397-414,416-423'
 
     Derived styles from scientific_styles.py are selected with -s. Examples:
-        chemsmart run mol -f complex.xyz visualize -s glossy --style-background dark
+        chemsmart run mol -f complex.xyz visualize -s glossy
         chemsmart run mol -f complex.xyz visualize -s comic
         chemsmart run mol -f complex.xyz visualize -s editorial-minimal
     """
@@ -91,24 +88,10 @@ def visualize(
 
     is_derived_style = is_pymol_derived_style(normalized_style)
 
-    style_background_explicit = (
-        ctx.get_parameter_source("style_background") != ParameterSource.DEFAULT
-    )
-
     if hybrid and is_derived_style:
         raise click.UsageError(
             "Hybrid visualization (-H/--hybrid) cannot be combined with "
             f"-s {style}."
-        )
-
-    if (
-        style_background_explicit
-        and normalized_style not in PYMOL_STYLES_WITH_BACKGROUND
-    ):
-        raise click.UsageError(
-            "'--style-background' can only be used with derived styles that "
-            "support backgrounds: '-s glossy', '-s comic', '-s hybrid' "
-            "(alias for comic), or '-s soft-cartoon'."
         )
 
     from chemsmart.jobs.mol.visualize import (
@@ -180,11 +163,6 @@ def visualize(
 
     if is_derived_style:
         job_kwargs["style"] = normalized_style
-        if (
-            normalized_style in PYMOL_STYLES_WITH_BACKGROUND
-            and style_background_explicit
-        ):
-            job_kwargs["style_background"] = style_background
     elif style is not None:
         job_kwargs["style"] = style
 

@@ -32,8 +32,8 @@ Visualization Options
 
    -  -  ``-s, --style``
       -  string
-      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, ``hybrid``,
-         ``soft-cartoon``, and scientific styles (see below)
+      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, ``soft-cartoon``, and
+         scientific styles (see below)
 
    -  -  ``-t, --trace/--no-trace``
       -  bool
@@ -236,8 +236,8 @@ Glossy Options
 
 .. note::
 
-   ``--style-background`` applies only to derived styles that support it (``glossy``, ``comic``, ``hybrid``, and
-   ``soft-cartoon``). Hybrid mode (``-H/--hybrid``) and derived ``-s`` styles cannot be combined.
+   ``--style-background`` applies only to derived styles that support it (``glossy``, ``comic``, and ``soft-cartoon``).
+   Group hybrid mode (``-H/--hybrid``) and derived ``-s`` styles cannot be combined.
 
 Basic Usage
 ===========
@@ -285,9 +285,8 @@ in PyMOL. See ``scientific_styles.py`` for the full command signature.
  Comic Visualization
 *********************
 
-Create flat, illustrated comic figures for metal complexes using ``-s comic`` (alias ``-s hybrid``) on the ``visualize``
-subcommand. Like other derived styles, comic uses
-:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
+Create flat, illustrated comic figures for metal complexes using ``-s comic`` on the ``visualize`` subcommand. Like
+other derived styles, comic uses :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. code:: bash
 
@@ -392,7 +391,7 @@ Manual PyMOL usage
 
 All derived ``-s`` styles are implemented in ``scientific_styles.py`` and routed through
 :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`. Use ``--style-background`` only with
-``glossy``, ``comic``, ``hybrid`` (alias for comic), or ``soft-cartoon``.
+``glossy``, ``comic``, or ``soft-cartoon``.
 
 .. list-table::
    :header-rows: 1
@@ -402,7 +401,7 @@ All derived ``-s`` styles are implemented in ``scientific_styles.py`` and routed
       -  Description
    -  -  ``glossy``
       -  Semi-metallic poster rendering with optional white or dark background
-   -  -  ``comic`` / ``hybrid``
+   -  -  ``comic``
       -  Comic ball-and-stick rendering with black outlines and labels
    -  -  ``soft-cartoon``
       -  Soft premium ball-and-stick rendering with light metallic shading

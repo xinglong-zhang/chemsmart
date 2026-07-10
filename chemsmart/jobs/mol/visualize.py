@@ -10,10 +10,7 @@ infrastructure for file management and execution via job runners.
 import logging
 
 from chemsmart.jobs.mol.job import PyMOLJob
-from chemsmart.jobs.mol.runner import (
-    PYMOL_STYLE_DEFAULT_BACKGROUNDS,
-    normalize_pymol_style,
-)
+from chemsmart.jobs.mol.runner import normalize_pymol_style
 
 logger = logging.getLogger(__name__)
 
@@ -155,26 +152,18 @@ class PyMOLScientificStyleVisualizationJob(PyMOLVisualizationJob):
 
     TYPE = "pymol_scientific_style_visualization"
 
-    def __init__(self, style_background=None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a derived scientific style visualization job.
 
         Args:
-            style_background (str, optional): Background override for styles
-                that support it, such as ``glossy`` or ``comic``.
             **kwargs: Must include ``style`` and other PyMOLJob arguments.
         """
         style = kwargs.get("style")
         if style is not None:
             kwargs["style"] = normalize_pymol_style(style)
 
-        normalized_style = kwargs.get("style")
-        if style_background is None and normalized_style is not None:
-            style_background = PYMOL_STYLE_DEFAULT_BACKGROUNDS.get(
-                normalized_style, "white"
-            )
-
-        super().__init__(style_background=style_background, **kwargs)
+        super().__init__(**kwargs)
 
         if self.label is not None and self.style is not None:
             self.label += f"_{self.style}_visualization"

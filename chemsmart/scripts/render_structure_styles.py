@@ -118,7 +118,6 @@ def run_chemsmart_visualize(
     xyz_path: Path,
     style_key: str,
     work_dir: Path,
-    style_background: str | None = None,
 ) -> None:
     """Run ``chemsmart run mol -f … visualize -s …`` for one derived style."""
     cli_style = _style_cli_name(style_key)
@@ -134,8 +133,6 @@ def run_chemsmart_visualize(
         cli_style,
         "--no-trace",
     ]
-    if style_background is not None:
-        command.extend(["--style-background", style_background])
 
     print(f"Running: {' '.join(command)}")
     subprocess.run(command, cwd=work_dir, check=True)
@@ -181,7 +178,6 @@ def render_all_styles(
     pymol_cmd: list[str],
     styles: list[str],
     derived_styles: frozenset[str],
-    style_background: str | None = None,
     width: int = 1200,
     height: int = 1200,
     dpi: int = 300,
@@ -200,7 +196,6 @@ def render_all_styles(
             xyz_path=xyz_path,
             style_key=style_key,
             work_dir=work_dir,
-            style_background=style_background,
         )
 
         pse_path = _expected_pse_path(work_dir, label, style_key)
@@ -315,12 +310,6 @@ def parse_args(argv=None):
         help="Derived style keys to render (default: all scientific styles).",
     )
     parser.add_argument(
-        "--style-background",
-        default=None,
-        choices=["white", "dark"],
-        help="Optional background override for styles that support it.",
-    )
-    parser.add_argument(
         "--width",
         type=int,
         default=1200,
@@ -364,7 +353,6 @@ def main(argv=None):
         pymol_cmd=pymol_cmd,
         styles=args.styles,
         derived_styles=derived_styles,
-        style_background=args.style_background,
         width=args.width,
         height=args.height,
         dpi=args.dpi,
