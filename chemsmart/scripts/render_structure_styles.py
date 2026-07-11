@@ -6,8 +6,9 @@ For each ``scientific_styles.py`` style, runs::
 
     chemsmart run mol -f INPUT.xyz visualize -s STYLE
 
-loads the resulting ``.pse`` session in PyMOL, ray-traces, exports PNG
-images, and writes a Sphinx ``.rst`` snippet.
+loads the resulting ``.pse`` session in PyMOL, ray-traces, and exports PNG
+images to ``docs/source/_static/pymol_styles/``. Figures are referenced from
+``docs/source/pymol-visualization.rst``.
 
 Run with the ChemSmart Python environment (not inside PyMOL)::
 
@@ -46,20 +47,6 @@ DEFAULT_DERIVED_STYLES = (
     "labeled_coordination_core",
 )
 
-STYLE_LABELS = {
-    "glossy": "Glossy semi-metallic",
-    "comic": "Comic",
-    "soft_cartoon": "Soft cartoon",
-    "editorial_minimal": "Editorial minimal",
-    "black_gold_cover": "Black-gold cover",
-    "neon_coordination_core": "Neon coordination core",
-    "matte_clay": "Matte clay",
-    "xray_wire": "X-ray wire",
-    "steric_surface": "Steric surface",
-    "quasi_chemdraw_bold": "Quasi-ChemDraw bold",
-    "labeled_coordination_core": "Labeled coordination core",
-}
-
 
 def _ensure_chemsmart_python() -> None:
     """Require the ChemSmart interpreter, not PyMOL's bundled Python."""
@@ -94,10 +81,6 @@ def _clean_label(label: str) -> str:
 def _style_cli_name(style_key: str) -> str:
     """Convert internal style key to ``visualize -s`` CLI value."""
     return style_key.replace("_", "-")
-
-
-def _style_title(style_key: str) -> str:
-    return STYLE_LABELS.get(style_key, style_key.replace("_", " ").title())
 
 
 def _resolve_chemsmart_command(explicit: str | None) -> list[str]:
@@ -237,45 +220,11 @@ def render_all_styles(
     return exported
 
 
-def build_rst_snippet(
-    exported_images: dict[str, Path],
-    rst_image_prefix: str,
-    molecule_label: str,
-    styles: list[str],
-) -> str:
-    """Return reStructuredText embedding the rendered style images."""
-    title = f"Derived PyMOL styles for ``{molecule_label}``"
-    lines = [title, "=" * len(title), ""]
-
-    for style_key in styles:
-        title_text = _style_title(style_key)
-        alt_text = f"{title_text} visualization of {molecule_label}"
-        image_ref = f"{rst_image_prefix}/style_{style_key}.png"
-        lines.extend(
-            [
-                title_text,
-                "-" * len(title_text),
-                "",
-                ".. figure:: " + image_ref,
-                f"   :alt: {alt_text}",
-                "   :align: center",
-                "   :width: 70%",
-                "",
-                f"   {title_text} style applied via "
-                f"``chemsmart run mol -f {molecule_label}.xyz visualize "
-                f"-s {_style_cli_name(style_key)}``.",
-                "",
-            ]
-        )
-
-    return "\n".join(lines)
-
-
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description=(
-            "Run ChemSmart derived visualize styles, export PNGs, "
-            "and generate Sphinx RST."
+            "Run ChemSmart derived visualize styles and export PNG figures "
+            "for docs/source/pymol-visualization.rst."
         )
     )
     parser.add_argument(
@@ -294,17 +243,6 @@ def parse_args(argv=None):
         type=Path,
         default=None,
         help="ChemSmart working directory for ``.pse`` outputs (default: OUTPUT_DIR/chemsmart).",
-    )
-    parser.add_argument(
-        "--rst-file",
-        type=Path,
-        default=Path("docs/source/pymol_styles_examples.rst"),
-        help="Output reStructuredText snippet path.",
-    )
-    parser.add_argument(
-        "--rst-image-prefix",
-        default="_static/pymol_styles",
-        help="Relative image path prefix used in .. figure:: directives.",
     )
     parser.add_argument(
         "--label",
@@ -378,7 +316,7 @@ def main(argv=None):
     chemsmart_cmd = _resolve_chemsmart_command(args.chemsmart)
     pymol_cmd = _resolve_pymol_command(args.pymol)
 
-    exported = render_all_styles(
+    render_all_styles(
         xyz_path=xyz_path,
         output_dir=output_dir,
         work_dir=work_dir,
@@ -393,17 +331,6 @@ def main(argv=None):
         height=args.height,
         dpi=args.dpi,
     )
-
-    rst_text = build_rst_snippet(
-        exported_images=exported,
-        rst_image_prefix=args.rst_image_prefix.rstrip("/"),
-        molecule_label=label,
-        styles=args.styles,
-    )
-
-    args.rst_file.parent.mkdir(parents=True, exist_ok=True)
-    args.rst_file.write_text(rst_text)
-    print(f"Wrote {args.rst_file.resolve()}")
     return 0
 
 
