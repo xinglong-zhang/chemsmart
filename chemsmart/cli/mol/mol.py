@@ -103,11 +103,6 @@ def click_pymol_visualization_options(
     return decorator
 
 
-def click_pymol_glossy_visualization_options(f):
-    """Deprecated alias kept for backward compatibility."""
-    return f
-
-
 def click_pymol_hybrid_visualization_options(f):
     """Group all hybrid visualization options for reuse."""
 

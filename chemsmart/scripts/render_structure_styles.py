@@ -33,20 +33,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-DEFAULT_DERIVED_STYLES = (
-    "glossy",
-    "comic",
-    "soft_cartoon",
-    "editorial_minimal",
-    "black_gold_cover",
-    "neon_coordination_core",
-    "matte_clay",
-    "xray_wire",
-    "steric_surface",
-    "quasi_chemdraw_bold",
-    "labeled_coordination_core",
-)
-
 
 def _ensure_chemsmart_python() -> None:
     """Require the ChemSmart interpreter, not PyMOL's bundled Python."""
@@ -70,6 +56,13 @@ def _get_derived_styles() -> frozenset[str]:
     from chemsmart.jobs.mol.runner import PYMOL_SCIENTIFIC_STYLE_COMMANDS
 
     return frozenset(PYMOL_SCIENTIFIC_STYLE_COMMANDS)
+
+
+def _default_derived_styles() -> list[str]:
+    """Return derived style keys in registry order."""
+    from chemsmart.jobs.mol.runner import PYMOL_SCIENTIFIC_STYLE_COMMANDS
+
+    return list(PYMOL_SCIENTIFIC_STYLE_COMMANDS)
 
 
 def _clean_label(label: str) -> str:
@@ -262,7 +255,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--styles",
         nargs="+",
-        default=list(DEFAULT_DERIVED_STYLES),
+        default=None,
         help="Derived style keys to render (default: all scientific styles).",
     )
     parser.add_argument(
@@ -310,6 +303,9 @@ def main(argv=None):
         raise FileNotFoundError(f"XYZ file not found: {xyz_path}")
 
     derived_styles = _get_derived_styles()
+    styles = (
+        args.styles if args.styles is not None else _default_derived_styles()
+    )
     label = _clean_label(args.label or xyz_path.stem)
     output_dir = args.output_dir.resolve()
     work_dir = (args.work_dir or output_dir / "chemsmart").resolve()
@@ -323,7 +319,7 @@ def main(argv=None):
         label=label,
         chemsmart_cmd=chemsmart_cmd,
         pymol_cmd=pymol_cmd,
-        styles=args.styles,
+        styles=styles,
         derived_styles=derived_styles,
         coordinates=args.coordinates,
         comic_coordinates=args.comic_coordinates,

@@ -57,18 +57,9 @@ PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
 
 _SCIENTIFIC_STYLE_TEMPLATE = "scientific_styles.py"
 
+# Hyphenated CLI names derived from the registry (insertion order preserved).
 PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
-    "glossy",
-    "comic",
-    "soft-cartoon",
-    "editorial-minimal",
-    "black-gold-cover",
-    "neon-coordination-core",
-    "matte-clay",
-    "xray-wire",
-    "steric-surface",
-    "quasi-chemdraw-bold",
-    "labeled-coordination-core",
+    style.replace("_", "-") for style in PYMOL_SCIENTIFIC_STYLE_COMMANDS
 ]
 
 PYMOL_STYLE_TEMPLATES = {
@@ -78,14 +69,6 @@ PYMOL_STYLE_TEMPLATES = {
         PYMOL_SCIENTIFIC_STYLE_COMMANDS,
         _SCIENTIFIC_STYLE_TEMPLATE,
     ),
-}
-
-PYMOL_STYLE_SHARED_TEMPLATES = {
-    "glossy": ["metallic_element_colors.py", "pymol_style_imports.py"],
-    "comic": [
-        "metallic_element_colors.py",
-        "pymol_style_imports.py",
-    ],
 }
 
 
@@ -107,23 +90,6 @@ def is_pymol_derived_style(style):
 def get_pymol_style_template_filename(style):
     """Return the template filename for a ChemSmart PyMOL style."""
     return PYMOL_STYLE_TEMPLATES[normalize_pymol_style(style)]
-
-
-def copy_pymol_style_shared_templates(job):
-    """Copy shared helper scripts required by a PyMOL style template."""
-    style = normalize_pymol_style(job.style)
-    shared_templates = PYMOL_STYLE_SHARED_TEMPLATES.get(style, [])
-    copied = []
-    for template_filename in shared_templates:
-        source_style_file = _PYMOL_TEMPLATES_PATH / template_filename
-        dest_style_file = os.path.join(job.folder, template_filename)
-        logger.debug(
-            f"Copying shared style file from {source_style_file} "
-            f"to {dest_style_file}."
-        )
-        shutil.copy(source_style_file, dest_style_file)
-        copied.append(dest_style_file)
-    return copied
 
 
 def parse_pymol_coordinate_bonds(coordinates):
@@ -167,8 +133,6 @@ def format_pymol_style_command(job, selection):
         if highlight_bonds:
             command += f", {highlight_bonds}"
         return command
-    if render_command == "render_soft_cartoon":
-        return f"{render_command} {selection}"
     if render_command is not None:
         return f"{render_command} {selection}"
     if style == "cylview":
@@ -325,7 +289,6 @@ class PyMOLJobRunner(JobRunner):
             f"Copying file from {source_style_file} to {dest_style_file}."
         )
         shutil.copy(source_style_file, dest_style_file)
-        copy_pymol_style_shared_templates(job)
 
         # check if job has attribute of isosurface_value or color_range
         if not hasattr(job, "isosurface_value"):

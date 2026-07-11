@@ -2,8 +2,8 @@
 PyMOL visualization styles for publication, cover, and presentation figures.
 
 ChemSmart applies this template for ``visualize -s`` choices including
-``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``, and
-``black-gold-cover``etc.
+``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``,
+``black-gold-cover``, and other scientific styles.
 In PyMOL directly::
 
     run scientific_styles.py
@@ -14,14 +14,59 @@ In PyMOL directly::
 """
 
 from pymol import cmd
-from pymol_style_imports import load_metallic_element_colors
 
-_metallic_colors = load_metallic_element_colors()
-define_metallic_poster_colors = _metallic_colors.define_metallic_poster_colors
-apply_metallic_poster_element_colors = (
-    _metallic_colors.apply_metallic_poster_element_colors
-)
-DEFAULT_METAL_COLOR = _metallic_colors.DEFAULT_METAL_COLOR
+DEFAULT_METAL_COLOR = "poster_mn_gold"
+
+METALLIC_POSTER_COLOR_RGB = {
+    "poster_carbon": [0.62, 0.62, 0.62],
+    "poster_hydrogen": [0.96, 0.96, 0.96],
+    "poster_nitrogen": [0.12, 0.22, 0.95],
+    "poster_oxygen": [0.95, 0.06, 0.04],
+    "poster_sulfur": [0.95, 0.72, 0.10],
+    "poster_phosphorus": [1.00, 0.48, 0.08],
+    "poster_halogen": [0.20, 0.82, 0.32],
+    "poster_mn_gold": [0.92, 0.60, 0.22],
+    "poster_mn_pink": [0.88, 0.48, 0.78],
+    "poster_metal_gray": [0.78, 0.78, 0.84],
+    "poster_label_white": [1.00, 1.00, 1.00],
+    "poster_label_black": [0.02, 0.02, 0.02],
+}
+
+OTHER_METALS_SELECTION = "elem Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au"
+
+
+def define_metallic_poster_colors():
+    """Register the poster element colors in the current PyMOL session."""
+    for name, rgb in METALLIC_POSTER_COLOR_RGB.items():
+        try:
+            cmd.set_color(name, rgb)
+        except Exception:
+            pass
+
+
+def apply_metallic_poster_element_colors(
+    sel,
+    metal,
+    metal_color=DEFAULT_METAL_COLOR,
+):
+    """Apply the poster element color scheme to a selection."""
+    define_metallic_poster_colors()
+
+    cmd.color("poster_carbon", f"{sel} and elem C")
+    cmd.color("poster_hydrogen", f"{sel} and elem H")
+    cmd.color("poster_nitrogen", f"{sel} and elem N")
+    cmd.color("poster_oxygen", f"{sel} and elem O")
+    cmd.color("poster_sulfur", f"{sel} and elem S")
+    cmd.color("poster_phosphorus", f"{sel} and elem P")
+    cmd.color("poster_halogen", f"{sel} and elem F+Cl+Br+I")
+
+    if cmd.count_atoms(metal) > 0:
+        cmd.color(metal_color, metal)
+
+    cmd.color(
+        "poster_metal_gray",
+        f"{sel} and {OTHER_METALS_SELECTION} and not ({metal})",
+    )
 
 
 def _safe_set(setting, value, selection=None):
@@ -558,107 +603,119 @@ def _finish_style(selection):
     cmd.refresh()
 
 
-def render_editorial_minimal(selection="all"):
-    """Editorial minimal white style for main-text mechanistic figures."""
+def _begin_scientific_style(selection):
+    """Shared setup for editorial / scientific derived styles."""
     _define_scientific_colors()
     _common_select_core(selection)
-
     cmd.hide("everything", selection)
-    cmd.show("sticks", selection)
-    cmd.show("spheres", "coord_core")
 
-    cmd.set("stick_radius", 0.095)
-    cmd.set("stick_radius", 0.135, "near_core")
-    cmd.set("sphere_scale", 0.24, "elem C+N+O+S+P+F+Cl+Br+I")
-    cmd.set("sphere_scale", 0.12, "elem H")
-    cmd.set("sphere_scale", 0.45, "metal_atom")
-    cmd.set("sphere_scale", 0.32, "coord_core and not metal_atom")
 
-    _color_by_element(carbon="sci_C_gray", metal="metal_gold")
+def _apply_coord_sphere_scales(
+    stick_radius,
+    stick_radius_near,
+    sphere_heavy,
+    sphere_h,
+    sphere_metal,
+    sphere_coord,
+):
+    """Apply the common stick/sphere scale tiers used by scientific styles."""
+    cmd.set("stick_radius", stick_radius)
+    cmd.set("stick_radius", stick_radius_near, "near_core")
+    cmd.set("sphere_scale", sphere_heavy, "elem C+N+O+S+P+F+Cl+Br+I")
+    cmd.set("sphere_scale", sphere_h, "elem H")
+    cmd.set("sphere_scale", sphere_metal, "metal_atom")
+    cmd.set("sphere_scale", sphere_coord, "coord_core and not metal_atom")
 
-    cmd.set("specular", 0.25)
-    cmd.set("spec_reflect", 0.05)
-    cmd.set("spec_power", 80)
-    cmd.set("ambient", 0.42)
-    cmd.set("direct", 0.62)
-    cmd.set("reflect", 0.05)
 
+def _apply_lighting(
+    specular,
+    spec_reflect,
+    ambient,
+    direct,
+    reflect,
+    spec_power=None,
+    shininess=None,
+):
+    cmd.set("specular", specular)
+    cmd.set("spec_reflect", spec_reflect)
+    if spec_power is not None:
+        cmd.set("spec_power", spec_power)
+    cmd.set("ambient", ambient)
+    cmd.set("direct", direct)
+    cmd.set("reflect", reflect)
+    if shininess is not None:
+        cmd.set("shininess", shininess)
+
+
+def _apply_view(
+    orthoscopic,
+    field_of_view,
+    ray_shadow="on",
+    depth_cue=None,
+    fog_start=None,
+    ray_trace_gain=None,
+    ray_shadows_mode="light",
+):
+    """Transparent background plus camera / ray settings for scientific styles."""
     _set_transparent_background()
-    cmd.set("orthoscopic", 1)
-    cmd.set("field_of_view", 25)
-    cmd.set("fog_start", 0.65)
-    cmd.set("ray_shadow", "on")
-    _safe_ray_shadows("light")
-    _base_quality()
+    cmd.set("orthoscopic", orthoscopic)
+    cmd.set("field_of_view", field_of_view)
+    if depth_cue is not None:
+        cmd.set("depth_cue", depth_cue)
+    if fog_start is not None:
+        cmd.set("fog_start", fog_start)
+    cmd.set("ray_shadow", ray_shadow)
+    if ray_trace_gain is not None:
+        cmd.set("ray_trace_gain", ray_trace_gain)
+    if ray_shadows_mode is not None:
+        _safe_ray_shadows(ray_shadows_mode)
 
+
+def _end_scientific_style(selection, message):
+    _base_quality()
     cmd.label("all", '""')
     _finish_style(selection)
-    print("Editorial minimal white style applied.")
+    print(message)
+
+
+def _show_coord_ball_and_stick(selection, spheres="coord_core"):
+    cmd.show("sticks", selection)
+    cmd.show("spheres", spheres)
+
+
+def render_editorial_minimal(selection="all"):
+    """Editorial minimal white style for main-text mechanistic figures."""
+    _begin_scientific_style(selection)
+    _show_coord_ball_and_stick(selection)
+    _apply_coord_sphere_scales(0.095, 0.135, 0.24, 0.12, 0.45, 0.32)
+    _color_by_element(carbon="sci_C_gray", metal="metal_gold")
+    _apply_lighting(0.25, 0.05, 0.42, 0.62, 0.05, spec_power=80)
+    _apply_view(orthoscopic=1, field_of_view=25, fog_start=0.65)
+    _end_scientific_style(selection, "Editorial minimal white style applied.")
 
 
 def render_black_gold_cover(selection="all"):
     """Black-gold journal-cover style for high-impact centerpiece figures."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-
-    cmd.hide("everything", selection)
-    cmd.show("sticks", selection)
-    cmd.show("spheres", "coord_core")
-
-    cmd.set("stick_radius", 0.12)
-    cmd.set("stick_radius", 0.17, "near_core")
-    cmd.set("sphere_scale", 0.26, "elem C+N+O+S+P+F+Cl+Br+I")
-    cmd.set("sphere_scale", 0.13, "elem H")
-    cmd.set("sphere_scale", 0.58, "metal_atom")
-    cmd.set("sphere_scale", 0.40, "coord_core and not metal_atom")
-
-    cmd.color("sci_C_ivory", "elem C")
-    cmd.color("sci_H_white", "elem H")
-    cmd.color("sci_N_blue", "elem N")
-    cmd.color("sci_O_red", "elem O")
-    cmd.color("sci_S_yellow", "elem S")
-    cmd.color("sci_P_orange", "elem P")
-    cmd.color("sci_halogen", "elem F+Cl+Br+I")
-    cmd.color("metal_gold", "metal_atom")
-
-    cmd.set("specular", 0.90)
-    cmd.set("spec_reflect", 0.72)
-    cmd.set("spec_power", 320)
-    cmd.set("ambient", 0.12)
-    cmd.set("direct", 0.88)
-    cmd.set("reflect", 0.52)
-    cmd.set("shininess", 95)
-
-    _set_transparent_background()
-    cmd.set("orthoscopic", 0)
-    cmd.set("field_of_view", 38)
-    cmd.set("depth_cue", 1)
-    cmd.set("fog_start", 0.22)
-    cmd.set("ray_shadow", "on")
-    cmd.set("ray_trace_gain", 0.18)
-    _safe_ray_shadows("light")
-    _base_quality()
-
-    cmd.label("all", '""')
-    _finish_style(selection)
-    print("Black-gold cover style applied.")
+    _begin_scientific_style(selection)
+    _show_coord_ball_and_stick(selection)
+    _apply_coord_sphere_scales(0.12, 0.17, 0.26, 0.13, 0.58, 0.40)
+    _color_by_element(carbon="sci_C_ivory", metal="metal_gold")
+    _apply_lighting(0.90, 0.72, 0.12, 0.88, 0.52, spec_power=320, shininess=95)
+    _apply_view(
+        orthoscopic=0,
+        field_of_view=38,
+        depth_cue=1,
+        fog_start=0.22,
+        ray_trace_gain=0.18,
+    )
+    _end_scientific_style(selection, "Black-gold cover style applied.")
 
 
 def render_neon_coordination_core(selection="all"):
     """Neon coordination-core style for reactive centers and catalytic pockets."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-
-    cmd.hide("everything", selection)
-    cmd.show("sticks", selection)
-    cmd.show("spheres", "coord_core")
-
-    cmd.set("stick_radius", 0.085)
-    cmd.set("stick_radius", 0.18, "near_core")
-    cmd.set("sphere_scale", 0.20, "elem C+N+O+S+P+F+Cl+Br+I")
-    cmd.set("sphere_scale", 0.11, "elem H")
-    cmd.set("sphere_scale", 0.62, "metal_atom")
-    cmd.set("sphere_scale", 0.42, "coord_core and not metal_atom")
+    _begin_scientific_style(selection)
+    _show_coord_ball_and_stick(selection)
+    _apply_coord_sphere_scales(0.085, 0.18, 0.20, 0.11, 0.62, 0.42)
 
     cmd.color("sci_C_dark", "elem C")
     cmd.color("sci_H_white", "elem H")
@@ -669,43 +726,22 @@ def render_neon_coordination_core(selection="all"):
     cmd.color("neon_green", "elem F+Cl+Br+I")
     cmd.color("metal_rose", "metal_atom")
 
-    cmd.set("specular", 0.78)
-    cmd.set("spec_reflect", 0.45)
-    cmd.set("spec_power", 180)
-    cmd.set("ambient", 0.08)
-    cmd.set("direct", 0.95)
-    cmd.set("reflect", 0.28)
-
-    _set_transparent_background()
-    cmd.set("orthoscopic", 0)
-    cmd.set("field_of_view", 42)
-    cmd.set("depth_cue", 1)
-    cmd.set("fog_start", 0.18)
-    cmd.set("ray_shadow", "on")
-    cmd.set("ray_trace_gain", 0.28)
-    _safe_ray_shadows("light")
-    _base_quality()
-
-    cmd.label("all", '""')
-    _finish_style(selection)
-    print("Neon coordination-core style applied.")
+    _apply_lighting(0.78, 0.45, 0.08, 0.95, 0.28, spec_power=180)
+    _apply_view(
+        orthoscopic=0,
+        field_of_view=42,
+        depth_cue=1,
+        fog_start=0.18,
+        ray_trace_gain=0.28,
+    )
+    _end_scientific_style(selection, "Neon coordination-core style applied.")
 
 
 def render_matte_clay(selection="all"):
     """Matte clay model style for soft graphical abstracts."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-
-    cmd.hide("everything", selection)
-    cmd.show("sticks", selection)
-    cmd.show("spheres", "coord_core")
-
-    cmd.set("stick_radius", 0.14)
-    cmd.set("stick_radius", 0.18, "near_core")
-    cmd.set("sphere_scale", 0.30, "elem C+N+O+S+P+F+Cl+Br+I")
-    cmd.set("sphere_scale", 0.15, "elem H")
-    cmd.set("sphere_scale", 0.55, "metal_atom")
-    cmd.set("sphere_scale", 0.40, "coord_core and not metal_atom")
+    _begin_scientific_style(selection)
+    _show_coord_ball_and_stick(selection)
+    _apply_coord_sphere_scales(0.14, 0.18, 0.30, 0.15, 0.55, 0.40)
 
     cmd.color("clay_carbon", "elem C")
     cmd.color("sci_H_white", "elem H")
@@ -716,33 +752,20 @@ def render_matte_clay(selection="all"):
     cmd.color("sci_halogen", "elem F+Cl+Br+I")
     cmd.color("metal_silver", "metal_atom")
 
-    cmd.set("specular", 0.08)
-    cmd.set("spec_reflect", 0.00)
-    cmd.set("spec_power", 30)
-    cmd.set("ambient", 0.55)
-    cmd.set("direct", 0.48)
-    cmd.set("reflect", 0.03)
-
-    _set_transparent_background()
-    cmd.set("orthoscopic", 1)
-    cmd.set("field_of_view", 28)
-    cmd.set("depth_cue", 1)
-    cmd.set("fog_start", 0.50)
-    cmd.set("ray_shadow", "on")
-    _safe_ray_shadows("soft")
-    _base_quality()
-
-    cmd.label("all", '""')
-    _finish_style(selection)
-    print("Matte clay style applied.")
+    _apply_lighting(0.08, 0.00, 0.55, 0.48, 0.03, spec_power=30)
+    _apply_view(
+        orthoscopic=1,
+        field_of_view=28,
+        depth_cue=1,
+        fog_start=0.50,
+        ray_shadows_mode="soft",
+    )
+    _end_scientific_style(selection, "Matte clay style applied.")
 
 
 def render_xray_wire(selection="all"):
     """X-ray crystallography wire style for SI structure verification."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-
-    cmd.hide("everything", selection)
+    _begin_scientific_style(selection)
     cmd.show("lines", selection)
     cmd.show("sticks", "near_core")
     cmd.show("spheres", "metal_atom")
@@ -758,41 +781,22 @@ def render_xray_wire(selection="all"):
     cmd.color("sci_S_yellow", "coord_core and elem S")
     cmd.color("metal_gold", "metal_atom")
 
-    cmd.set("specular", 0.05)
-    cmd.set("spec_reflect", 0.00)
-    cmd.set("ambient", 0.70)
-    cmd.set("direct", 0.35)
-    cmd.set("reflect", 0.00)
-
-    _set_transparent_background()
-    cmd.set("orthoscopic", 1)
-    cmd.set("field_of_view", 18)
-    cmd.set("ray_shadow", "off")
-    cmd.set("depth_cue", 0)
-    _base_quality()
-
-    cmd.label("all", '""')
-    _finish_style(selection)
-    print("X-ray wire style applied.")
+    _apply_lighting(0.05, 0.00, 0.70, 0.35, 0.00)
+    _apply_view(
+        orthoscopic=1,
+        field_of_view=18,
+        ray_shadow="off",
+        depth_cue=0,
+        ray_shadows_mode=None,
+    )
+    _end_scientific_style(selection, "X-ray wire style applied.")
 
 
 def render_steric_surface(selection="all"):
     """Transparent steric surface style for catalyst pockets."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-
-    cmd.hide("everything", selection)
-
-    cmd.show("sticks", selection)
-    cmd.show("spheres", "coord_core")
-
-    cmd.set("stick_radius", 0.095)
-    cmd.set("stick_radius", 0.14, "near_core")
-    cmd.set("sphere_scale", 0.24, "elem C+N+O+S+P+F+Cl+Br+I")
-    cmd.set("sphere_scale", 0.12, "elem H")
-    cmd.set("sphere_scale", 0.52, "metal_atom")
-    cmd.set("sphere_scale", 0.34, "coord_core and not metal_atom")
-
+    _begin_scientific_style(selection)
+    _show_coord_ball_and_stick(selection)
+    _apply_coord_sphere_scales(0.095, 0.14, 0.24, 0.12, 0.52, 0.34)
     _color_by_element(carbon="sci_C_gray", metal="metal_gold")
 
     cmd.show("surface", selection)
@@ -801,110 +805,57 @@ def render_steric_surface(selection="all"):
     cmd.set("surface_quality", 1)
     cmd.set("surface_solvent", 1)
 
+    # Re-apply atom colors after surface coloring paints the whole selection.
     _color_by_element(carbon="sci_C_gray", metal="metal_gold")
 
-    cmd.set("specular", 0.45)
-    cmd.set("spec_reflect", 0.22)
-    cmd.set("spec_power", 120)
-    cmd.set("ambient", 0.32)
-    cmd.set("direct", 0.74)
-    cmd.set("reflect", 0.20)
-
-    _set_transparent_background()
-    cmd.set("orthoscopic", 1)
-    cmd.set("field_of_view", 30)
-    cmd.set("depth_cue", 1)
-    cmd.set("fog_start", 0.45)
-    cmd.set("ray_shadow", "on")
-    _safe_ray_shadows("light")
-    _base_quality()
-
-    cmd.label("all", '""')
-    _finish_style(selection)
-    print("Transparent steric surface style applied.")
+    _apply_lighting(0.45, 0.22, 0.32, 0.74, 0.20, spec_power=120)
+    _apply_view(
+        orthoscopic=1,
+        field_of_view=30,
+        depth_cue=1,
+        fog_start=0.45,
+    )
+    _end_scientific_style(
+        selection, "Transparent steric surface style applied."
+    )
 
 
 def render_quasi_chemdraw_bold(selection="all"):
     """Quasi-ChemDraw bold 3D style with formula-like clarity."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-
-    cmd.hide("everything", selection)
-    cmd.show("sticks", selection)
-    cmd.show("spheres", "metal_atom or coord_core")
+    _begin_scientific_style(selection)
+    _show_coord_ball_and_stick(selection, spheres="metal_atom or coord_core")
 
     cmd.hide("sticks", f"({selection}) and elem H and not coord_core")
     cmd.hide("spheres", f"({selection}) and elem H and not coord_core")
 
-    cmd.set("stick_radius", 0.18)
-    cmd.set("stick_radius", 0.24, "near_core")
-    cmd.set("sphere_scale", 0.23, "elem C+N+O+S+P+F+Cl+Br+I")
-    cmd.set("sphere_scale", 0.13, "elem H")
-    cmd.set("sphere_scale", 0.50, "metal_atom")
-    cmd.set("sphere_scale", 0.34, "coord_core and not metal_atom")
-
-    cmd.color("sci_C_dark", "elem C")
-    cmd.color("sci_H_white", "elem H")
-    cmd.color("sci_N_blue", "elem N")
-    cmd.color("sci_O_red", "elem O")
-    cmd.color("sci_S_yellow", "elem S")
-    cmd.color("sci_P_orange", "elem P")
-    cmd.color("sci_halogen", "elem F+Cl+Br+I")
-    cmd.color("metal_gold", "metal_atom")
-
-    cmd.set("specular", 0.18)
-    cmd.set("spec_reflect", 0.02)
-    cmd.set("spec_power", 70)
-    cmd.set("ambient", 0.62)
-    cmd.set("direct", 0.42)
-    cmd.set("reflect", 0.02)
-
-    _set_transparent_background()
-    cmd.set("orthoscopic", 1)
-    cmd.set("field_of_view", 12)
-    cmd.set("depth_cue", 0)
-    cmd.set("ray_shadow", "off")
-    _base_quality()
-
-    cmd.label("all", '""')
-    _finish_style(selection)
-    print("Quasi-ChemDraw bold 3D style applied.")
+    _apply_coord_sphere_scales(0.18, 0.24, 0.23, 0.13, 0.50, 0.34)
+    _color_by_element(carbon="sci_C_dark", metal="metal_gold")
+    _apply_lighting(0.18, 0.02, 0.62, 0.42, 0.02, spec_power=70)
+    _apply_view(
+        orthoscopic=1,
+        field_of_view=12,
+        depth_cue=0,
+        ray_shadow="off",
+        ray_shadows_mode=None,
+    )
+    _end_scientific_style(selection, "Quasi-ChemDraw bold 3D style applied.")
 
 
 def render_labeled_coordination_core(selection="all"):
     """Coordination-core labeled style with explicit element labels."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-
-    cmd.hide("everything", selection)
-    cmd.show("sticks", selection)
-    cmd.show("spheres", "coord_core")
-
-    cmd.set("stick_radius", 0.11)
-    cmd.set("stick_radius", 0.16, "near_core")
-    cmd.set("sphere_scale", 0.25, "elem C+N+O+S+P+F+Cl+Br+I")
-    cmd.set("sphere_scale", 0.13, "elem H")
-    cmd.set("sphere_scale", 0.56, "metal_atom")
-    cmd.set("sphere_scale", 0.38, "coord_core and not metal_atom")
-
+    _begin_scientific_style(selection)
+    _show_coord_ball_and_stick(selection)
+    _apply_coord_sphere_scales(0.11, 0.16, 0.25, 0.13, 0.56, 0.38)
     _color_by_element(carbon="sci_C_gray", metal="metal_gold")
+    _apply_lighting(0.55, 0.28, 0.30, 0.70, 0.18, spec_power=180)
+    _apply_view(
+        orthoscopic=1,
+        field_of_view=28,
+        depth_cue=1,
+        fog_start=0.45,
+    )
 
-    cmd.set("specular", 0.55)
-    cmd.set("spec_reflect", 0.28)
-    cmd.set("spec_power", 180)
-    cmd.set("ambient", 0.30)
-    cmd.set("direct", 0.70)
-    cmd.set("reflect", 0.18)
-
-    _set_transparent_background()
-    cmd.set("orthoscopic", 1)
-    cmd.set("field_of_view", 28)
-    cmd.set("depth_cue", 1)
-    cmd.set("fog_start", 0.45)
-    cmd.set("ray_shadow", "on")
-    _safe_ray_shadows("light")
     _base_quality()
-
     cmd.label("all", '""')
     cmd.label("coord_core", "elem")
     cmd.set("label_size", 24)
