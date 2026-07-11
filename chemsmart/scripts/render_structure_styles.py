@@ -13,7 +13,15 @@ Run with the ChemSmart Python environment (not inside PyMOL)::
 
     python chemsmart/scripts/render_structure_styles.py INPUT.xyz
 
-PyMOL is invoked as an external executable for PNG export only.
+Regenerate all documentation figures::
+
+    python chemsmart/scripts/render_structure_styles.py \\
+        tests/data/StructuresTests/xyz/1-mer.xyz \\
+        --output-dir docs/source/_static/pymol_styles \\
+        --comic-coordinates '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'
+
+Pass ``--coordinates`` for every rendered style, or ``--comic-coordinates`` for
+comic highlighting only.
 """
 
 from __future__ import annotations
@@ -118,6 +126,7 @@ def run_chemsmart_visualize(
     xyz_path: Path,
     style_key: str,
     work_dir: Path,
+    coordinates: str | None = None,
 ) -> None:
     """Run ``chemsmart run mol -f … visualize -s …`` for one derived style."""
     cli_style = _style_cli_name(style_key)
@@ -133,6 +142,8 @@ def run_chemsmart_visualize(
         cli_style,
         "--no-trace",
     ]
+    if coordinates is not None:
+        command.extend(["-c", coordinates])
 
     print(f"Running: {' '.join(command)}")
     subprocess.run(command, cwd=work_dir, check=True)
@@ -178,6 +189,8 @@ def render_all_styles(
     pymol_cmd: list[str],
     styles: list[str],
     derived_styles: frozenset[str],
+    coordinates: str | None = None,
+    comic_coordinates: str | None = None,
     width: int = 1200,
     height: int = 1200,
     dpi: int = 300,
@@ -191,11 +204,16 @@ def render_all_styles(
         if style_key not in derived_styles:
             raise ValueError(f"Unsupported derived style: {style_key}")
 
+        style_coordinates = coordinates
+        if style_coordinates is None and style_key == "comic":
+            style_coordinates = comic_coordinates
+
         run_chemsmart_visualize(
             chemsmart_cmd=chemsmart_cmd,
             xyz_path=xyz_path,
             style_key=style_key,
             work_dir=work_dir,
+            coordinates=style_coordinates,
         )
 
         pse_path = _expected_pse_path(work_dir, label, style_key)
@@ -310,6 +328,22 @@ def parse_args(argv=None):
         help="Derived style keys to render (default: all scientific styles).",
     )
     parser.add_argument(
+        "--coordinates",
+        default=None,
+        help=(
+            "Coordinate spec passed to ``visualize -c`` for every rendered "
+            "style."
+        ),
+    )
+    parser.add_argument(
+        "--comic-coordinates",
+        default=None,
+        help=(
+            "Coordinate spec passed to ``visualize -c`` for the comic style "
+            "only."
+        ),
+    )
+    parser.add_argument(
         "--width",
         type=int,
         default=1200,
@@ -353,6 +387,8 @@ def main(argv=None):
         pymol_cmd=pymol_cmd,
         styles=args.styles,
         derived_styles=derived_styles,
+        coordinates=args.coordinates,
+        comic_coordinates=args.comic_coordinates,
         width=args.width,
         height=args.height,
         dpi=args.dpi,

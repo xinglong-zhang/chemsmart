@@ -230,29 +230,17 @@ Glossy Options
       -  string
       -  Enable glossy semi-metallic visualization mode
 
-   -  -  ``--style-background``
-      -  string
-      -  Background: ``white`` (publication) or ``dark`` (slides). Default: ``white``
-
 .. note::
 
-   ``--style-background`` applies only to derived styles that support it (``glossy``, ``comic``, and ``soft-cartoon``).
-   Group hybrid mode (``-H/--hybrid``) and derived ``-s`` styles cannot be combined.
+   Group hybrid mode (``-H/--hybrid``) and derived ``-s`` styles cannot be combined. Ray-traced PNG export uses a
+   transparent background.
 
 Basic Usage
 ===========
 
-Publication figure (white background):
-
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s glossy --style-background white
-
-Slide / presentation (dark background):
-
-.. code:: bash
-
-   chemsmart run mol -f mn_complex.xyz visualize -s glossy --style-background dark
+   chemsmart run mol -f complex.xyz visualize -s glossy
 
 Example
 =======
@@ -262,8 +250,8 @@ Example
    :align: center
    :width: 70%
 
-   Glossy semi-metallic style applied to ``crest_best`` via
-   ``chemsmart run mol -f crest_best.xyz visualize -s glossy``.
+   Glossy semi-metallic style applied to ``complex.xyz`` via
+   ``chemsmart run mol -f complex.xyz visualize -s glossy``.
 
 Manual PyMOL usage
 ==================
@@ -301,14 +289,15 @@ Basic Usage
 
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s comic
+   chemsmart run mol -f complex.xyz visualize -s comic
 
 Highlight specific metal-ligand bonds in coordination-core styling with ``-c`` (distance labels are suppressed for comic
 by default):
 
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s comic -c '[[1,8],[1,15],[1,36]]'
+   chemsmart run mol -f complex.xyz visualize -s comic \\
+       -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'
 
 Example
 =======
@@ -318,8 +307,8 @@ Example
    :align: center
    :width: 70%
 
-   Comic style applied to ``crest_best`` with a transparent background via
-   ``chemsmart run mol -f crest_best.xyz visualize -s comic``.
+   Comic style applied to ``complex.xyz`` with Mn coordination-bond highlighting and a transparent background via
+   ``chemsmart run mol -f complex.xyz visualize -s comic -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'``.
 
 Manual PyMOL usage
 ==================
@@ -345,22 +334,14 @@ subcommand. Like glossy and comic modes, this selects a dedicated job type.
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s soft-cartoon [SUBCMD_OPTIONS]
 
 The style renders scaled sticks and spheres with soft metallic shading, light ray shadows, and a perspective camera
-view. White backgrounds use a transparent viewport for compositing.
+view. Ray-traced PNG export uses a transparent background for compositing.
 
 Basic Usage
 ===========
 
-Publication figure (white background, default):
-
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s soft-cartoon --style-background white
-
-Slide / presentation (dark background):
-
-.. code:: bash
-
-   chemsmart run mol -f mn_complex.xyz visualize -s soft-cartoon --style-background dark
+   chemsmart run mol -f complex.xyz visualize -s soft-cartoon
 
 Example
 =======
@@ -370,8 +351,8 @@ Example
    :align: center
    :width: 70%
 
-   Soft cartoon style applied to ``crest_best`` via
-   ``chemsmart run mol -f crest_best.xyz visualize -s soft-cartoon``.
+   Soft cartoon ball-and-stick style applied to ``complex.xyz`` via
+   ``chemsmart run mol -f complex.xyz visualize -s soft-cartoon``.
 
 Manual PyMOL usage
 ==================
@@ -390,8 +371,7 @@ Manual PyMOL usage
 **************************
 
 All derived ``-s`` styles are implemented in ``scientific_styles.py`` and routed through
-:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`. Use ``--style-background`` only with
-``glossy``, ``comic``, or ``soft-cartoon``.
+:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. list-table::
    :header-rows: 1
@@ -400,13 +380,13 @@ All derived ``-s`` styles are implemented in ``scientific_styles.py`` and routed
    -  -  ``-s`` value
       -  Description
    -  -  ``glossy``
-      -  Semi-metallic poster rendering with optional white or dark background
+      -  Semi-metallic poster rendering with transparent PNG export
    -  -  ``comic``
       -  Comic ball-and-stick rendering with black outlines and labels
    -  -  ``soft-cartoon``
       -  Soft premium ball-and-stick rendering with light metallic shading
    -  -  ``editorial-minimal``
-      -  Matte minimal white style for main-text mechanistic figures
+      -  Matte minimal ball-and-stick style for main-text mechanistic figures
    -  -  ``black-gold-cover``
       -  High-impact black background with gold metal highlights
    -  -  ``neon-coordination-core``
@@ -414,9 +394,9 @@ All derived ``-s`` styles are implemented in ``scientific_styles.py`` and routed
    -  -  ``matte-clay``
       -  Soft clay/plastic look for graphical abstracts
    -  -  ``xray-wire``
-      -  Monochrome wire style for SI structure verification
+      -  Monochrome wireframe style for SI structure verification
    -  -  ``steric-surface``
-      -  Transparent molecular surface for steric enclosure
+      -  Transparent molecular surface for steric / space-filling views
    -  -  ``quasi-chemdraw-bold``
       -  Bold schematic 3D style with ChemDraw-like clarity
    -  -  ``labeled-coordination-core``
@@ -427,14 +407,12 @@ Basic Usage
 
 .. code:: bash
 
-   chemsmart run mol -f mn_complex.xyz visualize -s editorial-minimal
-   chemsmart run mol -f mn_complex.xyz visualize -s black-gold-cover
-   chemsmart run mol -f mn_complex.xyz visualize -s labeled-coordination-core
+   chemsmart run mol -f complex.xyz visualize -s editorial-minimal
+   chemsmart run mol -f complex.xyz visualize -s black-gold-cover
+   chemsmart run mol -f complex.xyz visualize -s labeled-coordination-core
 
 Examples
 ========
-
-The figures below were generated from ``tests/data/StructuresTests/xyz/crest_best.xyz``.
 
 Editorial minimal
 -----------------
@@ -444,7 +422,7 @@ Editorial minimal
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s editorial-minimal``
+   ``chemsmart run mol -f complex.xyz visualize -s editorial-minimal``
 
 Black-gold cover
 ----------------
@@ -454,7 +432,7 @@ Black-gold cover
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s black-gold-cover``
+   ``chemsmart run mol -f complex.xyz visualize -s black-gold-cover``
 
 Neon coordination core
 ----------------------
@@ -464,7 +442,7 @@ Neon coordination core
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s neon-coordination-core``
+   ``chemsmart run mol -f complex.xyz visualize -s neon-coordination-core``
 
 Matte clay
 ----------
@@ -474,7 +452,7 @@ Matte clay
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s matte-clay``
+   ``chemsmart run mol -f complex.xyz visualize -s matte-clay``
 
 X-ray wire
 ----------
@@ -484,7 +462,7 @@ X-ray wire
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s xray-wire``
+   ``chemsmart run mol -f complex.xyz visualize -s xray-wire``
 
 Steric surface
 --------------
@@ -494,7 +472,7 @@ Steric surface
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s steric-surface``
+   ``chemsmart run mol -f complex.xyz visualize -s steric-surface``
 
 Quasi-ChemDraw bold
 -------------------
@@ -504,7 +482,7 @@ Quasi-ChemDraw bold
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s quasi-chemdraw-bold``
+   ``chemsmart run mol -f complex.xyz visualize -s quasi-chemdraw-bold``
 
 Labeled coordination core
 -------------------------
@@ -514,7 +492,7 @@ Labeled coordination core
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f crest_best.xyz visualize -s labeled-coordination-core``
+   ``chemsmart run mol -f complex.xyz visualize -s labeled-coordination-core``
 
 Manual PyMOL usage
 ==================
@@ -529,8 +507,7 @@ Manual PyMOL usage
 
 .. note::
 
-   ``--style-background``, ``-H/--hybrid``, and special ``-s`` styles are mutually exclusive where noted. Only one
-   visualization mode can be active.
+   ``-H/--hybrid`` and derived ``-s`` styles are mutually exclusive. Only one visualization mode can be active.
 
 ************
  Align Jobs
