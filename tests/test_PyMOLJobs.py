@@ -21,7 +21,10 @@ from chemsmart.jobs.mol.runner import (
     parse_pymol_coordinate_bonds,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
-from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
+from chemsmart.jobs.mol.visualize import (
+    PyMOLScientificStyleVisualizationJob,
+    PyMOLVisualizationJob,
+)
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
     is_pubchem_network_available,
@@ -889,31 +892,57 @@ class TestPyMOLFileProcessingUsesSourceFilename:
 
 
 class TestPyMOLStyleCommands:
+    label_1_mer = "1-mer"
+    coordination_bonds_1_mer = [
+        [1, 2],
+        [1, 5],
+        [1, 36],
+        [1, 3],
+        [1, 15],
+        [1, 8],
+    ]
+
+    def test_1_mer_xyz_is_valid_visualization_geometry(
+        self, visualized_1_mer_xyz_file
+    ):
+        """``1-mer.xyz`` loads as a single Mn coordination complex."""
+        molecules = Molecule.from_filepath(
+            visualized_1_mer_xyz_file, return_list=True
+        )
+
+        assert len(molecules) == 1
+        assert molecules[0].num_atoms == 36
+        assert "Mn" in molecules[0].elements
+
     def test_parse_pymol_coordinate_bonds_extracts_bond_pairs(self):
-        coordinates = [[1, 8], [1, 15], [1, 36], [2, 3, 4]]
+        coordinates = self.coordination_bonds_1_mer + [[2, 3, 4]]
 
         assert parse_pymol_coordinate_bonds(coordinates) == [
-            (1, 8),
-            (1, 15),
+            (1, 2),
+            (1, 5),
             (1, 36),
+            (1, 3),
+            (1, 15),
+            (1, 8),
         ]
 
     def test_format_comic_highlight_bonds_encodes_bond_pairs(self):
-        coordinates = [[1, 8], [1, 15], [1, 36]]
-
-        assert format_comic_highlight_bonds(coordinates) == "1-8+1-15+1-36"
+        assert (
+            format_comic_highlight_bonds(self.coordination_bonds_1_mer)
+            == "1-2+1-5+1-36+1-3+1-15+1-8"
+        )
 
     def test_format_pymol_style_command_passes_highlight_bonds_for_comic(self):
         job = SimpleNamespace(
             style="comic",
-            coordinates=[[1, 8], [1, 15], [1, 36]],
+            coordinates=self.coordination_bonds_1_mer,
         )
 
-        command = format_pymol_style_command(job, "1-mer")
+        command = format_pymol_style_command(job, self.label_1_mer)
 
         assert (
             command
-            == "render_comic_metallic_labeled_final 1-mer, 1-8+1-15+1-36"
+            == f"render_comic_metallic_labeled_final {self.label_1_mer}, 1-2+1-5+1-36+1-3+1-15+1-8"
         )
 
     def test_format_pymol_style_command_omits_highlight_bonds_without_coordinates(
@@ -924,9 +953,30 @@ class TestPyMOLStyleCommands:
             coordinates=None,
         )
 
-        command = format_pymol_style_command(job, "1-mer")
+        command = format_pymol_style_command(job, self.label_1_mer)
 
-        assert command == "render_comic_metallic_labeled_final 1-mer"
+        assert (
+            command
+            == f"render_comic_metallic_labeled_final {self.label_1_mer}"
+        )
+
+    @pytest.mark.parametrize(
+        ("style", "expected_command"),
+        [
+            ("glossy", "metallic_poster_render"),
+            ("soft_cartoon", "render_soft_cartoon"),
+            ("neon_coordination_core", "render_neon_coordination_core"),
+        ],
+    )
+    def test_format_pymol_style_command_for_derived_styles_on_1_mer(
+        self, style, expected_command
+    ):
+        job = SimpleNamespace(style=style, coordinates=None)
+
+        command = format_pymol_style_command(job, self.label_1_mer)
+
+        assert command.startswith(expected_command)
+        assert self.label_1_mer in command
 
     def test_hybrid_is_not_a_derived_style(self):
         with pytest.raises(ValueError, match="not available"):
@@ -955,3 +1005,89 @@ class TestPyMOLStyleCommands:
         command = runner._add_coordinates_labels(job, "cmd")
 
         assert "distance d1, id 1, id 8" in command
+
+
+@pytest.mark.usefixtures("skip_if_no_pymol")
+class TestPyMOLScientificStyleVisualizationJobs:
+    """Derived ``-s`` style jobs using the ``1-mer.xyz`` test geometry."""
+
+    coordination_bonds_1_mer = [
+        [1, 2],
+        [1, 5],
+        [1, 36],
+        [1, 3],
+        [1, 15],
+        [1, 8],
+    ]
+
+    def test_comic_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="comic",
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            format_pymol_style_command(job, job.label)
+            == f"render_comic_metallic_labeled_final {job.label}"
+        )
+
+    def test_comic_style_job_with_coordination_bonds_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="comic",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            format_pymol_style_command(job, job.label)
+            == f"render_comic_metallic_labeled_final {job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
+        )
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        assert "distance d" not in runner._add_coordinates_labels(job, "cmd")
+
+    def test_glossy_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="glossy",
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert format_pymol_style_command(job, job.label).startswith(
+            "metallic_poster_render"
+        )

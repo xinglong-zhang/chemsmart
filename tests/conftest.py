@@ -1728,6 +1728,11 @@ def dna_hybrid_visualized_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def visualized_1_mer_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "1-mer.xyz")
+
+
+@pytest.fixture()
 def chemdraw_directory(structure_test_directory):
     return os.path.join(structure_test_directory, "chemdraw")
 
