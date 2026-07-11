@@ -145,11 +145,6 @@ class Thermochemistry:
             else None
         )
 
-    @classmethod
-    def from_filepath(cls, filepath, **kwargs):
-        """Construct a Thermochemistry object from an output filepath."""
-        return cls(filename=filepath, **kwargs)
-
     @cached_property
     def file_object(self):
         """Open the file and return the file object."""
