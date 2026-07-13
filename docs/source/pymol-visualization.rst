@@ -370,7 +370,8 @@ Manual PyMOL usage
  Scientific Visualization
 **************************
 
-All derived ``-s`` styles are implemented in ``scientific_styles.py`` and routed through
+CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices including ``glossy``, ``comic``,
+``soft-cartoon``, ``editorial-minimal``, ``black-gold-cover``, and other scientific styles. These are routed through
 :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. list-table::

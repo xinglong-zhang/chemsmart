@@ -1,7 +1,7 @@
 """
 PyMOL visualization styles for publication, cover, and presentation figures.
 
-ChemSmart applies this template for ``visualize -s`` choices including
+CHEMSMART applies this template for ``visualize -s`` choices including
 ``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``,
 ``black-gold-cover``, and other scientific styles.
 In PyMOL directly::
@@ -298,7 +298,7 @@ def _metal_element_label(metal_selection):
 
 
 def _parse_highlight_bond_pairs(highlight_bonds):
-    """Parse ChemSmart-encoded bond pairs such as ``1-8+1-15+1-36``."""
+    """Parse CHEMSMART-encoded bond pairs such as ``1-8+1-15+1-36``."""
     highlight_bonds = _normalize_none(highlight_bonds)
     if not highlight_bonds:
         return []
@@ -425,7 +425,7 @@ def render_comic_metallic_labeled_final(
 def comic_render(
     selection="all", highlight_bonds="", background=None, *_args, **_kwargs
 ):
-    """ChemSmart entry point for the comic style."""
+    """CHEMSMART entry point for the comic style."""
     render_comic_metallic_labeled_final(
         selection=selection,
         highlight_bonds=highlight_bonds,
@@ -514,7 +514,7 @@ def render_soft_cartoon(selection="all", background=None):
 
 
 def soft_cartoon_render(selection="all", background=None, *_args, **_kwargs):
-    """ChemSmart entry point for the soft cartoon style."""
+    """CHEMSMART entry point for the soft cartoon style."""
     render_soft_cartoon(selection=selection)
 
 

@@ -192,11 +192,11 @@ For full details on organometallic complex support and its restrictions, see :do
  Molecular Databases
 *********************
 
-Chemsmart Database Files (.db)
+CHEMSMART Database Files (.db)
 ==============================
 
-Chemsmart ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
-:doc:`database-assemble`). When a chemsmart database is used as molecular input, chemsmart first selects the requested
+CHEMSMART ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
+:doc:`database-assemble`). When a CHEMSMART database is used as molecular input, chemsmart first selects the requested
 record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to Gaussian, ORCA, or PyMOL
 (see :doc:`database-workflow`).
 
@@ -379,7 +379,7 @@ CHEMSMART automatically detects file formats based on extensions:
 -  ``.inp`` → ORCA input
 -  ``.out`` → ORCA/Gaussian output (auto-detected by reading file header)
 -  ``.cdx``, ``.cdxml`` → ChemDraw format
--  ``.db`` → Chemsmart/ASE database (auto-detected by validating the database schema)
+-  ``.db`` → CHEMSMART/ASE database (auto-detected by validating the database schema)
 -  ``.traj`` → ASE trajectory
 
 .. note::

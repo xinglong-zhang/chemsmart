@@ -88,7 +88,7 @@ def is_pymol_derived_style(style):
 
 
 def get_pymol_style_template_filename(style):
-    """Return the template filename for a ChemSmart PyMOL style."""
+    """Return the template filename for a CHEMSMART PyMOL style."""
     return PYMOL_STYLE_TEMPLATES[normalize_pymol_style(style)]
 
 
