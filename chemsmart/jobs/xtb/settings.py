@@ -78,6 +78,102 @@ class XTBJobSettings:
     def from_dict(cls, settings_dict):
         return cls(**settings_dict)
 
+    @classmethod
+    def from_database(
+        cls,
+        filepath,
+        record_index=None,
+        record_id=None,
+        structure_index="-1",
+        structure_id=None,
+    ):
+        """Create job settings from a chemsmart database file.
+
+        With record selectors (record_index/record_id), this fills
+        charge/multiplicity from the selected structure and, when present in
+        record metadata, xTB-relevant fields (gfn_version, solvent).
+        With a global structure selector (structure_id), this uses defaults
+        and fills only charge/multiplicity from the selected structure.
+        """
+        from chemsmart.database.database import Database
+        from chemsmart.database.utils import resolve_record
+        from chemsmart.utils.utils import string2index_1based
+
+        if not os.path.isfile(filepath):
+            raise FileNotFoundError(f"Database file not found: {filepath}")
+
+        db = Database(filepath)
+        record_selected = record_index is not None or record_id is not None
+        if structure_id is not None and record_selected:
+            raise ValueError(
+                "Use either structure_id or record_index/record_id, not both."
+            )
+
+        settings = cls.default()
+
+        if structure_id is not None:
+            full_sid = db.get_structure_by_partial_id(structure_id)
+            structure = db.get_structure(full_sid)
+            if structure is None:
+                raise ValueError(
+                    f"No structure found with ID '{structure_id}'."
+                )
+            settings.charge = structure.get("charge")
+            settings.multiplicity = structure.get("multiplicity")
+            settings.title = (
+                "Job prepared from chemsmart database "
+                f"{os.path.basename(filepath)}"
+            )
+            logger.info(
+                "Created JobSettings from database: "
+                f"charge={settings.charge}, "
+                f"multiplicity={settings.multiplicity}"
+            )
+            return settings
+
+        record = resolve_record(
+            db,
+            record_index=record_index,
+            record_id=record_id,
+            return_list=False,
+        )
+        if record is None:
+            return None
+
+        meta = record.get("meta", {})
+        molecules = record.get("molecules", [])
+        selected_index = string2index_1based(str(structure_index))
+        if isinstance(selected_index, slice):
+            raise ValueError(
+                "Database-aware jobs support one structure at a time."
+            )
+        try:
+            structure = molecules[selected_index] if molecules else {}
+        except IndexError as exc:
+            raise ValueError(
+                f"Structure index {structure_index} out of range for "
+                "selected record."
+            ) from exc
+        settings.charge = structure.get("charge")
+        settings.multiplicity = structure.get("multiplicity")
+        method = meta.get("method")
+        if method is not None:
+            method_lower = str(method).lower()
+            if method_lower in XTB_ALL_METHODS:
+                settings.gfn_version = method_lower
+        settings.solvent_model = meta.get("solvent_model")
+        settings.solvent_id = meta.get("solvent_id")
+        settings.title = (
+            "Job prepared from chemsmart database "
+            f"{os.path.basename(filepath)}"
+        )
+        logger.info(
+            "Created JobSettings from database: "
+            f"charge={settings.charge}, "
+            f"multiplicity={settings.multiplicity}"
+        )
+        return settings
+
     def copy(self):
         return copy.deepcopy(self)
 

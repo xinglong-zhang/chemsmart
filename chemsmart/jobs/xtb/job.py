@@ -51,7 +51,7 @@ class XTBJob(Job):
 
     @property
     def inputfile(self):
-        return self.xyzfile
+        return os.path.join(self.folder, f"{self.label}.inp")
 
     @property
     def outputfile(self):

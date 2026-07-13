@@ -4,7 +4,7 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.xtb.common import build_xtb_jobs
-from chemsmart.cli.xtb.xtb import require_xtb_filename, xtb
+from chemsmart.cli.xtb.xtb import xtb
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def opt(ctx, skip_completed, optimization_level, **kwargs):
     """Run xTB geometry optimization calculations."""
-    require_xtb_filename(ctx)
     job_settings = ctx.obj["job_settings"]
     keywords = list(ctx.obj["keywords"])
     if optimization_level is not None:
