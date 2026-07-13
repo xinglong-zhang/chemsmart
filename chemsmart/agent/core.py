@@ -16,10 +16,15 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.handles import (
+    HandleStore,
+    is_handle_id,
+    result_handle_kind,
+)
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.runner import evaluate_harness
 from chemsmart.agent.harness.trace import write_harness_result
+from chemsmart.agent.harness.workflow_state import workflow_state_scope
 from chemsmart.agent.loop import (
     ToolLoop,
     ToolLoopBudgets,
@@ -36,7 +41,7 @@ from chemsmart.agent.prompts.identity import (
     build_system_prompt,
     ensure_system_message,
 )
-from chemsmart.agent.provider_adapter import ToolRequest
+from chemsmart.agent.provider_adapter import ToolRequest, extract_response_text
 from chemsmart.agent.providers import (
     DEFAULT_TIMEOUT_S,
     extract_response_usage,
@@ -101,6 +106,15 @@ _CHITCHAT_TOKENS = {
 }
 _LLM_MAX_ATTEMPTS = 3
 _LLM_BACKOFF_SECONDS = (1, 2, 4)
+_PROJECT_YAML_TOOLS = {
+    "extract_project_protocol",
+    "render_project_yaml",
+    "validate_project_yaml",
+    "critic_project_yaml",
+    "write_project_yaml",
+    "read_project_yaml",
+    "update_project_yaml",
+}
 
 
 def _utc_now_iso() -> str:
@@ -213,6 +227,11 @@ class AgentSession:
         self._llm_stats: list[dict[str, Any]] = []
         self._loop_mode_state: tuple[str, bool] | None = None
         self._last_harness_result: HarnessResult | None = None
+        self._training_writer: Any | None = None
+
+    @property
+    def stage_prompt(self) -> str:
+        return self._stage_prompt
 
     @classmethod
     def load(
@@ -403,11 +422,12 @@ class AgentSession:
             policy=policy,
             approver=approver,
         )
-        loop_result = loop.run_turn(
-            messages=messages,
-            tool_defs=tool_defs,
-            mode=runtime_mode,
-        )
+        with workflow_state_scope(self.state.session_id):
+            loop_result = loop.run_turn(
+                messages=messages,
+                tool_defs=tool_defs,
+                mode=runtime_mode,
+            )
 
         tool_requests = loop_result["tool_requests"]
         tool_outcomes = loop_result["tool_outcomes"]
@@ -448,7 +468,9 @@ class AgentSession:
         self.state.request_intent = (
             "chitchat"
             if _is_chitchat_request(intent_request) and not tool_requests
-            else "workflow" if tool_requests else "advisory"
+            else "workflow"
+            if tool_requests
+            else "advisory"
         )
         self.state.total_steps_planned = len(tool_requests)
         self.state.current_step_index = len(results)
@@ -469,6 +491,12 @@ class AgentSession:
             }
         ]
         if loop_result.get("ask_user"):
+            self._write_training_episode(
+                provider_name=provider_name,
+                provider=provider,
+                loop_result=loop_result,
+                paused=True,
+            )
             self._refresh_conversation_history()
             return {
                 "session_id": self.state.session_id,
@@ -512,6 +540,11 @@ class AgentSession:
                 "ask_user_question": loop_result["ask_user"],
             }
 
+        self._write_training_episode(
+            provider_name=provider_name,
+            provider=provider,
+            loop_result=loop_result,
+        )
         self.state.pending_messages = None
         self.state.pending_ask_user = None
         self._save_state()
@@ -671,7 +704,7 @@ class AgentSession:
                     dry_submit=dry_submit,
                 )
 
-            if verdict is None:
+            if verdict is None and not _is_project_yaml_workflow(plan):
                 verdict = self._critic_call(
                     plan=plan,
                     dry_run_results=dry_run_results,
@@ -691,11 +724,15 @@ class AgentSession:
                     rationale=verdict.rationale,
                 )
 
-            block_reason = self._block_reason(
-                verdict=verdict,
-                dry_submit=dry_submit,
-                allow_remote_unknown=allow_remote_unknown,
-                allow_critic_override=allow_critic_override,
+            block_reason = (
+                self._block_reason(
+                    verdict=verdict,
+                    dry_submit=dry_submit,
+                    allow_remote_unknown=allow_remote_unknown,
+                    allow_critic_override=allow_critic_override,
+                )
+                if verdict is not None
+                else None
             )
             blocked = block_reason is not None
             if blocked:
@@ -1043,7 +1080,9 @@ class AgentSession:
             },
             rationale=step.rationale,
         )
-        result = self.registry.call(step.tool, resolved_args)
+        scope = self.state.session_id if self.state is not None else "default"
+        with workflow_state_scope(scope):
+            result = self.registry.call(step.tool, resolved_args)
         if _is_tool_error(result):
             error = result["error"]
             self.decision_log.write(
@@ -1120,7 +1159,9 @@ class AgentSession:
             },
             rationale=step.rationale,
         )
-        result = self.registry.call(step.tool, resolved_args)
+        scope = self.state.session_id if self.state is not None else "default"
+        with workflow_state_scope(scope):
+            result = self.registry.call(step.tool, resolved_args)
         if _is_tool_error(result):
             message = result["error"]["message"]
             if dry_submit and _is_submit_server_error(message):
@@ -1213,7 +1254,9 @@ class AgentSession:
             "exit_status": (
                 "error"
                 if run_error is not None
-                else "blocked" if blocked else "ok"
+                else "blocked"
+                if blocked
+                else "ok"
             ),
             "advisory_only": advisory_only,
             "is_chitchat": is_chitchat,
@@ -1443,6 +1486,72 @@ class AgentSession:
             meta["yolo"] = self._loop_mode_state[1]
         return meta
 
+    def _write_training_episode(
+        self,
+        *,
+        provider_name: str,
+        provider: Any,
+        loop_result: dict[str, Any],
+        paused: bool = False,
+    ) -> None:
+        """Append this completed turn to the cross-session training store."""
+
+        try:
+            from chemsmart.agent.training_log import (
+                TrainingEpisodeWriter,
+                tool_records_from_outcomes,
+            )
+
+            if self._training_writer is None:
+                self._training_writer = TrainingEpisodeWriter()
+            if not self._training_writer.enabled or self.state is None:
+                return
+            outcomes = list(loop_result.get("tool_outcomes") or [])
+            terminal_state = next(
+                (
+                    outcome.raw_result.get("terminal_state")
+                    for outcome in reversed(outcomes)
+                    if isinstance(outcome.raw_result, dict)
+                    and isinstance(
+                        outcome.raw_result.get("terminal_state"), dict
+                    )
+                ),
+                None,
+            )
+            self._training_writer.write_episode(
+                session_id=self.state.session_id,
+                turn=self.state.turn_index,
+                provider_name=provider_name,
+                model=getattr(provider, "default_model", None),
+                messages=_json_safe(loop_result.get("messages") or []),
+                tool_records=tool_records_from_outcomes(
+                    outcomes,
+                    requests=list(loop_result.get("tool_requests") or []),
+                ),
+                tool_requests=list(loop_result.get("tool_requests") or []),
+                approvals_count=loop_result.get("approvals_count") or 0,
+                denials_count=loop_result.get("denials_count") or 0,
+                cwd=self.state.cwd,
+                available_tools=self._registry_tool_names(),
+                final_answer=str(loop_result.get("assistant_text") or ""),
+                terminal_state=terminal_state,
+                paused=paused,
+            )
+        except Exception:
+            # Training capture must never break a live turn.
+            pass
+
+    def _registry_tool_names(self) -> list[str]:
+        # Custom/test registries only need `call` + tool defs; don't let a
+        # missing list_tools() silently disable episode capture.
+        list_tools = getattr(self.registry, "list_tools", None)
+        if not callable(list_tools):
+            return []
+        try:
+            return [tool.name for tool in list_tools()]
+        except Exception:
+            return []
+
     def _tool_loop_system_prompt(
         self,
         policy: PermissionPolicy,
@@ -1537,7 +1646,7 @@ class AgentSession:
     ) -> str | None:
         if self.handle_store is None:
             return None
-        kind = _result_handle_kind(tool_name, result)
+        kind = result_handle_kind(tool_name, result)
         if kind is None:
             return None
         return self.handle_store.put(
@@ -1757,6 +1866,10 @@ def _synthetic_plan_from_tool_requests(tool_requests: list[Any]) -> Plan:
     )
 
 
+def _is_project_yaml_workflow(plan: Plan) -> bool:
+    return any(step.tool in _PROJECT_YAML_TOOLS for step in plan.steps)
+
+
 def run_agent(request: str, **kwargs: Any) -> dict[str, Any]:
     return AgentSession(**_session_kwargs(kwargs)).run(
         request,
@@ -1881,7 +1994,7 @@ def _parse_json_response(response: Any) -> dict[str, Any]:
         and isinstance(response["content"], dict)
     ):
         return response["content"]
-    text = _extract_text(response)
+    text = extract_response_text(response)
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -1962,35 +2075,6 @@ def _is_submit_server_error(message: str) -> bool:
         or "submit_hpc requires server when multiple configured servers are "
         in message
     )
-
-
-def _extract_text(response: Any) -> str:
-    if isinstance(response, str):
-        return response
-    if isinstance(response, dict):
-        content = response.get("content")
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts: list[str] = []
-            for item in content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    parts.append(item.get("text", ""))
-            if parts:
-                return "\n".join(parts)
-        choices = response.get("choices") or []
-        if choices:
-            message = choices[0].get("message", {})
-            content = message.get("content", "")
-            if isinstance(content, str):
-                return content
-            if isinstance(content, list):
-                return "\n".join(
-                    item.get("text", "")
-                    for item in content
-                    if isinstance(item, dict)
-                )
-    raise ValueError("Could not extract text from provider response")
 
 
 def _stringify_response(response: Any) -> str | None:
@@ -2283,34 +2367,6 @@ def _run_local_failure_message(result: dict[str, Any]) -> str:
     if isinstance(stderr_path, str) and stderr_path.strip():
         message += f"; see {stderr_path}"
     return message
-
-
-def _result_handle_kind(tool_name: str, result: Any) -> str | None:
-    if tool_name == "build_molecule":
-        return "mol"
-    if tool_name == "build_gaussian_settings":
-        return "gset"
-    if tool_name == "build_orca_settings":
-        return "oset"
-    if tool_name == "build_job":
-        return "job"
-    if tool_name == "dry_run_input" and isinstance(result, dict):
-        return "dryrun"
-    if tool_name == "validate_runtime" and isinstance(result, dict):
-        return "runtime"
-    if tool_name == "run_local" and isinstance(result, dict):
-        return "runresult"
-    if tool_name == "extract_optimized_geometry":
-        return "geom"
-    if (
-        tool_name == "submit_hpc"
-        and isinstance(result, dict)
-        and "job_id" in result
-    ):
-        return "submit"
-    if tool_name == "recommend_method" and isinstance(result, dict):
-        return "recmethod"
-    return None
 
 
 def _malformed_input_issue(

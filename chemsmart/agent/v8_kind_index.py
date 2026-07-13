@@ -15,6 +15,10 @@ _T = {
         "type": "string",
         "enum": ["forward", "backward", "both", "reverse"],
     },
+    "qmmm_parent": {
+        "type": "string",
+        "enum": ["opt", "sp", "ts", "scan", "modred", "qrc", "neb"],
+    },
     "strs": {"type": "array", "items": {"type": "string"}},
     "ints": {"type": "array", "items": {"type": "integer"}},
     "pairs": {
@@ -73,7 +77,18 @@ KIND_SETTINGS = {
         "grouping_strategy": "str",
     },
     "gaussian.wbi": {},
-    "gaussian.qmmm": {"high_level_atoms": "ints", "low_level_atoms": "ints"},
+    "gaussian.qmmm": {
+        "parent_job": "qmmm_parent",
+        "high_level_atoms": "ints",
+        "medium_level_atoms": "ints",
+        "low_level_atoms": "ints",
+        "charge_total": "int",
+        "mult_total": "int",
+        "charge_intermediate": "int",
+        "mult_intermediate": "int",
+        "charge_high": "int",
+        "mult_high": "int",
+    },
     "gaussian.qrc": {},
     "orca.sp": {},
     "orca.opt": {
@@ -103,7 +118,19 @@ KIND_SETTINGS = {
         "additional_route_parameters": "str",
     },
     "orca.neb": {"nimages": "int", "joboption": "str"},
-    "orca.qmmm": {"high_level_atoms": "ints"},
+    "orca.qmmm": {
+        "parent_job": "qmmm_parent",
+        "high_level_atoms": "ints",
+        "intermediate_level_atoms": "ints",
+        "charge_total": "int",
+        "mult_total": "int",
+        "charge_intermediate": "int",
+        "mult_intermediate": "int",
+        "charge_high": "int",
+        "mult_high": "int",
+        "jobtype": "str",
+        "low_level_method": "str",
+    },
     "orca.qrc": {},
 }
 

@@ -120,7 +120,12 @@ def test_registry_default_registration_sets_read_tool_metadata():
             "validate_project_yaml",
             "critic_project_yaml",
             "write_project_yaml",
+            "read_project_yaml",
+            "update_project_yaml",
             "search_basis_sets",
+            "synthesize_command",
+            "repair_command",
+            "execute_chemsmart_command",
         }
     }
 
@@ -151,6 +156,13 @@ def test_registry_default_registration_sets_read_tool_metadata():
     assert project_tools["validate_project_yaml"].metadata.read_only is True
     assert project_tools["critic_project_yaml"].metadata.read_only is True
     assert project_tools["write_project_yaml"].metadata.read_only is False
+    assert project_tools["read_project_yaml"].metadata.read_only is True
+    assert project_tools["update_project_yaml"].metadata.read_only is False
+    assert project_tools["synthesize_command"].metadata.read_only is True
+    assert project_tools["repair_command"].metadata.read_only is True
+    assert (
+        project_tools["execute_chemsmart_command"].metadata.read_only is False
+    )
     assert project_tools["search_basis_sets"].metadata == RuntimeToolMetadata(
         read_only=True,
         ui_summary_template="Search basis sets {query}",
@@ -169,7 +181,12 @@ def test_registry_default_registration_sets_read_tool_metadata():
             "validate_project_yaml",
             "critic_project_yaml",
             "write_project_yaml",
+            "read_project_yaml",
+            "update_project_yaml",
             "search_basis_sets",
+            "synthesize_command",
+            "repair_command",
+            "execute_chemsmart_command",
         }
     )
 
@@ -269,3 +286,51 @@ def _make_tool_spec(
         input_schema=schema,
         metadata=metadata or RuntimeToolMetadata(),
     )
+
+
+def test_tool_groups_cover_every_registered_tool_exactly_once():
+    from chemsmart.agent.registry import TOOL_GROUPS
+
+    registry = ToolRegistry.default()
+    all_names = {tool.name for tool in registry.list_tools()}
+    grouped: list[str] = [
+        name for names in TOOL_GROUPS.values() for name in names
+    ]
+
+    assert set(grouped) == all_names  # no ungrouped, no phantom entries
+    assert len(grouped) == len(set(grouped))  # each tool in exactly one group
+
+
+def test_default_registry_restricts_to_selected_groups():
+    registry = ToolRegistry.default(groups=["synthesis", "project_yaml"])
+    names = {tool.name for tool in registry.list_tools()}
+
+    assert "synthesize_command" in names
+    assert "read_project_yaml" in names
+    assert "run_local" not in names
+    assert "execute_chemsmart_command" not in names
+
+
+def test_default_registry_honors_tool_groups_env(monkeypatch):
+    monkeypatch.setenv("CHEMSMART_AGENT_TOOL_GROUPS", "synthesis")
+
+    registry = ToolRegistry.default()
+
+    assert {tool.name for tool in registry.list_tools()} == {
+        "synthesize_command",
+        "repair_command",
+    }
+
+
+def test_default_registry_rejects_unknown_group():
+    with pytest.raises(ValueError, match="Unknown tool group"):
+        ToolRegistry.default(groups=["bogus"])
+
+
+def test_tool_group_lookup():
+    from chemsmart.agent.registry import tool_group
+
+    assert tool_group("synthesize_command") == "synthesis"
+    assert tool_group("execute_chemsmart_command") == "execution"
+    assert tool_group("write_project_yaml") == "project_yaml"
+    assert tool_group("nonexistent_tool") is None

@@ -28,7 +28,9 @@ def test_run_command_semantic_gate_uses_safe_fake_execution(
         ]
         assert "--fake" in argv
         assert "--no-scratch" in argv
-        (tmp_path / "water_orca_opt.inp").write_text(
+        from pathlib import Path
+
+        (Path(cwd) / "water_orca_opt.inp").write_text(
             "! Opt B3LYP def2-SVP\n"
             "* xyz 0 1\n"
             "O 0 0 0\n"
@@ -77,7 +79,7 @@ def test_safe_execution_failure_reports_missing_runtime_info(
     )
 
     assert result.verdict == "reject"
-    assert result.failed_rule_ids == ["cmd.semantic.safe_execution_failed"]
+    assert result.failed_rule_ids == ["cmd.runtime.server_invalid"]
     assert "valid chemsmart server configuration" in result.missing_info
     assert "available servers: ['colab_orca']" in result.missing_info
 
@@ -159,7 +161,9 @@ def test_db_record_selector_shape_passes_to_safe_execution(
     def fake_run(argv, **_kwargs):
         assert "--record-index" in argv
         assert "--structure-index" in argv
-        (tmp_path / "record_sp.com").write_text(
+        from pathlib import Path
+
+        (Path(_kwargs["cwd"]) / "record_sp.com").write_text(
             "# b3lyp/def2svp\n\nrecord\n\n0 1\nH 0 0 0\n\n",
             encoding="utf-8",
         )

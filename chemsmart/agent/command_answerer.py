@@ -23,6 +23,7 @@ from chemsmart.agent.model_command_parser import (
     ParsedModelCommand,
     format_parsed_model_command,
 )
+from chemsmart.agent.provider_adapter import extract_response_text
 
 JsonDict = dict[str, Any]
 
@@ -208,7 +209,7 @@ def compose_command_answer(
         return _fallback_answer(deterministic, f"provider error: {exc}")
 
     try:
-        parsed_response = _load_json_object(_extract_text(raw))
+        parsed_response = _load_json_object(extract_response_text(raw))
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         return _fallback_answer(deterministic, f"malformed response: {exc}")
 
@@ -263,7 +264,7 @@ def reason_missing_info(
         return None
 
     try:
-        parsed_response = _load_json_object(_extract_text(raw))
+        parsed_response = _load_json_object(extract_response_text(raw))
     except (ValueError, TypeError, json.JSONDecodeError):
         return None
 
@@ -335,36 +336,6 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
     return tuple(str(item).strip() for item in value if str(item).strip())
-
-
-def _extract_text(response: Any) -> str:
-    if isinstance(response, str):
-        return response
-    if isinstance(response, dict):
-        content = response.get("content")
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts = [
-                str(item.get("text", ""))
-                for item in content
-                if isinstance(item, dict) and item.get("type") == "text"
-            ]
-            if parts:
-                return "\n".join(parts)
-        choices = response.get("choices") or []
-        if choices:
-            message = choices[0].get("message", {})
-            content = message.get("content", "")
-            if isinstance(content, str):
-                return content
-            if isinstance(content, list):
-                return "\n".join(
-                    str(item.get("text", ""))
-                    for item in content
-                    if isinstance(item, dict)
-                )
-    raise ValueError("could not extract text from provider response")
 
 
 def _load_json_object(text: str) -> JsonDict:

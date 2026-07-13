@@ -4,10 +4,14 @@ import json
 from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable
 
-from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.handles import (
+    HandleStore,
+    is_handle_id,
+    json_safe,
+    result_handle_kind,
+)
 from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
@@ -712,13 +716,13 @@ class ToolLoop:
     ) -> str | None:
         if self.handle_store is None:
             return None
-        kind = _result_handle_kind(tool_name, result)
+        kind = result_handle_kind(tool_name, result)
         if kind is None:
             return None
         return self.handle_store.put(
             kind=kind,
             obj=result,
-            summary=_json_safe(result),
+            summary=json_safe(result),
         )
 
 
@@ -744,9 +748,9 @@ def _canonical_args_json(request: ToolRequest) -> str:
 
 def _display_result(result: Any, *, handle_id: str | None) -> Any:
     if handle_id is None:
-        return _json_safe(result)
+        return json_safe(result)
     payload: dict[str, Any] = {"handle_id": handle_id}
-    summary = _json_safe(result)
+    summary = json_safe(result)
     if isinstance(summary, dict):
         payload["summary"] = summary
     return payload
@@ -827,45 +831,3 @@ def _is_tool_error(result: Any) -> bool:
         and result.get("ok") is False
         and "error" in result
     )
-
-
-def _result_handle_kind(tool_name: str, result: Any) -> str | None:
-    if tool_name == "build_molecule":
-        return "mol"
-    if tool_name == "build_gaussian_settings":
-        return "gset"
-    if tool_name == "build_orca_settings":
-        return "oset"
-    if tool_name == "build_job":
-        return "job"
-    if tool_name == "dry_run_input" and isinstance(result, dict):
-        return "dryrun"
-    if tool_name == "validate_runtime" and isinstance(result, dict):
-        return "runtime"
-    if tool_name == "run_local" and isinstance(result, dict):
-        return "runresult"
-    if tool_name == "extract_optimized_geometry":
-        return "geom"
-    if (
-        tool_name == "submit_hpc"
-        and isinstance(result, dict)
-        and "job_id" in result
-    ):
-        return "submit"
-    if tool_name == "recommend_method" and isinstance(result, dict):
-        return "recmethod"
-    return None
-
-
-def _json_safe(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(key): _json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, bytes):
-        return {"type": "bytes", "length": len(value)}
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return {"type": value.__class__.__name__, "repr": repr(value)}

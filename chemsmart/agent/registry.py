@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
+import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal, get_args, get_origin, get_type_hints
 
@@ -25,6 +27,109 @@ from chemsmart.agent.tool_protocol import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Module-type tool groups. Each registered tool belongs to exactly one group so
+# the tool surface can be enabled incrementally — e.g. training/serving a local
+# model on "synthesis" only, then adding "project_yaml", then "execution".
+# Select groups via ToolRegistry.default(groups=[...]) or the
+# CHEMSMART_AGENT_TOOL_GROUPS env var (comma-separated group names).
+TOOL_GROUPS: dict[str, frozenset[str]] = {
+    "synthesis": frozenset(
+        {
+            "synthesize_command",
+            "repair_command",
+        }
+    ),
+    "project_yaml": frozenset(
+        {
+            "extract_project_protocol",
+            "render_project_yaml",
+            "validate_project_yaml",
+            "critic_project_yaml",
+            "write_project_yaml",
+            "read_project_yaml",
+            "update_project_yaml",
+            "search_basis_sets",
+        }
+    ),
+    "harness_jobs": frozenset(
+        {
+            "build_molecule",
+            "recommend_method",
+            "build_gaussian_settings",
+            "build_orca_settings",
+            "build_job",
+            "dry_run_input",
+            "validate_runtime",
+            "extract_optimized_geometry",
+        }
+    ),
+    "execution": frozenset(
+        {
+            "execute_chemsmart_command",
+            "run_local",
+            "submit_hpc",
+        }
+    ),
+    "wizard": frozenset(
+        {
+            "wizard_probe",
+            "wizard_refresh",
+            "wizard_verify",
+            "wizard_write",
+        }
+    ),
+    "diagnostics": frozenset(
+        {
+            "read",
+            "ssh_probe",
+            "scheduler_query",
+            "log_tail",
+        }
+    ),
+}
+
+_TOOL_GROUP_BY_NAME: dict[str, str] = {
+    tool_name: group_name
+    for group_name, tool_names in TOOL_GROUPS.items()
+    for tool_name in tool_names
+}
+
+_TOOL_GROUPS_ENV_VAR = "CHEMSMART_AGENT_TOOL_GROUPS"
+
+
+def tool_group(tool_name: str) -> str | None:
+    """Return the module group a registered tool belongs to."""
+
+    return _TOOL_GROUP_BY_NAME.get(tool_name)
+
+
+def resolve_tool_groups(
+    groups: Iterable[str] | None = None,
+) -> frozenset[str] | None:
+    """Resolve the enabled tool-name set from groups or the env override.
+
+    Returns None when no restriction applies (all tools enabled).
+    """
+
+    if groups is None:
+        raw = os.environ.get(_TOOL_GROUPS_ENV_VAR, "").strip()
+        if not raw:
+            return None
+        groups = [part.strip() for part in raw.split(",") if part.strip()]
+    selected = list(groups)
+    if not selected:
+        return None
+    unknown = sorted(set(selected) - set(TOOL_GROUPS))
+    if unknown:
+        known = ", ".join(sorted(TOOL_GROUPS))
+        raise ValueError(
+            f"Unknown tool group(s) {unknown!r}. Known groups: {known}"
+        )
+    enabled: set[str] = set()
+    for group_name in selected:
+        enabled |= TOOL_GROUPS[group_name]
+    return frozenset(enabled)
 
 
 class ToolInputModel(BaseModel):
@@ -85,7 +190,11 @@ class ToolRegistry:
         self._tools = {tool.name: tool for tool in tools}
 
     @classmethod
-    def default(cls) -> "ToolRegistry":
+    def default(
+        cls,
+        groups: Iterable[str] | None = None,
+    ) -> "ToolRegistry":
+        enabled_tools = resolve_tool_groups(groups)
         tool_sources = [
             ("build_molecule", "chemsmart.agent.tools", None, None),
             ("recommend_method", "chemsmart.agent.tools", None, None),
@@ -128,11 +237,30 @@ class ToolRegistry:
             (
                 "write_project_yaml",
                 "chemsmart.agent.project_yaml",
-                "Write a validated project YAML into ~/.chemsmart/<program> after explicit approval.",
+                "Write a validated project YAML into the current workspace .chemsmart/<program> after explicit approval.",
                 RuntimeToolMetadata(
                     read_only=False,
                     ui_summary_template="Write project YAML {project_name}",
                     side_effect="writes a user project YAML file",
+                ),
+            ),
+            (
+                "read_project_yaml",
+                "chemsmart.agent.project_yaml",
+                "Read the active workspace project YAML and summarize the chemsmart runtime settings it loads.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Read project YAML {project_name}",
+                ),
+            ),
+            (
+                "update_project_yaml",
+                "chemsmart.agent.project_yaml",
+                "Patch an existing workspace project YAML by dotted path, validate it, and write only after approval.",
+                RuntimeToolMetadata(
+                    read_only=False,
+                    ui_summary_template="Update project YAML {project_name}",
+                    side_effect="writes a workspace project YAML file",
                 ),
             ),
             (
@@ -142,6 +270,34 @@ class ToolRegistry:
                 RuntimeToolMetadata(
                     read_only=True,
                     ui_summary_template="Search basis sets {query}",
+                ),
+            ),
+            (
+                "synthesize_command",
+                "chemsmart.agent.tools_command",
+                "Synthesize one grounded chemsmart CLI command using the CLI schema, project YAML check, adapter, and runtime semantic gate.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Synthesize chemsmart command",
+                ),
+            ),
+            (
+                "repair_command",
+                "chemsmart.agent.tools_command",
+                "Repair a failed chemsmart CLI command and re-run runtime semantic validation.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Repair chemsmart command",
+                ),
+            ),
+            (
+                "execute_chemsmart_command",
+                "chemsmart.agent.tools_command",
+                "Execute an already semantic-gated chemsmart CLI command after explicit approval.",
+                RuntimeToolMetadata(
+                    read_only=False,
+                    ui_summary_template="Execute chemsmart command",
+                    side_effect="runs a local chemsmart command",
                 ),
             ),
             ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
@@ -210,6 +366,7 @@ class ToolRegistry:
                     metadata=metadata,
                 )
                 for name, module_name, description, metadata in tool_sources
+                if enabled_tools is None or name in enabled_tools
             ]
         )
 

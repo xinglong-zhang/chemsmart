@@ -4,7 +4,24 @@ import json
 
 import pytest
 
-from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.handles import (
+    HandleStore,
+    is_handle_id,
+    json_safe,
+    result_handle_kind,
+)
+
+
+def test_shared_handle_helpers_preserve_existing_contract():
+    assert result_handle_kind("build_molecule", object()) == "mol"
+    assert (
+        result_handle_kind("dry_run_input", {"inputfile": "a.com"}) == "dryrun"
+    )
+    assert result_handle_kind("dry_run_input", "not-a-mapping") is None
+    assert result_handle_kind("submit_hpc", {"job_id": None}) == "submit"
+    assert json_safe({"data": b"abc"}) == {
+        "data": {"type": "bytes", "length": 3}
+    }
 
 
 @pytest.mark.parametrize(

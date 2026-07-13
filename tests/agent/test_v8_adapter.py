@@ -74,12 +74,13 @@ def test_atom_index_settings_render_as_runtime_parseable_ranges():
                 "id": 2,
                 "kind": "gaussian.qmmm",
                 "file": "qm.xyz",
-                "charge": 0,
-                "mult": 1,
-                "settings": {
-                    "high_level_atoms": [1, 2, 3],
-                    "low_level_atoms": [4, 5, 6],
-                },
+                    "charge": 0,
+                    "mult": 1,
+                    "settings": {
+                        "parent_job": "opt",
+                        "high_level_atoms": [1, 2, 3],
+                        "low_level_atoms": [4, 5, 6],
+                    },
             },
         ],
     }
@@ -444,7 +445,7 @@ def test_gaussian_dias_fragment_indices_render_after_subcommand():
     ]
 
 
-def test_qmmm_atom_indices_render_after_subcommand():
+def test_qmmm_renders_under_explicit_parent_with_total_state():
     spec = {
         "intent": "workflow",
         "jobs": [
@@ -454,7 +455,12 @@ def test_qmmm_atom_indices_render_after_subcommand():
                 "file": "water.xyz",
                 "charge": 0,
                 "mult": 1,
-                "settings": {"high_level_atoms": [1], "low_level_atoms": [2, 3]},
+                "settings": {
+                    "parent_job": "sp",
+                    "high_level_atoms": [1],
+                    "medium_level_atoms": [2],
+                    "low_level_atoms": [2, 3],
+                },
                 "label": "water_qmmm",
             }
         ],
@@ -465,8 +471,93 @@ def test_qmmm_atom_indices_render_after_subcommand():
     assert out["valid"], out["errors"]
     assert out["commands"] == [
         "chemsmart run gaussian -f water.xyz -c 0 -m 1 "
-        "-l water_qmmm qmmm --high-level-atoms 1 --low-level-atoms 2,3"
+        "-l water_qmmm sp qmmm --high-level-atoms 1 "
+        "--medium-level-atoms 2 --low-level-atoms 2,3 "
+        "--charge-total 0 --mult-total 1"
     ]
+
+
+def test_qmmm_renders_explicit_layer_state_and_orca_mm_method():
+    specs = [
+        {
+            "intent": "workflow",
+            "jobs": [
+                {
+                    "id": 1,
+                    "kind": "gaussian.qmmm",
+                    "file": "enzyme.xyz",
+                    "charge": 0,
+                    "mult": 1,
+                    "settings": {
+                        "parent_job": "opt",
+                        "high_level_atoms": [1, 2, 3],
+                        "medium_level_atoms": [4, 5],
+                        "low_level_atoms": [6, 7],
+                        "charge_total": 0,
+                        "mult_total": 1,
+                        "charge_intermediate": 0,
+                        "mult_intermediate": 1,
+                        "charge_high": 0,
+                        "mult_high": 1,
+                    },
+                }
+            ],
+        },
+        {
+            "intent": "workflow",
+            "jobs": [
+                {
+                    "id": 1,
+                    "kind": "orca.qmmm",
+                    "file": "enzyme.xyz",
+                    "charge": -1,
+                    "mult": 1,
+                    "settings": {
+                        "parent_job": "opt",
+                        "high_level_atoms": [1, 2, 3],
+                        "jobtype": "QMMM",
+                        "low_level_method": "AMBER=HardFirst",
+                        "charge_total": -1,
+                        "mult_total": 1,
+                    },
+                }
+            ],
+        },
+    ]
+
+    gaussian = v8_adapter.adapt(json.dumps(specs[0]), default_project="demo")
+    orca = v8_adapter.adapt(json.dumps(specs[1]), default_project="demo")
+
+    assert gaussian["valid"], gaussian["errors"]
+    assert orca["valid"], orca["errors"]
+    assert "--charge-intermediate 0 --mult-intermediate 1" in gaussian[
+        "commands"
+    ][0]
+    assert "--jobtype QMMM --low-level-method AMBER=HardFirst" in orca[
+        "commands"
+    ][0]
+
+
+def test_qmmm_without_parent_is_not_rendered_as_top_level_command():
+    spec = {
+        "intent": "workflow",
+        "jobs": [
+            {
+                "id": 1,
+                "kind": "orca.qmmm",
+                "file": "water.xyz",
+                "charge": 0,
+                "mult": 1,
+                "settings": {"high_level_atoms": [1, 2]},
+            }
+        ],
+    }
+
+    out = v8_adapter.adapt(json.dumps(spec))
+
+    assert out["valid"] is False
+    assert out["commands"] == []
+    assert "requires settings.parent_job" in out["errors"][0]
 
 
 def test_orca_neb_options_render_after_subcommand():

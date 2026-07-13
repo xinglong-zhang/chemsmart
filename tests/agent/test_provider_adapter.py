@@ -5,8 +5,25 @@ import json
 from chemsmart.agent.provider_adapter import (
     ToolOutcome,
     build_tool_result_messages,
+    extract_response_text,
     normalize_response,
 )
+
+
+def test_extract_response_text_supports_provider_shapes():
+    assert extract_response_text("plain") == "plain"
+    assert (
+        extract_response_text(
+            {"content": [{"type": "text", "text": "anthropic"}]}
+        )
+        == "anthropic"
+    )
+    assert (
+        extract_response_text(
+            {"choices": [{"message": {"content": "openai"}}]}
+        )
+        == "openai"
+    )
 
 
 def test_normalize_anthropic_text_only_response():

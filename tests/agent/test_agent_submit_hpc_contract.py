@@ -57,7 +57,6 @@ def test_submit_hpc_matches_manual_sub_cli_submit_script_bytes(
         label=manual_job.label,
         jobtype=jobtype,
     )
-
     manual_bytes = read_submit_script_bytes(manual_job, server)
 
     assert agent_result["transport"] == "LocalDryRunTransport"
