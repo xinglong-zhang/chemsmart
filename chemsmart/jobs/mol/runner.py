@@ -39,7 +39,7 @@ pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
-_PYMOL_TEMPLATES_PATH = Path(__file__).resolve().parent / "templates"
+# Templates directory is resolved via PyMOLJobRunner.pymol_templates_path
 
 PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
     "glossy": "metallic_poster_render",
