@@ -47,7 +47,7 @@ PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
     "comic": "render_comic_metallic_labeled_final",
     "soft_cartoon": "render_soft_cartoon",
     "editorial_minimal": "render_editorial_minimal",
-    "black_gold_cover": "render_black_gold_cover",
+    "soft_ceramic": "render_soft_ceramic",
     "neon_coordination_core": "render_neon_coordination_core",
     "matte_clay": "render_matte_clay",
     "xray_wire": "render_xray_wire",

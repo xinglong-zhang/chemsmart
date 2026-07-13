@@ -22,6 +22,7 @@ from chemsmart.jobs.mol.runner import (
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.templates.scientific_styles import (
     render_editorial_minimal,
+    render_soft_ceramic,
 )
 from chemsmart.jobs.mol.visualize import (
     PyMOLScientificStyleVisualizationJob,
@@ -969,6 +970,7 @@ class TestPyMOLStyleCommands:
             ("soft_cartoon", "render_soft_cartoon"),
             ("neon_coordination_core", "render_neon_coordination_core"),
             ("editorial_minimal", "render_editorial_minimal"),
+            ("soft_ceramic", "render_soft_ceramic"),
         ],
     )
     def test_format_pymol_style_command_for_derived_styles_on_1_mer(
@@ -1005,6 +1007,10 @@ class TestPyMOLStyleCommands:
             (
                 "editorial_minimal",
                 "render_editorial_minimal 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+            ),
+            (
+                "soft_ceramic",
+                "render_soft_ceramic 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
             ),
         ],
     )
@@ -1050,6 +1056,41 @@ class TestPyMOLStyleCommands:
         assert 'cmd.color("mn_rose", "editorial_metal")' in source
         assert 'cmd.color("sulfur_gold", "editorial_s_donors")' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
+
+    def test_render_soft_ceramic_defines_expected_visual_parameters(self):
+        source = inspect.getsource(render_soft_ceramic)
+
+        assert (
+            'cmd.select("soft_ceramic_metal", f"{sel} and ({_METAL_ELEMENTS})")'
+            in source
+        )
+        assert "elem Mn" not in source
+        assert "within 2.8 of soft_ceramic_metal" in source
+        assert "(elem C) within 2.10 of soft_ceramic_metal" in source
+        assert "(elem O) within 1.35 of soft_ceramic_co_c" in source
+        assert "(elem H) within 1.85 of soft_ceramic_metal" in source
+        assert (
+            '_safe_set("sphere_scale", 0.56, "soft_ceramic_metal")' in source
+        )
+        assert (
+            '_safe_set("sphere_scale", 0.40, "soft_ceramic_donor_s")' in source
+        )
+        assert (
+            '_safe_set("sphere_scale", 0.37, "soft_ceramic_donor_n")' in source
+        )
+        assert '_safe_set("sphere_scale", 0.28, "soft_ceramic_co_c")' in source
+        assert '_safe_set("sphere_scale", 0.18, "soft_ceramic_co_o")' in source
+        assert (
+            '_safe_set("sphere_scale", 0.25, "soft_ceramic_hydride")' in source
+        )
+        assert '_safe_set("stick_radius", 0.115, sel)' in source
+        assert 'cmd.color("metal_bronze", "soft_ceramic_metal")' in source
+        assert (
+            'cmd.color("sulfur_soft_gold", "soft_ceramic_donor_s")' in source
+        )
+        assert 'cmd.bg_color("studio_background")' in source
+        assert '_safe_set("ray_opaque_background", 1)' in source
+        assert "_apply_coordination_highlight_bonds" in source
 
     def test_hybrid_is_not_a_derived_style(self):
         with pytest.raises(ValueError, match="not available"):
@@ -1215,5 +1256,32 @@ class TestPyMOLScientificStyleVisualizationJobs:
                 job, job.label
             )
             == "render_editorial_minimal "
+            f"{job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
+        )
+
+    def test_soft_ceramic_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="soft-ceramic",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == "render_soft_ceramic "
             f"{job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
         )

@@ -371,7 +371,7 @@ Manual PyMOL usage
 **************************
 
 CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices including ``glossy``, ``comic``,
-``soft-cartoon``, ``editorial-minimal``, ``black-gold-cover``, and other scientific styles. These are routed through
+``soft-cartoon``, ``editorial-minimal``, ``soft-ceramic``, and other scientific styles. These are routed through
 :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. list-table::
@@ -388,8 +388,8 @@ CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices includin
       -  Soft premium ball-and-stick rendering with light metallic shading
    -  -  ``editorial-minimal``
       -  Matte minimal ball-and-stick style for main-text mechanistic figures
-   -  -  ``black-gold-cover``
-      -  High-impact black background with gold metal highlights
+   -  -  ``soft-ceramic``
+      -  Soft ceramic / studio ball-and-stick style for coordination complexes
    -  -  ``neon-coordination-core``
       -  Neon coordination-core emphasis for reactive centers and TSs
    -  -  ``matte-clay``
@@ -409,7 +409,7 @@ Basic Usage
 .. code:: bash
 
    chemsmart run mol -f complex.xyz visualize -s editorial-minimal
-   chemsmart run mol -f complex.xyz visualize -s black-gold-cover
+   chemsmart run mol -f complex.xyz visualize -s soft-ceramic
    chemsmart run mol -f complex.xyz visualize -s labeled-coordination-core
 
 Examples
@@ -425,15 +425,15 @@ Editorial minimal
 
    ``chemsmart run mol -f complex.xyz visualize -s editorial-minimal``
 
-Black-gold cover
-----------------
+Soft ceramic
+------------
 
-.. figure:: _static/pymol_styles/style_black_gold_cover.png
-   :alt: Black-gold cover visualization example
+.. figure:: _static/pymol_styles/style_soft_ceramic.png
+   :alt: Soft ceramic visualization example
    :align: center
    :width: 70%
 
-   ``chemsmart run mol -f complex.xyz visualize -s black-gold-cover``
+   ``chemsmart run mol -f complex.xyz visualize -s soft-ceramic``
 
 Neon coordination core
 ----------------------
@@ -502,7 +502,7 @@ Manual PyMOL usage
 
    run scientific_styles.py
    render_editorial_minimal all
-   render_black_gold_cover all
+   render_soft_ceramic all
    render_labeled_coordination_core all
    ray 1200, 1200
 

@@ -3,7 +3,7 @@ PyMOL visualization styles for publication, cover, and presentation figures.
 
 CHEMSMART applies this template for ``visualize -s`` choices including
 ``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``,
-``black-gold-cover``, and other scientific styles.
+``soft-ceramic``, and other scientific styles.
 In PyMOL directly::
 
     run scientific_styles.py
@@ -11,6 +11,7 @@ In PyMOL directly::
     render_comic_metallic_labeled_final all
     render_soft_cartoon all
     render_editorial_minimal all
+    render_soft_ceramic all
 """
 
 from pymol import cmd
@@ -868,25 +869,161 @@ def render_editorial_minimal(selection="all", highlight_bonds=""):
     print("Editorial minimal white style applied.")
 
 
-def render_black_gold_cover(selection="all", highlight_bonds=""):
-    """Black-gold journal-cover style for high-impact centerpiece figures."""
-    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
-    _show_coord_ball_and_stick(selection)
-    _apply_coord_sphere_scales(0.12, 0.17, 0.26, 0.13, 0.58, 0.40)
-    _color_by_element(carbon="sci_C_ivory", metal="metal_gold")
-    _apply_lighting(0.90, 0.72, 0.12, 0.88, 0.52, spec_power=320, shininess=95)
-    _apply_view(
-        orthoscopic=0,
-        field_of_view=38,
-        depth_cue=1,
-        fog_start=0.22,
-        ray_trace_gain=0.18,
+def _define_soft_ceramic_colors():
+    """Register palette used by the soft-ceramic studio style."""
+    for name, rgb in {
+        "studio_background": [0.970, 0.965, 0.945],
+        "ligand_ivory": [0.69, 0.67, 0.60],
+        "carbonyl_cream": [0.76, 0.74, 0.67],
+        "metal_bronze": [0.78, 0.44, 0.14],
+        "sulfur_soft_gold": [0.88, 0.61, 0.08],
+        "nitrogen_cobalt": [0.06, 0.17, 0.72],
+        "oxygen_deep_red": [0.84, 0.04, 0.025],
+        "hydrogen_warm": [0.94, 0.94, 0.91],
+    }.items():
+        try:
+            cmd.set_color(name, rgb)
+        except Exception:
+            pass
+
+
+def render_soft_ceramic(selection="all", highlight_bonds=""):
+    """Soft ceramic / studio ball-and-stick style for coordination complexes.
+
+    Metal centers are selected dynamically from common transition and main-group
+    coordination metals rather than a hardcoded Mn-only selection.
+    Optional ``-c`` bond pairs are applied via ``highlight_bonds`` without
+    changing the shared CHEMSMART coordinate-highlight plumbing.
+    """
+    highlight_bonds = _normalize_none(highlight_bonds)
+    sel = f"({selection})"
+
+    for name in (
+        "soft_ceramic_metal",
+        "soft_ceramic_donor_s",
+        "soft_ceramic_donor_n",
+        "soft_ceramic_co_c",
+        "soft_ceramic_co_o",
+        "soft_ceramic_hydride",
+        "soft_ceramic_nh_h",
+        "soft_ceramic_important_h",
+        "soft_ceramic_coordination_core",
+    ):
+        cmd.delete(name)
+
+    _define_soft_ceramic_colors()
+    cmd.hide("everything", sel)
+    _safe_set("valence", 0)
+    _safe_set("stick_ball", 0)
+
+    cmd.select("soft_ceramic_metal", f"{sel} and ({_METAL_ELEMENTS})")
+    cmd.select(
+        "soft_ceramic_donor_s",
+        f"{sel} and (elem S) within 2.8 of soft_ceramic_metal",
     )
-    _finish_scientific_style(
-        selection,
-        highlight_bonds=highlight_bonds,
-        message="Black-gold cover style applied.",
+    cmd.select(
+        "soft_ceramic_donor_n",
+        f"{sel} and (elem N) within 2.8 of soft_ceramic_metal",
     )
+    cmd.select(
+        "soft_ceramic_co_c",
+        f"{sel} and (elem C) within 2.10 of soft_ceramic_metal",
+    )
+    cmd.select(
+        "soft_ceramic_co_o",
+        f"{sel} and (elem O) within 1.35 of soft_ceramic_co_c",
+    )
+    cmd.select(
+        "soft_ceramic_hydride",
+        f"{sel} and (elem H) within 1.85 of soft_ceramic_metal",
+    )
+    cmd.select(
+        "soft_ceramic_nh_h",
+        f"{sel} and (elem H) within 1.25 of soft_ceramic_donor_n",
+    )
+    cmd.select(
+        "soft_ceramic_important_h",
+        "soft_ceramic_hydride or soft_ceramic_nh_h",
+    )
+    cmd.select(
+        "soft_ceramic_coordination_core",
+        "soft_ceramic_metal or soft_ceramic_donor_s or soft_ceramic_donor_n "
+        "or soft_ceramic_co_c or soft_ceramic_co_o or soft_ceramic_hydride",
+    )
+
+    cmd.bg_color("studio_background")
+    cmd.color(
+        "ligand_ivory",
+        f"{sel} and (elem C+H) and not soft_ceramic_co_c "
+        "and not soft_ceramic_important_h",
+    )
+    cmd.color("carbonyl_cream", "soft_ceramic_co_c")
+    cmd.color("metal_bronze", "soft_ceramic_metal")
+    cmd.color("sulfur_soft_gold", "soft_ceramic_donor_s")
+    cmd.color("nitrogen_cobalt", "soft_ceramic_donor_n")
+    cmd.color("oxygen_deep_red", "soft_ceramic_co_o")
+    cmd.color("hydrogen_warm", "soft_ceramic_important_h")
+
+    cmd.show("sticks", sel)
+    cmd.hide("sticks", f"{sel} and elem H and not soft_ceramic_important_h")
+    cmd.hide("spheres", f"{sel} and elem H and not soft_ceramic_hydride")
+    cmd.show("spheres", "soft_ceramic_coordination_core")
+
+    _safe_set("sphere_scale", 0.56, "soft_ceramic_metal")
+    _safe_set("sphere_scale", 0.40, "soft_ceramic_donor_s")
+    _safe_set("sphere_scale", 0.37, "soft_ceramic_donor_n")
+    _safe_set("sphere_scale", 0.28, "soft_ceramic_co_c")
+    _safe_set("sphere_scale", 0.18, "soft_ceramic_co_o")
+    _safe_set("sphere_scale", 0.25, "soft_ceramic_hydride")
+
+    _safe_set("stick_radius", 0.115, sel)
+    _safe_set(
+        "stick_radius",
+        0.155,
+        "soft_ceramic_metal or soft_ceramic_donor_s or soft_ceramic_donor_n",
+    )
+    _safe_set(
+        "stick_radius",
+        0.130,
+        "soft_ceramic_co_c or soft_ceramic_co_o or soft_ceramic_hydride",
+    )
+
+    _safe_set("stick_quality", 40)
+    _safe_set("sphere_quality", 4)
+    _safe_set("use_shaders", 1)
+    _safe_set("two_sided_lighting", 1)
+    _safe_set("light_count", 8)
+
+    _safe_set("ambient", 0.30)
+    _safe_set("direct", 0.70)
+    _safe_set("reflect", 0.25)
+    _safe_set("specular", 0.55)
+    _safe_set("spec_reflect", 0.32)
+    _safe_set("spec_power", 115)
+    _safe_set("shininess", 58)
+
+    _safe_set("ray_shadow", 1)
+    _safe_set("ray_trace_mode", 0)
+    _safe_set("ray_trace_gain", 0.06)
+    _safe_set("antialias", 2)
+    _safe_set("ray_trace_antialias", 2)
+    _safe_set("ambient_occlusion_mode", 1)
+    _safe_set("ambient_occlusion_scale", 12)
+    _safe_set("ambient_occlusion_smooth", 10)
+    _safe_set("ray_shadow_decay_factor", 0.25)
+    _safe_set("ray_shadow_decay_range", 2.0)
+    _safe_set("ray_opaque_background", 1)
+
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(
+            highlight_bonds,
+            sel,
+            "soft_ceramic_metal",
+        )
+
+    cmd.label("all", '""')
+    _finish_style(selection)
+    print("Soft ceramic studio style applied.")
 
 
 def render_neon_coordination_core(selection="all", highlight_bonds=""):
@@ -1081,7 +1218,7 @@ cmd.extend("comic_render", comic_render)
 cmd.extend("render_soft_cartoon", render_soft_cartoon)
 cmd.extend("soft_cartoon_render", soft_cartoon_render)
 cmd.extend("render_editorial_minimal", render_editorial_minimal)
-cmd.extend("render_black_gold_cover", render_black_gold_cover)
+cmd.extend("render_soft_ceramic", render_soft_ceramic)
 cmd.extend("render_neon_coordination_core", render_neon_coordination_core)
 cmd.extend("render_matte_clay", render_matte_clay)
 cmd.extend("render_xray_wire", render_xray_wire)
