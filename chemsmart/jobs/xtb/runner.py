@@ -18,7 +18,7 @@ class XTBJobRunner(JobRunner):
     JOBTYPES = ["xtbopt", "xtbsp", "xtbhess"]
     PROGRAM = "xtb"
     FAKE = False
-    SCRATCH = True
+    SCRATCH = False
 
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
