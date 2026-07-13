@@ -579,8 +579,6 @@ chemsmart sub -s <server_name> --test xtb -p <project> -f <input.xyz> hess
 
 The shared xTB options include `-c/--charge`, `-m/--multiplicity`, `-g/--gfn-version`, `--optimization-level`, `-sm/--solvent-model`, `-si/--solvent-id`, `--grad/--no-grad`, `-l/--label`, `-a/--append-label`, and `-i/--index`. The rendered command is based on the xTB executable, for example `xtb <label>.xyz --gfn 2 --chrg 0 --uhf 0`; optimization adds `--opt <level>`, Hessian jobs add `--hess`, and solvent flags are included only when both solvent model and solvent id are set.
 
-Example inputs and smoke-test commands are available in `examples/xtb/`.
-
 ## Development
 
 Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.

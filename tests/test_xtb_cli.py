@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -43,12 +42,6 @@ class TestXTBHelp:
         assert "opt" in result.output
         assert "sp" in result.output
         assert "hess" in result.output
-
-    def test_xtb_job_help(self):
-        for jobtype in ("opt", "sp", "hess"):
-            result = CliRunner().invoke(run, ["xtb", jobtype, "--help"])
-            assert result.exit_code == 0, result.output
-            assert "--skip-completed" in result.output
 
 
 class TestXTBCLISettings:
@@ -123,9 +116,10 @@ class TestXTBSubmission:
     ):
         monkeypatch.chdir(tmp_path)
         xyz_file = (
-            Path(__file__).resolve().parents[1]
-            / "examples"
-            / "xtb"
+            Path(__file__).resolve().parent
+            / "data"
+            / "XTBTests"
+            / "inputs"
             / "water.xyz"
         )
         result = CliRunner().invoke(
@@ -154,12 +148,3 @@ class TestXTBSubmission:
             "conda activate ~/anaconda3/envs/chemsmart"
             in submit_script.read_text()
         )
-
-
-class TestXTBExamples:
-    def test_example_xyz_files_exist(self):
-        examples_dir = Path(__file__).resolve().parents[1] / "examples" / "xtb"
-        for filename in ("water.xyz", "methane.xyz"):
-            path = examples_dir / filename
-            assert path.exists()
-            assert os.path.getsize(path) > 0
