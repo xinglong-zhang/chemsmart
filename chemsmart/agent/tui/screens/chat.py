@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event, get_ident
 from typing import Iterable
@@ -35,6 +36,10 @@ from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.services.conversation_memory import ConversationMemory
 from chemsmart.agent.synthesis import SynthesisSession, resolve_default_project
+from chemsmart.settings.workspace_project import (
+    WorkspaceProjectStatus,
+    resolve_workspace_project,
+)
 from chemsmart.agent.tui.events import (
     AssistantTurnEvent,
     CriticVerdictEvent,
@@ -82,6 +87,7 @@ from chemsmart.agent.tui.widgets.cells import (
     DecisionTraceCell,
     DryRunInputCell,
     ErrorCell,
+    FinalAnswerCell,
     GeometryHandoffCell,
     JobStatusCell,
     MethodCell,
@@ -90,6 +96,7 @@ from chemsmart.agent.tui.widgets.cells import (
     RunResultCell,
     RuntimeValidationCell,
     SubmissionPreviewCell,
+    SynthesisTraceCell,
     ToolCallCell,
     UserMessageCell,
 )
@@ -103,6 +110,7 @@ from chemsmart.agent.tui.widgets.popups import (
     FilePickerOverlay,
     PermissionModeOverlay,
     PermissionModeResult,
+    ProjectYamlOverlay,
     TextPromptOverlay,
     build_approval_overlay,
 )
@@ -139,15 +147,19 @@ _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
     ("/wizard-verify", "verify server transport wiring"),
     ("/wizard-write", "write latest wizard YAML"),
     ("/doctor", "run inline diagnostics"),
-    ("/mode", "switch ask/run interaction mode"),
-    ("/init", "build a project YAML from a reported method"),
+    ("/mode", "show provider routing mode"),
+    ("/init", "start a project YAML request"),
+    ("/write-project", "write the latest validated project YAML"),
     ("/quit", "exit the TUI"),
     ("/exit", "exit the TUI"),
 )
 
 
 class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
-    BINDINGS = [Binding("j", "open_jobs_panel", "Jobs", show=False)]
+    BINDINGS = [
+        Binding("j", "open_jobs_panel", "Jobs", show=False),
+        Binding("shift+tab", "show_project_yaml", "Project YAML", show=False),
+    ]
 
     DEFAULT_CSS = """
     ChatScreen {
@@ -203,6 +215,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._active_provider_config
         )
         self._build_mode = False
+        self._workspace_project_status = resolve_workspace_project()
         self.active_synthesis_session: SynthesisSession | None = None
 
     def compose(self) -> ComposeResult:
@@ -284,15 +297,19 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         exclusive=True,
         exit_on_error=False,
         group="agent-session",
-        name="agent-run",
+        name="agent-unified",
     )
-    def run_agent_session(self, request: str) -> dict[str, object]:
+    def run_unified_session(self, request: str) -> dict[str, object]:
         self.active_resume_id = None
-        if self.active_agent_session is None:
+        if (
+            self.active_agent_session is None
+            or self.active_agent_session.stage_prompt != "unified_agent.md"
+        ):
             self.active_agent_session = AgentSession(
-                session_root=str(self.session_root)
+                session_root=str(self.session_root),
+                stage_prompt="unified_agent.md",
             )
-        policy = self._permission_policy()
+        policy = self._permission_policy(prompt_risky=True)
         result = self.active_agent_session.run_loop(
             request,
             policy=policy,
@@ -309,13 +326,30 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         name="agent-ask",
     )
     def run_synthesis_session(self, request: str) -> dict[str, object]:
+        provider_type = _provider_type_label(self._active_provider_config)
+        provider_model = _provider_model_label(self._active_provider_config)
+        artifact_dir = _new_synthesis_artifact_dir(
+            self.session_root,
+            provider_type=provider_type,
+        )
         try:
             if self.active_synthesis_session is None:
                 self.active_synthesis_session = SynthesisSession()
             result = self.active_synthesis_session.prepare_command(request)
             semantic = self.active_synthesis_session._last_semantic_result
+            payload = {
+                "request": request,
+                "provider_type": provider_type,
+                "provider_model": provider_model,
+                "synthesis": result,
+                "raw_response": self.active_synthesis_session._last_raw_response,
+                "semantic_result": (
+                    semantic.to_dict() if semantic is not None else None
+                ),
+            }
+            _write_synthesis_artifact(artifact_dir, payload)
         except Exception as exc:
-            return {
+            payload = {
                 "synthesis": {
                     "status": "infeasible",
                     "command": "",
@@ -327,13 +361,88 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "raw_response": "",
                 "semantic_result": None,
             }
+            _write_synthesis_artifact(
+                artifact_dir,
+                {
+                    "request": request,
+                    "provider_type": provider_type,
+                    "provider_model": provider_model,
+                    **payload,
+                },
+            )
+            return {
+                **payload,
+                "provider_type": provider_type,
+                "provider_model": provider_model,
+                "synthesis_artifact_dir": str(artifact_dir),
+            }
         return {
             "synthesis": result,
             "raw_response": self.active_synthesis_session._last_raw_response,
             "semantic_result": (
                 semantic.to_dict() if semantic is not None else None
             ),
+            "provider_type": provider_type,
+            "provider_model": provider_model,
+            "synthesis_artifact_dir": str(artifact_dir),
         }
+
+    @work(
+        thread=True,
+        exclusive=True,
+        exit_on_error=False,
+        group="slash-tool",
+        name="project-yaml-write",
+    )
+    def run_project_yaml_write(
+        self,
+        arguments: dict[str, object],
+    ) -> dict[str, object]:
+        tool_name = "write_project_yaml"
+        registry = ToolRegistry.default()
+        normalized_args = registry.normalize_args(tool_name, arguments)
+        description = registry.describe_tool(tool_name)
+        self.app.call_from_thread(
+            self._publish_tool_call_cell,
+            tool_name,
+            "approved",
+            description,
+            normalized_args,
+            "Confirmed by /write-project yes.",
+        )
+        result = registry.call(tool_name, normalized_args)
+        if isinstance(result, dict) and result.get("ok") is False:
+            message = str(result.get("error") or "Project YAML write failed.")
+            self.app.call_from_thread(
+                self._publish_tool_call_cell,
+                tool_name,
+                "error",
+                description,
+                normalized_args,
+                message,
+            )
+            self.app.call_from_thread(
+                self._handle_slash_tool_failure,
+                tool_name,
+                message,
+            )
+            return {"tool": tool_name, "status": "error", "result": result}
+
+        self.app.call_from_thread(
+            self._publish_tool_call_cell,
+            tool_name,
+            "ok",
+            description,
+            normalized_args,
+            self._tool_success_note(tool_name, result),
+        )
+        self.app.call_from_thread(
+            self._handle_slash_tool_success,
+            tool_name,
+            normalized_args,
+            result,
+        )
+        return {"tool": tool_name, "status": "ok", "result": result}
 
     @work(
         thread=True,
@@ -447,15 +556,14 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "Wait for the current request to finish before starting a new request.",
             )
             return
-        if self._build_mode:
-            self._start_build_request(text)
-            return
-        if self._interaction_mode == "ask":
+        if self._active_provider_config is not None and (
+            self._active_provider_config.type == "local"
+        ):
             self._start_synthesis_request(text)
             return
-        self._start_harness_request(text)
+        self._start_unified_request(text)
 
-    def _start_build_request(self, text: str) -> None:
+    def _start_unified_request(self, text: str) -> None:
         keep_conversational = self.active_agent_session is not None
         if not keep_conversational:
             self._stop_tailer()
@@ -465,32 +573,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
         self._current_request = text
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
-        self.query_one(FooterWidget).set_hint(
-            "Project YAML build mode — using the project-YAML harness…"
-        )
+        self.query_one(FooterWidget).set_hint("Unified agent is reasoning…")
         self.query_one(Transcript).add_cell(UserMessageCell(text))
         self._user_requests.add(text)
-        self._current_worker = self.run_build_session(text)
-        if self._session_poll_timer is not None:
-            self._session_poll_timer.stop()
-        self._session_poll_timer = self.set_interval(
-            0.1, self._attach_live_tailer, pause=False
-        )
-
-    def _start_harness_request(self, text: str) -> None:
-        keep_conversational = self.active_agent_session is not None
-        if not keep_conversational:
-            self._stop_tailer()
-        self._reset_request_state(
-            clear_transcript=True,
-            keep_conversational=keep_conversational,
-        )
-        self._current_request = text
-        self.query_one(FooterWidget).set_phase(Phase.PLANNING)
-        self.query_one(FooterWidget).set_hint("Agent is planning…")
-        self.query_one(Transcript).add_cell(UserMessageCell(text))
-        self._user_requests.add(text)
-        self._current_worker = self.run_agent_session(text)
+        self._current_worker = self.run_unified_session(text)
         if self._session_poll_timer is not None:
             self._session_poll_timer.stop()
         self._session_poll_timer = self.set_interval(
@@ -764,6 +850,38 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             JobsPanel(self._job_snapshot), self._handle_jobs_panel_action
         )
 
+    def action_show_project_yaml(self) -> None:
+        status = resolve_workspace_project()
+        self._workspace_project_status = status
+        self.query_one(FooterWidget).set_yaml_status(
+            loaded=status.loaded,
+            label=_yaml_footer_label(status),
+        )
+        if not status.loaded or status.path is None:
+            self.app.push_screen(
+                ProjectYamlOverlay(
+                    title="Workspace YAML",
+                    path=None,
+                    yaml_text=(
+                        "# Yaml unloaded\n"
+                        "# Build one with /init, then save it with "
+                        "/write-project <name> yes.\n"
+                    ),
+                )
+            )
+            return
+        try:
+            yaml_text = status.path.read_text(encoding="utf-8")
+        except OSError as exc:
+            yaml_text = f"# Failed to read {status.path}: {exc}\n"
+        self.app.push_screen(
+            ProjectYamlOverlay(
+                title=f"Workspace YAML: {status.program}:{status.project}",
+                path=status.path,
+                yaml_text=yaml_text,
+            )
+        )
+
     def action_soft_cancel(self) -> None:
         if self._quit_armed:
             if self._quit_timer is not None:
@@ -828,12 +946,16 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def _sync_footer_provider(self) -> None:
         config = self._active_provider_config
-        if config is None:
-            return
-        self.query_one(FooterWidget).set_provider_model(
-            f"{self._interaction_mode}:{config.type}",
-            config.model,
-            project=config.project or resolve_default_project(),
+        self._workspace_project_status = resolve_workspace_project()
+        if config is not None:
+            self.query_one(FooterWidget).set_provider_model(
+                f"{self._interaction_mode}:{config.type}",
+                config.model,
+                project=config.project or resolve_default_project(),
+            )
+        self.query_one(FooterWidget).set_yaml_status(
+            loaded=self._workspace_project_status.loaded,
+            label=_yaml_footer_label(self._workspace_project_status),
         )
 
     def _publish_synthesis_result(self, result: dict[str, object]) -> None:
@@ -846,33 +968,48 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
         status = str(synthesis.get("status") or "")
         footer = self.query_one(FooterWidget)
+        provider_type = str(result.get("provider_type") or "offline")
+        provider_model = str(result.get("provider_model") or "auto")
+        artifact_dir = str(result.get("synthesis_artifact_dir") or "")
+        semantic = result.get("semantic_result")
+        semantic_dict = semantic if isinstance(semantic, dict) else None
         if status == "ready":
             command = str(synthesis.get("command") or "")
             explanation = str(synthesis.get("explanation") or "")
             confidence = str(synthesis.get("confidence") or "low")
             project = str(synthesis.get("project") or "")
-            semantic = result.get("semantic_result")
-            semantic_text = _format_semantic_result(
-                semantic if isinstance(semantic, dict) else None
-            )
-            project_text = (
-                f"\nactive project: `{project}`\n\n" if project else "\n"
-            )
-            self.post_agent_message(
-                (
-                    "```bash\n"
-                    f"{command}\n"
-                    "```\n\n"
-                    f"confidence: `{confidence}`\n\n"
-                    f"{project_text}"
-                    f"{explanation or 'Prepared chemsmart command.'}"
-                    f"{semantic_text}"
-                ),
-                title="Synthesis",
+            transcript = self.query_one(Transcript)
+            transcript.add_cell(
+                SynthesisTraceCell(
+                    provider_type=provider_type,
+                    model=provider_model,
+                    mode=self._interaction_mode,
+                    status=status,
+                    command=command,
+                    semantic=semantic_dict,
+                    decision_trace=_decision_trace_dict(synthesis),
+                    artifact_dir=artifact_dir,
+                )
             )
             self._publish_decision_trace(synthesis)
-            self.query_one(Transcript).add_cell(
-                CommandInterpretationCell(parse_model_command(command))
+            transcript.add_cell(
+                CommandInterpretationCell(
+                    parse_model_command(command),
+                    expanded=True,
+                )
+            )
+            transcript.add_cell(
+                FinalAnswerCell(
+                    _final_command_text(
+                        command=command,
+                        explanation=(
+                            explanation or "Prepared chemsmart command."
+                        ),
+                        confidence=confidence,
+                        project=project,
+                    ),
+                    title="Final Command",
+                ),
             )
             footer.set_phase(Phase.FINISHED)
             footer.set_hint("Command ready — /mode run for full harness")
@@ -882,30 +1019,43 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             command = str(synthesis.get("command") or "")
             explanation = str(synthesis.get("explanation") or "")
             action = str(synthesis.get("action") or "explain_command")
-            semantic = result.get("semantic_result")
-            semantic_text = _format_semantic_result(
-                semantic if isinstance(semantic, dict) else None
-            )
             title = {
                 "explain_command": "Command Explanation",
                 "critique_command": "Command Critic",
                 "repair_command": "Command Repair",
             }.get(action, "Command Analysis")
-            self.post_agent_message(
-                (
-                    "```bash\n"
-                    f"{command}\n"
-                    "```\n\n"
-                    f"{explanation or 'No explanation was generated.'}"
-                    f"{semantic_text}"
-                ),
-                title=title,
+            transcript = self.query_one(Transcript)
+            transcript.add_cell(
+                SynthesisTraceCell(
+                    provider_type=provider_type,
+                    model=provider_model,
+                    mode=self._interaction_mode,
+                    status=status,
+                    command=command,
+                    semantic=semantic_dict,
+                    decision_trace=_decision_trace_dict(synthesis),
+                    artifact_dir=artifact_dir,
+                )
             )
             self._publish_decision_trace(synthesis)
             if command:
-                self.query_one(Transcript).add_cell(
-                    CommandInterpretationCell(parse_model_command(command))
+                transcript.add_cell(
+                    CommandInterpretationCell(
+                        parse_model_command(command),
+                        expanded=True,
+                    )
                 )
+            transcript.add_cell(
+                FinalAnswerCell(
+                    _final_answer_text(
+                        command=command,
+                        explanation=(
+                            explanation or "No explanation was generated."
+                        ),
+                    ),
+                    title=title,
+                )
+            )
             footer.set_phase(Phase.FINISHED)
             footer.set_hint("Command analysis ready")
             return
@@ -915,11 +1065,28 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             if not isinstance(missing, list):
                 missing = [str(missing)]
             lines = "\n".join(f"- {item}" for item in missing) or "- details"
-            self.post_agent_message(
-                f"I need more information before making a command:\n\n{lines}",
-                title="Clarification",
+            self.query_one(Transcript).add_cell(
+                SynthesisTraceCell(
+                    provider_type=provider_type,
+                    model=provider_model,
+                    mode=self._interaction_mode,
+                    status=status,
+                    command=str(synthesis.get("command") or ""),
+                    semantic=semantic_dict,
+                    decision_trace=_decision_trace_dict(synthesis),
+                    artifact_dir=artifact_dir,
+                )
             )
             self._publish_decision_trace(synthesis)
+            self.query_one(Transcript).add_cell(
+                FinalAnswerCell(
+                    (
+                        "I need more information before making a command:\n\n"
+                        f"{lines}"
+                    ),
+                    title="Clarification",
+                )
+            )
             footer.set_phase(Phase.IDLE)
             footer.set_hint("Clarification needed")
             return
@@ -927,15 +1094,26 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         explanation = str(
             synthesis.get("explanation") or "No executable command was made."
         )
-        semantic = result.get("semantic_result")
-        semantic_text = _format_semantic_result(
-            semantic if isinstance(semantic, dict) else None
-        )
-        self.post_agent_message(
-            f"{explanation}{semantic_text}",
-            title="Synthesis",
+        semantic_text = _format_semantic_result(semantic_dict)
+        self.query_one(Transcript).add_cell(
+            SynthesisTraceCell(
+                provider_type=provider_type,
+                model=provider_model,
+                mode=self._interaction_mode,
+                status=status,
+                command=str(synthesis.get("command") or ""),
+                semantic=semantic_dict,
+                decision_trace=_decision_trace_dict(synthesis),
+                artifact_dir=artifact_dir,
+            )
         )
         self._publish_decision_trace(synthesis)
+        self.query_one(Transcript).add_cell(
+            FinalAnswerCell(
+                f"{explanation}{semantic_text}",
+                title="Final Status",
+            )
+        )
         footer.set_phase(Phase.FINISHED)
         footer.set_hint("No command generated")
 
@@ -1340,9 +1518,40 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     def _has_user_message(self, request: str) -> bool:
         return request in self._user_requests
 
+    def _render_ask_user_prompt(self, event: ToolUseEvent) -> None:
+        """Render an ask_user tool call as a plain clarification question."""
+        question = str(event.args.get("question") or "").strip()
+        raw_options = event.args.get("options")
+        options = (
+            [str(o).strip() for o in raw_options if str(o).strip()]
+            if isinstance(raw_options, list)
+            else []
+        )
+        lines = ["The agent needs a bit more information to continue.", ""]
+        if question:
+            lines.extend([question, ""])
+        if options:
+            lines.append("Options (type the text or its number):")
+            lines.append("")
+            for index, option in enumerate(options, start=1):
+                lines.append(f"{index}. {option}")
+            lines.append("")
+        lines.append("_Type your answer in the prompt below._")
+        self.post_agent_message("\n".join(lines), title="Clarification needed")
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.IDLE)
+        footer.set_hint("Answer the question to continue")
+
     def _apply_tool_use_event(self, event: ToolUseEvent) -> None:
         transcript = self.query_one(Transcript)
         footer = self.query_one(FooterWidget)
+        # ask_user is a clarification, not a permission-gated action. Render it
+        # as a plain question (never a "[unknown]" risky pending tool cell) and
+        # leave the composer ready for the user's answer.
+        if event.tool == "ask_user":
+            if event.status == "pending":
+                self._render_ask_user_prompt(event)
+            return
         note = None
         if event.status == "approved":
             if event.scope == "session":
@@ -1378,6 +1587,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 ),
             )
         )
+        if event.status == "ok" and event.tool in {
+            "synthesize_command",
+            "repair_command",
+        }:
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            self._publish_command_tool_result(event.tool, payload)
+        elif (
+            event.status == "ok" and event.tool == "execute_chemsmart_command"
+        ):
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            self._publish_execute_tool_result(payload)
         if event.tool == "dry_run_input" and event.status == "ok":
             summary = _tool_use_summary_payload(event.payload)
             if summary is not None:
@@ -1449,6 +1669,97 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 self._current_entity_snapshot(),
                 event.status,
             )
+
+    def _publish_command_tool_result(
+        self,
+        tool_name: str,
+        payload: dict[str, object],
+    ) -> None:
+        command = str(payload.get("command") or "")
+        status = str(payload.get("status") or "")
+        semantic = payload.get("semantic")
+        semantic_dict = semantic if isinstance(semantic, dict) else None
+        decision_trace = payload.get("decision_trace")
+        decision_dict = (
+            decision_trace if isinstance(decision_trace, dict) else None
+        )
+        transcript = self.query_one(Transcript)
+        transcript.add_cell(
+            SynthesisTraceCell(
+                provider_type="api",
+                model=_provider_model_label(self._active_provider_config),
+                mode="unified",
+                status=status,
+                command=command,
+                semantic=semantic_dict,
+                decision_trace=decision_dict,
+                artifact_dir="decision_log.jsonl",
+            )
+        )
+        if command:
+            transcript.add_cell(
+                CommandInterpretationCell(
+                    parse_model_command(command),
+                    expanded=True,
+                )
+            )
+        if status == "needs_clarification":
+            missing = payload.get("missing_info")
+            if not isinstance(missing, list):
+                missing = [str(missing or "details")]
+            lines = "\n".join(f"- {item}" for item in missing)
+            transcript.add_cell(
+                FinalAnswerCell(
+                    "I need more information before making a command:\n\n"
+                    f"{lines}",
+                    title="Clarification",
+                )
+            )
+            return
+        title = "Final Command" if command else "Final Status"
+        if tool_name == "repair_command" and command:
+            title = "Repaired Command"
+        transcript.add_cell(
+            FinalAnswerCell(
+                (
+                    _final_command_text(
+                        command=command,
+                        explanation=str(payload.get("explanation") or ""),
+                        confidence=str(payload.get("confidence") or "medium"),
+                        project=str(payload.get("project") or ""),
+                    )
+                    if command
+                    else str(payload.get("explanation") or payload)
+                ),
+                title=title,
+            )
+        )
+
+    def _publish_execute_tool_result(
+        self,
+        payload: dict[str, object],
+    ) -> None:
+        command = str(payload.get("command") or "")
+        argv = payload.get("executed_argv")
+        argv_text = " ".join(map(str, argv)) if isinstance(argv, list) else ""
+        lines = [
+            f"status: `{payload.get('status') or 'unknown'}`",
+            f"returncode: `{payload.get('returncode')}`",
+        ]
+        if command:
+            lines.extend(
+                ["", "Requested command:", "", "```bash", command, "```"]
+            )
+        if argv_text:
+            lines.extend(
+                ["", "Executed argv:", "", "```bash", argv_text, "```"]
+            )
+        stderr = str(payload.get("stderr_tail") or "").strip()
+        if stderr:
+            lines.extend(["", "stderr tail:", "", "```text", stderr, "```"])
+        self.query_one(Transcript).add_cell(
+            FinalAnswerCell("\n".join(lines), title="Execution Result")
+        )
 
     def _current_entity_snapshot(self) -> dict[str, object] | None:
         session_dir = self.current_session_dir()
@@ -1555,6 +1866,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._handle_mode_command(argument)
         elif command == "/init":
             self._handle_init_command(argument)
+        elif command == "/write-project":
+            self._handle_project_write_command(argument)
         elif command == "/wizard":
             self._handle_wizard_probe_command(argument)
         elif command == "/wizard-verify":
@@ -1657,6 +1970,64 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._request_approval("run_local")
         else:
             self.post_error("Unknown command", raw)
+
+    def _handle_project_write_command(self, argument: str) -> None:
+        if self._current_worker and not self._current_worker.is_finished:
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before writing project YAML.",
+            )
+            return
+        try:
+            parts = shlex.split(argument)
+        except ValueError as exc:
+            self.post_error("Invalid write-project command", str(exc))
+            return
+
+        confirmed = False
+        overwrite = False
+        project_name: str | None = None
+        for part in parts:
+            value = part.strip()
+            lowered = value.lower()
+            if lowered in {"yes", "y", "--yes"}:
+                confirmed = True
+            elif lowered in {"overwrite", "--overwrite"}:
+                overwrite = True
+            elif project_name is None:
+                project_name = value
+            else:
+                self.post_error(
+                    "Invalid write-project command",
+                    "Usage: /write-project [name] yes [overwrite]",
+                )
+                return
+
+        candidate = _find_project_yaml_candidate_for_write(
+            self.session_root,
+            preferred_session_dir=self.current_session_dir(),
+        )
+        if candidate is None:
+            self.post_error(
+                "Project write unavailable",
+                "Run /init and build a validated project YAML first.",
+            )
+            return
+        if not confirmed:
+            self.post_error(
+                "Confirmation required",
+                "Use /write-project [name] yes [overwrite] to write the latest validated project YAML.",
+            )
+            return
+
+        if project_name:
+            candidate["project_name"] = project_name
+        candidate["overwrite"] = overwrite
+
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.PLANNING)
+        footer.set_hint("Writing project YAML…")
+        self._current_worker = self.run_project_yaml_write(candidate)
 
     def _handle_wizard_probe_command(self, argument: str) -> None:
         if self._current_worker and not self._current_worker.is_finished:
@@ -1887,6 +2258,31 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             footer.set_hint("Wizard YAML written")
             return
+        if tool_name == "write_project_yaml" and isinstance(result, dict):
+            self._sync_footer_provider()
+            project = str(result.get("project_name") or "project")
+            program = str(result.get("program") or "gaussian")
+            written_path = str(result.get("written_path") or "")
+            command_example = (
+                f"chemsmart run {program} -p {project} "
+                "-f examples/h2o.xyz -c 0 -m 1 opt"
+            )
+            self.post_agent_message(
+                (
+                    f"Wrote `{written_path}`.\n\n"
+                    "Deterministic use:\n\n"
+                    "```bash\n"
+                    f"{command_example}\n"
+                    "```\n\n"
+                    f"This workspace now has `{program}:{project}` loaded. "
+                    "The command-synthesis harness will attach and validate "
+                    f"this project automatically, and explicit CLI commands "
+                    f"can use `-p {project}` from this same workspace."
+                ),
+                title="Project YAML",
+            )
+            footer.set_hint(f"Project YAML written: {project}")
+            return
         if tool_name == "wizard_refresh" and isinstance(result, dict):
             self.post_agent_message(
                 self._wizard_refresh_result_table(result),
@@ -1946,6 +2342,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 return "Wizard refresh failed; preserved the last-good stale cache."
             return "Wizard refresh produced a fresh cache entry."
         if tool_name == "wizard_write" and isinstance(result, dict):
+            return f"Wrote {result.get('written_path')}"
+        if tool_name == "write_project_yaml" and isinstance(result, dict):
             return f"Wrote {result.get('written_path')}"
         return "Completed successfully."
 
@@ -2100,6 +2498,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ("[A]", "/wizard-refresh <name> [--force]", "refresh node cache"),
             ("[A]", "/wizard-verify <name>", "verify server transport wiring"),
             ("[A]", "/doctor", "run inline diagnostics"),
+            (
+                "[F]",
+                "/write-project [name] yes [overwrite]",
+                "write the latest validated project YAML",
+            ),
             ("[A]", "/quit", "exit the TUI"),
         ]
         for row in rows:
@@ -2111,12 +2514,19 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     def _handle_mode_command(self, argument: str) -> None:
         value = argument.strip().lower()
         if not value:
+            route = (
+                "local synthesis-only"
+                if self._active_provider_config is not None
+                and self._active_provider_config.type == "local"
+                else "frontier unified tool-loop"
+            )
             self.post_agent_message(
                 (
                     "```\n"
-                    f"mode: {self._interaction_mode}\n"
-                    "ask: CLI-first synthesis + runtime semantic gate\n"
-                    "run: explicit internal tool harness + critic/dry-run\n"
+                    f"route: {route}\n"
+                    f"legacy_mode: {self._interaction_mode}\n"
+                    "local: CLI-first synthesis + runtime semantic gate\n"
+                    "frontier: unified tool loop with command/YAML tools\n"
                     "```"
                 ),
                 title="Mode",
@@ -2128,7 +2538,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if (
             value == "run"
             and self._active_provider_config is not None
-            and self._active_provider_config.type == "local"
+            and (self._active_provider_config.type == "local")
         ):
             self.post_error(
                 "Run mode unavailable for local provider",
@@ -2137,38 +2547,23 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "tool-calling provider (anthropic/openai).",
             )
             return
-        if self._current_worker and not self._current_worker.is_finished:
-            self.post_error(
-                "Mode switch unavailable",
-                "Wait for the current request to finish before switching mode.",
-            )
-            return
-        if value != self._interaction_mode or self._build_mode:
-            self._reset_request_state(
-                clear_transcript=False,
-                clear_session=True,
-            )
-            self.active_synthesis_session = None
         self._build_mode = False
         self._interaction_mode = value
         self._sync_footer_provider()
         self.post_agent_message(
             (
-                "Ask mode uses the active provider for CLI-first command "
-                "synthesis, semantic validation, and repair."
+                "Mode preference recorded without resetting the session. "
+                "Local providers still use synthesis-only routing."
                 if value == "ask"
                 else (
-                    "Run mode uses the explicit internal tool harness. "
-                    "Dry-run artifacts must still include generated "
-                    "chemsmart CLI command evidence."
+                    "Mode preference recorded without resetting the session. "
+                    "Frontier providers use the unified tool-loop routing."
                 )
             ),
             title="Mode",
         )
 
     def _handle_init_command(self, argument: str) -> None:
-        # Project-YAML build mode drives the tool-loop harness, which needs a
-        # tool-calling frontier provider (the local model is ask-only).
         if (
             self._active_provider_config is not None
             and self._active_provider_config.type == "local"
@@ -2187,30 +2582,31 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             return
         argument = argument.strip()
-        self._build_mode = True
+        self._build_mode = False
         self._sync_footer_provider()
         if argument:
-            # `/init <reported method>` builds immediately.
-            self.start_request(argument)
+            self.start_request(
+                "Build a workspace project YAML from this reported method. "
+                "Validate and critique it before writing; ask for approval "
+                f"before write_project_yaml.\n\n{argument}"
+            )
             return
         self.post_agent_message(
             (
-                "**Project YAML build mode** is active.\n\n"
+                "**Project YAML request helper**\n\n"
                 "Paste your reported computational method (a paper's "
                 "*Computational Details*, a method sentence, or a few facts) "
-                "and I will use the project-YAML harness to "
+                "as a normal message, and the unified agent will use the "
+                "project-YAML harness to "
                 "`extract → render → validate → critique` a chemsmart project "
-                "YAML, then `write` it into `~/.chemsmart/<program>/` once you "
-                "approve.\n\n"
+                "YAML, then `write` it into this workspace's "
+                "`.chemsmart/<program>/` folder once you approve.\n\n"
                 'Tip: name the project (e.g. "call it co2") and say the '
-                "program (Gaussian or ORCA). Use `/mode ask` or `/mode run` to "
-                "leave build mode."
+                "program (Gaussian or ORCA)."
             ),
             title="Init: Project YAML",
         )
-        self.query_one(FooterWidget).set_hint(
-            "Project YAML build mode — paste your reported method"
-        )
+        self.query_one(FooterWidget).set_hint("Paste a project-YAML request")
         self.focus_composer()
 
     def _show_sessions_snapshot(self) -> None:
@@ -2439,10 +2835,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         waiter.set()
         return True
 
-    def _permission_policy(self) -> PermissionPolicy:
+    def _permission_policy(
+        self, *, prompt_risky: bool = False
+    ) -> PermissionPolicy:
         return PermissionPolicy(
             mode=self._permission_mode,
             yolo=self._yolo_enabled,
+            prompt_risky=prompt_risky,
             session_allow=set(self._session_allow_tools),
         )
 
@@ -2713,6 +3112,104 @@ def _extract_execute_context(session_dir: Path) -> dict[str, str | None]:
     }
 
 
+def _latest_project_yaml_candidate(
+    session_dir: Path | None,
+) -> dict[str, object] | None:
+    if session_dir is None:
+        return None
+    log_path = session_dir / "decision_log.jsonl"
+    if not log_path.exists():
+        return None
+
+    candidate: dict[str, object] | None = None
+    candidate_yaml: str | None = None
+    validated = False
+    try:
+        for raw in log_path.read_text(encoding="utf-8").splitlines():
+            if not raw.strip():
+                continue
+            entry = json.loads(raw)
+            payload = entry.get("payload") or {}
+            if not isinstance(payload, dict):
+                continue
+            tool = payload.get("tool")
+            if payload.get("status") not in {None, "ok"}:
+                continue
+
+            result = payload.get("payload") or {}
+            if isinstance(result, dict) and isinstance(
+                result.get("summary"), dict
+            ):
+                result = result["summary"]
+            if not isinstance(result, dict):
+                continue
+            if tool == "validate_project_yaml" and candidate is not None:
+                if result.get("verdict") not in {"ok", "warn", "reject"}:
+                    continue
+                validated = result.get("verdict") in {"ok", "warn"}
+                if not validated:
+                    candidate = None
+                    candidate_yaml = None
+                continue
+            if tool != "render_project_yaml":
+                continue
+            yaml_text = result.get("yaml_text")
+            if not isinstance(yaml_text, str) or not yaml_text.strip():
+                continue
+            # A re-render of the identical candidate (build-mode over-iteration)
+            # must NOT discard a prior successful validation — only a genuinely
+            # new/changed candidate resets the validated flag and needs
+            # re-validation before it can be written.
+            if yaml_text == candidate_yaml:
+                continue
+            candidate = {
+                "project_name": str(result.get("project_name") or "project"),
+                "program": str(result.get("program") or "gaussian"),
+                "yaml_text": yaml_text,
+            }
+            candidate_yaml = yaml_text
+            validated = False
+    except Exception:
+        return None
+    return candidate if validated else None
+
+
+def _yaml_footer_label(status: WorkspaceProjectStatus) -> str:
+    if status.loaded:
+        return f"Yaml loaded {status.program}:{status.project}"
+    return "Yaml unloaded"
+
+
+def _find_project_yaml_candidate_for_write(
+    session_root: Path,
+    *,
+    preferred_session_dir: Path | None = None,
+) -> dict[str, object] | None:
+    candidate = _latest_project_yaml_candidate(preferred_session_dir)
+    if candidate is not None:
+        return candidate
+    if not session_root.exists():
+        return None
+    try:
+        session_dirs = sorted(
+            [path for path in session_root.iterdir() if path.is_dir()],
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return None
+    for session_dir in session_dirs:
+        if (
+            preferred_session_dir is not None
+            and session_dir == preferred_session_dir
+        ):
+            continue
+        candidate = _latest_project_yaml_candidate(session_dir)
+        if candidate is not None:
+            return candidate
+    return None
+
+
 def _tool_use_payload_summary(payload: object) -> str | None:
     if not isinstance(payload, dict):
         return None
@@ -2762,6 +3259,44 @@ def _load_tui_provider_config() -> AgentProviderConfig | None:
         return None
 
 
+def _provider_type_label(config: AgentProviderConfig | None) -> str:
+    if config is None:
+        return "offline"
+    return str(config.type or "offline").strip().lower() or "offline"
+
+
+def _provider_model_label(config: AgentProviderConfig | None) -> str:
+    if config is None:
+        return "auto"
+    return str(config.model or "auto").strip() or "auto"
+
+
+def _new_synthesis_artifact_dir(
+    session_root: Path,
+    *,
+    provider_type: str,
+) -> Path:
+    lane = "local" if provider_type == "local" else "api"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = session_root / lane / "synthesis" / stamp
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _write_synthesis_artifact(
+    artifact_dir: Path,
+    payload: dict[str, object],
+) -> None:
+    try:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        (artifact_dir / "synthesis_turn.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True, default=str),
+            encoding="utf-8",
+        )
+    except OSError:
+        return
+
+
 def _default_interaction_mode(config: AgentProviderConfig | None) -> str:
     requested = os.environ.get("CHEMSMART_AGENT_TUI_MODE", "").strip().lower()
     if requested in {"ask", "run"}:
@@ -2770,6 +3305,42 @@ def _default_interaction_mode(config: AgentProviderConfig | None) -> str:
     # and API/frontier providers. The tool-calling harness remains available
     # through explicit `/mode run`, but it is no longer the default entry path.
     return "ask"
+
+
+def _decision_trace_dict(
+    synthesis: dict[str, object],
+) -> dict[str, object] | None:
+    trace = synthesis.get("decision_trace")
+    return trace if isinstance(trace, dict) and trace else None
+
+
+def _final_command_text(
+    *,
+    command: str,
+    explanation: str,
+    confidence: str,
+    project: str,
+) -> str:
+    parts = [
+        "```bash",
+        command,
+        "```",
+        "",
+        f"confidence: `{confidence}`",
+    ]
+    if project:
+        parts.extend(["", f"active project: `{project}`"])
+    if explanation:
+        parts.extend(["", explanation])
+    return "\n".join(parts)
+
+
+def _final_answer_text(*, command: str, explanation: str) -> str:
+    parts: list[str] = []
+    if command:
+        parts.extend(["Analyzed command:", "", "```bash", command, "```", ""])
+    parts.append(explanation)
+    return "\n".join(parts)
 
 
 def _format_semantic_result(semantic: dict[str, object] | None) -> str:

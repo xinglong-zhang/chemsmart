@@ -153,7 +153,7 @@ def test_apply_third_party_silence_strips_direct_handlers_from_listed_loggers(
     ],
 )
 def test_import_does_not_wipe_existing_handlers(
-    isolated_root_handlers, tmp_path, module_name: str
+    tmp_path, module_name: str
 ) -> None:
     """Regression: selected modules used to call ``create_logger()`` at
     module top level, which sets ``root.handlers = []`` and re-attaches a
@@ -161,16 +161,35 @@ def test_import_does_not_wipe_existing_handlers(
     whenever ``ToolRegistry.default()`` lazily imported those modules. The
     guard added in this fix only sets up default logging when no handlers are
     present yet.
+
+    Runs in a subprocess: ``importlib.reload`` of a CLI module in-process
+    recreates its click command objects and desynchronizes them from mocks in
+    other test modules (tests/test_config.py's conda auto-detect tests were
+    failing whenever this test ran first).
     """
-    root = logging.getLogger()
-    root.handlers[:] = []
-    sentinel = logging.FileHandler(tmp_path / "sentinel.log", mode="w")
-    root.addHandler(sentinel)
+    import subprocess
+    import sys
+    import textwrap
 
-    # Re-import to trigger the module-level guard fresh.
-    import importlib
+    code = textwrap.dedent(f"""
+        import importlib
+        import logging
 
-    module = importlib.import_module(module_name)
-    importlib.reload(module)
+        root = logging.getLogger()
+        root.handlers[:] = []
+        sentinel = logging.FileHandler(
+            {str(tmp_path / "sentinel.log")!r}, mode="w"
+        )
+        root.addHandler(sentinel)
 
-    assert sentinel in root.handlers
+        module = importlib.import_module({module_name!r})
+        importlib.reload(module)
+
+        assert sentinel in root.handlers
+        """)
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr

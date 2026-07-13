@@ -21,6 +21,9 @@ _EPHEMERAL_CELL_TYPE_NAMES = frozenset(
         "GeometryHandoffCell",
         "RunResultCell",
         "ToolCallCell",
+        "DecisionTraceCell",
+        "CommandInterpretationCell",
+        "SynthesisTraceCell",
     }
 )
 

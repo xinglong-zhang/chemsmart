@@ -11,6 +11,12 @@ from rich.text import Text
 from chemsmart.agent.registry import ToolRegistry
 
 _TOOL_META = {
+    "ask_user": {
+        "risk": "question",
+        "read_only": True,
+        "style": "warning",
+        "summary": "asks you a clarifying question (nothing is changed)",
+    },
     "build_molecule": {
         "risk": "read-only",
         "read_only": True,
@@ -52,6 +58,36 @@ _TOOL_META = {
         "read_only": False,
         "style": "error",
         "summary": "writes a user project YAML config",
+    },
+    "read_project_yaml": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "reads the active workspace project YAML",
+    },
+    "update_project_yaml": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "updates a workspace project YAML config",
+    },
+    "synthesize_command": {
+        "risk": "read-only",
+        "read_only": True,
+        "style": "warning",
+        "summary": "synthesizes a semantic-gated chemsmart CLI command",
+    },
+    "repair_command": {
+        "risk": "inspection",
+        "read_only": True,
+        "style": "warning",
+        "summary": "repairs and revalidates a chemsmart CLI command",
+    },
+    "execute_chemsmart_command": {
+        "risk": "risky",
+        "read_only": False,
+        "style": "error",
+        "summary": "runs a semantic-gated chemsmart CLI command",
     },
     "build_gaussian_settings": {
         "risk": "read-only",
@@ -272,8 +308,16 @@ def render_tool_result_summary(
         "validate_project_yaml",
         "critic_project_yaml",
         "write_project_yaml",
+        "read_project_yaml",
+        "update_project_yaml",
     }:
         return _render_project_yaml_summary(tool_name, payload)
+    if tool_name in {
+        "synthesize_command",
+        "repair_command",
+        "execute_chemsmart_command",
+    }:
+        return _render_command_tool_summary(tool_name, payload)
     return None
 
 
@@ -313,8 +357,16 @@ def render_tool_result_detail(
         "validate_project_yaml",
         "critic_project_yaml",
         "write_project_yaml",
+        "read_project_yaml",
+        "update_project_yaml",
     }:
         return _render_project_yaml_detail(payload)
+    if tool_name in {
+        "synthesize_command",
+        "repair_command",
+        "execute_chemsmart_command",
+    }:
+        return _render_command_tool_detail(payload)
     return None
 
 
@@ -383,9 +435,32 @@ def _render_project_yaml_summary(
     if tool_name == "write_project_yaml":
         path = _string_or_none(payload.get("written_path"))
         return f"{program}:{project} written" + (f" to {path}" if path else "")
+    if tool_name == "read_project_yaml":
+        path = _string_or_none(payload.get("path"))
+        return f"{program}:{project} loaded" + (f" from {path}" if path else "")
+    if tool_name == "update_project_yaml":
+        return f"{program}:{project} updated"
     if verdict is not None:
         return f"{program}:{project} verdict={verdict}"
     return f"{program}:{project}"
+
+
+def _render_command_tool_summary(
+    tool_name: str,
+    payload: dict[str, Any],
+) -> str | None:
+    status = _string_or_none(payload.get("status")) or "ok"
+    command = _string_or_none(payload.get("command"))
+    semantic = payload.get("semantic")
+    verdict = None
+    if isinstance(semantic, dict):
+        verdict = _string_or_none(semantic.get("verdict"))
+    if tool_name == "execute_chemsmart_command":
+        returncode = payload.get("returncode")
+        return f"execute {status}, rc={returncode}, gate={verdict or 'n/a'}"
+    if command:
+        return f"{status}, gate={verdict or 'n/a'}"
+    return status
 
 
 def _render_read_detail(payload: dict[str, Any]) -> list[Text] | None:
@@ -464,12 +539,16 @@ def _render_project_yaml_detail(payload: dict[str, Any]) -> list[Text] | None:
     lines: list[Text] = []
     yaml_text = _string_or_none(payload.get("yaml_text"))
     if yaml_text is not None:
-        lines.extend(Text(line, style="dim") for line in yaml_text.splitlines()[:6])
+        lines.extend(
+            Text(line, style="dim") for line in yaml_text.splitlines()[:6]
+        )
     summary = _string_or_none(payload.get("summary"))
     if summary is not None:
         lines.append(Text(summary, style="dim"))
     issues = payload.get("issues")
-    if not isinstance(issues, list) and isinstance(payload.get("validation"), dict):
+    if not isinstance(issues, list) and isinstance(
+        payload.get("validation"), dict
+    ):
         issues = payload["validation"].get("issues")
     if isinstance(issues, list):
         for issue in issues[:4]:
@@ -480,6 +559,30 @@ def _render_project_yaml_detail(payload: dict[str, Any]) -> list[Text] | None:
             message = _string_or_none(issue.get("message")) or ""
             style = "error" if severity == "reject" else "warning"
             lines.append(Text(f"{rule}: {message}", style=style))
+    return _finalize_detail_lines(lines, truncated=len(lines) > 6)
+
+
+def _render_command_tool_detail(payload: dict[str, Any]) -> list[Text] | None:
+    lines: list[Text] = []
+    command = _string_or_none(payload.get("command"))
+    if command is not None:
+        lines.append(Text(command, style="bold"))
+    explanation = _string_or_none(payload.get("explanation"))
+    if explanation is not None:
+        lines.append(Text(explanation, style="dim"))
+    semantic = payload.get("semantic")
+    if isinstance(semantic, dict):
+        verdict = _string_or_none(semantic.get("verdict")) or "unknown"
+        failed = semantic.get("failed_rule_ids") or []
+        lines.append(Text(f"semantic gate: {verdict}", style="dim"))
+        if failed:
+            lines.append(Text(f"failed rules: {', '.join(map(str, failed))}", style="error"))
+    stdout = _string_or_none(payload.get("stdout_tail"))
+    stderr = _string_or_none(payload.get("stderr_tail"))
+    if stdout is not None:
+        lines.append(Text(stdout.splitlines()[-1], style="dim"))
+    if stderr is not None:
+        lines.append(Text(stderr.splitlines()[-1], style="error"))
     return _finalize_detail_lines(lines, truncated=len(lines) > 6)
 
 

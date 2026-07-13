@@ -10,8 +10,6 @@ import traceback
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-
-UTC = timezone.utc
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
@@ -33,6 +31,7 @@ from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.cluster import ClusterHelper
 from chemsmart.utils.io import get_program_type_from_file
 
+UTC = timezone.utc
 _JOB_SNAPSHOT_CACHE_LOCK = Lock()
 
 

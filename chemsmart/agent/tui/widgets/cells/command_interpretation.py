@@ -16,19 +16,26 @@ from .base import BaseCell
 
 
 class CommandInterpretationCell(BaseCell):
-    """Collapsible deterministic grounding for a synthesized command.
+    """Deterministic grounding for a synthesized command."""
 
-    Collapsed by default so the agent's composed answer stays the focus; the
-    full deterministic fact table is available on demand for user audit.
-    """
-
-    def __init__(self, parsed: ParsedModelCommand) -> None:
+    def __init__(
+        self,
+        parsed: ParsedModelCommand,
+        *,
+        expanded: bool = True,
+    ) -> None:
         self.parsed = parsed
-        self.expanded = False
+        self.expanded = expanded
         self.source_text = format_parsed_model_command(parsed)
         super().__init__(
-            _render_collapsed_interpretation(parsed),
-            title="Command Interpretation ▸",
+            _render_command_interpretation(parsed)
+            if expanded
+            else _render_collapsed_interpretation(parsed),
+            title=(
+                "Deterministic Harness: CLI Command Synthesis ▾"
+                if expanded
+                else "Deterministic Harness: CLI Command Synthesis ▸"
+            ),
             classes="agent-cell command-interpretation-cell",
         )
 
@@ -41,9 +48,9 @@ class CommandInterpretationCell(BaseCell):
     def toggle(self) -> None:
         self.expanded = not self.expanded
         self.border_title = (
-            "Command Interpretation ▾"
+            "Deterministic Harness: CLI Command Synthesis ▾"
             if self.expanded
-            else "Command Interpretation ▸"
+            else "Deterministic Harness: CLI Command Synthesis ▸"
         )
         self.update(
             _render_command_interpretation(self.parsed)
@@ -215,4 +222,3 @@ def _summary_sentence(parsed: ParsedModelCommand) -> str:
         if line.startswith("Summary:"):
             return line
     return "Summary: This command was parsed deterministically."
-

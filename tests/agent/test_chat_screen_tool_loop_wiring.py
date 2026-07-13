@@ -40,7 +40,7 @@ def _loop_result() -> dict[str, object]:
     }
 
 
-def test_run_agent_session_calls_run_loop_with_screen_policy(
+def test_run_unified_session_calls_run_loop_with_screen_policy(
     monkeypatch, tmp_path
 ):
     captured: dict[str, object] = {}
@@ -49,6 +49,7 @@ def test_run_agent_session_calls_run_loop_with_screen_policy(
         captured["request"] = request
         captured["policy"] = kwargs["policy"]
         captured["approver"] = kwargs["approver"]
+        captured["stage_prompt"] = self.stage_prompt
         kwargs["policy"].record(
             "build_molecule", ApprovalDecision.ALLOW_SESSION
         )
@@ -61,12 +62,15 @@ def test_run_agent_session_calls_run_loop_with_screen_policy(
     screen._yolo_enabled = True
     screen._session_allow_tools = {"dry_run_input"}
 
-    result = ChatScreen.run_agent_session.__wrapped__(screen, "load water")
+    result = ChatScreen.run_unified_session.__wrapped__(screen, "load water")
 
     policy = captured["policy"]
     assert captured["request"] == "load water"
+    assert captured["stage_prompt"] == "unified_agent.md"
     assert policy.mode == PermissionMode.PERMISSION
     assert policy.yolo is True
+    # The unified loop prompts for risky tools instead of auto-denying them.
+    assert policy.prompt_risky is True
     assert policy.session_allow == {
         "dry_run_input",
         "build_molecule",
