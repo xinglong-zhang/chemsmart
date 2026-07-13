@@ -190,11 +190,15 @@ def metallic_poster_render(
     label_core="on",
     label_size=24,
     metal_color="poster_mn_gold",
+    highlight_bonds="",
 ):
     """Apply a glossy metallic poster-style rendering to a molecular complex."""
     define_metallic_poster_colors()
 
     coord_sel = _normalize_none(coord_sel)
+    highlight_bonds = _normalize_none(highlight_bonds)
+    if coord_sel is None and highlight_bonds:
+        coord_sel = _highlight_bonds_to_coord_sel(highlight_bonds)
 
     sel = f"({selection})"
     metal = f"({sel}) and ({metal_sel})"
@@ -283,6 +287,9 @@ def metallic_poster_render(
             label_font_id=7,
         )
 
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(highlight_bonds, sel, metal)
+
     cmd.zoom(selection, buffer=2.0)
     cmd.orient(selection)
     cmd.rebuild()
@@ -320,8 +327,17 @@ def _parse_highlight_bond_pairs(highlight_bonds):
     return pairs
 
 
-def _apply_comic_highlight_bonds(highlight_bonds, sel, metal_name):
-    """Style ``-c`` bond pairs like coordination-core S-Mn bonds in comic mode."""
+def _highlight_bonds_to_coord_sel(highlight_bonds):
+    """Return a PyMOL selection for all atoms referenced in bond pairs."""
+    pairs = _parse_highlight_bond_pairs(highlight_bonds)
+    if not pairs:
+        return None
+    atom_ids = sorted({atom_id for pair in pairs for atom_id in pair})
+    return " or ".join(f"id {atom_id}" for atom_id in atom_ids)
+
+
+def _apply_coordination_highlight_bonds(highlight_bonds, sel, metal_name):
+    """Style ``-c`` bond pairs like coordination-core metal-ligand bonds."""
     pairs = _parse_highlight_bond_pairs(highlight_bonds)
     if not pairs:
         return
@@ -344,6 +360,11 @@ def _apply_comic_highlight_bonds(highlight_bonds, sel, metal_name):
             0.42,
             f"({highlight_atoms}) and ({metal_name})",
         )
+
+
+def _apply_comic_highlight_bonds(highlight_bonds, sel, metal_name):
+    """Backward-compatible alias for comic highlight styling."""
+    _apply_coordination_highlight_bonds(highlight_bonds, sel, metal_name)
 
 
 def render_comic_metallic_labeled_final(
@@ -432,11 +453,12 @@ def comic_render(
     )
 
 
-def render_soft_cartoon(selection="all", background=None):
+def render_soft_cartoon(selection="all", background=None, highlight_bonds=""):
     """Apply soft cartoon ball-and-stick rendering with premium cover colors."""
     sel = f"({selection})"
     metal_name = "soft_cartoon_metal_atom"
     coord_core_name = "soft_cartoon_coord_core"
+    highlight_bonds = _normalize_none(highlight_bonds)
 
     cmd.delete(metal_name)
     cmd.delete(coord_core_name)
@@ -457,10 +479,14 @@ def render_soft_cartoon(selection="all", background=None):
     if cmd.count_atoms(metal_name) > 0:
         _safe_set("sphere_scale", 0.48, metal_name)
 
-    cmd.select(
-        coord_core_name,
-        f"{metal_name} or ((elem N+O+S+P+H) within 2.6 of {metal_name})",
-    )
+    if highlight_bonds:
+        coord_sel = _highlight_bonds_to_coord_sel(highlight_bonds)
+        cmd.select(coord_core_name, f"{sel} and ({coord_sel})")
+    else:
+        cmd.select(
+            coord_core_name,
+            f"{metal_name} or ((elem N+O+S+P+H) within 2.6 of {metal_name})",
+        )
     _safe_set("sphere_scale", 0.36, f"{coord_core_name} and not {metal_name}")
     _safe_set(
         "stick_radius",
@@ -499,6 +525,9 @@ def render_soft_cartoon(selection="all", background=None):
 
     cmd.label(sel, '""')
 
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(highlight_bonds, sel, metal_name)
+
     _set_transparent_background()
 
     _safe_set("orthoscopic", 0)
@@ -513,29 +542,44 @@ def render_soft_cartoon(selection="all", background=None):
     print("Soft cartoon style applied.")
 
 
-def soft_cartoon_render(selection="all", background=None, *_args, **_kwargs):
+def soft_cartoon_render(
+    selection="all", background=None, highlight_bonds="", *_args, **_kwargs
+):
     """CHEMSMART entry point for the soft cartoon style."""
-    render_soft_cartoon(selection=selection)
+    render_soft_cartoon(
+        selection=selection,
+        background=background,
+        highlight_bonds=highlight_bonds,
+    )
 
 
-def _common_select_core(selection="all", cutoff=2.6):
+_METAL_ELEMENTS = "elem Mn+Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au+Mg+Al+Ti+Zr"
+
+
+def _common_select_core(selection="all", cutoff=2.6, highlight_bonds=None):
     sel = f"({selection})"
+    highlight_bonds = _normalize_none(highlight_bonds)
 
     cmd.delete("metal_atom")
     cmd.delete("coord_core")
     cmd.delete("near_core")
 
-    cmd.select(
-        "metal_atom",
-        f"{sel} and (elem Mn or elem Fe or elem Co or elem Ni or elem Cu or elem Zn "
-        f"or elem Ru or elem Rh or elem Pd or elem Ag or elem Ir or elem Pt or elem Au "
-        f"or elem Mg or elem Al or elem Ti or elem Zr)",
-    )
+    if highlight_bonds:
+        coord_sel = _highlight_bonds_to_coord_sel(highlight_bonds)
+        cmd.select("coord_core", f"{sel} and ({coord_sel})")
+        cmd.select("metal_atom", f"coord_core and ({_METAL_ELEMENTS})")
+    else:
+        cmd.select(
+            "metal_atom",
+            f"{sel} and (elem Mn or elem Fe or elem Co or elem Ni or elem Cu or elem Zn "
+            f"or elem Ru or elem Rh or elem Pd or elem Ag or elem Ir or elem Pt or elem Au "
+            f"or elem Mg or elem Al or elem Ti or elem Zr)",
+        )
 
-    cmd.select(
-        "coord_core",
-        f"metal_atom or ({sel} and (elem N+O+S+P+H+Cl+Br+I) within {cutoff} of metal_atom)",
-    )
+        cmd.select(
+            "coord_core",
+            f"metal_atom or ({sel} and (elem N+O+S+P+H+Cl+Br+I) within {cutoff} of metal_atom)",
+        )
 
     cmd.select(
         "near_core",
@@ -603,11 +647,23 @@ def _finish_style(selection):
     cmd.refresh()
 
 
-def _begin_scientific_style(selection):
+def _begin_scientific_style(selection, highlight_bonds=""):
     """Shared setup for editorial / scientific derived styles."""
     _define_scientific_colors()
-    _common_select_core(selection)
+    _common_select_core(selection, highlight_bonds=highlight_bonds or None)
     cmd.hide("everything", selection)
+
+
+def _finish_scientific_style(selection, highlight_bonds="", message=""):
+    """Apply optional bond highlighting and finish a scientific style."""
+    highlight_bonds = _normalize_none(highlight_bonds)
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(
+            highlight_bonds,
+            f"({selection})",
+            "metal_atom",
+        )
+    _end_scientific_style(selection, message)
 
 
 def _apply_coord_sphere_scales(
@@ -683,20 +739,24 @@ def _show_coord_ball_and_stick(selection, spheres="coord_core"):
     cmd.show("spheres", spheres)
 
 
-def render_editorial_minimal(selection="all"):
+def render_editorial_minimal(selection="all", highlight_bonds=""):
     """Editorial minimal white style for main-text mechanistic figures."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     _show_coord_ball_and_stick(selection)
     _apply_coord_sphere_scales(0.095, 0.135, 0.24, 0.12, 0.45, 0.32)
     _color_by_element(carbon="sci_C_gray", metal="metal_gold")
     _apply_lighting(0.25, 0.05, 0.42, 0.62, 0.05, spec_power=80)
     _apply_view(orthoscopic=1, field_of_view=25, fog_start=0.65)
-    _end_scientific_style(selection, "Editorial minimal white style applied.")
+    _finish_scientific_style(
+        selection,
+        highlight_bonds=highlight_bonds,
+        message="Editorial minimal white style applied.",
+    )
 
 
-def render_black_gold_cover(selection="all"):
+def render_black_gold_cover(selection="all", highlight_bonds=""):
     """Black-gold journal-cover style for high-impact centerpiece figures."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     _show_coord_ball_and_stick(selection)
     _apply_coord_sphere_scales(0.12, 0.17, 0.26, 0.13, 0.58, 0.40)
     _color_by_element(carbon="sci_C_ivory", metal="metal_gold")
@@ -708,12 +768,16 @@ def render_black_gold_cover(selection="all"):
         fog_start=0.22,
         ray_trace_gain=0.18,
     )
-    _end_scientific_style(selection, "Black-gold cover style applied.")
+    _finish_scientific_style(
+        selection,
+        highlight_bonds=highlight_bonds,
+        message="Black-gold cover style applied.",
+    )
 
 
-def render_neon_coordination_core(selection="all"):
+def render_neon_coordination_core(selection="all", highlight_bonds=""):
     """Neon coordination-core style for reactive centers and catalytic pockets."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     _show_coord_ball_and_stick(selection)
     _apply_coord_sphere_scales(0.085, 0.18, 0.20, 0.11, 0.62, 0.42)
 
@@ -734,12 +798,16 @@ def render_neon_coordination_core(selection="all"):
         fog_start=0.18,
         ray_trace_gain=0.28,
     )
-    _end_scientific_style(selection, "Neon coordination-core style applied.")
+    _finish_scientific_style(
+        selection,
+        highlight_bonds=highlight_bonds,
+        message="Neon coordination-core style applied.",
+    )
 
 
-def render_matte_clay(selection="all"):
+def render_matte_clay(selection="all", highlight_bonds=""):
     """Matte clay model style for soft graphical abstracts."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     _show_coord_ball_and_stick(selection)
     _apply_coord_sphere_scales(0.14, 0.18, 0.30, 0.15, 0.55, 0.40)
 
@@ -760,12 +828,16 @@ def render_matte_clay(selection="all"):
         fog_start=0.50,
         ray_shadows_mode="soft",
     )
-    _end_scientific_style(selection, "Matte clay style applied.")
+    _finish_scientific_style(
+        selection,
+        highlight_bonds=highlight_bonds,
+        message="Matte clay style applied.",
+    )
 
 
-def render_xray_wire(selection="all"):
+def render_xray_wire(selection="all", highlight_bonds=""):
     """X-ray crystallography wire style for SI structure verification."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     cmd.show("lines", selection)
     cmd.show("sticks", "near_core")
     cmd.show("spheres", "metal_atom")
@@ -789,12 +861,16 @@ def render_xray_wire(selection="all"):
         depth_cue=0,
         ray_shadows_mode=None,
     )
-    _end_scientific_style(selection, "X-ray wire style applied.")
+    _finish_scientific_style(
+        selection,
+        highlight_bonds=highlight_bonds,
+        message="X-ray wire style applied.",
+    )
 
 
-def render_steric_surface(selection="all"):
+def render_steric_surface(selection="all", highlight_bonds=""):
     """Transparent steric surface style for catalyst pockets."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     _show_coord_ball_and_stick(selection)
     _apply_coord_sphere_scales(0.095, 0.14, 0.24, 0.12, 0.52, 0.34)
     _color_by_element(carbon="sci_C_gray", metal="metal_gold")
@@ -815,14 +891,16 @@ def render_steric_surface(selection="all"):
         depth_cue=1,
         fog_start=0.45,
     )
-    _end_scientific_style(
-        selection, "Transparent steric surface style applied."
+    _finish_scientific_style(
+        selection,
+        highlight_bonds=highlight_bonds,
+        message="Transparent steric surface style applied.",
     )
 
 
-def render_quasi_chemdraw_bold(selection="all"):
+def render_quasi_chemdraw_bold(selection="all", highlight_bonds=""):
     """Quasi-ChemDraw bold 3D style with formula-like clarity."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     _show_coord_ball_and_stick(selection, spheres="metal_atom or coord_core")
 
     cmd.hide("sticks", f"({selection}) and elem H and not coord_core")
@@ -838,12 +916,16 @@ def render_quasi_chemdraw_bold(selection="all"):
         ray_shadow="off",
         ray_shadows_mode=None,
     )
-    _end_scientific_style(selection, "Quasi-ChemDraw bold 3D style applied.")
+    _finish_scientific_style(
+        selection,
+        highlight_bonds=highlight_bonds,
+        message="Quasi-ChemDraw bold 3D style applied.",
+    )
 
 
-def render_labeled_coordination_core(selection="all"):
+def render_labeled_coordination_core(selection="all", highlight_bonds=""):
     """Coordination-core labeled style with explicit element labels."""
-    _begin_scientific_style(selection)
+    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
     _show_coord_ball_and_stick(selection)
     _apply_coord_sphere_scales(0.11, 0.16, 0.25, 0.13, 0.56, 0.38)
     _color_by_element(carbon="sci_C_gray", metal="metal_gold")
@@ -864,6 +946,14 @@ def render_labeled_coordination_core(selection="all"):
     cmd.set("label_outline_color", "white")
     cmd.set("label_position", [0, 0, 0])
     cmd.set("label_connector", 0)
+
+    highlight_bonds = _normalize_none(highlight_bonds)
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(
+            highlight_bonds,
+            f"({selection})",
+            "metal_atom",
+        )
 
     _finish_style(selection)
     print("Labeled coordination-core style applied.")

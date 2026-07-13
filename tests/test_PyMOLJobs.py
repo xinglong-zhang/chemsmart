@@ -912,11 +912,11 @@ class TestPyMOLStyleCommands:
         assert molecules[0].num_atoms == 36
         assert "Mn" in molecules[0].elements
 
-    def test_format_comic_highlight_bonds_encodes_bond_pairs(self):
+    def test_format_highlight_bonds_encodes_bond_pairs(self):
         coordinates = self.coordination_bonds_1_mer + [[2, 3, 4]]
 
         assert (
-            PyMOLScientificStyleVisualizationJobRunner._format_comic_highlight_bonds(
+            PyMOLScientificStyleVisualizationJobRunner._format_highlight_bonds(
                 coordinates
             )
             == "1-2+1-5+1-36+1-3+1-15+1-8"
@@ -980,6 +980,41 @@ class TestPyMOLStyleCommands:
         assert command.startswith(expected_command)
         assert self.label_1_mer in command
 
+    @pytest.mark.parametrize(
+        ("style", "expected_command"),
+        [
+            (
+                "glossy",
+                "metallic_poster_render 1-mer, elem Mn, id 1 or id 2 or id 3 or id 5 or id 8 or id 15 or id 36, "
+                "2.6, N+O+S+P+H, white, on, 24, poster_mn_gold, "
+                "1-2+1-5+1-36+1-3+1-15+1-8",
+            ),
+            (
+                "soft_cartoon",
+                "render_soft_cartoon 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+            ),
+            (
+                "neon_coordination_core",
+                "render_neon_coordination_core 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+            ),
+        ],
+    )
+    def test_format_pymol_style_command_passes_highlight_bonds_for_derived_styles(
+        self, style, expected_command
+    ):
+        job = SimpleNamespace(
+            style=style,
+            coordinates=self.coordination_bonds_1_mer,
+        )
+
+        command = (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, self.label_1_mer
+            )
+        )
+
+        assert command == expected_command
+
     def test_hybrid_is_not_a_derived_style(self):
         with pytest.raises(ValueError, match="not available"):
             normalize_pymol_style("hybrid")
@@ -990,6 +1025,20 @@ class TestPyMOLStyleCommands:
         )
         job = SimpleNamespace(
             style="comic",
+            coordinates=[[1, 8], [1, 15], [2, 3, 4]],
+        )
+
+        command = runner._add_coordinates_labels(job, "cmd")
+
+        assert "distance d" not in command
+        assert "angle a1" in command
+
+    def test_glossy_style_skips_bond_distance_labels_from_coordinates(self):
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        job = SimpleNamespace(
+            style="glossy",
             coordinates=[[1, 8], [1, 15], [2, 3, 4]],
         )
 
