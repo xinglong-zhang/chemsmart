@@ -1,3 +1,4 @@
+import inspect
 import os.path
 import shutil
 from types import SimpleNamespace
@@ -19,6 +20,9 @@ from chemsmart.jobs.mol.runner import (
     normalize_pymol_style,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
+from chemsmart.jobs.mol.templates.scientific_styles import (
+    render_editorial_minimal,
+)
 from chemsmart.jobs.mol.visualize import (
     PyMOLScientificStyleVisualizationJob,
     PyMOLVisualizationJob,
@@ -964,6 +968,7 @@ class TestPyMOLStyleCommands:
             ("glossy", "metallic_poster_render"),
             ("soft_cartoon", "render_soft_cartoon"),
             ("neon_coordination_core", "render_neon_coordination_core"),
+            ("editorial_minimal", "render_editorial_minimal"),
         ],
     )
     def test_format_pymol_style_command_for_derived_styles_on_1_mer(
@@ -997,6 +1002,10 @@ class TestPyMOLStyleCommands:
                 "neon_coordination_core",
                 "render_neon_coordination_core 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
             ),
+            (
+                "editorial_minimal",
+                "render_editorial_minimal 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+            ),
         ],
     )
     def test_format_pymol_style_command_passes_highlight_bonds_for_derived_styles(
@@ -1014,6 +1023,33 @@ class TestPyMOLStyleCommands:
         )
 
         assert command == expected_command
+
+    def test_render_editorial_minimal_defines_expected_visual_parameters(self):
+        source = inspect.getsource(render_editorial_minimal)
+
+        assert 'cmd.select("editorial_metal", f"{sel} and elem Mn")' in source
+        assert "within 2.8 of editorial_metal" in source
+        assert "elem C within 2.2 of editorial_metal" in source
+        assert "elem O and neighbor editorial_co_carbons" in source
+        assert "elem H within 1.8 of editorial_metal" in source
+        assert '_safe_set("sphere_scale", 0.60, "editorial_metal")' in source
+        assert (
+            '_safe_set("sphere_scale", 0.36, "editorial_n_donors")' in source
+        )
+        assert (
+            '_safe_set("sphere_scale", 0.39, "editorial_s_donors")' in source
+        )
+        assert (
+            '_safe_set("sphere_scale", 0.26, "editorial_co_carbons")' in source
+        )
+        assert (
+            '_safe_set("sphere_scale", 0.21, "editorial_co_oxygens")' in source
+        )
+        assert '_safe_set("stick_radius", 0.12, sel)' in source
+        assert '_safe_set("field_of_view", 45)' in source
+        assert 'cmd.color("mn_rose", "editorial_metal")' in source
+        assert 'cmd.color("sulfur_gold", "editorial_s_donors")' in source
+        assert '_safe_set("ambient_occlusion_mode", 1)' in source
 
     def test_hybrid_is_not_a_derived_style(self):
         with pytest.raises(ValueError, match="not available"):
@@ -1153,4 +1189,31 @@ class TestPyMOLScientificStyleVisualizationJobs:
             PyMOLScientificStyleVisualizationJobRunner._format_style_command(
                 job, job.label
             ).startswith("metallic_poster_render")
+        )
+
+    def test_editorial_minimal_style_job_on_1_mer_xyz(
+        self,
+        tmpdir,
+        visualized_1_mer_xyz_file,
+        pymol_scientific_style_visualization_jobrunner,
+    ):
+        job = PyMOLScientificStyleVisualizationJob.from_filename(
+            visualized_1_mer_xyz_file,
+            jobrunner=pymol_scientific_style_visualization_jobrunner,
+            style="editorial-minimal",
+            coordinates=self.coordination_bonds_1_mer,
+        )
+        job.set_folder(tmpdir)
+        job.run()
+
+        assert job.is_complete()
+        assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
+        assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
+            == "render_editorial_minimal "
+            f"{job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
         )

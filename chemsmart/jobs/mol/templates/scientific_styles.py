@@ -739,19 +739,133 @@ def _show_coord_ball_and_stick(selection, spheres="coord_core"):
     cmd.show("spheres", spheres)
 
 
+def _define_editorial_minimal_colors():
+    """Register palette used by the editorial-minimal style."""
+    _define_scientific_colors()
+    for name, rgb in {
+        "mn_rose": [0.78, 0.38, 0.48],
+        "sulfur_gold": [0.95, 0.68, 0.05],
+        "hydrogen_soft": [0.88, 0.88, 0.86],
+    }.items():
+        try:
+            cmd.set_color(name, rgb)
+        except Exception:
+            pass
+
+
 def render_editorial_minimal(selection="all", highlight_bonds=""):
     """Editorial minimal white style for main-text mechanistic figures."""
-    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
-    _show_coord_ball_and_stick(selection)
-    _apply_coord_sphere_scales(0.095, 0.135, 0.24, 0.12, 0.45, 0.32)
-    _color_by_element(carbon="sci_C_gray", metal="metal_gold")
-    _apply_lighting(0.25, 0.05, 0.42, 0.62, 0.05, spec_power=80)
-    _apply_view(orthoscopic=1, field_of_view=25, fog_start=0.65)
-    _finish_scientific_style(
-        selection,
-        highlight_bonds=highlight_bonds,
-        message="Editorial minimal white style applied.",
+    highlight_bonds = _normalize_none(highlight_bonds)
+    sel = f"({selection})"
+
+    for name in (
+        "editorial_metal",
+        "editorial_donors",
+        "editorial_n_donors",
+        "editorial_s_donors",
+        "editorial_co_carbons",
+        "editorial_co_oxygens",
+        "editorial_important_H",
+        "editorial_sphere_atoms",
+    ):
+        cmd.delete(name)
+
+    _define_editorial_minimal_colors()
+    cmd.hide("everything", sel)
+
+    cmd.select("editorial_metal", f"{sel} and elem Mn")
+    cmd.select(
+        "editorial_donors",
+        f"{sel} and (elem N+S) within 2.8 of editorial_metal",
     )
+    cmd.select("editorial_n_donors", "editorial_donors and elem N")
+    cmd.select("editorial_s_donors", "editorial_donors and elem S")
+    cmd.select(
+        "editorial_co_carbons",
+        f"{sel} and elem C within 2.2 of editorial_metal",
+    )
+    cmd.select(
+        "editorial_co_oxygens",
+        f"{sel} and elem O and neighbor editorial_co_carbons",
+    )
+    cmd.select(
+        "editorial_important_H",
+        f"{sel} and elem H within 1.8 of editorial_metal",
+    )
+    cmd.select(
+        "editorial_sphere_atoms",
+        "editorial_metal or editorial_donors or editorial_co_carbons "
+        "or editorial_important_H",
+    )
+
+    cmd.show("sticks", sel)
+    cmd.show("spheres", "editorial_sphere_atoms")
+    cmd.show("spheres", "editorial_co_oxygens")
+    cmd.hide("sticks", f"{sel} and elem H and not editorial_important_H")
+    cmd.hide("spheres", f"{sel} and elem H and not editorial_important_H")
+
+    _safe_set("sphere_scale", 0.60, "editorial_metal")
+    _safe_set("sphere_scale", 0.36, "editorial_n_donors")
+    _safe_set("sphere_scale", 0.39, "editorial_s_donors")
+    _safe_set("sphere_scale", 0.26, "editorial_co_carbons")
+    _safe_set("sphere_scale", 0.21, "editorial_co_oxygens")
+    _safe_set("sphere_scale", 0.26, "editorial_important_H")
+
+    _safe_set("stick_radius", 0.12, sel)
+    _safe_set("stick_radius", 0.15, f"{sel} and within 2.8 of editorial_metal")
+    _safe_set("stick_radius", 0.07, f"{sel} and elem H")
+    _safe_set("stick_quality", 30)
+
+    cmd.color("mn_rose", "editorial_metal")
+    cmd.color("sulfur_gold", "editorial_s_donors")
+    cmd.color("sci_N_blue", "editorial_n_donors")
+    cmd.color("sci_C_gray", "editorial_co_carbons")
+    cmd.color("sci_O_red", "editorial_co_oxygens")
+    cmd.color("hydrogen_soft", "editorial_important_H")
+    cmd.color(
+        "sci_C_gray",
+        f"{sel} and elem C and not editorial_co_carbons",
+    )
+
+    _set_transparent_background()
+    _safe_set("orthoscopic", 1)
+    _safe_set("field_of_view", 45)
+
+    _safe_set("ambient", 0.22)
+    _safe_set("direct", 0.80)
+    _safe_set("specular", 0.72)
+    _safe_set("spec_reflect", 0.55)
+    _safe_set("spec_power", 220)
+    _safe_set("shininess", 75)
+    _safe_set("ray_shadow", "on")
+    _safe_set("ambient_occlusion_mode", 1)
+    _safe_set("ambient_occlusion_scale", 15)
+    _safe_set("ambient_occlusion_smooth", 10)
+
+    _safe_set("specular", 0.85, "editorial_metal")
+    _safe_set("shininess", 90, "editorial_metal")
+    _safe_set(
+        "specular",
+        0.15,
+        "editorial_donors or editorial_co_carbons or editorial_important_H",
+    )
+    _safe_set(
+        "shininess",
+        20,
+        "editorial_donors or editorial_co_carbons or editorial_important_H",
+    )
+
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(
+            highlight_bonds,
+            sel,
+            "editorial_metal",
+        )
+
+    _base_quality()
+    cmd.label("all", '""')
+    _finish_style(selection)
+    print("Editorial minimal white style applied.")
 
 
 def render_black_gold_cover(selection="all", highlight_bonds=""):
