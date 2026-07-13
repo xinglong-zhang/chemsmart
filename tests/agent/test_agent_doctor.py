@@ -10,7 +10,6 @@ import logging
 import sys
 from unittest.mock import MagicMock
 
-import pytest
 from click.testing import CliRunner
 
 from chemsmart.agent.cli import agent
