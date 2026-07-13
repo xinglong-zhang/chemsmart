@@ -16,8 +16,6 @@ from chemsmart.jobs.mol.runner import (
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
     PyMOLSpinJobRunner,
-    format_comic_highlight_bonds,
-    format_pymol_style_command,
     normalize_pymol_style,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
@@ -918,7 +916,9 @@ class TestPyMOLStyleCommands:
         coordinates = self.coordination_bonds_1_mer + [[2, 3, 4]]
 
         assert (
-            format_comic_highlight_bonds(coordinates)
+            PyMOLScientificStyleVisualizationJobRunner._format_comic_highlight_bonds(
+                coordinates
+            )
             == "1-2+1-5+1-36+1-3+1-15+1-8"
         )
 
@@ -928,7 +928,11 @@ class TestPyMOLStyleCommands:
             coordinates=self.coordination_bonds_1_mer,
         )
 
-        command = format_pymol_style_command(job, self.label_1_mer)
+        command = (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, self.label_1_mer
+            )
+        )
 
         assert (
             command
@@ -943,7 +947,11 @@ class TestPyMOLStyleCommands:
             coordinates=None,
         )
 
-        command = format_pymol_style_command(job, self.label_1_mer)
+        command = (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, self.label_1_mer
+            )
+        )
 
         assert (
             command
@@ -963,7 +971,11 @@ class TestPyMOLStyleCommands:
     ):
         job = SimpleNamespace(style=style, coordinates=None)
 
-        command = format_pymol_style_command(job, self.label_1_mer)
+        command = (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, self.label_1_mer
+            )
+        )
 
         assert command.startswith(expected_command)
         assert self.label_1_mer in command
@@ -1035,7 +1047,9 @@ class TestPyMOLScientificStyleVisualizationJobs:
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
         assert (
-            format_pymol_style_command(job, job.label)
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
             == f"render_comic_metallic_labeled_final {job.label}"
         )
 
@@ -1058,7 +1072,9 @@ class TestPyMOLScientificStyleVisualizationJobs:
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
         assert (
-            format_pymol_style_command(job, job.label)
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            )
             == f"render_comic_metallic_labeled_final {job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
         )
         runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
@@ -1084,6 +1100,8 @@ class TestPyMOLScientificStyleVisualizationJobs:
         assert os.path.exists(os.path.join(tmpdir, "scientific_styles.py"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.xyz"))
         assert os.path.exists(os.path.join(tmpdir, f"{job.label}.pse"))
-        assert format_pymol_style_command(job, job.label).startswith(
-            "metallic_poster_render"
+        assert (
+            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                job, job.label
+            ).startswith("metallic_poster_render")
         )
