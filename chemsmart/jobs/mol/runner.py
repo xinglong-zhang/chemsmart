@@ -9,6 +9,7 @@ and process management; specialized runners extend it with job-specific
 commands and post-processing (e.g., FFmpeg movie creation).
 """
 
+import copy
 import glob
 import logging
 import math
@@ -92,10 +93,13 @@ def get_pymol_style_template_filename(style):
     return PYMOL_STYLE_TEMPLATES[normalize_pymol_style(style)]
 
 
-def parse_pymol_coordinate_bonds(coordinates):
-    """Return 2-atom bond pairs from visualize ``-c`` coordinate specs."""
+def format_comic_highlight_bonds(coordinates):
+    """Encode 2-atom ``-c`` bond pairs for ``render_comic_metallic_labeled_final``.
+
+    Uses the same free-format coordinate path as ``_add_coordinates_labels``.
+    """
     if not coordinates:
-        return []
+        return ""
 
     prepend_string_list = get_prepend_string_list_from_modred_free_format(
         input_modred=coordinates,
@@ -107,12 +111,6 @@ def parse_pymol_coordinate_bonds(coordinates):
             indices = [int(value) for value in prepend_string.split()[1:]]
             if len(indices) == 2:
                 bonds.append((indices[0], indices[1]))
-    return bonds
-
-
-def format_comic_highlight_bonds(coordinates):
-    """Encode bond pairs for ``render_comic_metallic_labeled_final``."""
-    bonds = parse_pymol_coordinate_bonds(coordinates)
     if not bonds:
         return ""
     return "+".join(f"{atom_a}-{atom_b}" for atom_a, atom_b in bonds)
@@ -609,12 +607,10 @@ class PyMOLJobRunner(JobRunner):
                         [int(i) for i in prepend_string.split()[1:]]
                     )
 
-            hide_bond_distance_labels = (
-                normalize_pymol_style(getattr(job, "style", None)) == "comic"
-            )
-            if not hide_bond_distance_labels:
-                for i, distance in enumerate(distances):
-                    command += f"; distance d{i+1}, id {distance[0]}, id {distance[1]}"
+            for i, distance in enumerate(distances):
+                command += (
+                    f"; distance d{i+1}, id {distance[0]}, id {distance[1]}"
+                )
             for i, angle in enumerate(angles):
                 command += f"; angle a{i+1}, id {angle[0]}, id {angle[1]}, id {angle[2]}"
             for i, dihedral in enumerate(dihedrals):
@@ -1119,6 +1115,35 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
     """PyMOL job runner for derived scientific_styles.py visualization jobs."""
 
     JOBTYPES = ["pymol_scientific_style_visualization"]
+
+    @staticmethod
+    def _coordinates_for_non_bond_labels(coordinates):
+        """Return angle/dihedral specs; comic bonds use highlight styling instead."""
+        if not coordinates:
+            return coordinates
+
+        prepend_string_list = get_prepend_string_list_from_modred_free_format(
+            input_modred=coordinates,
+            program="pymol",
+        )
+        label_coordinates = []
+        for prepend_string in prepend_string_list:
+            if prepend_string.startswith(("A", "D")):
+                label_coordinates.append(
+                    [int(value) for value in prepend_string.split()[1:]]
+                )
+        return label_coordinates or None
+
+    def _add_coordinates_labels(self, job, command):
+        """For comic, skip distance labels; bonds go through highlight styling."""
+        if normalize_pymol_style(job.style) == "comic" and job.coordinates:
+            label_job = copy.copy(job)
+            label_job.coordinates = self._coordinates_for_non_bond_labels(
+                job.coordinates
+            )
+            return super()._add_coordinates_labels(label_job, command)
+
+        return super()._add_coordinates_labels(job, command)
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):

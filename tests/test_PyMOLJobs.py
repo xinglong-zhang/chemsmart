@@ -12,13 +12,13 @@ from chemsmart.jobs.mol.mo import PyMOLMOJob
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
 from chemsmart.jobs.mol.runner import (
+    PyMOLJobRunner,
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
     PyMOLSpinJobRunner,
     format_comic_highlight_bonds,
     format_pymol_style_command,
     normalize_pymol_style,
-    parse_pymol_coordinate_bonds,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.visualize import (
@@ -914,21 +914,11 @@ class TestPyMOLStyleCommands:
         assert molecules[0].num_atoms == 36
         assert "Mn" in molecules[0].elements
 
-    def test_parse_pymol_coordinate_bonds_extracts_bond_pairs(self):
+    def test_format_comic_highlight_bonds_encodes_bond_pairs(self):
         coordinates = self.coordination_bonds_1_mer + [[2, 3, 4]]
 
-        assert parse_pymol_coordinate_bonds(coordinates) == [
-            (1, 2),
-            (1, 5),
-            (1, 36),
-            (1, 3),
-            (1, 15),
-            (1, 8),
-        ]
-
-    def test_format_comic_highlight_bonds_encodes_bond_pairs(self):
         assert (
-            format_comic_highlight_bonds(self.coordination_bonds_1_mer)
+            format_comic_highlight_bonds(coordinates)
             == "1-2+1-5+1-36+1-3+1-15+1-8"
         )
 
@@ -996,10 +986,16 @@ class TestPyMOLStyleCommands:
         assert "distance d" not in command
         assert "angle a1" in command
 
+    def test_base_runner_keeps_bond_distance_labels_for_comic_style(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(style="comic", coordinates=[[1, 8]])
+
+        command = runner._add_coordinates_labels(job, "cmd")
+
+        assert "distance d1, id 1, id 8" in command
+
     def test_non_comic_style_keeps_bond_distance_labels(self):
-        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
-            PyMOLScientificStyleVisualizationJobRunner
-        )
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
         job = SimpleNamespace(style="pymol", coordinates=[[1, 8]])
 
         command = runner._add_coordinates_labels(job, "cmd")
