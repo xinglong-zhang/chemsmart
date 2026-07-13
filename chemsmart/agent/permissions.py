@@ -33,12 +33,20 @@ class ResolvedDecision(str, Enum):
 
 
 DRIVING_DEFAULT_DENY = {"run_local", "submit_hpc", "remote_probe"}
-ALWAYS_REQUIRE_APPROVAL = {"wizard_write", "write_project_yaml"}
+ALWAYS_REQUIRE_APPROVAL = {
+    "wizard_write",
+    "write_project_yaml",
+    "update_project_yaml",
+    "execute_chemsmart_command",
+}
 READ_ONLY_TOOLS = {
     "read",
     "ssh_probe",
     "scheduler_query",
     "log_tail",
+    "synthesize_command",
+    "repair_command",
+    "read_project_yaml",
     "extract_project_protocol",
     "render_project_yaml",
     "validate_project_yaml",
@@ -77,6 +85,7 @@ class ResolvedPermission:
 class PermissionPolicy:
     mode: PermissionPolicyMode
     yolo: bool = False
+    prompt_risky: bool = False
     session_allow: set[str] = field(default_factory=set)
     driving_denylist: set[str] = field(
         default_factory=lambda: set(DRIVING_DEFAULT_DENY)
@@ -87,6 +96,7 @@ class PermissionPolicy:
             req,
             mode=self.mode,
             yolo=self.yolo,
+            prompt_risky=self.prompt_risky,
             session_allow=self.session_allow,
             driving_denylist=self.driving_denylist,
         )
@@ -145,6 +155,7 @@ def resolve(
     mode: PermissionPolicyMode,
     *,
     yolo: bool = False,
+    prompt_risky: bool = False,
     session_allow: set[str] | None = None,
     driving_denylist: set[str] | None = None,
 ) -> ResolvedPermission:
@@ -203,6 +214,11 @@ def resolve(
                 return ResolvedPermission(
                     decision=ResolvedDecision.AUTO_ALLOW,
                     reason="yolo",
+                )
+            if prompt_risky:
+                return ResolvedPermission(
+                    decision=ResolvedDecision.NEEDS_USER,
+                    reason="risky_tool_requires_approval",
                 )
             return ResolvedPermission(
                 decision=ResolvedDecision.AUTO_DENY,

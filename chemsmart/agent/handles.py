@@ -54,7 +54,7 @@ class HandleStore:
             raise TypeError("Handle summaries must be dict objects")
 
         handle_id = self._mint(kind)
-        safe_summary = _json_safe(summary)
+        safe_summary = json_safe(summary)
         self._objects[handle_id] = obj
         self._summaries[handle_id] = safe_summary
         self._kinds[handle_id] = kind
@@ -111,11 +111,59 @@ def is_handle_id(value: str) -> bool:
     return HANDLE_ID_RE.match(value) is not None
 
 
-def _json_safe(value: Any) -> Any:
+def result_handle_kind(tool_name: str, result: Any) -> str | None:
+    """Return the persisted handle kind for a tool result, when applicable."""
+
+    scalar_kinds = {
+        "build_molecule": "mol",
+        "build_gaussian_settings": "gset",
+        "build_orca_settings": "oset",
+        "build_job": "job",
+        "extract_optimized_geometry": "geom",
+    }
+    if tool_name in scalar_kinds:
+        return scalar_kinds[tool_name]
+    mapping_kinds = {
+        "dry_run_input": "dryrun",
+        "validate_runtime": "runtime",
+        "run_local": "runresult",
+        "recommend_method": "recmethod",
+    }
+    if tool_name in mapping_kinds and isinstance(result, dict):
+        return mapping_kinds[tool_name]
+    if (
+        tool_name == "submit_hpc"
+        and isinstance(result, dict)
+        and "job_id" in result
+    ):
+        return "submit"
+    return None
+
+
+def store_result_handle(
+    handle_store: HandleStore | None,
+    tool_name: str,
+    result: Any,
+    *,
+    summary: dict[str, Any],
+) -> str | None:
+    """Persist a handle for a supported tool result."""
+
+    if handle_store is None:
+        return None
+    kind = result_handle_kind(tool_name, result)
+    if kind is None:
+        return None
+    return handle_store.put(kind=kind, obj=result, summary=summary)
+
+
+def json_safe(value: Any) -> Any:
+    """Convert a generic tool result into a JSON-safe summary value."""
+
     if isinstance(value, dict):
-        return {str(key): _json_safe(item) for key, item in value.items()}
+        return {str(key): json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_json_safe(item) for item in value]
+        return [json_safe(item) for item in value]
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, bytes):

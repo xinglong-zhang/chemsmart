@@ -4,10 +4,14 @@ import json
 from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable
 
-from chemsmart.agent.handles import HandleStore, is_handle_id
+from chemsmart.agent.handles import (
+    HandleStore,
+    is_handle_id,
+    json_safe,
+    store_result_handle,
+)
 from chemsmart.agent.permissions import (
     ApprovalDecision,
     PermissionMode,
@@ -20,6 +24,7 @@ from chemsmart.agent.provider_adapter import (
     ToolRequest,
     build_tool_result_messages,
     normalize_response,
+    response_payload,
 )
 from chemsmart.agent.providers import (
     DEFAULT_TIMEOUT_S,
@@ -124,7 +129,7 @@ class ToolLoop:
                 tools=tool_defs,
                 timeout_s=DEFAULT_TIMEOUT_S,
             )
-            response_dict = _response_payload(response)
+            response_dict = response_payload(response)
             if self.budgets.log_provider_turn_raw:
                 self.decision_log.write(
                     "provider_turn_raw",
@@ -695,30 +700,18 @@ class ToolLoop:
         self,
         provider_name: str,
     ) -> list[dict[str, Any]]:
-        if hasattr(self.registry, "tool_defs_for_provider"):
-            return with_virtual_tool_defs(
-                provider_name,
-                self.registry.tool_defs_for_provider(provider_name),
-            )
-        return with_virtual_tool_defs(
-            provider_name,
-            self.registry.openai_tool_defs(),
-        )
+        return registry_tool_defs_for_provider(self.registry, provider_name)
 
     def _store_result_handle(
         self,
         tool_name: str,
         result: Any,
     ) -> str | None:
-        if self.handle_store is None:
-            return None
-        kind = _result_handle_kind(tool_name, result)
-        if kind is None:
-            return None
-        return self.handle_store.put(
-            kind=kind,
-            obj=result,
-            summary=_json_safe(result),
+        return store_result_handle(
+            self.handle_store,
+            tool_name,
+            result,
+            summary=json_safe(result),
         )
 
 
@@ -744,22 +737,12 @@ def _canonical_args_json(request: ToolRequest) -> str:
 
 def _display_result(result: Any, *, handle_id: str | None) -> Any:
     if handle_id is None:
-        return _json_safe(result)
+        return json_safe(result)
     payload: dict[str, Any] = {"handle_id": handle_id}
-    summary = _json_safe(result)
+    summary = json_safe(result)
     if isinstance(summary, dict):
         payload["summary"] = summary
     return payload
-
-
-def _response_payload(response: Any) -> dict[str, Any]:
-    if isinstance(response, dict):
-        return response
-    if hasattr(response, "model_dump"):
-        payload = response.model_dump()
-        if isinstance(payload, dict):
-            return payload
-    raise TypeError("Provider response must be a dict-like payload")
 
 
 def with_virtual_tool_defs(
@@ -773,6 +756,19 @@ def with_virtual_tool_defs(
         return defs
     defs.append(_ask_user_tool_def_for_provider(provider_name))
     return defs
+
+
+def registry_tool_defs_for_provider(
+    registry: ToolRegistry,
+    provider_name: str,
+) -> list[dict[str, Any]]:
+    """Return provider-native registry definitions plus virtual tools."""
+
+    if hasattr(registry, "tool_defs_for_provider"):
+        tool_defs = registry.tool_defs_for_provider(provider_name)
+    else:
+        tool_defs = registry.openai_tool_defs()
+    return with_virtual_tool_defs(provider_name, tool_defs)
 
 
 def _ask_user_tool_def_for_provider(provider_name: str) -> dict[str, Any]:
@@ -827,45 +823,3 @@ def _is_tool_error(result: Any) -> bool:
         and result.get("ok") is False
         and "error" in result
     )
-
-
-def _result_handle_kind(tool_name: str, result: Any) -> str | None:
-    if tool_name == "build_molecule":
-        return "mol"
-    if tool_name == "build_gaussian_settings":
-        return "gset"
-    if tool_name == "build_orca_settings":
-        return "oset"
-    if tool_name == "build_job":
-        return "job"
-    if tool_name == "dry_run_input" and isinstance(result, dict):
-        return "dryrun"
-    if tool_name == "validate_runtime" and isinstance(result, dict):
-        return "runtime"
-    if tool_name == "run_local" and isinstance(result, dict):
-        return "runresult"
-    if tool_name == "extract_optimized_geometry":
-        return "geom"
-    if (
-        tool_name == "submit_hpc"
-        and isinstance(result, dict)
-        and "job_id" in result
-    ):
-        return "submit"
-    if tool_name == "recommend_method" and isinstance(result, dict):
-        return "recmethod"
-    return None
-
-
-def _json_safe(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(key): _json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, bytes):
-        return {"type": "bytes", "length": len(value)}
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return {"type": value.__class__.__name__, "repr": repr(value)}

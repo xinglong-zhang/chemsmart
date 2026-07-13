@@ -507,12 +507,45 @@ def test_legacy_driving_regression_snapshot(tool, yolo, expected):
     assert resolved == expected
 
 
+@pytest.mark.parametrize("tool", ["run_local", "submit_hpc"])
+def test_prompt_risky_converts_driving_deny_to_user_approval(tool):
+    resolved = PermissionPolicy(
+        mode=PermissionMode.DRIVING,
+        prompt_risky=True,
+    ).resolve(make_request(tool))
+
+    assert resolved == ResolvedPermission(
+        decision=ResolvedDecision.NEEDS_USER,
+        reason="risky_tool_requires_approval",
+    )
+
+
+@pytest.mark.parametrize(
+    "tool",
+    ["update_project_yaml", "execute_chemsmart_command"],
+)
+def test_unified_risky_tools_always_require_approval(tool):
+    resolved = PermissionPolicy(
+        mode=PermissionMode.DRIVING,
+        yolo=True,
+        prompt_risky=True,
+    ).resolve(make_request(tool))
+
+    assert resolved == ResolvedPermission(
+        decision=ResolvedDecision.NEEDS_USER,
+        reason="always_require_approval",
+    )
+
+
 def test_runtime_permission_mode_placeholders_are_stable():
     assert READ_ONLY_TOOLS == {
         "read",
         "ssh_probe",
         "scheduler_query",
         "log_tail",
+        "synthesize_command",
+        "repair_command",
+        "read_project_yaml",
         "extract_project_protocol",
         "render_project_yaml",
         "validate_project_yaml",

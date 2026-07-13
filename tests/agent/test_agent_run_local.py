@@ -9,7 +9,6 @@ from chemsmart.agent.tools import (
     run_local,
 )
 
-
 def _build_job(single_molecule_xyz_file, tmp_path: Path):
     molecule = build_molecule(single_molecule_xyz_file)
     settings = build_gaussian_settings("B3LYP", "6-31G*")

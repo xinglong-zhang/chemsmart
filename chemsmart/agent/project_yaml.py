@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
-import os
+import json
 import re
 import tempfile
 from copy import deepcopy
+from difflib import unified_diff
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+
+from chemsmart.agent.harness.basis_sets import resolve_basis_name
+from chemsmart.agent.harness.workflow_state import (
+    current_workflow_state,
+    select_workspace_project,
+)
+from chemsmart.settings.workspace_project import (
+    resolve_workspace_project,
+    workspace_project_path,
+)
 
 ProjectProgram = Literal["gaussian", "orca"]
 
@@ -63,8 +74,7 @@ def extract_project_protocol(
     heavy_elements = sorted(heavy_basis)
     protocol_notes = _extract_protocol_notes(source)
     freq = _mentions_frequency_confirmation(lowered)
-
-    return {
+    result = {
         "ok": True,
         "project_name": name,
         "program": normalized_program,
@@ -86,6 +96,10 @@ def extract_project_protocol(
         "protocol_notes": protocol_notes,
         "unsupported_yaml_features": _unsupported_protocol_features(lowered),
     }
+    td_method = _extract_td_method(source)
+    if td_method is not None:
+        result["td"] = td_method
+    return result
 
 
 def render_project_yaml(
@@ -102,6 +116,46 @@ def render_project_yaml(
         project_name or str(protocol.get("project_name") or "project")
     )
     method = _method_from_protocol(protocol)
+
+    block = _render_method_block(method, normalized_program)
+    solv_freq = bool(method.get("solv_freq", False))
+
+    # The current chemsmart project loader uses `gas` for opt/ts/scan/etc. and
+    # `solv` for sp jobs. A gas-phase project still needs a solv-shaped method
+    # block with no solvent fields so all job settings can be constructed.
+    gas_block = deepcopy(block)
+    solv_block = deepcopy(block)
+    solv_block["freq"] = solv_freq
+    solvent_model = _string_or_none(method.get("solvent_model"))
+    solvent_id = _string_or_none(method.get("solvent_id"))
+    if solvent_model and solvent_id:
+        solv_block["solvent_model"] = solvent_model
+        solv_block["solvent_id"] = solvent_id
+
+    document = {"gas": gas_block, "solv": solv_block}
+    td_method = protocol.get("td")
+    if normalized_program == "gaussian" and isinstance(td_method, dict):
+        # Gaussian's TD-DFT subcommand reads a distinct top-level `td` block.
+        # Preserve an explicitly extracted excited-state method instead of
+        # forcing the tool loop to patch YAML by trial and error.
+        document["td"] = _render_method_block(td_method, normalized_program)
+    yaml_text = yaml.safe_dump(document, sort_keys=False)
+    return {
+        "ok": True,
+        "project_name": name,
+        "program": normalized_program,
+        "yaml_text": yaml_text,
+        "unsupported_yaml_features": protocol.get(
+            "unsupported_yaml_features", []
+        ),
+    }
+
+
+def _render_method_block(
+    method: dict[str, Any],
+    program: str,
+) -> dict[str, Any]:
+    """Normalize one gas/solv/TD method section for project YAML output."""
 
     functional = _string_or_none(method.get("functional_route"))
     if functional is None:
@@ -121,12 +175,10 @@ def render_project_yaml(
         _normalize_basis_if_known(_string_or_none(method.get("basis")))
         or "def2svp"
     )
-    freq = bool(method.get("freq", True))
-    solv_freq = bool(method.get("solv_freq", False))
     block: dict[str, Any] = {
         "functional": functional,
         "basis": basis,
-        "freq": freq,
+        "freq": bool(method.get("freq", True)),
     }
 
     heavy_elements = _string_list(method.get("heavy_elements"))
@@ -140,10 +192,6 @@ def render_project_yaml(
         light_basis = light_basis or basis
         basis = "gen"
         block["basis"] = basis
-    # Mixed-basis (heavy/light) sections are only valid under gen/genecp. For a
-    # plain single-basis protocol (no heavy elements) emitting light_elements_basis
-    # would trip the chemsmart loader's mixed-basis-without-gen guard, so only
-    # attach these sections when the basis is actually gen/genecp.
     if basis in {"gen", "genecp"}:
         if heavy_elements:
             block["heavy_elements"] = heavy_elements
@@ -152,35 +200,15 @@ def render_project_yaml(
         if light_basis:
             block["light_elements_basis"] = light_basis
 
-    if normalized_program == "orca":
-        if _string_or_none(method.get("dispersion")) == "d3bj":
+    if program == "orca":
+        dispersion = _string_or_none(method.get("dispersion"))
+        if dispersion == "d3bj":
             block["dispersion"] = "D3BJ"
+        elif dispersion == "d3":
+            block["dispersion"] = "D3"
         if basis == "gen":
             block["basis"] = light_basis or "def2-svp"
-
-    # The current chemsmart project loader uses `gas` for opt/ts/scan/etc. and
-    # `solv` for sp jobs. A gas-phase project still needs a solv-shaped method
-    # block with no solvent fields so all job settings can be constructed.
-    gas_block = deepcopy(block)
-    solv_block = deepcopy(block)
-    solv_block["freq"] = solv_freq
-    solvent_model = _string_or_none(method.get("solvent_model"))
-    solvent_id = _string_or_none(method.get("solvent_id"))
-    if solvent_model and solvent_id:
-        solv_block["solvent_model"] = solvent_model
-        solv_block["solvent_id"] = solvent_id
-
-    document = {"gas": gas_block, "solv": solv_block}
-    yaml_text = yaml.safe_dump(document, sort_keys=False)
-    return {
-        "ok": True,
-        "project_name": name,
-        "program": normalized_program,
-        "yaml_text": yaml_text,
-        "unsupported_yaml_features": protocol.get(
-            "unsupported_yaml_features", []
-        ),
-    }
+    return block
 
 
 def _coerce_yaml_text(value: Any) -> str:
@@ -365,7 +393,7 @@ def write_project_yaml(
     program: ProjectProgram = "gaussian",
     overwrite: bool = False,
 ) -> dict[str, Any]:
-    """Write a validated project YAML into ``~/.chemsmart/<program>``."""
+    """Write a validated project YAML into the current workspace."""
 
     yaml_text = _coerce_yaml_text(yaml_text)
     normalized_program = _normalize_program(program)
@@ -384,7 +412,7 @@ def write_project_yaml(
             "validation": validation,
             "error": "project YAML failed validation",
         }
-    target = Path.home() / ".chemsmart" / normalized_program / f"{name}.yaml"
+    target = workspace_project_path(name, normalized_program)
     if target.exists() and not overwrite:
         return {
             "ok": False,
@@ -396,6 +424,7 @@ def write_project_yaml(
         }
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_normalize_yaml_text(yaml_text), encoding="utf-8")
+    state_delta = select_workspace_project(name, normalized_program)
     return {
         "ok": True,
         "project_name": name,
@@ -403,19 +432,206 @@ def write_project_yaml(
         "written_path": str(target),
         "overwrite": overwrite,
         "validation": validation,
+        "state_delta": {"project": state_delta},
+    }
+
+
+def read_project_yaml(
+    project_name: str = "",
+    program: str = "",
+) -> dict[str, Any]:
+    """Read the active workspace project YAML and summarize runtime settings."""
+
+    resolved = _resolve_project_yaml_target(project_name, program)
+    if resolved["path"] is None:
+        return {
+            "ok": False,
+            "project_name": resolved["project_name"],
+            "program": resolved["program"],
+            "path": None,
+            "candidates": resolved["candidates"],
+            "message": resolved["message"],
+        }
+    path = Path(str(resolved["path"]))
+    yaml_text = path.read_text(encoding="utf-8")
+    validation = validate_project_yaml(
+        yaml_text,
+        program=resolved["program"],
+        project_name=resolved["project_name"],
+    )
+    state_delta = (
+        select_workspace_project(
+            resolved["project_name"], resolved["program"]
+        )
+        if validation.get("verdict") != "reject"
+        else {"selected": False, "rule_id": "workflow.project.invalid"}
+    )
+    return {
+        "ok": True,
+        "project_name": resolved["project_name"],
+        "program": resolved["program"],
+        "path": str(path),
+        "yaml_text": yaml_text,
+        "parsed": yaml.safe_load(yaml_text) or {},
+        "validation": validation,
+        "runtime_summary": validation.get("runtime_summary"),
+        "state_delta": {"project": state_delta},
+    }
+
+
+def update_project_yaml(
+    updates: dict[str, Any] | str | None = None,
+    project_name: str = "",
+    program: str = "",
+    unset: list[str] | None = None,
+) -> dict[str, Any]:
+    """Patch an existing workspace project YAML after validation."""
+
+    if isinstance(updates, str):
+        try:
+            decoded = json.loads(updates)
+        except json.JSONDecodeError as exc:
+            return {
+                "ok": False,
+                "project_name": _normalize_project_name(project_name),
+                "program": str(program or ""),
+                "written_path": None,
+                "rule_id": "yaml.update.stringified_json_invalid",
+                "repair_hint": "Pass updates as a JSON object/dictionary.",
+                "error": f"stringified updates could not be decoded: {exc}",
+            }
+        if not isinstance(decoded, dict):
+            return {
+                "ok": False,
+                "project_name": _normalize_project_name(project_name),
+                "program": str(program or ""),
+                "written_path": None,
+                "rule_id": "yaml.update.mapping_required",
+                "repair_hint": "Pass updates as a JSON object/dictionary.",
+                "error": "decoded updates must be a mapping",
+            }
+        updates = decoded
+
+    resolved = _resolve_project_yaml_target(project_name, program)
+    if resolved["path"] is None:
+        return {
+            "ok": False,
+            "project_name": resolved["project_name"],
+            "program": resolved["program"],
+            "written_path": None,
+            "error": resolved["message"]
+            or "workspace project YAML is not loaded",
+        }
+    path = Path(str(resolved["path"]))
+    before_text = path.read_text(encoding="utf-8")
+    try:
+        document = yaml.safe_load(before_text) or {}
+    except yaml.YAMLError as exc:
+        return {
+            "ok": False,
+            "project_name": resolved["project_name"],
+            "program": resolved["program"],
+            "written_path": str(path),
+            "error": f"existing YAML could not be parsed: {exc}",
+        }
+    if not isinstance(document, dict):
+        return {
+            "ok": False,
+            "project_name": resolved["project_name"],
+            "program": resolved["program"],
+            "written_path": str(path),
+            "error": "existing YAML root is not a mapping",
+        }
+
+    patched = deepcopy(document)
+    for dotted, value in (updates or {}).items():
+        _set_dotted_path(patched, str(dotted), value)
+    for dotted in unset or []:
+        _unset_dotted_path(patched, str(dotted))
+
+    after_text = yaml.safe_dump(patched, sort_keys=False)
+    validation = validate_project_yaml(
+        after_text,
+        program=resolved["program"],
+        project_name=resolved["project_name"],
+    )
+    diff = "".join(
+        unified_diff(
+            before_text.splitlines(keepends=True),
+            after_text.splitlines(keepends=True),
+            fromfile=str(path),
+            tofile=str(path),
+        )
+    )
+    if validation["verdict"] == "reject":
+        return {
+            "ok": False,
+            "project_name": resolved["project_name"],
+            "program": resolved["program"],
+            "written_path": str(path),
+            "validation": validation,
+            "diff": diff,
+            "error": "project YAML update failed validation",
+        }
+
+    path.write_text(_normalize_yaml_text(after_text), encoding="utf-8")
+    state_delta = select_workspace_project(
+        resolved["project_name"], resolved["program"]
+    )
+    return {
+        "ok": True,
+        "project_name": resolved["project_name"],
+        "program": resolved["program"],
+        "written_path": str(path),
+        "validation": validation,
+        "diff": diff,
+        "state_delta": {"project": state_delta},
     }
 
 
 def _extract_functional(lowered: str) -> str | None:
-    if "b3lyp" in lowered:
-        return "b3lyp"
-    if "m06-2x" in lowered or "m062x" in lowered:
-        return "m062x"
-    if "pbe0" in lowered:
-        return "pbe0"
-    if re.search(r"\bpbe\b", lowered):
-        return "pbe"
-    return None
+    matches: list[tuple[int, str]] = []
+    for pattern, canonical in (
+        (r"cam[- ]?b3lyp", "camb3lyp"),
+        (r"m06[- ]?2x|m062x", "m062x"),
+        (r"\bpbe0\b", "pbe0"),
+        (r"\bb3lyp\b", "b3lyp"),
+        (r"\bpbe\b", "pbe"),
+    ):
+        match = re.search(pattern, lowered)
+        if match:
+            matches.append((match.start(), canonical))
+    return min(matches, default=(0, None))[1]
+
+
+def _extract_td_method(source: str) -> dict[str, Any] | None:
+    """Extract a separately reported Gaussian TD-DFT method when present."""
+
+    marker = re.search(
+        r"(?i)\b(?:td[- ]?dft|tddft|time[- ]dependent|td)\b",
+        source,
+    )
+    if marker is None:
+        return None
+    excerpt = source[marker.start() : marker.start() + 320]
+    functional = _extract_functional(excerpt.lower())
+    basis = _extract_first_basis(excerpt)
+    if functional is None and basis is None:
+        return None
+    normalized_functional, dispersion = _normalize_functional_and_dispersion(
+        functional,
+        _extract_dispersion(excerpt.lower()),
+    )
+    return {
+        "functional": normalized_functional,
+        "dispersion": dispersion,
+        "functional_route": _functional_route(
+            normalized_functional,
+            dispersion,
+        ),
+        "basis": basis,
+        "freq": True,
+    }
 
 
 def _extract_dispersion(lowered: str) -> str | None:
@@ -436,9 +652,17 @@ def _normalize_functional_and_dispersion(
     inferred_dispersion = dispersion
     if any(alias in lowered for alias in _D3BJ_ALIASES):
         inferred_dispersion = "d3bj"
+    elif re.search(
+        r"(?:\bgd3\b|-d3\b|\bd3\b|empiricaldispersion=gd3\b)", lowered
+    ):
+        # Plain Grimme D3 (zero-damping), e.g. "b3lyp-d3" or
+        # "b3lyp empiricaldispersion=gd3" — distinct from D3BJ and must not
+        # be silently dropped from the rendered route.
+        inferred_dispersion = "d3"
     extracted = _extract_functional(lowered)
     return (
-        extracted or lowered.replace("-d3bj", "").strip("- "),
+        extracted
+        or lowered.replace("-d3bj", "").replace("-d3", "").strip("- "),
         inferred_dispersion,
     )
 
@@ -457,12 +681,14 @@ def _extract_heavy_basis(text: str) -> dict[str, str]:
 
 
 def _extract_light_basis(text: str) -> str | None:
-    match = re.search(
+    patterns = (
         rf"(?i)({_DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?(?:\s+basis\s+set)?\s+for\s+all\s+other\s+atoms",
-        text,
+        rf"(?i)({_DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?(?:\s+basis\s+set)?\s+for\s+light\s+atoms",
     )
-    if match:
-        return _normalize_basis_name(match.group(1))
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return _normalize_basis_name(match.group(1))
     # A bare single basis is the whole-molecule basis, not a mixed-basis
     # "light elements" section. Returning the first basis here would spuriously
     # mark a single-basis protocol as mixed and break rendering/critic. The
@@ -547,6 +773,8 @@ def _functional_route(
         return None
     if dispersion == "d3bj":
         return f"{functional} empiricaldispersion=gd3bj"
+    if dispersion == "d3":
+        return f"{functional} empiricaldispersion=gd3"
     return functional
 
 
@@ -624,8 +852,40 @@ def _static_project_yaml_issues(
                     f"{phase} must be a mapping or null.",
                 )
             )
+        else:
+            issues.extend(_basis_catalog_issues(block, phase, program))
     if program == "gaussian":
         issues.extend(_gaussian_static_issues(parsed))
+    return issues
+
+
+def _basis_catalog_issues(
+    block: dict[str, Any],
+    phase: str,
+    program: str,
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    for key in (
+        "basis",
+        "heavy_elements_basis",
+        "light_elements_basis",
+        "aux_basis",
+    ):
+        value = _string_or_none(block.get(key))
+        if value is None or value.lower() in {"gen", "genecp"}:
+            continue
+        result = resolve_basis_name(value, program=program)
+        if result.verdict == "ok":
+            continue
+        issues.append(
+            _issue(
+                "yaml.basis.program_unsupported"
+                if result.canonical_name
+                else "yaml.basis.unrecognized",
+                "reject",
+                f"{phase}.{key}={value!r}: {result.message}",
+            )
+        )
     return issues
 
 
@@ -737,7 +997,119 @@ def _protocol_alignment_issues(
                 "reported minima/TS confirmation requires harmonic frequency analysis; set gas.freq: true.",
             )
         )
+    td_method = protocol.get("td")
+    if isinstance(td_method, dict):
+        td_block = parsed.get("td") if isinstance(parsed.get("td"), dict) else {}
+        expected_td = _render_method_block(td_method, "gaussian")
+        if not td_block:
+            issues.append(
+                _issue(
+                    "critic.td_block_missing",
+                    "reject",
+                    "reported TD-DFT method requires a top-level td block.",
+                )
+            )
+        else:
+            for key in ("functional", "basis"):
+                if td_block.get(key) != expected_td.get(key):
+                    issues.append(
+                        _issue(
+                            f"critic.td_{key}_mismatch",
+                            "reject",
+                            (
+                                f"td.{key} should be "
+                                f"{expected_td.get(key)!r} for the reported TD-DFT method."
+                            ),
+                        )
+                    )
     return issues
+
+
+def _resolve_project_yaml_target(
+    project_name: str = "",
+    program: str = "",
+) -> dict[str, Any]:
+    requested_program = str(program or "").strip()
+    requested_project = str(project_name or "").strip()
+    if requested_program or requested_project:
+        normalized_program = _normalize_program(
+            requested_program or "gaussian"
+        )
+        normalized_project = _normalize_project_name(
+            requested_project or "project"
+        )
+        path = workspace_project_path(normalized_project, normalized_program)
+        if not path.exists():
+            status = resolve_workspace_project()
+            return {
+                "project_name": normalized_project,
+                "program": normalized_program,
+                "path": None,
+                "candidates": [str(item) for item in status.candidates],
+                "message": (
+                    f"Workspace project YAML not found: {path}. "
+                    f"{status.message}"
+                ),
+            }
+        return {
+            "project_name": normalized_project,
+            "program": normalized_program,
+            "path": str(path),
+            "candidates": [],
+            "message": f"Loaded workspace project YAML: {path}",
+        }
+
+    selected = current_workflow_state().project
+    if selected is not None:
+        selected_path = Path(selected.path)
+        if selected_path.is_file():
+            return {
+                "project_name": selected.name,
+                "program": selected.program,
+                "path": str(selected_path),
+                "candidates": [],
+                "message": f"Loaded selected workspace project YAML: {selected_path}",
+            }
+
+    status = resolve_workspace_project()
+    return {
+        "project_name": status.project,
+        "program": status.program,
+        "path": str(status.path) if status.path is not None else None,
+        "candidates": [str(item) for item in status.candidates],
+        "message": status.message,
+    }
+
+
+def _set_dotted_path(
+    document: dict[str, Any],
+    dotted: str,
+    value: Any,
+) -> None:
+    parts = [part for part in dotted.split(".") if part]
+    if not parts:
+        raise ValueError("update path cannot be empty")
+    cursor: dict[str, Any] = document
+    for part in parts[:-1]:
+        existing = cursor.get(part)
+        if not isinstance(existing, dict):
+            existing = {}
+            cursor[part] = existing
+        cursor = existing
+    cursor[parts[-1]] = value
+
+
+def _unset_dotted_path(document: dict[str, Any], dotted: str) -> None:
+    parts = [part for part in dotted.split(".") if part]
+    if not parts:
+        return
+    cursor: Any = document
+    for part in parts[:-1]:
+        if not isinstance(cursor, dict):
+            return
+        cursor = cursor.get(part)
+    if isinstance(cursor, dict):
+        cursor.pop(parts[-1], None)
 
 
 def _load_project_yaml_via_runtime(

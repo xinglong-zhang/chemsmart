@@ -6,13 +6,9 @@ import inspect
 import json
 import logging
 import os
-import threading
-import time
 import warnings
 from contextlib import contextmanager
 from datetime import datetime, timezone
-
-UTC = timezone.utc
 from pathlib import Path
 
 import click
@@ -60,6 +56,7 @@ from chemsmart.agent.wizard import (
 )
 from chemsmart.agent.wizard.tools import wizard_refresh as run_wizard_refresh
 
+UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
 _INLINE_CLI_STDERR_HINTS = (

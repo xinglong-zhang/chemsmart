@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from chemsmart.agent.tui.app import ChemsmartTuiApp
+from chemsmart.agent.tui.screens.chat import (
+    _find_project_yaml_candidate_for_write,
+    _latest_project_yaml_candidate,
+)
 from chemsmart.agent.tui.widgets.composer import Composer
 
 from .._agent_session_helpers import FakeProvider
@@ -65,7 +70,7 @@ def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
     asyncio.run(scenario())
 
 
-def test_init_enters_project_yaml_build_mode(monkeypatch, tmp_path):
+def test_init_alias_uses_unified_project_yaml_request(monkeypatch, tmp_path):
     session_root = tmp_path / "sessions"
     write_session_fixture(session_root)
 
@@ -91,17 +96,17 @@ def test_init_enters_project_yaml_build_mode(monkeypatch, tmp_path):
             captured: list[str] = []
             monkeypatch.setattr(
                 screen,
-                "run_build_session",
+                "run_unified_session",
                 lambda text: captured.append(text) or _FakeWorker(),
             )
 
-            # Bare /init enters a persistent build mode.
+            # Bare /init is now a helper/alias, not a persistent mode.
             _set_composer_text(app, "/init")
             await pilot.press("enter")
             await pilot.pause()
-            assert screen._build_mode is True
+            assert screen._build_mode is False
 
-            # A subsequent message routes to the project-YAML build harness.
+            # A subsequent natural message routes through the unified session.
             _set_composer_text(
                 app, "Optimize in water with B3LYP-D3BJ/def2-SVP, call it h2o."
             )
@@ -110,15 +115,184 @@ def test_init_enters_project_yaml_build_mode(monkeypatch, tmp_path):
             assert captured == [
                 "Optimize in water with B3LYP-D3BJ/def2-SVP, call it h2o."
             ]
-            assert screen._build_mode is True
-
-            # /mode leaves build mode.
-            _set_composer_text(app, "/mode ask")
-            await pilot.press("enter")
-            await pilot.pause()
             assert screen._build_mode is False
 
+            # /init with an argument injects project-YAML intent.
+            _set_composer_text(app, "/init Use Gaussian B3LYP/def2-SVP, call it co2.")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert captured[-1].startswith(
+                "Build a workspace project YAML from this reported method."
+            )
+            assert "call it co2" in captured[-1]
+
     asyncio.run(scenario())
+
+
+def test_latest_project_yaml_candidate_reads_tool_loop_log(tmp_path):
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    yaml_text = (
+        "gas:\n"
+        "  functional: b3lyp empiricaldispersion=gd3bj\n"
+        "  basis: gen\n"
+        "  freq: true\n"
+    )
+    entries = [
+        {
+            "kind": "tool_use_result",
+            "payload": {
+                "tool": "render_project_yaml",
+                "status": "ok",
+                "payload": {
+                    "ok": True,
+                    "project_name": "co2",
+                    "program": "gaussian",
+                    "yaml_text": yaml_text,
+                },
+            },
+        },
+        {
+            "kind": "tool_use_result",
+            "payload": {
+                "tool": "validate_project_yaml",
+                "status": "ok",
+                "payload": {
+                    "ok": True,
+                    "project_name": "co2",
+                    "program": "gaussian",
+                    "verdict": "ok",
+                    "issues": [],
+                },
+            },
+        }
+    ]
+    (session_dir / "decision_log.jsonl").write_text(
+        "\n".join(json.dumps(entry) for entry in entries) + "\n",
+        encoding="utf-8",
+    )
+
+    candidate = _latest_project_yaml_candidate(session_dir)
+
+    assert candidate == {
+        "project_name": "co2",
+        "program": "gaussian",
+        "yaml_text": yaml_text,
+    }
+
+
+def _render_entry(yaml_text: str, project="co2", program="gaussian"):
+    return {
+        "kind": "tool_use_result",
+        "payload": {
+            "tool": "render_project_yaml",
+            "status": "ok",
+            "payload": {
+                "ok": True,
+                "project_name": project,
+                "program": program,
+                "yaml_text": yaml_text,
+            },
+        },
+    }
+
+
+def _validate_entry(verdict="ok"):
+    return {
+        "kind": "tool_use_result",
+        "payload": {
+            "tool": "validate_project_yaml",
+            "status": "ok",
+            "payload": {"ok": verdict == "ok", "verdict": verdict},
+        },
+    }
+
+
+def test_candidate_survives_identical_rerender_after_validate(tmp_path):
+    # Build-mode over-iteration: the model re-renders the SAME candidate after a
+    # successful validate. That must NOT make the candidate "unvalidated" (the
+    # /write-project "Project write unavailable" chain bug).
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    yaml_text = "gas:\n  functional: b3lyp\n  basis: gen\n  freq: true\n"
+    entries = [
+        _render_entry(yaml_text),
+        _validate_entry("ok"),
+        _render_entry(yaml_text),  # re-render, last tool call
+    ]
+    (session_dir / "decision_log.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+
+    candidate = _latest_project_yaml_candidate(session_dir)
+    assert candidate is not None
+    assert candidate["yaml_text"] == yaml_text
+
+
+def test_changed_candidate_after_validate_requires_revalidation(tmp_path):
+    # A genuinely NEW/changed candidate rendered after a validate must NOT be
+    # treated as validated until it is itself validated.
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    first = "gas:\n  functional: b3lyp\n  basis: def2svp\n"
+    changed = "gas:\n  functional: m062x\n  basis: def2tzvp\n"
+    entries = [
+        _render_entry(first),
+        _validate_entry("ok"),
+        _render_entry(changed),  # different candidate, not yet validated
+    ]
+    (session_dir / "decision_log.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+
+    assert _latest_project_yaml_candidate(session_dir) is None
+
+
+def test_project_yaml_write_candidate_falls_back_to_latest_session(tmp_path):
+    stale = tmp_path / "stale-session"
+    stale.mkdir()
+    (stale / "decision_log.jsonl").write_text("", encoding="utf-8")
+    latest = tmp_path / "latest-session"
+    latest.mkdir()
+    yaml_text = "gas:\n  functional: b3lyp\n  basis: 6-31g(d)\n"
+    entries = [
+        {
+            "kind": "tool_use_result",
+            "payload": {
+                "tool": "render_project_yaml",
+                "status": "ok",
+                "payload": {
+                    "ok": True,
+                    "project_name": "co2",
+                    "program": "gaussian",
+                    "yaml_text": yaml_text,
+                },
+            },
+        },
+        {
+            "kind": "tool_use_result",
+            "payload": {
+                "tool": "validate_project_yaml",
+                "status": "ok",
+                "payload": {"verdict": "ok"},
+            },
+        },
+    ]
+    (latest / "decision_log.jsonl").write_text(
+        "\n".join(json.dumps(entry) for entry in entries) + "\n",
+        encoding="utf-8",
+    )
+
+    candidate = _find_project_yaml_candidate_for_write(
+        tmp_path,
+        preferred_session_dir=None,
+    )
+
+    assert candidate == {
+        "project_name": "co2",
+        "program": "gaussian",
+        "yaml_text": yaml_text,
+    }
 
 
 def test_init_slash_command_is_registered_in_palette():

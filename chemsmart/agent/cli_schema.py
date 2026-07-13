@@ -123,21 +123,18 @@ def inspect_cleandoc(text: str) -> str:
 
 
 def _parameter_schema(param: click.Parameter) -> JsonDict:
-    default_info = _serialize_default(param.default)
     schema: JsonDict = {
         "name": param.name,
         "opts": _parameter_opts(param),
         "type": _serialize_type(param.type),
         "choices": _choices(param.type),
-        "default": default_info["default"],
+        "default": _serialize_default(param.default),
         "help": _parameter_help(param),
         "is_flag": bool(getattr(param, "is_flag", False)),
         "multiple": bool(param.multiple),
         "required": bool(param.required),
         "nargs": param.nargs,
     }
-    if default_info["default_is_callable"]:
-        schema["default_is_callable"] = True
     return schema
 
 
@@ -207,15 +204,17 @@ def _choices(param_type: click.ParamType) -> list[str] | None:
     return None
 
 
-def _serialize_default(default: Any) -> JsonDict:
+def _serialize_default(default: Any) -> Any:
+    """Return a stable default without exposing Click implementation details."""
+
     if callable(default):
-        return {"default": None, "default_is_callable": True}
+        return None
     normalized = _jsonable_value(default)
     try:
         json.dumps(normalized)
     except (TypeError, ValueError):
-        return {"default": None, "default_is_callable": True}
-    return {"default": normalized, "default_is_callable": False}
+        return None
+    return normalized
 
 
 def _jsonable_value(value: Any) -> Any:

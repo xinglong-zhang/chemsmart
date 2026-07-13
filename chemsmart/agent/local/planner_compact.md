@@ -44,7 +44,9 @@ orca.sp, orca.opt, orca.ts, orca.freq, orca.irc, orca.scan, orca.modred, orca.ne
 - gaussian.crest: `num_confs_to_run`, `grouping_strategy`, `num_groups`.
 - gaussian.traj: `num_structures_to_run`, `proportion_structures_to_use`, `grouping_strategy`.
 - orca.neb: `nimages`, `joboption`; product geometry goes in top-level `product_file`.
-- qmmm: `high_level_atoms`; gaussian.qmmm can also emit `low_level_atoms`.
+- qmmm: `high_level_atoms`; Gaussian can also emit medium/low-level atoms and
+  explicit layer charge/multiplicity; ORCA can emit intermediate atoms,
+  explicit layer charge/multiplicity, `jobtype`, and `low_level_method`.
 - any job: `additional_route_parameters` only when the user explicitly requests a real route keyword such as `scf=tight`.
 
 ## Structural formats

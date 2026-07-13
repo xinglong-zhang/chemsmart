@@ -31,7 +31,17 @@ _FLAG = {
     "num_structures_to_run": "--num-structures-to-run",
     "proportion_structures_to_use": "--proportion-structures-to-use",
     "high_level_atoms": "--high-level-atoms",
+    "medium_level_atoms": "--medium-level-atoms",
     "low_level_atoms": "--low-level-atoms",
+    "intermediate_level_atoms": "--intermediate-level-atoms",
+    "charge_total": "--charge-total",
+    "mult_total": "--mult-total",
+    "charge_intermediate": "--charge-intermediate",
+    "mult_intermediate": "--mult-intermediate",
+    "charge_high": "--charge-high",
+    "mult_high": "--mult-high",
+    "jobtype": "--jobtype",
+    "low_level_method": "--low-level-method",
     "nimages": "--nimages",
     "joboption": "--joboption",
     "freeze_atoms": "--freeze-atoms",
@@ -44,13 +54,16 @@ _FLAG = {
 _RANGE_FLAGS = {
     "--fragment-indices",
     "--high-level-atoms",
+    "--medium-level-atoms",
     "--low-level-atoms",
     "--freeze-atoms",
 }
 _RANGE_SETTINGS = {
     "fragment_indices",
     "high_level_atoms",
+    "medium_level_atoms",
     "low_level_atoms",
+    "intermediate_level_atoms",
     "freeze_atoms",
 }
 _DB_SELECTOR_FLAG = {
@@ -63,6 +76,7 @@ _DB_SELECTOR_FLAG = {
 _SUBCOMMAND_SETTINGS = {
     "fragment_indices",
     "high_level_atoms",
+    "medium_level_atoms",
     "low_level_atoms",
     "nimages",
     "joboption",
@@ -76,6 +90,19 @@ _SUBCOMMAND_SETTINGS = {
     "states",
     "root",
     "eqsolv",
+    "intermediate_level_atoms",
+    "charge_total",
+    "mult_total",
+    "charge_intermediate",
+    "mult_intermediate",
+    "charge_high",
+    "mult_high",
+    "jobtype",
+    "low_level_method",
+}
+_QMMM_PARENTS = {
+    "gaussian": {"opt", "sp", "ts", "scan", "modred", "qrc"},
+    "orca": {"opt", "sp", "ts", "scan", "modred", "qrc", "neb"},
 }
 
 
@@ -253,6 +280,14 @@ def _job_command(
         parts += ["-p", shlex.quote(str(project))]
 
     settings = dict(job.get("settings", {}) or {})
+    qmmm_parent: str | None = None
+    if kind.endswith(".qmmm"):
+        qmmm_parent = str(settings.pop("parent_job", "")).strip().lower()
+        if qmmm_parent not in _QMMM_PARENTS[program]:
+            allowed = ", ".join(sorted(_QMMM_PARENTS[program]))
+            raise ValueError(
+                f"{kind} requires settings.parent_job; allowed: {allowed}"
+            )
     freq_true = settings.pop("freq", None) is True or kind.endswith(".freq")
     if freq_true:
         route = settings.get("additional_route_parameters")
@@ -289,7 +324,20 @@ def _job_command(
     parts += ["-c", str(job.get("charge", 0)), "-m", str(job.get("mult", 1))]
     if job.get("label"):
         parts += ["-l", shlex.quote(str(job["label"]))]
-    parts.append(_subcommand(kind))
+    if qmmm_parent is not None:
+        parts += [qmmm_parent, "qmmm"]
+        # Gaussian's QMMM settings are independent from the parent job
+        # settings, so total state must appear in the nested QMMM scope. The
+        # same explicit form is also valid and unambiguous for ORCA.
+        if "charge_total" not in settings:
+            subcommand_flags += [
+                "--charge-total",
+                str(job.get("charge", 0)),
+            ]
+        if "mult_total" not in settings:
+            subcommand_flags += ["--mult-total", str(job.get("mult", 1))]
+    else:
+        parts.append(_subcommand(kind))
     parts += subcommand_flags
     return " ".join(parts)
 

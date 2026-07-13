@@ -6,13 +6,12 @@ import json
 import logging
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
-
-UTC = timezone.utc
 from pathlib import Path
 from typing import Literal
 
 from chemsmart.agent.wizard.paths import server_cache_path, write_private_text
 
+UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
 CacheStatus = Literal["fresh", "stale", "error"]

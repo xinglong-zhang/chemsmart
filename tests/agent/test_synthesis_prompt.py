@@ -43,8 +43,11 @@ def test_prompt_prohibits_orca_td(prompt: str) -> None:
     )
 
 
-def test_prompt_prohibits_gaussian_scan_subcommand(prompt: str) -> None:
-    assert "NO `gaussian scan`" in prompt or "NO gaussian scan" in prompt
+def test_prompt_distinguishes_gaussian_scan_from_modred(prompt: str) -> None:
+    assert "gaussian scan" in prompt
+    assert "gaussian modred" in prompt
+    assert "Relaxed PES" in prompt
+    assert "freeze / fix / hold / constrain" in prompt
 
 
 def test_prompt_includes_nci_family_guidance(prompt: str) -> None:

@@ -53,6 +53,9 @@ class ChemsmartTuiApp(App[None]):
     def action_refresh_screen(self) -> None:
         self._delegate_to_chat("action_refresh_screen")
 
+    def action_show_project_yaml(self) -> None:
+        self._delegate_to_chat("action_show_project_yaml")
+
     def action_dismiss_overlay(self) -> None:
         self._delegate_to_chat("action_dismiss_overlay")
 

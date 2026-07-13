@@ -305,6 +305,24 @@ def test_tool_meta_existing_entries_are_unchanged_and_mva_entries_exist():
     }
 
 
+def test_ask_user_is_a_clean_read_only_clarification_not_unknown_risk():
+    # ask_user is the model's clarification mechanism; it must NOT render as an
+    # "[unknown]" risky, state-mutating pending tool (the confusing permission
+    # framing users saw). It has no side effect.
+    from chemsmart.agent.tui.tool_meta import (
+        tool_read_only,
+        tool_risk_badge,
+        tool_side_effect_summary,
+    )
+
+    risk, _style = tool_risk_badge("ask_user")
+    assert risk == "question"
+    assert tool_read_only("ask_user") is True
+    summary = tool_side_effect_summary("ask_user")
+    assert "mutate" not in summary
+    assert summary != "may inspect or mutate local state"
+
+
 def test_render_tool_result_error_uses_compact_error_summary_only():
     result = {
         "error": "invalid_path",

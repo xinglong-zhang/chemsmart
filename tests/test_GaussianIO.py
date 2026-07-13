@@ -1,4 +1,5 @@
 import os.path
+import shutil
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ from chemsmart.io.gaussian.output import (
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.jobs.gaussian.runner import FakeGaussian
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
@@ -306,6 +308,27 @@ class TestGaussian16Input:
         assert g16_oniom.real_multiplicity == 1
         assert g16_oniom.int_multiplicity == 1
         assert g16_oniom.model_multiplicity == 1
+
+    def test_base_input_reads_signed_oniom_total_state_as_numbers(
+        self, gaussian_qmmm_inputfile_3layer
+    ):
+        g16_input = Gaussian16Input(filename=gaussian_qmmm_inputfile_3layer)
+
+        assert g16_input.charge == 0
+        assert g16_input.multiplicity == 1
+
+    def test_fake_gaussian_runs_signed_oniom_total_state(
+        self, gaussian_qmmm_inputfile_3layer, tmp_path
+    ):
+        input_file = tmp_path / "three_layer_oniom.com"
+        shutil.copyfile(gaussian_qmmm_inputfile_3layer, input_file)
+
+        fake = FakeGaussian(input_file)
+        fake.run()
+
+        assert "Normal termination" in (tmp_path / "three_layer_oniom.log").read_text(
+            encoding="utf-8"
+        )
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)

@@ -55,6 +55,8 @@ class FooterWidget(Static):
         self._provider = provider or "offline"
         self._model = _DEFAULT_MODELS.get(provider, "auto")
         self._project = ""
+        self._yaml_loaded = False
+        self._yaml_label = "Yaml unloaded"
         self._draft_tokens = 0
         spinner = Spinner("arc")
         self._spinner_frames = tuple(spinner.frames)
@@ -124,6 +126,18 @@ class FooterWidget(Static):
             self._model = model
         if project is not None:
             self._project = project
+        self._refresh_text()
+
+    def set_yaml_status(
+        self,
+        *,
+        loaded: bool,
+        label: str | None = None,
+    ) -> None:
+        self._yaml_loaded = bool(loaded)
+        self._yaml_label = label or (
+            "Yaml loaded" if self._yaml_loaded else "Yaml unloaded"
+        )
         self._refresh_text()
 
     def update_draft(self, text: str) -> None:
@@ -226,6 +240,12 @@ class FooterWidget(Static):
             text.append(" • ", style="dim")
             text.append("project ", style="dim")
             text.append(self._project, style="accent")
+        text.append(" • ", style="dim")
+        text.append(
+            self._yaml_label,
+            style="success" if self._yaml_loaded else "error",
+        )
+        text.append(" (S-Tab)", style="dim")
         text.append(" • ", style="dim")
         text.append(f"tok {self._draft_tokens}", style="dim")
         if self.entity_status:

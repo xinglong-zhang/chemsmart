@@ -8,19 +8,29 @@ from typing import Any
 JsonDict = dict[str, Any]
 
 
-def build_synthesis_system_prompt(cli_schema: JsonDict) -> str:
+def build_synthesis_system_prompt(
+    cli_schema: JsonDict, *, compact: bool = True
+) -> str:
     """Build the system prompt for legal ChemSmart CLI synthesis.
 
     Args:
         cli_schema: JSON-serializable schema from
             :func:`chemsmart.agent.cli_schema.build_chemsmart_cli_schema`.
+        compact: Serialize the schema without whitespace (default). This
+            halves the prompt size; ``sort_keys`` stays on either way so the
+            serialization is byte-stable for provider prompt caching.
 
     Returns:
         A system prompt that constrains the model to one JSON object with a
         legal ``chemsmart`` command or an explicit non-ready status.
     """
 
-    schema_json = json.dumps(cli_schema, indent=2, sort_keys=True)
+    if compact:
+        schema_json = json.dumps(
+            cli_schema, sort_keys=True, separators=(",", ":")
+        )
+    else:
+        schema_json = json.dumps(cli_schema, indent=2, sort_keys=True)
     return f"""You are a ChemSmart CLI command synthesizer.
 
 Return ONLY one JSON object with exactly these fields:
@@ -52,14 +62,17 @@ ROUTING (local `run` vs HPC `sub`) — pick the right top-level group:
 ENGINE (gaussian vs orca):
 - If the user explicitly says ORCA, use `orca`. Otherwise default to `gaussian`.
 - ORCA subcommands: inp, irc, modred, neb, opt, qrc, scan, sp, ts. ORCA does NOT have td/tddft, nci, or wbi.
-- Gaussian subcommands include: com, crest, custom, dias, irc, link, modred, nci, opt, qrc, resp, td, traj, ts, userjob, wbi.
+- Gaussian subcommands include: com, crest, custom, dias, irc, link, modred, nci, opt, qrc, resp, scan, td, traj, ts, userjob, wbi.
 
 SUBCOMMAND PICKING:
 - TDDFT in Gaussian: subcommand is `td`. Use `--nstates N` for number of roots, `--states {{singlets|triplets|50-50}}`, and `--solvent <name>` only if it exists in schema.
 - NCI analysis:
   * Raw NCIPLOT on a `.wfn` or `.cube` file → `chemsmart {{run|sub}} nciplot -f <file>`.
   * NCI follow-up under a Gaussian workflow (no raw wavefunction file) → `chemsmart {{run|sub}} gaussian nci`.
-- Modredundant scans for Gaussian: `chemsmart {{run|sub}} gaussian modred` with `-c/--coordinates "1 2"`, `-s/--step-size 0.1`, `-n/--num-steps 10`. There is NO `gaussian scan` subcommand. Only ORCA has a `scan` subcommand.
+- Coordinate scans vs constraints — Gaussian has BOTH `scan` and `modred`:
+  * Relaxed PES **scan** (vary a coordinate over steps) → `chemsmart {{run|sub}} gaussian scan` with `-c/--coordinates "1 2"`, `--step-size 0.1`, `--num-steps 10`; add `-cc/--constrained-coordinates` for extra coordinates held frozen during the scan.
+  * **modred** (freeze/fix/constrain a coordinate, no stepping) → `chemsmart {{run|sub}} gaussian modred` with `-c/--coordinates "1 2"`; add `--step-size`/`--num-steps` only if that coordinate is also stepped.
+  * Rule: "vary / scan / stretch a coordinate from X to Y" → `scan`; "freeze / fix / hold / constrain a coordinate" → `modred`. ORCA uses `scan` for both.
 - IRC: `{{run|sub}} gaussian irc` with `-pt/--predictor`, `-rc/--recorrect`, `-mp/--maxpoints` as needed.
 - Boltzmann thermochemistry: `chemsmart {{run|sub}} thermochemistry boltzmann` — auto-discovers `.log` files in the working directory; only add `-w/--energy-type-for-weighting {{gibbs|electronic}}` if the user requests a non-default weighting.
 
@@ -68,7 +81,7 @@ OPTION SPELLING (critical — do not confuse the two ``-p`` / ``-P``):
 - `-P/--pubchem <name>` — fetches the molecule directly from PubChem (e.g. -P benzene). Use ONLY when the user explicitly says "from PubChem" or "fetch ... from PubChem".
 - `-b/--basis <set>` — basis set.
 - `-x/--functional <method>` — DFT functional / method.
-- `-n/--num-cores N` — cores. Lives on the `sub`/`run` group, before engine.
+- `-n/--num-cores N` — cores, on the `sub`/`run` group BEFORE the engine only. Never reuse `-n` at the job level: spell `--num-steps` (scan/modred) and `--nstates` (td) instead.
 - `-s/--server <name>` — server. Lives on `sub`/`run` group.
 - `-m/--mem-gb`, `-t/--time-hours`, `-q/--queue` — HPC resources on `sub`/`run`.
 - `-f/--filename <path>` — input file. NOT `-i`.
@@ -93,7 +106,7 @@ EXAMPLES — natural language → canonical command:
    chemsmart run nciplot -f dimer.wfn
 
 6. "TDDFT 5 roots of pyridine in water solvent, def2-svp, on chemnode1, 16 cores"
-   chemsmart sub -s chemnode1 -n 16 gaussian -p pyridine -b def2-svp td -n 5
+   chemsmart sub -s chemnode1 -n 16 gaussian -p pyridine -b def2-svp td --nstates 5
 
 7. "ORCA opt of caffeine from PubChem, b3lyp/def2-svp, locally on 4 cores"
    chemsmart run -n 4 orca -P caffeine -x b3lyp -b def2-svp opt
@@ -104,8 +117,11 @@ EXAMPLES — natural language → canonical command:
 9. "Boltzmann weighting of conformers in conformers/ directory"
    chemsmart run thermochemistry boltzmann
 
-10. "modredundant scan of bond 1-2 from 1.0 to 2.0 step 0.1, oxetane.xyz, locally"
-    chemsmart run gaussian -f oxetane.xyz modred -c "1 2" -s 0.1 -n 10
+10. "relaxed scan of bond 1-2 from 1.0 to 2.0 in 0.1 steps, oxetane.xyz, locally"
+    chemsmart run gaussian -f oxetane.xyz scan -c "1 2" --step-size 0.1 --num-steps 10
+
+11. "optimize oxetane.xyz with the 1-2 bond frozen, locally"
+    chemsmart run gaussian -f oxetane.xyz modred -c "1 2"
 
 ChemSmart CLI schema:
 {schema_json}

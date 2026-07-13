@@ -11,7 +11,9 @@ from chemsmart.agent.permissions import (
 from chemsmart.agent.project_yaml import (
     critic_project_yaml,
     extract_project_protocol,
+    read_project_yaml,
     render_project_yaml,
+    update_project_yaml,
     validate_project_yaml,
     write_project_yaml,
 )
@@ -148,6 +150,34 @@ def test_project_yaml_extracts_solvent_and_rejects_missing_method():
     )
 
 
+def test_project_yaml_preserves_a_distinct_gaussian_td_method():
+    protocol = extract_project_protocol(
+        "Optimize in the gas phase using PBE0/def2-SVP. For TD-DFT, use "
+        "CAM-B3LYP/def2-SVP to calculate the absorption spectrum.",
+        project_name="photo",
+        program="gaussian",
+    )
+    rendered = render_project_yaml(protocol)
+    parsed = yaml.safe_load(rendered["yaml_text"])
+
+    assert protocol["method"]["functional"] == "pbe0"
+    assert protocol["td"]["functional"] == "camb3lyp"
+    assert parsed["gas"]["functional"] == "pbe0"
+    assert parsed["td"]["functional"] == "camb3lyp"
+    assert parsed["td"]["basis"] == "def2svp"
+
+    validation = validate_project_yaml(
+        rendered["yaml_text"], program="gaussian", project_name="photo"
+    )
+    assert validation["verdict"] == "ok"
+    assert validation["runtime_summary"]["td"]["functional"] == "camb3lyp"
+
+    critic = critic_project_yaml(
+        rendered["yaml_text"], protocol=protocol, program="gaussian"
+    )
+    assert critic["verdict"] == "ok"
+
+
 def test_single_basis_protocol_renders_and_validates_without_mixed_basis_leak():
     # A plain single-basis protocol must NOT emit heavy/light basis sections;
     # doing so under a non-gen basis trips the chemsmart mixed-basis guard.
@@ -201,6 +231,39 @@ def test_project_yaml_canonicalizes_model_supplied_mixed_basis_method_dict():
     assert parsed["gas"]["heavy_elements"] == ["I"]
     assert parsed["gas"]["heavy_elements_basis"] == "def2svpd"
     assert parsed["gas"]["light_elements_basis"] == "def2svp"
+
+
+def test_project_yaml_extracts_spoken_light_atom_basis_phrase():
+    protocol = extract_project_protocol(
+        "I want to create a project yaml named co2.yaml for a CO2 reduction "
+        "project. Use Gaussian for DFT refinements. The method should be "
+        "B3LYP-D3BJ with def2-SVP for light atoms and def2-SVPD for Br. "
+        "Use gas phase optimization followed by harmonic frequency analysis "
+        "to confirm minima and transition states. The conformer search was "
+        "done externally with CREST at GFN2-xTB, so include that as protocol "
+        "context but do not make it the Gaussian calculation method.",
+        project_name="co2.yaml",
+        program="gaussian",
+    )
+    rendered = render_project_yaml(protocol)
+    parsed = yaml.safe_load(rendered["yaml_text"])
+
+    assert protocol["method"]["basis"] == "gen"
+    assert protocol["method"]["heavy_elements_basis"] == "def2svpd"
+    assert protocol["method"]["light_elements_basis"] == "def2svp"
+    assert parsed["gas"]["basis"] == "gen"
+    assert parsed["gas"]["heavy_elements"] == ["Br"]
+    assert parsed["gas"]["heavy_elements_basis"] == "def2svpd"
+    assert parsed["gas"]["light_elements_basis"] == "def2svp"
+
+    critic = critic_project_yaml(
+        rendered["yaml_text"],
+        protocol=protocol,
+        program="gaussian",
+        project_name="co2",
+    )
+    assert critic["verdict"] == "warn"
+    assert all(issue["severity"] != "reject" for issue in critic["issues"])
     assert (
         validate_project_yaml(
             rendered["yaml_text"],
@@ -284,8 +347,8 @@ gas:
     )
 
 
-def test_project_yaml_write_uses_user_config_dir(monkeypatch, tmp_path):
-    monkeypatch.setenv("HOME", str(tmp_path))
+def test_project_yaml_write_uses_workspace_config_dir(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     yaml_text = """
 gas:
   functional: b3lyp empiricaldispersion=gd3bj
@@ -304,6 +367,50 @@ solv:
     assert result["written_path"] == str(target)
     assert target.read_text(encoding="utf-8").endswith("\n")
 
+    from chemsmart.settings.gaussian import GaussianProjectSettings
+
+    settings = GaussianProjectSettings.from_project("co2")
+    assert settings.opt_settings().functional == (
+        "b3lyp empiricaldispersion=gd3bj"
+    )
+
+
+def test_project_yaml_read_and_update_use_workspace_config_dir(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.chdir(tmp_path)
+    yaml_text = """
+gas:
+  functional: b3lyp
+  basis: def2svp
+  freq: true
+solv:
+  functional: b3lyp
+  basis: def2svp
+  freq: false
+"""
+    written = write_project_yaml("demo", yaml_text, program="gaussian")
+    assert written["ok"] is True
+
+    loaded = read_project_yaml()
+    assert loaded["ok"] is True
+    assert loaded["project_name"] == "demo"
+    assert loaded["program"] == "gaussian"
+    assert loaded["parsed"]["gas"]["functional"] == "b3lyp"
+
+    updated = update_project_yaml(
+        {"gas.functional": "m062x", "solv.functional": "m062x"},
+        project_name="demo",
+        program="gaussian",
+    )
+    assert updated["ok"] is True
+    assert "-  functional: b3lyp" in updated["diff"]
+    assert "+  functional: m062x" in updated["diff"]
+
+    loaded_after = read_project_yaml("demo", "gaussian")
+    assert loaded_after["parsed"]["gas"]["functional"] == "m062x"
+
 
 def test_project_yaml_tools_are_registered_and_write_requires_approval():
     registry = ToolRegistry.default()
@@ -315,6 +422,11 @@ def test_project_yaml_tools_are_registered_and_write_requires_approval():
         "validate_project_yaml",
         "critic_project_yaml",
         "write_project_yaml",
+        "read_project_yaml",
+        "update_project_yaml",
+        "synthesize_command",
+        "repair_command",
+        "execute_chemsmart_command",
     }.issubset(names)
 
     request = ToolRequest(
@@ -331,3 +443,43 @@ def test_project_yaml_tools_are_registered_and_write_requires_approval():
     assert resolved.decision == ResolvedDecision.NEEDS_USER
     policy.record("write_project_yaml", ApprovalDecision.ALLOW_SESSION)
     assert "write_project_yaml" not in policy.session_allow
+
+
+def test_plain_d3_dispersion_is_preserved_not_dropped():
+    # "b3lyp-d3" (zero-damping D3, not BJ) must render the gd3 route keyword;
+    # it was previously silently dropped because only d3bj was handled.
+    for functional in ("b3lyp-d3", "B3LYP empiricaldispersion=gd3"):
+        rendered = render_project_yaml(
+            {
+                "functional": functional,
+                "basis": "genecp",
+                "freq": True,
+                "heavy_elements": ["Br"],
+                "heavy_elements_basis": "SDD",
+                "light_elements_basis": "6-31G**",
+            },
+            project_name="ch3br",
+            program="gaussian",
+        )
+        parsed = yaml.safe_load(rendered["yaml_text"])
+        assert parsed["gas"]["functional"] == (
+            "b3lyp empiricaldispersion=gd3"
+        ), functional
+
+    # D3BJ still renders gd3bj (no regression).
+    rendered = render_project_yaml(
+        {"functional": "b3lyp-d3bj", "basis": "def2svp", "freq": True},
+        project_name="x",
+        program="gaussian",
+    )
+    parsed = yaml.safe_load(rendered["yaml_text"])
+    assert parsed["gas"]["functional"] == "b3lyp empiricaldispersion=gd3bj"
+
+    # ORCA plain D3 maps to the ORCA D3 keyword.
+    rendered = render_project_yaml(
+        {"functional": "pbe0", "dispersion": "d3", "basis": "def2tzvp"},
+        project_name="cat",
+        program="orca",
+    )
+    parsed = yaml.safe_load(rendered["yaml_text"])
+    assert parsed["gas"]["dispersion"] == "D3"

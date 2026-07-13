@@ -180,6 +180,7 @@ def invoke_manual_submit_cli(
     jobtype: str,
 ):
     runner = CliRunner()
+    write_gaussian_project_yaml(job_folder / ".chemsmart")
     args = [
         "-s",
         server_name,

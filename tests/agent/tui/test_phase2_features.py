@@ -184,7 +184,10 @@ def test_agent_cli_ask_streams_without_tui_import(
         [
             {
                 "status": "ready",
-                "command": "chemsmart sub gaussian opt -p water -b 6-31g*",
+                "command": (
+                    "chemsmart sub gaussian -p water -b 6-31g* "
+                    f"-f {single_molecule_xyz_file} opt"
+                ),
                 "explanation": "Loop answer.",
                 "confidence": "medium",
                 "missing_info": [],

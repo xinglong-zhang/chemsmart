@@ -10,6 +10,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from chemsmart.agent.harness.command_contracts import check_command_contracts
+from chemsmart.agent.harness.failure_taxonomy import classify_runtime_failure
+from chemsmart.agent.harness.generated_invariants import (
+    check_generated_input_invariants,
+)
 from chemsmart.agent.harness.extractors import (
     extract_gaussian_route,
     extract_orca_route,
@@ -181,6 +186,22 @@ def evaluate_command_semantics(
             "command must start with 'chemsmart'",
         )
 
+    base_cwd = Path(cwd or os.getcwd()).resolve()
+    top_index, top_level = _top_level_command(tokens)
+    if top_level in _COMPUTATIONAL_TOP_LEVEL:
+        contract_issues = _command_contract_issues(
+            tokens,
+            top_index,
+            cwd=base_cwd,
+        )
+        if any(issue.severity == "reject" for issue in contract_issues):
+            return CommandSemanticResult(
+                verdict="reject",
+                command=command,
+                checked_argv=tuple(tokens),
+                issues=contract_issues,
+            )
+
     parse_issue = _strict_parser_issue(command, tokens)
     if parse_issue is not None:
         return CommandSemanticResult(
@@ -190,7 +211,6 @@ def evaluate_command_semantics(
             issues=(parse_issue,),
         )
 
-    top_index, top_level = _top_level_command(tokens)
     if top_level not in _COMPUTATIONAL_TOP_LEVEL:
         return CommandSemanticResult(
             verdict="warn",
@@ -237,17 +257,16 @@ def evaluate_command_semantics(
         )
 
     safe_argv = _safe_execution_argv(tokens, top_index, top_level)
-    if cwd is None:
-        # Run in an isolated temp dir so a stale <label>.out in the real cwd cannot
-        # trigger chemsmart's skip-completed path (which writes no input and yields a
-        # false generated_input_missing reject). Absolutize input files so relative
-        # -f/-e tokens still resolve from the temp cwd.
-        workdir = Path(tempfile.mkdtemp(prefix="chemsmart-gate-"))
-        safe_argv = _absolutize_file_args(safe_argv, Path(os.getcwd()))
-        cleanup_dir: Path | None = workdir
-    else:
-        workdir = Path(cwd)
-        cleanup_dir = None
+    # Run in an isolated temp dir so a stale <label>.out in the real cwd cannot
+    # trigger chemsmart's skip-completed path (which writes no input and yields a
+    # false generated_input_missing reject). The caller's cwd is still the
+    # workspace of record: relative input files are resolved from it, and its
+    # workspace-local .chemsmart settings are mirrored into the temp dir so
+    # project/server YAML lookup sees the same configuration the user sees.
+    workdir = Path(tempfile.mkdtemp(prefix="chemsmart-gate-"))
+    safe_argv = _absolutize_file_args(safe_argv, base_cwd)
+    _mirror_workspace_config(base_cwd, workdir)
+    cleanup_dir: Path | None = workdir
     try:
         before = _input_snapshot(workdir)
         try:
@@ -283,21 +302,27 @@ def evaluate_command_semantics(
         generated_inputs = _generated_inputs(workdir, before)
         issues: list[CommandSemanticIssue] = []
         if completed.returncode != 0:
+            failure = classify_runtime_failure(
+                stdout=stdout_tail,
+                stderr=stderr_tail,
+                returncode=completed.returncode,
+            )
             issues.append(
                 CommandSemanticIssue(
-                    rule_id="cmd.semantic.safe_execution_failed",
+                    rule_id=failure.rule_id,
                     severity="reject",
-                    message=(
-                        "safe chemsmart runtime validation failed with exit code "
-                        f"{completed.returncode}"
-                    ),
+                    message=failure.message,
                     evidence={
+                        "category": failure.category,
                         "returncode": completed.returncode,
                         "argv": safe_argv,
                         "stdout_tail": stdout_tail,
                         "stderr_tail": stderr_tail,
                     },
-                    missing_info=tuple(_missing_info_from_output(stderr_tail, stdout_tail)),
+                    missing_info=(
+                        failure.missing_info
+                        or tuple(_missing_info_from_output(stderr_tail, stdout_tail))
+                    ),
                 )
             )
         elif (
@@ -339,6 +364,20 @@ def evaluate_command_semantics(
                         evidence={"path": generated.get("path")},
                     )
                 )
+
+        for issue in check_generated_input_invariants(
+            command,
+            generated_inputs,
+            cwd=str(base_cwd),
+        ):
+            issues.append(
+                CommandSemanticIssue(
+                    rule_id=issue.rule_id,
+                    severity=issue.severity,
+                    message=issue.message,
+                    evidence=issue.evidence,
+                )
+            )
 
         verdict: CommandSemanticVerdict = "ok"
         if any(issue.severity == "reject" for issue in issues):
@@ -483,6 +522,40 @@ def _preflight_semantic_issues(
     db_issues = _db_selector_issues(program, program_tokens)
     issues.extend(db_issues)
     return tuple(issues)
+
+
+def _command_contract_issues(
+    tokens: list[str],
+    top_index: int,
+    *,
+    cwd: Path,
+) -> tuple[CommandSemanticIssue, ...]:
+    software_index = _software_index(tokens, top_index)
+    if software_index is None:
+        return ()
+    program = tokens[software_index]
+    if program not in _SOFTWARE_COMMANDS:
+        return ()
+    job_index = _first_job_token_index(tokens, software_index + 1)
+    if job_index is None:
+        return ()
+    contract_issues = check_command_contracts(
+        program=program,
+        job=tokens[job_index],
+        program_tokens=tokens[software_index + 1 : job_index],
+        job_tokens=tokens[job_index:],
+        cwd=cwd,
+    )
+    return tuple(
+        CommandSemanticIssue(
+            rule_id=issue.rule_id,
+            severity=issue.severity,
+            message=issue.message,
+            evidence=issue.evidence,
+            missing_info=issue.missing_info,
+        )
+        for issue in contract_issues
+    )
 
 
 def _db_selector_issues(
@@ -709,20 +782,36 @@ def _is_software_command(tokens: list[str], top_index: int) -> bool:
     return any(token in _SOFTWARE_COMMANDS for token in tokens[top_index + 1 :])
 
 
+def _mirror_workspace_config(base_cwd: Path, workdir: Path) -> None:
+    source = base_cwd / ".chemsmart"
+    if not source.is_dir():
+        return
+    shutil.copytree(source, workdir / ".chemsmart", dirs_exist_ok=True)
+
+
 def _missing_info_from_output(*chunks: str) -> list[str]:
     text = "\n".join(chunks)
     missing: list[str] = []
+    has_project_error = "No project settings implemented" in text
+    has_server_error = "No server implemented" in text
     if "No server implemented" in text:
         missing.append("valid chemsmart server configuration")
     if "Currently available servers:" in text:
         tail = text.split("Currently available servers:", 1)[1].splitlines()[0]
         missing.append(f"available servers: {tail.strip()}")
-    if "No project settings implemented" in text:
+    if has_project_error:
         missing.append("valid chemsmart project configuration")
     if "Currently available projects:" in text:
         tail = text.split("Currently available projects:", 1)[1].splitlines()[0]
         missing.append(f"available projects: {tail.strip()}")
-    if "No such file or directory" in text or "FileNotFoundError" in text:
+    if (
+        "No such file or directory" in text
+        or (
+            "FileNotFoundError" in text
+            and not has_project_error
+            and not has_server_error
+        )
+    ):
         missing.append("existing local input file path")
     return missing
 

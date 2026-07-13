@@ -9,6 +9,7 @@ from .approval import (
 )
 from .cwd_mismatch import CwdMismatchChoice, CwdMismatchOverlay
 from .file_picker import FilePickerOverlay
+from .project_yaml import ProjectYamlOverlay
 from .text_prompt import TextPromptOverlay
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "CwdMismatchChoice",
     "CwdMismatchOverlay",
     "FilePickerOverlay",
+    "ProjectYamlOverlay",
     "TextPromptOverlay",
 ]

@@ -96,7 +96,9 @@ def test_synthesize_preserves_explicit_api_project() -> None:
     assert " -p test " not in result["command"]
 
 
-def test_frontier_router_explains_previous_command_without_resynthesis() -> None:
+def test_frontier_router_explains_previous_command_without_resynthesis() -> (
+    None
+):
     ready_without_project = {
         "status": "ready",
         "command": (
@@ -146,7 +148,10 @@ def test_frontier_router_explains_previous_command_without_resynthesis() -> None
             "charge": "0",
             "multiplicity": "1",
         },
-        "reasoning": ["用户要求用中文解释上一条命令。", "命令是 gaussian opt。"],
+        "reasoning": [
+            "用户要求用中文解释上一条命令。",
+            "命令是 gaussian opt。",
+        ],
         "caveats": [],
     }
     provider = DummyProvider(
@@ -184,7 +189,9 @@ def test_frontier_router_explains_previous_command_without_resynthesis() -> None
     assert second["grounded"] is True
     assert second["reasoning"] == composed_answer["reasoning"]
     assert second["decision_trace"]["action"] == "explain_command"
-    assert second["decision_trace"]["reasoning"] == composed_answer["reasoning"]
+    assert (
+        second["decision_trace"]["reasoning"] == composed_answer["reasoning"]
+    )
     assert second["decision_trace"]["target_command"] == first["command"]
     assert len(provider.messages) == 4
 
@@ -204,18 +211,37 @@ def test_local_provider_skips_frontier_intent_router() -> None:
     assert len(provider.messages) == 1
 
 
-def test_resolve_default_project_uses_single_available_project(
+def test_resolve_default_project_uses_single_workspace_project(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    home = tmp_path / "home"
-    project_dir = home / ".chemsmart" / "gaussian"
+    project_dir = tmp_path / ".chemsmart" / "gaussian"
     project_dir.mkdir(parents=True)
     (project_dir / "test.yaml").write_text("gas: {}\n", encoding="utf-8")
-    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CHEMSMART_AGENT_PROJECT", raising=False)
 
     assert resolve_default_project() == "test"
+
+
+def test_prepare_command_falls_back_when_workspace_yaml_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = DummyProvider([_json_response(READY)], name="local")
+    session = SynthesisSession(
+        provider=provider,
+        semantic_gate=False,
+        enable_intent_router=False,
+    )
+
+    result = session.prepare_command("Prepare a Gaussian optimization.")
+
+    assert result["status"] == "needs_clarification"
+    assert "No workspace project YAML" in result["explanation"]
+    assert result["yaml_check"]["loaded"] is False
+    assert provider.messages == []
 
 
 def test_synthesize_retries_once_after_invalid_json() -> None:
@@ -341,8 +367,9 @@ def test_run_interactive_retries_after_runtime_semantic_reject(
     session.run_interactive("run ORCA water opt")
 
     assert confirmed == ["chemsmart run orca -f water.xyz -c 0 -m 1 opt"]
-    assert "Notice: synthesized command failed runtime semantic validation" in (
-        capsys.readouterr().out
+    assert (
+        "Notice: synthesized command failed runtime semantic validation"
+        in (capsys.readouterr().out)
     )
     retry_prompt = provider.messages[1][-1]["content"]
     assert "runtime semantic validation" in retry_prompt
@@ -375,7 +402,10 @@ def test_run_interactive_reports_final_runtime_semantic_reject(
     session.run_interactive("make a ts job")
 
     output = capsys.readouterr().out
-    assert "Notice: synthesized command failed runtime semantic validation" in output
+    assert (
+        "Notice: synthesized command failed runtime semantic validation"
+        in output
+    )
     assert "no input generated" in output
 
 
@@ -612,3 +642,78 @@ def test_agent_ask_debug_flag_plumbs_to_synthesis_session(
             "def2-svp",
         ]
     ]
+
+
+def test_clarification_from_semantic_asks_for_missing_charge_multiplicity():
+    from chemsmart.agent.harness.command_semantics import (
+        CommandSemanticResult,
+    )
+    from chemsmart.agent.synthesis import _clarification_from_semantic
+
+    assert _clarification_from_semantic(None) == []
+
+    reject = CommandSemanticResult(
+        verdict="reject",
+        command="chemsmart run gaussian -p co2 -f examples/h2o.xyz opt",
+        stderr_tail=(
+            "ValueError: Charge and multiplicity must be set for "
+            "Gaussian/ORCA jobs."
+        ),
+    )
+    questions = _clarification_from_semantic(reject)
+    assert len(questions) == 1
+    assert "charge" in questions[0].lower()
+    assert "multiplicity" in questions[0].lower()
+
+    # An unrelated runtime failure yields no synthetic clarification.
+    other = CommandSemanticResult(
+        verdict="reject",
+        command="chemsmart run gaussian -p co2 -f examples/h2o.xyz opt",
+        stderr_tail="RuntimeError: some other failure",
+    )
+    assert _clarification_from_semantic(other) == []
+
+
+def test_synthesize_tolerates_think_preamble_and_captures_reasoning() -> None:
+    # Reasoning models (Qwen3-Thinking / DeepSeek) emit <think>…</think>
+    # before the JSON; synthesis must parse the JSON AND keep the reasoning.
+    reasoning = "The user wants a TS job; gaussian ts subcommand, def2-svp."
+    content = f"<think>{reasoning}</think>\n" + json.dumps(READY)
+    provider = DummyProvider([content])
+    session = SynthesisSession(provider=provider, schema={"subcommands": {}})
+
+    result = session.synthesize("make a ts job")
+
+    assert result == READY
+    assert session._last_reasoning == reasoning
+
+
+def test_synthesize_captures_reasoning_content_field() -> None:
+    # DashScope/OpenAI-reasoning convention: reasoning in a separate field,
+    # content is the clean JSON.
+    reasoning = "Single point, gaussian sp, neutral singlet."
+    response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps(READY),
+                    "reasoning_content": reasoning,
+                }
+            }
+        ]
+    }
+    provider = DummyProvider([response])
+    session = SynthesisSession(provider=provider, schema={"subcommands": {}})
+
+    result = session.synthesize("sp please")
+
+    assert result == READY
+    assert session._last_reasoning == reasoning
+
+
+def test_synthesize_reasoning_empty_when_absent() -> None:
+    provider = DummyProvider([_json_response(READY)])
+    session = SynthesisSession(provider=provider, schema={"subcommands": {}})
+    session.synthesize("make a ts job")
+    assert session._last_reasoning == ""

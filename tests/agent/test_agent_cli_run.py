@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-
-UTC = timezone.utc
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -14,6 +12,8 @@ from chemsmart.agent.harness.command_semantics import CommandSemanticResult
 
 from ._agent_session_helpers import FakeProvider
 from .tui._helpers import write_session_fixture
+
+UTC = timezone.utc
 
 
 def test_agent_cli_run_prints_plan_and_writes_decision_log(
