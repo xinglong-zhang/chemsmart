@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from chemsmart.agent.handles import (
     HandleStore,
     is_handle_id,
-    result_handle_kind,
+    store_result_handle,
 )
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.runner import evaluate_harness
@@ -28,7 +28,7 @@ from chemsmart.agent.harness.workflow_state import workflow_state_scope
 from chemsmart.agent.loop import (
     ToolLoop,
     ToolLoopBudgets,
-    with_virtual_tool_defs,
+    registry_tool_defs_for_provider,
 )
 from chemsmart.agent.permissions import (
     ApprovalDecision,
@@ -1357,15 +1357,7 @@ class AgentSession:
         self,
         provider_name: str,
     ) -> list[dict[str, Any]]:
-        if hasattr(self.registry, "tool_defs_for_provider"):
-            return with_virtual_tool_defs(
-                provider_name,
-                self.registry.tool_defs_for_provider(provider_name),
-            )
-        return with_virtual_tool_defs(
-            provider_name,
-            self.registry.openai_tool_defs(),
-        )
+        return registry_tool_defs_for_provider(self.registry, provider_name)
 
     def _has_pending_ask_user(self) -> bool:
         if self.state is None:
@@ -1644,14 +1636,10 @@ class AgentSession:
         tool_name: str,
         result: Any,
     ) -> str | None:
-        if self.handle_store is None:
-            return None
-        kind = result_handle_kind(tool_name, result)
-        if kind is None:
-            return None
-        return self.handle_store.put(
-            kind=kind,
-            obj=result,
+        return store_result_handle(
+            self.handle_store,
+            tool_name,
+            result,
             summary=_preview_value(result),
         )
 

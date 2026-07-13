@@ -7,6 +7,7 @@ from chemsmart.agent.provider_adapter import (
     build_tool_result_messages,
     extract_response_text,
     normalize_response,
+    response_payload,
 )
 
 
@@ -18,6 +19,16 @@ def test_extract_response_text_supports_provider_shapes():
         )
         == "anthropic"
     )
+
+
+def test_response_payload_supports_dict_and_sdk_model():
+    class Response:
+        def model_dump(self):
+            return {"content": "sdk"}
+
+    payload = {"content": "dict"}
+    assert response_payload(payload) is payload
+    assert response_payload(Response()) == {"content": "sdk"}
     assert (
         extract_response_text(
             {"choices": [{"message": {"content": "openai"}}]}

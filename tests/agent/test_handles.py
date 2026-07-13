@@ -9,6 +9,7 @@ from chemsmart.agent.handles import (
     is_handle_id,
     json_safe,
     result_handle_kind,
+    store_result_handle,
 )
 
 
@@ -22,6 +23,28 @@ def test_shared_handle_helpers_preserve_existing_contract():
     assert json_safe({"data": b"abc"}) == {
         "data": {"type": "bytes", "length": 3}
     }
+
+
+def test_store_result_handle_persists_supported_results(tmp_path):
+    store = HandleStore(tmp_path)
+    result = {"inputfile": "job.com"}
+
+    handle_id = store_result_handle(
+        store,
+        "dry_run_input",
+        result,
+        summary=result,
+    )
+
+    assert handle_id is not None
+    assert store.get(handle_id) is result
+    assert (
+        store_result_handle(None, "dry_run_input", result, summary=result)
+        is None
+    )
+    assert (
+        store_result_handle(store, "unknown", result, summary=result) is None
+    )
 
 
 @pytest.mark.parametrize(

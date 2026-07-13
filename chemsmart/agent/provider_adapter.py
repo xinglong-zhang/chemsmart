@@ -75,7 +75,7 @@ def normalize_response(
     provider: str,
     response: Any,
 ) -> tuple[str, list[ToolRequest], str | None]:
-    payload = _response_payload(response)
+    payload = response_payload(response)
     if provider == "anthropic":
         return _normalize_anthropic_response(payload)
     if provider == "openai":
@@ -207,7 +207,9 @@ def _openai_message_text(message: dict[str, Any]) -> str:
     return "\n".join(text_parts)
 
 
-def _response_payload(response: Any) -> dict[str, Any]:
+def response_payload(response: Any) -> dict[str, Any]:
+    """Normalize a provider SDK response into a dictionary."""
+
     if isinstance(response, dict):
         return response
     if hasattr(response, "model_dump"):

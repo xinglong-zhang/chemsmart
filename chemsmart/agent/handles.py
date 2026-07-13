@@ -140,6 +140,23 @@ def result_handle_kind(tool_name: str, result: Any) -> str | None:
     return None
 
 
+def store_result_handle(
+    handle_store: HandleStore | None,
+    tool_name: str,
+    result: Any,
+    *,
+    summary: dict[str, Any],
+) -> str | None:
+    """Persist a handle for a supported tool result."""
+
+    if handle_store is None:
+        return None
+    kind = result_handle_kind(tool_name, result)
+    if kind is None:
+        return None
+    return handle_store.put(kind=kind, obj=result, summary=summary)
+
+
 def json_safe(value: Any) -> Any:
     """Convert a generic tool result into a JSON-safe summary value."""
 

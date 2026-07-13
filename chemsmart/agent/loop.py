@@ -10,7 +10,7 @@ from chemsmart.agent.handles import (
     HandleStore,
     is_handle_id,
     json_safe,
-    result_handle_kind,
+    store_result_handle,
 )
 from chemsmart.agent.permissions import (
     ApprovalDecision,
@@ -24,6 +24,7 @@ from chemsmart.agent.provider_adapter import (
     ToolRequest,
     build_tool_result_messages,
     normalize_response,
+    response_payload,
 )
 from chemsmart.agent.providers import (
     DEFAULT_TIMEOUT_S,
@@ -128,7 +129,7 @@ class ToolLoop:
                 tools=tool_defs,
                 timeout_s=DEFAULT_TIMEOUT_S,
             )
-            response_dict = _response_payload(response)
+            response_dict = response_payload(response)
             if self.budgets.log_provider_turn_raw:
                 self.decision_log.write(
                     "provider_turn_raw",
@@ -699,29 +700,17 @@ class ToolLoop:
         self,
         provider_name: str,
     ) -> list[dict[str, Any]]:
-        if hasattr(self.registry, "tool_defs_for_provider"):
-            return with_virtual_tool_defs(
-                provider_name,
-                self.registry.tool_defs_for_provider(provider_name),
-            )
-        return with_virtual_tool_defs(
-            provider_name,
-            self.registry.openai_tool_defs(),
-        )
+        return registry_tool_defs_for_provider(self.registry, provider_name)
 
     def _store_result_handle(
         self,
         tool_name: str,
         result: Any,
     ) -> str | None:
-        if self.handle_store is None:
-            return None
-        kind = result_handle_kind(tool_name, result)
-        if kind is None:
-            return None
-        return self.handle_store.put(
-            kind=kind,
-            obj=result,
+        return store_result_handle(
+            self.handle_store,
+            tool_name,
+            result,
             summary=json_safe(result),
         )
 
@@ -756,16 +745,6 @@ def _display_result(result: Any, *, handle_id: str | None) -> Any:
     return payload
 
 
-def _response_payload(response: Any) -> dict[str, Any]:
-    if isinstance(response, dict):
-        return response
-    if hasattr(response, "model_dump"):
-        payload = response.model_dump()
-        if isinstance(payload, dict):
-            return payload
-    raise TypeError("Provider response must be a dict-like payload")
-
-
 def with_virtual_tool_defs(
     provider_name: str,
     tool_defs: list[dict[str, Any]],
@@ -777,6 +756,19 @@ def with_virtual_tool_defs(
         return defs
     defs.append(_ask_user_tool_def_for_provider(provider_name))
     return defs
+
+
+def registry_tool_defs_for_provider(
+    registry: ToolRegistry,
+    provider_name: str,
+) -> list[dict[str, Any]]:
+    """Return provider-native registry definitions plus virtual tools."""
+
+    if hasattr(registry, "tool_defs_for_provider"):
+        tool_defs = registry.tool_defs_for_provider(provider_name)
+    else:
+        tool_defs = registry.openai_tool_defs()
+    return with_virtual_tool_defs(provider_name, tool_defs)
 
 
 def _ask_user_tool_def_for_provider(provider_name: str) -> dict[str, Any]:
