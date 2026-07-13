@@ -945,3 +945,50 @@ class TestGaussianLinkJobSettingsGuess:
         route = self._route(" (mix,always) ")
         assert "guess=(mix,always)" in route
         assert "guess=((mix,always))" not in route
+
+
+class TestBuiltinECPBasisKeyword:
+    """Explicit built-in ECP bases (SDD on Br, Z<=36) must keep genecp."""
+
+    def test_sdd_on_br_keeps_genecp_and_writes_ecp_block(self):
+        from chemsmart.io.gaussian.gengenecp import (
+            GenGenECPSection,
+            is_builtin_ecp_basis,
+        )
+
+        assert is_builtin_ecp_basis("SDD")
+        assert is_builtin_ecp_basis("lanl2dz")
+        assert not is_builtin_ecp_basis("def2-SVPD")
+
+        section = GenGenECPSection._fallback_genecp_heavy_basis_section(
+            heavy_elements=["Br"], heavy_elements_basis="SDD"
+        )
+        # Basis block AND the pseudopotential block must both be present.
+        assert section.count("Br 0") == 2
+        assert section.count("SDD") == 2
+
+    def test_determine_basis_keyword_respects_explicit_ecp(self):
+        from chemsmart.io.molecules.structure import Molecule
+        import numpy as np
+
+        settings = GaussianJobSettings.default()
+        settings.basis = "genecp"
+        settings.heavy_elements = ["Br"]
+        settings.heavy_elements_basis = "SDD"
+        settings.light_elements_basis = "6-31G**"
+        molecule = Molecule(
+            symbols=["C", "Br", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.94],
+                    [1.03, 0.0, -0.36],
+                    [-0.515, 0.892, -0.36],
+                    [-0.515, -0.892, -0.36],
+                ]
+            ),
+        )
+
+        # Br is Z=35 (<=36): the old heuristic downgraded to 'gen' and the
+        # SDD pseudopotential was silently dropped.
+        assert settings.determine_basis_keyword(molecule) == "genecp"

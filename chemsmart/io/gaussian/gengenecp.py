@@ -11,6 +11,31 @@ pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
+# Gaussian built-in basis keywords that carry an effective core potential.
+# When the user names one of these for heavy elements, the ECP is explicitly
+# requested and must be written/applied regardless of the Z>36 auto-heuristic
+# (e.g. SDD on Br, Z=35). These names are Gaussian-internal, not BSE names.
+GAUSSIAN_BUILTIN_ECP_BASES = frozenset(
+    {
+        "sdd",
+        "sddall",
+        "lanl2dz",
+        "lanl2mb",
+        "lanl08",
+        "cep-4g",
+        "cep-31g",
+        "cep-121g",
+    }
+)
+
+
+def is_builtin_ecp_basis(basis_name):
+    """Return True when the basis name is a Gaussian built-in ECP keyword."""
+
+    if not basis_name:
+        return False
+    return str(basis_name).strip().lower() in GAUSSIAN_BUILTIN_ECP_BASES
+
 
 class GenGenECPSection:
     """
@@ -182,9 +207,17 @@ class GenGenECPSection:
             + "****\n"
         )
 
-        ecp_elements = [
-            element for element in heavy_elements if pt.requires_ecp(element)
-        ]
+        if is_builtin_ecp_basis(heavy_elements_basis):
+            # The user explicitly chose an ECP-carrying keyword (e.g. SDD,
+            # LANL2DZ): every heavy element gets the ECP block, even Z<=36
+            # elements like Br, or the pseudopotential is silently dropped.
+            ecp_elements = list(heavy_elements)
+        else:
+            ecp_elements = [
+                element
+                for element in heavy_elements
+                if pt.requires_ecp(element)
+            ]
         if not ecp_elements:
             return heavy_basis_section
 

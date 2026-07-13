@@ -1283,11 +1283,16 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         self.intermediate_level_functional = intermediate_level_functional
         self.intermediate_level_basis = intermediate_level_basis
         self.intermediate_level_method = intermediate_level_method
-        # allow legacy kwarg name from older configs
+        # Accept the historical project-YAML spelling as well as the CLI
+        # spelling.  Without this alias, ``qmmm.mm_force_field`` survives
+        # YAML loading but is silently ignored by the QMMM input writer.
+        legacy_low_level_method = kwargs.pop("low_level_force_field", None)
+        if legacy_low_level_method is None:
+            legacy_low_level_method = kwargs.pop("mm_force_field", None)
         self.low_level_method = (
             low_level_method
             if low_level_method is not None
-            else kwargs.pop("low_level_force_field", None)
+            else legacy_low_level_method
         )
         self.high_level_atoms = high_level_atoms
         self.intermediate_level_atoms = intermediate_level_atoms

@@ -1,6 +1,8 @@
 import os
 from io import StringIO
 
+import pytest
+
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import PBSSubmitter, SLURMSubmitter
@@ -111,3 +113,22 @@ export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#PBS -m abe\n" in buffer.getvalue()
+
+    def test_submit_propagates_scheduler_failure(self, monkeypatch):
+        server = Server("mock-pbs", SCHEDULER="PBS", SUBMIT_COMMAND="qsub")
+        monkeypatch.setattr(server, "_check_running_jobs", lambda job: None)
+        monkeypatch.setattr(server, "_write_submission_script", lambda **kwargs: None)
+        monkeypatch.setattr(server, "_submit_job", lambda job: 1)
+
+        with pytest.raises(RuntimeError, match="return code 1"):
+            server.submit(job=object())
+
+    def test_submit_test_mode_returns_without_scheduler_submission(self, monkeypatch):
+        server = Server("mock-pbs", SCHEDULER="PBS", SUBMIT_COMMAND="qsub")
+        monkeypatch.setattr(server, "_check_running_jobs", lambda job: None)
+        monkeypatch.setattr(server, "_write_submission_script", lambda **kwargs: None)
+        called = []
+        monkeypatch.setattr(server, "_submit_job", lambda job: called.append(job))
+
+        assert server.submit(job=object(), test=True) == 0
+        assert called == []

@@ -784,8 +784,7 @@ class GaussianJobSettings(MolecularJobSettings):
             if additional_params:
                 route_string += f" {additional_params}"
             logger.debug(
-                f"Added additional route parameters: "
-                f"{additional_params}"
+                f"Added additional route parameters: {additional_params}"
             )
 
         # Write job type specific route keywords
@@ -948,6 +947,18 @@ class GaussianJobSettings(MolecularJobSettings):
                     f"Element {element} requires ECP (Z > 36), using 'genecp'"
                 )
                 return "genecp"
+
+        # An explicitly requested built-in ECP basis (e.g. SDD on Br) must
+        # keep the genecp keyword even when Z <= 36, or Gaussian never reads
+        # the pseudopotential section.
+        from chemsmart.io.gaussian.gengenecp import is_builtin_ecp_basis
+
+        if is_builtin_ecp_basis(self.heavy_elements_basis):
+            logger.debug(
+                f"Heavy elements basis {self.heavy_elements_basis!r} is a "
+                f"built-in ECP keyword, using 'genecp'"
+            )
+            return "genecp"
 
         # All heavy elements have atomic number <= 36, use 'gen'
         logger.debug(

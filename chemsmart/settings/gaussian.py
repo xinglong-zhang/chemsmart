@@ -8,9 +8,11 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianTDDFTJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.workspace_project import (
+    workspace_project_names,
+    workspace_project_path,
+)
 from chemsmart.utils.mixins import RegistryMixin
-
-user_settings = ChemsmartUserSettings()
 
 logger = logging.getLogger(__name__)
 project_settings_registry: list[str] = []
@@ -174,8 +176,9 @@ class GaussianProjectSettings(RegistryMixin):
         Create project settings instance based on project name.
 
         Searches for project configuration in the following order:
-        1. User-defined project settings directory
-        2. Chemsmart test project configurations
+        1. Current workspace project settings
+        2. Existing user project settings directory
+        3. Chemsmart test project configurations
 
         Args:
             project (str): Name of the project configuration to load.
@@ -187,25 +190,35 @@ class GaussianProjectSettings(RegistryMixin):
             FileNotFoundError: If no configuration
             is found for the specified project.
         """
-        # First try user-defined project settings
+        # First try the current workspace. This keeps project settings tied to
+        # the directory where chemsmart was launched instead of silently using
+        # a global ~/.chemsmart project with the same name.
+        workspace_project_settings = cls._from_workspace_project_name(project)
+        if workspace_project_settings is not None:
+            return workspace_project_settings
+
+        # Preserve the established CLI contract. Agent auto-selection is
+        # workspace-only, but an explicitly named legacy project remains
+        # loadable when no workspace project shadows it.
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
-        else:
-            # Fall back to chemsmart test project settings
-            chemsmart_test_project_settings = (
-                cls._from_chemsmart_test_projects(project)
-            )
-            if chemsmart_test_project_settings is not None:
-                return chemsmart_test_project_settings
+
+        chemsmart_test_project_settings = cls._from_chemsmart_test_projects(
+            project
+        )
+        if chemsmart_test_project_settings is not None:
+            return chemsmart_test_project_settings
 
         # Generate helpful error message with available options
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            f"Place new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n"
+            "Place new gaussian project settings .yaml file in "
+            f"{workspace_project_path(project, 'gaussian').parent}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
-            f"Currently available projects: {user_settings.all_available_gaussian_projects}"
+            "Currently available projects: "
+            f"{_available_gaussian_projects()}"
         )
 
     @classmethod
@@ -250,6 +263,19 @@ class GaussianProjectSettings(RegistryMixin):
             return settings
 
     @classmethod
+    def _from_workspace_project_name(cls, project_name):
+        project_name_yaml_path = workspace_project_path(
+            project_name, "gaussian"
+        )
+        project_settings_manager = GaussianProjectSettingsManager(
+            filename=str(project_name_yaml_path)
+        )
+        settings = cls._from_projects_manager(project_settings_manager)
+
+        if settings is not None:
+            return settings
+
+    @classmethod
     def _from_chemsmart_test_projects(cls, project_name):
         """
         Load project settings from chemsmart test projects directory.
@@ -276,6 +302,11 @@ class GaussianProjectSettings(RegistryMixin):
 
         if settings is not None:
             return settings
+
+
+def _available_gaussian_projects() -> list[str]:
+    legacy = ChemsmartUserSettings().all_available_gaussian_projects
+    return sorted(set(workspace_project_names("gaussian")) | set(legacy))
 
 
 class YamlGaussianProjectSettings(GaussianProjectSettings):
