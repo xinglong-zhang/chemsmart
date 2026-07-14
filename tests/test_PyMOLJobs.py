@@ -31,7 +31,6 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     SoftCeramicStyle,
     _get_coordinating_atoms,
     element_category_selection,
-    render_comic_metallic_labeled_final,
     render_editorial_minimal,
     render_matte_clay,
     render_neon_coordination_core,
@@ -932,143 +931,52 @@ class TestPyMOLStyleCommands:
         assert molecules[0].num_atoms == 36
         assert "Mn" in molecules[0].elements
 
-    def test_format_highlight_bonds_encodes_bond_pairs(self):
-        coordinates = self.coordination_bonds_1_mer + [[2, 3, 4]]
-
-        assert (
-            PyMOLScientificStyleVisualizationJobRunner._format_highlight_bonds(
-                coordinates
-            )
-            == "1-2+1-5+1-36+1-3+1-15+1-8"
-        )
-
-    def test_format_pymol_style_command_passes_highlight_bonds_for_comic(self):
-        job = SimpleNamespace(
-            style="comic",
-            coordinates=self.coordination_bonds_1_mer,
-        )
-
-        command = (
-            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
-                job, self.label_1_mer
-            )
-        )
-
-        assert (
-            command
-            == f"render_comic_metallic_labeled_final {self.label_1_mer}, 1-2+1-5+1-36+1-3+1-15+1-8"
-        )
-
-    def test_format_pymol_style_command_omits_highlight_bonds_without_coordinates(
-        self,
-    ):
-        job = SimpleNamespace(
-            style="comic",
-            coordinates=None,
-        )
-
-        command = (
-            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
-                job, self.label_1_mer
-            )
-        )
-
-        assert (
-            command
-            == f"render_comic_metallic_labeled_final {self.label_1_mer}"
-        )
-
-    @pytest.mark.parametrize(
-        ("style", "expected_command"),
-        [
-            ("glossy", "metallic_poster_render"),
-            ("soft_cartoon", "render_soft_cartoon"),
-            ("neon_coordination_core", "render_neon_coordination_core"),
-            ("editorial_minimal", "render_editorial_minimal"),
-            ("soft_ceramic", "render_soft_ceramic"),
-            ("matte_clay", "render_matte_clay"),
-        ],
-    )
-    def test_format_pymol_style_command_for_derived_styles_on_1_mer(
-        self, style, expected_command
-    ):
-        job = SimpleNamespace(style=style, coordinates=None)
-
-        command = (
-            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
-                job, self.label_1_mer
-            )
-        )
-
-        assert command.startswith(expected_command)
-        assert self.label_1_mer in command
-
-    @pytest.mark.parametrize(
-        ("style", "expected_command"),
-        [
+    def test_format_pymol_style_command_is_independent_of_coordinates(self):
+        """``-c`` is handled via distance/angle labels, not style args."""
+        for style, expected in (
             (
-                "glossy",
-                "metallic_poster_render 1-mer, elem Mn, id 1 or id 2 or id 3 or id 5 or id 8 or id 15 or id 36, "
-                "2.6, N+O+S+P+H, white, on, 24, poster_mn_gold, "
-                "1-2+1-5+1-36+1-3+1-15+1-8",
+                "comic",
+                f"render_comic_metallic_labeled_final {self.label_1_mer}",
             ),
-            (
-                "soft_cartoon",
-                "render_soft_cartoon 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
-            ),
+            ("soft_cartoon", f"render_soft_cartoon {self.label_1_mer}"),
             (
                 "neon_coordination_core",
-                "render_neon_coordination_core 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+                f"render_neon_coordination_core {self.label_1_mer}",
             ),
             (
                 "editorial_minimal",
-                "render_editorial_minimal 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+                f"render_editorial_minimal {self.label_1_mer}",
             ),
+            ("soft_ceramic", f"render_soft_ceramic {self.label_1_mer}"),
+            ("matte_clay", f"render_matte_clay {self.label_1_mer}"),
             (
-                "soft_ceramic",
-                "render_soft_ceramic 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+                "glossy",
+                f"metallic_poster_render {self.label_1_mer}, elem Mn, None, "
+                f"2.6, N+O+S+P+H",
             ),
-            (
-                "matte_clay",
-                "render_matte_clay 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
-            ),
-        ],
-    )
-    def test_format_pymol_style_command_passes_highlight_bonds_for_derived_styles(
-        self, style, expected_command
-    ):
+        ):
+            for coordinates in (None, self.coordination_bonds_1_mer):
+                job = SimpleNamespace(style=style, coordinates=coordinates)
+                command = PyMOLScientificStyleVisualizationJobRunner._format_style_command(
+                    job, self.label_1_mer
+                )
+                assert command == expected
+
+    def test_scientific_style_runner_keeps_bond_distance_labels(self):
+        """Derived styles reuse the main-branch ``-c`` distance path."""
+        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
         job = SimpleNamespace(
-            style=style,
-            coordinates=self.coordination_bonds_1_mer,
+            style="soft_cartoon",
+            coordinates=[[1, 8], [1, 15], [2, 3, 4]],
         )
 
-        command = (
-            PyMOLScientificStyleVisualizationJobRunner._format_style_command(
-                job, self.label_1_mer
-            )
-        )
+        command = runner._add_coordinates_labels(job, "cmd")
 
-        assert command == expected_command
-
-    @pytest.mark.parametrize(
-        "render_fn",
-        [
-            render_comic_metallic_labeled_final,
-            render_soft_cartoon,
-            render_editorial_minimal,
-            render_soft_ceramic,
-            render_neon_coordination_core,
-            render_matte_clay,
-            render_quasi_chemdraw_bold,
-        ],
-    )
-    def test_render_wrappers_accept_highlight_bonds_as_second_argument(
-        self, render_fn
-    ):
-        """CHEMSMART passes ``-c`` bond pairs as the second positional arg."""
-        params = list(inspect.signature(render_fn).parameters)
-        assert params[0] == "selection"
-        assert params[1] == "highlight_bonds"
+        assert "distance d1, id 1, id 8" in command
+        assert "distance d2, id 1, id 15" in command
+        assert "angle a1" in command
 
     def test_get_coordinating_atoms_uses_radius_ratio_helper(self):
         source = inspect.getsource(_get_coordinating_atoms)
@@ -1161,7 +1069,6 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_opaque_background", 0)' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
         assert '_safe_set("depth_cue", 0)' in source
-        assert "apply_highlight_bonds" in source
 
     def test_render_soft_ceramic_defines_expected_visual_parameters(self):
         source = inspect.getsource(SoftCeramicStyle)
@@ -1185,7 +1092,6 @@ class TestPyMOLStyleCommands:
         assert 'cmd.color("sulfur_soft_gold", atoms["donor_s"])' in source
         assert 'cmd.bg_color("studio_background")' in source
         assert '_safe_set("ray_opaque_background", 1)' in source
-        assert "apply_highlight_bonds" in source
 
     def test_render_soft_cartoon_defines_expected_visual_parameters(self):
         source = inspect.getsource(SoftCartoonStyle)
@@ -1217,7 +1123,6 @@ class TestPyMOLStyleCommands:
         assert "apply_ambient_occlusion" in source
         assert "apply_illustrated_camera" in source
         assert '_safe_set("ray_trace_mode", 1)' in source
-        assert "apply_highlight_bonds" in source
         assert "self.frame(" in source
 
     def test_render_quasi_chemdraw_bold_defines_expected_visual_parameters(
@@ -1248,7 +1153,6 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_shadow", 0)' in style_source
         assert '_safe_set("ambient_occlusion_mode", 0)' in style_source
         assert '_safe_set("orthoscopic", 1)' in style_source
-        assert "apply_highlight_bonds" in style_source
 
     def test_render_matte_clay_defines_expected_visual_parameters(self):
         source = inspect.getsource(MatteClayStyle)
@@ -1266,56 +1170,23 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_opaque_background", 0)' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
         assert '_safe_set("ambient_occlusion_scale", 18)' in source
-        assert "apply_highlight_bonds" in source
         assert "cmd.select(" not in source
 
     def test_hybrid_is_not_a_derived_style(self):
         with pytest.raises(ValueError, match="not available"):
             normalize_pymol_style("hybrid")
 
-    def test_comic_style_skips_bond_distance_labels_from_coordinates(self):
-        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
-            PyMOLScientificStyleVisualizationJobRunner
-        )
-        job = SimpleNamespace(
-            style="comic",
-            coordinates=[[1, 8], [1, 15], [2, 3, 4]],
-        )
-
-        command = runner._add_coordinates_labels(job, "cmd")
-
-        assert "distance d" not in command
-        assert "angle a1" in command
-
-    def test_glossy_style_skips_bond_distance_labels_from_coordinates(self):
-        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
-            PyMOLScientificStyleVisualizationJobRunner
-        )
-        job = SimpleNamespace(
-            style="glossy",
-            coordinates=[[1, 8], [1, 15], [2, 3, 4]],
-        )
-
-        command = runner._add_coordinates_labels(job, "cmd")
-
-        assert "distance d" not in command
-        assert "angle a1" in command
-
-    def test_base_runner_keeps_bond_distance_labels_for_comic_style(self):
-        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
-        job = SimpleNamespace(style="comic", coordinates=[[1, 8]])
-
-        command = runner._add_coordinates_labels(job, "cmd")
-
-        assert "distance d1, id 1, id 8" in command
-
-    def test_non_comic_style_keeps_bond_distance_labels(self):
-        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
-        job = SimpleNamespace(style="pymol", coordinates=[[1, 8]])
-
-        command = runner._add_coordinates_labels(job, "cmd")
-
-        assert "distance d1, id 1, id 8" in command
+    def test_derived_and_base_styles_keep_bond_distance_labels(self):
+        for runner_cls, style in (
+            (PyMOLScientificStyleVisualizationJobRunner, "comic"),
+            (PyMOLScientificStyleVisualizationJobRunner, "glossy"),
+            (PyMOLScientificStyleVisualizationJobRunner, "steric_surface"),
+            (PyMOLJobRunner, "pymol"),
+        ):
+            runner = runner_cls.__new__(runner_cls)
+            job = SimpleNamespace(style=style, coordinates=[[1, 8]])
+            command = runner._add_coordinates_labels(job, "cmd")
+            assert "distance d1, id 1, id 8" in command
 
 
 @pytest.mark.usefixtures("skip_if_no_pymol")
@@ -1378,12 +1249,14 @@ class TestPyMOLScientificStyleVisualizationJobs:
             PyMOLScientificStyleVisualizationJobRunner._format_style_command(
                 job, job.label
             )
-            == f"render_comic_metallic_labeled_final {job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
+            == f"render_comic_metallic_labeled_final {job.label}"
         )
         runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
             PyMOLScientificStyleVisualizationJobRunner
         )
-        assert "distance d" not in runner._add_coordinates_labels(job, "cmd")
+        assert "distance d1, id 1, id 2" in runner._add_coordinates_labels(
+            job, "cmd"
+        )
 
     def test_glossy_style_job_on_1_mer_xyz(
         self,
@@ -1432,8 +1305,7 @@ class TestPyMOLScientificStyleVisualizationJobs:
             PyMOLScientificStyleVisualizationJobRunner._format_style_command(
                 job, job.label
             )
-            == "render_editorial_minimal "
-            f"{job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
+            == f"render_editorial_minimal {job.label}"
         )
 
     def test_soft_ceramic_style_job_on_1_mer_xyz(
@@ -1459,6 +1331,5 @@ class TestPyMOLScientificStyleVisualizationJobs:
             PyMOLScientificStyleVisualizationJobRunner._format_style_command(
                 job, job.label
             )
-            == "render_soft_ceramic "
-            f"{job.label}, 1-2+1-5+1-36+1-3+1-15+1-8"
+            == f"render_soft_ceramic {job.label}"
         )

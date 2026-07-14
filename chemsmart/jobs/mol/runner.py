@@ -9,7 +9,6 @@ and process management; specialized runners extend it with job-specific
 commands and post-processing (e.g., FFmpeg movie creation).
 """
 
-import copy
 import glob
 import logging
 import math
@@ -1076,74 +1075,27 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
     JOBTYPES = ["pymol_scientific_style_visualization"]
 
     @staticmethod
-    def _format_highlight_bonds(coordinates):
-        """Encode 2-atom ``-c`` bond pairs for coordination highlight styling."""
-        if not coordinates:
-            return ""
-
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=coordinates,
-            program="pymol",
-        )
-        bonds = []
-        for prepend_string in prepend_string_list:
-            if prepend_string.startswith("B"):
-                indices = [int(value) for value in prepend_string.split()[1:]]
-                if len(indices) == 2:
-                    bonds.append((indices[0], indices[1]))
-        if not bonds:
-            return ""
-        return "+".join(f"{atom_a}-{atom_b}" for atom_a, atom_b in bonds)
-
-    @staticmethod
-    def _highlight_bonds_to_coord_sel(highlight_bonds):
-        """Return a PyMOL ``coord_sel`` expression from encoded bond pairs."""
-        atom_ids = []
-        for token in highlight_bonds.split("+"):
-            token = token.strip()
-            if not token or "-" not in token:
-                continue
-            atom_a, atom_b = token.split("-", 1)
-            atom_ids.extend([int(atom_a), int(atom_b)])
-        if not atom_ids:
-            return None
-        return " or ".join(
-            f"id {atom_id}" for atom_id in sorted(set(atom_ids))
-        )
-
-    @staticmethod
     def _format_style_command(job, selection):
-        """Build the PyMOL -d command for a derived scientific style."""
+        """Build the PyMOL -d command for a derived scientific style.
+
+        ``-c`` coordinate highlights are handled by the shared
+        ``_add_coordinates_labels`` path (distance / angle / dihedral
+        measurements), matching plain ``visualize -c`` on the main branch.
+        Style commands themselves only select the look; they do not re-encode
+        bond pairs.
+        """
         style = normalize_pymol_style(job.style)
         render_command = PYMOL_SCIENTIFIC_STYLE_COMMANDS.get(style)
         if render_command is None:
             raise ValueError(f"The style {job.style} is not available!")
 
-        highlight_bonds = (
-            PyMOLScientificStyleVisualizationJobRunner._format_highlight_bonds(
-                job.coordinates
-            )
-        )
-
         if render_command == "metallic_poster_render":
-            if highlight_bonds:
-                coord_sel = PyMOLScientificStyleVisualizationJobRunner._highlight_bonds_to_coord_sel(
-                    highlight_bonds
-                )
-                return (
-                    f"metallic_poster_render {selection}, elem Mn, {coord_sel}, "
-                    f"2.6, N+O+S+P+H, white, on, 24, poster_mn_gold, "
-                    f"{highlight_bonds}"
-                )
             return (
                 f"metallic_poster_render {selection}, elem Mn, None, 2.6, "
                 f"N+O+S+P+H"
             )
 
-        command = f"{render_command} {selection}"
-        if highlight_bonds:
-            command += f", {highlight_bonds}"
-        return command
+        return f"{render_command} {selection}"
 
     def _generate_visualization_style_script(self, job):
         """Copy scientific_styles.py for derived ``-s`` visualization jobs."""
@@ -1167,35 +1119,6 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
         """Apply the derived scientific style render command."""
         command += f' -d "{self._format_style_command(job, job.label)}'
         return command
-
-    @staticmethod
-    def _coordinates_for_non_bond_labels(coordinates):
-        """Return angle/dihedral specs; comic bonds use highlight styling instead."""
-        if not coordinates:
-            return coordinates
-
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=coordinates,
-            program="pymol",
-        )
-        label_coordinates = []
-        for prepend_string in prepend_string_list:
-            if prepend_string.startswith(("A", "D")):
-                label_coordinates.append(
-                    [int(value) for value in prepend_string.split()[1:]]
-                )
-        return label_coordinates or None
-
-    def _add_coordinates_labels(self, job, command):
-        """Skip bond distance labels when bonds are used for highlight styling."""
-        if is_pymol_derived_style(job.style) and job.coordinates:
-            label_job = copy.copy(job)
-            label_job.coordinates = self._coordinates_for_non_bond_labels(
-                job.coordinates
-            )
-            return super()._add_coordinates_labels(label_job, command)
-
-        return super()._add_coordinates_labels(job, command)
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
