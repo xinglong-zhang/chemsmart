@@ -385,7 +385,7 @@ CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices includin
    -  -  ``comic``
       -  Comic ball-and-stick rendering with black outlines and labels
    -  -  ``soft-cartoon``
-      -  Soft premium ball-and-stick rendering with light metallic shading
+      -  Soft pastel ball-and-stick with radius-ratio coordination spheres and illustrated outlines
    -  -  ``editorial-minimal``
       -  Matte minimal ball-and-stick style for main-text mechanistic figures
    -  -  ``soft-ceramic``

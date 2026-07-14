@@ -21,17 +21,21 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.templates.scientific_styles import (
+    ELEMENT_CATEGORIES,
     EditorialMinimalStyle,
     MatteClayStyle,
     NeonCoordinationCoreStyle,
     QuasiChemDrawBoldStyle,
     ScientificStyle,
+    SoftCartoonStyle,
     SoftCeramicStyle,
     _get_coordinating_atoms,
+    element_category_selection,
     render_editorial_minimal,
     render_matte_clay,
     render_neon_coordination_core,
     render_quasi_chemdraw_bold,
+    render_soft_cartoon,
     render_soft_ceramic,
 )
 from chemsmart.jobs.mol.visualize import (
@@ -1064,6 +1068,30 @@ class TestPyMOLStyleCommands:
         assert "cmd.color" not in source
         assert "sphere_scale" not in source
 
+    def test_element_category_helpers_are_centralized(self):
+        assert ELEMENT_CATEGORIES["halogen"] == "F+Cl+Br+I"
+        assert ELEMENT_CATEGORIES["N+O"] == "N+O"
+        assert ELEMENT_CATEGORIES["metal"].startswith("elem ")
+        assert (
+            element_category_selection("all", "halogen")
+            == "(all) and elem F+Cl+Br+I"
+        )
+        assert (
+            element_category_selection("sc_shell", "N+O")
+            == "(sc_shell) and elem N+O"
+        )
+
+        base_source = inspect.getsource(ScientificStyle)
+        assert (
+            "def _safe_set(self, setting, value, selection=None, category=None)"
+            in base_source
+        )
+        assert (
+            "def apply_style_palette(self, selection, palette, overrides=None)"
+            in base_source
+        )
+        assert "element_category_selection" in base_source
+
     def test_render_editorial_minimal_defines_expected_visual_parameters(self):
         source = inspect.getsource(EditorialMinimalStyle)
         wrapper = inspect.getsource(render_editorial_minimal)
@@ -1106,8 +1134,8 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("sphere_scale", 0.44, atoms["metal"])' in source
         assert '_safe_set("stick_radius", 0.10, sel)' in source
         assert 'cmd.set_bond("stick_radius", 0.145' in source
-        assert 'cmd.color("ncc_metal_c", atoms["metal"])' in source
-        assert 'cmd.color("ncc_nitrogen", f"{sel} and elem N")' in source
+        assert "apply_style_palette" in source
+        assert 'overrides={atoms["metal"]: "ncc_metal_c"}' in source
         assert '_safe_set("opaque_background", 0)' in source
         assert '_safe_set("ray_opaque_background", 0)' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
@@ -1138,6 +1166,35 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_opaque_background", 1)' in source
         assert "apply_highlight_bonds" in source
 
+    def test_render_soft_cartoon_defines_expected_visual_parameters(self):
+        source = inspect.getsource(SoftCartoonStyle)
+        wrapper = inspect.getsource(render_soft_cartoon)
+
+        assert issubclass(SoftCartoonStyle, ScientificStyle)
+        assert SoftCartoonStyle.prefix == "sc"
+        assert SoftCartoonStyle.include_nh_h is True
+        assert "SoftCartoonStyle().render" in wrapper
+        assert "select_coordination" in source
+        assert "within 2.6" not in source
+        assert "byres" not in source
+        assert "elem Mn or elem Fe" not in source
+        assert 'cmd.bg_color("sc_background")' in source
+        assert '_safe_set("stick_radius", 0.135, sel)' in source
+        assert 'cmd.set_bond("stick_radius", 0.165' in source
+        assert '_safe_set("sphere_scale", 0.40, atoms["metal"])' in source
+        assert '("N+O", 0.275)' in source
+        assert "category=category" in source
+        assert "self._safe_set" in source
+        assert "apply_style_palette" in source
+        assert 'overrides={atoms["metal"]: "sc_metal"}' in source
+        assert "_apply_lighting(" in source
+        assert "apply_soft_shadows" in source
+        assert "apply_ambient_occlusion" in source
+        assert "apply_illustrated_camera" in source
+        assert '_safe_set("ray_trace_mode", 1)' in source
+        assert "apply_highlight_bonds" in source
+        assert "self.frame(" in source
+
     def test_render_quasi_chemdraw_bold_defines_expected_visual_parameters(
         self,
     ):
@@ -1160,8 +1217,8 @@ class TestPyMOLStyleCommands:
         assert (
             '_safe_set("sphere_scale", 0.34, atoms["metal"])' in style_source
         )
-        assert 'cmd.color("qcd_metal", atoms["metal"])' in style_source
-        assert 'cmd.color("qcd_nitrogen", f"{sel} and elem N")' in style_source
+        assert "apply_style_palette" in style_source
+        assert 'overrides={atoms["metal"]: "qcd_metal"}' in style_source
         assert '_safe_set("ambient", 0.58)' in style_source
         assert '_safe_set("ray_shadow", 0)' in style_source
         assert '_safe_set("ambient_occlusion_mode", 0)' in style_source
