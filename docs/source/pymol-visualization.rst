@@ -399,7 +399,7 @@ CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices includin
    -  -  ``steric-surface``
       -  Transparent molecular surface for steric / space-filling views
    -  -  ``quasi-chemdraw-bold``
-      -  Bold schematic 3D style with ChemDraw-like clarity
+      -  Bold ChemDraw-like style using radius-ratio cores and flat illustrative shading
    -  -  ``labeled-coordination-core``
       -  Coordination core with explicit element labels
 

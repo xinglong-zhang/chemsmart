@@ -21,10 +21,17 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.templates.scientific_styles import (
+    EditorialMinimalStyle,
+    MatteClayStyle,
+    NeonCoordinationCoreStyle,
+    QuasiChemDrawBoldStyle,
+    ScientificStyle,
+    SoftCeramicStyle,
     _get_coordinating_atoms,
     render_editorial_minimal,
     render_matte_clay,
     render_neon_coordination_core,
+    render_quasi_chemdraw_bold,
     render_soft_ceramic,
 )
 from chemsmart.jobs.mol.visualize import (
@@ -1058,10 +1065,13 @@ class TestPyMOLStyleCommands:
         assert "sphere_scale" not in source
 
     def test_render_editorial_minimal_defines_expected_visual_parameters(self):
-        source = inspect.getsource(render_editorial_minimal)
+        source = inspect.getsource(EditorialMinimalStyle)
+        wrapper = inspect.getsource(render_editorial_minimal)
 
-        assert "_get_coordinating_atoms" in source
-        assert 'prefix="editorial"' in source
+        assert issubclass(EditorialMinimalStyle, ScientificStyle)
+        assert EditorialMinimalStyle.prefix == "editorial"
+        assert "EditorialMinimalStyle().render" in wrapper
+        assert "select_coordination" in source
         assert 'metal="elem Mn"' not in source
         assert "donors=" not in source
         assert "within 2.8" not in source
@@ -1083,10 +1093,13 @@ class TestPyMOLStyleCommands:
     def test_render_neon_coordination_core_defines_expected_visual_parameters(
         self,
     ):
-        source = inspect.getsource(render_neon_coordination_core)
+        source = inspect.getsource(NeonCoordinationCoreStyle)
+        wrapper = inspect.getsource(render_neon_coordination_core)
 
-        assert "_get_coordinating_atoms" in source
-        assert 'prefix="ncc"' in source
+        assert issubclass(NeonCoordinationCoreStyle, ScientificStyle)
+        assert NeonCoordinationCoreStyle.prefix == "ncc"
+        assert "NeonCoordinationCoreStyle().render" in wrapper
+        assert "select_coordination" in source
         assert "_common_select_core" not in source
         assert "within 3.00" not in source
         assert "neighbor ncc_metal" not in source
@@ -1099,14 +1112,17 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_opaque_background", 0)' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
         assert '_safe_set("depth_cue", 0)' in source
-        assert "_apply_coordination_highlight_bonds" in source
+        assert "apply_highlight_bonds" in source
 
     def test_render_soft_ceramic_defines_expected_visual_parameters(self):
-        source = inspect.getsource(render_soft_ceramic)
+        source = inspect.getsource(SoftCeramicStyle)
+        wrapper = inspect.getsource(render_soft_ceramic)
 
-        assert "_get_coordinating_atoms" in source
-        assert 'prefix="soft_ceramic"' in source
-        assert "include_nh_h=True" in source
+        assert issubclass(SoftCeramicStyle, ScientificStyle)
+        assert SoftCeramicStyle.prefix == "soft_ceramic"
+        assert SoftCeramicStyle.include_nh_h is True
+        assert "SoftCeramicStyle().render" in wrapper
+        assert "select_coordination" in source
         assert 'metal="elem Mn"' not in source
         assert "donors=" not in source
         assert '_safe_set("sphere_scale", 0.56, atoms["metal"])' in source
@@ -1120,13 +1136,46 @@ class TestPyMOLStyleCommands:
         assert 'cmd.color("sulfur_soft_gold", atoms["donor_s"])' in source
         assert 'cmd.bg_color("studio_background")' in source
         assert '_safe_set("ray_opaque_background", 1)' in source
-        assert "_apply_coordination_highlight_bonds" in source
+        assert "apply_highlight_bonds" in source
+
+    def test_render_quasi_chemdraw_bold_defines_expected_visual_parameters(
+        self,
+    ):
+        style_source = inspect.getsource(QuasiChemDrawBoldStyle)
+        wrapper_source = inspect.getsource(render_quasi_chemdraw_bold)
+
+        assert issubclass(QuasiChemDrawBoldStyle, ScientificStyle)
+        assert QuasiChemDrawBoldStyle.prefix == "qcd"
+        assert QuasiChemDrawBoldStyle.command == "render_quasi_chemdraw_bold"
+        assert "qcd_bond" in QuasiChemDrawBoldStyle.colors
+        assert "QuasiChemDrawBoldStyle().render" in wrapper_source
+        assert "select_coordination" in style_source
+        assert "_common_select_core" not in style_source
+        assert "within 2.75" not in style_source
+        assert "neighbor qcd_metal" not in style_source
+        assert "Li+Na+K+Rb+Cs" not in style_source
+        assert '_safe_set("stick_radius", 0.155, sel)' in style_source
+        assert '_safe_set("stick_color", "qcd_bond", sel)' in style_source
+        assert 'cmd.set_bond("stick_radius", 0.185' in style_source
+        assert (
+            '_safe_set("sphere_scale", 0.34, atoms["metal"])' in style_source
+        )
+        assert 'cmd.color("qcd_metal", atoms["metal"])' in style_source
+        assert 'cmd.color("qcd_nitrogen", f"{sel} and elem N")' in style_source
+        assert '_safe_set("ambient", 0.58)' in style_source
+        assert '_safe_set("ray_shadow", 0)' in style_source
+        assert '_safe_set("ambient_occlusion_mode", 0)' in style_source
+        assert '_safe_set("orthoscopic", 1)' in style_source
+        assert "apply_highlight_bonds" in style_source
 
     def test_render_matte_clay_defines_expected_visual_parameters(self):
-        source = inspect.getsource(render_matte_clay)
+        source = inspect.getsource(MatteClayStyle)
+        wrapper = inspect.getsource(render_matte_clay)
 
-        assert "_get_coordinating_atoms" in source
-        assert 'prefix="matte_clay"' in source
+        assert issubclass(MatteClayStyle, ScientificStyle)
+        assert MatteClayStyle.prefix == "matte_clay"
+        assert "MatteClayStyle().render" in wrapper
+        assert "select_coordination" in source
         assert "donors=" not in source
         assert 'atoms["hydride"]' in source
         assert '_safe_set("sphere_scale", 0.62, atoms["metal"])' in source
@@ -1135,7 +1184,7 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_opaque_background", 0)' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
         assert '_safe_set("ambient_occlusion_scale", 18)' in source
-        assert "_apply_coordination_highlight_bonds" in source
+        assert "apply_highlight_bonds" in source
         assert "cmd.select(" not in source
 
     def test_hybrid_is_not_a_derived_style(self):
