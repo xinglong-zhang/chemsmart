@@ -112,18 +112,92 @@ class ScientificStyle:
     @staticmethod
     def hide_distance_value_labels():
         """Hide numeric labels on ``-c`` bond-distance objects (``d1``, ``d2``, …)."""
+        for name in ScientificStyle._distance_object_names():
+            try:
+                cmd.hide("labels", name)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _distance_object_names():
+        """Return sorted ``d1``, ``d2``, … measurement object names."""
         try:
             names = cmd.get_names("objects", enabled_only=0)
         except Exception:
-            return
+            return []
 
+        distance_names = []
         for name in names:
             suffix = name[1:] if name.startswith("d") else ""
             if suffix.isdigit():
+                distance_names.append((int(suffix), name))
+        distance_names.sort()
+        return [name for _, name in distance_names]
+
+    @staticmethod
+    def pairs_from_distance_objects(selection="all"):
+        """Return 1-based atom-index pairs stored in ``d1``, ``d2``, … objects."""
+        try:
+            state = cmd.get_state()
+        except Exception:
+            return []
+
+        distance_names = ScientificStyle._distance_object_names()
+        if not distance_names:
+            return []
+
+        xyz2idx = {}
+        try:
+            cmd.iterate_state(
+                state,
+                selection,
+                "xyz2idx[(x, y, z)] = index",
+                space={"xyz2idx": xyz2idx},
+            )
+        except Exception:
+            return []
+
+        pairs = []
+        try:
+            raw_objects = cmd.get_session(
+                " ".join(distance_names), 1, 1, 0, 0
+            )["names"]
+        except Exception:
+            return pairs
+
+        for obj in raw_objects:
+            try:
+                points = obj[5][2][state - 1][1]
+                if points is None:
+                    continue
+            except (KeyError, IndexError, TypeError):
+                continue
+            for point_index in range(0, len(points), 6):
+                xyz1 = tuple(points[point_index : point_index + 3])
+                xyz2 = tuple(points[point_index + 3 : point_index + 6])
                 try:
-                    cmd.hide("labels", name)
-                except Exception:
-                    pass
+                    pairs.append((xyz2idx[xyz1], xyz2idx[xyz2]))
+                except KeyError:
+                    continue
+        return pairs
+
+    @staticmethod
+    def bond_atom_index_pairs(pairs):
+        """Draw PyMOL sticks between 1-based atom-index pairs."""
+        for atom_a, atom_b in pairs:
+            try:
+                cmd.bond(f"id {int(atom_a)}", f"id {int(atom_b)}")
+            except Exception:
+                pass
+
+    @staticmethod
+    def remove_distance_objects():
+        """Delete ``d1``, ``d2``, … measurement objects created by ``-c``."""
+        for name in ScientificStyle._distance_object_names():
+            try:
+                cmd.delete(name)
+            except Exception:
+                pass
 
     @classmethod
     def element_category_selection(cls, base_selection, category):
@@ -499,9 +573,9 @@ class MetallicPosterStyle(ScientificStyle):
 
     name = "metallic_poster"
     command = "metallic_poster_render"
+    prefix = "poster"
+    include_nh_h = True
     message = "Metallic poster style applied."
-    DEFAULT_METAL_COLOR = "poster_mn_gold"
-    OTHER_METALS_SELECTION = "elem Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au"
     colors = {
         "poster_carbon": [0.62, 0.62, 0.62],
         "poster_hydrogen": [0.96, 0.96, 0.96],
@@ -511,122 +585,116 @@ class MetallicPosterStyle(ScientificStyle):
         "poster_phosphorus": [1.00, 0.48, 0.08],
         "poster_halogen": [0.20, 0.82, 0.32],
         "poster_mn_gold": [0.92, 0.60, 0.22],
-        "poster_mn_pink": [0.88, 0.48, 0.78],
         "poster_metal_gray": [0.78, 0.78, 0.84],
         "poster_label_white": [1.00, 1.00, 1.00],
         "poster_label_black": [0.02, 0.02, 0.02],
     }
 
-    @staticmethod
-    def _normalize_none(value):
-        """Convert PyMOL command-line 'None' strings to Python None."""
-        if value is None:
-            return None
-        if str(value).lower() in ["none", "null", "false", ""]:
-            return None
-        return value
+    ELEMENT_PALETTE = {
+        "C": "poster_carbon",
+        "H": "poster_hydrogen",
+        "N": "poster_nitrogen",
+        "O": "poster_oxygen",
+        "S": "poster_sulfur",
+        "P": "poster_phosphorus",
+        "halogen": "poster_halogen",
+    }
+
+    @classmethod
+    def metal_palette_overrides(cls, selection, metal):
+        """Return poster/comic metal-center palette overrides."""
+        sel = cls.selection_expr(selection)
+        return {
+            f"{sel} and ({cls.METAL_ELEMENTS}) and not ({metal})": (
+                "poster_metal_gray"
+            ),
+            metal: "poster_mn_gold",
+        }
 
     @staticmethod
     def metal_element_label(metal_selection):
         """Return the element symbol of the first atom in a metal selection."""
         model = cmd.get_model(metal_selection)
         if not model.atom:
-            return "Mn"
+            return "?"
         symbol = model.atom[0].symbol.strip()
-        return symbol or "Mn"
+        return symbol or "?"
 
-    def apply_element_colors(self, sel, metal, metal_color=None):
-        """Apply the poster element color scheme to a selection."""
-        if metal_color is None:
-            metal_color = self.DEFAULT_METAL_COLOR
+    def render(self, selection="all"):
+        sel = f"({selection})"
         self.define_colors()
-        overrides = {
-            f"{sel} and {self.OTHER_METALS_SELECTION} and not ({metal})": (
-                "poster_metal_gray"
-            ),
-        }
-        if cmd.count_atoms(metal) > 0:
-            overrides[metal] = metal_color
-        self.apply_element_palette(
+        atoms = self.select_coordination(selection)
+        shell = self.first_shell(atoms)
+        core = atoms["coordination_core"]
+        metal = atoms["metal"]
+
+        self.set_transparent_background()
+        self.apply_base_quality()
+        self.apply_lighting(
+            0.85,
+            0.60,
+            0.22,
+            0.82,
+            0.45,
+            spec_power=260,
+            shininess=90,
+        )
+        self.safe_set("fog_start", 0.60)
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("field_of_view", 35)
+        self.safe_set("depth_cue", 1)
+        self.safe_set("light_count", 8)
+        self.safe_set("ray_trace_mode", 0)
+        self.safe_set("ray_trace_gain", 0.08)
+        self.safe_set("ray_trace_disco_factor", 1)
+        self.safe_ray_shadows("light")
+        self.apply_soft_shadows(decay_factor=0.25, decay_range=2.0)
+        self.apply_ambient_occlusion(scale=18, smooth=12)
+        self.safe_set("sphere_quality", 4)
+
+        cmd.hide("everything", sel)
+        cmd.show("sticks", sel)
+        self.safe_set("stick_radius", 0.13, sel)
+        self.safe_set("stick_quality", 30, sel)
+        self.safe_set("stick_ball", 0, sel)
+        self.safe_set("valence", 0, sel)
+        cmd.hide("sticks", f"{sel} and elem H and not ({shell})")
+        cmd.show("spheres", core)
+        self.safe_set("sphere_scale", 0.62, metal)
+        self.safe_set("sphere_scale", 0.50, atoms["donors"])
+        self.safe_set("sphere_scale", 0.34, atoms["important_h"])
+        self.safe_set("stick_radius", 0.16, core)
+
+        self.apply_style_palette(
             sel,
-            {
-                "C": "poster_carbon",
-                "H": "poster_hydrogen",
-                "N": "poster_nitrogen",
-                "O": "poster_oxygen",
-                "S": "poster_sulfur",
-                "P": "poster_phosphorus",
-                "halogen": "poster_halogen",
-            },
-            overrides=overrides,
+            self.ELEMENT_PALETTE,
+            overrides=self.metal_palette_overrides(selection, metal),
         )
 
-    def make_centered_element_labels(
-        self,
-        atoms_to_label,
-        label_prefix="metallic_poster_labels",
-        label_size=24,
-        label_font_id=7,
-    ):
-        """Create centered pseudoatom labels at selected atom coordinates."""
-        self.define_colors()
+        label_prefix = "metallic_poster_labels"
         cmd.delete(label_prefix + "*")
-
-        model = cmd.get_model(atoms_to_label)
-        if len(model.atom) == 0:
-            print("No atoms found for centered labels:", atoms_to_label)
-            return
-
-        label_color_by_element = {
-            "Mn": "poster_label_black",
-            "Fe": "poster_label_black",
-            "Co": "poster_label_black",
-            "Ni": "poster_label_black",
-            "Cu": "poster_label_black",
-            "Zn": "poster_label_black",
-            "Ru": "poster_label_black",
-            "Rh": "poster_label_black",
-            "Pd": "poster_label_black",
-            "Ir": "poster_label_black",
-            "Pt": "poster_label_black",
-            "N": "poster_label_white",
-            "O": "poster_label_white",
-            "S": "poster_label_black",
-            "P": "poster_label_black",
-            "H": "poster_label_black",
-        }
-
+        label_colors = {"N": "poster_label_white", "O": "poster_label_white"}
         counters = {}
-        for atom in model.atom:
-            elem = atom.symbol.strip()
-            if not elem:
-                elem = atom.name.strip()[0]
-
+        for atom in cmd.get_model(core).atom:
+            elem = atom.symbol.strip() or atom.name.strip()[0]
             counters[elem] = counters.get(elem, 0) + 1
             obj_name = f"{label_prefix}_{elem}"
-            pseudo_name = f"L_{elem}_{counters[elem]}"
-
             cmd.pseudoatom(
                 object=obj_name,
-                name=pseudo_name,
+                name=f"L_{elem}_{counters[elem]}",
                 pos=atom.coord,
                 label=elem,
             )
-
         for elem in counters:
             obj_name = f"{label_prefix}_{elem}"
             cmd.hide("everything", obj_name)
             cmd.show("labels", obj_name)
-
             self.safe_set("label_position", [0, 0, 0], obj_name)
-            self.safe_set("label_font_id", int(label_font_id), obj_name)
-            self.safe_set("label_size", float(label_size), obj_name)
+            self.safe_set("label_font_id", 7, obj_name)
+            self.safe_set("label_size", 24.0, obj_name)
             self.safe_set("label_connector", 0, obj_name)
             self.safe_set("label_shadow_mode", 2, obj_name)
-
-            label_color = label_color_by_element.get(
-                elem, "poster_label_white"
-            )
+            label_color = label_colors.get(elem, "poster_label_black")
             outline_color = (
                 "poster_label_black"
                 if label_color == "poster_label_white"
@@ -635,109 +703,7 @@ class MetallicPosterStyle(ScientificStyle):
             self.safe_set("label_color", label_color, obj_name)
             self.safe_set("label_outline_color", outline_color, obj_name)
 
-    def render(self, selection="all"):
-        """Apply glossy metallic poster rendering with CHEMSMART defaults."""
-        metal_sel = "elem Mn"
-        coord_sel = None
-        coord_cutoff = 2.6
-        donor_elements = "N+O+S+P+H"
-        label_core = "on"
-        label_size = 24
-        metal_color = self.DEFAULT_METAL_COLOR
-
-        self.define_colors()
-
-        coord_sel = self._normalize_none(coord_sel)
-
-        sel = f"({selection})"
-        metal = f"({sel}) and ({metal_sel})"
-
-        if cmd.count_atoms(metal) == 0:
-            fallback_metals = "elem Mn+Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au"
-            metal = f"({sel}) and ({fallback_metals})"
-
-        if coord_sel is None:
-            coord = (
-                f"({sel}) and "
-                f"(elem {donor_elements}) within {float(coord_cutoff)} of ({metal})"
-            )
-        else:
-            coord = f"({sel}) and ({coord_sel})"
-
-        core = f"({metal}) or ({coord})"
-
-        self.set_transparent_background()
-        self.safe_set("ambient", 0.22)
-        self.safe_set("direct", 0.82)
-        self.safe_set("fog_start", 0.60)
-
-        self.safe_set("orthoscopic", 1)
-        self.safe_set("field_of_view", 35)
-        self.safe_set("depth_cue", 1)
-
-        self.safe_set("specular", 0.85)
-        self.safe_set("spec_reflect", 0.60)
-        self.safe_set("spec_power", 260)
-        self.safe_set("reflect", 0.45)
-        self.safe_set("shininess", 90)
-        self.safe_set("light_count", 8)
-        self.safe_set("two_sided_lighting", 1)
-
-        self.safe_set("ray_shadow", 1)
-        self.safe_set("ray_trace_mode", 0)
-        self.safe_set("ray_trace_gain", 0.08)
-        self.safe_set("ray_trace_disco_factor", 1)
-        self.safe_ray_shadows("light")
-
-        self.safe_set("ray_shadow_decay_factor", 0.25)
-        self.safe_set("ray_shadow_decay_range", 2.0)
-
-        self.safe_set("ambient_occlusion_mode", 1)
-        self.safe_set("ambient_occlusion_scale", 18)
-        self.safe_set("ambient_occlusion_smooth", 12)
-
-        self.safe_set("antialias", 2)
-        self.safe_set("ray_trace_antialias", 2)
-
-        cmd.hide("everything", sel)
-
-        cmd.show("sticks", sel)
-        self.safe_set("stick_radius", 0.13, sel)
-        self.safe_set("stick_quality", 30, sel)
-        self.safe_set("stick_ball", 0, sel)
-        self.safe_set("valence", 0, sel)
-
-        cmd.hide("sticks", f"{sel} and elem H and not ({coord})")
-
-        cmd.show("spheres", core)
-        self.safe_set("sphere_quality", 4)
-        self.safe_set("sphere_scale", 0.62, metal)
-        self.safe_set("sphere_scale", 0.50, coord)
-        self.safe_set("sphere_scale", 0.34, f"({coord}) and elem H")
-
-        self.safe_set(
-            "stick_radius", 0.16, f"{sel} and within 2.9 of ({metal})"
-        )
-
-        self.apply_element_colors(sel, metal, metal_color=metal_color)
-
-        if str(label_core).lower() in ["on", "1", "true", "yes"]:
-            self.safe_set("label_font_id", 7)
-            self.safe_set("label_size", float(label_size))
-            self.safe_set("label_position", [0, 0, 0])
-            self.safe_set("label_connector", 0)
-
-            self.make_centered_element_labels(
-                core,
-                label_prefix="metallic_poster_labels",
-                label_size=label_size,
-                label_font_id=7,
-            )
-
-        cmd.zoom(selection, buffer=2.0)
-        cmd.orient(selection)
-        cmd.rebuild()
-        self.finalize()
+        self.finish_default(selection)
 
 
 class ComicMetallicStyle(ScientificStyle):
@@ -745,74 +711,98 @@ class ComicMetallicStyle(ScientificStyle):
 
     name = "comic_metallic"
     command = "render_comic_metallic_labeled_final"
+    prefix = "comic"
     message = "Comic metallic style applied. Run 'ray 1200, 1200' to generate the image."
 
-    def render(self, selection="all", background=None):
+    colors = MetallicPosterStyle.colors
+
+    DONOR_ROLES = (
+        ("donor_n", "N"),
+        ("donor_p", "P"),
+        ("donor_s", "S"),
+    )
+
+    PERIPHERAL_SCALES = (
+        ("heavy", 0.25),
+        ("H", 0.15),
+    )
+
+    OUTLINE_COLOR = "black"
+    RAY_TRACE_GAIN = 0.6
+    METAL_SPHERE_SCALE = 0.42
+    STICK_RADIUS = 0.14
+
+    def render(self, selection="all", **kwargs):
         sel = f"({selection})"
-        metal_name = "comic_metal_atom"
+        self.define_colors()
+        atoms = self.select_coordination(selection)
+        metal = atoms["metal"]
+
+        self.apply_base_quality()
+        self.set_transparent_background()
 
         cmd.hide("everything", sel)
         cmd.show("sticks", sel)
         cmd.show("spheres", sel)
+        self.safe_set("stick_radius", self.STICK_RADIUS, sel)
+        for category, scale in self.PERIPHERAL_SCALES:
+            self._safe_set(
+                "sphere_scale", scale, selection=sel, category=category
+            )
+        if cmd.count_atoms(metal) > 0:
+            self.safe_set("sphere_scale", self.METAL_SPHERE_SCALE, metal)
 
-        self.safe_set("stick_radius", 0.14, sel)
-        self.safe_set("sphere_scale", 0.25, f"{sel} and elem C+N+O+S+P")
-        self.safe_set("sphere_scale", 0.15, f"{sel} and elem H")
-
-        cmd.select(
-            metal_name,
-            f"{sel} and (elem Mn or elem Fe or elem Co or elem Ni or elem Ru or elem Rh)",
-        )
-        if cmd.count_atoms(metal_name) > 0:
-            self.safe_set("sphere_scale", 0.42, metal_name)
-
-        MetallicPosterStyle().apply_element_colors(
+        self.apply_style_palette(
             sel,
-            metal_name,
-            metal_color=MetallicPosterStyle.DEFAULT_METAL_COLOR,
+            MetallicPosterStyle.ELEMENT_PALETTE,
+            overrides=MetallicPosterStyle.metal_palette_overrides(
+                selection, metal
+            ),
         )
 
-        if cmd.count_atoms(metal_name) > 0:
-            cmd.bond(metal_name, f"{sel} and elem N")
-            cmd.bond(metal_name, f"{sel} and elem P")
-            cmd.bond(metal_name, f"{sel} and elem S")
+        highlight_pairs = self.pairs_from_distance_objects(selection)
+        if highlight_pairs:
+            self.bond_atom_index_pairs(highlight_pairs)
+            self.remove_distance_objects()
+        elif cmd.count_atoms(metal) > 0:
+            for donor_key, _element in self.DONOR_ROLES:
+                donors = atoms[donor_key]
+                if donors != "none" and cmd.count_atoms(donors) > 0:
+                    cmd.bond(metal, donors)
 
-        self.safe_set("specular", 0.85)
-        self.safe_set("spec_power", 300)
-        self.safe_set("spec_reflect", 0.70)
-        self.safe_set("ambient", 0.25)
-        self.safe_set("direct", 0.75)
-        self.safe_set("shininess", 90)
-
+        self.apply_lighting(
+            0.85,
+            0.70,
+            0.25,
+            0.75,
+            0.0,
+            spec_power=300,
+            shininess=90,
+        )
         self.safe_set("ray_trace_mode", 1)
-        self.safe_set("ray_trace_color", "black")
-        self.safe_set("ray_trace_gain", 0.6)
+        self.safe_set("ray_trace_color", self.OUTLINE_COLOR)
+        self.safe_set("ray_trace_gain", self.RAY_TRACE_GAIN)
 
-        cmd.label(sel, '""')
-        if cmd.count_atoms(metal_name) > 0:
-            metal_label = MetallicPosterStyle.metal_element_label(metal_name)
-            cmd.label(metal_name, f'"{metal_label}"')
-        cmd.label(f"{sel} and elem N", '"N"')
-        cmd.label(f"{sel} and elem P", '"P"')
-        cmd.label(f"{sel} and elem S", '"S"')
-
-        self.safe_set("label_position", [0.0, 0.0, 2.0])
-        self.safe_set("label_shadow_mode", 0)
-        self.safe_set("ray_label_specular", 0)
-        self.safe_set("label_font_id", 7)
-        self.safe_set("label_color", "white")
-        self.safe_set("label_size", 28)
-
-        self.set_transparent_background()
+        cmd.label("all", '""')
+        if cmd.count_atoms(metal) > 0:
+            metal_label = MetallicPosterStyle.metal_element_label(metal)
+            cmd.label(metal, f'"{metal_label}"')
+        for donor_key, element in self.DONOR_ROLES:
+            donors = atoms[donor_key]
+            if donors != "none" and cmd.count_atoms(donors) > 0:
+                cmd.label(donors, f'"{element}"')
+        for setting, value in (
+            ("label_position", [0.0, 0.0, 2.0]),
+            ("label_shadow_mode", 0),
+            ("ray_label_specular", 0),
+            ("label_font_id", 7),
+            ("label_color", "white"),
+            ("label_size", 28),
+        ):
+            self.safe_set(setting, value)
 
         self.safe_set("orthoscopic", 1)
-        self.safe_set("antialias", 2)
-
-        cmd.zoom(selection, buffer=2.0)
-        cmd.orient(selection)
-        cmd.refresh()
-        self.finalize()
-        print(self.message)
+        self.finish_default(selection)
 
 
 class SoftCartoonStyle(ScientificStyle):
@@ -1541,7 +1531,8 @@ def _make_style_wrapper(style_cls):
     """Return a thin ``render_*`` wrapper for a :class:`ScientificStyle` subclass."""
 
     def wrapper(selection="all", **kwargs):
-        return style_cls().render(selection=selection, **kwargs)
+        kwargs.pop("_self", None)
+        return style_cls().render(selection=selection)
 
     wrapper.__name__ = style_cls.command or style_cls.name
     wrapper.__doc__ = style_cls.__doc__

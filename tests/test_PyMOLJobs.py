@@ -24,6 +24,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     ComicMetallicStyle,
     EditorialMinimalStyle,
     MatteClayStyle,
+    MetallicPosterStyle,
     NeonCoordinationCoreStyle,
     QuasiChemDrawBoldStyle,
     ScientificStyle,
@@ -964,18 +965,53 @@ class TestPyMOLStyleCommands:
                 assert command == expected
 
     def test_scientific_styles_hide_distance_value_labels(self):
-        """Derived styles keep distance dashes but hide numeric distance labels."""
+        """Derived styles hide numeric labels on ``-c`` distance objects."""
         hide_source = inspect.getsource(
             ScientificStyle.hide_distance_value_labels
         )
         assert 'cmd.hide("labels"' in hide_source
-        assert "suffix.isdigit()" in hide_source
+        assert "_distance_object_names" in hide_source
 
         finish_source = inspect.getsource(ScientificStyle.finish_default)
         assert "self.finalize()" in finish_source
 
         comic_source = inspect.getsource(ComicMetallicStyle.render)
-        assert "self.finalize()" in comic_source
+        assert "self.finish_default(selection)" in comic_source
+
+    def test_metallic_poster_uses_radius_ratio_coordination(self):
+        source = inspect.getsource(MetallicPosterStyle)
+
+        assert issubclass(MetallicPosterStyle, ScientificStyle)
+        assert MetallicPosterStyle.prefix == "poster"
+        assert MetallicPosterStyle.include_nh_h is True
+        assert "select_coordination" in source
+        assert 'PRIMARY_METAL = "elem Mn"' not in source
+        assert "within 2.6" not in source
+        assert "within 2.9" not in source
+        assert 'atoms["metal"]' in source
+        assert 'atoms["donors"]' in source
+        assert 'atoms["coordination_core"]' in source
+        assert "apply_style_palette" in source
+        assert "def _apply_poster" not in source
+
+    def test_comic_metallic_uses_radius_ratio_coordination(self):
+        source = inspect.getsource(ComicMetallicStyle)
+
+        assert issubclass(ComicMetallicStyle, ScientificStyle)
+        assert ComicMetallicStyle.prefix == "comic"
+        assert "select_coordination" in source
+        assert "METAL_SELECTION" not in source
+        assert "elem Mn or elem Fe" not in source
+        assert "DONOR_ROLES" in source
+        assert "MetallicPosterStyle.ELEMENT_PALETTE" in source
+        assert "MetallicPosterStyle.colors" in source
+        assert "apply_style_palette" in source
+        assert "pairs_from_distance_objects" in source
+        assert "bond_atom_index_pairs" in source
+        assert "remove_distance_objects" in source
+        assert "def _apply_comic" not in source
+        assert "def _apply_poster_palette" not in source
+        assert "def _highlight_bonds" not in source
 
     def test_scientific_style_runner_orders_distances_before_render(self):
         """``-c`` distances must exist before style render calls finalize."""
@@ -991,6 +1027,12 @@ class TestPyMOLStyleCommands:
         assert ' -d "' in setup_source
         assert "render_" not in setup_source
 
+    def test_style_wrapper_ignores_pymol_self_kwarg(self):
+        import chemsmart.jobs.mol.templates.scientific_styles as scientific_styles
+
+        source = inspect.getsource(scientific_styles._make_style_wrapper)
+        assert 'kwargs.pop("_self", None)' in source
+
     def test_build_coordination_atoms_uses_radius_ratio_helper(self):
         source = inspect.getsource(ScientificStyle.build_coordination_atoms)
         module_source = inspect.getsource(
@@ -999,7 +1041,8 @@ class TestPyMOLStyleCommands:
 
         assert (
             "from chemsmart.utils.geometry import get_coordinating_atoms"
-            in (module_source)
+            in module_source
+            or "def get_coordinating_atoms(" in module_source
         )
         assert "get_coordinating_atoms(" in source
         assert "cmd.get_model" in source
@@ -1379,7 +1422,7 @@ class TestPyMOLScientificStyleVisualizationJobs:
             job, "cmd"
         )
         assert "hide labels" not in runner._add_coordinates_labels(job, "cmd")
-        assert "self.finalize()" in inspect.getsource(
+        assert "self.finish_default(selection)" in inspect.getsource(
             ComicMetallicStyle.render
         )
 

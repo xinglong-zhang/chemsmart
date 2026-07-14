@@ -264,8 +264,8 @@ When editing a saved ``.pse`` session:
    metallic_poster_render all
    render_comic_metallic_labeled_final all
 
-CHEMSMART and the registered PyMOL commands pass only the object/selection name; poster defaults (Mn metal, 2.6 Å
-coordination cutoff, ``N+O+S+P+H`` donors, labels on) are applied inside :class:`MetallicPosterStyle`.
+CHEMSMART and the registered PyMOL commands pass only the object/selection name; the metal center and coordinating atoms
+are resolved via radius-ratio ``select_coordination`` (using :attr:`ScientificStyle.METAL_ELEMENTS`).
 
 .. _comic-visualization:
 
@@ -291,8 +291,8 @@ Basic Usage
 
    chemsmart run mol -f complex.xyz visualize -s comic
 
-Highlight metal–ligand distances with ``-c`` (same distance dashes as plain ``visualize -c``; numeric distance labels
-are hidden so style atom labels remain visible):
+Highlight metal–ligand bonds with ``-c``. In comic style, each pair is drawn as a ball-and-stick bond; numeric distance
+labels are hidden so element labels remain visible. Other scientific styles keep the usual dashed distance measurements.
 
 .. code:: bash
 
@@ -307,7 +307,7 @@ Example
    :align: center
    :width: 70%
 
-   Comic style applied to ``complex.xyz`` with Mn–ligand distance dashes and
+   Comic style applied to ``complex.xyz`` with Mn–ligand highlight bonds and
    coordination-core element labels via
    ``chemsmart run mol -f complex.xyz visualize -s comic -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'``.
 
