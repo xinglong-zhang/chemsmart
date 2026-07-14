@@ -1076,6 +1076,8 @@ class SoftCartoonStyle(ScientificStyle):
 
         _safe_set("sphere_scale", 0.215, peripheral_heavy)
         _safe_set("sphere_scale", 0.40, atoms["metal"])
+        # Shell heavy atoms default to framework scale; category rules override below.
+        _safe_set("sphere_scale", 0.215, f"({shell}) and not elem H")
         for category, scale in (
             ("N+O", 0.275),
             ("S+P", 0.255),

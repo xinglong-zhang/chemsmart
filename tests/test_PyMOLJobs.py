@@ -1182,6 +1182,10 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("stick_radius", 0.135, sel)' in source
         assert 'cmd.set_bond("stick_radius", 0.165' in source
         assert '_safe_set("sphere_scale", 0.40, atoms["metal"])' in source
+        assert (
+            '_safe_set("sphere_scale", 0.215, f"({shell}) and not elem H")'
+            in source
+        )
         assert '("N+O", 0.275)' in source
         assert "category=category" in source
         assert "self._safe_set" in source
