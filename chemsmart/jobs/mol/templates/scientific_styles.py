@@ -1515,22 +1515,72 @@ class StericSurfaceStyle(ScientificStyle):
 
     name = "steric_surface"
     command = "render_steric_surface"
+    prefix = "steric"
     message = "Transparent steric surface style applied."
 
-    def render(self, selection="all"):
-        _begin_scientific_style(selection)
-        _show_coord_ball_and_stick(selection)
-        _apply_coord_sphere_scales(0.095, 0.14, 0.24, 0.12, 0.52, 0.34)
-        _color_by_element(carbon="sci_C_gray", metal="metal_gold")
+    def _apply_atom_colors(self, sel, atoms):
+        self.apply_style_palette(
+            sel,
+            {
+                "C": "sci_C_gray",
+                "H": "sci_H_white",
+                "N": "sci_N_blue",
+                "O": "sci_O_red",
+                "S": "sci_S_yellow",
+                "P": "sci_P_orange",
+                "halogen": "sci_halogen",
+            },
+            overrides={atoms["metal"]: "metal_gold"},
+        )
+        cmd.color("sci_N_blue", atoms["donor_n"])
+        cmd.color("sci_S_yellow", atoms["donor_s"])
+        cmd.color("sci_P_orange", atoms["donor_p"])
+        cmd.color("sci_C_gray", atoms["co_c"])
+        cmd.color("sci_O_red", atoms["co_o"])
+        cmd.color("sci_H_white", atoms["hydride"])
 
-        cmd.show("surface", selection)
+    def render(self, selection="all"):
+        sel = f"({selection})"
+        _define_scientific_colors()
+        cmd.hide("everything", sel)
+
+        atoms = self.select_coordination(selection)
+
+        cmd.show("sticks", sel)
+        cmd.hide("sticks", f"{sel} and elem H and not {atoms['hydride']}")
+        cmd.hide("spheres", f"{sel} and elem H and not {atoms['hydride']}")
+        sphere_atoms = " or ".join(
+            part
+            for part in (
+                atoms["metal"],
+                atoms["donors"],
+                atoms["co_c"],
+                atoms["co_o"],
+                atoms["hydride"],
+            )
+            if part and part != "none"
+        )
+        if sphere_atoms:
+            cmd.show("spheres", sphere_atoms)
+
+        _safe_set("stick_radius", 0.095, sel)
+        _safe_set("stick_radius", 0.14, atoms["coordination_core"])
+        _safe_set("sphere_scale", 0.52, atoms["metal"])
+        _safe_set("sphere_scale", 0.34, atoms["donors"])
+        _safe_set("sphere_scale", 0.34, atoms["co_c"])
+        _safe_set("sphere_scale", 0.34, atoms["co_o"])
+        _safe_set("sphere_scale", 0.12, atoms["hydride"])
+
+        self._apply_atom_colors(sel, atoms)
+
+        cmd.show("surface", sel)
         cmd.color("surface_sky", selection)
-        cmd.set("transparency", 0.68, selection)
-        cmd.set("surface_quality", 1)
-        cmd.set("surface_solvent", 1)
+        _safe_set("transparency", 0.68, sel)
+        _safe_set("surface_quality", 1)
+        _safe_set("surface_solvent", 1)
 
         # Re-apply atom colors after surface coloring paints the whole selection.
-        _color_by_element(carbon="sci_C_gray", metal="metal_gold")
+        self._apply_atom_colors(sel, atoms)
 
         _apply_lighting(0.45, 0.22, 0.32, 0.74, 0.20, spec_power=120)
         _apply_view(
@@ -1539,10 +1589,7 @@ class StericSurfaceStyle(ScientificStyle):
             depth_cue=1,
             fog_start=0.45,
         )
-        _finish_scientific_style(
-            selection,
-            message=self.message,
-        )
+        self.finish_default(selection)
 
 
 class QuasiChemDrawBoldStyle(ScientificStyle):

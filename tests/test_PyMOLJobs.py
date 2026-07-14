@@ -30,6 +30,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     ScientificStyle,
     SoftCartoonStyle,
     SoftCeramicStyle,
+    StericSurfaceStyle,
     XrayWireStyle,
     _get_coordinating_atoms,
     element_category_selection,
@@ -40,6 +41,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     render_quasi_chemdraw_bold,
     render_soft_cartoon,
     render_soft_ceramic,
+    render_steric_surface,
     render_xray_wire,
 )
 from chemsmart.jobs.mol.visualize import (
@@ -1204,6 +1206,41 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_trace_fog", 0)' in style_source
         assert "_set_transparent_background()" in style_source
         assert "apply_illustrated_camera" in style_source
+        assert "self.finish_default(selection)" in style_source
+
+    def test_render_steric_surface_defines_expected_visual_parameters(self):
+        style_source = inspect.getsource(StericSurfaceStyle)
+        wrapper_source = inspect.getsource(render_steric_surface)
+
+        assert issubclass(StericSurfaceStyle, ScientificStyle)
+        assert StericSurfaceStyle.prefix == "steric"
+        assert StericSurfaceStyle.command == "render_steric_surface"
+        assert "StericSurfaceStyle().render" in wrapper_source
+        assert "select_coordination" in style_source
+        assert "_begin_scientific_style" not in style_source
+        assert "_common_select_core" not in style_source
+        assert "_show_coord_ball_and_stick" not in style_source
+        assert "_apply_coord_sphere_scales" not in style_source
+        assert "_color_by_element" not in style_source
+        assert "_finish_scientific_style" not in style_source
+        assert "within 2.6" not in style_source
+        assert "byres" not in style_source
+        assert "sphere_atoms" in style_source
+        assert 'cmd.show("spheres", sphere_atoms)' in style_source
+        assert (
+            'cmd.show("spheres", atoms["coordination_core"])'
+            not in style_source
+        )
+        assert (
+            '_safe_set("sphere_scale", 0.52, atoms["metal"])' in style_source
+        )
+        assert '_safe_set("sphere_scale", 0.34, atoms["co_c"])' in style_source
+        assert '_safe_set("sphere_scale", 0.34, atoms["co_o"])' in style_source
+        assert 'cmd.color("sci_C_gray", atoms["co_c"])' in style_source
+        assert 'cmd.color("sci_O_red", atoms["co_o"])' in style_source
+        assert "apply_style_palette" in style_source
+        assert 'overrides={atoms["metal"]: "metal_gold"}' in style_source
+        assert '_safe_set("transparency", 0.68, sel)' in style_source
         assert "self.finish_default(selection)" in style_source
 
     def test_render_matte_clay_defines_expected_visual_parameters(self):
