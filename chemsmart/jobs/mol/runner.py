@@ -1089,12 +1089,6 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
         if render_command is None:
             raise ValueError(f"The style {job.style} is not available!")
 
-        if render_command == "metallic_poster_render":
-            return (
-                f"metallic_poster_render {selection}, elem Mn, None, 2.6, "
-                f"N+O+S+P+H"
-            )
-
         return f"{render_command} {selection}"
 
     def _generate_visualization_style_script(self, job):

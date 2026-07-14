@@ -20,538 +20,50 @@ from pymol import cmd
 
 from chemsmart.utils.geometry import get_coordinating_atoms
 
-
-def _normalize_none(value):
-    """Convert PyMOL command-line 'None' strings to Python None."""
-    if value is None:
-        return None
-    if str(value).lower() in ["none", "null", "false", ""]:
-        return None
-    return value
-
-
-DEFAULT_METAL_COLOR = "poster_mn_gold"
-
-OTHER_METALS_SELECTION = "elem Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au"
-
-
-def define_metallic_poster_colors():
-    """Register the poster element colors in the current PyMOL session."""
-    MetallicPosterStyle().define_colors()
-
-
-def apply_metallic_poster_element_colors(
-    sel,
-    metal,
-    metal_color=DEFAULT_METAL_COLOR,
-):
-    """Apply the poster element color scheme to a selection."""
-    define_metallic_poster_colors()
-
-    overrides = {
-        f"{sel} and {OTHER_METALS_SELECTION} and not ({metal})": (
-            "poster_metal_gray"
-        ),
-    }
-    if cmd.count_atoms(metal) > 0:
-        overrides[metal] = metal_color
-    apply_element_palette(
-        sel,
-        {
-            "C": "poster_carbon",
-            "H": "poster_hydrogen",
-            "N": "poster_nitrogen",
-            "O": "poster_oxygen",
-            "S": "poster_sulfur",
-            "P": "poster_phosphorus",
-            "halogen": "poster_halogen",
-        },
-        overrides=overrides,
-    )
-
-
-def _safe_set(setting, value, selection=None):
-    """Set a PyMOL setting safely across different PyMOL versions."""
-    try:
-        if selection is None:
-            cmd.set(setting, value)
-        else:
-            cmd.set(setting, value, selection)
-    except Exception:
-        pass
-
-
-def _safe_ray_shadows(mode="light"):
-    try:
-        cmd.util.ray_shadows(mode)
-    except Exception:
-        pass
-
-
-def hide_distance_value_labels():
-    """Hide numeric labels on ``-c`` bond-distance objects (``d1``, ``d2``, …).
-
-    Distance dashes remain visible; only the measurement text is hidden so
-    style-specific atom labels (e.g. comic Mn/N/P/S) stay legible.
-    """
-    try:
-        names = cmd.get_names("objects", enabled_only=0)
-    except Exception:
-        return
-
-    for name in names:
-        suffix = name[1:] if name.startswith("d") else ""
-        if suffix.isdigit():
-            try:
-                cmd.hide("labels", name)
-            except Exception:
-                pass
-
-
-def _set_transparent_background():
-    """Configure ray-traced PNG export with a transparent background."""
-    cmd.bg_color("white")
-    _safe_set("ray_opaque_background", 0)
-
-
-def _make_centered_element_labels(
-    atoms_to_label,
-    label_prefix="metallic_poster_labels",
-    label_size=24,
-    label_font_id=7,
-):
-    """Create centered pseudoatom labels at selected atom coordinates."""
-    define_metallic_poster_colors()
-
-    cmd.delete(label_prefix + "*")
-
-    model = cmd.get_model(atoms_to_label)
-
-    if len(model.atom) == 0:
-        print("No atoms found for centered labels:", atoms_to_label)
-        return
-
-    label_color_by_element = {
-        "Mn": "poster_label_black",
-        "Fe": "poster_label_black",
-        "Co": "poster_label_black",
-        "Ni": "poster_label_black",
-        "Cu": "poster_label_black",
-        "Zn": "poster_label_black",
-        "Ru": "poster_label_black",
-        "Rh": "poster_label_black",
-        "Pd": "poster_label_black",
-        "Ir": "poster_label_black",
-        "Pt": "poster_label_black",
-        "N": "poster_label_white",
-        "O": "poster_label_white",
-        "S": "poster_label_black",
-        "P": "poster_label_black",
-        "H": "poster_label_black",
-    }
-
-    counters = {}
-
-    for atom in model.atom:
-        elem = atom.symbol.strip()
-        if not elem:
-            elem = atom.name.strip()[0]
-
-        counters[elem] = counters.get(elem, 0) + 1
-
-        obj_name = f"{label_prefix}_{elem}"
-        pseudo_name = f"L_{elem}_{counters[elem]}"
-
-        cmd.pseudoatom(
-            object=obj_name,
-            name=pseudo_name,
-            pos=atom.coord,
-            label=elem,
-        )
-
-    for elem in counters:
-        obj_name = f"{label_prefix}_{elem}"
-
-        cmd.hide("everything", obj_name)
-        cmd.show("labels", obj_name)
-
-        _safe_set("label_position", [0, 0, 0], obj_name)
-        _safe_set("label_font_id", int(label_font_id), obj_name)
-        _safe_set("label_size", float(label_size), obj_name)
-        _safe_set("label_connector", 0, obj_name)
-        _safe_set("label_shadow_mode", 2, obj_name)
-
-        label_color = label_color_by_element.get(elem, "poster_label_white")
-        outline_color = (
-            "poster_label_black"
-            if label_color == "poster_label_white"
-            else "poster_label_white"
-        )
-
-        _safe_set("label_color", label_color, obj_name)
-        _safe_set("label_outline_color", outline_color, obj_name)
-
-
-def metallic_poster_render(
-    selection="all",
-    metal_sel="elem Mn",
-    coord_sel=None,
-    coord_cutoff=2.6,
-    donor_elements="N+O+S+P+H",
-    background="white",
-    label_core="on",
-    label_size=24,
-    metal_color="poster_mn_gold",
-):
-    """Apply a glossy metallic poster-style rendering to a molecular complex.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`MetallicPosterStyle`.
-    """
-    MetallicPosterStyle().render(
-        selection=selection,
-        metal_sel=metal_sel,
-        coord_sel=coord_sel,
-        coord_cutoff=coord_cutoff,
-        donor_elements=donor_elements,
-        background=background,
-        label_core=label_core,
-        label_size=label_size,
-        metal_color=metal_color,
-    )
-
-
-def _metal_element_label(metal_selection):
-    """Return the element symbol of the first atom in a metal selection."""
-    model = cmd.get_model(metal_selection)
-    if not model.atom:
-        return "Mn"
-    symbol = model.atom[0].symbol.strip()
-    return symbol or "Mn"
-
-
-def render_comic_metallic_labeled_final(selection="all", background=None):
-    """Apply comic metallic ball-and-stick rendering with black outlines.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`ComicMetallicStyle`.
-    """
-    ComicMetallicStyle().render(
-        selection=selection,
-        background=background,
-    )
-
-
-def render_soft_cartoon(selection="all", background=None):
-    """Apply soft cartoon ball-and-stick rendering with premium cover colors.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`SoftCartoonStyle`.
-    """
-    SoftCartoonStyle().render(
-        selection=selection,
-        background=background,
-    )
-
-
-# Centralized metal selection used by radius-ratio coordination styles.
-_METAL_ELEMENTS = (
-    "elem Li+Na+K+Rb+Cs+Be+Mg+Ca+Sr+Ba+Al+Ga+In+Sn+Pb+"
-    "Sc+Ti+V+Cr+Mn+Fe+Co+Ni+Cu+Zn+Y+Zr+Nb+Mo+Tc+Ru+Rh+Pd+Ag+Cd+"
-    "Hf+Ta+W+Re+Os+Ir+Pt+Au+Hg"
-)
-
-# PyMOL ``elem`` expressions for grouped atom categories (single source of truth).
-# ``periodictable.NONMETALS`` classifies elements by atomic number; this map is
-# the PyMOL-facing selection vocabulary shared by scientific styles.
-ELEMENT_CATEGORIES = {
-    "carbon": "C",
-    "hydrogen": "H",
-    "nitrogen": "N",
-    "oxygen": "O",
-    "sulfur": "S",
-    "phosphorus": "P",
-    "C": "C",
-    "H": "H",
-    "N": "N",
-    "O": "O",
-    "S": "S",
-    "P": "P",
-    "N+O": "N+O",
-    "S+P": "S+P",
-    "heavy": "C+N+O+S+P+F+Cl+Br+I",
-    "halogen": "F+Cl+Br+I",
-    "Br+I": "Br+I",
-    "chalcogen": "O+S+Se+Te",
-    "pnictogen": "N+P+As+Sb",
-    "metal": _METAL_ELEMENTS,
-}
-
-
-def element_category_selection(base_selection, category):
-    """Build a PyMOL selection for an element category within ``base_selection``."""
-    elements = ELEMENT_CATEGORIES.get(category, category)
-    if elements.startswith("elem "):
-        return "(%s) and (%s)" % (base_selection, elements)
-    return "(%s) and elem %s" % (base_selection, elements)
-
-
-def apply_element_palette(selection, palette, overrides=None):
-    """Apply colors to element categories and optional named-selection overrides."""
-    for category, color_name in palette.items():
-        try:
-            cmd.color(
-                color_name, element_category_selection(selection, category)
-            )
-        except Exception:
-            pass
-    if overrides:
-        for sel_expr, color_name in overrides.items():
-            try:
-                cmd.color(color_name, sel_expr)
-            except Exception:
-                pass
-
-
-def _parse_metal_symbols(metal):
-    """Parse a PyMOL metal selection string into a set of element symbols."""
-    text = (metal or _METAL_ELEMENTS).replace("elem", " ")
-    return {
-        token.strip()
-        for token in text.replace("+", " ").split()
-        if token.strip()
-    }
-
-
-def _pymol_index_selection(sel, pymol_indices):
-    """Build a PyMOL selection expression from atom indices."""
-    indices = sorted({int(index) for index in pymol_indices})
-    if not indices:
-        return "none"
-    return "%s and index %s" % (
-        sel,
-        "+".join(str(index) for index in indices),
-    )
-
-
-def _get_coordinating_atoms(
-    selection="all",
-    prefix="coord",
-    metal=None,
-    include_nh_h=False,
-):
-    """Build named selections via covalent-radius-ratio coordination spheres.
-
-    Extracts ChemPy coordinates, calls
-    ``chemsmart.utils.geometry.get_coordinating_atoms`` for each metal center
-    (radius-ratio direct ligands plus geometric partner expansion), and partitions the resulting primary /
-    secondary spheres into role-based named selections. Applies no colors or
-    rendering. Does not use topology-dependent residue expansions.
-    """
-    sel = f"({selection})"
-    names = {
-        "metal": "%s_metal" % prefix,
-        "donor_s": "%s_donor_s" % prefix,
-        "donor_n": "%s_donor_n" % prefix,
-        "donor_p": "%s_donor_p" % prefix,
-        "donors": "%s_donors" % prefix,
-        "co_c": "%s_co_c" % prefix,
-        "co_o": "%s_co_o" % prefix,
-        "hydride": "%s_hydride" % prefix,
-        "nh_h": "%s_nh_h" % prefix,
-        "important_h": "%s_important_h" % prefix,
-        "coordination_core": "%s_coordination_core" % prefix,
-    }
-
-    model = cmd.get_model(sel)
-    if len(model.atom) == 0:
-        for name in names.values():
-            cmd.select(name, "none")
-        return names
-
-    elements = []
-    pymol_indices = []
-    coords = []
-    for atom in model.atom:
-        elements.append(str(getattr(atom, "symbol", "")).strip())
-        pymol_indices.append(int(atom.index))
-        coords.append([float(value) for value in atom.coord])
-    coordinates = np.asarray(coords, dtype=float)
-
-    metal_symbols = _parse_metal_symbols(metal)
-    metal_local = [
-        idx for idx, element in enumerate(elements) if element in metal_symbols
-    ]
-
-    primary_local = set()
-    secondary_local = set()
-    for metal_idx in metal_local:
-        primary, secondary = get_coordinating_atoms(
-            metal_idx, elements, coordinates
-        )
-        primary_local.update(primary)
-        secondary_local.update(secondary)
-
-    def role_indices(predicate, local_indices):
-        return [
-            pymol_indices[idx]
-            for idx in sorted(local_indices)
-            if predicate(elements[idx])
-        ]
-
-    metal_pymol = [pymol_indices[idx] for idx in metal_local]
-    hydride_pymol = role_indices(lambda el: el == "H", primary_local)
-    nh_h_pymol = (
-        role_indices(lambda el: el == "H", secondary_local)
-        if include_nh_h
-        else []
-    )
-    donor_s_pymol = role_indices(lambda el: el == "S", primary_local)
-    donor_n_pymol = role_indices(lambda el: el == "N", primary_local)
-    donor_p_pymol = role_indices(lambda el: el == "P", primary_local)
-    co_c_pymol = role_indices(lambda el: el == "C", primary_local)
-    co_o_pymol = role_indices(
-        lambda el: el == "O", primary_local | secondary_local
-    )
-    important_h_pymol = sorted(set(hydride_pymol) | set(nh_h_pymol))
-    core_pymol = sorted(
-        set(metal_pymol)
-        | {pymol_indices[idx] for idx in primary_local}
-        | {pymol_indices[idx] for idx in secondary_local}
-    )
-
-    cmd.select(names["metal"], _pymol_index_selection(sel, metal_pymol))
-    cmd.select(names["donor_s"], _pymol_index_selection(sel, donor_s_pymol))
-    cmd.select(names["donor_n"], _pymol_index_selection(sel, donor_n_pymol))
-    cmd.select(names["donor_p"], _pymol_index_selection(sel, donor_p_pymol))
-    donor_parts = []
-    if donor_s_pymol:
-        donor_parts.append(names["donor_s"])
-    if donor_n_pymol:
-        donor_parts.append(names["donor_n"])
-    if donor_p_pymol:
-        donor_parts.append(names["donor_p"])
-    if donor_parts:
-        cmd.select(names["donors"], " or ".join(donor_parts))
-    else:
-        cmd.select(names["donors"], "none")
-    cmd.select(names["co_c"], _pymol_index_selection(sel, co_c_pymol))
-    cmd.select(names["co_o"], _pymol_index_selection(sel, co_o_pymol))
-    cmd.select(names["hydride"], _pymol_index_selection(sel, hydride_pymol))
-    cmd.select(names["nh_h"], _pymol_index_selection(sel, nh_h_pymol))
-    cmd.select(
-        names["important_h"], _pymol_index_selection(sel, important_h_pymol)
-    )
-    cmd.select(
-        names["coordination_core"], _pymol_index_selection(sel, core_pymol)
-    )
-    return names
+# ---------------------------------------------------------------------------
+# ScientificStyle base class (shared coordination, palette, camera, lighting)
+# ---------------------------------------------------------------------------
 
 
 class ScientificStyle:
-    """Base class for class-based scientific PyMOL styles.
+    """Base class for scientific PyMOL visualization styles.
 
-    Subclasses own their color palette and ``render`` implementation.
-    Shared coordination selection stays on module helpers. Public
-    ``render_*`` wrappers should call ``Style().render(...)`` so PyMOL
-    ``cmd.extend`` and CHEMSMART command names remain stable.
+    Subclasses declare ``name``, ``command``, ``prefix``, ``colors``, and
+    implement ``render()`` with style-specific overrides only. Shared
+    coordination selection, element categories, camera resets, and palette
+    helpers live on this parent.
     """
 
-    name = "scientific"
-    command = None
-    prefix = "coord"
-    colors = {}
-    include_nh_h = False
-    message = "Scientific style applied."
+    METAL_ELEMENTS = (
+        "elem Li+Na+K+Rb+Cs+Be+Mg+Ca+Sr+Ba+Al+Ga+In+Sn+Pb+"
+        "Sc+Ti+V+Cr+Mn+Fe+Co+Ni+Cu+Zn+Y+Zr+Nb+Mo+Tc+Ru+Rh+Pd+Ag+Cd+"
+        "Hf+Ta+W+Re+Os+Ir+Pt+Au+Hg"
+    )
 
-    def define_colors(self):
-        """Register ``self.colors`` in the current PyMOL session."""
-        for name, rgb in self.colors.items():
-            try:
-                cmd.set_color(name, rgb)
-            except Exception:
-                pass
+    ELEMENT_CATEGORIES = {
+        "carbon": "C",
+        "hydrogen": "H",
+        "nitrogen": "N",
+        "oxygen": "O",
+        "sulfur": "S",
+        "phosphorus": "P",
+        "C": "C",
+        "H": "H",
+        "N": "N",
+        "O": "O",
+        "S": "S",
+        "P": "P",
+        "N+O": "N+O",
+        "S+P": "S+P",
+        "heavy": "C+N+O+S+P+F+Cl+Br+I",
+        "halogen": "F+Cl+Br+I",
+        "Br+I": "Br+I",
+        "chalcogen": "O+S+Se+Te",
+        "pnictogen": "N+P+As+Sb",
+        "metal": METAL_ELEMENTS,
+    }
 
-    def select_coordination(self, selection="all"):
-        """Build named coordination selections via radius-ratio helpers."""
-        return _get_coordinating_atoms(
-            selection=selection,
-            prefix=self.prefix,
-            include_nh_h=self.include_nh_h,
-        )
-
-    def first_shell(self, atoms):
-        """Return selection expression for non-metal coordination-core atoms."""
-        return "%s and not %s" % (
-            atoms["coordination_core"],
-            atoms["metal"],
-        )
-
-    def frame(self, selection, core_name, zoom_buffer=1.4):
-        """Orient / center / zoom around the coordination environment."""
-        sel = f"({selection})"
-        cmd.label("all", '""')
-        cmd.orient(sel)
-        cmd.center(core_name)
-        try:
-            cmd.origin(core_name)
-        except Exception:
-            pass
-        cmd.zoom(sel, zoom_buffer)
-        try:
-            cmd.rebuild()
-        except Exception:
-            pass
-        cmd.refresh()
-
-    def finalize(self):
-        """Post-render cleanup shared by all scientific styles."""
-        hide_distance_value_labels()
-
-    def finish_default(self, selection):
-        """Zoom/orient via ``_finish_style`` and print ``self.message``."""
-        self.finalize()
-        _finish_style(selection)
-        print(self.message)
-
-    def apply_illustrated_camera(self, field_of_view=25, depth_cue=0, fog=0.0):
-        """Flat orthographic camera without forcing a transparent background."""
-        _safe_set("orthoscopic", 1)
-        _safe_set("ray_orthoscopic", 1)
-        _safe_set("depth_cue", depth_cue)
-        _safe_set("fog", fog)
-        _safe_set("field_of_view", field_of_view)
-
-    def apply_soft_shadows(self, decay_factor=0.35, decay_range=2.5):
-        _safe_set("ray_shadow", 1)
-        _safe_set("ray_shadow_decay_factor", decay_factor)
-        _safe_set("ray_shadow_decay_range", decay_range)
-
-    def apply_ambient_occlusion(self, scale=13, smooth=15):
-        _safe_set("ambient_occlusion_mode", 1)
-        _safe_set("ambient_occlusion_scale", scale)
-        _safe_set("ambient_occlusion_smooth", smooth)
-
-    def _safe_set(self, setting, value, selection=None, category=None):
-        """Set a PyMOL parameter, optionally scoped to an element category."""
-        if selection is None and category is None:
-            _safe_set(setting, value)
-            return
-        target = element_category_selection(selection, category)
-        _safe_set(setting, value, target)
-
-    def apply_style_palette(self, selection, palette, overrides=None):
-        """Apply element-category colors from a category-to-color-name mapping."""
-        apply_element_palette(selection, palette, overrides=overrides)
-
-    def render(self, selection="all"):
-        raise NotImplementedError(
-            f"{type(self).__name__} must implement render()"
-        )
-
-
-def _define_scientific_colors():
-    colors = {
+    SHARED_COLORS = {
         "sci_C_gray": [0.58, 0.58, 0.56],
         "sci_C_dark": [0.10, 0.10, 0.10],
         "sci_C_ivory": [0.82, 0.79, 0.70],
@@ -572,72 +84,414 @@ def _define_scientific_colors():
         "surface_warm": [1.00, 0.76, 0.45],
     }
 
-    for name, rgb in colors.items():
+    name = "scientific"
+    command = None
+    prefix = "coord"
+    colors = {}
+    include_nh_h = False
+    message = "Scientific style applied."
+
+    @staticmethod
+    def safe_set(setting, value, selection=None):
+        """Set a PyMOL parameter safely across different PyMOL versions."""
         try:
-            cmd.set_color(name, rgb)
+            if selection is None:
+                cmd.set(setting, value)
+            else:
+                cmd.set(setting, value, selection)
         except Exception:
             pass
 
+    @staticmethod
+    def safe_ray_shadows(mode="light"):
+        try:
+            cmd.util.ray_shadows(mode)
+        except Exception:
+            pass
 
-def _base_quality():
-    _safe_set("antialias", 2)
-    _safe_set("ray_trace_antialias", 2)
-    _safe_set("sphere_quality", 3)
-    _safe_set("stick_quality", 30)
-    _safe_set("two_sided_lighting", 1)
-    _safe_set("use_shaders", 1)
-    _safe_set("depth_cue", 1)
-    _safe_set("label_connector", 0)
+    @staticmethod
+    def hide_distance_value_labels():
+        """Hide numeric labels on ``-c`` bond-distance objects (``d1``, ``d2``, …)."""
+        try:
+            names = cmd.get_names("objects", enabled_only=0)
+        except Exception:
+            return
+
+        for name in names:
+            suffix = name[1:] if name.startswith("d") else ""
+            if suffix.isdigit():
+                try:
+                    cmd.hide("labels", name)
+                except Exception:
+                    pass
+
+    @classmethod
+    def element_category_selection(cls, base_selection, category):
+        """Build a PyMOL selection for an element category within ``base_selection``."""
+        elements = cls.ELEMENT_CATEGORIES.get(category, category)
+        if elements.startswith("elem "):
+            return "(%s) and (%s)" % (base_selection, elements)
+        return "(%s) and elem %s" % (base_selection, elements)
+
+    @classmethod
+    def apply_element_palette(cls, selection, palette, overrides=None):
+        """Apply colors to element categories and optional named-selection overrides."""
+        for category, color_name in palette.items():
+            try:
+                cmd.color(
+                    color_name,
+                    cls.element_category_selection(selection, category),
+                )
+            except Exception:
+                pass
+        if overrides:
+            for sel_expr, color_name in overrides.items():
+                try:
+                    cmd.color(color_name, sel_expr)
+                except Exception:
+                    pass
+
+    @staticmethod
+    def selection_expr(selection):
+        return "(%s)" % selection
+
+    def define_colors(self):
+        """Register ``self.colors`` in the current PyMOL session."""
+        for color_name, rgb in self.colors.items():
+            try:
+                cmd.set_color(color_name, rgb)
+            except Exception:
+                pass
+
+    @classmethod
+    def define_shared_colors(cls):
+        """Register the shared scientific palette (``sci_*``, ``metal_*``, etc.)."""
+        for color_name, rgb in cls.SHARED_COLORS.items():
+            try:
+                cmd.set_color(color_name, rgb)
+            except Exception:
+                pass
+
+    @classmethod
+    def _parse_metal_symbols(cls, metal):
+        text = (metal or cls.METAL_ELEMENTS).replace("elem", " ")
+        return {
+            token.strip()
+            for token in text.replace("+", " ").split()
+            if token.strip()
+        }
+
+    @staticmethod
+    def _pymol_index_selection(sel, pymol_indices):
+        indices = sorted({int(index) for index in pymol_indices})
+        if not indices:
+            return "none"
+        return "%s and index %s" % (
+            sel,
+            "+".join(str(index) for index in indices),
+        )
+
+    @classmethod
+    def build_coordination_atoms(
+        cls,
+        selection="all",
+        prefix="coord",
+        metal=None,
+        include_nh_h=False,
+    ):
+        """Build named selections via covalent-radius-ratio coordination spheres."""
+        sel = cls.selection_expr(selection)
+        names = {
+            "metal": "%s_metal" % prefix,
+            "donor_s": "%s_donor_s" % prefix,
+            "donor_n": "%s_donor_n" % prefix,
+            "donor_p": "%s_donor_p" % prefix,
+            "donors": "%s_donors" % prefix,
+            "co_c": "%s_co_c" % prefix,
+            "co_o": "%s_co_o" % prefix,
+            "hydride": "%s_hydride" % prefix,
+            "nh_h": "%s_nh_h" % prefix,
+            "important_h": "%s_important_h" % prefix,
+            "coordination_core": "%s_coordination_core" % prefix,
+        }
+
+        model = cmd.get_model(sel)
+        if len(model.atom) == 0:
+            for name in names.values():
+                cmd.select(name, "none")
+            return names
+
+        elements = []
+        pymol_indices = []
+        coords = []
+        for atom in model.atom:
+            elements.append(str(getattr(atom, "symbol", "")).strip())
+            pymol_indices.append(int(atom.index))
+            coords.append([float(value) for value in atom.coord])
+        coordinates = np.asarray(coords, dtype=float)
+
+        metal_symbols = cls._parse_metal_symbols(metal)
+        metal_local = [
+            idx
+            for idx, element in enumerate(elements)
+            if element in metal_symbols
+        ]
+
+        primary_local = set()
+        secondary_local = set()
+        for metal_idx in metal_local:
+            primary, secondary = get_coordinating_atoms(
+                metal_idx, elements, coordinates
+            )
+            primary_local.update(primary)
+            secondary_local.update(secondary)
+
+        def role_indices(predicate, local_indices):
+            return [
+                pymol_indices[idx]
+                for idx in sorted(local_indices)
+                if predicate(elements[idx])
+            ]
+
+        metal_pymol = [pymol_indices[idx] for idx in metal_local]
+        hydride_pymol = role_indices(lambda el: el == "H", primary_local)
+        nh_h_pymol = (
+            role_indices(lambda el: el == "H", secondary_local)
+            if include_nh_h
+            else []
+        )
+        donor_s_pymol = role_indices(lambda el: el == "S", primary_local)
+        donor_n_pymol = role_indices(lambda el: el == "N", primary_local)
+        donor_p_pymol = role_indices(lambda el: el == "P", primary_local)
+        co_c_pymol = role_indices(lambda el: el == "C", primary_local)
+        co_o_pymol = role_indices(
+            lambda el: el == "O", primary_local | secondary_local
+        )
+        important_h_pymol = sorted(set(hydride_pymol) | set(nh_h_pymol))
+        core_pymol = sorted(
+            set(metal_pymol)
+            | {pymol_indices[idx] for idx in primary_local}
+            | {pymol_indices[idx] for idx in secondary_local}
+        )
+
+        cmd.select(
+            names["metal"], cls._pymol_index_selection(sel, metal_pymol)
+        )
+        cmd.select(
+            names["donor_s"], cls._pymol_index_selection(sel, donor_s_pymol)
+        )
+        cmd.select(
+            names["donor_n"], cls._pymol_index_selection(sel, donor_n_pymol)
+        )
+        cmd.select(
+            names["donor_p"], cls._pymol_index_selection(sel, donor_p_pymol)
+        )
+        donor_parts = []
+        if donor_s_pymol:
+            donor_parts.append(names["donor_s"])
+        if donor_n_pymol:
+            donor_parts.append(names["donor_n"])
+        if donor_p_pymol:
+            donor_parts.append(names["donor_p"])
+        if donor_parts:
+            cmd.select(names["donors"], " or ".join(donor_parts))
+        else:
+            cmd.select(names["donors"], "none")
+        cmd.select(names["co_c"], cls._pymol_index_selection(sel, co_c_pymol))
+        cmd.select(names["co_o"], cls._pymol_index_selection(sel, co_o_pymol))
+        cmd.select(
+            names["hydride"], cls._pymol_index_selection(sel, hydride_pymol)
+        )
+        cmd.select(names["nh_h"], cls._pymol_index_selection(sel, nh_h_pymol))
+        cmd.select(
+            names["important_h"],
+            cls._pymol_index_selection(sel, important_h_pymol),
+        )
+        cmd.select(
+            names["coordination_core"],
+            cls._pymol_index_selection(sel, core_pymol),
+        )
+        return names
+
+    def select_coordination(self, selection="all"):
+        """Build named coordination selections via radius-ratio helpers."""
+        return self.build_coordination_atoms(
+            selection=selection,
+            prefix=self.prefix,
+            include_nh_h=self.include_nh_h,
+        )
+
+    def first_shell(self, atoms):
+        """Return selection expression for non-metal coordination-core atoms."""
+        return "%s and not %s" % (
+            atoms["coordination_core"],
+            atoms["metal"],
+        )
+
+    @staticmethod
+    def coordination_sphere_atoms(atoms, include_hydride=True):
+        """Join role selections that receive explicit sphere scales."""
+        parts = [atoms["metal"], atoms["donors"], atoms["co_c"], atoms["co_o"]]
+        if include_hydride:
+            parts.append(atoms["hydride"])
+        return " or ".join(part for part in parts if part and part != "none")
+
+    @classmethod
+    def set_transparent_background(cls):
+        """Configure ray-traced PNG export with a transparent background."""
+        cmd.bg_color("white")
+        cls.safe_set("ray_opaque_background", 0)
+
+    @classmethod
+    def apply_base_quality(cls):
+        cls.safe_set("antialias", 2)
+        cls.safe_set("ray_trace_antialias", 2)
+        cls.safe_set("sphere_quality", 3)
+        cls.safe_set("stick_quality", 30)
+        cls.safe_set("two_sided_lighting", 1)
+        cls.safe_set("use_shaders", 1)
+        cls.safe_set("depth_cue", 1)
+        cls.safe_set("label_connector", 0)
+
+    @classmethod
+    def finish_camera(cls, selection, buffer=2.0):
+        cmd.zoom(selection, buffer=buffer)
+        cmd.orient(selection)
+        cmd.refresh()
+
+    @staticmethod
+    def apply_lighting(
+        specular,
+        spec_reflect,
+        ambient,
+        direct,
+        reflect,
+        spec_power=None,
+        shininess=None,
+    ):
+        cmd.set("specular", specular)
+        cmd.set("spec_reflect", spec_reflect)
+        if spec_power is not None:
+            cmd.set("spec_power", spec_power)
+        cmd.set("ambient", ambient)
+        cmd.set("direct", direct)
+        cmd.set("reflect", reflect)
+        if shininess is not None:
+            cmd.set("shininess", shininess)
+
+    @classmethod
+    def apply_transparent_view(
+        cls,
+        orthoscopic,
+        field_of_view,
+        ray_shadow="on",
+        depth_cue=None,
+        fog_start=None,
+        ray_trace_gain=None,
+        ray_shadows_mode="light",
+    ):
+        """Transparent background plus camera / ray settings for scientific styles."""
+        cls.set_transparent_background()
+        cmd.set("orthoscopic", orthoscopic)
+        cmd.set("field_of_view", field_of_view)
+        if depth_cue is not None:
+            cmd.set("depth_cue", depth_cue)
+        if fog_start is not None:
+            cmd.set("fog_start", fog_start)
+        cmd.set("ray_shadow", ray_shadow)
+        if ray_trace_gain is not None:
+            cmd.set("ray_trace_gain", ray_trace_gain)
+        if ray_shadows_mode is not None:
+            cls.safe_ray_shadows(ray_shadows_mode)
+
+    def apply_style_palette(self, selection, palette, overrides=None):
+        """Apply element-category colors from a category-to-color-name mapping."""
+        self.apply_element_palette(selection, palette, overrides=overrides)
+
+    def _safe_set(self, setting, value, selection=None, category=None):
+        """Set a PyMOL parameter, optionally scoped to an element category."""
+        if selection is None and category is None:
+            self.safe_set(setting, value)
+            return
+        target = self.element_category_selection(selection, category)
+        self.safe_set(setting, value, target)
+
+    def frame(self, selection, core_name, zoom_buffer=1.4):
+        """Orient / center / zoom around the coordination environment."""
+        sel = self.selection_expr(selection)
+        cmd.label("all", '""')
+        cmd.orient(sel)
+        cmd.center(core_name)
+        try:
+            cmd.origin(core_name)
+        except Exception:
+            pass
+        cmd.zoom(sel, zoom_buffer)
+        try:
+            cmd.rebuild()
+        except Exception:
+            pass
+        cmd.refresh()
+
+    def finalize(self):
+        """Post-render cleanup shared by all scientific styles."""
+        self.hide_distance_value_labels()
+
+    def finish_default(self, selection):
+        """Zoom/orient via ``finish_camera`` and print ``self.message``."""
+        self.finalize()
+        self.finish_camera(selection)
+        print(self.message)
+
+    def apply_illustrated_camera(self, field_of_view=25, depth_cue=0, fog=0.0):
+        """Flat orthographic camera without forcing a transparent background."""
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("ray_orthoscopic", 1)
+        self.safe_set("depth_cue", depth_cue)
+        self.safe_set("fog", fog)
+        self.safe_set("field_of_view", field_of_view)
+
+    def apply_soft_shadows(self, decay_factor=0.35, decay_range=2.5):
+        self.safe_set("ray_shadow", 1)
+        self.safe_set("ray_shadow_decay_factor", decay_factor)
+        self.safe_set("ray_shadow_decay_range", decay_range)
+
+    def apply_ambient_occlusion(self, scale=13, smooth=15):
+        self.safe_set("ambient_occlusion_mode", 1)
+        self.safe_set("ambient_occlusion_scale", scale)
+        self.safe_set("ambient_occlusion_smooth", smooth)
+
+    def apply_coordination_sci_palette(self, sel, atoms):
+        """Apply the shared scientific element palette to coordination roles."""
+        self.apply_style_palette(
+            sel,
+            {
+                "C": "sci_C_gray",
+                "H": "sci_H_white",
+                "N": "sci_N_blue",
+                "O": "sci_O_red",
+                "S": "sci_S_yellow",
+                "P": "sci_P_orange",
+                "halogen": "sci_halogen",
+            },
+            overrides={atoms["metal"]: "metal_gold"},
+        )
+        cmd.color("sci_N_blue", atoms["donor_n"])
+        cmd.color("sci_S_yellow", atoms["donor_s"])
+        cmd.color("sci_P_orange", atoms["donor_p"])
+        cmd.color("sci_C_gray", atoms["co_c"])
+        cmd.color("sci_O_red", atoms["co_o"])
+        cmd.color("sci_H_white", atoms["hydride"])
+
+    def render(self, selection="all", **kwargs):
+        raise NotImplementedError(
+            "%s must implement render()" % type(self).__name__
+        )
 
 
-def _finish_style(selection):
-    cmd.zoom(selection, buffer=2.0)
-    cmd.orient(selection)
-    cmd.refresh()
-
-
-def _apply_lighting(
-    specular,
-    spec_reflect,
-    ambient,
-    direct,
-    reflect,
-    spec_power=None,
-    shininess=None,
-):
-    cmd.set("specular", specular)
-    cmd.set("spec_reflect", spec_reflect)
-    if spec_power is not None:
-        cmd.set("spec_power", spec_power)
-    cmd.set("ambient", ambient)
-    cmd.set("direct", direct)
-    cmd.set("reflect", reflect)
-    if shininess is not None:
-        cmd.set("shininess", shininess)
-
-
-def _apply_view(
-    orthoscopic,
-    field_of_view,
-    ray_shadow="on",
-    depth_cue=None,
-    fog_start=None,
-    ray_trace_gain=None,
-    ray_shadows_mode="light",
-):
-    """Transparent background plus camera / ray settings for scientific styles."""
-    _set_transparent_background()
-    cmd.set("orthoscopic", orthoscopic)
-    cmd.set("field_of_view", field_of_view)
-    if depth_cue is not None:
-        cmd.set("depth_cue", depth_cue)
-    if fog_start is not None:
-        cmd.set("fog_start", fog_start)
-    cmd.set("ray_shadow", ray_shadow)
-    if ray_trace_gain is not None:
-        cmd.set("ray_trace_gain", ray_trace_gain)
-    if ray_shadows_mode is not None:
-        _safe_ray_shadows(ray_shadows_mode)
+# ---------------------------------------------------------------------------
+# Style implementations
+# ---------------------------------------------------------------------------
 
 
 class MetallicPosterStyle(ScientificStyle):
@@ -646,6 +500,8 @@ class MetallicPosterStyle(ScientificStyle):
     name = "metallic_poster"
     command = "metallic_poster_render"
     message = "Metallic poster style applied."
+    DEFAULT_METAL_COLOR = "poster_mn_gold"
+    OTHER_METALS_SELECTION = "elem Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au"
     colors = {
         "poster_carbon": [0.62, 0.62, 0.62],
         "poster_hydrogen": [0.96, 0.96, 0.96],
@@ -661,21 +517,137 @@ class MetallicPosterStyle(ScientificStyle):
         "poster_label_black": [0.02, 0.02, 0.02],
     }
 
-    def render(
+    @staticmethod
+    def _normalize_none(value):
+        """Convert PyMOL command-line 'None' strings to Python None."""
+        if value is None:
+            return None
+        if str(value).lower() in ["none", "null", "false", ""]:
+            return None
+        return value
+
+    @staticmethod
+    def metal_element_label(metal_selection):
+        """Return the element symbol of the first atom in a metal selection."""
+        model = cmd.get_model(metal_selection)
+        if not model.atom:
+            return "Mn"
+        symbol = model.atom[0].symbol.strip()
+        return symbol or "Mn"
+
+    def apply_element_colors(self, sel, metal, metal_color=None):
+        """Apply the poster element color scheme to a selection."""
+        if metal_color is None:
+            metal_color = self.DEFAULT_METAL_COLOR
+        self.define_colors()
+        overrides = {
+            f"{sel} and {self.OTHER_METALS_SELECTION} and not ({metal})": (
+                "poster_metal_gray"
+            ),
+        }
+        if cmd.count_atoms(metal) > 0:
+            overrides[metal] = metal_color
+        self.apply_element_palette(
+            sel,
+            {
+                "C": "poster_carbon",
+                "H": "poster_hydrogen",
+                "N": "poster_nitrogen",
+                "O": "poster_oxygen",
+                "S": "poster_sulfur",
+                "P": "poster_phosphorus",
+                "halogen": "poster_halogen",
+            },
+            overrides=overrides,
+        )
+
+    def make_centered_element_labels(
         self,
-        selection="all",
-        metal_sel="elem Mn",
-        coord_sel=None,
-        coord_cutoff=2.6,
-        donor_elements="N+O+S+P+H",
-        background="white",
-        label_core="on",
+        atoms_to_label,
+        label_prefix="metallic_poster_labels",
         label_size=24,
-        metal_color="poster_mn_gold",
+        label_font_id=7,
     ):
+        """Create centered pseudoatom labels at selected atom coordinates."""
+        self.define_colors()
+        cmd.delete(label_prefix + "*")
+
+        model = cmd.get_model(atoms_to_label)
+        if len(model.atom) == 0:
+            print("No atoms found for centered labels:", atoms_to_label)
+            return
+
+        label_color_by_element = {
+            "Mn": "poster_label_black",
+            "Fe": "poster_label_black",
+            "Co": "poster_label_black",
+            "Ni": "poster_label_black",
+            "Cu": "poster_label_black",
+            "Zn": "poster_label_black",
+            "Ru": "poster_label_black",
+            "Rh": "poster_label_black",
+            "Pd": "poster_label_black",
+            "Ir": "poster_label_black",
+            "Pt": "poster_label_black",
+            "N": "poster_label_white",
+            "O": "poster_label_white",
+            "S": "poster_label_black",
+            "P": "poster_label_black",
+            "H": "poster_label_black",
+        }
+
+        counters = {}
+        for atom in model.atom:
+            elem = atom.symbol.strip()
+            if not elem:
+                elem = atom.name.strip()[0]
+
+            counters[elem] = counters.get(elem, 0) + 1
+            obj_name = f"{label_prefix}_{elem}"
+            pseudo_name = f"L_{elem}_{counters[elem]}"
+
+            cmd.pseudoatom(
+                object=obj_name,
+                name=pseudo_name,
+                pos=atom.coord,
+                label=elem,
+            )
+
+        for elem in counters:
+            obj_name = f"{label_prefix}_{elem}"
+            cmd.hide("everything", obj_name)
+            cmd.show("labels", obj_name)
+
+            self.safe_set("label_position", [0, 0, 0], obj_name)
+            self.safe_set("label_font_id", int(label_font_id), obj_name)
+            self.safe_set("label_size", float(label_size), obj_name)
+            self.safe_set("label_connector", 0, obj_name)
+            self.safe_set("label_shadow_mode", 2, obj_name)
+
+            label_color = label_color_by_element.get(
+                elem, "poster_label_white"
+            )
+            outline_color = (
+                "poster_label_black"
+                if label_color == "poster_label_white"
+                else "poster_label_white"
+            )
+            self.safe_set("label_color", label_color, obj_name)
+            self.safe_set("label_outline_color", outline_color, obj_name)
+
+    def render(self, selection="all"):
+        """Apply glossy metallic poster rendering with CHEMSMART defaults."""
+        metal_sel = "elem Mn"
+        coord_sel = None
+        coord_cutoff = 2.6
+        donor_elements = "N+O+S+P+H"
+        label_core = "on"
+        label_size = 24
+        metal_color = self.DEFAULT_METAL_COLOR
+
         self.define_colors()
 
-        coord_sel = _normalize_none(coord_sel)
+        coord_sel = self._normalize_none(coord_sel)
 
         sel = f"({selection})"
         metal = f"({sel}) and ({metal_sel})"
@@ -694,70 +666,68 @@ class MetallicPosterStyle(ScientificStyle):
 
         core = f"({metal}) or ({coord})"
 
-        _set_transparent_background()
-        _safe_set("ambient", 0.22)
-        _safe_set("direct", 0.82)
-        _safe_set("fog_start", 0.60)
+        self.set_transparent_background()
+        self.safe_set("ambient", 0.22)
+        self.safe_set("direct", 0.82)
+        self.safe_set("fog_start", 0.60)
 
-        _safe_set("orthoscopic", 1)
-        _safe_set("field_of_view", 35)
-        _safe_set("depth_cue", 1)
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("field_of_view", 35)
+        self.safe_set("depth_cue", 1)
 
-        _safe_set("specular", 0.85)
-        _safe_set("spec_reflect", 0.60)
-        _safe_set("spec_power", 260)
-        _safe_set("reflect", 0.45)
-        _safe_set("shininess", 90)
-        _safe_set("light_count", 8)
-        _safe_set("two_sided_lighting", 1)
+        self.safe_set("specular", 0.85)
+        self.safe_set("spec_reflect", 0.60)
+        self.safe_set("spec_power", 260)
+        self.safe_set("reflect", 0.45)
+        self.safe_set("shininess", 90)
+        self.safe_set("light_count", 8)
+        self.safe_set("two_sided_lighting", 1)
 
-        _safe_set("ray_shadow", 1)
-        _safe_set("ray_trace_mode", 0)
-        _safe_set("ray_trace_gain", 0.08)
-        _safe_set("ray_trace_disco_factor", 1)
-        _safe_ray_shadows("light")
+        self.safe_set("ray_shadow", 1)
+        self.safe_set("ray_trace_mode", 0)
+        self.safe_set("ray_trace_gain", 0.08)
+        self.safe_set("ray_trace_disco_factor", 1)
+        self.safe_ray_shadows("light")
 
-        _safe_set("ray_shadow_decay_factor", 0.25)
-        _safe_set("ray_shadow_decay_range", 2.0)
+        self.safe_set("ray_shadow_decay_factor", 0.25)
+        self.safe_set("ray_shadow_decay_range", 2.0)
 
-        _safe_set("ambient_occlusion_mode", 1)
-        _safe_set("ambient_occlusion_scale", 18)
-        _safe_set("ambient_occlusion_smooth", 12)
+        self.safe_set("ambient_occlusion_mode", 1)
+        self.safe_set("ambient_occlusion_scale", 18)
+        self.safe_set("ambient_occlusion_smooth", 12)
 
-        _safe_set("antialias", 2)
-        _safe_set("ray_trace_antialias", 2)
+        self.safe_set("antialias", 2)
+        self.safe_set("ray_trace_antialias", 2)
 
         cmd.hide("everything", sel)
 
         cmd.show("sticks", sel)
-        _safe_set("stick_radius", 0.13, sel)
-        _safe_set("stick_quality", 30, sel)
-        _safe_set("stick_ball", 0, sel)
-        _safe_set("valence", 0, sel)
+        self.safe_set("stick_radius", 0.13, sel)
+        self.safe_set("stick_quality", 30, sel)
+        self.safe_set("stick_ball", 0, sel)
+        self.safe_set("valence", 0, sel)
 
         cmd.hide("sticks", f"{sel} and elem H and not ({coord})")
 
         cmd.show("spheres", core)
-        _safe_set("sphere_quality", 4)
-        _safe_set("sphere_scale", 0.62, metal)
-        _safe_set("sphere_scale", 0.50, coord)
-        _safe_set("sphere_scale", 0.34, f"({coord}) and elem H")
+        self.safe_set("sphere_quality", 4)
+        self.safe_set("sphere_scale", 0.62, metal)
+        self.safe_set("sphere_scale", 0.50, coord)
+        self.safe_set("sphere_scale", 0.34, f"({coord}) and elem H")
 
-        _safe_set("stick_radius", 0.16, f"{sel} and within 2.9 of ({metal})")
-
-        apply_metallic_poster_element_colors(
-            sel,
-            metal,
-            metal_color=metal_color,
+        self.safe_set(
+            "stick_radius", 0.16, f"{sel} and within 2.9 of ({metal})"
         )
 
-        if str(label_core).lower() in ["on", "1", "true", "yes"]:
-            _safe_set("label_font_id", 7)
-            _safe_set("label_size", float(label_size))
-            _safe_set("label_position", [0, 0, 0])
-            _safe_set("label_connector", 0)
+        self.apply_element_colors(sel, metal, metal_color=metal_color)
 
-            _make_centered_element_labels(
+        if str(label_core).lower() in ["on", "1", "true", "yes"]:
+            self.safe_set("label_font_id", 7)
+            self.safe_set("label_size", float(label_size))
+            self.safe_set("label_position", [0, 0, 0])
+            self.safe_set("label_connector", 0)
+
+            self.make_centered_element_labels(
                 core,
                 label_prefix="metallic_poster_labels",
                 label_size=label_size,
@@ -785,21 +755,21 @@ class ComicMetallicStyle(ScientificStyle):
         cmd.show("sticks", sel)
         cmd.show("spheres", sel)
 
-        _safe_set("stick_radius", 0.14, sel)
-        _safe_set("sphere_scale", 0.25, f"{sel} and elem C+N+O+S+P")
-        _safe_set("sphere_scale", 0.15, f"{sel} and elem H")
+        self.safe_set("stick_radius", 0.14, sel)
+        self.safe_set("sphere_scale", 0.25, f"{sel} and elem C+N+O+S+P")
+        self.safe_set("sphere_scale", 0.15, f"{sel} and elem H")
 
         cmd.select(
             metal_name,
             f"{sel} and (elem Mn or elem Fe or elem Co or elem Ni or elem Ru or elem Rh)",
         )
         if cmd.count_atoms(metal_name) > 0:
-            _safe_set("sphere_scale", 0.42, metal_name)
+            self.safe_set("sphere_scale", 0.42, metal_name)
 
-        apply_metallic_poster_element_colors(
+        MetallicPosterStyle().apply_element_colors(
             sel,
             metal_name,
-            metal_color=DEFAULT_METAL_COLOR,
+            metal_color=MetallicPosterStyle.DEFAULT_METAL_COLOR,
         )
 
         if cmd.count_atoms(metal_name) > 0:
@@ -807,36 +777,36 @@ class ComicMetallicStyle(ScientificStyle):
             cmd.bond(metal_name, f"{sel} and elem P")
             cmd.bond(metal_name, f"{sel} and elem S")
 
-        _safe_set("specular", 0.85)
-        _safe_set("spec_power", 300)
-        _safe_set("spec_reflect", 0.70)
-        _safe_set("ambient", 0.25)
-        _safe_set("direct", 0.75)
-        _safe_set("shininess", 90)
+        self.safe_set("specular", 0.85)
+        self.safe_set("spec_power", 300)
+        self.safe_set("spec_reflect", 0.70)
+        self.safe_set("ambient", 0.25)
+        self.safe_set("direct", 0.75)
+        self.safe_set("shininess", 90)
 
-        _safe_set("ray_trace_mode", 1)
-        _safe_set("ray_trace_color", "black")
-        _safe_set("ray_trace_gain", 0.6)
+        self.safe_set("ray_trace_mode", 1)
+        self.safe_set("ray_trace_color", "black")
+        self.safe_set("ray_trace_gain", 0.6)
 
         cmd.label(sel, '""')
         if cmd.count_atoms(metal_name) > 0:
-            metal_label = _metal_element_label(metal_name)
+            metal_label = MetallicPosterStyle.metal_element_label(metal_name)
             cmd.label(metal_name, f'"{metal_label}"')
         cmd.label(f"{sel} and elem N", '"N"')
         cmd.label(f"{sel} and elem P", '"P"')
         cmd.label(f"{sel} and elem S", '"S"')
 
-        _safe_set("label_position", [0.0, 0.0, 2.0])
-        _safe_set("label_shadow_mode", 0)
-        _safe_set("ray_label_specular", 0)
-        _safe_set("label_font_id", 7)
-        _safe_set("label_color", "white")
-        _safe_set("label_size", 28)
+        self.safe_set("label_position", [0.0, 0.0, 2.0])
+        self.safe_set("label_shadow_mode", 0)
+        self.safe_set("ray_label_specular", 0)
+        self.safe_set("label_font_id", 7)
+        self.safe_set("label_color", "white")
+        self.safe_set("label_size", 28)
 
-        _set_transparent_background()
+        self.set_transparent_background()
 
-        _safe_set("orthoscopic", 1)
-        _safe_set("antialias", 2)
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("antialias", 2)
 
         cmd.zoom(selection, buffer=2.0)
         cmd.orient(selection)
@@ -848,7 +818,7 @@ class ComicMetallicStyle(ScientificStyle):
 class SoftCartoonStyle(ScientificStyle):
     """Soft cartoon ball-and-stick with muted pastels and rounded outlines.
 
-    Uses the shared ``_METAL_ELEMENTS`` set and radius-ratio coordination
+    Uses :attr:`ScientificStyle.METAL_ELEMENTS` and radius-ratio coordination
     (plus 1.6 Å geometric partner expansion) via ``select_coordination``.
     """
 
@@ -889,22 +859,22 @@ class SoftCartoonStyle(ScientificStyle):
         cmd.hide("sticks", f"{sel} and elem H and not ({shell})")
         cmd.hide("spheres", f"{sel} and elem H and not ({shell})")
 
-        _safe_set("stick_radius", 0.135, sel)
-        _safe_set("stick_h_scale", 0.72)
-        _safe_set("stick_quality", 32)
-        _safe_set("stick_ball", 0)
-        _safe_set("smooth_half_bonds", 1)
-        _safe_set("render_as_cylinders", 1)
-        _safe_set("stick_color", -1, sel)
+        self.safe_set("stick_radius", 0.135, sel)
+        self.safe_set("stick_h_scale", 0.72)
+        self.safe_set("stick_quality", 32)
+        self.safe_set("stick_ball", 0)
+        self.safe_set("smooth_half_bonds", 1)
+        self.safe_set("render_as_cylinders", 1)
+        self.safe_set("stick_color", -1, sel)
         try:
             cmd.set_bond("stick_radius", 0.165, atoms["metal"], shell)
         except Exception:
             pass
 
-        _safe_set("sphere_scale", 0.215, peripheral_heavy)
-        _safe_set("sphere_scale", 0.40, atoms["metal"])
+        self.safe_set("sphere_scale", 0.215, peripheral_heavy)
+        self.safe_set("sphere_scale", 0.40, atoms["metal"])
         # Shell heavy atoms default to framework scale; category rules override below.
-        _safe_set("sphere_scale", 0.215, f"({shell}) and not elem H")
+        self.safe_set("sphere_scale", 0.215, f"({shell}) and not elem H")
         for category, scale in (
             ("N+O", 0.275),
             ("S+P", 0.255),
@@ -913,9 +883,11 @@ class SoftCartoonStyle(ScientificStyle):
             self._safe_set(
                 "sphere_scale", scale, selection=shell, category=category
             )
-        _safe_set("sphere_scale", 0.175, coordinating_h)
-        _safe_set("sphere_quality", 4)
-        _safe_set("sphere_color", -1, f"{sphere_heavy} or {coordinating_h}")
+        self.safe_set("sphere_scale", 0.175, coordinating_h)
+        self.safe_set("sphere_quality", 4)
+        self.safe_set(
+            "sphere_color", -1, f"{sphere_heavy} or {coordinating_h}"
+        )
 
         self.apply_style_palette(
             sel,
@@ -931,26 +903,26 @@ class SoftCartoonStyle(ScientificStyle):
             overrides={atoms["metal"]: "sc_metal"},
         )
 
-        _apply_lighting(
+        self.apply_lighting(
             0.22, 0.10, 0.42, 0.58, 0.06, spec_power=28, shininess=18
         )
-        _safe_set("light_count", 5)
-        _safe_set("two_sided_lighting", 1)
-        _safe_set("use_shaders", 1)
+        self.safe_set("light_count", 5)
+        self.safe_set("two_sided_lighting", 1)
+        self.safe_set("use_shaders", 1)
         self.apply_soft_shadows(decay_factor=0.35, decay_range=2.5)
         self.apply_ambient_occlusion(scale=13, smooth=15)
-        _safe_set("ray_trace_mode", 1)
-        _safe_set("ray_trace_color", "sc_outline")
-        _safe_set("ray_trace_gain", 0.025)
-        _safe_set("ray_trace_disco_factor", 0.25)
+        self.safe_set("ray_trace_mode", 1)
+        self.safe_set("ray_trace_color", "sc_outline")
+        self.safe_set("ray_trace_gain", 0.025)
+        self.safe_set("ray_trace_disco_factor", 0.25)
         self.apply_illustrated_camera(field_of_view=25)
-        _safe_set("antialias", 2)
-        _safe_set("ray_trace_antialias", 2)
-        _safe_set("dash_round_ends", 1)
-        _safe_set("dash_radius", 0.065)
-        _safe_set("dash_length", 0.18)
-        _safe_set("dash_gap", 0.16)
-        _safe_set("dash_color", "sc_outline")
+        self.safe_set("antialias", 2)
+        self.safe_set("ray_trace_antialias", 2)
+        self.safe_set("dash_round_ends", 1)
+        self.safe_set("dash_radius", 0.065)
+        self.safe_set("dash_length", 0.18)
+        self.safe_set("dash_gap", 0.16)
+        self.safe_set("dash_color", "sc_outline")
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.6)
         self.finalize()
@@ -973,7 +945,7 @@ class EditorialMinimalStyle(ScientificStyle):
     def render(self, selection="all"):
         sel = f"({selection})"
 
-        _define_scientific_colors()
+        self.define_shared_colors()
         self.define_colors()
         cmd.hide("everything", sel)
 
@@ -991,17 +963,17 @@ class EditorialMinimalStyle(ScientificStyle):
         cmd.hide("sticks", f"{sel} and elem H and not {atoms['important_h']}")
         cmd.hide("spheres", f"{sel} and elem H and not {atoms['important_h']}")
 
-        _safe_set("sphere_scale", 0.60, atoms["metal"])
-        _safe_set("sphere_scale", 0.36, atoms["donor_n"])
-        _safe_set("sphere_scale", 0.39, atoms["donor_s"])
-        _safe_set("sphere_scale", 0.26, atoms["co_c"])
-        _safe_set("sphere_scale", 0.21, atoms["co_o"])
-        _safe_set("sphere_scale", 0.26, atoms["important_h"])
+        self.safe_set("sphere_scale", 0.60, atoms["metal"])
+        self.safe_set("sphere_scale", 0.36, atoms["donor_n"])
+        self.safe_set("sphere_scale", 0.39, atoms["donor_s"])
+        self.safe_set("sphere_scale", 0.26, atoms["co_c"])
+        self.safe_set("sphere_scale", 0.21, atoms["co_o"])
+        self.safe_set("sphere_scale", 0.26, atoms["important_h"])
 
-        _safe_set("stick_radius", 0.12, sel)
-        _safe_set("stick_radius", 0.15, atoms["coordination_core"])
-        _safe_set("stick_radius", 0.07, f"{sel} and elem H")
-        _safe_set("stick_quality", 30)
+        self.safe_set("stick_radius", 0.12, sel)
+        self.safe_set("stick_radius", 0.15, atoms["coordination_core"])
+        self.safe_set("stick_radius", 0.07, f"{sel} and elem H")
+        self.safe_set("stick_quality", 30)
 
         cmd.color("mn_rose", atoms["metal"])
         cmd.color("sulfur_gold", atoms["donor_s"])
@@ -1014,32 +986,32 @@ class EditorialMinimalStyle(ScientificStyle):
             f"{sel} and elem C and not {atoms['co_c']}",
         )
 
-        _set_transparent_background()
-        _safe_set("orthoscopic", 1)
-        _safe_set("field_of_view", 45)
+        self.set_transparent_background()
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("field_of_view", 45)
 
-        _safe_set("ambient", 0.22)
-        _safe_set("direct", 0.80)
-        _safe_set("specular", 0.72)
-        _safe_set("spec_reflect", 0.55)
-        _safe_set("spec_power", 220)
-        _safe_set("shininess", 75)
-        _safe_set("ray_shadow", "on")
-        _safe_set("ambient_occlusion_mode", 1)
-        _safe_set("ambient_occlusion_scale", 15)
-        _safe_set("ambient_occlusion_smooth", 10)
+        self.safe_set("ambient", 0.22)
+        self.safe_set("direct", 0.80)
+        self.safe_set("specular", 0.72)
+        self.safe_set("spec_reflect", 0.55)
+        self.safe_set("spec_power", 220)
+        self.safe_set("shininess", 75)
+        self.safe_set("ray_shadow", "on")
+        self.safe_set("ambient_occlusion_mode", 1)
+        self.safe_set("ambient_occlusion_scale", 15)
+        self.safe_set("ambient_occlusion_smooth", 10)
 
-        _safe_set("specular", 0.85, atoms["metal"])
-        _safe_set("shininess", 90, atoms["metal"])
+        self.safe_set("specular", 0.85, atoms["metal"])
+        self.safe_set("shininess", 90, atoms["metal"])
         soft_atoms = "%s or %s or %s" % (
             atoms["donors"],
             atoms["co_c"],
             atoms["important_h"],
         )
-        _safe_set("specular", 0.15, soft_atoms)
-        _safe_set("shininess", 20, soft_atoms)
+        self.safe_set("specular", 0.15, soft_atoms)
+        self.safe_set("shininess", 20, soft_atoms)
 
-        _base_quality()
+        self.apply_base_quality()
         cmd.label("all", '""')
         self.finish_default(selection)
 
@@ -1068,8 +1040,8 @@ class SoftCeramicStyle(ScientificStyle):
 
         self.define_colors()
         cmd.hide("everything", sel)
-        _safe_set("valence", 0)
-        _safe_set("stick_ball", 0)
+        self.safe_set("valence", 0)
+        self.safe_set("stick_ball", 0)
 
         atoms = self.select_coordination(selection)
 
@@ -1091,52 +1063,52 @@ class SoftCeramicStyle(ScientificStyle):
         cmd.hide("spheres", f"{sel} and elem H and not {atoms['hydride']}")
         cmd.show("spheres", atoms["coordination_core"])
 
-        _safe_set("sphere_scale", 0.56, atoms["metal"])
-        _safe_set("sphere_scale", 0.40, atoms["donor_s"])
-        _safe_set("sphere_scale", 0.37, atoms["donor_n"])
-        _safe_set("sphere_scale", 0.28, atoms["co_c"])
-        _safe_set("sphere_scale", 0.18, atoms["co_o"])
-        _safe_set("sphere_scale", 0.25, atoms["hydride"])
+        self.safe_set("sphere_scale", 0.56, atoms["metal"])
+        self.safe_set("sphere_scale", 0.40, atoms["donor_s"])
+        self.safe_set("sphere_scale", 0.37, atoms["donor_n"])
+        self.safe_set("sphere_scale", 0.28, atoms["co_c"])
+        self.safe_set("sphere_scale", 0.18, atoms["co_o"])
+        self.safe_set("sphere_scale", 0.25, atoms["hydride"])
 
-        _safe_set("stick_radius", 0.115, sel)
-        _safe_set(
+        self.safe_set("stick_radius", 0.115, sel)
+        self.safe_set(
             "stick_radius",
             0.155,
             "%s or %s or %s"
             % (atoms["metal"], atoms["donor_s"], atoms["donor_n"]),
         )
-        _safe_set(
+        self.safe_set(
             "stick_radius",
             0.130,
             "%s or %s or %s"
             % (atoms["co_c"], atoms["co_o"], atoms["hydride"]),
         )
 
-        _safe_set("stick_quality", 40)
-        _safe_set("sphere_quality", 4)
-        _safe_set("use_shaders", 1)
-        _safe_set("two_sided_lighting", 1)
-        _safe_set("light_count", 8)
+        self.safe_set("stick_quality", 40)
+        self.safe_set("sphere_quality", 4)
+        self.safe_set("use_shaders", 1)
+        self.safe_set("two_sided_lighting", 1)
+        self.safe_set("light_count", 8)
 
-        _safe_set("ambient", 0.30)
-        _safe_set("direct", 0.70)
-        _safe_set("reflect", 0.25)
-        _safe_set("specular", 0.55)
-        _safe_set("spec_reflect", 0.32)
-        _safe_set("spec_power", 115)
-        _safe_set("shininess", 58)
+        self.safe_set("ambient", 0.30)
+        self.safe_set("direct", 0.70)
+        self.safe_set("reflect", 0.25)
+        self.safe_set("specular", 0.55)
+        self.safe_set("spec_reflect", 0.32)
+        self.safe_set("spec_power", 115)
+        self.safe_set("shininess", 58)
 
-        _safe_set("ray_shadow", 1)
-        _safe_set("ray_trace_mode", 0)
-        _safe_set("ray_trace_gain", 0.06)
-        _safe_set("antialias", 2)
-        _safe_set("ray_trace_antialias", 2)
-        _safe_set("ambient_occlusion_mode", 1)
-        _safe_set("ambient_occlusion_scale", 12)
-        _safe_set("ambient_occlusion_smooth", 10)
-        _safe_set("ray_shadow_decay_factor", 0.25)
-        _safe_set("ray_shadow_decay_range", 2.0)
-        _safe_set("ray_opaque_background", 1)
+        self.safe_set("ray_shadow", 1)
+        self.safe_set("ray_trace_mode", 0)
+        self.safe_set("ray_trace_gain", 0.06)
+        self.safe_set("antialias", 2)
+        self.safe_set("ray_trace_antialias", 2)
+        self.safe_set("ambient_occlusion_mode", 1)
+        self.safe_set("ambient_occlusion_scale", 12)
+        self.safe_set("ambient_occlusion_smooth", 10)
+        self.safe_set("ray_shadow_decay_factor", 0.25)
+        self.safe_set("ray_shadow_decay_range", 2.0)
+        self.safe_set("ray_opaque_background", 1)
 
         cmd.label("all", '""')
         self.finish_default(selection)
@@ -1168,28 +1140,28 @@ class NeonCoordinationCoreStyle(ScientificStyle):
         atoms = self.select_coordination(selection)
         first_shell = self.first_shell(atoms)
 
-        _safe_set("opaque_background", 0)
-        _safe_set("ray_opaque_background", 0)
-        _safe_set("show_alpha_checker", 1)
+        self.safe_set("opaque_background", 0)
+        self.safe_set("ray_opaque_background", 0)
+        self.safe_set("show_alpha_checker", 1)
 
         cmd.hide("everything", sel)
         cmd.show("sticks", sel)
         cmd.show("spheres", atoms["coordination_core"])
         cmd.hide("sticks", f"{sel} and elem H and not ({first_shell})")
 
-        _safe_set("stick_radius", 0.10, sel)
-        _safe_set("stick_h_scale", 0.70)
-        _safe_set("stick_quality", 32)
-        _safe_set("stick_transparency", 0.0)
-        _safe_set("stick_ball", 0)
-        _safe_set("smooth_half_bonds", 1)
+        self.safe_set("stick_radius", 0.10, sel)
+        self.safe_set("stick_h_scale", 0.70)
+        self.safe_set("stick_quality", 32)
+        self.safe_set("stick_transparency", 0.0)
+        self.safe_set("stick_ball", 0)
+        self.safe_set("smooth_half_bonds", 1)
         try:
             cmd.set_bond("stick_radius", 0.145, atoms["metal"], first_shell)
         except Exception:
             pass
 
-        _safe_set("sphere_scale", 0.44, atoms["metal"])
-        _safe_set(
+        self.safe_set("sphere_scale", 0.44, atoms["metal"])
+        self.safe_set(
             "sphere_scale",
             0.28,
             f"({first_shell}) and not (elem H+Br+I)",
@@ -1200,8 +1172,8 @@ class NeonCoordinationCoreStyle(ScientificStyle):
         self._safe_set(
             "sphere_scale", 0.20, selection=first_shell, category="H"
         )
-        _safe_set("sphere_transparency", 0.0, atoms["coordination_core"])
-        _safe_set("sphere_quality", 4)
+        self.safe_set("sphere_transparency", 0.0, atoms["coordination_core"])
+        self.safe_set("sphere_quality", 4)
 
         self.apply_style_palette(
             sel,
@@ -1217,31 +1189,31 @@ class NeonCoordinationCoreStyle(ScientificStyle):
             overrides={atoms["metal"]: "ncc_metal_c"},
         )
 
-        _safe_set("ambient", 0.10)
-        _safe_set("direct", 0.82)
-        _safe_set("reflect", 0.20)
-        _safe_set("specular", 0.78)
-        _safe_set("spec_reflect", 0.50)
-        _safe_set("spec_power", 170)
-        _safe_set("shininess", 65)
-        _safe_set("light_count", 8)
-        _safe_set("two_sided_lighting", 1)
-        _safe_set("ray_shadow", 1)
-        _safe_set("ray_shadow_decay_factor", 0.22)
-        _safe_set("ray_shadow_decay_range", 2.0)
-        _safe_set("ambient_occlusion_mode", 1)
-        _safe_set("ambient_occlusion_scale", 18)
-        _safe_set("ambient_occlusion_smooth", 10)
-        _safe_set("ray_trace_mode", 0)
-        _safe_set("ray_trace_gain", 0.06)
-        _safe_set("depth_cue", 0)
-        _safe_set("fog", 0.0)
-        _safe_set("orthoscopic", 1)
-        _safe_set("ray_orthoscopic", 1)
-        _safe_set("use_shaders", 1)
-        _safe_set("render_as_cylinders", 1)
-        _safe_set("antialias", 2)
-        _safe_set("ray_trace_antialias", 2)
+        self.safe_set("ambient", 0.10)
+        self.safe_set("direct", 0.82)
+        self.safe_set("reflect", 0.20)
+        self.safe_set("specular", 0.78)
+        self.safe_set("spec_reflect", 0.50)
+        self.safe_set("spec_power", 170)
+        self.safe_set("shininess", 65)
+        self.safe_set("light_count", 8)
+        self.safe_set("two_sided_lighting", 1)
+        self.safe_set("ray_shadow", 1)
+        self.safe_set("ray_shadow_decay_factor", 0.22)
+        self.safe_set("ray_shadow_decay_range", 2.0)
+        self.safe_set("ambient_occlusion_mode", 1)
+        self.safe_set("ambient_occlusion_scale", 18)
+        self.safe_set("ambient_occlusion_smooth", 10)
+        self.safe_set("ray_trace_mode", 0)
+        self.safe_set("ray_trace_gain", 0.06)
+        self.safe_set("depth_cue", 0)
+        self.safe_set("fog", 0.0)
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("ray_orthoscopic", 1)
+        self.safe_set("use_shaders", 1)
+        self.safe_set("render_as_cylinders", 1)
+        self.safe_set("antialias", 2)
+        self.safe_set("ray_trace_antialias", 2)
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.7)
         self.finalize()
@@ -1271,8 +1243,8 @@ class MatteClayStyle(ScientificStyle):
 
         self.define_colors()
         cmd.hide("everything", sel)
-        _safe_set("valence", 0)
-        _safe_set("stick_ball", 0)
+        self.safe_set("valence", 0)
+        self.safe_set("stick_ball", 0)
 
         atoms = self.select_coordination(selection)
 
@@ -1295,16 +1267,16 @@ class MatteClayStyle(ScientificStyle):
         cmd.hide("spheres", f"{sel} and elem H and not {atoms['hydride']}")
         cmd.show("spheres", atoms["coordination_core"])
 
-        _safe_set("sphere_scale", 0.62, atoms["metal"])
-        _safe_set("sphere_scale", 0.36, atoms["donor_s"])
-        _safe_set("sphere_scale", 0.34, atoms["donor_n"])
-        _safe_set("sphere_scale", 0.34, atoms["donor_p"])
-        _safe_set("sphere_scale", 0.30, atoms["co_c"])
-        _safe_set("sphere_scale", 0.28, atoms["co_o"])
-        _safe_set("sphere_scale", 0.24, atoms["hydride"])
+        self.safe_set("sphere_scale", 0.62, atoms["metal"])
+        self.safe_set("sphere_scale", 0.36, atoms["donor_s"])
+        self.safe_set("sphere_scale", 0.34, atoms["donor_n"])
+        self.safe_set("sphere_scale", 0.34, atoms["donor_p"])
+        self.safe_set("sphere_scale", 0.30, atoms["co_c"])
+        self.safe_set("sphere_scale", 0.28, atoms["co_o"])
+        self.safe_set("sphere_scale", 0.24, atoms["hydride"])
 
-        _safe_set("stick_radius", 0.108, sel)
-        _safe_set(
+        self.safe_set("stick_radius", 0.108, sel)
+        self.safe_set(
             "stick_radius",
             0.138,
             "%s or %s" % (atoms["metal"], atoms["coordination_core"]),
@@ -1312,36 +1284,36 @@ class MatteClayStyle(ScientificStyle):
 
         # Transparent background and zero-gloss clay material with soft AO.
         cmd.bg_color("white")
-        _safe_set("ray_opaque_background", 0)
-        _safe_set("specular", 0.0)
-        _safe_set("specular_intensity", 0.0)
-        _safe_set("spec_direct", 0.0)
-        _safe_set("spec_reflect", 0.0)
-        _safe_set("spec_power", 1.0)
-        _safe_set("shininess", 0.0)
-        _safe_set("reflect", 0.0)
-        _safe_set("ray_transparency_specular", 0.0)
-        _safe_set("ambient", 0.42)
-        _safe_set("direct", 0.58)
-        _safe_set("light_count", 3)
-        _safe_set("light", [-0.40, -0.55, -1.00])
-        _safe_set("two_sided_lighting", 1)
-        _safe_set("ray_shadow", 1)
-        _safe_set("ray_trace_mode", 0)
-        _safe_set("ray_trace_gain", 0.0)
-        _safe_set("ambient_occlusion_mode", 1)
-        _safe_set("ambient_occlusion_scale", 18)
-        _safe_set("ambient_occlusion_smooth", 14)
-        _safe_set("ray_shadow_decay_factor", 0.28)
-        _safe_set("ray_shadow_decay_range", 2.0)
-        _safe_set("use_shaders", 1)
-        _safe_set("antialias", 2)
-        _safe_set("ray_trace_antialias", 2)
-        _safe_set("sphere_quality", 4)
-        _safe_set("stick_quality", 32)
-        _safe_set("orthoscopic", 1)
-        _safe_set("depth_cue", 0)
-        _safe_set("ray_trace_fog", 0)
+        self.safe_set("ray_opaque_background", 0)
+        self.safe_set("specular", 0.0)
+        self.safe_set("specular_intensity", 0.0)
+        self.safe_set("spec_direct", 0.0)
+        self.safe_set("spec_reflect", 0.0)
+        self.safe_set("spec_power", 1.0)
+        self.safe_set("shininess", 0.0)
+        self.safe_set("reflect", 0.0)
+        self.safe_set("ray_transparency_specular", 0.0)
+        self.safe_set("ambient", 0.42)
+        self.safe_set("direct", 0.58)
+        self.safe_set("light_count", 3)
+        self.safe_set("light", [-0.40, -0.55, -1.00])
+        self.safe_set("two_sided_lighting", 1)
+        self.safe_set("ray_shadow", 1)
+        self.safe_set("ray_trace_mode", 0)
+        self.safe_set("ray_trace_gain", 0.0)
+        self.safe_set("ambient_occlusion_mode", 1)
+        self.safe_set("ambient_occlusion_scale", 18)
+        self.safe_set("ambient_occlusion_smooth", 14)
+        self.safe_set("ray_shadow_decay_factor", 0.28)
+        self.safe_set("ray_shadow_decay_range", 2.0)
+        self.safe_set("use_shaders", 1)
+        self.safe_set("antialias", 2)
+        self.safe_set("ray_trace_antialias", 2)
+        self.safe_set("sphere_quality", 4)
+        self.safe_set("stick_quality", 32)
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("depth_cue", 0)
+        self.safe_set("ray_trace_fog", 0)
 
         cmd.label("all", '""')
         self.finish_default(selection)
@@ -1375,10 +1347,10 @@ class XrayWireStyle(ScientificStyle):
         cmd.hide("lines", sel)
         cmd.hide("nonbonded", sel)
 
-        _safe_set("stick_radius", 0.18, sel)
-        _safe_set("stick_ball", 1)
-        _safe_set("stick_ball_ratio", 1.0)
-        _safe_set("sphere_scale", 0.6, center_metal)
+        self.safe_set("stick_radius", 0.18, sel)
+        self.safe_set("stick_ball", 1)
+        self.safe_set("stick_ball_ratio", 1.0)
+        self.safe_set("sphere_scale", 0.6, center_metal)
 
         self.apply_style_palette(
             sel,
@@ -1392,24 +1364,24 @@ class XrayWireStyle(ScientificStyle):
             overrides={center_metal: "xw_metal"},
         )
 
-        _safe_set("ray_trace_mode", 3)
-        _safe_set("ray_trace_gain", 0.05)
-        _safe_set("ambient", 0.5)
-        _safe_set("direct", 0.6)
-        _safe_set("reflect", 0.0)
-        _safe_set("spec_power", 1.0)
-        _safe_set("spec_count", 0)
-        _safe_set("specular", 0.0)
-        _safe_set("shininess", 0.0)
-        _safe_set("ray_shadow", 1)
-        _safe_set("ray_trace_fog", 0)
+        self.safe_set("ray_trace_mode", 3)
+        self.safe_set("ray_trace_gain", 0.05)
+        self.safe_set("ambient", 0.5)
+        self.safe_set("direct", 0.6)
+        self.safe_set("reflect", 0.0)
+        self.safe_set("spec_power", 1.0)
+        self.safe_set("spec_count", 0)
+        self.safe_set("specular", 0.0)
+        self.safe_set("shininess", 0.0)
+        self.safe_set("ray_shadow", 1)
+        self.safe_set("ray_trace_fog", 0)
 
-        _set_transparent_background()
+        self.set_transparent_background()
 
         self.apply_illustrated_camera(field_of_view=25, depth_cue=0, fog=0.0)
-        _safe_set("antialias", 2)
-        _safe_set("two_sided_lighting", 1)
-        _safe_set("use_shaders", 1)
+        self.safe_set("antialias", 2)
+        self.safe_set("two_sided_lighting", 1)
+        self.safe_set("use_shaders", 1)
 
         self.finish_default(selection)
 
@@ -1422,30 +1394,9 @@ class StericSurfaceStyle(ScientificStyle):
     prefix = "steric"
     message = "Transparent steric surface style applied."
 
-    def _apply_atom_colors(self, sel, atoms):
-        self.apply_style_palette(
-            sel,
-            {
-                "C": "sci_C_gray",
-                "H": "sci_H_white",
-                "N": "sci_N_blue",
-                "O": "sci_O_red",
-                "S": "sci_S_yellow",
-                "P": "sci_P_orange",
-                "halogen": "sci_halogen",
-            },
-            overrides={atoms["metal"]: "metal_gold"},
-        )
-        cmd.color("sci_N_blue", atoms["donor_n"])
-        cmd.color("sci_S_yellow", atoms["donor_s"])
-        cmd.color("sci_P_orange", atoms["donor_p"])
-        cmd.color("sci_C_gray", atoms["co_c"])
-        cmd.color("sci_O_red", atoms["co_o"])
-        cmd.color("sci_H_white", atoms["hydride"])
-
     def render(self, selection="all"):
-        sel = f"({selection})"
-        _define_scientific_colors()
+        sel = self.selection_expr(selection)
+        self.define_shared_colors()
         cmd.hide("everything", sel)
 
         atoms = self.select_coordination(selection)
@@ -1453,41 +1404,31 @@ class StericSurfaceStyle(ScientificStyle):
         cmd.show("sticks", sel)
         cmd.hide("sticks", f"{sel} and elem H and not {atoms['hydride']}")
         cmd.hide("spheres", f"{sel} and elem H and not {atoms['hydride']}")
-        sphere_atoms = " or ".join(
-            part
-            for part in (
-                atoms["metal"],
-                atoms["donors"],
-                atoms["co_c"],
-                atoms["co_o"],
-                atoms["hydride"],
-            )
-            if part and part != "none"
-        )
+        sphere_atoms = self.coordination_sphere_atoms(atoms)
         if sphere_atoms:
             cmd.show("spheres", sphere_atoms)
 
-        _safe_set("stick_radius", 0.095, sel)
-        _safe_set("stick_radius", 0.14, atoms["coordination_core"])
-        _safe_set("sphere_scale", 0.52, atoms["metal"])
-        _safe_set("sphere_scale", 0.34, atoms["donors"])
-        _safe_set("sphere_scale", 0.34, atoms["co_c"])
-        _safe_set("sphere_scale", 0.34, atoms["co_o"])
-        _safe_set("sphere_scale", 0.12, atoms["hydride"])
+        self.safe_set("stick_radius", 0.095, sel)
+        self.safe_set("stick_radius", 0.14, atoms["coordination_core"])
+        self.safe_set("sphere_scale", 0.52, atoms["metal"])
+        self.safe_set("sphere_scale", 0.34, atoms["donors"])
+        self.safe_set("sphere_scale", 0.34, atoms["co_c"])
+        self.safe_set("sphere_scale", 0.34, atoms["co_o"])
+        self.safe_set("sphere_scale", 0.12, atoms["hydride"])
 
-        self._apply_atom_colors(sel, atoms)
+        self.apply_coordination_sci_palette(sel, atoms)
 
         cmd.show("surface", sel)
         cmd.color("surface_sky", selection)
-        _safe_set("transparency", 0.68, sel)
-        _safe_set("surface_quality", 1)
-        _safe_set("surface_solvent", 1)
+        self.safe_set("transparency", 0.68, sel)
+        self.safe_set("surface_quality", 1)
+        self.safe_set("surface_solvent", 1)
 
         # Re-apply atom colors after surface coloring paints the whole selection.
-        self._apply_atom_colors(sel, atoms)
+        self.apply_coordination_sci_palette(sel, atoms)
 
-        _apply_lighting(0.45, 0.22, 0.32, 0.74, 0.20, spec_power=120)
-        _apply_view(
+        self.apply_lighting(0.45, 0.22, 0.32, 0.74, 0.20, spec_power=120)
+        self.apply_transparent_view(
             orthoscopic=1,
             field_of_view=30,
             depth_cue=1,
@@ -1527,18 +1468,18 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
         cmd.hide("sticks", f"{sel} and elem H and not ({shell})")
         cmd.hide("spheres", f"{sel} and elem H and not ({shell})")
 
-        _safe_set("stick_radius", 0.155, sel)
-        _safe_set("stick_h_scale", 0.70)
-        _safe_set("stick_quality", 32)
-        _safe_set("stick_ball", 0)
-        _safe_set("smooth_half_bonds", 1)
-        _safe_set("stick_color", "qcd_bond", sel)
+        self.safe_set("stick_radius", 0.155, sel)
+        self.safe_set("stick_h_scale", 0.70)
+        self.safe_set("stick_quality", 32)
+        self.safe_set("stick_ball", 0)
+        self.safe_set("smooth_half_bonds", 1)
+        self.safe_set("stick_color", "qcd_bond", sel)
         try:
             cmd.set_bond("stick_radius", 0.185, atoms["metal"], shell)
         except Exception:
             pass
 
-        _safe_set("sphere_scale", 0.34, atoms["metal"])
+        self.safe_set("sphere_scale", 0.34, atoms["metal"])
         for category, scale in (
             ("N+O", 0.23),
             ("S+P", 0.18),
@@ -1549,8 +1490,8 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
             self._safe_set(
                 "sphere_scale", scale, selection=shell, category=category
             )
-        _safe_set("sphere_transparency", 0.0, atoms["coordination_core"])
-        _safe_set("sphere_quality", 4)
+        self.safe_set("sphere_transparency", 0.0, atoms["coordination_core"])
+        self.safe_set("sphere_quality", 4)
 
         self.apply_style_palette(
             sel,
@@ -1566,104 +1507,59 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
             overrides={atoms["metal"]: "qcd_metal"},
         )
 
-        _safe_set("ambient", 0.58)
-        _safe_set("direct", 0.48)
-        _safe_set("reflect", 0.08)
-        _safe_set("specular", 0.20)
-        _safe_set("spec_reflect", 0.12)
-        _safe_set("spec_power", 45)
-        _safe_set("shininess", 25)
-        _safe_set("light_count", 8)
-        _safe_set("two_sided_lighting", 1)
-        _safe_set("ray_shadow", 0)
-        _safe_set("ambient_occlusion_mode", 0)
-        _safe_set("depth_cue", 0)
-        _safe_set("fog", 0.0)
-        _safe_set("orthoscopic", 1)
-        _safe_set("ray_orthoscopic", 1)
-        _safe_set("use_shaders", 1)
-        _safe_set("render_as_cylinders", 1)
-        _safe_set("antialias", 2)
-        _safe_set("ray_trace_antialias", 2)
+        self.safe_set("ambient", 0.58)
+        self.safe_set("direct", 0.48)
+        self.safe_set("reflect", 0.08)
+        self.safe_set("specular", 0.20)
+        self.safe_set("spec_reflect", 0.12)
+        self.safe_set("spec_power", 45)
+        self.safe_set("shininess", 25)
+        self.safe_set("light_count", 8)
+        self.safe_set("two_sided_lighting", 1)
+        self.safe_set("ray_shadow", 0)
+        self.safe_set("ambient_occlusion_mode", 0)
+        self.safe_set("depth_cue", 0)
+        self.safe_set("fog", 0.0)
+        self.safe_set("orthoscopic", 1)
+        self.safe_set("ray_orthoscopic", 1)
+        self.safe_set("use_shaders", 1)
+        self.safe_set("render_as_cylinders", 1)
+        self.safe_set("antialias", 2)
+        self.safe_set("ray_trace_antialias", 2)
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.4)
         self.finalize()
         print(self.message)
 
 
-def render_editorial_minimal(selection="all"):
-    """Editorial minimal white style for main-text mechanistic figures.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`EditorialMinimalStyle`.
-    """
-    EditorialMinimalStyle().render(selection)
+# ---------------------------------------------------------------------------
+# Public PyMOL / CHEMSMART entry points
+# ---------------------------------------------------------------------------
 
 
-def render_soft_ceramic(selection="all"):
-    """Soft ceramic / studio ball-and-stick style for coordination complexes.
+def _make_style_wrapper(style_cls):
+    """Return a thin ``render_*`` wrapper for a :class:`ScientificStyle` subclass."""
 
-    Metal centers are selected dynamically from common transition and main-group
-    coordination metals rather than a hardcoded Mn-only selection.
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`SoftCeramicStyle`.
-    """
-    SoftCeramicStyle().render(selection)
+    def wrapper(selection="all", **kwargs):
+        return style_cls().render(selection=selection, **kwargs)
 
-
-def render_neon_coordination_core(selection="all"):
-    """Neon coordination-core style for reactive centers and catalytic pockets.
-
-    Uses covalent-radius-ratio coordination spheres shared with editorial /
-    soft-ceramic / matte-clay. Transparent background with studio-neon lighting.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`NeonCoordinationCoreStyle`.
-    """
-    NeonCoordinationCoreStyle().render(selection)
+    wrapper.__name__ = style_cls.command or style_cls.name
+    wrapper.__doc__ = style_cls.__doc__
+    return wrapper
 
 
-def render_matte_clay(selection="all"):
-    """Matte clay style for soft graphical abstracts.
-
-    Uses covalent-radius-ratio coordination spheres shared with soft-ceramic /
-    editorial styles. Non-core hydrogens are hidden.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`MatteClayStyle`.
-    """
-    MatteClayStyle().render(selection)
-
-
-def render_xray_wire(selection="all"):
-    """X-ray crystallography wire style for SI structure verification.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`XrayWireStyle`.
-    """
-    XrayWireStyle().render(selection)
+metallic_poster_render = _make_style_wrapper(MetallicPosterStyle)
+render_comic_metallic_labeled_final = _make_style_wrapper(ComicMetallicStyle)
+render_soft_cartoon = _make_style_wrapper(SoftCartoonStyle)
+render_editorial_minimal = _make_style_wrapper(EditorialMinimalStyle)
+render_soft_ceramic = _make_style_wrapper(SoftCeramicStyle)
+render_neon_coordination_core = _make_style_wrapper(NeonCoordinationCoreStyle)
+render_matte_clay = _make_style_wrapper(MatteClayStyle)
+render_xray_wire = _make_style_wrapper(XrayWireStyle)
+render_steric_surface = _make_style_wrapper(StericSurfaceStyle)
+render_quasi_chemdraw_bold = _make_style_wrapper(QuasiChemDrawBoldStyle)
 
 
-def render_steric_surface(selection="all"):
-    """Transparent steric surface style for catalyst pockets.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`StericSurfaceStyle`.
-    """
-    StericSurfaceStyle().render(selection)
-
-
-def render_quasi_chemdraw_bold(selection="all"):
-    """Quasi-ChemDraw bold 3D style with formula-like clarity.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`QuasiChemDrawBoldStyle`.
-    """
-    QuasiChemDrawBoldStyle().render(selection)
-
-
-# Canonical PyMOL command names (must stay aligned with
-# ``PYMOL_SCIENTIFIC_STYLE_COMMANDS`` in ``runner.py``).
 _PYMOL_STYLE_COMMANDS = (
     ("metallic_poster_render", metallic_poster_render),
     (

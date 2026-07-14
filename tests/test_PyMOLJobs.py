@@ -21,7 +21,6 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.templates.scientific_styles import (
-    ELEMENT_CATEGORIES,
     ComicMetallicStyle,
     EditorialMinimalStyle,
     MatteClayStyle,
@@ -32,9 +31,6 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     SoftCeramicStyle,
     StericSurfaceStyle,
     XrayWireStyle,
-    _get_coordinating_atoms,
-    element_category_selection,
-    hide_distance_value_labels,
     render_editorial_minimal,
     render_matte_clay,
     render_neon_coordination_core,
@@ -957,8 +953,7 @@ class TestPyMOLStyleCommands:
             ("matte_clay", f"render_matte_clay {self.label_1_mer}"),
             (
                 "glossy",
-                f"metallic_poster_render {self.label_1_mer}, elem Mn, None, "
-                f"2.6, N+O+S+P+H",
+                f"metallic_poster_render {self.label_1_mer}",
             ),
         ):
             for coordinates in (None, self.coordination_bonds_1_mer):
@@ -970,7 +965,9 @@ class TestPyMOLStyleCommands:
 
     def test_scientific_styles_hide_distance_value_labels(self):
         """Derived styles keep distance dashes but hide numeric distance labels."""
-        hide_source = inspect.getsource(hide_distance_value_labels)
+        hide_source = inspect.getsource(
+            ScientificStyle.hide_distance_value_labels
+        )
         assert 'cmd.hide("labels"' in hide_source
         assert "suffix.isdigit()" in hide_source
 
@@ -994,10 +991,10 @@ class TestPyMOLStyleCommands:
         assert ' -d "' in setup_source
         assert "render_" not in setup_source
 
-    def test_get_coordinating_atoms_uses_radius_ratio_helper(self):
-        source = inspect.getsource(_get_coordinating_atoms)
+    def test_build_coordination_atoms_uses_radius_ratio_helper(self):
+        source = inspect.getsource(ScientificStyle.build_coordination_atoms)
         module_source = inspect.getsource(
-            inspect.getmodule(_get_coordinating_atoms)
+            inspect.getmodule(ScientificStyle.build_coordination_atoms)
         )
 
         assert (
@@ -1014,15 +1011,15 @@ class TestPyMOLStyleCommands:
         assert "sphere_scale" not in source
 
     def test_element_category_helpers_are_centralized(self):
-        assert ELEMENT_CATEGORIES["halogen"] == "F+Cl+Br+I"
-        assert ELEMENT_CATEGORIES["N+O"] == "N+O"
-        assert ELEMENT_CATEGORIES["metal"].startswith("elem ")
+        assert ScientificStyle.ELEMENT_CATEGORIES["halogen"] == "F+Cl+Br+I"
+        assert ScientificStyle.ELEMENT_CATEGORIES["N+O"] == "N+O"
+        assert ScientificStyle.ELEMENT_CATEGORIES["metal"].startswith("elem ")
         assert (
-            element_category_selection("all", "halogen")
+            ScientificStyle.element_category_selection("all", "halogen")
             == "(all) and elem F+Cl+Br+I"
         )
         assert (
-            element_category_selection("sc_shell", "N+O")
+            ScientificStyle.element_category_selection("sc_shell", "N+O")
             == "(sc_shell) and elem N+O"
         )
 
@@ -1043,25 +1040,30 @@ class TestPyMOLStyleCommands:
 
         assert issubclass(EditorialMinimalStyle, ScientificStyle)
         assert EditorialMinimalStyle.prefix == "editorial"
-        assert "EditorialMinimalStyle().render" in wrapper
+        assert render_editorial_minimal.__name__ == "render_editorial_minimal"
+        assert "style_cls().render" in wrapper
         assert "select_coordination" in source
         assert 'metal="elem Mn"' not in source
         assert "donors=" not in source
         assert "within 2.8" not in source
-        assert '_safe_set("sphere_scale", 0.60, atoms["metal"])' in source
-        assert '_safe_set("sphere_scale", 0.36, atoms["donor_n"])' in source
-        assert '_safe_set("sphere_scale", 0.39, atoms["donor_s"])' in source
-        assert '_safe_set("sphere_scale", 0.26, atoms["co_c"])' in source
-        assert '_safe_set("sphere_scale", 0.21, atoms["co_o"])' in source
-        assert '_safe_set("stick_radius", 0.12, sel)' in source
+        assert 'self.safe_set("sphere_scale", 0.60, atoms["metal"])' in source
         assert (
-            '_safe_set("stick_radius", 0.15, atoms["coordination_core"])'
+            'self.safe_set("sphere_scale", 0.36, atoms["donor_n"])' in source
+        )
+        assert (
+            'self.safe_set("sphere_scale", 0.39, atoms["donor_s"])' in source
+        )
+        assert 'self.safe_set("sphere_scale", 0.26, atoms["co_c"])' in source
+        assert 'self.safe_set("sphere_scale", 0.21, atoms["co_o"])' in source
+        assert 'self.safe_set("stick_radius", 0.12, sel)' in source
+        assert (
+            'self.safe_set("stick_radius", 0.15, atoms["coordination_core"])'
             in source
         )
-        assert '_safe_set("field_of_view", 45)' in source
+        assert 'self.safe_set("field_of_view", 45)' in source
         assert 'cmd.color("mn_rose", atoms["metal"])' in source
         assert 'cmd.color("sulfur_gold", atoms["donor_s"])' in source
-        assert '_safe_set("ambient_occlusion_mode", 1)' in source
+        assert 'self.safe_set("ambient_occlusion_mode", 1)' in source
 
     def test_render_neon_coordination_core_defines_expected_visual_parameters(
         self,
@@ -1071,20 +1073,24 @@ class TestPyMOLStyleCommands:
 
         assert issubclass(NeonCoordinationCoreStyle, ScientificStyle)
         assert NeonCoordinationCoreStyle.prefix == "ncc"
-        assert "NeonCoordinationCoreStyle().render" in wrapper
+        assert (
+            render_neon_coordination_core.__name__
+            == "render_neon_coordination_core"
+        )
+        assert "style_cls().render" in wrapper
         assert "select_coordination" in source
         assert "_common_select_core" not in source
         assert "within 3.00" not in source
         assert "neighbor ncc_metal" not in source
-        assert '_safe_set("sphere_scale", 0.44, atoms["metal"])' in source
-        assert '_safe_set("stick_radius", 0.10, sel)' in source
+        assert 'self.safe_set("sphere_scale", 0.44, atoms["metal"])' in source
+        assert 'self.safe_set("stick_radius", 0.10, sel)' in source
         assert 'cmd.set_bond("stick_radius", 0.145' in source
         assert "apply_style_palette" in source
         assert 'overrides={atoms["metal"]: "ncc_metal_c"}' in source
-        assert '_safe_set("opaque_background", 0)' in source
-        assert '_safe_set("ray_opaque_background", 0)' in source
-        assert '_safe_set("ambient_occlusion_mode", 1)' in source
-        assert '_safe_set("depth_cue", 0)' in source
+        assert 'self.safe_set("opaque_background", 0)' in source
+        assert 'self.safe_set("ray_opaque_background", 0)' in source
+        assert 'self.safe_set("ambient_occlusion_mode", 1)' in source
+        assert 'self.safe_set("depth_cue", 0)' in source
 
     def test_render_soft_ceramic_defines_expected_visual_parameters(self):
         source = inspect.getsource(SoftCeramicStyle)
@@ -1093,21 +1099,28 @@ class TestPyMOLStyleCommands:
         assert issubclass(SoftCeramicStyle, ScientificStyle)
         assert SoftCeramicStyle.prefix == "soft_ceramic"
         assert SoftCeramicStyle.include_nh_h is True
-        assert "SoftCeramicStyle().render" in wrapper
+        assert render_soft_ceramic.__name__ == "render_soft_ceramic"
+        assert "style_cls().render" in wrapper
         assert "select_coordination" in source
         assert 'metal="elem Mn"' not in source
         assert "donors=" not in source
-        assert '_safe_set("sphere_scale", 0.56, atoms["metal"])' in source
-        assert '_safe_set("sphere_scale", 0.40, atoms["donor_s"])' in source
-        assert '_safe_set("sphere_scale", 0.37, atoms["donor_n"])' in source
-        assert '_safe_set("sphere_scale", 0.28, atoms["co_c"])' in source
-        assert '_safe_set("sphere_scale", 0.18, atoms["co_o"])' in source
-        assert '_safe_set("sphere_scale", 0.25, atoms["hydride"])' in source
-        assert '_safe_set("stick_radius", 0.115, sel)' in source
+        assert 'self.safe_set("sphere_scale", 0.56, atoms["metal"])' in source
+        assert (
+            'self.safe_set("sphere_scale", 0.40, atoms["donor_s"])' in source
+        )
+        assert (
+            'self.safe_set("sphere_scale", 0.37, atoms["donor_n"])' in source
+        )
+        assert 'self.safe_set("sphere_scale", 0.28, atoms["co_c"])' in source
+        assert 'self.safe_set("sphere_scale", 0.18, atoms["co_o"])' in source
+        assert (
+            'self.safe_set("sphere_scale", 0.25, atoms["hydride"])' in source
+        )
+        assert 'self.safe_set("stick_radius", 0.115, sel)' in source
         assert 'cmd.color("metal_bronze", atoms["metal"])' in source
         assert 'cmd.color("sulfur_soft_gold", atoms["donor_s"])' in source
         assert 'cmd.bg_color("studio_background")' in source
-        assert '_safe_set("ray_opaque_background", 1)' in source
+        assert 'self.safe_set("ray_opaque_background", 1)' in source
 
     def test_render_soft_cartoon_defines_expected_visual_parameters(self):
         source = inspect.getsource(SoftCartoonStyle)
@@ -1116,17 +1129,17 @@ class TestPyMOLStyleCommands:
         assert issubclass(SoftCartoonStyle, ScientificStyle)
         assert SoftCartoonStyle.prefix == "sc"
         assert SoftCartoonStyle.include_nh_h is True
-        assert "SoftCartoonStyle().render" in wrapper
+        assert "style_cls().render" in wrapper
         assert "select_coordination" in source
         assert "within 2.6" not in source
         assert "byres" not in source
         assert "elem Mn or elem Fe" not in source
         assert 'cmd.bg_color("sc_background")' in source
-        assert '_safe_set("stick_radius", 0.135, sel)' in source
+        assert 'self.safe_set("stick_radius", 0.135, sel)' in source
         assert 'cmd.set_bond("stick_radius", 0.165' in source
-        assert '_safe_set("sphere_scale", 0.40, atoms["metal"])' in source
+        assert 'self.safe_set("sphere_scale", 0.40, atoms["metal"])' in source
         assert (
-            '_safe_set("sphere_scale", 0.215, f"({shell}) and not elem H")'
+            'self.safe_set("sphere_scale", 0.215, f"({shell}) and not elem H")'
             in source
         )
         assert '("N+O", 0.275)' in source
@@ -1134,11 +1147,11 @@ class TestPyMOLStyleCommands:
         assert "self._safe_set" in source
         assert "apply_style_palette" in source
         assert 'overrides={atoms["metal"]: "sc_metal"}' in source
-        assert "_apply_lighting(" in source
+        assert "self.apply_lighting(" in source
         assert "apply_soft_shadows" in source
         assert "apply_ambient_occlusion" in source
         assert "apply_illustrated_camera" in source
-        assert '_safe_set("ray_trace_mode", 1)' in source
+        assert 'self.safe_set("ray_trace_mode", 1)' in source
         assert "self.frame(" in source
 
     def test_render_quasi_chemdraw_bold_defines_expected_visual_parameters(
@@ -1151,24 +1164,28 @@ class TestPyMOLStyleCommands:
         assert QuasiChemDrawBoldStyle.prefix == "qcd"
         assert QuasiChemDrawBoldStyle.command == "render_quasi_chemdraw_bold"
         assert "qcd_bond" in QuasiChemDrawBoldStyle.colors
-        assert "QuasiChemDrawBoldStyle().render" in wrapper_source
+        assert (
+            render_quasi_chemdraw_bold.__name__ == "render_quasi_chemdraw_bold"
+        )
+        assert "style_cls().render" in wrapper_source
         assert "select_coordination" in style_source
         assert "_common_select_core" not in style_source
         assert "within 2.75" not in style_source
         assert "neighbor qcd_metal" not in style_source
         assert "Li+Na+K+Rb+Cs" not in style_source
-        assert '_safe_set("stick_radius", 0.155, sel)' in style_source
-        assert '_safe_set("stick_color", "qcd_bond", sel)' in style_source
+        assert 'self.safe_set("stick_radius", 0.155, sel)' in style_source
+        assert 'self.safe_set("stick_color", "qcd_bond", sel)' in style_source
         assert 'cmd.set_bond("stick_radius", 0.185' in style_source
         assert (
-            '_safe_set("sphere_scale", 0.34, atoms["metal"])' in style_source
+            'self.safe_set("sphere_scale", 0.34, atoms["metal"])'
+            in style_source
         )
         assert "apply_style_palette" in style_source
         assert 'overrides={atoms["metal"]: "qcd_metal"}' in style_source
-        assert '_safe_set("ambient", 0.58)' in style_source
-        assert '_safe_set("ray_shadow", 0)' in style_source
-        assert '_safe_set("ambient_occlusion_mode", 0)' in style_source
-        assert '_safe_set("orthoscopic", 1)' in style_source
+        assert 'self.safe_set("ambient", 0.58)' in style_source
+        assert 'self.safe_set("ray_shadow", 0)' in style_source
+        assert 'self.safe_set("ambient_occlusion_mode", 0)' in style_source
+        assert 'self.safe_set("orthoscopic", 1)' in style_source
 
     def test_render_xray_wire_defines_expected_visual_parameters(self):
         style_source = inspect.getsource(XrayWireStyle)
@@ -1179,7 +1196,8 @@ class TestPyMOLStyleCommands:
         assert XrayWireStyle.command == "render_xray_wire"
         assert "xw_charcoal" in XrayWireStyle.colors
         assert "xw_metal" in XrayWireStyle.colors
-        assert "XrayWireStyle().render" in wrapper_source
+        assert render_xray_wire.__name__ == "render_xray_wire"
+        assert "style_cls().render" in wrapper_source
         assert "select_coordination" in style_source
         assert "_begin_scientific_style" not in style_source
         assert "_common_select_core" not in style_source
@@ -1189,22 +1207,24 @@ class TestPyMOLStyleCommands:
         assert 'center_metal = atoms["metal"]' in style_source
         assert 'cmd.hide("lines", sel)' in style_source
         assert 'cmd.hide("nonbonded", sel)' in style_source
-        assert '_safe_set("stick_radius", 0.18, sel)' in style_source
-        assert '_safe_set("stick_ball", 1)' in style_source
-        assert '_safe_set("stick_ball_ratio", 1.0)' in style_source
-        assert '_safe_set("sphere_scale", 0.6, center_metal)' in style_source
+        assert 'self.safe_set("stick_radius", 0.18, sel)' in style_source
+        assert 'self.safe_set("stick_ball", 1)' in style_source
+        assert 'self.safe_set("stick_ball_ratio", 1.0)' in style_source
+        assert (
+            'self.safe_set("sphere_scale", 0.6, center_metal)' in style_source
+        )
         assert "apply_style_palette" in style_source
         assert 'overrides={center_metal: "xw_metal"}' in style_source
-        assert '_safe_set("ray_trace_mode", 3)' in style_source
-        assert '_safe_set("ray_trace_gain", 0.05)' in style_source
-        assert '_safe_set("ambient", 0.5)' in style_source
-        assert '_safe_set("direct", 0.6)' in style_source
-        assert '_safe_set("reflect", 0.0)' in style_source
-        assert '_safe_set("spec_power", 1.0)' in style_source
-        assert '_safe_set("spec_count", 0)' in style_source
-        assert '_safe_set("ray_shadow", 1)' in style_source
-        assert '_safe_set("ray_trace_fog", 0)' in style_source
-        assert "_set_transparent_background()" in style_source
+        assert 'self.safe_set("ray_trace_mode", 3)' in style_source
+        assert 'self.safe_set("ray_trace_gain", 0.05)' in style_source
+        assert 'self.safe_set("ambient", 0.5)' in style_source
+        assert 'self.safe_set("direct", 0.6)' in style_source
+        assert 'self.safe_set("reflect", 0.0)' in style_source
+        assert 'self.safe_set("spec_power", 1.0)' in style_source
+        assert 'self.safe_set("spec_count", 0)' in style_source
+        assert 'self.safe_set("ray_shadow", 1)' in style_source
+        assert 'self.safe_set("ray_trace_fog", 0)' in style_source
+        assert "self.set_transparent_background()" in style_source
         assert "apply_illustrated_camera" in style_source
         assert "self.finish_default(selection)" in style_source
 
@@ -1215,7 +1235,8 @@ class TestPyMOLStyleCommands:
         assert issubclass(StericSurfaceStyle, ScientificStyle)
         assert StericSurfaceStyle.prefix == "steric"
         assert StericSurfaceStyle.command == "render_steric_surface"
-        assert "StericSurfaceStyle().render" in wrapper_source
+        assert render_steric_surface.__name__ == "render_steric_surface"
+        assert "style_cls().render" in wrapper_source
         assert "select_coordination" in style_source
         assert "_begin_scientific_style" not in style_source
         assert "_common_select_core" not in style_source
@@ -1225,22 +1246,24 @@ class TestPyMOLStyleCommands:
         assert "_finish_scientific_style" not in style_source
         assert "within 2.6" not in style_source
         assert "byres" not in style_source
-        assert "sphere_atoms" in style_source
-        assert 'cmd.show("spheres", sphere_atoms)' in style_source
+        assert "coordination_sphere_atoms" in style_source
+        assert "apply_coordination_sci_palette" in style_source
         assert (
             'cmd.show("spheres", atoms["coordination_core"])'
             not in style_source
         )
         assert (
-            '_safe_set("sphere_scale", 0.52, atoms["metal"])' in style_source
+            'self.safe_set("sphere_scale", 0.52, atoms["metal"])'
+            in style_source
         )
-        assert '_safe_set("sphere_scale", 0.34, atoms["co_c"])' in style_source
-        assert '_safe_set("sphere_scale", 0.34, atoms["co_o"])' in style_source
-        assert 'cmd.color("sci_C_gray", atoms["co_c"])' in style_source
-        assert 'cmd.color("sci_O_red", atoms["co_o"])' in style_source
-        assert "apply_style_palette" in style_source
-        assert 'overrides={atoms["metal"]: "metal_gold"}' in style_source
-        assert '_safe_set("transparency", 0.68, sel)' in style_source
+        assert (
+            'self.safe_set("sphere_scale", 0.34, atoms["co_c"])'
+            in style_source
+        )
+        assert (
+            'self.safe_set("sphere_scale", 0.34, atoms["co_o"])'
+            in style_source
+        )
         assert "self.finish_default(selection)" in style_source
 
     def test_render_matte_clay_defines_expected_visual_parameters(self):
@@ -1249,16 +1272,17 @@ class TestPyMOLStyleCommands:
 
         assert issubclass(MatteClayStyle, ScientificStyle)
         assert MatteClayStyle.prefix == "matte_clay"
-        assert "MatteClayStyle().render" in wrapper
+        assert render_matte_clay.__name__ == "render_matte_clay"
+        assert "style_cls().render" in wrapper
         assert "select_coordination" in source
         assert "donors=" not in source
         assert 'atoms["hydride"]' in source
-        assert '_safe_set("sphere_scale", 0.62, atoms["metal"])' in source
+        assert 'self.safe_set("sphere_scale", 0.62, atoms["metal"])' in source
         assert 'cmd.color("mc_metal_center", atoms["metal"])' in source
         assert 'cmd.bg_color("white")' in source
-        assert '_safe_set("ray_opaque_background", 0)' in source
-        assert '_safe_set("ambient_occlusion_mode", 1)' in source
-        assert '_safe_set("ambient_occlusion_scale", 18)' in source
+        assert 'self.safe_set("ray_opaque_background", 0)' in source
+        assert 'self.safe_set("ambient_occlusion_mode", 1)' in source
+        assert 'self.safe_set("ambient_occlusion_scale", 18)' in source
         assert "cmd.select(" not in source
 
     def test_hybrid_is_not_a_derived_style(self):
@@ -1282,7 +1306,7 @@ class TestPyMOLStyleCommands:
         assert "hide labels" not in base_command
         assert "hide labels" not in derived_command
         assert "hide_distance_value_labels" in inspect.getsource(
-            hide_distance_value_labels
+            ScientificStyle.hide_distance_value_labels
         )
 
 
@@ -1380,7 +1404,8 @@ class TestPyMOLScientificStyleVisualizationJobs:
         assert (
             PyMOLScientificStyleVisualizationJobRunner._format_style_command(
                 job, job.label
-            ).startswith("metallic_poster_render")
+            )
+            == f"metallic_poster_render {job.label}"
         )
 
     def test_editorial_minimal_style_job_on_1_mer_xyz(

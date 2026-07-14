@@ -262,10 +262,10 @@ When editing a saved ``.pse`` session:
 
    run scientific_styles.py
    metallic_poster_render all
-   metallic_poster_render all, elem Mn, None, 2.6, N+O+S+P+H, dark
+   render_comic_metallic_labeled_final all
 
-For Mn coordination complexes and fac/mer comparisons, pass additional arguments to ``metallic_poster_render`` directly
-in PyMOL. See ``scientific_styles.py`` for the full command signature.
+CHEMSMART and the registered PyMOL commands pass only the object/selection name; poster defaults (Mn metal, 2.6 Å
+coordination cutoff, ``N+O+S+P+H`` donors, labels on) are applied inside :class:`MetallicPosterStyle`.
 
 .. _comic-visualization:
 
