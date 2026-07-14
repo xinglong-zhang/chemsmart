@@ -242,13 +242,6 @@ def render_comic_metallic_labeled_final(selection="all", background=None):
     )
 
 
-def comic_render(selection="all", background=None, *_args, **_kwargs):
-    """CHEMSMART entry point for the comic style."""
-    render_comic_metallic_labeled_final(
-        selection=selection,
-    )
-
-
 def render_soft_cartoon(selection="all", background=None):
     """Apply soft cartoon ball-and-stick rendering with premium cover colors.
 
@@ -256,14 +249,6 @@ def render_soft_cartoon(selection="all", background=None):
     lives on :class:`SoftCartoonStyle`.
     """
     SoftCartoonStyle().render(
-        selection=selection,
-        background=background,
-    )
-
-
-def soft_cartoon_render(selection="all", background=None, *_args, **_kwargs):
-    """CHEMSMART entry point for the soft cartoon style."""
-    render_soft_cartoon(
         selection=selection,
         background=background,
     )
@@ -565,27 +550,6 @@ class ScientificStyle:
         )
 
 
-def _common_select_core(selection="all", cutoff=2.6):
-    sel = f"({selection})"
-
-    cmd.select(
-        "metal_atom",
-        f"{sel} and (elem Mn or elem Fe or elem Co or elem Ni or elem Cu or elem Zn "
-        f"or elem Ru or elem Rh or elem Pd or elem Ag or elem Ir or elem Pt or elem Au "
-        f"or elem Mg or elem Al or elem Ti or elem Zr)",
-    )
-
-    cmd.select(
-        "coord_core",
-        f"metal_atom or ({sel} and (elem N+O+S+P+H+Cl+Br+I) within {cutoff} of metal_atom)",
-    )
-
-    cmd.select(
-        "near_core",
-        f"{sel} and byres (coord_core around 3.0)",
-    )
-
-
 def _define_scientific_colors():
     colors = {
         "sci_C_gray": [0.58, 0.58, 0.56],
@@ -615,22 +579,6 @@ def _define_scientific_colors():
             pass
 
 
-def _color_by_element(carbon="sci_C_gray", metal="metal_gold"):
-    apply_element_palette(
-        "all",
-        {
-            "C": carbon,
-            "H": "sci_H_white",
-            "N": "sci_N_blue",
-            "O": "sci_O_red",
-            "S": "sci_S_yellow",
-            "P": "sci_P_orange",
-            "halogen": "sci_halogen",
-        },
-        overrides={"metal_atom": metal},
-    )
-
-
 def _base_quality():
     _safe_set("antialias", 2)
     _safe_set("ray_trace_antialias", 2)
@@ -646,37 +594,6 @@ def _finish_style(selection):
     cmd.zoom(selection, buffer=2.0)
     cmd.orient(selection)
     cmd.refresh()
-
-
-def _begin_scientific_style(selection):
-    """Shared setup for editorial / scientific derived styles."""
-    _define_scientific_colors()
-    _common_select_core(selection)
-    cmd.hide("everything", selection)
-
-
-def _finish_scientific_style(selection, message=""):
-    """Finish a scientific style."""
-    _end_scientific_style(selection, message)
-
-
-def _apply_coord_sphere_scales(
-    stick_radius,
-    stick_radius_near,
-    sphere_heavy,
-    sphere_h,
-    sphere_metal,
-    sphere_coord,
-):
-    """Apply the common stick/sphere scale tiers used by scientific styles."""
-    cmd.set("stick_radius", stick_radius)
-    cmd.set("stick_radius", stick_radius_near, "near_core")
-    cmd.set(
-        "sphere_scale", sphere_heavy, "elem %s" % ELEMENT_CATEGORIES["heavy"]
-    )
-    cmd.set("sphere_scale", sphere_h, "elem %s" % ELEMENT_CATEGORIES["H"])
-    cmd.set("sphere_scale", sphere_metal, "metal_atom")
-    cmd.set("sphere_scale", sphere_coord, "coord_core and not metal_atom")
 
 
 def _apply_lighting(
@@ -721,19 +638,6 @@ def _apply_view(
         cmd.set("ray_trace_gain", ray_trace_gain)
     if ray_shadows_mode is not None:
         _safe_ray_shadows(ray_shadows_mode)
-
-
-def _end_scientific_style(selection, message):
-    hide_distance_value_labels()
-    _base_quality()
-    cmd.label("all", '""')
-    _finish_style(selection)
-    print(message)
-
-
-def _show_coord_ball_and_stick(selection, spheres="coord_core"):
-    cmd.show("sticks", selection)
-    cmd.show("spheres", spheres)
 
 
 class MetallicPosterStyle(ScientificStyle):
@@ -1687,39 +1591,6 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
         print(self.message)
 
 
-class LabeledCoordinationCoreStyle(ScientificStyle):
-    """Coordination-core labeled style with explicit element labels."""
-
-    name = "labeled_coordination_core"
-    command = "render_labeled_coordination_core"
-    message = "Labeled coordination-core style applied."
-
-    def render(self, selection="all"):
-        _begin_scientific_style(selection)
-        _show_coord_ball_and_stick(selection)
-        _apply_coord_sphere_scales(0.11, 0.16, 0.25, 0.13, 0.56, 0.38)
-        _color_by_element(carbon="sci_C_gray", metal="metal_gold")
-        _apply_lighting(0.55, 0.28, 0.30, 0.70, 0.18, spec_power=180)
-        _apply_view(
-            orthoscopic=1,
-            field_of_view=28,
-            depth_cue=1,
-            fog_start=0.45,
-        )
-
-        _base_quality()
-        cmd.label("all", '""')
-        cmd.label("coord_core", "elem")
-        cmd.set("label_size", 24)
-        cmd.set("label_font_id", 7)
-        cmd.set("label_color", "black")
-        cmd.set("label_outline_color", "white")
-        cmd.set("label_position", [0, 0, 0])
-        cmd.set("label_connector", 0)
-
-        self.finish_default(selection)
-
-
 def render_editorial_minimal(selection="all"):
     """Editorial minimal white style for main-text mechanistic figures.
 
@@ -1791,29 +1662,23 @@ def render_quasi_chemdraw_bold(selection="all"):
     QuasiChemDrawBoldStyle().render(selection)
 
 
-def render_labeled_coordination_core(selection="all"):
-    """Coordination-core labeled style with explicit element labels.
-
-    Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
-    lives on :class:`LabeledCoordinationCoreStyle`.
-    """
-    LabeledCoordinationCoreStyle().render(selection)
-
-
-cmd.extend("metallic_poster_render", metallic_poster_render)
-cmd.extend(
-    "render_comic_metallic_labeled_final", render_comic_metallic_labeled_final
+# Canonical PyMOL command names (must stay aligned with
+# ``PYMOL_SCIENTIFIC_STYLE_COMMANDS`` in ``runner.py``).
+_PYMOL_STYLE_COMMANDS = (
+    ("metallic_poster_render", metallic_poster_render),
+    (
+        "render_comic_metallic_labeled_final",
+        render_comic_metallic_labeled_final,
+    ),
+    ("render_soft_cartoon", render_soft_cartoon),
+    ("render_editorial_minimal", render_editorial_minimal),
+    ("render_soft_ceramic", render_soft_ceramic),
+    ("render_neon_coordination_core", render_neon_coordination_core),
+    ("render_matte_clay", render_matte_clay),
+    ("render_xray_wire", render_xray_wire),
+    ("render_steric_surface", render_steric_surface),
+    ("render_quasi_chemdraw_bold", render_quasi_chemdraw_bold),
 )
-cmd.extend("comic_render", comic_render)
-cmd.extend("render_soft_cartoon", render_soft_cartoon)
-cmd.extend("soft_cartoon_render", soft_cartoon_render)
-cmd.extend("render_editorial_minimal", render_editorial_minimal)
-cmd.extend("render_soft_ceramic", render_soft_ceramic)
-cmd.extend("render_neon_coordination_core", render_neon_coordination_core)
-cmd.extend("render_matte_clay", render_matte_clay)
-cmd.extend("render_xray_wire", render_xray_wire)
-cmd.extend("render_steric_surface", render_steric_surface)
-cmd.extend("render_quasi_chemdraw_bold", render_quasi_chemdraw_bold)
-cmd.extend(
-    "render_labeled_coordination_core", render_labeled_coordination_core
-)
+
+for _command_name, _command_fn in _PYMOL_STYLE_COMMANDS:
+    cmd.extend(_command_name, _command_fn)

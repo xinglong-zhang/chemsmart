@@ -52,7 +52,6 @@ PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
     "xray_wire": "render_xray_wire",
     "steric_surface": "render_steric_surface",
     "quasi_chemdraw_bold": "render_quasi_chemdraw_bold",
-    "labeled_coordination_core": "render_labeled_coordination_core",
 }
 
 _SCIENTIFIC_STYLE_TEMPLATE = "scientific_styles.py"

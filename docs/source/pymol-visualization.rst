@@ -401,8 +401,6 @@ CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices includin
       -  Transparent molecular surface for steric / space-filling views
    -  -  ``quasi-chemdraw-bold``
       -  Bold ChemDraw-like style using radius-ratio cores and flat illustrative shading
-   -  -  ``labeled-coordination-core``
-      -  Coordination core with explicit element labels
 
 Basic Usage
 ===========
@@ -411,7 +409,6 @@ Basic Usage
 
    chemsmart run mol -f complex.xyz visualize -s editorial-minimal
    chemsmart run mol -f complex.xyz visualize -s soft-ceramic
-   chemsmart run mol -f complex.xyz visualize -s labeled-coordination-core
 
 Examples
 ========
@@ -486,16 +483,6 @@ Quasi-ChemDraw bold
 
    ``chemsmart run mol -f complex.xyz visualize -s quasi-chemdraw-bold``
 
-Labeled coordination core
--------------------------
-
-.. figure:: _static/pymol_styles/style_labeled_coordination_core.png
-   :alt: Labeled coordination core visualization example
-   :align: center
-   :width: 70%
-
-   ``chemsmart run mol -f complex.xyz visualize -s labeled-coordination-core``
-
 Manual PyMOL usage
 ==================
 
@@ -504,7 +491,6 @@ Manual PyMOL usage
    run scientific_styles.py
    render_editorial_minimal all
    render_soft_ceramic all
-   render_labeled_coordination_core all
    ray 1200, 1200
 
 .. note::
