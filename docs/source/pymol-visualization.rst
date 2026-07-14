@@ -393,7 +393,7 @@ CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices includin
    -  -  ``neon-coordination-core``
       -  Neon coordination-core emphasis for reactive centers and TSs
    -  -  ``matte-clay``
-      -  Soft clay/plastic look for graphical abstracts
+      -  Matte clay ball-and-stick with coordination-core emphasis and core hydrogens
    -  -  ``xray-wire``
       -  Monochrome wireframe style for SI structure verification
    -  -  ``steric-surface``

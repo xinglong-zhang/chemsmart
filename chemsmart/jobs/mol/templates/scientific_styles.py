@@ -12,6 +12,7 @@ In PyMOL directly::
     render_soft_cartoon all
     render_editorial_minimal all
     render_soft_ceramic all
+    render_matte_clay all
 """
 
 from pymol import cmd
@@ -375,8 +376,6 @@ def render_comic_metallic_labeled_final(
     sel = f"({selection})"
     metal_name = "comic_metal_atom"
 
-    cmd.delete(metal_name)
-
     cmd.hide("everything", sel)
     cmd.show("sticks", sel)
     cmd.show("spheres", sel)
@@ -460,9 +459,6 @@ def render_soft_cartoon(selection="all", background=None, highlight_bonds=""):
     metal_name = "soft_cartoon_metal_atom"
     coord_core_name = "soft_cartoon_coord_core"
     highlight_bonds = _normalize_none(highlight_bonds)
-
-    cmd.delete(metal_name)
-    cmd.delete(coord_core_name)
 
     cmd.hide("everything", sel)
     cmd.show("sticks", sel)
@@ -561,10 +557,6 @@ def _common_select_core(selection="all", cutoff=2.6, highlight_bonds=None):
     sel = f"({selection})"
     highlight_bonds = _normalize_none(highlight_bonds)
 
-    cmd.delete("metal_atom")
-    cmd.delete("coord_core")
-    cmd.delete("near_core")
-
     if highlight_bonds:
         coord_sel = _highlight_bonds_to_coord_sel(highlight_bonds)
         cmd.select("coord_core", f"{sel} and ({coord_sel})")
@@ -606,9 +598,6 @@ def _define_scientific_colors():
         "neon_cyan": [0.00, 0.85, 1.00],
         "neon_magenta": [1.00, 0.05, 0.75],
         "neon_green": [0.15, 1.00, 0.35],
-        "clay_carbon": [0.70, 0.64, 0.56],
-        "clay_blue": [0.32, 0.45, 0.78],
-        "clay_red": [0.78, 0.30, 0.25],
         "surface_sky": [0.55, 0.78, 1.00],
         "surface_warm": [1.00, 0.76, 0.45],
     }
@@ -759,18 +748,6 @@ def render_editorial_minimal(selection="all", highlight_bonds=""):
     highlight_bonds = _normalize_none(highlight_bonds)
     sel = f"({selection})"
 
-    for name in (
-        "editorial_metal",
-        "editorial_donors",
-        "editorial_n_donors",
-        "editorial_s_donors",
-        "editorial_co_carbons",
-        "editorial_co_oxygens",
-        "editorial_important_H",
-        "editorial_sphere_atoms",
-    ):
-        cmd.delete(name)
-
     _define_editorial_minimal_colors()
     cmd.hide("everything", sel)
 
@@ -897,19 +874,6 @@ def render_soft_ceramic(selection="all", highlight_bonds=""):
     """
     highlight_bonds = _normalize_none(highlight_bonds)
     sel = f"({selection})"
-
-    for name in (
-        "soft_ceramic_metal",
-        "soft_ceramic_donor_s",
-        "soft_ceramic_donor_n",
-        "soft_ceramic_co_c",
-        "soft_ceramic_co_o",
-        "soft_ceramic_hydride",
-        "soft_ceramic_nh_h",
-        "soft_ceramic_important_h",
-        "soft_ceramic_coordination_core",
-    ):
-        cmd.delete(name)
 
     _define_soft_ceramic_colors()
     cmd.hide("everything", sel)
@@ -1056,34 +1020,148 @@ def render_neon_coordination_core(selection="all", highlight_bonds=""):
     )
 
 
+def _define_matte_clay_colors():
+    """Register muted ceramic/chalk colors used by the matte-clay style."""
+    for name, rgb in {
+        "mc_framework": [0.555, 0.515, 0.455],
+        "mc_hydrogen": [0.875, 0.865, 0.820],
+        "mc_nitrogen": [0.300, 0.395, 0.585],
+        "mc_oxygen": [0.715, 0.285, 0.235],
+        "mc_chalcogen": [0.790, 0.600, 0.205],
+        "mc_pnictogen": [0.655, 0.420, 0.275],
+        "mc_halogen": [0.455, 0.565, 0.455],
+        "mc_metal_center": [0.690, 0.705, 0.745],
+    }.items():
+        try:
+            cmd.set_color(name, rgb)
+        except Exception:
+            pass
+
+
 def render_matte_clay(selection="all", highlight_bonds=""):
-    """Matte clay model style for soft graphical abstracts."""
-    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
-    _show_coord_ball_and_stick(selection)
-    _apply_coord_sphere_scales(0.14, 0.18, 0.30, 0.15, 0.55, 0.40)
+    """Matte clay style for soft graphical abstracts.
 
-    cmd.color("clay_carbon", "elem C")
-    cmd.color("sci_H_white", "elem H")
-    cmd.color("clay_blue", "elem N")
-    cmd.color("clay_red", "elem O")
-    cmd.color("sci_S_yellow", "elem S")
-    cmd.color("sci_P_orange", "elem P")
-    cmd.color("sci_halogen", "elem F+Cl+Br+I")
-    cmd.color("metal_silver", "metal_atom")
+    Uses the same ``within X of metal`` coordination-core selection pattern as
+    soft-ceramic / editorial styles. Non-core hydrogens are hidden.
+    Optional ``highlight_bonds`` preserves CHEMSMART ``-c`` highlighting.
+    """
+    highlight_bonds = _normalize_none(highlight_bonds)
+    sel = f"({selection})"
 
-    _apply_lighting(0.08, 0.00, 0.55, 0.48, 0.03, spec_power=30)
-    _apply_view(
-        orthoscopic=1,
-        field_of_view=28,
-        depth_cue=1,
-        fog_start=0.50,
-        ray_shadows_mode="soft",
+    _define_matte_clay_colors()
+    cmd.hide("everything", sel)
+    _safe_set("valence", 0)
+    _safe_set("stick_ball", 0)
+
+    cmd.select("matte_clay_metal", f"{sel} and ({_METAL_ELEMENTS})")
+    cmd.select(
+        "matte_clay_donor_s",
+        f"{sel} and (elem S) within 2.8 of matte_clay_metal",
     )
-    _finish_scientific_style(
-        selection,
-        highlight_bonds=highlight_bonds,
-        message="Matte clay style applied.",
+    cmd.select(
+        "matte_clay_donor_n",
+        f"{sel} and (elem N) within 2.8 of matte_clay_metal",
     )
+    cmd.select(
+        "matte_clay_donor_p",
+        f"{sel} and (elem P) within 2.8 of matte_clay_metal",
+    )
+    cmd.select(
+        "matte_clay_co_c",
+        f"{sel} and (elem C) within 2.10 of matte_clay_metal",
+    )
+    cmd.select(
+        "matte_clay_co_o",
+        f"{sel} and (elem O) within 1.35 of matte_clay_co_c",
+    )
+    cmd.select(
+        "matte_clay_hydride",
+        f"{sel} and (elem H) within 1.85 of matte_clay_metal",
+    )
+    cmd.select(
+        "matte_clay_coordination_core",
+        "matte_clay_metal or matte_clay_donor_s or matte_clay_donor_n "
+        "or matte_clay_donor_p or matte_clay_co_c or matte_clay_co_o "
+        "or matte_clay_hydride",
+    )
+
+    cmd.color(
+        "mc_framework",
+        f"{sel} and (elem C+H) and not matte_clay_co_c "
+        "and not matte_clay_hydride",
+    )
+    cmd.color("mc_framework", "matte_clay_co_c")
+    cmd.color("mc_metal_center", "matte_clay_metal")
+    cmd.color("mc_chalcogen", "matte_clay_donor_s")
+    cmd.color("mc_nitrogen", "matte_clay_donor_n")
+    cmd.color("mc_pnictogen", "matte_clay_donor_p")
+    cmd.color("mc_oxygen", "matte_clay_co_o")
+    cmd.color("mc_hydrogen", "matte_clay_hydride")
+    cmd.color("mc_halogen", f"{sel} and elem F+Cl+Br+I")
+
+    cmd.show("sticks", sel)
+    cmd.hide("sticks", f"{sel} and elem H and not matte_clay_hydride")
+    cmd.hide("spheres", f"{sel} and elem H and not matte_clay_hydride")
+    cmd.show("spheres", "matte_clay_coordination_core")
+
+    _safe_set("sphere_scale", 0.62, "matte_clay_metal")
+    _safe_set("sphere_scale", 0.36, "matte_clay_donor_s")
+    _safe_set("sphere_scale", 0.34, "matte_clay_donor_n")
+    _safe_set("sphere_scale", 0.34, "matte_clay_donor_p")
+    _safe_set("sphere_scale", 0.30, "matte_clay_co_c")
+    _safe_set("sphere_scale", 0.28, "matte_clay_co_o")
+    _safe_set("sphere_scale", 0.24, "matte_clay_hydride")
+
+    _safe_set("stick_radius", 0.108, sel)
+    _safe_set(
+        "stick_radius",
+        0.138,
+        "matte_clay_metal or matte_clay_coordination_core",
+    )
+
+    # Transparent background and zero-gloss clay material with soft AO.
+    cmd.bg_color("white")
+    _safe_set("ray_opaque_background", 0)
+    _safe_set("specular", 0.0)
+    _safe_set("specular_intensity", 0.0)
+    _safe_set("spec_direct", 0.0)
+    _safe_set("spec_reflect", 0.0)
+    _safe_set("spec_power", 1.0)
+    _safe_set("shininess", 0.0)
+    _safe_set("reflect", 0.0)
+    _safe_set("ray_transparency_specular", 0.0)
+    _safe_set("ambient", 0.42)
+    _safe_set("direct", 0.58)
+    _safe_set("light_count", 3)
+    _safe_set("light", [-0.40, -0.55, -1.00])
+    _safe_set("two_sided_lighting", 1)
+    _safe_set("ray_shadow", 1)
+    _safe_set("ray_trace_mode", 0)
+    _safe_set("ray_trace_gain", 0.0)
+    _safe_set("ambient_occlusion_mode", 1)
+    _safe_set("ambient_occlusion_scale", 18)
+    _safe_set("ambient_occlusion_smooth", 14)
+    _safe_set("ray_shadow_decay_factor", 0.28)
+    _safe_set("ray_shadow_decay_range", 2.0)
+    _safe_set("use_shaders", 1)
+    _safe_set("antialias", 2)
+    _safe_set("ray_trace_antialias", 2)
+    _safe_set("sphere_quality", 4)
+    _safe_set("stick_quality", 32)
+    _safe_set("orthoscopic", 1)
+    _safe_set("depth_cue", 0)
+    _safe_set("ray_trace_fog", 0)
+
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(
+            highlight_bonds,
+            sel,
+            "matte_clay_metal",
+        )
+
+    cmd.label("all", '""')
+    _finish_style(selection)
+    print("Matte clay style applied.")
 
 
 def render_xray_wire(selection="all", highlight_bonds=""):

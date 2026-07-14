@@ -22,6 +22,7 @@ from chemsmart.jobs.mol.runner import (
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.templates.scientific_styles import (
     render_editorial_minimal,
+    render_matte_clay,
     render_soft_ceramic,
 )
 from chemsmart.jobs.mol.visualize import (
@@ -971,6 +972,7 @@ class TestPyMOLStyleCommands:
             ("neon_coordination_core", "render_neon_coordination_core"),
             ("editorial_minimal", "render_editorial_minimal"),
             ("soft_ceramic", "render_soft_ceramic"),
+            ("matte_clay", "render_matte_clay"),
         ],
     )
     def test_format_pymol_style_command_for_derived_styles_on_1_mer(
@@ -1011,6 +1013,10 @@ class TestPyMOLStyleCommands:
             (
                 "soft_ceramic",
                 "render_soft_ceramic 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
+            ),
+            (
+                "matte_clay",
+                "render_matte_clay 1-mer, 1-2+1-5+1-36+1-3+1-15+1-8",
             ),
         ],
     )
@@ -1091,6 +1097,31 @@ class TestPyMOLStyleCommands:
         assert 'cmd.bg_color("studio_background")' in source
         assert '_safe_set("ray_opaque_background", 1)' in source
         assert "_apply_coordination_highlight_bonds" in source
+
+    def test_render_matte_clay_defines_expected_visual_parameters(self):
+        source = inspect.getsource(render_matte_clay)
+
+        assert (
+            'cmd.select("matte_clay_metal", f"{sel} and ({_METAL_ELEMENTS})")'
+            in source
+        )
+        assert "within 2.8 of matte_clay_metal" in source
+        assert "(elem C) within 2.10 of matte_clay_metal" in source
+        assert "(elem O) within 1.35 of matte_clay_co_c" in source
+        assert "(elem H) within 1.85 of matte_clay_metal" in source
+        assert (
+            'cmd.hide("sticks", f"{sel} and elem H and not matte_clay_hydride")'
+            in source
+        )
+        assert '_safe_set("sphere_scale", 0.62, "matte_clay_metal")' in source
+        assert 'cmd.color("mc_metal_center", "matte_clay_metal")' in source
+        assert 'cmd.bg_color("white")' in source
+        assert '_safe_set("ray_opaque_background", 0)' in source
+        assert '_safe_set("ambient_occlusion_mode", 1)' in source
+        assert '_safe_set("ambient_occlusion_scale", 18)' in source
+        assert "_apply_coordination_highlight_bonds" in source
+        assert "_mc_detect_centers" not in source
+        assert "_mc_distance" not in source
 
     def test_hybrid_is_not_a_derived_style(self):
         with pytest.raises(ValueError, match="not available"):
