@@ -30,13 +30,36 @@ def get_coordinating_atoms(
     coordinates,
     tau_primary=1.15,
     tau_secondary=1.35,
+    expand_cutoff=1.6,
 ):
     """Categorize atoms coordinating to a metal by covalent-radius ratio.
+
+    Direct ligands are assigned via metal–atom covalent-radius ratios.
+    For XYZ inputs without connectivity, a purely geometric expansion then
+    pulls in covalently bound partner atoms of those direct ligands (for
+    example the O of CO, or H of H2O) that lie within ``expand_cutoff`` of
+    any primary-sphere atom. No topology / residue metadata is used.
+
+    Parameters
+    ----------
+    metal_index : int
+        0-based index of the metal center.
+    elements : sequence of str
+        Element symbols for all atoms.
+    coordinates : array-like
+        Cartesian coordinates, shape ``(n_atoms, 3)``.
+    tau_primary, tau_secondary : float
+        Radius-ratio thresholds for the primary and secondary shells.
+    expand_cutoff : float
+        Distance (Å) used to expand from direct ligands to their bound
+        partners. Set to ``0`` or ``None`` to disable expansion.
 
     Returns
     -------
     tuple[list[int], list[int]]
         ``(primary_sphere, secondary_sphere)`` as 0-based atom indices.
+        Expanded partner atoms are placed in ``secondary_sphere`` when they
+        are not already primary.
     """
     primary_sphere = []
     secondary_sphere = []
@@ -64,6 +87,26 @@ def get_coordinating_atoms(
             primary_sphere.append(idx)
         elif ratio <= tau_secondary:
             secondary_sphere.append(idx)
+
+    # Geometric partner expansion (XYZ-safe; no byres / neighbor topology).
+    # Captures the second atom of diatomic ligands and similar small molecules.
+    if primary_sphere and expand_cutoff:
+        primary_set = set(primary_sphere)
+        secondary_set = set(secondary_sphere)
+        primary_coords = coordinates[primary_sphere]
+        for idx in range(len(elements)):
+            if (
+                idx == metal_index
+                or idx in primary_set
+                or idx in secondary_set
+            ):
+                continue
+            partner_dists = np.linalg.norm(
+                primary_coords - coordinates[idx], axis=1
+            )
+            if np.min(partner_dists) <= expand_cutoff:
+                secondary_sphere.append(idx)
+                secondary_set.add(idx)
 
     return primary_sphere, secondary_sphere
 

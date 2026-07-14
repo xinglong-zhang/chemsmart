@@ -553,7 +553,11 @@ def soft_cartoon_render(
     )
 
 
-_METAL_ELEMENTS = "elem Mn+Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au+Mg+Al+Ti+Zr"
+_METAL_ELEMENTS = (
+    "elem Li+Na+K+Rb+Cs+Be+Mg+Ca+Sr+Ba+Al+Ga+In+Sn+Pb+"
+    "Sc+Ti+V+Cr+Mn+Fe+Co+Ni+Cu+Zn+Y+Zr+Nb+Mo+Tc+Ru+Rh+Pd+Ag+Cd+"
+    "Hf+Ta+W+Re+Os+Ir+Pt+Au+Hg"
+)
 
 
 def _parse_metal_symbols(metal):
@@ -586,9 +590,10 @@ def _get_coordinating_atoms(
     """Build named selections via covalent-radius-ratio coordination spheres.
 
     Extracts ChemPy coordinates, calls
-    ``chemsmart.utils.geometry.get_coordinating_atoms`` for each metal center,
-    and partitions the resulting primary/secondary spheres into role-based
-    named selections. Applies no colors or rendering.
+    ``chemsmart.utils.geometry.get_coordinating_atoms`` for each metal center
+    (radius-ratio direct ligands plus geometric partner expansion), and partitions the resulting primary /
+    secondary spheres into role-based named selections. Applies no colors or
+    rendering. Does not use topology-dependent residue expansions.
     """
     sel = f"({selection})"
     names = {
@@ -659,7 +664,7 @@ def _get_coordinating_atoms(
     core_pymol = sorted(
         set(metal_pymol)
         | {pymol_indices[idx] for idx in primary_local}
-        | set(co_o_pymol)
+        | {pymol_indices[idx] for idx in secondary_local}
     )
 
     cmd.select(names["metal"], _pymol_index_selection(sel, metal_pymol))
@@ -1082,34 +1087,139 @@ def render_soft_ceramic(selection="all", highlight_bonds=""):
     print("Soft ceramic studio style applied.")
 
 
+def _define_neon_coordination_core_colors():
+    """Register palette used by the neon-coordination-core style."""
+    for name, rgb in {
+        "ncc_background": [0.008, 0.012, 0.026],
+        "ncc_carbon": [0.20, 0.23, 0.30],
+        "ncc_hydrogen": [0.88, 0.92, 1.00],
+        "ncc_metal_c": [0.20, 1.00, 0.56],
+        "ncc_nitrogen": [0.02, 0.88, 1.00],
+        "ncc_oxygen": [1.00, 0.10, 0.52],
+        "ncc_sulfur": [1.00, 0.76, 0.08],
+        "ncc_phosphor": [1.00, 0.46, 0.08],
+        "ncc_halogen": [0.76, 0.28, 1.00],
+    }.items():
+        try:
+            cmd.set_color(name, rgb)
+        except Exception:
+            pass
+
+
 def render_neon_coordination_core(selection="all", highlight_bonds=""):
-    """Neon coordination-core style for reactive centers and catalytic pockets."""
-    _begin_scientific_style(selection, highlight_bonds=highlight_bonds)
-    _show_coord_ball_and_stick(selection)
-    _apply_coord_sphere_scales(0.085, 0.18, 0.20, 0.11, 0.62, 0.42)
+    """Neon coordination-core style for reactive centers and catalytic pockets.
 
-    cmd.color("sci_C_dark", "elem C")
-    cmd.color("sci_H_white", "elem H")
-    cmd.color("neon_cyan", "elem N")
-    cmd.color("neon_magenta", "elem O")
-    cmd.color("neon_green", "elem S")
-    cmd.color("sci_P_orange", "elem P")
-    cmd.color("neon_green", "elem F+Cl+Br+I")
-    cmd.color("metal_rose", "metal_atom")
+    Uses covalent-radius-ratio coordination spheres shared with editorial /
+    soft-ceramic / matte-clay. Transparent background with studio-neon lighting.
+    """
+    highlight_bonds = _normalize_none(highlight_bonds)
+    sel = f"({selection})"
 
-    _apply_lighting(0.78, 0.45, 0.08, 0.95, 0.28, spec_power=180)
-    _apply_view(
-        orthoscopic=0,
-        field_of_view=42,
-        depth_cue=1,
-        fog_start=0.18,
-        ray_trace_gain=0.28,
+    _define_neon_coordination_core_colors()
+    atoms = _get_coordinating_atoms(
+        selection=selection,
+        prefix="ncc",
     )
-    _finish_scientific_style(
-        selection,
-        highlight_bonds=highlight_bonds,
-        message="Neon coordination-core style applied.",
+    first_shell = "%s and not %s" % (
+        atoms["coordination_core"],
+        atoms["metal"],
     )
+
+    _safe_set("opaque_background", 0)
+    _safe_set("ray_opaque_background", 0)
+    _safe_set("show_alpha_checker", 1)
+
+    cmd.hide("everything", sel)
+    cmd.show("sticks", sel)
+    cmd.show("spheres", atoms["coordination_core"])
+    cmd.hide("sticks", f"{sel} and elem H and not ({first_shell})")
+
+    _safe_set("stick_radius", 0.10, sel)
+    _safe_set("stick_h_scale", 0.70)
+    _safe_set("stick_quality", 32)
+    _safe_set("stick_transparency", 0.0)
+    _safe_set("stick_ball", 0)
+    _safe_set("smooth_half_bonds", 1)
+    try:
+        cmd.set_bond("stick_radius", 0.145, atoms["metal"], first_shell)
+    except Exception:
+        pass
+
+    _safe_set("sphere_scale", 0.44, atoms["metal"])
+    _safe_set(
+        "sphere_scale",
+        0.28,
+        f"({first_shell}) and not (elem H+Br+I)",
+    )
+    _safe_set(
+        "sphere_scale",
+        0.22,
+        f"({first_shell}) and elem Br+I",
+    )
+    _safe_set(
+        "sphere_scale",
+        0.20,
+        f"({first_shell}) and elem H",
+    )
+    _safe_set("sphere_transparency", 0.0, atoms["coordination_core"])
+    _safe_set("sphere_quality", 4)
+
+    cmd.color("ncc_carbon", f"{sel} and elem C")
+    cmd.color("ncc_hydrogen", f"{sel} and elem H")
+    cmd.color("ncc_nitrogen", f"{sel} and elem N")
+    cmd.color("ncc_oxygen", f"{sel} and elem O")
+    cmd.color("ncc_sulfur", f"{sel} and elem S")
+    cmd.color("ncc_phosphor", f"{sel} and elem P")
+    cmd.color("ncc_halogen", f"{sel} and elem F+Cl+Br+I")
+    cmd.color("ncc_metal_c", atoms["metal"])
+
+    _safe_set("ambient", 0.10)
+    _safe_set("direct", 0.82)
+    _safe_set("reflect", 0.20)
+    _safe_set("specular", 0.78)
+    _safe_set("spec_reflect", 0.50)
+    _safe_set("spec_power", 170)
+    _safe_set("shininess", 65)
+    _safe_set("light_count", 8)
+    _safe_set("two_sided_lighting", 1)
+    _safe_set("ray_shadow", 1)
+    _safe_set("ray_shadow_decay_factor", 0.22)
+    _safe_set("ray_shadow_decay_range", 2.0)
+    _safe_set("ambient_occlusion_mode", 1)
+    _safe_set("ambient_occlusion_scale", 18)
+    _safe_set("ambient_occlusion_smooth", 10)
+    _safe_set("ray_trace_mode", 0)
+    _safe_set("ray_trace_gain", 0.06)
+    _safe_set("depth_cue", 0)
+    _safe_set("fog", 0.0)
+    _safe_set("orthoscopic", 1)
+    _safe_set("ray_orthoscopic", 1)
+    _safe_set("use_shaders", 1)
+    _safe_set("render_as_cylinders", 1)
+    _safe_set("antialias", 2)
+    _safe_set("ray_trace_antialias", 2)
+
+    if highlight_bonds:
+        _apply_coordination_highlight_bonds(
+            highlight_bonds,
+            sel,
+            atoms["metal"],
+        )
+
+    cmd.label("all", '""')
+    cmd.orient(sel)
+    cmd.center(atoms["coordination_core"])
+    try:
+        cmd.origin(atoms["coordination_core"])
+    except Exception:
+        pass
+    cmd.zoom(sel, 1.7)
+    try:
+        cmd.rebuild()
+    except Exception:
+        pass
+    cmd.refresh()
+    print("Neon coordination-core style applied.")
 
 
 def _define_matte_clay_colors():

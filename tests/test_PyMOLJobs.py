@@ -24,6 +24,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     _get_coordinating_atoms,
     render_editorial_minimal,
     render_matte_clay,
+    render_neon_coordination_core,
     render_soft_ceramic,
 )
 from chemsmart.jobs.mol.visualize import (
@@ -1078,6 +1079,27 @@ class TestPyMOLStyleCommands:
         assert 'cmd.color("mn_rose", atoms["metal"])' in source
         assert 'cmd.color("sulfur_gold", atoms["donor_s"])' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
+
+    def test_render_neon_coordination_core_defines_expected_visual_parameters(
+        self,
+    ):
+        source = inspect.getsource(render_neon_coordination_core)
+
+        assert "_get_coordinating_atoms" in source
+        assert 'prefix="ncc"' in source
+        assert "_common_select_core" not in source
+        assert "within 3.00" not in source
+        assert "neighbor ncc_metal" not in source
+        assert '_safe_set("sphere_scale", 0.44, atoms["metal"])' in source
+        assert '_safe_set("stick_radius", 0.10, sel)' in source
+        assert 'cmd.set_bond("stick_radius", 0.145' in source
+        assert 'cmd.color("ncc_metal_c", atoms["metal"])' in source
+        assert 'cmd.color("ncc_nitrogen", f"{sel} and elem N")' in source
+        assert '_safe_set("opaque_background", 0)' in source
+        assert '_safe_set("ray_opaque_background", 0)' in source
+        assert '_safe_set("ambient_occlusion_mode", 1)' in source
+        assert '_safe_set("depth_cue", 0)' in source
+        assert "_apply_coordination_highlight_bonds" in source
 
     def test_render_soft_ceramic_defines_expected_visual_parameters(self):
         source = inspect.getsource(render_soft_ceramic)

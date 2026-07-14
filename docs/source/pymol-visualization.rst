@@ -391,7 +391,7 @@ CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices includin
    -  -  ``soft-ceramic``
       -  Soft ceramic / studio ball-and-stick style for coordination complexes
    -  -  ``neon-coordination-core``
-      -  Neon coordination-core emphasis for reactive centers and TSs
+      -  Neon coordination-core emphasis using radius-ratio shells and a transparent background
    -  -  ``matte-clay``
       -  Matte clay ball-and-stick using radius-ratio coordination spheres and core hydrogens
    -  -  ``xray-wire``

@@ -468,3 +468,52 @@ class TestGetCoordinatingAtoms:
 
         assert primary == []
         assert secondary == []
+
+    def test_geometric_expansion_captures_terminal_co_oxygen(self):
+        """XYZ-safe expansion: CO oxygen near primary C, even if far from Mn."""
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        co_bond = 1.15
+        o_dist = c_dist + co_bond
+        # Terminal O should sit outside the secondary radius-ratio shell.
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_geometric_expansion_can_be_disabled(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        o_dist = c_dist + 1.15
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(
+            0, elements, coordinates, expand_cutoff=0
+        )
+
+        assert primary == [1]
+        assert secondary == []
