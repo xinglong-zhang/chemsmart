@@ -1202,8 +1202,7 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("spec_count", 0)' in style_source
         assert '_safe_set("ray_shadow", 1)' in style_source
         assert '_safe_set("ray_trace_fog", 0)' in style_source
-        assert 'cmd.bg_color("white")' in style_source
-        assert '_safe_set("ray_opaque_background", 1)' in style_source
+        assert "_set_transparent_background()" in style_source
         assert "apply_illustrated_camera" in style_source
         assert "self.finish_default(selection)" in style_source
 

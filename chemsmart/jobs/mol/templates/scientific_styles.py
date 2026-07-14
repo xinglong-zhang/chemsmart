@@ -1500,8 +1500,7 @@ class XrayWireStyle(ScientificStyle):
         _safe_set("ray_shadow", 1)
         _safe_set("ray_trace_fog", 0)
 
-        cmd.bg_color("white")
-        _safe_set("ray_opaque_background", 1)
+        _set_transparent_background()
 
         self.apply_illustrated_camera(field_of_view=25, depth_cue=0, fog=0.0)
         _safe_set("antialias", 2)
