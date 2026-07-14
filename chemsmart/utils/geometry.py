@@ -18,7 +18,54 @@ import math
 
 import numpy as np
 
+from chemsmart.utils.periodictable import PeriodicTable
+
 logger = logging.getLogger(__name__)
+_pt = PeriodicTable()
+
+
+def get_coordinating_atoms(
+    metal_index,
+    elements,
+    coordinates,
+    tau_primary=1.15,
+    tau_secondary=1.35,
+):
+    """Categorize atoms coordinating to a metal by covalent-radius ratio.
+
+    Returns
+    -------
+    tuple[list[int], list[int]]
+        ``(primary_sphere, secondary_sphere)`` as 0-based atom indices.
+    """
+    primary_sphere = []
+    secondary_sphere = []
+
+    coordinates = np.asarray(coordinates, dtype=float)
+    xyz_m = coordinates[metal_index]
+    element_m = elements[metal_index]
+    r_m = _pt.covalent_radius(element_m)
+
+    distances = np.linalg.norm(coordinates - xyz_m, axis=1)
+
+    for idx, (element, dist) in enumerate(zip(elements, distances)):
+        if idx == metal_index:
+            continue
+
+        # Hydride / hydrogen exception: tight catalytic hydrides.
+        if element == "H" and dist <= 1.8:
+            primary_sphere.append(idx)
+            continue
+
+        r_a = _pt.covalent_radius(element)
+        ratio = dist / (r_m + r_a)
+
+        if ratio <= tau_primary:
+            primary_sphere.append(idx)
+        elif ratio <= tau_secondary:
+            secondary_sphere.append(idx)
+
+    return primary_sphere, secondary_sphere
 
 
 def is_collinear(coords, tol=1e-2):

@@ -15,7 +15,10 @@ In PyMOL directly::
     render_matte_clay all
 """
 
+import numpy as np
 from pymol import cmd
+
+from chemsmart.utils.geometry import get_coordinating_atoms
 
 DEFAULT_METAL_COLOR = "poster_mn_gold"
 
@@ -553,6 +556,140 @@ def soft_cartoon_render(
 _METAL_ELEMENTS = "elem Mn+Fe+Co+Ni+Cu+Zn+Ru+Rh+Pd+Ag+Ir+Pt+Au+Mg+Al+Ti+Zr"
 
 
+def _parse_metal_symbols(metal):
+    """Parse a PyMOL metal selection string into a set of element symbols."""
+    text = (metal or _METAL_ELEMENTS).replace("elem", " ")
+    return {
+        token.strip()
+        for token in text.replace("+", " ").split()
+        if token.strip()
+    }
+
+
+def _pymol_index_selection(sel, pymol_indices):
+    """Build a PyMOL selection expression from atom indices."""
+    indices = sorted({int(index) for index in pymol_indices})
+    if not indices:
+        return "none"
+    return "%s and index %s" % (
+        sel,
+        "+".join(str(index) for index in indices),
+    )
+
+
+def _get_coordinating_atoms(
+    selection="all",
+    prefix="coord",
+    metal=None,
+    include_nh_h=False,
+):
+    """Build named selections via covalent-radius-ratio coordination spheres.
+
+    Extracts ChemPy coordinates, calls
+    ``chemsmart.utils.geometry.get_coordinating_atoms`` for each metal center,
+    and partitions the resulting primary/secondary spheres into role-based
+    named selections. Applies no colors or rendering.
+    """
+    sel = f"({selection})"
+    names = {
+        "metal": "%s_metal" % prefix,
+        "donor_s": "%s_donor_s" % prefix,
+        "donor_n": "%s_donor_n" % prefix,
+        "donor_p": "%s_donor_p" % prefix,
+        "donors": "%s_donors" % prefix,
+        "co_c": "%s_co_c" % prefix,
+        "co_o": "%s_co_o" % prefix,
+        "hydride": "%s_hydride" % prefix,
+        "nh_h": "%s_nh_h" % prefix,
+        "important_h": "%s_important_h" % prefix,
+        "coordination_core": "%s_coordination_core" % prefix,
+    }
+
+    model = cmd.get_model(sel)
+    if len(model.atom) == 0:
+        for name in names.values():
+            cmd.select(name, "none")
+        return names
+
+    elements = []
+    pymol_indices = []
+    coords = []
+    for atom in model.atom:
+        elements.append(str(getattr(atom, "symbol", "")).strip())
+        pymol_indices.append(int(atom.index))
+        coords.append([float(value) for value in atom.coord])
+    coordinates = np.asarray(coords, dtype=float)
+
+    metal_symbols = _parse_metal_symbols(metal)
+    metal_local = [
+        idx for idx, element in enumerate(elements) if element in metal_symbols
+    ]
+
+    primary_local = set()
+    secondary_local = set()
+    for metal_idx in metal_local:
+        primary, secondary = get_coordinating_atoms(
+            metal_idx, elements, coordinates
+        )
+        primary_local.update(primary)
+        secondary_local.update(secondary)
+
+    def role_indices(predicate, local_indices):
+        return [
+            pymol_indices[idx]
+            for idx in sorted(local_indices)
+            if predicate(elements[idx])
+        ]
+
+    metal_pymol = [pymol_indices[idx] for idx in metal_local]
+    hydride_pymol = role_indices(lambda el: el == "H", primary_local)
+    nh_h_pymol = (
+        role_indices(lambda el: el == "H", secondary_local)
+        if include_nh_h
+        else []
+    )
+    donor_s_pymol = role_indices(lambda el: el == "S", primary_local)
+    donor_n_pymol = role_indices(lambda el: el == "N", primary_local)
+    donor_p_pymol = role_indices(lambda el: el == "P", primary_local)
+    co_c_pymol = role_indices(lambda el: el == "C", primary_local)
+    co_o_pymol = role_indices(
+        lambda el: el == "O", primary_local | secondary_local
+    )
+    important_h_pymol = sorted(set(hydride_pymol) | set(nh_h_pymol))
+    core_pymol = sorted(
+        set(metal_pymol)
+        | {pymol_indices[idx] for idx in primary_local}
+        | set(co_o_pymol)
+    )
+
+    cmd.select(names["metal"], _pymol_index_selection(sel, metal_pymol))
+    cmd.select(names["donor_s"], _pymol_index_selection(sel, donor_s_pymol))
+    cmd.select(names["donor_n"], _pymol_index_selection(sel, donor_n_pymol))
+    cmd.select(names["donor_p"], _pymol_index_selection(sel, donor_p_pymol))
+    donor_parts = []
+    if donor_s_pymol:
+        donor_parts.append(names["donor_s"])
+    if donor_n_pymol:
+        donor_parts.append(names["donor_n"])
+    if donor_p_pymol:
+        donor_parts.append(names["donor_p"])
+    if donor_parts:
+        cmd.select(names["donors"], " or ".join(donor_parts))
+    else:
+        cmd.select(names["donors"], "none")
+    cmd.select(names["co_c"], _pymol_index_selection(sel, co_c_pymol))
+    cmd.select(names["co_o"], _pymol_index_selection(sel, co_o_pymol))
+    cmd.select(names["hydride"], _pymol_index_selection(sel, hydride_pymol))
+    cmd.select(names["nh_h"], _pymol_index_selection(sel, nh_h_pymol))
+    cmd.select(
+        names["important_h"], _pymol_index_selection(sel, important_h_pymol)
+    )
+    cmd.select(
+        names["coordination_core"], _pymol_index_selection(sel, core_pymol)
+    )
+    return names
+
+
 def _common_select_core(selection="all", cutoff=2.6, highlight_bonds=None):
     sel = f"({selection})"
     highlight_bonds = _normalize_none(highlight_bonds)
@@ -751,58 +888,44 @@ def render_editorial_minimal(selection="all", highlight_bonds=""):
     _define_editorial_minimal_colors()
     cmd.hide("everything", sel)
 
-    cmd.select("editorial_metal", f"{sel} and elem Mn")
-    cmd.select(
-        "editorial_donors",
-        f"{sel} and (elem N+S) within 2.8 of editorial_metal",
+    atoms = _get_coordinating_atoms(
+        selection=selection,
+        prefix="editorial",
     )
-    cmd.select("editorial_n_donors", "editorial_donors and elem N")
-    cmd.select("editorial_s_donors", "editorial_donors and elem S")
-    cmd.select(
-        "editorial_co_carbons",
-        f"{sel} and elem C within 2.2 of editorial_metal",
-    )
-    cmd.select(
-        "editorial_co_oxygens",
-        f"{sel} and elem O and neighbor editorial_co_carbons",
-    )
-    cmd.select(
-        "editorial_important_H",
-        f"{sel} and elem H within 1.8 of editorial_metal",
-    )
-    cmd.select(
-        "editorial_sphere_atoms",
-        "editorial_metal or editorial_donors or editorial_co_carbons "
-        "or editorial_important_H",
+    sphere_atoms = "%s or %s or %s or %s" % (
+        atoms["metal"],
+        atoms["donors"],
+        atoms["co_c"],
+        atoms["important_h"],
     )
 
     cmd.show("sticks", sel)
-    cmd.show("spheres", "editorial_sphere_atoms")
-    cmd.show("spheres", "editorial_co_oxygens")
-    cmd.hide("sticks", f"{sel} and elem H and not editorial_important_H")
-    cmd.hide("spheres", f"{sel} and elem H and not editorial_important_H")
+    cmd.show("spheres", sphere_atoms)
+    cmd.show("spheres", atoms["co_o"])
+    cmd.hide("sticks", f"{sel} and elem H and not {atoms['important_h']}")
+    cmd.hide("spheres", f"{sel} and elem H and not {atoms['important_h']}")
 
-    _safe_set("sphere_scale", 0.60, "editorial_metal")
-    _safe_set("sphere_scale", 0.36, "editorial_n_donors")
-    _safe_set("sphere_scale", 0.39, "editorial_s_donors")
-    _safe_set("sphere_scale", 0.26, "editorial_co_carbons")
-    _safe_set("sphere_scale", 0.21, "editorial_co_oxygens")
-    _safe_set("sphere_scale", 0.26, "editorial_important_H")
+    _safe_set("sphere_scale", 0.60, atoms["metal"])
+    _safe_set("sphere_scale", 0.36, atoms["donor_n"])
+    _safe_set("sphere_scale", 0.39, atoms["donor_s"])
+    _safe_set("sphere_scale", 0.26, atoms["co_c"])
+    _safe_set("sphere_scale", 0.21, atoms["co_o"])
+    _safe_set("sphere_scale", 0.26, atoms["important_h"])
 
     _safe_set("stick_radius", 0.12, sel)
-    _safe_set("stick_radius", 0.15, f"{sel} and within 2.8 of editorial_metal")
+    _safe_set("stick_radius", 0.15, atoms["coordination_core"])
     _safe_set("stick_radius", 0.07, f"{sel} and elem H")
     _safe_set("stick_quality", 30)
 
-    cmd.color("mn_rose", "editorial_metal")
-    cmd.color("sulfur_gold", "editorial_s_donors")
-    cmd.color("sci_N_blue", "editorial_n_donors")
-    cmd.color("sci_C_gray", "editorial_co_carbons")
-    cmd.color("sci_O_red", "editorial_co_oxygens")
-    cmd.color("hydrogen_soft", "editorial_important_H")
+    cmd.color("mn_rose", atoms["metal"])
+    cmd.color("sulfur_gold", atoms["donor_s"])
+    cmd.color("sci_N_blue", atoms["donor_n"])
+    cmd.color("sci_C_gray", atoms["co_c"])
+    cmd.color("sci_O_red", atoms["co_o"])
+    cmd.color("hydrogen_soft", atoms["important_h"])
     cmd.color(
         "sci_C_gray",
-        f"{sel} and elem C and not editorial_co_carbons",
+        f"{sel} and elem C and not {atoms['co_c']}",
     )
 
     _set_transparent_background()
@@ -820,24 +943,21 @@ def render_editorial_minimal(selection="all", highlight_bonds=""):
     _safe_set("ambient_occlusion_scale", 15)
     _safe_set("ambient_occlusion_smooth", 10)
 
-    _safe_set("specular", 0.85, "editorial_metal")
-    _safe_set("shininess", 90, "editorial_metal")
-    _safe_set(
-        "specular",
-        0.15,
-        "editorial_donors or editorial_co_carbons or editorial_important_H",
+    _safe_set("specular", 0.85, atoms["metal"])
+    _safe_set("shininess", 90, atoms["metal"])
+    soft_atoms = "%s or %s or %s" % (
+        atoms["donors"],
+        atoms["co_c"],
+        atoms["important_h"],
     )
-    _safe_set(
-        "shininess",
-        20,
-        "editorial_donors or editorial_co_carbons or editorial_important_H",
-    )
+    _safe_set("specular", 0.15, soft_atoms)
+    _safe_set("shininess", 20, soft_atoms)
 
     if highlight_bonds:
         _apply_coordination_highlight_bonds(
             highlight_bonds,
             sel,
-            "editorial_metal",
+            atoms["metal"],
         )
 
     _base_quality()
@@ -880,76 +1000,48 @@ def render_soft_ceramic(selection="all", highlight_bonds=""):
     _safe_set("valence", 0)
     _safe_set("stick_ball", 0)
 
-    cmd.select("soft_ceramic_metal", f"{sel} and ({_METAL_ELEMENTS})")
-    cmd.select(
-        "soft_ceramic_donor_s",
-        f"{sel} and (elem S) within 2.8 of soft_ceramic_metal",
-    )
-    cmd.select(
-        "soft_ceramic_donor_n",
-        f"{sel} and (elem N) within 2.8 of soft_ceramic_metal",
-    )
-    cmd.select(
-        "soft_ceramic_co_c",
-        f"{sel} and (elem C) within 2.10 of soft_ceramic_metal",
-    )
-    cmd.select(
-        "soft_ceramic_co_o",
-        f"{sel} and (elem O) within 1.35 of soft_ceramic_co_c",
-    )
-    cmd.select(
-        "soft_ceramic_hydride",
-        f"{sel} and (elem H) within 1.85 of soft_ceramic_metal",
-    )
-    cmd.select(
-        "soft_ceramic_nh_h",
-        f"{sel} and (elem H) within 1.25 of soft_ceramic_donor_n",
-    )
-    cmd.select(
-        "soft_ceramic_important_h",
-        "soft_ceramic_hydride or soft_ceramic_nh_h",
-    )
-    cmd.select(
-        "soft_ceramic_coordination_core",
-        "soft_ceramic_metal or soft_ceramic_donor_s or soft_ceramic_donor_n "
-        "or soft_ceramic_co_c or soft_ceramic_co_o or soft_ceramic_hydride",
+    atoms = _get_coordinating_atoms(
+        selection=selection,
+        prefix="soft_ceramic",
+        include_nh_h=True,
     )
 
     cmd.bg_color("studio_background")
     cmd.color(
         "ligand_ivory",
-        f"{sel} and (elem C+H) and not soft_ceramic_co_c "
-        "and not soft_ceramic_important_h",
+        f"{sel} and (elem C+H) and not {atoms['co_c']} "
+        f"and not {atoms['important_h']}",
     )
-    cmd.color("carbonyl_cream", "soft_ceramic_co_c")
-    cmd.color("metal_bronze", "soft_ceramic_metal")
-    cmd.color("sulfur_soft_gold", "soft_ceramic_donor_s")
-    cmd.color("nitrogen_cobalt", "soft_ceramic_donor_n")
-    cmd.color("oxygen_deep_red", "soft_ceramic_co_o")
-    cmd.color("hydrogen_warm", "soft_ceramic_important_h")
+    cmd.color("carbonyl_cream", atoms["co_c"])
+    cmd.color("metal_bronze", atoms["metal"])
+    cmd.color("sulfur_soft_gold", atoms["donor_s"])
+    cmd.color("nitrogen_cobalt", atoms["donor_n"])
+    cmd.color("oxygen_deep_red", atoms["co_o"])
+    cmd.color("hydrogen_warm", atoms["important_h"])
 
     cmd.show("sticks", sel)
-    cmd.hide("sticks", f"{sel} and elem H and not soft_ceramic_important_h")
-    cmd.hide("spheres", f"{sel} and elem H and not soft_ceramic_hydride")
-    cmd.show("spheres", "soft_ceramic_coordination_core")
+    cmd.hide("sticks", f"{sel} and elem H and not {atoms['important_h']}")
+    cmd.hide("spheres", f"{sel} and elem H and not {atoms['hydride']}")
+    cmd.show("spheres", atoms["coordination_core"])
 
-    _safe_set("sphere_scale", 0.56, "soft_ceramic_metal")
-    _safe_set("sphere_scale", 0.40, "soft_ceramic_donor_s")
-    _safe_set("sphere_scale", 0.37, "soft_ceramic_donor_n")
-    _safe_set("sphere_scale", 0.28, "soft_ceramic_co_c")
-    _safe_set("sphere_scale", 0.18, "soft_ceramic_co_o")
-    _safe_set("sphere_scale", 0.25, "soft_ceramic_hydride")
+    _safe_set("sphere_scale", 0.56, atoms["metal"])
+    _safe_set("sphere_scale", 0.40, atoms["donor_s"])
+    _safe_set("sphere_scale", 0.37, atoms["donor_n"])
+    _safe_set("sphere_scale", 0.28, atoms["co_c"])
+    _safe_set("sphere_scale", 0.18, atoms["co_o"])
+    _safe_set("sphere_scale", 0.25, atoms["hydride"])
 
     _safe_set("stick_radius", 0.115, sel)
     _safe_set(
         "stick_radius",
         0.155,
-        "soft_ceramic_metal or soft_ceramic_donor_s or soft_ceramic_donor_n",
+        "%s or %s or %s"
+        % (atoms["metal"], atoms["donor_s"], atoms["donor_n"]),
     )
     _safe_set(
         "stick_radius",
         0.130,
-        "soft_ceramic_co_c or soft_ceramic_co_o or soft_ceramic_hydride",
+        "%s or %s or %s" % (atoms["co_c"], atoms["co_o"], atoms["hydride"]),
     )
 
     _safe_set("stick_quality", 40)
@@ -982,7 +1074,7 @@ def render_soft_ceramic(selection="all", highlight_bonds=""):
         _apply_coordination_highlight_bonds(
             highlight_bonds,
             sel,
-            "soft_ceramic_metal",
+            atoms["metal"],
         )
 
     cmd.label("all", '""')
@@ -1041,9 +1133,9 @@ def _define_matte_clay_colors():
 def render_matte_clay(selection="all", highlight_bonds=""):
     """Matte clay style for soft graphical abstracts.
 
-    Uses the same ``within X of metal`` coordination-core selection pattern as
-    soft-ceramic / editorial styles. Non-core hydrogens are hidden.
-    Optional ``highlight_bonds`` preserves CHEMSMART ``-c`` highlighting.
+    Uses covalent-radius-ratio coordination spheres shared with soft-ceramic /
+    editorial styles. Non-core hydrogens are hidden. Optional ``highlight_bonds``
+    preserves CHEMSMART ``-c`` highlighting.
     """
     highlight_bonds = _normalize_none(highlight_bonds)
     sel = f"({selection})"
@@ -1053,70 +1145,43 @@ def render_matte_clay(selection="all", highlight_bonds=""):
     _safe_set("valence", 0)
     _safe_set("stick_ball", 0)
 
-    cmd.select("matte_clay_metal", f"{sel} and ({_METAL_ELEMENTS})")
-    cmd.select(
-        "matte_clay_donor_s",
-        f"{sel} and (elem S) within 2.8 of matte_clay_metal",
-    )
-    cmd.select(
-        "matte_clay_donor_n",
-        f"{sel} and (elem N) within 2.8 of matte_clay_metal",
-    )
-    cmd.select(
-        "matte_clay_donor_p",
-        f"{sel} and (elem P) within 2.8 of matte_clay_metal",
-    )
-    cmd.select(
-        "matte_clay_co_c",
-        f"{sel} and (elem C) within 2.10 of matte_clay_metal",
-    )
-    cmd.select(
-        "matte_clay_co_o",
-        f"{sel} and (elem O) within 1.35 of matte_clay_co_c",
-    )
-    cmd.select(
-        "matte_clay_hydride",
-        f"{sel} and (elem H) within 1.85 of matte_clay_metal",
-    )
-    cmd.select(
-        "matte_clay_coordination_core",
-        "matte_clay_metal or matte_clay_donor_s or matte_clay_donor_n "
-        "or matte_clay_donor_p or matte_clay_co_c or matte_clay_co_o "
-        "or matte_clay_hydride",
+    atoms = _get_coordinating_atoms(
+        selection=selection,
+        prefix="matte_clay",
     )
 
     cmd.color(
         "mc_framework",
-        f"{sel} and (elem C+H) and not matte_clay_co_c "
-        "and not matte_clay_hydride",
+        f"{sel} and (elem C+H) and not {atoms['co_c']} "
+        f"and not {atoms['hydride']}",
     )
-    cmd.color("mc_framework", "matte_clay_co_c")
-    cmd.color("mc_metal_center", "matte_clay_metal")
-    cmd.color("mc_chalcogen", "matte_clay_donor_s")
-    cmd.color("mc_nitrogen", "matte_clay_donor_n")
-    cmd.color("mc_pnictogen", "matte_clay_donor_p")
-    cmd.color("mc_oxygen", "matte_clay_co_o")
-    cmd.color("mc_hydrogen", "matte_clay_hydride")
+    cmd.color("mc_framework", atoms["co_c"])
+    cmd.color("mc_metal_center", atoms["metal"])
+    cmd.color("mc_chalcogen", atoms["donor_s"])
+    cmd.color("mc_nitrogen", atoms["donor_n"])
+    cmd.color("mc_pnictogen", atoms["donor_p"])
+    cmd.color("mc_oxygen", atoms["co_o"])
+    cmd.color("mc_hydrogen", atoms["hydride"])
     cmd.color("mc_halogen", f"{sel} and elem F+Cl+Br+I")
 
     cmd.show("sticks", sel)
-    cmd.hide("sticks", f"{sel} and elem H and not matte_clay_hydride")
-    cmd.hide("spheres", f"{sel} and elem H and not matte_clay_hydride")
-    cmd.show("spheres", "matte_clay_coordination_core")
+    cmd.hide("sticks", f"{sel} and elem H and not {atoms['hydride']}")
+    cmd.hide("spheres", f"{sel} and elem H and not {atoms['hydride']}")
+    cmd.show("spheres", atoms["coordination_core"])
 
-    _safe_set("sphere_scale", 0.62, "matte_clay_metal")
-    _safe_set("sphere_scale", 0.36, "matte_clay_donor_s")
-    _safe_set("sphere_scale", 0.34, "matte_clay_donor_n")
-    _safe_set("sphere_scale", 0.34, "matte_clay_donor_p")
-    _safe_set("sphere_scale", 0.30, "matte_clay_co_c")
-    _safe_set("sphere_scale", 0.28, "matte_clay_co_o")
-    _safe_set("sphere_scale", 0.24, "matte_clay_hydride")
+    _safe_set("sphere_scale", 0.62, atoms["metal"])
+    _safe_set("sphere_scale", 0.36, atoms["donor_s"])
+    _safe_set("sphere_scale", 0.34, atoms["donor_n"])
+    _safe_set("sphere_scale", 0.34, atoms["donor_p"])
+    _safe_set("sphere_scale", 0.30, atoms["co_c"])
+    _safe_set("sphere_scale", 0.28, atoms["co_o"])
+    _safe_set("sphere_scale", 0.24, atoms["hydride"])
 
     _safe_set("stick_radius", 0.108, sel)
     _safe_set(
         "stick_radius",
         0.138,
-        "matte_clay_metal or matte_clay_coordination_core",
+        "%s or %s" % (atoms["metal"], atoms["coordination_core"]),
     )
 
     # Transparent background and zero-gloss clay material with soft AO.
@@ -1156,7 +1221,7 @@ def render_matte_clay(selection="all", highlight_bonds=""):
         _apply_coordination_highlight_bonds(
             highlight_bonds,
             sel,
-            "matte_clay_metal",
+            atoms["metal"],
         )
 
     cmd.label("all", '""')

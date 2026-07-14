@@ -21,6 +21,7 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.templates.scientific_styles import (
+    _get_coordinating_atoms,
     render_editorial_minimal,
     render_matte_clay,
     render_soft_ceramic,
@@ -1036,64 +1037,65 @@ class TestPyMOLStyleCommands:
 
         assert command == expected_command
 
+    def test_get_coordinating_atoms_uses_radius_ratio_helper(self):
+        source = inspect.getsource(_get_coordinating_atoms)
+        module_source = inspect.getsource(
+            inspect.getmodule(_get_coordinating_atoms)
+        )
+
+        assert (
+            "from chemsmart.utils.geometry import get_coordinating_atoms"
+            in (module_source)
+        )
+        assert "get_coordinating_atoms(" in source
+        assert "cmd.get_model" in source
+        assert "primary_local" in source
+        assert "secondary_local" in source
+        assert "coordination_core" in source
+        assert "within %s of" not in source
+        assert "cmd.color" not in source
+        assert "sphere_scale" not in source
+
     def test_render_editorial_minimal_defines_expected_visual_parameters(self):
         source = inspect.getsource(render_editorial_minimal)
 
-        assert 'cmd.select("editorial_metal", f"{sel} and elem Mn")' in source
-        assert "within 2.8 of editorial_metal" in source
-        assert "elem C within 2.2 of editorial_metal" in source
-        assert "elem O and neighbor editorial_co_carbons" in source
-        assert "elem H within 1.8 of editorial_metal" in source
-        assert '_safe_set("sphere_scale", 0.60, "editorial_metal")' in source
-        assert (
-            '_safe_set("sphere_scale", 0.36, "editorial_n_donors")' in source
-        )
-        assert (
-            '_safe_set("sphere_scale", 0.39, "editorial_s_donors")' in source
-        )
-        assert (
-            '_safe_set("sphere_scale", 0.26, "editorial_co_carbons")' in source
-        )
-        assert (
-            '_safe_set("sphere_scale", 0.21, "editorial_co_oxygens")' in source
-        )
+        assert "_get_coordinating_atoms" in source
+        assert 'prefix="editorial"' in source
+        assert 'metal="elem Mn"' not in source
+        assert "donors=" not in source
+        assert "within 2.8" not in source
+        assert '_safe_set("sphere_scale", 0.60, atoms["metal"])' in source
+        assert '_safe_set("sphere_scale", 0.36, atoms["donor_n"])' in source
+        assert '_safe_set("sphere_scale", 0.39, atoms["donor_s"])' in source
+        assert '_safe_set("sphere_scale", 0.26, atoms["co_c"])' in source
+        assert '_safe_set("sphere_scale", 0.21, atoms["co_o"])' in source
         assert '_safe_set("stick_radius", 0.12, sel)' in source
+        assert (
+            '_safe_set("stick_radius", 0.15, atoms["coordination_core"])'
+            in source
+        )
         assert '_safe_set("field_of_view", 45)' in source
-        assert 'cmd.color("mn_rose", "editorial_metal")' in source
-        assert 'cmd.color("sulfur_gold", "editorial_s_donors")' in source
+        assert 'cmd.color("mn_rose", atoms["metal"])' in source
+        assert 'cmd.color("sulfur_gold", atoms["donor_s"])' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
 
     def test_render_soft_ceramic_defines_expected_visual_parameters(self):
         source = inspect.getsource(render_soft_ceramic)
 
-        assert (
-            'cmd.select("soft_ceramic_metal", f"{sel} and ({_METAL_ELEMENTS})")'
-            in source
-        )
-        assert "elem Mn" not in source
-        assert "within 2.8 of soft_ceramic_metal" in source
-        assert "(elem C) within 2.10 of soft_ceramic_metal" in source
-        assert "(elem O) within 1.35 of soft_ceramic_co_c" in source
-        assert "(elem H) within 1.85 of soft_ceramic_metal" in source
-        assert (
-            '_safe_set("sphere_scale", 0.56, "soft_ceramic_metal")' in source
-        )
-        assert (
-            '_safe_set("sphere_scale", 0.40, "soft_ceramic_donor_s")' in source
-        )
-        assert (
-            '_safe_set("sphere_scale", 0.37, "soft_ceramic_donor_n")' in source
-        )
-        assert '_safe_set("sphere_scale", 0.28, "soft_ceramic_co_c")' in source
-        assert '_safe_set("sphere_scale", 0.18, "soft_ceramic_co_o")' in source
-        assert (
-            '_safe_set("sphere_scale", 0.25, "soft_ceramic_hydride")' in source
-        )
+        assert "_get_coordinating_atoms" in source
+        assert 'prefix="soft_ceramic"' in source
+        assert "include_nh_h=True" in source
+        assert 'metal="elem Mn"' not in source
+        assert "donors=" not in source
+        assert '_safe_set("sphere_scale", 0.56, atoms["metal"])' in source
+        assert '_safe_set("sphere_scale", 0.40, atoms["donor_s"])' in source
+        assert '_safe_set("sphere_scale", 0.37, atoms["donor_n"])' in source
+        assert '_safe_set("sphere_scale", 0.28, atoms["co_c"])' in source
+        assert '_safe_set("sphere_scale", 0.18, atoms["co_o"])' in source
+        assert '_safe_set("sphere_scale", 0.25, atoms["hydride"])' in source
         assert '_safe_set("stick_radius", 0.115, sel)' in source
-        assert 'cmd.color("metal_bronze", "soft_ceramic_metal")' in source
-        assert (
-            'cmd.color("sulfur_soft_gold", "soft_ceramic_donor_s")' in source
-        )
+        assert 'cmd.color("metal_bronze", atoms["metal"])' in source
+        assert 'cmd.color("sulfur_soft_gold", atoms["donor_s"])' in source
         assert 'cmd.bg_color("studio_background")' in source
         assert '_safe_set("ray_opaque_background", 1)' in source
         assert "_apply_coordination_highlight_bonds" in source
@@ -1101,27 +1103,18 @@ class TestPyMOLStyleCommands:
     def test_render_matte_clay_defines_expected_visual_parameters(self):
         source = inspect.getsource(render_matte_clay)
 
-        assert (
-            'cmd.select("matte_clay_metal", f"{sel} and ({_METAL_ELEMENTS})")'
-            in source
-        )
-        assert "within 2.8 of matte_clay_metal" in source
-        assert "(elem C) within 2.10 of matte_clay_metal" in source
-        assert "(elem O) within 1.35 of matte_clay_co_c" in source
-        assert "(elem H) within 1.85 of matte_clay_metal" in source
-        assert (
-            'cmd.hide("sticks", f"{sel} and elem H and not matte_clay_hydride")'
-            in source
-        )
-        assert '_safe_set("sphere_scale", 0.62, "matte_clay_metal")' in source
-        assert 'cmd.color("mc_metal_center", "matte_clay_metal")' in source
+        assert "_get_coordinating_atoms" in source
+        assert 'prefix="matte_clay"' in source
+        assert "donors=" not in source
+        assert 'atoms["hydride"]' in source
+        assert '_safe_set("sphere_scale", 0.62, atoms["metal"])' in source
+        assert 'cmd.color("mc_metal_center", atoms["metal"])' in source
         assert 'cmd.bg_color("white")' in source
         assert '_safe_set("ray_opaque_background", 0)' in source
         assert '_safe_set("ambient_occlusion_mode", 1)' in source
         assert '_safe_set("ambient_occlusion_scale", 18)' in source
         assert "_apply_coordination_highlight_bonds" in source
-        assert "_mc_detect_centers" not in source
-        assert "_mc_distance" not in source
+        assert "cmd.select(" not in source
 
     def test_hybrid_is_not_a_derived_style(self):
         with pytest.raises(ValueError, match="not available"):
