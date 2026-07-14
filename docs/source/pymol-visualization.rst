@@ -361,7 +361,7 @@ Manual PyMOL usage
 
    run scientific_styles.py
    render_soft_cartoon all
-   render_soft_cartoon all, white
+   render_soft_cartoon all, 1-2+1-5
    ray 1200, 1200
 
 .. _scientific-visualization:

@@ -299,27 +299,30 @@ def comic_render(
     )
 
 
-def render_soft_cartoon(selection="all", background=None, highlight_bonds=""):
+def render_soft_cartoon(selection="all", highlight_bonds="", background=None):
     """Apply soft cartoon ball-and-stick rendering with premium cover colors.
 
     Thin public wrapper for PyMOL ``cmd.extend`` / CHEMSMART. Implementation
     lives on :class:`SoftCartoonStyle`.
+
+    ``highlight_bonds`` is the second positional argument so CHEMSMART ``-c``
+    bond pairs map correctly from ``render_soft_cartoon <sel>, <bonds>``.
     """
     SoftCartoonStyle().render(
         selection=selection,
-        background=background,
         highlight_bonds=highlight_bonds,
+        background=background,
     )
 
 
 def soft_cartoon_render(
-    selection="all", background=None, highlight_bonds="", *_args, **_kwargs
+    selection="all", highlight_bonds="", background=None, *_args, **_kwargs
 ):
     """CHEMSMART entry point for the soft cartoon style."""
     render_soft_cartoon(
         selection=selection,
-        background=background,
         highlight_bonds=highlight_bonds,
+        background=background,
     )
 
 
@@ -1043,7 +1046,7 @@ class SoftCartoonStyle(ScientificStyle):
         "sc_metal": [0.66, 0.50, 0.80],
     }
 
-    def render(self, selection="all", background=None, highlight_bonds=""):
+    def render(self, selection="all", highlight_bonds="", background=None):
         sel = f"({selection})"
         self.define_colors()
         atoms = self.select_coordination(selection)

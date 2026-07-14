@@ -31,6 +31,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     SoftCeramicStyle,
     _get_coordinating_atoms,
     element_category_selection,
+    render_comic_metallic_labeled_final,
     render_editorial_minimal,
     render_matte_clay,
     render_neon_coordination_core,
@@ -1048,6 +1049,26 @@ class TestPyMOLStyleCommands:
         )
 
         assert command == expected_command
+
+    @pytest.mark.parametrize(
+        "render_fn",
+        [
+            render_comic_metallic_labeled_final,
+            render_soft_cartoon,
+            render_editorial_minimal,
+            render_soft_ceramic,
+            render_neon_coordination_core,
+            render_matte_clay,
+            render_quasi_chemdraw_bold,
+        ],
+    )
+    def test_render_wrappers_accept_highlight_bonds_as_second_argument(
+        self, render_fn
+    ):
+        """CHEMSMART passes ``-c`` bond pairs as the second positional arg."""
+        params = list(inspect.signature(render_fn).parameters)
+        assert params[0] == "selection"
+        assert params[1] == "highlight_bonds"
 
     def test_get_coordinating_atoms_uses_radius_ratio_helper(self):
         source = inspect.getsource(_get_coordinating_atoms)
