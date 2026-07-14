@@ -30,6 +30,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     ScientificStyle,
     SoftCartoonStyle,
     SoftCeramicStyle,
+    XrayWireStyle,
     _get_coordinating_atoms,
     element_category_selection,
     hide_distance_value_labels,
@@ -39,6 +40,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     render_quasi_chemdraw_bold,
     render_soft_cartoon,
     render_soft_ceramic,
+    render_xray_wire,
 )
 from chemsmart.jobs.mol.visualize import (
     PyMOLScientificStyleVisualizationJob,
@@ -1165,6 +1167,45 @@ class TestPyMOLStyleCommands:
         assert '_safe_set("ray_shadow", 0)' in style_source
         assert '_safe_set("ambient_occlusion_mode", 0)' in style_source
         assert '_safe_set("orthoscopic", 1)' in style_source
+
+    def test_render_xray_wire_defines_expected_visual_parameters(self):
+        style_source = inspect.getsource(XrayWireStyle)
+        wrapper_source = inspect.getsource(render_xray_wire)
+
+        assert issubclass(XrayWireStyle, ScientificStyle)
+        assert XrayWireStyle.prefix == "xray"
+        assert XrayWireStyle.command == "render_xray_wire"
+        assert "xw_charcoal" in XrayWireStyle.colors
+        assert "xw_metal" in XrayWireStyle.colors
+        assert "XrayWireStyle().render" in wrapper_source
+        assert "select_coordination" in style_source
+        assert "_begin_scientific_style" not in style_source
+        assert "_common_select_core" not in style_source
+        assert "_finish_scientific_style" not in style_source
+        assert 'cmd.label("all"' not in style_source
+        assert "id 0" not in style_source
+        assert 'center_metal = atoms["metal"]' in style_source
+        assert 'cmd.hide("lines", sel)' in style_source
+        assert 'cmd.hide("nonbonded", sel)' in style_source
+        assert '_safe_set("stick_radius", 0.18, sel)' in style_source
+        assert '_safe_set("stick_ball", 1)' in style_source
+        assert '_safe_set("stick_ball_ratio", 1.0)' in style_source
+        assert '_safe_set("sphere_scale", 0.6, center_metal)' in style_source
+        assert "apply_style_palette" in style_source
+        assert 'overrides={center_metal: "xw_metal"}' in style_source
+        assert '_safe_set("ray_trace_mode", 3)' in style_source
+        assert '_safe_set("ray_trace_gain", 0.05)' in style_source
+        assert '_safe_set("ambient", 0.5)' in style_source
+        assert '_safe_set("direct", 0.6)' in style_source
+        assert '_safe_set("reflect", 0.0)' in style_source
+        assert '_safe_set("spec_power", 1.0)' in style_source
+        assert '_safe_set("spec_count", 0)' in style_source
+        assert '_safe_set("ray_shadow", 1)' in style_source
+        assert '_safe_set("ray_trace_fog", 0)' in style_source
+        assert 'cmd.bg_color("white")' in style_source
+        assert '_safe_set("ray_opaque_background", 1)' in style_source
+        assert "apply_illustrated_camera" in style_source
+        assert "self.finish_default(selection)" in style_source
 
     def test_render_matte_clay_defines_expected_visual_parameters(self):
         source = inspect.getsource(MatteClayStyle)

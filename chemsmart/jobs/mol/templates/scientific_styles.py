@@ -1448,37 +1448,67 @@ class XrayWireStyle(ScientificStyle):
 
     name = "xray_wire"
     command = "render_xray_wire"
+    prefix = "xray"
     message = "X-ray wire style applied."
+    colors = {
+        "xw_charcoal": [0.2, 0.2, 0.2],
+        "xw_metal": [0.95, 0.55, 0.15],
+        "xw_sulfur": [0.85, 0.75, 0.25],
+        "xw_nitrogen": [0.2, 0.4, 0.8],
+        "xw_oxygen": [0.85, 0.25, 0.25],
+        "xw_hydrogen": [1.0, 1.0, 1.0],
+    }
 
     def render(self, selection="all"):
-        _begin_scientific_style(selection)
-        cmd.show("lines", selection)
-        cmd.show("sticks", "near_core")
-        cmd.show("spheres", "metal_atom")
+        sel = f"({selection})"
+        self.define_colors()
+        atoms = self.select_coordination(selection)
+        center_metal = atoms["metal"]
 
-        cmd.set("line_width", 2.0)
-        cmd.set("stick_radius", 0.06)
-        cmd.set("stick_radius", 0.11, "near_core")
-        cmd.set("sphere_scale", 0.38, "metal_atom")
+        cmd.hide("everything", sel)
+        cmd.show("sticks", sel)
+        cmd.show("spheres", center_metal)
+        cmd.hide("lines", sel)
+        cmd.hide("nonbonded", sel)
 
-        cmd.color("sci_C_dark", selection)
-        cmd.color("sci_N_blue", "coord_core and elem N")
-        cmd.color("sci_O_red", "coord_core and elem O")
-        cmd.color("sci_S_yellow", "coord_core and elem S")
-        cmd.color("metal_gold", "metal_atom")
+        _safe_set("stick_radius", 0.18, sel)
+        _safe_set("stick_ball", 1)
+        _safe_set("stick_ball_ratio", 1.0)
+        _safe_set("sphere_scale", 0.6, center_metal)
 
-        _apply_lighting(0.05, 0.00, 0.70, 0.35, 0.00)
-        _apply_view(
-            orthoscopic=1,
-            field_of_view=18,
-            ray_shadow="off",
-            depth_cue=0,
-            ray_shadows_mode=None,
+        self.apply_style_palette(
+            sel,
+            {
+                "C": "xw_charcoal",
+                "H": "xw_hydrogen",
+                "N": "xw_nitrogen",
+                "O": "xw_oxygen",
+                "S": "xw_sulfur",
+            },
+            overrides={center_metal: "xw_metal"},
         )
-        _finish_scientific_style(
-            selection,
-            message=self.message,
-        )
+
+        _safe_set("ray_trace_mode", 3)
+        _safe_set("ray_trace_gain", 0.05)
+        _safe_set("ambient", 0.5)
+        _safe_set("direct", 0.6)
+        _safe_set("reflect", 0.0)
+        _safe_set("spec_power", 1.0)
+        _safe_set("spec_count", 0)
+        _safe_set("specular", 0.0)
+        _safe_set("shininess", 0.0)
+        _safe_set("ray_shadow", 1)
+        _safe_set("ray_trace_fog", 0)
+
+        cmd.bg_color("white")
+        _safe_set("ray_opaque_background", 1)
+
+        self.apply_illustrated_camera(field_of_view=25, depth_cue=0, fog=0.0)
+        _safe_set("antialias", 2)
+        _safe_set("two_sided_lighting", 1)
+        _safe_set("use_shaders", 1)
+
+        self.finish_default(selection)
 
 
 class StericSurfaceStyle(ScientificStyle):
