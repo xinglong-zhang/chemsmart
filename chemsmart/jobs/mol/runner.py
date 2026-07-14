@@ -1082,7 +1082,8 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
         ``_add_coordinates_labels`` path (distance / angle / dihedral
         measurements), matching plain ``visualize -c`` on the main branch.
         Style commands themselves only select the look; they do not re-encode
-        bond pairs.
+        bond pairs. Numeric distance labels are hidden inside
+        ``scientific_styles.py`` after distances are created.
         """
         style = normalize_pymol_style(job.style)
         render_command = PYMOL_SCIENTIFIC_STYLE_COMMANDS.get(style)
@@ -1116,8 +1117,28 @@ class PyMOLScientificStyleVisualizationJobRunner(PyMOLVisualizationJobRunner):
         return dest_style_file
 
     def _setup_style(self, job, command):
-        """Apply the derived scientific style render command."""
-        command += f' -d "{self._format_style_command(job, job.label)}'
+        """Open the PyMOL ``-d`` script block; render runs after ``-c`` distances."""
+        command += ' -d "'
+        return command
+
+    def _append_style_render(self, job, command):
+        """Append the scientific style render command after ``-c`` measurements."""
+        command += f"; {self._format_style_command(job, job.label)}"
+        return command
+
+    def _get_command(self, job):
+        """Build PyMOL command with distances before style render."""
+        command = self._get_visualization_command(job)
+        command = self._setup_style(job, command)
+        command = self._setup_viewport(command)
+        command = self._add_coordinates_labels(job, command)
+        command = self._append_style_render(job, command)
+        command = self._offset_labels(job, command)
+        command = self._add_vdw(job, command)
+        command = self._add_zoom_command(job, command)
+        command = self._job_specific_commands(job, command)
+        command = self._save_pse_command(job, command)
+        command = self._quit_command(job, command)
         return command
 
 

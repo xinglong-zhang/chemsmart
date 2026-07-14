@@ -88,6 +88,26 @@ def _safe_ray_shadows(mode="light"):
         pass
 
 
+def hide_distance_value_labels():
+    """Hide numeric labels on ``-c`` bond-distance objects (``d1``, ``d2``, …).
+
+    Distance dashes remain visible; only the measurement text is hidden so
+    style-specific atom labels (e.g. comic Mn/N/P/S) stay legible.
+    """
+    try:
+        names = cmd.get_names("objects", enabled_only=0)
+    except Exception:
+        return
+
+    for name in names:
+        suffix = name[1:] if name.startswith("d") else ""
+        if suffix.isdigit():
+            try:
+                cmd.hide("labels", name)
+            except Exception:
+                pass
+
+
 def _set_transparent_background():
     """Configure ray-traced PNG export with a transparent background."""
     cmd.bg_color("white")
@@ -499,8 +519,13 @@ class ScientificStyle:
             pass
         cmd.refresh()
 
+    def finalize(self):
+        """Post-render cleanup shared by all scientific styles."""
+        hide_distance_value_labels()
+
     def finish_default(self, selection):
         """Zoom/orient via ``_finish_style`` and print ``self.message``."""
+        self.finalize()
         _finish_style(selection)
         print(self.message)
 
@@ -699,6 +724,7 @@ def _apply_view(
 
 
 def _end_scientific_style(selection, message):
+    hide_distance_value_labels()
     _base_quality()
     cmd.label("all", '""')
     _finish_style(selection)
@@ -837,6 +863,7 @@ class MetallicPosterStyle(ScientificStyle):
         cmd.zoom(selection, buffer=2.0)
         cmd.orient(selection)
         cmd.rebuild()
+        self.finalize()
 
 
 class ComicMetallicStyle(ScientificStyle):
@@ -910,6 +937,7 @@ class ComicMetallicStyle(ScientificStyle):
         cmd.zoom(selection, buffer=2.0)
         cmd.orient(selection)
         cmd.refresh()
+        self.finalize()
         print(self.message)
 
 
@@ -1021,6 +1049,7 @@ class SoftCartoonStyle(ScientificStyle):
         _safe_set("dash_color", "sc_outline")
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.6)
+        self.finalize()
         print(self.message)
 
 
@@ -1311,6 +1340,7 @@ class NeonCoordinationCoreStyle(ScientificStyle):
         _safe_set("ray_trace_antialias", 2)
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.7)
+        self.finalize()
         print(self.message)
 
 
@@ -1577,6 +1607,7 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
         _safe_set("ray_trace_antialias", 2)
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.4)
+        self.finalize()
         print(self.message)
 
 

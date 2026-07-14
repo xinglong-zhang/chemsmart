@@ -291,8 +291,8 @@ Basic Usage
 
    chemsmart run mol -f complex.xyz visualize -s comic
 
-Highlight metal–ligand distances with ``-c`` (same distance/angle/dihedral measurements as plain ``visualize -c``; the
-comic style only changes the look):
+Highlight metal–ligand distances with ``-c`` (same distance dashes as plain ``visualize -c``; numeric distance labels
+are hidden so style atom labels remain visible):
 
 .. code:: bash
 
@@ -307,7 +307,8 @@ Example
    :align: center
    :width: 70%
 
-   Comic style applied to ``complex.xyz`` with Mn–ligand distance labels and a transparent background via
+   Comic style applied to ``complex.xyz`` with Mn–ligand distance dashes and
+   coordination-core element labels via
    ``chemsmart run mol -f complex.xyz visualize -s comic -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'``.
 
 Manual PyMOL usage

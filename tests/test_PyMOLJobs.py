@@ -22,6 +22,7 @@ from chemsmart.jobs.mol.runner import (
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
 from chemsmart.jobs.mol.templates.scientific_styles import (
     ELEMENT_CATEGORIES,
+    ComicMetallicStyle,
     EditorialMinimalStyle,
     MatteClayStyle,
     NeonCoordinationCoreStyle,
@@ -31,6 +32,7 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     SoftCeramicStyle,
     _get_coordinating_atoms,
     element_category_selection,
+    hide_distance_value_labels,
     render_editorial_minimal,
     render_matte_clay,
     render_neon_coordination_core,
@@ -962,21 +964,31 @@ class TestPyMOLStyleCommands:
                 )
                 assert command == expected
 
-    def test_scientific_style_runner_keeps_bond_distance_labels(self):
-        """Derived styles reuse the main-branch ``-c`` distance path."""
-        runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
-            PyMOLScientificStyleVisualizationJobRunner
-        )
-        job = SimpleNamespace(
-            style="soft_cartoon",
-            coordinates=[[1, 8], [1, 15], [2, 3, 4]],
-        )
+    def test_scientific_styles_hide_distance_value_labels(self):
+        """Derived styles keep distance dashes but hide numeric distance labels."""
+        hide_source = inspect.getsource(hide_distance_value_labels)
+        assert 'cmd.hide("labels"' in hide_source
+        assert "suffix.isdigit()" in hide_source
 
-        command = runner._add_coordinates_labels(job, "cmd")
+        finish_source = inspect.getsource(ScientificStyle.finish_default)
+        assert "self.finalize()" in finish_source
 
-        assert "distance d1, id 1, id 8" in command
-        assert "distance d2, id 1, id 15" in command
-        assert "angle a1" in command
+        comic_source = inspect.getsource(ComicMetallicStyle.render)
+        assert "self.finalize()" in comic_source
+
+    def test_scientific_style_runner_orders_distances_before_render(self):
+        """``-c`` distances must exist before style render calls finalize."""
+        source = inspect.getsource(
+            PyMOLScientificStyleVisualizationJobRunner._get_command
+        )
+        assert source.index("_add_coordinates_labels") < source.index(
+            "_append_style_render"
+        )
+        setup_source = inspect.getsource(
+            PyMOLScientificStyleVisualizationJobRunner._setup_style
+        )
+        assert ' -d "' in setup_source
+        assert "render_" not in setup_source
 
     def test_get_coordinating_atoms_uses_radius_ratio_helper(self):
         source = inspect.getsource(_get_coordinating_atoms)
@@ -1176,17 +1188,25 @@ class TestPyMOLStyleCommands:
         with pytest.raises(ValueError, match="not available"):
             normalize_pymol_style("hybrid")
 
-    def test_derived_and_base_styles_keep_bond_distance_labels(self):
-        for runner_cls, style in (
-            (PyMOLScientificStyleVisualizationJobRunner, "comic"),
-            (PyMOLScientificStyleVisualizationJobRunner, "glossy"),
-            (PyMOLScientificStyleVisualizationJobRunner, "steric_surface"),
-            (PyMOLJobRunner, "pymol"),
-        ):
-            runner = runner_cls.__new__(runner_cls)
-            job = SimpleNamespace(style=style, coordinates=[[1, 8]])
-            command = runner._add_coordinates_labels(job, "cmd")
-            assert "distance d1, id 1, id 8" in command
+    def test_derived_styles_hide_distance_value_labels_base_style_keeps_them(
+        self,
+    ):
+        base_runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        derived_runner = PyMOLScientificStyleVisualizationJobRunner.__new__(
+            PyMOLScientificStyleVisualizationJobRunner
+        )
+        job = SimpleNamespace(style="comic", coordinates=[[1, 8]])
+
+        base_command = base_runner._add_coordinates_labels(job, "cmd")
+        derived_command = derived_runner._add_coordinates_labels(job, "cmd")
+
+        assert "distance d1, id 1, id 8" in base_command
+        assert "distance d1, id 1, id 8" in derived_command
+        assert "hide labels" not in base_command
+        assert "hide labels" not in derived_command
+        assert "hide_distance_value_labels" in inspect.getsource(
+            hide_distance_value_labels
+        )
 
 
 @pytest.mark.usefixtures("skip_if_no_pymol")
@@ -1256,6 +1276,10 @@ class TestPyMOLScientificStyleVisualizationJobs:
         )
         assert "distance d1, id 1, id 2" in runner._add_coordinates_labels(
             job, "cmd"
+        )
+        assert "hide labels" not in runner._add_coordinates_labels(job, "cmd")
+        assert "self.finalize()" in inspect.getsource(
+            ComicMetallicStyle.render
         )
 
     def test_glossy_style_job_on_1_mer_xyz(
