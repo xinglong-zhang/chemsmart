@@ -993,7 +993,7 @@ class TestPyMOLStyleCommands:
         assert 'atoms["metal"]' in source
         assert 'atoms["donors"]' in source
         assert 'atoms["coordination_core"]' in source
-        assert "apply_style_palette" in source
+        assert "apply_element_palette" in source
         assert "def _apply_poster" not in source
 
     def test_comic_metallic_uses_radius_ratio_coordination(self):
@@ -1007,7 +1007,7 @@ class TestPyMOLStyleCommands:
         assert "DONOR_ROLES" in source
         assert "MetallicPosterStyle.ELEMENT_PALETTE" in source
         assert "MetallicPosterStyle.colors" in source
-        assert "apply_style_palette" in source
+        assert "apply_element_palette" in source
         assert "pairs_from_distance_objects" in source
         assert "bond_atom_index_pairs" in source
         assert "remove_distance_objects" in source
@@ -1074,7 +1074,7 @@ class TestPyMOLStyleCommands:
             in base_source
         )
         assert (
-            "def apply_style_palette(self, selection, palette, overrides=None)"
+            "def apply_element_palette(cls, selection, palette, overrides=None)"
             in base_source
         )
         assert "element_category_selection" in base_source
@@ -1142,7 +1142,7 @@ class TestPyMOLStyleCommands:
         assert 'self.safe_set("sphere_scale", 0.44, atoms["metal"])' in source
         assert 'self.safe_set("stick_radius", 0.10, sel)' in source
         assert 'cmd.set_bond("stick_radius", 0.145' in source
-        assert "apply_style_palette" in source
+        assert "apply_element_palette" in source
         assert 'overrides={atoms["metal"]: "ncc_metal_c"}' in source
         assert 'self.safe_set("opaque_background", 0)' in source
         assert 'self.safe_set("ray_opaque_background", 0)' in source
@@ -1202,7 +1202,7 @@ class TestPyMOLStyleCommands:
         assert '("N+O", 0.275)' in source
         assert "category=category" in source
         assert "self._safe_set" in source
-        assert "apply_style_palette" in source
+        assert "apply_element_palette" in source
         assert 'overrides={atoms["metal"]: "sc_metal"}' in source
         assert "self.apply_lighting(" in source
         assert "apply_soft_shadows" in source
@@ -1237,7 +1237,7 @@ class TestPyMOLStyleCommands:
             'self.safe_set("sphere_scale", 0.34, atoms["metal"])'
             in style_source
         )
-        assert "apply_style_palette" in style_source
+        assert "apply_element_palette" in style_source
         assert 'overrides={atoms["metal"]: "qcd_metal"}' in style_source
         assert 'self.safe_set("ambient", 0.58)' in style_source
         assert 'self.safe_set("ray_shadow", 0)' in style_source
@@ -1270,7 +1270,7 @@ class TestPyMOLStyleCommands:
         assert (
             'self.safe_set("sphere_scale", 0.6, center_metal)' in style_source
         )
-        assert "apply_style_palette" in style_source
+        assert "apply_element_palette" in style_source
         assert 'overrides={center_metal: "xw_metal"}' in style_source
         assert 'self.safe_set("ray_trace_mode", 3)' in style_source
         assert 'self.safe_set("ray_trace_gain", 0.05)' in style_source

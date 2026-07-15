@@ -50,7 +50,6 @@ class PyMOLJob(Job):
         jobrunner=None,
         pymol_script=None,
         style=None,
-        style_background="white",
         trace=None,
         vdw=None,
         quiet_mode=True,
@@ -81,8 +80,6 @@ class PyMOLJob(Job):
                 Use :class:`PyMOLScientificStyleVisualizationJob` for derived
                 ``scientific_styles.py`` options such as ``glossy`` or
                 ``editorial_minimal``.
-            style_background: Background override for derived styles that
-                support it, such as ``glossy`` or ``comic`` (default: ``white``).
             trace: Whether to trace molecular paths (default: None).
             vdw: Van der Waals representation settings (default: None).
             quiet_mode: Run PyMOL in quiet mode (default: True).
@@ -105,7 +102,6 @@ class PyMOLJob(Job):
         self.source_basename = source_basename
         self.pymol_script = pymol_script
         self.style = style
-        self.style_background = style_background
         self.trace = trace
         self.vdw = vdw
         self.quiet_mode = quiet_mode

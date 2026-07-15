@@ -58,12 +58,6 @@ class ScientificStyle:
     METAL_ELEMENTS = metal_pymol_selection()
 
     ELEMENT_CATEGORIES = {
-        "carbon": "C",
-        "hydrogen": "H",
-        "nitrogen": "N",
-        "oxygen": "O",
-        "sulfur": "S",
-        "phosphorus": "P",
         "C": "C",
         "H": "H",
         "N": "N",
@@ -75,8 +69,6 @@ class ScientificStyle:
         "heavy": "C+N+O+S+P+F+Cl+Br+I",
         "halogen": "F+Cl+Br+I",
         "Br+I": "Br+I",
-        "chalcogen": "O+S+Se+Te",
-        "pnictogen": "N+P+As+Sb",
         "metal": METAL_ELEMENTS,
     }
 
@@ -504,10 +496,6 @@ class ScientificStyle:
         if ray_shadows_mode is not None:
             cls.safe_ray_shadows(ray_shadows_mode)
 
-    def apply_style_palette(self, selection, palette, overrides=None):
-        """Apply element-category colors from a category-to-color-name mapping."""
-        self.apply_element_palette(selection, palette, overrides=overrides)
-
     def _safe_set(self, setting, value, selection=None, category=None):
         """Set a PyMOL parameter, optionally scoped to an element category."""
         if selection is None and category is None:
@@ -563,7 +551,7 @@ class ScientificStyle:
 
     def apply_coordination_sci_palette(self, sel, atoms):
         """Apply the shared scientific element palette to coordination roles."""
-        self.apply_style_palette(
+        self.apply_element_palette(
             sel,
             {
                 "C": "sci_C_gray",
@@ -583,7 +571,7 @@ class ScientificStyle:
         cmd.color("sci_O_red", atoms["co_o"])
         cmd.color("sci_H_white", atoms["hydride"])
 
-    def render(self, selection="all", **kwargs):
+    def render(self, selection="all"):
         raise NotImplementedError(
             "%s must implement render()" % type(self).__name__
         )
@@ -691,7 +679,7 @@ class MetallicPosterStyle(ScientificStyle):
         self.safe_set("sphere_scale", 0.34, atoms["important_h"])
         self.safe_set("stick_radius", 0.16, core)
 
-        self.apply_style_palette(
+        self.apply_element_palette(
             sel,
             self.ELEMENT_PALETTE,
             overrides=self.metal_palette_overrides(selection, metal),
@@ -758,7 +746,7 @@ class ComicMetallicStyle(ScientificStyle):
     METAL_SPHERE_SCALE = 0.42
     STICK_RADIUS = 0.14
 
-    def render(self, selection="all", **kwargs):
+    def render(self, selection="all"):
         sel = f"({selection})"
         self.define_colors()
         atoms = self.select_coordination(selection)
@@ -778,7 +766,7 @@ class ComicMetallicStyle(ScientificStyle):
         if cmd.count_atoms(metal) > 0:
             self.safe_set("sphere_scale", self.METAL_SPHERE_SCALE, metal)
 
-        self.apply_style_palette(
+        self.apply_element_palette(
             sel,
             MetallicPosterStyle.ELEMENT_PALETTE,
             overrides=MetallicPosterStyle.metal_palette_overrides(
@@ -857,7 +845,7 @@ class SoftCartoonStyle(ScientificStyle):
         "sc_metal": [0.66, 0.50, 0.80],
     }
 
-    def render(self, selection="all", background=None):
+    def render(self, selection="all"):
         sel = f"({selection})"
         self.define_colors()
         atoms = self.select_coordination(selection)
@@ -906,7 +894,7 @@ class SoftCartoonStyle(ScientificStyle):
             "sphere_color", -1, f"{sphere_heavy} or {coordinating_h}"
         )
 
-        self.apply_style_palette(
+        self.apply_element_palette(
             sel,
             {
                 "C": "sc_carbon",
@@ -1139,7 +1127,6 @@ class NeonCoordinationCoreStyle(ScientificStyle):
     prefix = "ncc"
     message = "Neon coordination-core style applied."
     colors = {
-        "ncc_background": [0.008, 0.012, 0.026],
         "ncc_carbon": [0.20, 0.23, 0.30],
         "ncc_hydrogen": [0.88, 0.92, 1.00],
         "ncc_metal_c": [0.20, 1.00, 0.56],
@@ -1192,7 +1179,7 @@ class NeonCoordinationCoreStyle(ScientificStyle):
         self.safe_set("sphere_transparency", 0.0, atoms["coordination_core"])
         self.safe_set("sphere_quality", 4)
 
-        self.apply_style_palette(
+        self.apply_element_palette(
             sel,
             {
                 "C": "ncc_carbon",
@@ -1277,7 +1264,7 @@ class MatteClayStyle(ScientificStyle):
         cmd.color("mc_pnictogen", atoms["donor_p"])
         cmd.color("mc_oxygen", atoms["co_o"])
         cmd.color("mc_hydrogen", atoms["hydride"])
-        self.apply_style_palette(sel, {"halogen": "mc_halogen"})
+        self.apply_element_palette(sel, {"halogen": "mc_halogen"})
 
         cmd.show("sticks", sel)
         cmd.hide("sticks", f"{sel} and elem H and not {atoms['hydride']}")
@@ -1369,7 +1356,7 @@ class XrayWireStyle(ScientificStyle):
         self.safe_set("stick_ball_ratio", 1.0)
         self.safe_set("sphere_scale", 0.6, center_metal)
 
-        self.apply_style_palette(
+        self.apply_element_palette(
             sel,
             {
                 "C": "xw_charcoal",
@@ -1510,7 +1497,7 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
         self.safe_set("sphere_transparency", 0.0, atoms["coordination_core"])
         self.safe_set("sphere_quality", 4)
 
-        self.apply_style_palette(
+        self.apply_element_palette(
             sel,
             {
                 "C": "qcd_carbon",

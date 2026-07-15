@@ -79,7 +79,7 @@ def is_metal(symbol):
     pt = PeriodicTable()
     try:
         element = pt.to_element(text)
-        if element not in pt.PERIODIC_TABLE:
+        if element not in PeriodicTable.PERIODIC_TABLE:
             return False
         if element.lower() != text.lower():
             return False
