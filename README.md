@@ -2,7 +2,7 @@
 ---
 # chemsmart - Chemistry Simulation and Modeling Automation Toolkit
 
-[![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/branch/main/graph/badge.svg?token=chemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/chemsmart)
+[![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/graph/badge.svg?token=L01DRALL5E)](https://codecov.io/gh/xinglong-zhang/chemsmart)
 [![CI](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml)
 
 ---
@@ -291,7 +291,7 @@ To submit (and run) a geometry optimization job, do:
 ```py
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> opt
 ```
-where `<server_name>` is the one of the servers specified in `~/.chemsmart/server/*.yaml` files, without `.yaml` extension; `<project>` is one of the project settings specified in `~/.chemsmart/gaussian/*.yaml` files, without `.yaml` extension; and `<input_file>` is an input file the user wishes to run job on. Note that this input file can be any format, such as `.xyz`, Gaussian `.com`, `.gjf` or `.log` file or ORCA `.inp` or `.out` file.
+where `<server_name>` is the one of the servers specified in `~/.chemsmart/server/*.yaml` files, without `.yaml` extension; `<project>` is one of the project settings specified in `~/.chemsmart/gaussian/*.yaml` files, without `.yaml` extension; and `<input_file>` is an input file the user wishes to run job on. Note that this input file can be any format, such as `.xyz`, Gaussian `.com`, `.gjf` or `.log` file, ORCA `.inp` or `.out` file, or an xTB main `.out` file.
 
 ---
 

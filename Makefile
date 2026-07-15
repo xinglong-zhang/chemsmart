@@ -199,22 +199,32 @@ lint:             ## Run linters (ruff).
 	$(ENV_PREFIX)ruff check . --fix
 
 # === Testing ===
-
 .PHONY: coverage-clean
-coverage-clean:   ## Remove any stale coverage files prior to running tests.
+coverage-clean:   ## Remove stale coverage files before running tests.
 ifeq ($(OS_FAMILY),Windows)
-	-@for /R . %%f in (.coverage*) do @$(RM) "%%f" 2>$(NULL)
+	-@if exist .coverage $(RM) .coverage 2>$(NULL)
+	-@for /R . %%f in (.coverage.*) do @$(RM) "%%f" 2>$(NULL)
+	-@if exist coverage.xml $(RM) coverage.xml 2>$(NULL)
+	-@if exist htmlcov $(RMDIR) htmlcov 2>$(NULL)
 else
-	-@rm -f .coverage .coverage.* 2>/dev/null
+	-@rm -f .coverage .coverage.* coverage.xml 2>/dev/null
+	-@rm -rf htmlcov 2>/dev/null
 endif
 
 .PHONY: test
-test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short --maxfail=1 tests/
-# Portable error ignoring: - so a bad shard cannot fail the job 
-	-$(ENV_PREFIX)coverage combine .coverage*  # combine all partial files if present  
-	-$(ENV_PREFIX)coverage xml
-	-$(ENV_PREFIX)coverage html
+test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
+	$(ENV_PREFIX)pytest \
+		-v \
+		--cov-config=.coveragerc \
+		--cov=chemsmart \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage.xml \
+		--cov-report=html:htmlcov \
+		-l \
+		--tb=short \
+		--maxfail=1 \
+		tests/
 
 # === Docs ===
 .PHONY: docs-lint docs-fmt docs docs-clean
@@ -334,15 +344,19 @@ release-test: build ## Build and upload to TestPyPI.
 	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
 
 .PHONY: release
-release: build ## Build and upload to PyPI. Use REPOSITORY=pypi or REPOSITORY=testpypi.
+release: build ## Manually upload to PyPI/TestPyPI. Do not use before pushing a production release tag.
+	@echo "WARNING: This is a manual upload."
+	@echo "Do not use this target for a version that will also be published by GitHub Actions."
 	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
 ifeq ($(REPOSITORY),testpypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
 	@echo ""
 	@echo "Test install with:"
 	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
 else ifeq ($(REPOSITORY),pypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
 	@echo ""
 	@echo "Install with:"
 	@echo "python -m pip install $(PACKAGE_NAME)==$(VERSION)"
@@ -351,19 +365,9 @@ else
 	@exit 1
 endif
 
-.PHONY: release-tagged
-release-tagged: check-clean check-git-tag build tag ## Build, tag, and upload to PyPI/TestPyPI.
-	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
-ifeq ($(REPOSITORY),testpypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
-else ifeq ($(REPOSITORY),pypi)
-	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
-else
-	@echo "Error: REPOSITORY must be either 'pypi' or 'testpypi'"
-	@exit 1
-endif
-	@echo "Release complete for version $(VERSION)"
-	@echo "Remember to push commits and tags:"
-	@echo "  git push"
-	@echo "  git push origin v$(VERSION)"
-
+## # Normal production release
+## make test
+## make build
+## make tag
+## git push origin main
+## git push origin v$(make version)

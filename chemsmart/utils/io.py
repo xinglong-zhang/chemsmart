@@ -3,7 +3,7 @@ Input/output utility functions for molecular structure processing.
 
 This module provides helper functions for creating molecule objects,
 cleaning duplicate structures, and text processing operations commonly
-used in computational chemistry file I/O operations.
+used in computational chemistry file I/O.
 
 Key functionality includes:
 - Molecule object creation from coordinate data
@@ -31,6 +31,7 @@ from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
 
+
 SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
 PROGRAM_INFO = {
@@ -57,7 +58,7 @@ PROGRAM_INFO = {
             "Your ORCA version",
             "ORCA versions",
         ],
-        "suffixes": [".out"],
+        "suffixes": [".out", ".log"],
     },
     "xtb": {
         "keywords": ["x T B", "xtb version", "xtb is free software:"],
@@ -70,6 +71,11 @@ ALL_SUFFIXES = tuple(
 )
 # Folder-level detection is currently supported only for these programs
 PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
+
+
+def get_program_output_extensions(program, default=(".log", ".out")):
+    """Return preferred output-file extensions for a detected program."""
+    return tuple(PROGRAM_INFO.get(program, {}).get("suffixes", default))
 
 
 def create_molecule_list(
@@ -344,7 +350,7 @@ def get_program_type_from_file(filepath):
     """
     max_lines = 200
     try:
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for i, line in enumerate(f):
                 if i >= max_lines:
                     break
@@ -365,6 +371,31 @@ def get_program_type_from_file(filepath):
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
     return "unknown"
+
+
+def discover_pka_target_companion_outputs(ha_gas_path, program=None):
+    """Infer A- and solvent SP paths from a HA gas-phase output file."""
+    from chemsmart.utils.datasets import (
+        discover_pka_output_path,
+        pka_output_basename_from_path,
+    )
+
+    ha_gas_path = str(ha_gas_path)
+    directory = os.path.dirname(ha_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ha_gas_path)
+    basename = pka_output_basename_from_path(ha_gas_path, "ha_gas")
+    return {
+        "a": discover_pka_output_path(
+            basename, directory, "a_gas", program=program
+        ),
+        "ha_solv": discover_pka_output_path(
+            basename, directory, "ha_sp", program=program
+        ),
+        "a_solv": discover_pka_output_path(
+            basename, directory, "a_sp", program=program
+        ),
+    }
 
 
 def check_program_availability_in_chemsmart(program_name):

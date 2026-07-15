@@ -297,21 +297,23 @@ class Config:
     def configure_paths_interactively(self) -> None:
         """Interactively prompt for optional software folder paths.
 
-        Prompts the user for the Gaussian g16, ORCA, and NCIPLOT
-        installation folders.  Pressing Enter skips a prompt.
+        Prompts the user for the Gaussian g16, ORCA, NCIPLOT, and customized
+        scratch folders.
+        Pressing Enter skips a prompt.
 
         Uses :func:`click.prompt` so the prompts work correctly on all
         platforms — Linux, macOS, Windows Git Bash, and Conda PowerShell —
         without any shell-specific ``read`` syntax in the Makefile.
         """
         click.echo(
-            "\nConfigure optional software paths "
+            "\nConfigure optional software and scratch paths "
             "(press Enter to skip each):"
         )
         for sw_name, placeholder, label in [
             ("Gaussian g16", "~/bin/g16", "Gaussian g16 folder"),
             ("ORCA", "~/bin/orca_6_0_0", "ORCA folder"),
             ("NCIPLOT", "~/bin/nciplot", "NCIPLOT folder"),
+            ("scratch", "~/scratch", "SCRATCH folder"),
         ]:
             try:
                 folder = click.prompt(
@@ -587,10 +589,40 @@ def nciplot(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/bin/nciplot", folder)
 
 
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    required=True,
+    help="Path to the Scratch folder.",
+)
+def scratch(ctx, folder):
+    """
+    Configure paths to the Scratch folder.
+    Replaces '~/scratch' with the specified folder in YAML files.
+
+    Examples:
+        chemsmart config scratch --folder <SCRATCHFOLDER>
+    """
+    cfg = ctx.obj["cfg"]
+    if "~" in folder:
+        scratch_folder = os.path.expanduser(folder)
+        assert os.path.exists(os.path.abspath(scratch_folder)), (
+            f"SCRATCH folder not found: {scratch_folder}.\n"
+            f"You may set up scratch folder in home directory by creating a symbolic link via:\n"
+            f"`ln -s /path/to/your/scratch ~/scratch`"
+        )
+    logger.info(f"Configuring SCRATCH with folder: {folder}")
+    update_yaml_files(cfg.chemsmart_server, "~/scratch", folder)
+
+
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
 config.add_command(nciplot)
+config.add_command(scratch)
 
 if __name__ == "__main__":
     config()

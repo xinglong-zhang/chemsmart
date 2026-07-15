@@ -136,6 +136,20 @@ Extract structures from ORCA calculations:
 
    chemsmart sub -s server gaussian -p project -f orca_opt.out sp
 
+xTB Files
+=========
+
+xTB Main Output Files (.out)
+----------------------------
+
+An xTB calculation writes its results to a **directory** (containing ``charges``, ``xtbopt.log``, ``g98.out``, and so
+on). For geometry input you can point ``-f`` at the xTB main output file; when given a file path, CHEMSMART
+automatically resolves it to the parent calculation directory before reading.
+
+.. code:: bash
+
+   chemsmart sub -s server gaussian -p project -f co2_ohess/co2_ohess.out sp
+
 ChemDraw Files
 ==============
 
@@ -377,15 +391,16 @@ CHEMSMART automatically detects file formats based on extensions:
 -  ``.com``, ``.gjf`` → Gaussian input
 -  ``.log`` → Gaussian output
 -  ``.inp`` → ORCA input
--  ``.out`` → ORCA/Gaussian output (auto-detected by reading file header)
+-  ``.out`` → Gaussian/ORCA/xTB output (auto-detected by reading file header)
 -  ``.cdx``, ``.cdxml`` → ChemDraw format
 -  ``.db`` → Chemsmart/ASE database (auto-detected by validating the database schema)
 -  ``.traj`` → ASE trajectory
 
 .. note::
 
-   For ``.out`` files, CHEMSMART automatically detects whether the file is from ORCA or Gaussian by examining the file
-   header. If detection fails, an error will be raised indicating the unsupported format.
+   For ``.out`` files, CHEMSMART automatically detects whether the file is from Gaussian, ORCA, or xTB by examining the
+   file header. If detection fails, an error will be raised indicating the unsupported format. For xTB, the ``.out``
+   file is resolved to its parent calculation directory so that the associated output files can be read.
 
 For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilities.
 
