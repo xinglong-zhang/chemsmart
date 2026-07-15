@@ -1,4 +1,6 @@
 """
+Xinglong ZHANG Group PyMOL Scientific Style Settings and Functions.
+
 PyMOL visualization styles for publication, cover, and presentation figures.
 
 CHEMSMART applies this template for ``visualize -s`` choices including
