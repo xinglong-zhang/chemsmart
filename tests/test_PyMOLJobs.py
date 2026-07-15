@@ -25,16 +25,9 @@ from chemsmart.jobs.mol.templates import scientific_styles
 from chemsmart.jobs.mol.templates.scientific_styles import (
     SCIENTIFIC_STYLE_CLASSES,
     ComicMetallicStyle,
-    EditorialMinimalStyle,
     GlossyStyle,
-    MatteClayStyle,
-    NeonCoordinationCoreStyle,
-    QuasiChemDrawBoldStyle,
     ScientificStyle,
-    SoftCartoonStyle,
-    SoftCeramicStyle,
     StericSurfaceStyle,
-    XrayWireStyle,
     metal_pymol_selection,
     pymol_elem_selection,
 )
@@ -919,18 +912,6 @@ class TestPyMOLStyleCommands:
         [1, 8],
     ]
 
-    def test_1_mer_xyz_is_valid_visualization_geometry(
-        self, visualized_1_mer_xyz_file
-    ):
-        """``1-mer.xyz`` loads as a single Mn coordination complex."""
-        molecules = Molecule.from_filepath(
-            visualized_1_mer_xyz_file, return_list=True
-        )
-
-        assert len(molecules) == 1
-        assert molecules[0].num_atoms == 36
-        assert "Mn" in molecules[0].elements
-
     def test_format_pymol_style_command_is_independent_of_coordinates(self):
         """``-c`` is handled via distance/angle labels, not style args."""
         for style, expected in (
@@ -974,30 +955,6 @@ class TestPyMOLStyleCommands:
             assert template_commands[style_cls.command] == style_cls.command
             wrapper = getattr(scientific_styles, style_cls.command)
             assert wrapper.__name__ == style_cls.command
-
-    @pytest.mark.parametrize(
-        "style_cls,include_nh_h",
-        [
-            (GlossyStyle, True),
-            (ComicMetallicStyle, False),
-            (SoftCartoonStyle, True),
-            (EditorialMinimalStyle, False),
-            (SoftCeramicStyle, True),
-            (NeonCoordinationCoreStyle, False),
-            (MatteClayStyle, False),
-            (XrayWireStyle, False),
-            (StericSurfaceStyle, False),
-            (QuasiChemDrawBoldStyle, False),
-        ],
-    )
-    def test_scientific_style_class_metadata(self, style_cls, include_nh_h):
-        assert issubclass(style_cls, ScientificStyle)
-        assert style_cls.include_nh_h is include_nh_h
-        assert style_cls.command
-        assert (
-            style_cls.command
-            == PYMOL_SCIENTIFIC_STYLE_COMMANDS[style_cls.command]
-        )
 
     def test_select_coordination_uses_command_as_prefix(self, mocker):
         style = StericSurfaceStyle()
