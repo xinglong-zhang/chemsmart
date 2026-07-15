@@ -55,14 +55,14 @@ ORCA:
 XTB:
     EXEFOLDER: null  # use xtb from activated conda environment/PATH
     LOCAL_RUN: True
-    SCRATCH: True
+    SCRATCH: False  # run in job folder by default; set True for batch/scratch runs
     CONDA_ENV: |
         source ~/anaconda3/etc/profile.d/conda.sh
         conda activate ~/anaconda3/envs/chemsmart
     MODULES: null
     SCRIPTS: null
     ENVARS: |
-        export SCRATCH=~/scratch
+        export SCRATCH=~/scratch  # required if scratch is true
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot
