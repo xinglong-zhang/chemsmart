@@ -1042,7 +1042,6 @@ class TestPyMOLStyleCommands:
         assert (
             "from chemsmart.utils.geometry import get_coordinating_atoms"
             in module_source
-            or "def get_coordinating_atoms(" in module_source
         )
         assert "get_coordinating_atoms(" in source
         assert "cmd.get_model" in source
