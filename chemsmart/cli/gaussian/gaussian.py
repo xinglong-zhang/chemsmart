@@ -756,16 +756,12 @@ def gaussian(
                 f"Obtained {len(molecules)} molecule {molecules} from {filename}"
             )
 
-        if pubchem:
-            molecules = Molecule.from_pubchem(
-                identifier=pubchem, return_list=True
-            )
-            assert (
-                molecules is not None
-            ), f"Could not obtain molecule from PubChem {pubchem}!"
-            logger.debug(
-                f"Obtained molecule {molecules} from PubChem {pubchem}"
-            )
+    if pubchem and not is_pka_table_input:
+        molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from PubChem {pubchem}!"
+        logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
     # update labels
     if label is not None and append_label is not None:

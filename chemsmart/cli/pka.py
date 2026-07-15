@@ -77,8 +77,8 @@ def pka_gas_phase_data(
     entropy_method="grimme",
 ):
     """Return gas-phase SCF energy and qh-G correction in Hartree."""
-    thermo = Thermochemistry.from_filepath(
-        filepath,
+    thermo = Thermochemistry(
+        filename=filepath,
         **_pka_thermochemistry_kwargs(
             temperature,
             concentration,
@@ -109,7 +109,7 @@ def pka_gas_phase_data(
 
 def pka_solvent_scf_energy(filepath):
     """Return solvent-phase SCF energy in Hartree."""
-    thermo = Thermochemistry.from_filepath(filepath)
+    thermo = Thermochemistry(filename=filepath)
     electronic_energy_j_mol = _extract_thermochemistry_property(
         thermo,
         filepath,
@@ -306,7 +306,7 @@ def compute_pka_thermochemistry(
     def get_species_thermo(filepath, name):
         if filepath is None:
             return None
-        thermo = Thermochemistry.from_filepath(filepath, **thermo_kwargs)
+        thermo = Thermochemistry(filename=filepath, **thermo_kwargs)
         return {
             "name": name,
             "E": _thermochemistry_value_in_units(

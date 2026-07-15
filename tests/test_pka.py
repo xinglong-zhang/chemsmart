@@ -107,13 +107,14 @@ class _FakeThermochemistry:
 def _install_fake_thermochemistry(monkeypatch, constructed=None):
     constructed = [] if constructed is None else constructed
 
-    def _from_filepath(cls, filepath, **kwargs):
-        constructed.append(Path(filepath).name)
-        return _FakeThermochemistry(filepath, **kwargs)
+    class _TrackingFakeThermochemistry(_FakeThermochemistry):
+        def __init__(self, filename, **kwargs):
+            constructed.append(Path(filename).name)
+            super().__init__(filename, **kwargs)
 
     monkeypatch.setattr(
-        "chemsmart.analysis.thermochemistry.Thermochemistry.from_filepath",
-        classmethod(_from_filepath),
+        "chemsmart.cli.pka.Thermochemistry",
+        _TrackingFakeThermochemistry,
     )
     return constructed
 
@@ -330,7 +331,7 @@ class TestPKa:
     def test_run_pka_batch_analyze_mixed_gaussian_orca(
         self, tmp_path, monkeypatch
     ):
-        """batch-analyze stays program-agnostic via Thermochemistry.from_filepath."""
+        """batch-analyze stays program-agnostic via Thermochemistry(filename=...)."""
         monkeypatch.chdir(tmp_path)
         basename = "target"
         for suffix in ("_pka_HA_opt", "_pka_A_opt", "_pka_HA_sp", "_pka_A_sp"):
@@ -399,13 +400,16 @@ class TestPKa:
     def test_pka_thermochemistry_missing_scf_energy(
         self, tmp_path, monkeypatch
     ):
-        class _MissingScfThermo:
+        class _MissingScfThermochemistry:
             electronic_energy = None
             qrrho_gibbs_free_energy = -1.0
 
+            def __init__(self, filename, **kwargs):
+                pass
+
         monkeypatch.setattr(
-            "chemsmart.analysis.thermochemistry.Thermochemistry.from_filepath",
-            classmethod(lambda cls, filepath, **kwargs: _MissingScfThermo()),
+            "chemsmart.cli.pka.Thermochemistry",
+            _MissingScfThermochemistry,
         )
 
         from chemsmart.cli.pka import pka_solvent_scf_energy
@@ -414,13 +418,16 @@ class TestPKa:
             pka_solvent_scf_energy(str(tmp_path / "missing.out"))
 
     def test_pka_thermochemistry_missing_qh_gibbs(self, tmp_path, monkeypatch):
-        class _MissingQhThermo:
+        class _MissingQhThermochemistry:
             electronic_energy = -1.0
             qrrho_gibbs_free_energy = None
 
+            def __init__(self, filename, **kwargs):
+                pass
+
         monkeypatch.setattr(
-            "chemsmart.analysis.thermochemistry.Thermochemistry.from_filepath",
-            classmethod(lambda cls, filepath, **kwargs: _MissingQhThermo()),
+            "chemsmart.cli.pka.Thermochemistry",
+            _MissingQhThermochemistry,
         )
 
         from chemsmart.cli.pka import pka_gas_phase_data
