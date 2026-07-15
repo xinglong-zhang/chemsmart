@@ -76,7 +76,7 @@ class GromacsJobRunner(JobRunner):
         """
         Return the configured GROMACS executable.
         """
-        return self._get_executable()
+        return GromacsExecutable.from_servername(servername=self.server.name)
 
     def _prerun(self, job):
         """
@@ -139,7 +139,7 @@ class GromacsJobRunner(JobRunner):
         The direct runner option has the highest priority. If it is not given,
         fall back to GromacsExecutable.
         """
-        if getattr(self, "gmx_executable", None) is not None:
+        if self.gmx_executable is not None:
             return self.gmx_executable
 
         return GromacsExecutable().get_executable()
@@ -401,7 +401,7 @@ class GromacsJobRunner(JobRunner):
         Prepare environment variables for subprocess execution.
         """
         run_env = os.environ.copy()
-        run_env.update(getattr(self, "gmx_env", {}) or {})
+        run_env.update(self.gmx_env)
 
         if env is not None:
             run_env.update(env)
@@ -412,8 +412,8 @@ class GromacsJobRunner(JobRunner):
         """
         Wrap command with bash when modules or source scripts are required.
         """
-        modules = getattr(self, "gmx_modules", []) or []
-        source_scripts = getattr(self, "gmx_source_scripts", []) or []
+        modules = self.gmx_modules
+        source_scripts = self.gmx_source_scripts
 
         if not modules and not source_scripts:
             return list(command)
@@ -469,7 +469,7 @@ class GromacsJobRunner(JobRunner):
             self._format_command_for_log(command),
         )
 
-        if getattr(self, "fake", False):
+        if self.fake:
             return subprocess.CompletedProcess(
                 args=command,
                 returncode=0,
