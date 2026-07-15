@@ -32,8 +32,7 @@ Visualization Options
 
    -  -  ``-s, --style``
       -  string
-      -  Render style: ``pymol`` or ``cylview``; ``visualize`` also accepts ``glossy``, ``comic``, ``soft-cartoon``, and
-         scientific styles (see below)
+      -  Render style (see :ref:`visualization-styles`)
 
    -  -  ``-t, --trace/--no-trace``
       -  bool
@@ -202,94 +201,91 @@ Example
    :width: 60%
    :align: center
 
-.. _glossy-visualization:
+.. _visualization-styles:
 
 **********************
- Glossy Visualization
+ Visualization Styles
 **********************
 
-Create semi-metallic publication-style figures for metal complexes using ``-s glossy`` on the ``visualize`` subcommand.
-Like other derived styles, glossy uses :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
-
-.. code:: bash
-
-   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s glossy [SUBCMD_OPTIONS]
-
-Glossy Options
-==============
+Use ``-s/--style`` on the ``visualize`` subcommand to select a render style. Base styles use
+``zhang_group_pymol_style.py``; scientific styles use ``scientific_styles.py`` and are routed through
+:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
 
 .. list-table::
    :header-rows: 1
-   :widths: 25 15 60
+   :widths: 28 22 50
 
-   -  -  Option
-      -  Type
+   -  -  ``-s`` value
+      -  Template
       -  Description
 
-   -  -  ``-s glossy``
-      -  string
-      -  Enable glossy semi-metallic visualization mode
+   -  -  ``pymol``
+      -  ``zhang_group_pymol_style.py``
+      -  Default PyMOL ball-and-stick visualization
 
-.. note::
+   -  -  ``cylview``
+      -  ``zhang_group_pymol_style.py``
+      -  Cylindrical stick representation
 
-   Group hybrid mode (``-H/--hybrid``) and derived ``-s`` styles cannot be combined. Ray-traced PNG export uses a
-   transparent background.
+   -  -  ``glossy``
+      -  ``scientific_styles.py``
+      -  Glossy semi-metallic rendering with transparent PNG export
+
+   -  -  ``comic``
+      -  ``scientific_styles.py``
+      -  Comic ball-and-stick rendering with black outlines and element labels
+
+   -  -  ``soft-cartoon``
+      -  ``scientific_styles.py``
+      -  Soft pastel ball-and-stick with radius-ratio coordination spheres and illustrated outlines
+
+   -  -  ``editorial-minimal``
+      -  ``scientific_styles.py``
+      -  Matte minimal ball-and-stick style for main-text mechanistic figures
+
+   -  -  ``soft-ceramic``
+      -  ``scientific_styles.py``
+      -  Soft ceramic / studio ball-and-stick style for coordination complexes
+
+   -  -  ``neon-coordination-core``
+      -  ``scientific_styles.py``
+      -  Neon coordination-core emphasis using radius-ratio shells and a transparent background
+
+   -  -  ``matte-clay``
+      -  ``scientific_styles.py``
+      -  Matte clay ball-and-stick using radius-ratio coordination spheres and core hydrogens
+
+   -  -  ``xray-wire``
+      -  ``scientific_styles.py``
+      -  Monochrome wireframe style for SI structure verification
+
+   -  -  ``steric-surface``
+      -  ``scientific_styles.py``
+      -  Transparent molecular surface for steric / space-filling views
+
+   -  -  ``quasi-chemdraw-bold``
+      -  ``scientific_styles.py``
+      -  Bold ChemDraw-like style using radius-ratio cores and flat illustrative shading
 
 Basic Usage
 ===========
+
+Standard PyMOL style:
+
+.. code:: bash
+
+   chemsmart run mol -f molecule.xyz visualize
+   chemsmart run mol -f molecule.xyz visualize -s pymol
+   chemsmart run mol -f molecule.xyz visualize -s cylview
+
+Scientific styles:
 
 .. code:: bash
 
    chemsmart run mol -f complex.xyz visualize -s glossy
-
-Example
-=======
-
-.. figure:: _static/pymol_styles/style_glossy.png
-   :alt: Glossy semi-metallic visualization example
-   :align: center
-   :width: 70%
-
-   Glossy semi-metallic style applied to ``complex.xyz`` via
-   ``chemsmart run mol -f complex.xyz visualize -s glossy``.
-
-Manual PyMOL usage
-==================
-
-When editing a saved ``.pse`` session:
-
-.. code:: text
-
-   run scientific_styles.py
-   glossy all
-   comic all
-
-CHEMSMART and the registered PyMOL commands pass only the object/selection name; the metal center and coordinating atoms
-are resolved via radius-ratio ``select_coordination`` algorithm.
-
-.. _comic-visualization:
-
-*********************
- Comic Visualization
-*********************
-
-Create flat, illustrated comic figures for metal complexes using ``-s comic`` on the ``visualize`` subcommand. Like
-other derived styles, comic uses :class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
-
-.. code:: bash
-
-   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s comic [SUBCMD_OPTIONS]
-
-The style renders thick sticks and scaled spheres with black ray-traced outlines, centered element labels on the metal
-and donor atoms, and an orthoscopic (flat) camera view. Ray-traced PNG export uses a transparent background for
-compositing into manuscripts or slides.
-
-Basic Usage
-===========
-
-.. code:: bash
-
    chemsmart run mol -f complex.xyz visualize -s comic
+   chemsmart run mol -f complex.xyz visualize -s soft-cartoon
+   chemsmart run mol -f complex.xyz visualize -s editorial-minimal
 
 Highlight metal–ligand bonds with ``-c``. In comic style, each pair is drawn as a ball-and-stick bond; numeric distance
 labels are hidden so element labels remain visible. Other scientific styles keep the usual dashed distance measurements.
@@ -299,119 +295,44 @@ labels are hidden so element labels remain visible. Other scientific styles keep
    chemsmart run mol -f complex.xyz visualize -s comic \\
        -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'
 
-Example
-=======
+.. note::
+
+   ``-H/--hybrid`` and derived ``-s`` styles are mutually exclusive. Scientific styles resolve the metal center and
+   coordinating atoms via the radius-ratio ``select_coordination`` algorithm. Ray-traced PNG export uses a transparent
+   background for compositing.
+
+Examples
+========
+
+Glossy
+------
+
+.. figure:: _static/pymol_styles/style_glossy.png
+   :alt: Glossy semi-metallic visualization example
+   :align: center
+   :width: 70%
+
+   ``chemsmart run mol -f complex.xyz visualize -s glossy``
+
+Comic
+-----
 
 .. figure:: _static/pymol_styles/style_comic.png
    :alt: Comic visualization example
    :align: center
    :width: 70%
 
-   Comic style applied to ``complex.xyz`` with Mn–ligand highlight bonds and
-   coordination-core element labels via
-   ``chemsmart run mol -f complex.xyz visualize -s comic -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'``.
+   ``chemsmart run mol -f complex.xyz visualize -s comic -c '[[1,2],[1,5],[1,36],[1,3],[1,15],[1,8]]'``
 
-Manual PyMOL usage
-==================
-
-.. code:: text
-
-   run scientific_styles.py
-   comic all
-   ray 1200, 1200
-   png comic.png, dpi=300
-
-.. _soft-cartoon-visualization:
-
-****************************
- Soft Cartoon Visualization
-****************************
-
-Create soft premium ball-and-stick figures for metal complexes using ``-s soft-cartoon`` on the ``visualize``
-subcommand. Like glossy and comic modes, this selects a dedicated job type.
-
-.. code:: bash
-
-   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize -s soft-cartoon [SUBCMD_OPTIONS]
-
-The style renders scaled sticks and spheres with soft metallic shading, light ray shadows, and a perspective camera
-view. Ray-traced PNG export uses a transparent background for compositing.
-
-Basic Usage
-===========
-
-.. code:: bash
-
-   chemsmart run mol -f complex.xyz visualize -s soft-cartoon
-
-Example
-=======
+Soft cartoon
+------------
 
 .. figure:: _static/pymol_styles/style_soft_cartoon.png
    :alt: Soft cartoon visualization example
    :align: center
    :width: 70%
 
-   Soft cartoon ball-and-stick style applied to ``complex.xyz`` via
-   ``chemsmart run mol -f complex.xyz visualize -s soft-cartoon``.
-
-Manual PyMOL usage
-==================
-
-.. code:: text
-
-   run scientific_styles.py
-   soft_cartoon all
-   soft_cartoon all, 1-2+1-5
-   ray 1200, 1200
-
-.. _scientific-visualization:
-
-**************************
- Scientific Visualization
-**************************
-
-CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices including ``glossy``, ``comic``,
-``soft-cartoon``, ``editorial-minimal``, ``soft-ceramic``, and other scientific styles. These are routed through
-:class:`~chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob`.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-
-   -  -  ``-s`` value
-      -  Description
-   -  -  ``glossy``
-      -  Glossy semi-metallic rendering with transparent PNG export
-   -  -  ``comic``
-      -  Comic ball-and-stick rendering with black outlines and labels
-   -  -  ``soft-cartoon``
-      -  Soft pastel ball-and-stick with radius-ratio coordination spheres and illustrated outlines
-   -  -  ``editorial-minimal``
-      -  Matte minimal ball-and-stick style for main-text mechanistic figures
-   -  -  ``soft-ceramic``
-      -  Soft ceramic / studio ball-and-stick style for coordination complexes
-   -  -  ``neon-coordination-core``
-      -  Neon coordination-core emphasis using radius-ratio shells and a transparent background
-   -  -  ``matte-clay``
-      -  Matte clay ball-and-stick using radius-ratio coordination spheres and core hydrogens
-   -  -  ``xray-wire``
-      -  Monochrome wireframe style for SI structure verification
-   -  -  ``steric-surface``
-      -  Transparent molecular surface for steric / space-filling views
-   -  -  ``quasi-chemdraw-bold``
-      -  Bold ChemDraw-like style using radius-ratio cores and flat illustrative shading
-
-Basic Usage
-===========
-
-.. code:: bash
-
-   chemsmart run mol -f complex.xyz visualize -s editorial-minimal
-   chemsmart run mol -f complex.xyz visualize -s soft-ceramic
-
-Examples
-========
+   ``chemsmart run mol -f complex.xyz visualize -s soft-cartoon``
 
 Editorial minimal
 -----------------
@@ -482,20 +403,6 @@ Quasi-ChemDraw bold
    :width: 70%
 
    ``chemsmart run mol -f complex.xyz visualize -s quasi-chemdraw-bold``
-
-Manual PyMOL usage
-==================
-
-.. code:: text
-
-   run scientific_styles.py
-   editorial_minimal all
-   soft_ceramic all
-   ray 1200, 1200
-
-.. note::
-
-   ``-H/--hybrid`` and derived ``-s`` styles are mutually exclusive. Only one visualization mode can be active.
 
 ************
  Align Jobs
