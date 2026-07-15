@@ -16,7 +16,7 @@ In PyMOL directly::
 """
 
 import numpy as np
-from pymol import cmd
+from pymol import cmd  # type: ignore
 
 from chemsmart.utils.geometry import get_coordinating_atoms
 from chemsmart.utils.periodictable import is_metal, metal_element_symbols
