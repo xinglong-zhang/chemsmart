@@ -7,12 +7,12 @@ CHEMSMART applies this template for ``visualize -s`` choices including
 In PyMOL directly::
 
     run scientific_styles.py
-    metallic_poster_render all
-    render_comic_metallic_labeled_final all
-    render_soft_cartoon all
-    render_editorial_minimal all
-    render_soft_ceramic all
-    render_matte_clay all
+    glossy all
+    comic all
+    soft_cartoon all
+    editorial_minimal all
+    soft_ceramic all
+    matte_clay all
 """
 
 import numpy as np
@@ -49,7 +49,7 @@ def metal_pymol_selection():
 class ScientificStyle:
     """Base class for scientific PyMOL visualization styles.
 
-    Subclasses declare ``name``, ``command``, ``prefix``, ``colors``, and
+    Subclasses declare ``name``, ``command``, ``colors``, and
     implement ``render()`` with style-specific overrides only. Shared
     coordination selection, element categories, camera resets, and palette
     helpers live on this parent.
@@ -95,10 +95,8 @@ class ScientificStyle:
 
     name = "scientific"
     command = None
-    prefix = "coord"
     colors = {}
     include_nh_h = False
-    message = "Scientific style applied."
 
     @staticmethod
     def safe_set(setting, value, selection=None):
@@ -339,11 +337,9 @@ class ScientificStyle:
             secondary_local.update(secondary)
 
         def role_indices(predicate, local_indices):
-            return [
-                pymol_indices[idx]
-                for idx in sorted(local_indices)
-                if predicate(elements[idx])
-            ]
+            return cls._role_pymol_indices(
+                pymol_indices, elements, local_indices, predicate
+            )
 
         metal_pymol = [pymol_indices[idx] for idx in metal_local]
         hydride_pymol = role_indices(lambda el: el == "H", primary_local)
@@ -405,11 +401,21 @@ class ScientificStyle:
         )
         return names
 
+    @staticmethod
+    def _role_pymol_indices(pymol_indices, elements, local_indices, predicate):
+        """Map local atom indices to PyMOL indices for atoms matching ``predicate``."""
+        return [
+            pymol_indices[idx]
+            for idx in sorted(local_indices)
+            if predicate(elements[idx])
+        ]
+
     def select_coordination(self, selection="all"):
         """Build named coordination selections via radius-ratio helpers."""
+        prefix = self.command or self.name or "coord"
         return self.build_coordination_atoms(
             selection=selection,
-            prefix=self.prefix,
+            prefix=prefix,
             include_nh_h=self.include_nh_h,
         )
 
@@ -526,10 +532,9 @@ class ScientificStyle:
         self.hide_distance_value_labels()
 
     def finish_default(self, selection):
-        """Zoom/orient via ``finish_camera`` and print ``self.message``."""
+        """Zoom and orient via ``finish_camera`` after post-render cleanup."""
         self.finalize()
         self.finish_camera(selection)
-        print(self.message)
 
     def apply_illustrated_camera(self, field_of_view=25, depth_cue=0, fog=0.0):
         """Flat orthographic camera without forcing a transparent background."""
@@ -582,47 +587,45 @@ class ScientificStyle:
 # ---------------------------------------------------------------------------
 
 
-class MetallicPosterStyle(ScientificStyle):
-    """Glossy metallic poster-style rendering for cover figures."""
+class GlossyStyle(ScientificStyle):
+    """Glossy semi-metallic rendering for publication and cover figures."""
 
-    name = "metallic_poster"
-    command = "metallic_poster_render"
-    prefix = "poster"
+    name = "glossy"
+    command = "glossy"
     include_nh_h = True
-    message = "Metallic poster style applied."
     colors = {
-        "poster_carbon": [0.62, 0.62, 0.62],
-        "poster_hydrogen": [0.96, 0.96, 0.96],
-        "poster_nitrogen": [0.12, 0.22, 0.95],
-        "poster_oxygen": [0.95, 0.06, 0.04],
-        "poster_sulfur": [0.95, 0.72, 0.10],
-        "poster_phosphorus": [1.00, 0.48, 0.08],
-        "poster_halogen": [0.20, 0.82, 0.32],
-        "poster_mn_gold": [0.92, 0.60, 0.22],
-        "poster_metal_gray": [0.78, 0.78, 0.84],
-        "poster_label_white": [1.00, 1.00, 1.00],
-        "poster_label_black": [0.02, 0.02, 0.02],
+        "glossy_carbon": [0.62, 0.62, 0.62],
+        "glossy_hydrogen": [0.96, 0.96, 0.96],
+        "glossy_nitrogen": [0.12, 0.22, 0.95],
+        "glossy_oxygen": [0.95, 0.06, 0.04],
+        "glossy_sulfur": [0.95, 0.72, 0.10],
+        "glossy_phosphorus": [1.00, 0.48, 0.08],
+        "glossy_halogen": [0.20, 0.82, 0.32],
+        "glossy_mn_gold": [0.92, 0.60, 0.22],
+        "glossy_metal_gray": [0.78, 0.78, 0.84],
+        "glossy_label_white": [1.00, 1.00, 1.00],
+        "glossy_label_black": [0.02, 0.02, 0.02],
     }
 
     ELEMENT_PALETTE = {
-        "C": "poster_carbon",
-        "H": "poster_hydrogen",
-        "N": "poster_nitrogen",
-        "O": "poster_oxygen",
-        "S": "poster_sulfur",
-        "P": "poster_phosphorus",
-        "halogen": "poster_halogen",
+        "C": "glossy_carbon",
+        "H": "glossy_hydrogen",
+        "N": "glossy_nitrogen",
+        "O": "glossy_oxygen",
+        "S": "glossy_sulfur",
+        "P": "glossy_phosphorus",
+        "halogen": "glossy_halogen",
     }
 
     @classmethod
     def metal_palette_overrides(cls, selection, metal):
-        """Return poster/comic metal-center palette overrides."""
+        """Return glossy/comic metal-center palette overrides."""
         sel = cls.selection_expr(selection)
         return {
             f"{sel} and ({cls.METAL_ELEMENTS}) and not ({metal})": (
-                "poster_metal_gray"
+                "glossy_metal_gray"
             ),
-            metal: "poster_mn_gold",
+            metal: "glossy_mn_gold",
         }
 
     @staticmethod
@@ -685,9 +688,9 @@ class MetallicPosterStyle(ScientificStyle):
             overrides=self.metal_palette_overrides(selection, metal),
         )
 
-        label_prefix = "metallic_poster_labels"
+        label_prefix = "glossy_labels"
         cmd.delete(label_prefix + "*")
-        label_colors = {"N": "poster_label_white", "O": "poster_label_white"}
+        label_colors = {"N": "glossy_label_white", "O": "glossy_label_white"}
         counters = {}
         for atom in cmd.get_model(core).atom:
             elem = atom.symbol.strip() or atom.name.strip()[0]
@@ -708,11 +711,11 @@ class MetallicPosterStyle(ScientificStyle):
             self.safe_set("label_size", 24.0, obj_name)
             self.safe_set("label_connector", 0, obj_name)
             self.safe_set("label_shadow_mode", 2, obj_name)
-            label_color = label_colors.get(elem, "poster_label_black")
+            label_color = label_colors.get(elem, "glossy_label_black")
             outline_color = (
-                "poster_label_black"
-                if label_color == "poster_label_white"
-                else "poster_label_white"
+                "glossy_label_black"
+                if label_color == "glossy_label_white"
+                else "glossy_label_white"
             )
             self.safe_set("label_color", label_color, obj_name)
             self.safe_set("label_outline_color", outline_color, obj_name)
@@ -724,11 +727,8 @@ class ComicMetallicStyle(ScientificStyle):
     """Comic metallic ball-and-stick rendering with black outlines."""
 
     name = "comic_metallic"
-    command = "render_comic_metallic_labeled_final"
-    prefix = "comic"
-    message = "Comic metallic style applied. Run 'ray 1200, 1200' to generate the image."
-
-    colors = MetallicPosterStyle.colors
+    command = "comic"
+    colors = GlossyStyle.colors
 
     DONOR_ROLES = (
         ("donor_n", "N"),
@@ -768,10 +768,8 @@ class ComicMetallicStyle(ScientificStyle):
 
         self.apply_element_palette(
             sel,
-            MetallicPosterStyle.ELEMENT_PALETTE,
-            overrides=MetallicPosterStyle.metal_palette_overrides(
-                selection, metal
-            ),
+            GlossyStyle.ELEMENT_PALETTE,
+            overrides=GlossyStyle.metal_palette_overrides(selection, metal),
         )
 
         highlight_pairs = self.pairs_from_distance_objects(selection)
@@ -799,7 +797,7 @@ class ComicMetallicStyle(ScientificStyle):
 
         cmd.label("all", '""')
         if cmd.count_atoms(metal) > 0:
-            metal_label = MetallicPosterStyle.metal_element_label(metal)
+            metal_label = GlossyStyle.metal_element_label(metal)
             cmd.label(metal, f'"{metal_label}"')
         for donor_key, element in self.DONOR_ROLES:
             donors = atoms[donor_key]
@@ -828,10 +826,8 @@ class SoftCartoonStyle(ScientificStyle):
     """
 
     name = "soft_cartoon"
-    command = "render_soft_cartoon"
-    prefix = "sc"
+    command = "soft_cartoon"
     include_nh_h = True
-    message = "Soft cartoon style applied."
     colors = {
         "sc_background": [0.965, 0.950, 0.915],
         "sc_outline": [0.18, 0.17, 0.20],
@@ -931,16 +927,13 @@ class SoftCartoonStyle(ScientificStyle):
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.6)
         self.finalize()
-        print(self.message)
 
 
 class EditorialMinimalStyle(ScientificStyle):
     """Editorial minimal white style for main-text mechanistic figures."""
 
     name = "editorial_minimal"
-    command = "render_editorial_minimal"
-    prefix = "editorial"
-    message = "Editorial minimal white style applied."
+    command = "editorial_minimal"
     colors = {
         "mn_rose": [0.78, 0.38, 0.48],
         "sulfur_gold": [0.95, 0.68, 0.05],
@@ -1025,10 +1018,8 @@ class SoftCeramicStyle(ScientificStyle):
     """Soft ceramic / studio ball-and-stick style for coordination complexes."""
 
     name = "soft_ceramic"
-    command = "render_soft_ceramic"
-    prefix = "soft_ceramic"
+    command = "soft_ceramic"
     include_nh_h = True
-    message = "Soft ceramic studio style applied."
     colors = {
         "studio_background": [0.970, 0.965, 0.945],
         "ligand_ivory": [0.69, 0.67, 0.60],
@@ -1123,9 +1114,7 @@ class NeonCoordinationCoreStyle(ScientificStyle):
     """Neon coordination-core style for reactive centers and catalytic pockets."""
 
     name = "neon_coordination_core"
-    command = "render_neon_coordination_core"
-    prefix = "ncc"
-    message = "Neon coordination-core style applied."
+    command = "neon_coordination_core"
     colors = {
         "ncc_carbon": [0.20, 0.23, 0.30],
         "ncc_hydrogen": [0.88, 0.92, 1.00],
@@ -1221,16 +1210,13 @@ class NeonCoordinationCoreStyle(ScientificStyle):
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.7)
         self.finalize()
-        print(self.message)
 
 
 class MatteClayStyle(ScientificStyle):
     """Matte clay style for soft graphical abstracts."""
 
     name = "matte_clay"
-    command = "render_matte_clay"
-    prefix = "matte_clay"
-    message = "Matte clay style applied."
+    command = "matte_clay"
     colors = {
         "mc_framework": [0.555, 0.515, 0.455],
         "mc_hydrogen": [0.875, 0.865, 0.820],
@@ -1327,9 +1313,7 @@ class XrayWireStyle(ScientificStyle):
     """X-ray crystallography wire style for SI structure verification."""
 
     name = "xray_wire"
-    command = "render_xray_wire"
-    prefix = "xray"
-    message = "X-ray wire style applied."
+    command = "xray_wire"
     colors = {
         "xw_charcoal": [0.2, 0.2, 0.2],
         "xw_metal": [0.95, 0.55, 0.15],
@@ -1394,9 +1378,7 @@ class StericSurfaceStyle(ScientificStyle):
     """Transparent steric surface style for catalyst pockets."""
 
     name = "steric_surface"
-    command = "render_steric_surface"
-    prefix = "steric"
-    message = "Transparent steric surface style applied."
+    command = "steric_surface"
 
     def render(self, selection="all"):
         sel = self.selection_expr(selection)
@@ -1445,9 +1427,7 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
     """Flat ChemDraw-like bold ball-and-stick style."""
 
     name = "quasi_chemdraw_bold"
-    command = "render_quasi_chemdraw_bold"
-    prefix = "qcd"
-    message = "Quasi-ChemDraw bold 3D style applied."
+    command = "quasi_chemdraw_bold"
     colors = {
         "qcd_bond": [0.075, 0.080, 0.090],
         "qcd_carbon": [0.075, 0.080, 0.090],
@@ -1533,7 +1513,6 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
 
         self.frame(selection, atoms["coordination_core"], zoom_buffer=1.4)
         self.finalize()
-        print(self.message)
 
 
 # ---------------------------------------------------------------------------
@@ -1541,8 +1520,28 @@ class QuasiChemDrawBoldStyle(ScientificStyle):
 # ---------------------------------------------------------------------------
 
 
+SCIENTIFIC_STYLE_CLASSES = (
+    GlossyStyle,
+    ComicMetallicStyle,
+    SoftCartoonStyle,
+    EditorialMinimalStyle,
+    SoftCeramicStyle,
+    NeonCoordinationCoreStyle,
+    MatteClayStyle,
+    XrayWireStyle,
+    StericSurfaceStyle,
+    QuasiChemDrawBoldStyle,
+)
+
+
+PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
+    style_cls.command: style_cls.command
+    for style_cls in SCIENTIFIC_STYLE_CLASSES
+}
+
+
 def _make_style_wrapper(style_cls):
-    """Return a thin ``render_*`` wrapper for a :class:`ScientificStyle` subclass."""
+    """Return a thin PyMOL command wrapper for a :class:`ScientificStyle` subclass."""
 
     def wrapper(selection="all", **kwargs):
         kwargs.pop("_self", None)
@@ -1553,33 +1552,7 @@ def _make_style_wrapper(style_cls):
     return wrapper
 
 
-metallic_poster_render = _make_style_wrapper(MetallicPosterStyle)
-render_comic_metallic_labeled_final = _make_style_wrapper(ComicMetallicStyle)
-render_soft_cartoon = _make_style_wrapper(SoftCartoonStyle)
-render_editorial_minimal = _make_style_wrapper(EditorialMinimalStyle)
-render_soft_ceramic = _make_style_wrapper(SoftCeramicStyle)
-render_neon_coordination_core = _make_style_wrapper(NeonCoordinationCoreStyle)
-render_matte_clay = _make_style_wrapper(MatteClayStyle)
-render_xray_wire = _make_style_wrapper(XrayWireStyle)
-render_steric_surface = _make_style_wrapper(StericSurfaceStyle)
-render_quasi_chemdraw_bold = _make_style_wrapper(QuasiChemDrawBoldStyle)
-
-
-_PYMOL_STYLE_COMMANDS = (
-    ("metallic_poster_render", metallic_poster_render),
-    (
-        "render_comic_metallic_labeled_final",
-        render_comic_metallic_labeled_final,
-    ),
-    ("render_soft_cartoon", render_soft_cartoon),
-    ("render_editorial_minimal", render_editorial_minimal),
-    ("render_soft_ceramic", render_soft_ceramic),
-    ("render_neon_coordination_core", render_neon_coordination_core),
-    ("render_matte_clay", render_matte_clay),
-    ("render_xray_wire", render_xray_wire),
-    ("render_steric_surface", render_steric_surface),
-    ("render_quasi_chemdraw_bold", render_quasi_chemdraw_bold),
-)
-
-for _command_name, _command_fn in _PYMOL_STYLE_COMMANDS:
-    cmd.extend(_command_name, _command_fn)
+for _style_cls in SCIENTIFIC_STYLE_CLASSES:
+    _wrapper = _make_style_wrapper(_style_cls)
+    globals()[_style_cls.command] = _wrapper
+    cmd.extend(_style_cls.command, _wrapper)

@@ -261,12 +261,11 @@ When editing a saved ``.pse`` session:
 .. code:: text
 
    run scientific_styles.py
-   metallic_poster_render all
-   render_comic_metallic_labeled_final all
+   glossy all
+   comic all
 
 CHEMSMART and the registered PyMOL commands pass only the object/selection name; the metal center and coordinating atoms
-are resolved via radius-ratio ``select_coordination`` (metals from :class:`~chemsmart.utils.periodictable.PeriodicTable`
-via :attr:`ScientificStyle.METAL_ELEMENTS`).
+are resolved via radius-ratio ``select_coordination`` algorithm.
 
 .. _comic-visualization:
 
@@ -318,7 +317,7 @@ Manual PyMOL usage
 .. code:: text
 
    run scientific_styles.py
-   render_comic_metallic_labeled_final all
+   comic all
    ray 1200, 1200
    png comic.png, dpi=300
 
@@ -362,8 +361,8 @@ Manual PyMOL usage
 .. code:: text
 
    run scientific_styles.py
-   render_soft_cartoon all
-   render_soft_cartoon all, 1-2+1-5
+   soft_cartoon all
+   soft_cartoon all, 1-2+1-5
    ray 1200, 1200
 
 .. _scientific-visualization:
@@ -383,7 +382,7 @@ CHEMSMART applies ``scientific_styles.py`` for ``visualize -s`` choices includin
    -  -  ``-s`` value
       -  Description
    -  -  ``glossy``
-      -  Semi-metallic poster rendering with transparent PNG export
+      -  Glossy semi-metallic rendering with transparent PNG export
    -  -  ``comic``
       -  Comic ball-and-stick rendering with black outlines and labels
    -  -  ``soft-cartoon``
@@ -490,8 +489,8 @@ Manual PyMOL usage
 .. code:: text
 
    run scientific_styles.py
-   render_editorial_minimal all
-   render_soft_ceramic all
+   editorial_minimal all
+   soft_ceramic all
    ray 1200, 1200
 
 .. note::

@@ -21,6 +21,9 @@ import sys
 from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.mol.templates.scientific_styles import (
+    PYMOL_SCIENTIFIC_STYLE_COMMANDS,
+)
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.utils.io import convert_string_indices_to_pymol_id_indices
@@ -39,20 +42,6 @@ pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
-# Templates directory is resolved via PyMOLJobRunner.pymol_templates_path
-
-PYMOL_SCIENTIFIC_STYLE_COMMANDS = {
-    "glossy": "metallic_poster_render",
-    "comic": "render_comic_metallic_labeled_final",
-    "soft_cartoon": "render_soft_cartoon",
-    "editorial_minimal": "render_editorial_minimal",
-    "soft_ceramic": "render_soft_ceramic",
-    "neon_coordination_core": "render_neon_coordination_core",
-    "matte_clay": "render_matte_clay",
-    "xray_wire": "render_xray_wire",
-    "steric_surface": "render_steric_surface",
-    "quasi_chemdraw_bold": "render_quasi_chemdraw_bold",
-}
 
 _SCIENTIFIC_STYLE_TEMPLATE = "scientific_styles.py"
 
