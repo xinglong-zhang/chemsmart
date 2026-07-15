@@ -88,7 +88,6 @@ def get_coordinating_atoms(
         elif ratio <= tau_secondary:
             secondary_sphere.append(idx)
 
-    # Geometric partner expansion (XYZ-safe; no byres / neighbor topology).
     # Captures the second atom of diatomic ligands and similar small molecules.
     if primary_sphere and expand_cutoff:
         primary_set = set(primary_sphere)
