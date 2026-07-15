@@ -19,6 +19,27 @@ import numpy as np
 from pymol import cmd
 
 from chemsmart.utils.geometry import get_coordinating_atoms
+from chemsmart.utils.periodictable import is_metal, metal_element_symbols
+
+# ---------------------------------------------------------------------------
+# PyMOL element selections
+# ---------------------------------------------------------------------------
+
+
+def pymol_elem_selection(symbols):
+    """Build a PyMOL ``elem X+Y+Z`` selection from element symbols."""
+    cleaned = [
+        str(symbol).strip() for symbol in symbols if str(symbol).strip()
+    ]
+    if not cleaned:
+        return "none"
+    return "elem " + "+".join(cleaned)
+
+
+def metal_pymol_selection():
+    """Return a PyMOL selection covering all classified metals."""
+    return pymol_elem_selection(metal_element_symbols())
+
 
 # ---------------------------------------------------------------------------
 # ScientificStyle base class (shared coordination, palette, camera, lighting)
@@ -34,11 +55,7 @@ class ScientificStyle:
     helpers live on this parent.
     """
 
-    METAL_ELEMENTS = (
-        "elem Li+Na+K+Rb+Cs+Be+Mg+Ca+Sr+Ba+Al+Ga+In+Sn+Pb+"
-        "Sc+Ti+V+Cr+Mn+Fe+Co+Ni+Cu+Zn+Y+Zr+Nb+Mo+Tc+Ru+Rh+Pd+Ag+Cd+"
-        "Hf+Ta+W+Re+Os+Ir+Pt+Au+Hg"
-    )
+    METAL_ELEMENTS = metal_pymol_selection()
 
     ELEMENT_CATEGORIES = {
         "carbon": "C",
@@ -248,7 +265,9 @@ class ScientificStyle:
 
     @classmethod
     def _parse_metal_symbols(cls, metal):
-        text = (metal or cls.METAL_ELEMENTS).replace("elem", " ")
+        if not metal:
+            return set()
+        text = str(metal).replace("elem", " ")
         return {
             token.strip()
             for token in text.replace("+", " ").split()
@@ -304,12 +323,19 @@ class ScientificStyle:
             coords.append([float(value) for value in atom.coord])
         coordinates = np.asarray(coords, dtype=float)
 
-        metal_symbols = cls._parse_metal_symbols(metal)
-        metal_local = [
-            idx
-            for idx, element in enumerate(elements)
-            if element in metal_symbols
-        ]
+        if metal:
+            metal_symbols = cls._parse_metal_symbols(metal)
+            metal_local = [
+                idx
+                for idx, element in enumerate(elements)
+                if element in metal_symbols
+            ]
+        else:
+            metal_local = [
+                idx
+                for idx, element in enumerate(elements)
+                if is_metal(element)
+            ]
 
         primary_local = set()
         secondary_local = set()
@@ -808,7 +834,8 @@ class ComicMetallicStyle(ScientificStyle):
 class SoftCartoonStyle(ScientificStyle):
     """Soft cartoon ball-and-stick with muted pastels and rounded outlines.
 
-    Uses :attr:`ScientificStyle.METAL_ELEMENTS` and radius-ratio coordination
+    Uses :attr:`ScientificStyle.METAL_ELEMENTS` (from :class:`~chemsmart.utils.periodictable.PeriodicTable`)
+    and radius-ratio coordination
     (plus 1.6 Å geometric partner expansion) via ``select_coordination``.
     """
 

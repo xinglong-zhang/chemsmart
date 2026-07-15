@@ -32,6 +32,8 @@ from chemsmart.jobs.mol.templates.scientific_styles import (
     SoftCeramicStyle,
     StericSurfaceStyle,
     XrayWireStyle,
+    metal_pymol_selection,
+    pymol_elem_selection,
     render_editorial_minimal,
     render_matte_clay,
     render_neon_coordination_core,
@@ -1044,6 +1046,7 @@ class TestPyMOLStyleCommands:
             in module_source
         )
         assert "get_coordinating_atoms(" in source
+        assert "is_metal(element)" in source
         assert "cmd.get_model" in source
         assert "primary_local" in source
         assert "secondary_local" in source
@@ -1075,6 +1078,18 @@ class TestPyMOLStyleCommands:
             in base_source
         )
         assert "element_category_selection" in base_source
+
+    def test_pymol_elem_selection(self):
+        assert pymol_elem_selection(["Fe", "Cu"]) == "elem Fe+Cu"
+        assert pymol_elem_selection([]) == "none"
+
+    def test_metal_pymol_selection(self):
+        selection = metal_pymol_selection()
+        assert selection.startswith("elem ")
+        symbols = selection.replace("elem ", "").split("+")
+        assert "Mn" in symbols
+        assert "C" not in symbols
+        assert selection == ScientificStyle.METAL_ELEMENTS
 
     def test_render_editorial_minimal_defines_expected_visual_parameters(self):
         source = inspect.getsource(EditorialMinimalStyle)

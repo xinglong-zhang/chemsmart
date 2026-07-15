@@ -265,7 +265,8 @@ When editing a saved ``.pse`` session:
    render_comic_metallic_labeled_final all
 
 CHEMSMART and the registered PyMOL commands pass only the object/selection name; the metal center and coordinating atoms
-are resolved via radius-ratio ``select_coordination`` (using :attr:`ScientificStyle.METAL_ELEMENTS`).
+are resolved via radius-ratio ``select_coordination`` (metals from :class:`~chemsmart.utils.periodictable.PeriodicTable`
+via :attr:`ScientificStyle.METAL_ELEMENTS`).
 
 .. _comic-visualization:
 
