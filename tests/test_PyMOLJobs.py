@@ -14,6 +14,7 @@ from chemsmart.jobs.mol.nci import PyMOLNCIJob
 from chemsmart.jobs.mol.runner import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
     PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
+    PyMOLAlignJobRunner,
     PyMOLJobRunner,
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
@@ -942,6 +943,60 @@ class TestPyMOLStyleCommands:
                 )
                 assert command == expected
 
+    def test_setup_style_cylview_flat(self):
+        runner = PyMOLJobRunner.__new__(PyMOLJobRunner)
+        job = SimpleNamespace(style="cylview-flat", label=self.label_1_mer)
+        command = runner._setup_style(job, "pymol cmd")
+        assert command.endswith(f' -d "cylview_flat_style {self.label_1_mer}')
+
+        job_normalized = SimpleNamespace(
+            style="cylview_flat", label=self.label_1_mer
+        )
+        command_normalized = runner._setup_style(job_normalized, "pymol cmd")
+        assert command_normalized.endswith(
+            f' -d "cylview_flat_style {self.label_1_mer}'
+        )
+
+        assert normalize_pymol_style("cylview-flat") == "cylview_flat"
+
+    def test_align_setup_style_cylview_flat(self):
+        runner = PyMOLAlignJobRunner.__new__(PyMOLAlignJobRunner)
+        job = SimpleNamespace(
+            style="cylview-flat",
+            mol_names=[self.label_1_mer, "2-mer"],
+        )
+        command = runner._setup_style(job, "pymol cmd")
+        assert (
+            ' -d "cylview_flat_style 1-mer; cylview_flat_style 2-mer'
+            in command
+        )
+
+    def test_cylview_flat_visualization_job_label_suffix(self):
+        """cylview-flat PSE/xyz names must not collide with cylview."""
+        job_flat = PyMOLVisualizationJob(
+            molecule=None,
+            label="mol",
+            style="cylview-flat",
+        )
+        assert job_flat.style == "cylview_flat"
+        assert job_flat.label == "mol_cylview_flat_visualization"
+        assert job_flat.job_basename == "mol_cylview_flat_visualization"
+
+        job_cylview = PyMOLVisualizationJob(
+            molecule=None,
+            label="mol",
+            style="cylview",
+        )
+        assert job_cylview.label == "mol"
+        assert job_cylview.job_basename == "mol"
+
+        job_pymol = PyMOLVisualizationJob(
+            molecule=None,
+            label="mol",
+            style="pymol",
+        )
+        assert job_pymol.label == "mol"
+
     def test_scientific_style_registry_matches_classes(self):
         template_commands = scientific_styles.PYMOL_SCIENTIFIC_STYLE_COMMANDS
 
@@ -1056,6 +1111,7 @@ class TestPyMOLStyleCommands:
         assert selection == ScientificStyle.METAL_ELEMENTS
 
     def test_hybrid_is_not_a_derived_style(self):
+        # TODO: Remove this test if hybrid style is integrated with ScientificStyle
         with pytest.raises(ValueError, match="not available"):
             normalize_pymol_style("hybrid")
 

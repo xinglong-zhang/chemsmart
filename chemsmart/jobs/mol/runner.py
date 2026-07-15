@@ -53,6 +53,7 @@ PYMOL_VISUALIZE_STYLE_CLI_CHOICES = [
 PYMOL_STYLE_TEMPLATES = {
     "pymol": "zhang_group_pymol_style.py",
     "cylview": "zhang_group_pymol_style.py",
+    "cylview_flat": "zhang_group_pymol_style.py",
     **dict.fromkeys(
         PYMOL_SCIENTIFIC_STYLE_COMMANDS,
         _SCIENTIFIC_STYLE_TEMPLATE,
@@ -473,10 +474,13 @@ class PyMOLJobRunner(JobRunner):
                 # no render style and no style file present
                 command += ' -d "'
         else:
-            if job.style.lower() == "pymol":
+            style = job.style.lower().replace("-", "_")
+            if style == "pymol":
                 command += f' -d "pymol_style {job.label}'
-            elif job.style.lower() == "cylview":
+            elif style == "cylview":
                 command += f' -d "cylview_style {job.label}'
+            elif style == "cylview_flat":
+                command += f' -d "cylview_flat_style {job.label}'
             else:
                 raise ValueError(f"The style {job.style} is not available!")
 
@@ -1921,6 +1925,12 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                     pymol_commands.append(f"pymol_style {name}")
                 elif job.style.lower() == "cylview":
                     pymol_commands.append(f"cylview_style {name}")
+                elif job.style.lower().replace("-", "_") == "cylview_flat":
+                    pymol_commands.append(f"cylview_flat_style {name}")
+                else:
+                    raise ValueError(
+                        f"The style {job.style} is not available!"
+                    )
 
             # Alignment commands - align all to GLOBAL
             # first molecule (not batch first molecule)
@@ -1946,6 +1956,12 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                     pymol_commands.append(f"pymol_style {name}")
                 elif job.style.lower() == "cylview":
                     pymol_commands.append(f"cylview_style {name}")
+                elif job.style.lower().replace("-", "_") == "cylview_flat":
+                    pymol_commands.append(f"cylview_flat_style {name}")
+                else:
+                    raise ValueError(
+                        f"The style {job.style} is not available!"
+                    )
 
             # Align to global first molecule (job.mol_names[0])
             global_ref = job.mol_names[0]
@@ -2038,16 +2054,20 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
 
     def _setup_style(self, job, command):
         """Set up style commands"""
+        molnames = job.mol_names
         if job.style is None or job.style.lower() == "pymol":
-            molnames = job.mol_names
             style_cmds = "; ".join(
                 [f"pymol_style {name}" for name in molnames]
             )
             command += f' -d "{style_cmds}'
         elif job.style.lower() == "cylview":
-            molnames = job.mol_names
             style_cmds = "; ".join(
                 [f"cylview_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        elif job.style.lower().replace("-", "_") == "cylview_flat":
+            style_cmds = "; ".join(
+                [f"cylview_flat_style {name}" for name in molnames]
             )
             command += f' -d "{style_cmds}'
         else:

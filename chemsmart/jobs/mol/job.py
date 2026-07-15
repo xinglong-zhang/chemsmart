@@ -76,7 +76,8 @@ class PyMOLJob(Job):
                 used for processing steps like chk/fchk/cube handling.
             jobrunner: Runner for executing the job (default: None).
             pymol_script: Custom PyMOL script path (default: None).
-            style: Visualization style: ``pymol`` or ``cylview`` (default: None).
+            style: Visualization style: ``pymol``, ``cylview``, or
+                ``cylview_flat`` (default: None).
                 Use :class:`PyMOLScientificStyleVisualizationJob` for derived
                 ``scientific_styles.py`` options such as ``glossy`` or
                 ``editorial_minimal``.

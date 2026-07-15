@@ -53,12 +53,20 @@ class PyMOLVisualizationJob(PyMOLJob):
             jobrunner: Job execution runner (default: None).
             **kwargs: Additional arguments passed to parent PyMOLJob.
         """
+        style = kwargs.get("style")
+        if style is not None:
+            kwargs["style"] = normalize_pymol_style(style)
+
         super().__init__(
             molecule=molecule,
             label=label,
             jobrunner=jobrunner,
             **kwargs,
         )
+
+        # Distinguish cylview-flat outputs from plain cylview / pymol PSE names.
+        if self.label is not None and self.style == "cylview_flat":
+            self.label += f"_{self.style}_visualization"
 
 
 class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):

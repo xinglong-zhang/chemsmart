@@ -28,8 +28,11 @@ def click_pymol_visualization_options(
     """Common click options for PyMOL visualization."""
 
     def decorator(f):
-        style_choices = ["pymol", "cylview"]
-        style_help = 'PyMOL render style. Choices include "pymol" or "cylview"'
+        style_choices = ["pymol", "cylview", "cylview-flat"]
+        style_help = (
+            'PyMOL render style. Choices include "pymol", "cylview", '
+            'or "cylview-flat"'
+        )
         if include_visualize_styles:
             style_choices.extend(PYMOL_VISUALIZE_STYLE_CLI_CHOICES)
             style_help += (
