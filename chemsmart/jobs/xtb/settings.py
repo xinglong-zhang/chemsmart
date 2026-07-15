@@ -28,6 +28,7 @@ class XTBJobSettings:
         solvent_model=None,
         solvent_id=None,
         input_string=None,
+        additional_route_parameters=None,
         **kwargs,
     ):
         if gfn_version is not None:
@@ -61,6 +62,7 @@ class XTBJobSettings:
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
         self.input_string = input_string
+        self.additional_route_parameters = additional_route_parameters
 
     @staticmethod
     def _warn_if_unknown(value, known_values, label):

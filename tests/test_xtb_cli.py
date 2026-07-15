@@ -102,6 +102,24 @@ class TestXTBCLISettings:
         assert result.exit_code == 0, result.output
         assert settings.jobtype == "hess"
 
+    def test_sp_additional_route_parameters_merge(
+        self, single_molecule_xyz_file
+    ):
+        result, settings, _ = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-r",
+                "--copy --json",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.additional_route_parameters == "--copy --json"
+
 
 class TestXTBJobClasses:
     def test_xtb_job_types_are_distinct(self):

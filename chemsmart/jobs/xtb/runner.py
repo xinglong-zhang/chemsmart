@@ -127,6 +127,8 @@ class XTBJobRunner(JobRunner):
             args.extend([f"--{settings.solvent_model}", settings.solvent_id])
         if settings.grad:
             args.append("--grad")
+        if settings.additional_route_parameters is not None:
+            args.extend(settings.additional_route_parameters.split())
         return args
 
     @staticmethod
