@@ -1,0 +1,361 @@
+"""Provider-independent runtime controller and state-transition authority."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from chemsmart.agent.harness.workflow_state import WorkflowState
+from chemsmart.agent.runtime.contracts import (
+    AgentDecision,
+    ExecutionMode,
+    ProviderRole,
+    RuntimeV2Mode,
+    TaskEnvelope,
+    TaskPhase,
+    WorkspaceRef,
+)
+from chemsmart.agent.runtime.event_store import RuntimeEventStore
+from chemsmart.agent.runtime.events import EventKind, RuntimeEvent
+from chemsmart.agent.runtime.lifecycle import RuntimeLifecycle
+from chemsmart.agent.runtime.reducer import apply_event, reduce_events
+from chemsmart.agent.runtime.tool_catalog import ToolCatalog, ToolSelection
+
+_LOCAL_PROVIDER_MARKERS = ("local", "mlx", "vllm")
+_TRANSITIONS: dict[TaskPhase, frozenset[TaskPhase]] = {
+    TaskPhase.ROUTE: frozenset(
+        {
+            TaskPhase.PROJECT,
+            TaskPhase.PROJECT_WRITE,
+            TaskPhase.SYNTHESIS,
+            TaskPhase.REPAIR,
+            TaskPhase.EXECUTION,
+            TaskPhase.COMPLETE,
+            TaskPhase.WAITING_USER,
+        }
+    ),
+    TaskPhase.PROJECT: frozenset(
+        {
+            TaskPhase.PROJECT_WRITE,
+            TaskPhase.SYNTHESIS,
+            TaskPhase.COMPLETE,
+            TaskPhase.WAITING_USER,
+        }
+    ),
+    TaskPhase.PROJECT_WRITE: frozenset(
+        {TaskPhase.SYNTHESIS, TaskPhase.COMPLETE, TaskPhase.WAITING_USER}
+    ),
+    TaskPhase.SYNTHESIS: frozenset(
+        {
+            TaskPhase.VALIDATION,
+            TaskPhase.REPAIR,
+            TaskPhase.EXECUTION,
+            TaskPhase.COMPLETE,
+            TaskPhase.WAITING_USER,
+        }
+    ),
+    TaskPhase.VALIDATION: frozenset(
+        {
+            TaskPhase.REPAIR,
+            TaskPhase.EXECUTION,
+            TaskPhase.COMPLETE,
+            TaskPhase.WAITING_USER,
+        }
+    ),
+    TaskPhase.REPAIR: frozenset(
+        {
+            TaskPhase.VALIDATION,
+            TaskPhase.EXECUTION,
+            TaskPhase.COMPLETE,
+            TaskPhase.WAITING_USER,
+        }
+    ),
+    TaskPhase.EXECUTION: frozenset(
+        {TaskPhase.COMPLETE, TaskPhase.REPAIR, TaskPhase.WAITING_USER}
+    ),
+    TaskPhase.WAITING_USER: frozenset(
+        {
+            TaskPhase.PROJECT,
+            TaskPhase.SYNTHESIS,
+            TaskPhase.REPAIR,
+            TaskPhase.EXECUTION,
+        }
+    ),
+    TaskPhase.COMPLETE: frozenset({TaskPhase.ROUTE}),
+    TaskPhase.BLOCKED: frozenset({TaskPhase.ROUTE}),
+}
+
+
+class RuntimeController:
+    def __init__(
+        self,
+        *,
+        session_dir: str | Path,
+        session_id: str,
+        registry: Any,
+        mode: RuntimeV2Mode,
+    ) -> None:
+        self.session_dir = Path(session_dir)
+        self.session_id = session_id
+        self.registry = registry
+        self.mode = mode
+        self.store = RuntimeEventStore(
+            self.session_dir / "runtime_events.jsonl"
+        )
+        events = self.store.load()
+        self.state = reduce_events(events)
+        self.turn_id = self.state.turn_id
+        self.catalog = ToolCatalog(registry)
+        self.selection: ToolSelection | None = None
+
+    def ensure_session(self, *, cwd: str) -> None:
+        if self.state.session_id:
+            return
+        self.turn_id = "bootstrap"
+        self.emit(
+            EventKind.SESSION_STARTED,
+            {"cwd": str(Path(cwd).resolve()), "runtime_mode": self.mode.value},
+            idempotency_key="session-started",
+        )
+
+    def start_turn(
+        self,
+        *,
+        request: str,
+        turn_index: int,
+        provider_name: str,
+        cwd: str,
+        workflow_state: WorkflowState | None = None,
+    ) -> TaskEnvelope:
+        self.ensure_session(cwd=cwd)
+        role = provider_role(provider_name)
+        phase = route_initial_phase(request, role=role)
+        self.turn_id = f"turn_{turn_index:04d}"
+        self.emit(
+            EventKind.TURN_STARTED,
+            {
+                "request": request,
+                "phase": phase.value,
+                "provider_role": role.value,
+            },
+            idempotency_key=f"turn-start:{self.turn_id}",
+        )
+        self.selection = self.catalog.select(phase=phase, provider_role=role)
+        self.emit(
+            EventKind.EXPOSURE_PLANNED,
+            {
+                "phase": phase.value,
+                "tools": list(self.selection.direct),
+                "deferred_count": len(self.selection.deferred),
+                "hidden_count": len(self.selection.hidden),
+            },
+            idempotency_key=f"exposure:{self.turn_id}:{phase.value}",
+        )
+        project = (
+            _workspace_ref(workflow_state.project) if workflow_state else None
+        )
+        server = (
+            _workspace_ref(workflow_state.server) if workflow_state else None
+        )
+        return TaskEnvelope(
+            task_id=f"task_{uuid4().hex[:12]}",
+            session_id=self.session_id,
+            turn_id=self.turn_id,
+            request=request,
+            cwd=str(Path(cwd).resolve()),
+            provider_role=role,
+            phase=phase,
+            execution_mode=execution_mode_from_request(request),
+            project=project,
+            server=server,
+            previous_command=(
+                workflow_state.previous_command if workflow_state else ""
+            ),
+            unresolved_slots=(
+                workflow_state.unresolved_slots if workflow_state else ()
+            ),
+        )
+
+    def lifecycle(self) -> RuntimeLifecycle:
+        if self.selection is None:
+            raise RuntimeError("start_turn must be called before lifecycle")
+        return RuntimeLifecycle(
+            emitter=self,
+            selection=self.selection,
+            mode=self.mode,
+        )
+
+    def tool_defs(self, provider_name: str) -> list[dict[str, Any]]:
+        if self.selection is None:
+            raise RuntimeError("start_turn must be called before tool_defs")
+        return self.catalog.provider_tool_defs(provider_name, self.selection)
+
+    def validate_decision(self, decision: AgentDecision) -> None:
+        current = self.state.phase
+        if decision.phase == current:
+            return
+        if decision.phase not in _TRANSITIONS.get(current, frozenset()):
+            raise ValueError(
+                f"invalid runtime transition {current.value} -> {decision.phase.value}"
+            )
+
+    def complete(self, *, status: str = "ok") -> None:
+        self.emit(
+            EventKind.TURN_COMPLETED,
+            {"status": status},
+            idempotency_key=f"turn-complete:{self.turn_id}",
+        )
+
+    def block(self, *, reason: str, rule_ids: tuple[str, ...] = ()) -> None:
+        self.emit(
+            EventKind.TURN_BLOCKED,
+            {"reason": reason, "rule_ids": list(rule_ids)},
+            idempotency_key=f"turn-blocked:{self.turn_id}:{reason}",
+        )
+
+    def emit(
+        self,
+        kind: EventKind,
+        payload: dict[str, Any],
+        *,
+        idempotency_key: str = "",
+    ) -> RuntimeEvent:
+        event = self.store.append(
+            session_id=self.session_id,
+            turn_id=self.turn_id or "bootstrap",
+            kind=kind,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
+        if event.sequence > self.state.latest_sequence:
+            self.state = apply_event(self.state, event)
+            self.store.write_snapshot(
+                self.state.model_dump(mode="json"),
+                self.session_dir / "runtime_state.json",
+            )
+        return event
+
+
+def provider_role(provider_name: str) -> ProviderRole:
+    normalized = str(provider_name or "").strip().lower()
+    if any(marker in normalized for marker in _LOCAL_PROVIDER_MARKERS):
+        return ProviderRole.SYNTHESIS_SPECIALIST
+    return ProviderRole.CONTROLLER
+
+
+def route_initial_phase(
+    request: str,
+    *,
+    role: ProviderRole,
+) -> TaskPhase:
+    if role is ProviderRole.SYNTHESIS_SPECIALIST:
+        return TaskPhase.SYNTHESIS
+    text = str(request or "").lower()
+    if (
+        _matches(
+            text,
+            r"(?:write|save|overwrite|update|patch).{0,24}(?:ya?ml|project)",
+        )
+        or _matches(
+            text,
+            r"(?:yaml|project).{0,24}(?:write|save|overwrite|update|patch)",
+        )
+        or any(
+            marker in text
+            for marker in ("프로젝트 수정", "yaml 저장", "写入", "更新项目")
+        )
+    ):
+        return TaskPhase.PROJECT_WRITE
+    if any(
+        marker in text
+        for marker in (
+            "yaml",
+            "project settings",
+            "project configuration",
+            "프로젝트",
+            "项目配置",
+        )
+    ):
+        return TaskPhase.PROJECT
+    if any(
+        marker in text
+        for marker in (
+            "repair",
+            "fix this command",
+            "failed command",
+            "고쳐",
+            "복구",
+            "修复命令",
+        )
+    ):
+        return TaskPhase.REPAIR
+    if any(
+        marker in text
+        for marker in (
+            "execute this command",
+            "run it now",
+            "submit it",
+            "실제로 실행",
+            "지금 실행",
+            "제출해",
+            "立即执行",
+            "提交作业",
+        )
+    ):
+        return TaskPhase.EXECUTION
+    return TaskPhase.SYNTHESIS
+
+
+def execution_mode_from_request(request: str) -> ExecutionMode:
+    text = str(request or "").lower()
+    if "--test" in text or "--fake" in text or "fake run" in text:
+        return ExecutionMode.TEST_FAKE
+    if any(
+        marker in text
+        for marker in (
+            "submit",
+            "scheduler",
+            "slurm",
+            "pbs",
+            "hpc",
+            "제출",
+            "提交",
+        )
+    ):
+        return ExecutionMode.HPC
+    if any(
+        marker in text
+        for marker in (
+            "execute this command",
+            "run it now",
+            "실제로 실행",
+            "立即执行",
+        )
+    ):
+        return ExecutionMode.LOCAL
+    return ExecutionMode.NONE
+
+
+def _workspace_ref(value: Any) -> WorkspaceRef | None:
+    if value is None:
+        return None
+    return WorkspaceRef(
+        name=str(value.name),
+        program=str(value.program),
+        path=str(value.path),
+        sha256=str(value.sha256),
+    )
+
+
+def _matches(value: str, pattern: str) -> bool:
+    return re.search(pattern, value, flags=re.IGNORECASE) is not None
+
+
+__all__ = [
+    "RuntimeController",
+    "execution_mode_from_request",
+    "provider_role",
+    "route_initial_phase",
+]
