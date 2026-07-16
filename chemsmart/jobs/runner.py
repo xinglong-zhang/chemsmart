@@ -479,6 +479,12 @@ class JobRunner(RegistryMixin):
         """Get the base filepath for the job to assist in file removal."""
         return Path(job.folder) / job.label
 
+    def _append_suffix_to_job_label(self, job, suffix):
+        """Append ``suffix`` to ``job.label`` once."""
+        if suffix and not job.label.endswith(suffix):
+            job.label = f"{job.label}{suffix}"
+        logger.debug(f"Job label: {job.label}")
+
     def _delete_scratch_directory(self):
         """
         Delete the scratch directory if it exists.
