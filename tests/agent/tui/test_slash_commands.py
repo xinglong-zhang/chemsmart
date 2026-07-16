@@ -49,7 +49,7 @@ def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
             await pilot.pause()
             _set_composer_text(app, command)
             await pilot.press("enter")
-            await pilot.pause()
+            await pilot.pause(0.2)
             if command == "/sessions":
                 await pilot.pause()
             if command.startswith("/resume"):
