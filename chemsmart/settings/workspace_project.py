@@ -73,6 +73,7 @@ def workspace_project_names(
 def resolve_workspace_project(
     *,
     cwd: str | Path | None = None,
+    selected_path: str | Path | None = None,
 ) -> WorkspaceProjectStatus:
     candidates = iter_workspace_project_yaml(cwd=cwd)
     if not candidates:
@@ -86,6 +87,20 @@ def resolve_workspace_project(
                 "No workspace project YAML found. Create one with /init, then "
                 "write it with /write-project."
             ),
+        )
+    selected = (
+        Path(selected_path).expanduser().resolve()
+        if selected_path is not None
+        else None
+    )
+    if selected is not None and selected in candidates:
+        return WorkspaceProjectStatus(
+            loaded=True,
+            project=selected.stem,
+            program=selected.parent.name,
+            path=selected,
+            candidates=candidates,
+            message=f"Loaded selected workspace project YAML: {selected}",
         )
     if len(candidates) > 1:
         names = ", ".join(

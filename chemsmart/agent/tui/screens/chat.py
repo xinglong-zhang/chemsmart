@@ -45,6 +45,10 @@ from chemsmart.agent.runtime.calculations import (
     inspect_calculation,
     load_calculation_runs,
 )
+from chemsmart.agent.harness.workflow_state import (
+    current_workflow_state,
+    select_workspace_project,
+)
 from chemsmart.agent.services.conversation_memory import ConversationMemory
 from chemsmart.agent.synthesis import SynthesisSession, resolve_default_project
 from chemsmart.agent.tools_command import execute_chemsmart_command_observed
@@ -121,7 +125,9 @@ from chemsmart.agent.tui.widgets.cells import (
     UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
-from chemsmart.agent.tui.widgets.calculation_strip import CalculationStatusStrip
+from chemsmart.agent.tui.widgets.calculation_strip import (
+    CalculationStatusStrip,
+)
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.header import ChemsmartHeader
 from chemsmart.agent.tui.widgets.popups import (
@@ -262,11 +268,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._calculation_cells: dict[str, CalculationReceiptCell] = {}
         self._turn_serial = 0
         self._active_turn_id = "turn-0"
-        self._tui_session_dir = self.session_root / ".runtime" / (
-            "tui-"
-            + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            + "-"
-            + uuid.uuid4().hex[:8]
+        self._tui_session_dir = (
+            self.session_root
+            / ".runtime"
+            / (
+                "tui-"
+                + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                + "-"
+                + uuid.uuid4().hex[:8]
+            )
         )
         self._calculation_decision_log: DecisionLog | None = None
         self._active_provider_config = _load_tui_provider_config()
@@ -274,7 +284,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._active_provider_config
         )
         self._build_mode = False
-        self._workspace_project_status = resolve_workspace_project()
+        selected_project = current_workflow_state().project
+        self._selected_workspace_project_path = (
+            Path(selected_project.path).resolve()
+            if selected_project is not None
+            else None
+        )
+        self._workspace_project_status = resolve_workspace_project(
+            selected_path=self._selected_workspace_project_path
+        )
         self.active_synthesis_session: SynthesisSession | None = None
 
     def compose(self) -> ComposeResult:
@@ -1099,8 +1117,12 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             if event.state == WorkerState.ERROR:
                 error = event.worker.error
                 self.post_error(
-                    error.__class__.__name__ if error else "Calculation worker error",
-                    str(error) if error else "Unknown calculation worker error",
+                    error.__class__.__name__
+                    if error
+                    else "Calculation worker error",
+                    str(error)
+                    if error
+                    else "Unknown calculation worker error",
                 )
                 if not self._worker_is_busy():
                     self.query_one(FooterWidget).set_phase(Phase.ERROR)
@@ -1143,7 +1165,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 chitchat = result.get("is_chitchat", False)
                 blocked = result.get("blocked", False)
                 has_legacy_dry_run = bool(
-                    result.get("dry_run_result") or result.get("dry_run_results")
+                    result.get("dry_run_result")
+                    or result.get("dry_run_results")
                 )
                 if (
                     session_id
@@ -1208,7 +1231,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         ):
             return
         self.query_one(FooterWidget).set_usage(
-            input_tokens=input_tokens if isinstance(input_tokens, int) else None,
+            input_tokens=input_tokens
+            if isinstance(input_tokens, int)
+            else None,
             output_tokens=(
                 output_tokens if isinstance(output_tokens, int) else None
             ),
@@ -1292,8 +1317,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                         "The calculation process group will receive SIGTERM."
                     ),
                 ),
-                lambda value, run_id=action.run_id: self._confirm_local_calculation_cancel(
-                    run_id, value
+                lambda value, run_id=action.run_id: (
+                    self._confirm_local_calculation_cancel(run_id, value)
                 ),
             )
 
@@ -1339,13 +1364,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
 
     def action_show_project_yaml(self) -> None:
-        status = resolve_workspace_project()
+        status = self._resolve_workspace_project_status()
         self._workspace_project_status = status
         self.query_one(FooterWidget).set_yaml_status(
             loaded=status.loaded,
             label=_yaml_footer_label(status),
         )
-        if not status.loaded or status.path is None:
+        if not status.candidates:
             if self.app.plain:
                 self.post_agent_message(
                     "YAML MISSING\n\nBuild one with /init, then save it with "
@@ -1356,20 +1381,27 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.app.push_screen(
                 ProjectYamlOverlay(
                     title="Workspace YAML",
-                    path=None,
-                    yaml_text=(
-                        "# Yaml unloaded\n"
-                        "# Build one with /init, then save it with "
-                        "/write-project <name> yes.\n"
-                    ),
+                    candidates=(),
                 )
             )
             return
-        try:
-            yaml_text = status.path.read_text(encoding="utf-8")
-        except OSError as exc:
-            yaml_text = f"# Failed to read {status.path}: {exc}\n"
         if self.app.plain:
+            if not status.loaded or status.path is None:
+                candidates = "\n".join(
+                    f"- `{path.parent.name}:{path.stem}`: `{path}`"
+                    for path in status.candidates
+                )
+                self.post_agent_message(
+                    "Multiple workspace YAML files are available. Select one "
+                    "with an explicit project name in the request or CLI.\n\n"
+                    + candidates,
+                    title="Workspace YAML selection",
+                )
+                return
+            try:
+                yaml_text = status.path.read_text(encoding="utf-8")
+            except OSError as exc:
+                yaml_text = f"# Failed to read {status.path}: {exc}\n"
             self.post_agent_message(
                 f"path: `{status.path}`\n\n```yaml\n{yaml_text.rstrip()}\n```",
                 title=f"Workspace YAML: {status.program}:{status.project}",
@@ -1377,11 +1409,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             return
         self.app.push_screen(
             ProjectYamlOverlay(
-                title=f"Workspace YAML: {status.program}:{status.project}",
-                path=status.path,
-                yaml_text=yaml_text,
-            )
+                title="Workspace project YAML",
+                candidates=status.candidates,
+                selected_path=status.path,
+            ),
+            self._on_project_yaml_selected,
         )
+
+    def _on_project_yaml_selected(self, path: Path | None) -> None:
+        if path is not None:
+            self._activate_workspace_project_path(path)
+        self.focus_composer()
 
     def action_show_shortcuts(self) -> None:
         if self.app.plain:
@@ -1474,7 +1512,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             composer.clear_text()
             footer.update_draft("")
             footer.set_queued_prompt(True)
-            footer.set_hint("Follow-up queued · Tab on an empty draft restores it")
+            footer.set_hint(
+                "Follow-up queued · Tab on an empty draft restores it"
+            )
             return
         if not draft and self._queued_prompt is not None:
             composer.load_text(self._queued_prompt)
@@ -1483,7 +1523,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             footer.set_hint("Queued follow-up restored for editing")
             return
         if draft and self._queued_prompt is not None:
-            self.notify("One follow-up is already queued.", severity="warning", timeout=3)
+            self.notify(
+                "One follow-up is already queued.",
+                severity="warning",
+                timeout=3,
+            )
 
     def action_soft_cancel(self) -> None:
         if self._quit_armed:
@@ -1583,7 +1627,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         return items
 
     def _slash_unavailable_reason(self, command: str) -> str | None:
-        if command in {"/allow", "/allow-session", "/deny"} and not self._pending_approval:
+        if (
+            command in {"/allow", "/allow-session", "/deny"}
+            and not self._pending_approval
+        ):
             return "no approval is pending"
         if command == "/execute" and not self._last_dry_run_session_id:
             return "no validated dry-run is ready"
@@ -1618,18 +1665,94 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def _sync_footer_provider(self) -> None:
         config = self._active_provider_config
-        self._workspace_project_status = resolve_workspace_project()
+        self._workspace_project_status = (
+            self._resolve_workspace_project_status()
+        )
         if config is not None:
             role = "synthesis" if config.type == "local" else "unified"
             self.query_one(FooterWidget).set_provider_model(
                 f"{role}:{config.type}",
                 config.model,
-                project=config.project or resolve_default_project(),
+                project=(
+                    self._workspace_project_status.project
+                    or config.project
+                    or resolve_default_project()
+                ),
             )
         self.query_one(FooterWidget).set_yaml_status(
             loaded=self._workspace_project_status.loaded,
             label=_yaml_footer_label(self._workspace_project_status),
         )
+
+    def _resolve_workspace_project_status(self) -> WorkspaceProjectStatus:
+        selected_path = self._selected_workspace_project_path
+        state_project = current_workflow_state().project
+        if selected_path is None and state_project is not None:
+            selected_path = Path(state_project.path).resolve()
+
+        status = resolve_workspace_project(selected_path=selected_path)
+        if not status.loaded and status.candidates:
+            configured = (
+                str(self._active_provider_config.project or "").strip()
+                if self._active_provider_config is not None
+                else ""
+            )
+            matches = tuple(
+                path for path in status.candidates if path.stem == configured
+            )
+            if len(matches) == 1:
+                status = resolve_workspace_project(selected_path=matches[0])
+
+        self._selected_workspace_project_path = (
+            status.path if status.loaded else None
+        )
+        return status
+
+    def _activate_workspace_project_path(self, path: Path) -> bool:
+        resolved = path.expanduser().resolve()
+        status = resolve_workspace_project(selected_path=resolved)
+        if not status.loaded or status.path is None:
+            self.post_error(
+                "Project selection failed",
+                f"{resolved} is not a workspace project YAML.",
+            )
+            return False
+        state_delta = select_workspace_project(
+            status.project,
+            status.program,
+        )
+        if not state_delta.get("selected"):
+            self.post_error(
+                "Project selection failed",
+                str(state_delta.get("rule_id") or resolved),
+            )
+            return False
+        self._selected_workspace_project_path = status.path
+        self._workspace_project_status = status
+        if self.active_synthesis_session is not None:
+            self.active_synthesis_session.default_project = status.project
+        footer = self.query_one(FooterWidget)
+        footer.set_yaml_status(
+            loaded=True,
+            label=_yaml_footer_label(status),
+        )
+        footer.set_hint(f"Active project: {status.program}:{status.project}")
+        return True
+
+    def _apply_workspace_project_tool_result(
+        self,
+        tool_name: str,
+        result: object,
+    ) -> None:
+        if tool_name not in {
+            "read_project_yaml",
+            "write_project_yaml",
+            "update_project_yaml",
+        } or not isinstance(result, dict):
+            return
+        raw_path = result.get("written_path") or result.get("path")
+        if raw_path:
+            self._activate_workspace_project_path(Path(str(raw_path)))
 
     def _can_approve_or_execute(self, action: str) -> bool:
         pending = self._pending_tool_request
@@ -1702,7 +1825,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if ready is None:
             return "No semantic- and intent-validated command is ready."
         if ready.action != expected_action:
-            expected = "chemsmart run" if expected_action == "run" else "chemsmart sub"
+            expected = (
+                "chemsmart run"
+                if expected_action == "run"
+                else "chemsmart sub"
+            )
             return f"The validated command is not a `{expected}` command."
         if ready.workspace != Path.cwd().resolve():
             return (
@@ -1742,7 +1869,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             explanation = str(synthesis.get("explanation") or "")
             confidence = str(synthesis.get("confidence") or "low")
             project = str(synthesis.get("project") or "")
-            intent = synthesis.get("intent_assertion") or synthesis.get("intent")
+            intent = synthesis.get("intent_assertion") or synthesis.get(
+                "intent"
+            )
             intent_dict = intent if isinstance(intent, dict) else None
             command_is_executable = self._remember_ready_command(
                 command=command,
@@ -2140,6 +2269,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     AgentMessageCell(event.text.strip(), title="Assistant")
                 )
         elif isinstance(event, ToolCallEvent):
+            if event.status == "done":
+                self._apply_workspace_project_tool_result(
+                    event.tool,
+                    event.payload,
+                )
             if workflow_cell is not None:
                 if event.status == "running":
                     workflow_cell.mark_started(
@@ -2353,6 +2487,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         call_id = event.provider_call_id or (
             f"legacy:{event.step_index}:{event.tool}"
         )
+        if event.status == "ok":
+            self._apply_workspace_project_tool_result(
+                event.tool,
+                event.payload,
+            )
         self._upsert_tool_cell(
             provider_call_id=call_id,
             tool=event.tool,
@@ -2554,9 +2693,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             "label": parsed.label or parsed.filename or "calculation",
             "project": parsed.project or "",
             "input_path": parsed.filename or "",
-            "status": (
-                "completed" if payload.get("ok") else "process_failed"
-            ),
+            "status": ("completed" if payload.get("ok") else "process_failed"),
             "stage": str(payload.get("status") or "Execution finished"),
             "returncode": payload.get("returncode"),
             "error": "\n".join(
@@ -3088,7 +3225,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     ) -> None:
         footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.FINISHED)
-        if tool_name == "execute_chemsmart_command" and isinstance(result, dict):
+        self._apply_workspace_project_tool_result(tool_name, result)
+        if tool_name == "execute_chemsmart_command" and isinstance(
+            result, dict
+        ):
             self._ready_command = None
             self._publish_execute_tool_result(result)
             footer.set_hint("Command execution completed")
@@ -3128,7 +3268,6 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             footer.set_hint("Wizard YAML written")
             return
         if tool_name == "write_project_yaml" and isinstance(result, dict):
-            self._sync_footer_provider()
             project = str(result.get("project_name") or "project")
             program = str(result.get("program") or "gaussian")
             written_path = str(result.get("written_path") or "")
@@ -3467,7 +3606,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             return
         provider_type = _provider_type_label(self._active_provider_config)
         provider_role = (
-            "CLI synthesis" if provider_type == "local" else "unified tool loop"
+            "CLI synthesis"
+            if provider_type == "local"
+            else "unified tool loop"
         )
         self.post_agent_message(
             (
@@ -4152,6 +4293,8 @@ def _latest_project_yaml_candidate(
 def _yaml_footer_label(status: WorkspaceProjectStatus) -> str:
     if status.loaded:
         return f"YAML OK {status.program}:{status.project}"
+    if status.candidates:
+        return f"YAML SELECT {len(status.candidates)}"
     return "YAML MISSING"
 
 
@@ -4244,7 +4387,9 @@ def _public_tool_result_payload(payload: object) -> dict[str, object] | None:
         "cli_grounding_issue",
         "calculation",
     }
-    projected = {key: value for key, value in payload.items() if key in allowed}
+    projected = {
+        key: value for key, value in payload.items() if key in allowed
+    }
     return projected or None
 
 
@@ -4309,7 +4454,11 @@ def _write_synthesis_artifact(
 
 
 def _default_interaction_mode(config: AgentProviderConfig | None) -> str:
-    return "synthesis" if config is not None and config.type == "local" else "unified"
+    return (
+        "synthesis"
+        if config is not None and config.type == "local"
+        else "unified"
+    )
 
 
 def _ready_command_hint(ready: _ReadyCommand | None) -> str:

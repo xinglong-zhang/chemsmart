@@ -29,9 +29,9 @@ class ToolSelection(BaseModel):
 _PHASE_TOOLS: dict[TaskPhase, tuple[str, ...]] = {
     TaskPhase.PROJECT: (
         "extract_project_protocol",
+        "read_project_yaml",
         "render_project_yaml",
         "validate_project_yaml",
-        "critic_project_yaml",
         "search_basis_sets",
     ),
     TaskPhase.PROJECT_READ: (

@@ -9,6 +9,10 @@ from textual.widgets import OptionList
 from textual.worker import Worker, WorkerState
 
 from chemsmart.agent.provider_config import AgentProviderConfig
+from chemsmart.agent.harness.workflow_state import (
+    current_workflow_state,
+    reset_workflow_state,
+)
 from chemsmart.agent.runtime.calculations import (
     CalculationEvent,
     CalculationRun,
@@ -20,7 +24,9 @@ from chemsmart.agent.tui.events import ToolUseEvent
 from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.screens.calculations import CalculationMonitor
 from chemsmart.agent.tui.state import TuiState, TuiStateReducer
-from chemsmart.agent.tui.widgets.calculation_strip import CalculationStatusStrip
+from chemsmart.agent.tui.widgets.calculation_strip import (
+    CalculationStatusStrip,
+)
 from chemsmart.agent.tui.widgets.cells import (
     CalculationReceiptCell,
     FinalAnswerCell,
@@ -97,13 +103,15 @@ tui:
 
     config = load_tui_config(path)
 
-    assert config.keybindings["show_shortcuts"] == DEFAULT_KEYBINDINGS[
-        "show_shortcuts"
-    ]
+    assert (
+        config.keybindings["show_shortcuts"]
+        == DEFAULT_KEYBINDINGS["show_shortcuts"]
+    )
     assert config.keybindings["toggle_transcript"] == "ctrl+x"
-    assert config.keybindings["show_activity"] == DEFAULT_KEYBINDINGS[
-        "show_activity"
-    ]
+    assert (
+        config.keybindings["show_activity"]
+        == DEFAULT_KEYBINDINGS["show_activity"]
+    )
     assert config.tool_detail == "compact"
     assert any("reserved" in issue for issue in config.issues)
     assert any("unknown" in issue for issue in config.issues)
@@ -250,6 +258,111 @@ def test_shift_tab_opens_workspace_yaml_and_escape_restores_composer(
             assert app.query_one(Composer).has_focus
 
     asyncio.run(scenario())
+
+
+def test_shift_tab_cycles_and_selects_multiple_workspace_yamls(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = tmp_path / "workspace"
+    gaussian_dir = workspace / ".chemsmart" / "gaussian"
+    gaussian_dir.mkdir(parents=True)
+    first_path = gaussian_dir / "formaldehyde_uv.yaml"
+    second_path = gaussian_dir / "water.yaml"
+    first_path.write_text(
+        "gas:\n  functional: camb3lyp\n  basis: def2svp\n",
+        encoding="utf-8",
+    )
+    second_path.write_text(
+        "gas:\n  functional: pbe0\n  basis: def2svp\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace)
+    reset_workflow_state()
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            footer = app.query_one(FooterWidget)
+            assert footer.state.yaml_label == "YAML SELECT 2"
+
+            await pilot.press("shift+tab")
+            await pilot.pause()
+            assert isinstance(app.screen, ProjectYamlOverlay)
+            assert app.screen.path == first_path.resolve()
+
+            await pilot.press("down")
+            await pilot.pause()
+            assert app.screen.path == second_path.resolve()
+            assert "functional: pbe0" in app.screen.yaml_text
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.screen is app.chat_screen
+            assert current_workflow_state(workspace).project is not None
+            assert current_workflow_state(workspace).project.name == "water"
+            assert footer.state.yaml_label == "YAML OK gaussian:water"
+
+            await pilot.press("shift+tab")
+            await pilot.pause()
+            assert isinstance(app.screen, ProjectYamlOverlay)
+            assert app.screen.path == second_path.resolve()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        reset_workflow_state()
+
+
+def test_written_project_becomes_active_when_other_yaml_exists(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = tmp_path / "workspace"
+    gaussian_dir = workspace / ".chemsmart" / "gaussian"
+    gaussian_dir.mkdir(parents=True)
+    (gaussian_dir / "existing.yaml").write_text(
+        "gas:\n  functional: b3lyp\n  basis: def2svp\n",
+        encoding="utf-8",
+    )
+    written_path = gaussian_dir / "water.yaml"
+    written_path.write_text(
+        "gas:\n  functional: pbe0\n  basis: def2svp\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace)
+    reset_workflow_state()
+
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_screen._apply_workspace_project_tool_result(
+                "write_project_yaml",
+                {
+                    "ok": True,
+                    "project_name": "water",
+                    "program": "gaussian",
+                    "written_path": str(written_path),
+                },
+            )
+            await pilot.pause()
+
+            footer = app.query_one(FooterWidget)
+            assert footer.state.yaml_label == "YAML OK gaussian:water"
+            assert current_workflow_state(workspace).project is not None
+            assert current_workflow_state(workspace).project.name == "water"
+
+            await pilot.press("shift+tab")
+            await pilot.pause()
+            assert isinstance(app.screen, ProjectYamlOverlay)
+            assert app.screen.path == written_path.resolve()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        reset_workflow_state()
 
 
 def test_at_file_picker_refreshes_cold_nested_workspace_index(
@@ -469,7 +582,9 @@ def test_tool_lifecycle_coalesces_and_preserves_public_evidence(tmp_path):
 
             cells = app.query_one(Transcript).query_one("#cells")
             tool_cells = [
-                cell for cell in cells.children if isinstance(cell, ToolCallCell)
+                cell
+                for cell in cells.children
+                if isinstance(cell, ToolCallCell)
             ]
             assert len(tool_cells) == 1
             assert tool_cells[0].status == "ok"
@@ -633,9 +748,7 @@ def test_calculation_status_strip_and_ctrl_b_share_run_state(tmp_path):
                 stage="SCF cycle 6",
                 elapsed_s=0.4,
             )
-            app.chat_screen._on_calculation_run(
-                run.to_dict(), persist=False
-            )
+            app.chat_screen._on_calculation_run(run.to_dict(), persist=False)
             await pilot.pause()
 
             strip = app.query_one(CalculationStatusStrip)
@@ -705,7 +818,9 @@ def test_local_result_diagnosis_uses_latest_run_without_path_prompt(
     asyncio.run(scenario())
 
 
-def test_footer_uses_provider_state_and_responsive_priority(monkeypatch, tmp_path):
+def test_footer_uses_provider_state_and_responsive_priority(
+    monkeypatch, tmp_path
+):
     config = AgentProviderConfig(
         name="deepseek",
         type="openai",
@@ -803,9 +918,7 @@ def test_one_hundred_tool_events_update_within_budget(tmp_path):
             screen._apply_tool_use_event(_tool_event("pending"))
             timings: list[float] = []
             for index in range(100):
-                event = _tool_event(
-                    "approved" if index % 2 == 0 else "ok"
-                )
+                event = _tool_event("approved" if index % 2 == 0 else "ok")
                 start = perf_counter()
                 screen._apply_tool_use_event(event)
                 timings.append((perf_counter() - start) * 1000)
@@ -935,15 +1048,17 @@ def test_run_executes_latest_validated_command_without_mode_switch(
             assert len(receipt_cells) == 1
             assert receipt_cells[0].run["status"] == "completed"
             assert receipt_cells[0].run["energy"] == -76.0
-            assert "RAW OUTPUT MUST NOT BE IN TRANSCRIPT" not in app.export_screenshot()
+            assert (
+                "RAW OUTPUT MUST NOT BE IN TRANSCRIPT"
+                not in app.export_screenshot()
+            )
 
     asyncio.run(scenario())
 
 
 def test_second_local_run_requires_explicit_yes(monkeypatch, tmp_path):
     command = (
-        "chemsmart run orca -p orca_sp_demo -f inputs/h2o.xyz "
-        "-c 0 -m 1 sp"
+        "chemsmart run orca -p orca_sp_demo -f inputs/h2o.xyz -c 0 -m 1 sp"
     )
     project_dir = tmp_path / ".chemsmart" / "orca"
     project_dir.mkdir(parents=True)
@@ -986,8 +1101,7 @@ def test_second_local_run_requires_explicit_yes(monkeypatch, tmp_path):
 
 def test_run_rejects_stale_project_yaml(monkeypatch, tmp_path):
     command = (
-        "chemsmart run orca -p orca_sp_demo -f inputs/h2o.xyz "
-        "-c 0 -m 1 sp"
+        "chemsmart run orca -p orca_sp_demo -f inputs/h2o.xyz -c 0 -m 1 sp"
     )
     project_dir = tmp_path / ".chemsmart" / "orca"
     project_dir.mkdir(parents=True)

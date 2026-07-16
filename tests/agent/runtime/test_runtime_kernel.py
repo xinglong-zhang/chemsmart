@@ -227,7 +227,8 @@ def test_phase_catalog_limits_controller_and_local_tool_surfaces():
 
     assert len(controller.direct) == 5
     assert "write_project_yaml" not in controller.direct
-    assert "critic_project_yaml" in controller.direct
+    assert "read_project_yaml" in controller.direct
+    assert "critic_project_yaml" in controller.deferred
     assert specialist.direct == ("synthesize_command", "repair_command")
     assert "build_job" in controller.hidden
 
