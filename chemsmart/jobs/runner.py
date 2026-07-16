@@ -48,7 +48,18 @@ def run_phase_jobs(
     logger_obj=None,
     phase_label: str = "phase",
 ) -> None:
-    """Shared phase runner wrapper."""
+    """Run a workflow phase of child jobs through ``Job._execute_phase_jobs``.
+
+    Phase siblings are always executed sequentially. The derived ``serial_mode``
+    (from ``parent_runner`` when omitted) only controls whether an incomplete
+    child stops the phase early when ``stop_on_incomplete`` is true; it does not
+    run HA/A (or other intra-phase sub-jobs) concurrently.
+
+    For pKa, intra-molecule phases (gas opt, solvation SP, reference legs, etc.)
+    never run in parallel by design. ``--run-in-parallel`` applies to separate
+    pKa target jobs wrapped in ``BatchJob``, not to sub-jobs inside one pKa
+    thermodynamic cycle.
+    """
     if serial_mode is None:
         serial_mode = get_serial_mode(parent_runner)
     Job._execute_phase_jobs(

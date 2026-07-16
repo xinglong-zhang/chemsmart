@@ -8,6 +8,17 @@ calculations using ORCA with a proper thermodynamic cycle:
 
 Using the same level of theory ensures proper error cancellation for
 solvation free energy calculations.
+
+Execution parallelism
+---------------------
+Within one ``ORCApKaJob`` (a single target molecule), sub-jobs in each
+workflow phase (HA opt, A- opt, HA SP, A- SP, and reference legs) always run
+sequentially via ``run_phase_jobs``. The CLI ``--run-in-parallel`` flag does
+not submit HA and A- optimizations concurrently inside one pKa job.
+
+Parallelism applies only across separate pKa target jobs (for example
+multi-molecule ``OrcaBatchJob`` fan-out), not within the thermodynamic-cycle
+sub-jobs of a single molecule.
 """
 
 import logging
@@ -32,6 +43,10 @@ class ORCApKaJob(ORCAJob):
     3. Run SP on optimized HA in solution
     4. Run SP on optimized A- in solution
     5. (Optional) Same for reference acid Href and Ref-
+
+    Intra-molecule execution is strictly sequential: HA and A- sub-jobs within
+    each phase (gas opt, solvation SP, etc.) never run in parallel. Use
+    ``BatchJob`` fan-out for parallelism across multiple target molecules.
 
     Attributes:
         TYPE (str): Job type identifier ('orcapka').
@@ -474,9 +489,14 @@ class ORCApKaJob(ORCAJob):
 
     # ------------------------------------------------------------------
     # Execution
+    #
+    # Intra-molecule phases always run sequentially via run_phase_jobs.
+    # --run-in-parallel only affects separate pKa BatchJob targets, not
+    # concurrent HA/A submission within one thermodynamic cycle.
     # ------------------------------------------------------------------
 
     def _run_opt_jobs(self):
+        """Run gas phase optimization jobs (HA then A- sequentially)."""
         run_phase_jobs(
             parent_runner=self.jobrunner,
             jobs=self.opt_jobs,

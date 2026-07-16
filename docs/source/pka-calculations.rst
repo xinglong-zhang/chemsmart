@@ -133,6 +133,16 @@ CHEMSMART implements a dual-level approach for accurate solvation free energies:
  Job Submission (Gaussian / ORCA)
 **********************************
 
+.. note::
+
+   **Intra-molecule phases are always sequential.** Within one pKa job (one target molecule), gas-phase optimizations
+   (HA, A⁻), solvent single-points, and reference legs run one after another. The ``--run-in-parallel`` /
+   ``--no-run-in-parallel`` flags do **not** submit HA and A⁻ concurrently inside a single pKa calculation.
+
+   Parallel execution applies only across **separate** pKa target jobs — for example when multiple molecules or
+   batch-table rows are wrapped in a ``BatchJob``. That is independent of the sequential thermodynamic-cycle sub-jobs
+   inside each individual pKa job.
+
 Job submission is backend-specific. Use the dedicated pages for full examples and parameter tables:
 
 -  :ref:`gaussian-pka-calculations`
