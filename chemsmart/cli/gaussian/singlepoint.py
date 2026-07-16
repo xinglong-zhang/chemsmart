@@ -66,6 +66,7 @@ def sp(
         f"Single point job settings from project: {sp_settings.__dict__}"
     )
 
+    from chemsmart.jobs.gaussian.batch import GaussianBatchJob
     from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
     from chemsmart.utils.cli import create_sp_label
 
@@ -108,7 +109,11 @@ def sp(
                     **kwargs,
                 )
                 jobs.append(job)
-            return jobs
+            return GaussianBatchJob(
+                jobs=jobs,
+                no_run_in_parallel=jobrunner.no_run_in_parallel,
+                label=f"{label}_batch",
+            )
         else:
             # Single molecule case
             molecule = molecules[-1]

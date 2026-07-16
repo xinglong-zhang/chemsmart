@@ -8,6 +8,7 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.jobs.batch import BatchJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import (
     JobRunner,
@@ -114,24 +115,24 @@ def process_pipeline(ctx, *args, **kwargs):
         )
         return None
 
-    # Handle list of jobs (when multiple molecules are specified with --index)
+    def _prepare_runner(single_job):
+        return jobrunner.from_job(
+            job=single_job,
+            server=jobrunner.server,
+            scratch=jobrunner.scratch,
+            fake=jobrunner.fake,
+            delete_scratch=jobrunner.delete_scratch,
+            no_run_in_parallel=jobrunner.no_run_in_parallel,
+            num_cores=jobrunner.num_cores,
+            num_gpus=jobrunner.num_gpus,
+            mem_gb=jobrunner.mem_gb,
+            num_nodes=getattr(jobrunner, "num_nodes", None),
+        )
+
+    # Handle list of jobs (legacy multi-molecule return path)
     if isinstance(job, list):
         logger.info(f"Running {len(job)} jobs")
         serial_mode = get_serial_mode(jobrunner)
-
-        def _prepare_runner(single_job):
-            return jobrunner.from_job(
-                job=single_job,
-                server=jobrunner.server,
-                scratch=jobrunner.scratch,
-                fake=jobrunner.fake,
-                delete_scratch=jobrunner.delete_scratch,
-                no_run_in_parallel=jobrunner.no_run_in_parallel,
-                num_cores=jobrunner.num_cores,
-                num_gpus=jobrunner.num_gpus,
-                mem_gb=jobrunner.mem_gb,
-                num_nodes=getattr(jobrunner, "num_nodes", None),
-            )
 
         if serial_mode.no_run_in_parallel:
             logger.info("Running jobs in serial mode (one after another)")
@@ -162,25 +163,21 @@ def process_pipeline(ctx, *args, **kwargs):
                     )
         return None
 
+    # BatchJob has no runner TYPE; bind an engine runner from the first child
+    # so BatchJob can propagate copies onto each child job.
+    if isinstance(job, BatchJob):
+        if not job.jobs:
+            raise ValueError(f"BatchJob {job} has no child jobs to run.")
+        job.jobrunner = _prepare_runner(job.jobs[0])
+        job.run()
+        return None
+
     # Instantiate a specific jobrunner based on job type
     # jobrunner at this stage is an instance of specific JobRunner subclass
     # to run the job
     if isinstance(job, Job):
-        jobrunner = jobrunner.from_job(
-            job=job,
-            server=jobrunner.server,
-            scratch=jobrunner.scratch,
-            fake=jobrunner.fake,
-            delete_scratch=jobrunner.delete_scratch,
-            no_run_in_parallel=jobrunner.no_run_in_parallel,
-            num_cores=jobrunner.num_cores,
-            num_gpus=jobrunner.num_gpus,
-            mem_gb=jobrunner.mem_gb,
-            num_nodes=getattr(jobrunner, "num_nodes", None),
-        )
-
         # Attach jobrunner to job and run the job with the jobrunner
-        job.jobrunner = jobrunner
+        job.jobrunner = _prepare_runner(job)
         job.run()
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")

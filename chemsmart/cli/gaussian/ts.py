@@ -55,6 +55,7 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
 
     logger.info(f"TS job settings from project: {ts_settings.__dict__}")
 
+    from chemsmart.jobs.gaussian.batch import GaussianBatchJob
     from chemsmart.jobs.gaussian.ts import GaussianTSJob
 
     # Get the original molecule indices from context
@@ -111,7 +112,11 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
                     **kwargs,
                 )
                 jobs.append(job)
-            return jobs
+            return GaussianBatchJob(
+                jobs=jobs,
+                no_run_in_parallel=jobrunner.no_run_in_parallel,
+                label=f"{label}_batch",
+            )
         else:
             # Single molecule case
             molecule = molecules[-1]

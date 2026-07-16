@@ -89,6 +89,7 @@ def scan(
     if ctx.invoked_subcommand is None:
         check_charge_and_multiplicity(scan_settings)
 
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
         from chemsmart.jobs.gaussian.scan import GaussianScanJob
 
         # Get the original molecule indices from context
@@ -118,7 +119,11 @@ def scan(
                     **kwargs,
                 )
                 jobs.append(job)
-            return jobs
+            return GaussianBatchJob(
+                jobs=jobs,
+                no_run_in_parallel=jobrunner.no_run_in_parallel,
+                label=f"{label}_batch",
+            )
         else:
             # Single molecule case
             molecule = molecules[-1]

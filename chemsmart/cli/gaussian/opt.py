@@ -64,6 +64,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     ctx.obj["parent_settings"] = opt_settings
     ctx.obj["parent_jobtype"] = "opt"
 
+    from chemsmart.jobs.gaussian.batch import GaussianBatchJob
     from chemsmart.jobs.gaussian.opt import GaussianOptJob
 
     # Get the original molecule indices from context
@@ -113,7 +114,11 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
                     **kwargs,
                 )
                 jobs.append(job)
-            return jobs
+            return GaussianBatchJob(
+                jobs=jobs,
+                no_run_in_parallel=jobrunner.no_run_in_parallel,
+                label=f"{label}_batch",
+            )
         else:
             # Single molecule case
             molecule = molecules[-1]

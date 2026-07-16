@@ -781,27 +781,39 @@ class TestGaussianBatchTriggeringGate:
 class TestGaussianRunSubNoParallelIntegration:
     """Integration-style tests for `run/sub --no-run-in-parallel`."""
 
-    def test_run_no_run_in_parallel_executes_fanout_jobs_serially(
+    def test_run_no_run_in_parallel_builds_serial_batch_job(
         self,
         multiple_molecules_xyz_file,
         pbs_server,
     ):
-        """`run --no-run-in-parallel` keeps fan-out but executes jobs serially."""
+        """`run --no-run-in-parallel` builds Gaussian batch with serial execution."""
+        from chemsmart.jobs.job import Job
+
+        class DummyBatchJob(Job):
+            TYPE = "g16opt"
+
+            def run(self, **kwargs):
+                return None
+
         runner = CliRunner()
-        job1 = MagicMock(label="opt_idx1")
-        job2 = MagicMock(label="opt_idx2")
-        job1.TYPE = "g16opt"
-        job2.TYPE = "g16opt"
+        dummy_batch_job = DummyBatchJob(
+            molecule=None,
+            label="opt_batch",
+            jobrunner=None,
+        )
         with (
             patch(
                 "chemsmart.cli.run.Server.from_servername",
                 return_value=pbs_server,
             ),
             patch(
-                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
-                side_effect=[job1, job2],
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob"
             ) as mock_job_cls,
-            patch("chemsmart.cli.run.ThreadPoolExecutor") as mock_executor,
+            patch(
+                "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
+                return_value=dummy_batch_job,
+            ) as mock_batch_cls,
+            patch.object(dummy_batch_job, "run") as mock_batch_run,
         ):
             result = runner.invoke(
                 entry_point,
@@ -832,31 +844,31 @@ class TestGaussianRunSubNoParallelIntegration:
 
         assert result.exit_code == 0, result.output
         assert mock_job_cls.call_count == 2
-        assert job1.run.call_count == 1
-        assert job2.run.call_count == 1
-        assert mock_executor.call_count == 0
+        assert mock_batch_cls.call_count == 1
+        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+        assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
+        assert mock_batch_run.call_count == 1
 
-    def test_sub_no_run_in_parallel_submits_each_fanout_job(
+    def test_sub_no_run_in_parallel_submits_serial_batch_job(
         self,
         multiple_molecules_xyz_file,
         pbs_server,
     ):
-        """`sub --no-run-in-parallel` submits each selected job target."""
+        """`sub --no-run-in-parallel` submits Gaussian batch with serial flag."""
         runner = CliRunner()
-        job1 = MagicMock(label="opt_idx1")
-        job2 = MagicMock(label="opt_idx2")
-        job1.TYPE = "g16opt"
-        job2.TYPE = "g16opt"
-
+        mock_batch_job = MagicMock()
         with (
             patch(
                 "chemsmart.cli.sub.Server.from_servername",
                 return_value=pbs_server,
             ),
             patch(
-                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
-                side_effect=[job1, job2],
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob"
             ) as mock_job_cls,
+            patch(
+                "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
+                return_value=mock_batch_job,
+            ) as mock_batch_cls,
             patch("chemsmart.settings.server.Server.submit") as mock_submit,
         ):
             result = runner.invoke(
@@ -888,12 +900,13 @@ class TestGaussianRunSubNoParallelIntegration:
 
         assert result.exit_code == 0, result.output
         assert mock_job_cls.call_count == 2
-        assert mock_submit.call_count == 2
-        for call in mock_job_cls.call_args_list:
-            assert call.kwargs["jobrunner"].no_run_in_parallel is True
-        for call in mock_submit.call_args_list:
-            assert call.kwargs["test"] is True
-            assert "--no-run-in-parallel" in call.kwargs["cli_args"]
+        assert mock_batch_cls.call_count == 1
+        assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+        assert mock_submit.call_count == 1
+        assert mock_submit.call_args.kwargs["test"] is True
+        assert (
+            "--no-run-in-parallel" in mock_submit.call_args.kwargs["cli_args"]
+        )
 
     def test_scan_settings_from_project(
         self,

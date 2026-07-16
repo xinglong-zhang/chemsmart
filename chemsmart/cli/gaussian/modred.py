@@ -79,6 +79,7 @@ def modred(
         )
 
         # If no subcommand invoked, run regular modred
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
         from chemsmart.jobs.gaussian.modred import GaussianModredJob
 
         # Get the original molecule indices from context
@@ -108,7 +109,11 @@ def modred(
                     **kwargs,
                 )
                 jobs.append(job)
-            return jobs
+            return GaussianBatchJob(
+                jobs=jobs,
+                no_run_in_parallel=jobrunner.no_run_in_parallel,
+                label=f"{label}_batch",
+            )
         else:
             # Single molecule case
             molecule = molecules[-1]
