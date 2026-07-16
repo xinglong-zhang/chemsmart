@@ -138,7 +138,7 @@ class Job(RegistryMixin):
         """Run a phase of child jobs using shared orchestration semantics.
 
         This centralizes the repeated pattern of optional pre-phase refresh,
-        per-job runner propagation, and serial-mode fail-fast behavior.
+        per-job runner propagation, and fail-fast behavior.
         """
         if before_run is not None:
             before_run()

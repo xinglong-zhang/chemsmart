@@ -13,11 +13,13 @@ import os
 
 import click
 
+from chemsmart.cli.database.database import click_database_id_options
 from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
 )
+from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
@@ -96,7 +98,7 @@ def click_orca_settings_options(f):
         "-b", "--basis", type=str, default=None, help="New basis set to run."
     )
     @click.option(
-        "-a",
+        "-B",
         "--aux-basis",
         type=str,
         default=None,
@@ -412,6 +414,7 @@ def click_orca_jobtype_options(f):
 @click_orca_options
 @click_filename_options
 @click_file_label_and_index_options
+@click_database_id_options
 @click_orca_settings_options
 @click_orca_solvent_group_options
 @click_pubchem_options
@@ -441,6 +444,11 @@ def orca(
     mdci_cutoff,
     mdci_density,
     index,
+    record_index,
+    record_id,
+    structure_id,
+    structure_index,
+    molecule_id,
     additional_route_parameters,
     forces,
     remove_solvent,
@@ -458,6 +466,36 @@ def orca(
     job settings, loads molecular structures, and prepares the context for
     subcommands.
     """
+    # --mid is not supported for job submission
+    if molecule_id is not None:
+        raise click.UsageError(
+            "--mid/--molecule-id is not supported for ORCA job submission. "
+            "Use --sid/--structure-id or --ri/--rid with -i/--si instead."
+        )
+    # -i/--index and --si/--structure-index are equivalent aliases
+    if index is not None and structure_index is not None:
+        raise click.UsageError(
+            "-i/--index and --si/--structure-index are mutually exclusive. "
+            "Use only one to specify the structure index."
+        )
+    # If --si is given, treat it as -i so all downstream code uses index
+    if structure_index is not None:
+        index = structure_index
+
+    is_chemsmart_db = is_chemsmart_database(filename)
+    if is_chemsmart_db:
+        record_selectors = [record_index is not None, record_id is not None]
+        if sum(record_selectors) + (structure_id is not None) != 1:
+            raise click.UsageError(
+                "For chemsmart database input, select exactly one of "
+                "--ri/--record-index, --rid/--record-id, or "
+                "--sid/--structure-id."
+            )
+        if index is not None and not any(record_selectors):
+            raise click.UsageError(
+                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "can only be used together with --ri/--record-index or --rid/--record-id."
+            )
 
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings
@@ -468,6 +506,17 @@ def orca(
 
     # obtain ORCA Settings from filename, if supplied; otherwise return
     # defaults
+
+    # Defer filetype validation if the pka subcommand is being invoked,
+    # as it has its own table file handling.
+    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
+    from chemsmart.utils.datasets import PKaTableEntry
+
+    is_pka_subcommand = ctx.invoked_subcommand == "pka"
+    is_pka_table_input = is_pka_subcommand and (
+        PKaTableEntry.is_submission_table(filename)
+        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
+    )
 
     if filename is None:
         # for cases where filename is not supplied, eg, get structure from
@@ -485,6 +534,29 @@ def orca(
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
+    elif filename.endswith(".db"):
+        if is_chemsmart_db:
+            job_settings = ORCAJobSettings.from_database(
+                filepath=filename,
+                record_index=record_index,
+                record_id=record_id,
+                structure_index=index or "-1",
+                structure_id=structure_id,
+            )
+            logger.info(f"Loaded ORCA settings from database file: {filename}")
+        else:
+            logger.debug(
+                f"File {filename} is not a valid chemsmart database file."
+            )
+            job_settings = ORCAJobSettings.default()
+    elif is_pka_table_input or (
+        is_pka_subcommand and is_pka_cdxml_input(filename)
+    ):
+        job_settings = ORCAJobSettings.default()
+        logger.info(
+            "pka subcommand invoked with table or CDXML file; "
+            "skipping filetype validation and using default ORCA settings"
+        )
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain ORCAJobSettings"
@@ -585,27 +657,57 @@ def orca(
 
     # obtain molecule structure from file or PubChem
     molecules = None
-    if filename is None and pubchem is None:
-        raise ValueError(
-            "[filename] or [pubchem] has not been specified!\n"
-            "Please specify one of them!"
-        )
-    if filename and pubchem:
-        raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\n"
-            "Please specify only one of them."
-        )
 
-    if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
+    # Skip molecule loading for pKa table/CDXML files (handled by pKa batch)
+    if is_pka_table_input:
+        logger.debug(
+            f"Skipping molecule loading for pKa table/CDXML file: {filename}"
         )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecules {molecules} from {filename}")
+        molecules = None
+    else:
+        if filename is None and pubchem is None:
+            raise ValueError(
+                "[filename] or [pubchem] has not been specified!\n"
+                "Please specify one of them!"
+            )
+        if filename and pubchem:
+            raise ValueError(
+                "Both [filename] and [pubchem] have been specified!\n"
+                "Please specify only one of them."
+            )
 
-    if pubchem:
+    if filename and not is_pka_table_input:
+        if is_chemsmart_db:
+            if structure_id is not None:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    return_list=True,
+                    structure_id=structure_id,
+                )
+            else:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    index=index or "-1",
+                    return_list=True,
+                    record_index=record_index,
+                    record_id=record_id,
+                )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from database {filename}!"
+            logger.debug(
+                f"Obtained database molecule {molecules} from {filename}"
+            )
+        else:
+            molecules = Molecule.from_filepath(
+                filepath=filename, index=":", return_list=True
+            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filename}!"
+            logger.debug(f"Obtained molecules {molecules} from {filename}")
+
+    if pubchem and not is_pka_table_input:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None
@@ -620,10 +722,30 @@ def orca(
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{append_label}"
         logger.debug(f"Created label with append: {label}")
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
+        if ctx.invoked_subcommand:
+            label = f"{label}_{ctx.invoked_subcommand}"
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{ctx.invoked_subcommand}"
         logger.debug(f"Created default label: {label}")
 
@@ -632,7 +754,7 @@ def orca(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
     molecule_indices = None
-    if index is not None:
+    if index is not None and not is_chemsmart_db:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index

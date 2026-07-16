@@ -27,6 +27,47 @@ from chemsmart.cli.main import entry_point
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
 
+class TestGaussianCLIPubChemOptCommand:
+    """CLI tests for ``--pubchem`` structure loading without ``-f``."""
+
+    def test_pubchem_only_opt_passes_molecule_to_job(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--pubchem <cid> opt`` loads a structure and passes it to the job."""
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[pubchem_molecule],
+        ) as mock_from_pubchem:
+            result, settings = run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-l",
+                    "ammonia",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_from_pubchem.assert_called_once_with(
+            identifier="222", return_list=True
+        )
+        assert settings is not None, "GaussianOptJob was never instantiated"
+
+
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""
 

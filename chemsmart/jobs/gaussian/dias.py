@@ -350,6 +350,8 @@ class GaussianDIASJob(GaussianJob):
         points along the reaction coordinate. These calculations
         provide reference energies for DI-AS analysis.
         """
+        for job in self.all_molecules_jobs:
+            job.run()
         jobs_to_run = self.all_molecules_jobs
 
         # Check if jobs should be run in serial based on jobrunner flag
@@ -384,6 +386,8 @@ class GaussianDIASJob(GaussianJob):
         Fragment 1 energies are used with fragment 2 and complete
         molecule energies to compute dissociation energies.
         """
+        for job in self.fragment1_jobs:
+            job.run()
         jobs_to_run = self.fragment1_jobs
 
         # Check if jobs should be run in serial based on jobrunner flag
@@ -418,6 +422,8 @@ class GaussianDIASJob(GaussianJob):
         These calculations complete the energy data needed for
         DI-AS fragmentation analysis.
         """
+        for job in self.fragment2_jobs:
+            job.run()
         jobs_to_run = self.fragment2_jobs
 
         # Check if jobs should be run in serial based on jobrunner flag

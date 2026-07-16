@@ -1,12 +1,12 @@
 #########################
- Chemsmart Documentation
+ CHEMSMART Documentation
 #########################
 
 .. image:: _static/chemsmart_logo.png
    :width: 400
    :align: center
 
-Chemsmart is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
+CHEMSMART is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
 files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, and other computational
 chemistry software.
 
@@ -84,6 +84,18 @@ chemistry software.
    :caption: Thermochemistry
 
    thermochemistry-analysis
+
+..
+   .. toctree::
+      :maxdepth: 2
+      :caption: Database
+
+      database-overview
+      database-assemble
+      database-query
+      database-inspect
+      database-export
+      database-workflow
 
 .. toctree::
    :maxdepth: 2

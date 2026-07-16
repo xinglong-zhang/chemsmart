@@ -18,12 +18,14 @@ Key mixin classes:
 import inspect
 import os
 import re
+from datetime import datetime
 from functools import cached_property
 
 from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.utils.repattern import gaussian_date_pattern, orca_date_pattern
 
 
 class FileMixin:
@@ -392,6 +394,55 @@ class FileMixin:
         else:
             return None
 
+    def validate_frequencies(self, ignore_threshold=-15.0):
+        """
+        Validate vibrational frequencies based on the job type and return a report.
+
+        - For an "OPT" job, it checks for zero imaginary frequencies.
+        - For a "TS" job, it checks for exactly one imaginary frequency.
+        - For other job types, validation is not performed.
+
+        Args:
+            ignore_threshold (float): Frequencies above this threshold are ignored.
+
+        Returns:
+            dict: A dictionary containing the validation results.
+        """
+        imaginary_freqs = []
+        if self.vibrational_frequencies is not None:
+            imaginary_freqs = [
+                freq
+                for freq in self.vibrational_frequencies
+                if freq < ignore_threshold
+            ]
+
+        num_imaginary = len(imaginary_freqs)
+        job_type = self.jobtype.upper() if self.jobtype else ""
+
+        is_valid_minimum = False
+        is_valid_ts = False
+        detected_job_type = "UNKNOWN"
+
+        if "OPT" in job_type:
+            is_valid_minimum = num_imaginary == 0
+            detected_job_type = "OPT"
+        elif "TS" in job_type:
+            is_valid_ts = num_imaginary == 1
+            detected_job_type = "TS"
+        elif self.jobtype:
+            detected_job_type = self.jobtype.upper()
+
+        if self.vibrational_frequencies is None and "OPT" in job_type:
+            is_valid_minimum = True
+
+        return {
+            "detected_job_type": detected_job_type,
+            "total_imaginary_frequencies": num_imaginary,
+            "imaginary_frequencies_list": imaginary_freqs,
+            "is_valid_minimum": is_valid_minimum,
+            "is_valid_ts": is_valid_ts,
+        }
+
 
 class GaussianFileMixin(FileMixin):
     """
@@ -401,6 +452,39 @@ class GaussianFileMixin(FileMixin):
     route string parsing, job type detection, and settings extraction.
     Handles Gaussian input/output file formats and job parameters.
     """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for i, line in enumerate(self.contents):
+            if (
+                "******************************************" in line
+                and i + 1 < len(self.contents)
+            ):
+                next_line = self.contents[i + 1]
+                if "Gaussian" in next_line:
+                    version_line = next_line
+                    version = version_line.split()[2].split("-")[1]
+                    return version
+        return None
+
+    @property
+    def file_date(self):
+        if not self.contents:
+            return None
+        last_line = self.contents[-1]
+        match = re.search(gaussian_date_pattern, last_line)
+        if match:
+            time_info = match.group(1)
+            try:
+                return datetime.strptime(
+                    time_info, "%a %b %d %H:%M:%S %Y"
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        return None
 
     def _get_chk(self):
         """
@@ -718,6 +802,11 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.functional
 
     @property
+    def method(self):
+        """Get the computational method from route string."""
+        return self.route_object.method
+
+    @property
     def basis(self):
         """
         Get basis set from route string.
@@ -889,6 +978,32 @@ class ORCAFileMixin(FileMixin):
     extraction. Handles ORCA input/output file formats and job settings.
     """
 
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "Program Version" in line:
+                version = line.split()[2]
+                return version
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "Starting time:" in line:
+                match = re.search(orca_date_pattern, line)
+                if match:
+                    time_info = match.group(1)
+                    try:
+                        return datetime.strptime(
+                            time_info, "%a %b %d %H:%M:%S %Y"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
     @cached_property
     def contents_string(self):
         """
@@ -948,6 +1063,10 @@ class ORCAFileMixin(FileMixin):
                         c_idx = l_elem.index("density")
                         return l_elem[c_idx + 1]
         return None
+
+    @property
+    def solvent_on(self):
+        return self.solvent_model is not None and self.solvent_id is not None
 
     @property
     def solvent_model(self):
@@ -1105,6 +1224,11 @@ class ORCAFileMixin(FileMixin):
             str or None: Ab initio method name or None if not specified.
         """
         return self.route_object.ab_initio
+
+    @property
+    def method(self):
+        """Get the computational method from ORCA route string."""
+        return self.route_object.method
 
     @property
     def dispersion(self):

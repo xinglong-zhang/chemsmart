@@ -300,6 +300,11 @@ def irc(
     # validate charge and multiplicity consistency
     check_charge_and_multiplicity(irc_settings)
 
+    # get molecule from context (use the last molecule if multiple)
+    molecules = ctx.obj["molecules"]
+    molecule = molecules[-1]  # get last molecule from list of molecules
+    logger.info(f"Running IRC calculation on molecule: {molecule}")
+
     # get label for the job output files
     label = ctx.obj["label"]
     logger.debug(f"Job label: {label}")

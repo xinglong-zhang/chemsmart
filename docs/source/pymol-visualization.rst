@@ -228,8 +228,8 @@ Align all files of the same type:
 
 .. note::
 
-   When using ``-i n``, ensure every input file contains the nth structure. File extensions are used to determine the
-   file type ``-t``.
+   When using ``-i n``, ensure every input file contains the nth structure. Here ``-t/--filetype`` is extension-based:
+   it filters filenames such as ``.xyz`` or ``.log`` and does not infer a Gaussian or ORCA program identity.
 
 Align multiple structures in one file:
 

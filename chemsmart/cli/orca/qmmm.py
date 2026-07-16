@@ -268,9 +268,7 @@ def create_orca_qmmm_subcommand(parent_command):
         jobrunner = ctx.obj["jobrunner"]
         ctx.obj["qmmm"] = True
         project_settings = ctx.obj["project_settings"]
-        logger.debug(
-            "Project settings: %s", ctx.obj["project_settings"].__dict__
-        )
+        logger.debug(f"Project settings: {project_settings.__dict__}")
 
         job_settings = ctx.obj["job_settings"]
         keywords = ctx.obj["keywords"]
@@ -286,7 +284,7 @@ def create_orca_qmmm_subcommand(parent_command):
             qmmm_merged = qmmm_settings.merge(job_settings, keywords=keywords)
         except Exception as exc:
             logger.debug(
-                "qmmm_settings.merge failed or is unavailable: %s", exc
+                f"qmmm_settings.merge failed or is unavailable: {exc}"
             )
             if job_settings is not None:
                 try:
@@ -309,7 +307,7 @@ def create_orca_qmmm_subcommand(parent_command):
                 qmmm_settings = ORCAQMMMJobSettings()
 
         label = ctx.obj.get("label")
-        logger.debug("Label for job: %s", label)
+        logger.debug(f"Label for job: {label}")
 
         # Distinguish QMMM subcommand outputs from parent job outputs
         if label and "qmmm" not in label.lower():
@@ -406,7 +404,7 @@ def create_orca_qmmm_subcommand(parent_command):
                 )
             except Exception as exc:
                 logger.debug(
-                    "Failed to merge parent settings into QMMM: %s", exc
+                    f"Failed to merge parent settings into QMMM: {exc}"
                 )
 
         effective_skip_completed = (

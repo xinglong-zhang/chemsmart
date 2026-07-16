@@ -11,6 +11,8 @@ SERVER:
     ##PROJECT: 13002374
     SCRATCH_DIR: null
     USE_HOSTS: true
+    EXTRA_SCHEDULER_DIRECTIVES: |
+      #SBATCH --reservation=xlzhang_1
     EXTRA_COMMANDS: |
         #extra commands to activate chemsmart environment in submission script
 GAUSSIAN:

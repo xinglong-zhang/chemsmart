@@ -716,3 +716,78 @@ class TestORCARunSubNoParallelIntegration:
         assert (
             "--no-run-in-parallel" in mock_submit.call_args.kwargs["cli_args"]
         )
+
+
+class TestORCALabelAndAuxBasisOptions:
+    def test_short_a_sets_append_label(self, single_molecule_xyz_file):
+        from os.path import basename, splitext
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca as orca_cli
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob"
+        ) as mock:
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                orca_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-a",
+                    "tag",
+                    "sp",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock.call_args is not None
+        base = splitext(basename(single_molecule_xyz_file))[0]
+        assert mock.call_args.kwargs["label"].startswith(f"{base}_tag")
+        assert mock.call_args.kwargs["settings"].aux_basis is None
+
+    def test_short_B_sets_aux_basis(self, single_molecule_xyz_file):
+        from unittest.mock import MagicMock, patch
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.orca.orca import orca as orca_cli
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob"
+        ) as mock:
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                orca_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-B",
+                    "def2/J",
+                    "sp",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock.call_args is not None
+        assert mock.call_args.kwargs["settings"].aux_basis == "def2/J"

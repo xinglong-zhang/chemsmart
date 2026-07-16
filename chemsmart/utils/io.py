@@ -3,7 +3,7 @@ Input/output utility functions for molecular structure processing.
 
 This module provides helper functions for creating molecule objects,
 cleaning duplicate structures, and text processing operations commonly
-used in computational chemistry file I/O operations.
+used in computational chemistry file I/O.
 
 Key functionality includes:
 - Molecule object creation from coordinate data
@@ -31,6 +31,7 @@ from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
 
+
 SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
 PROGRAM_INFO = {
@@ -57,7 +58,7 @@ PROGRAM_INFO = {
             "Your ORCA version",
             "ORCA versions",
         ],
-        "suffixes": [".out"],
+        "suffixes": [".out", ".log"],
     },
     "xtb": {
         "keywords": ["x T B", "xtb version", "xtb is free software:"],
@@ -72,6 +73,11 @@ ALL_SUFFIXES = tuple(
 PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
 
 
+def get_program_output_extensions(program, default=(".log", ".out")):
+    """Return preferred output-file extensions for a detected program."""
+    return tuple(PROGRAM_INFO.get(program, {}).get("suffixes", default))
+
+
 def create_molecule_list(
     orientations,
     orientations_pbc,
@@ -83,6 +89,9 @@ def create_molecule_list(
     frozen_atoms,
     pbc_conditions,
     num_structures=None,
+    is_optimized_structure_list=None,
+    rotational_constants_list=None,
+    point_groups_list=None,
 ):
     """
     Helper to build a list of Molecule objects from arrays.
@@ -104,6 +113,12 @@ def create_molecule_list(
         pbc_conditions (list | None): Periodic boundary conditions.
         num_structures (int, optional): Number of structures to create; if None
             uses `len(orientations)`.
+        is_optimized_structure_list (list[bool] | None): Per-structure flags
+            indicating if the structure is optimized (optional).
+        rotational_constants_list (list | None): Per-structure rotational
+            constants aligned with `orientations` (optional).
+        point_groups_list (list[str] | None): Per-structure point group
+            symbols aligned with `orientations` (optional).
 
     Returns:
         list[Molecule]: Molecule objects with specified properties.
@@ -133,13 +148,31 @@ def create_molecule_list(
         Molecule(
             symbols=symbols,
             positions=orientations[i],
-            translation_vectors=orientations_pbc[i],
             charge=charge,
             multiplicity=multiplicity,
             frozen_atoms=frozen_atoms,
             pbc_conditions=pbc_conditions,
+            translation_vectors=orientations_pbc[i],
             energy=energies[i] if energies else None,
             forces=forces[i] if forces else None,
+            structure_index_in_file=i + 1,
+            is_optimized_structure=(
+                is_optimized_structure_list[i]
+                if is_optimized_structure_list
+                and i < len(is_optimized_structure_list)
+                else None
+            ),
+            rotational_constants=(
+                rotational_constants_list[i]
+                if rotational_constants_list
+                and i < len(rotational_constants_list)
+                else None
+            ),
+            point_group=(
+                point_groups_list[i]
+                if point_groups_list and i < len(point_groups_list)
+                else None
+            ),
         )
         for i in range(num_structures)
     ]
@@ -338,6 +371,31 @@ def get_program_type_from_file(filepath):
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
     return "unknown"
+
+
+def discover_pka_target_companion_outputs(ha_gas_path, program=None):
+    """Infer A- and solvent SP paths from a HA gas-phase output file."""
+    from chemsmart.utils.datasets import (
+        discover_pka_output_path,
+        pka_output_basename_from_path,
+    )
+
+    ha_gas_path = str(ha_gas_path)
+    directory = os.path.dirname(ha_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ha_gas_path)
+    basename = pka_output_basename_from_path(ha_gas_path, "ha_gas")
+    return {
+        "a": discover_pka_output_path(
+            basename, directory, "a_gas", program=program
+        ),
+        "ha_solv": discover_pka_output_path(
+            basename, directory, "ha_sp", program=program
+        ),
+        "a_solv": discover_pka_output_path(
+            basename, directory, "a_sp", program=program
+        ),
+    }
 
 
 def check_program_availability_in_chemsmart(program_name):
@@ -1784,3 +1842,34 @@ def update_windows_env(paths_to_add: list, pythonpath_entry: str) -> None:
         )
     except Exception as e:
         logger.warning(f"Could not update Windows environment: {e}")
+
+
+def resolve_output_path(input_file, output_file):
+    """Return *output_file* unchanged, unless it would overwrite *input_file*.
+
+    When both paths resolve to the same file, a numeric suffix (``_1``, ``_2``,
+    …) is appended and a warning is logged.
+    """
+    in_path = os.path.abspath(input_file)
+    out_path = os.path.abspath(output_file)
+
+    if in_path != out_path:
+        return out_path, False
+
+    # Split file name and extension
+    basename = os.path.basename(output_file)
+    dir_name = os.path.dirname(out_path)
+    stem, suffix = os.path.splitext(basename)
+
+    counter = 1
+    while True:
+        candidate = os.path.join(dir_name, f"{stem}_{counter}{suffix}")
+        if (
+            not os.path.exists(candidate)
+            and os.path.abspath(candidate) != in_path
+        ):
+            logger.warning(
+                f"Resolved output path would overwrite input ({out_path}); using {candidate} instead."
+            )
+            return candidate, True
+        counter += 1
