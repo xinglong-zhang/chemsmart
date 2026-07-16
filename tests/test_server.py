@@ -1,6 +1,9 @@
 import os
 from io import StringIO
 
+import pytest
+
+from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import PBSSubmitter, SLURMSubmitter
@@ -111,3 +114,62 @@ export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#PBS -m abe\n" in buffer.getvalue()
+
+
+class TestCheckRunningJobs:
+    class _MockClusterHelper:
+        running_job_names = []
+
+        def get_gaussian_running_jobs(self):
+            return [], self.running_job_names
+
+    def test_rejects_duplicate_batch_job_label(self, monkeypatch):
+        self._MockClusterHelper.running_job_names = ["pka_batch"]
+        monkeypatch.setattr(
+            "chemsmart.utils.cluster.ClusterHelper",
+            self._MockClusterHelper,
+        )
+
+        batch = GaussianBatchJob(jobs=[], label="pka_batch")
+        with pytest.raises(
+            SystemExit, match="Duplicate job NOT submitted: pka_batch"
+        ):
+            Server._check_running_jobs(batch)
+
+    def test_allows_unique_batch_job_label(self, monkeypatch):
+        self._MockClusterHelper.running_job_names = ["other_batch"]
+        monkeypatch.setattr(
+            "chemsmart.utils.cluster.ClusterHelper",
+            self._MockClusterHelper,
+        )
+
+        batch = GaussianBatchJob(jobs=[], label="pka_batch")
+        Server._check_running_jobs(batch)
+
+    def test_batch_job_checks_container_label_not_children(self, monkeypatch):
+        self._MockClusterHelper.running_job_names = ["acid1_pka"]
+        monkeypatch.setattr(
+            "chemsmart.utils.cluster.ClusterHelper",
+            self._MockClusterHelper,
+        )
+
+        child = type("ChildJob", (), {"label": "acid1_pka"})()
+        batch = GaussianBatchJob(jobs=[child], label="acids_pka_batch")
+        Server._check_running_jobs(batch)
+
+    def test_skips_jobs_without_scheduler_label(self, monkeypatch):
+        def _fail_if_called(self):
+            raise AssertionError("cluster query should not run")
+
+        monkeypatch.setattr(
+            self._MockClusterHelper,
+            "get_gaussian_running_jobs",
+            _fail_if_called,
+        )
+        monkeypatch.setattr(
+            "chemsmart.utils.cluster.ClusterHelper",
+            self._MockClusterHelper,
+        )
+
+        batch = GaussianBatchJob(jobs=[], label=None)
+        Server._check_running_jobs(batch)

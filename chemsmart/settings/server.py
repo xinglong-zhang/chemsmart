@@ -579,6 +579,27 @@ class Server(RegistryMixin):
             self._submit_job(job)
 
     @staticmethod
+    def _scheduler_labels_for_duplicate_check(job):
+        """
+        Return scheduler-visible labels to guard against duplicate submission.
+
+        For ``BatchJob`` containers, only the container label is queued by
+        the scheduler; child labels execute on the compute node and are not
+        checked here.
+        """
+        from chemsmart.jobs.batch import BatchJob
+        from chemsmart.jobs.gaussian import GaussianJob
+        from chemsmart.jobs.orca.job import ORCAJob
+
+        if job.label is None:
+            return []
+
+        if isinstance(job, (GaussianJob, ORCAJob, BatchJob)):
+            return [job.label]
+
+        return []
+
+    @staticmethod
     def _check_running_jobs(job):
         """
         Check if the job is already running or queued.
@@ -589,22 +610,23 @@ class Server(RegistryMixin):
         Args:
             job: Job instance to check.
         """
-        from chemsmart.jobs.gaussian import GaussianJob
-        from chemsmart.utils.cluster import ClusterHelper
-
-        if not isinstance(job, GaussianJob) or job.label is None:
+        labels = Server._scheduler_labels_for_duplicate_check(job)
+        if not labels:
             return
+
+        from chemsmart.utils.cluster import ClusterHelper
 
         cluster_helper = ClusterHelper()
         running_job_ids, running_job_names = (
             cluster_helper.get_gaussian_running_jobs()
         )
 
-        if job.label in running_job_names:
-            logger.info(
-                f"Warning: submitting job with duplicate name: {job.label}"
-            )
-            sys.exit(f"Duplicate job NOT submitted: {job.label}")
+        for label in labels:
+            if label in running_job_names:
+                logger.info(
+                    f"Warning: submitting job with duplicate name: {label}"
+                )
+                sys.exit(f"Duplicate job NOT submitted: {label}")
 
     def _write_submission_script(self, job, cli_args, **kwargs):
         """
