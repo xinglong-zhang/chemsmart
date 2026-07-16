@@ -10,6 +10,7 @@ coordinates by computing energies of fragments and whole molecules.
 
 import logging
 
+from chemsmart.jobs.batch import run_child_jobs_as_batch
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.utils import get_list_from_string_range
@@ -350,31 +351,14 @@ class GaussianDIASJob(GaussianJob):
         points along the reaction coordinate. These calculations
         provide reference energies for DI-AS analysis.
         """
-        jobs_to_run = self.all_molecules_jobs
-
-        # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.no_run_in_parallel:
-            logger.info(
-                "Running molecule jobs in serial mode (one after another)"
-            )
-            for job in jobs_to_run:
-                job.run()
-                # Enforce that job completed before proceeding to next
-                if not job.is_complete():
-                    logger.warning(
-                        f"Molecule job {job.label} did not complete successfully. "
-                        f"Stopping serial execution."
-                    )
-                    break
-        else:
-            logger.info("Running molecule jobs using GaussianBatchJob")
-            batch_job = GaussianBatchJob(
-                jobs=jobs_to_run,
-                no_run_in_parallel=False,
-                label=f"{self.label}_molecules_batch",
-                jobrunner=self.jobrunner,
-            )
-            batch_job.run()
+        logger.info("Running molecule jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=self.all_molecules_jobs,
+            parent=self,
+            label_suffix="_molecules_batch",
+            fail_fast=False,
+        )
 
     def _run_fragment1_jobs(self):
         """
@@ -384,31 +368,14 @@ class GaussianDIASJob(GaussianJob):
         Fragment 1 energies are used with fragment 2 and complete
         molecule energies to compute dissociation energies.
         """
-        jobs_to_run = self.fragment1_jobs
-
-        # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.no_run_in_parallel:
-            logger.info(
-                "Running fragment 1 jobs in serial mode (one after another)"
-            )
-            for job in jobs_to_run:
-                job.run()
-                # Enforce that job completed before proceeding to next
-                if not job.is_complete():
-                    logger.warning(
-                        f"Fragment 1 job {job.label} did not complete successfully. "
-                        f"Stopping serial execution."
-                    )
-                    break
-        else:
-            logger.info("Running fragment 1 jobs using GaussianBatchJob")
-            batch_job = GaussianBatchJob(
-                jobs=jobs_to_run,
-                no_run_in_parallel=False,
-                label=f"{self.label}_fragment1_batch",
-                jobrunner=self.jobrunner,
-            )
-            batch_job.run()
+        logger.info("Running fragment 1 jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=self.fragment1_jobs,
+            parent=self,
+            label_suffix="_fragment1_batch",
+            fail_fast=False,
+        )
 
     def _run_fragment2_jobs(self):
         """
@@ -418,31 +385,14 @@ class GaussianDIASJob(GaussianJob):
         These calculations complete the energy data needed for
         DI-AS fragmentation analysis.
         """
-        jobs_to_run = self.fragment2_jobs
-
-        # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.no_run_in_parallel:
-            logger.info(
-                "Running fragment 2 jobs in serial mode (one after another)"
-            )
-            for job in jobs_to_run:
-                job.run()
-                # Enforce that job completed before proceeding to next
-                if not job.is_complete():
-                    logger.warning(
-                        f"Fragment 2 job {job.label} did not complete successfully. "
-                        f"Stopping serial execution."
-                    )
-                    break
-        else:
-            logger.info("Running fragment 2 jobs using GaussianBatchJob")
-            batch_job = GaussianBatchJob(
-                jobs=jobs_to_run,
-                no_run_in_parallel=False,
-                label=f"{self.label}_fragment2_batch",
-                jobrunner=self.jobrunner,
-            )
-            batch_job.run()
+        logger.info("Running fragment 2 jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=self.fragment2_jobs,
+            parent=self,
+            label_suffix="_fragment2_batch",
+            fail_fast=False,
+        )
 
     def _run(self, **kwargs):
         """

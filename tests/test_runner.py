@@ -253,6 +253,129 @@ class TestBatchJobRefactor:
         with pytest.raises(BatchExecutionError, match="fail_job"):
             batch.run()
 
+    def test_serial_fail_fast_false_attempts_all_then_raises(self, pbs_server):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+
+        fail_job = Mock(label="fail_job")
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        ok_job = Mock(label="ok_job")
+        ok_job.run.return_value = None
+        ok_job.is_complete.return_value = True
+
+        batch = dummy_batch_cls(
+            jobs=[fail_job, ok_job],
+            no_run_in_parallel=True,
+            fail_fast=False,
+            jobrunner=runner,
+        )
+
+        with pytest.raises(BatchExecutionError, match="1 of 2") as exc_info:
+            batch.run()
+
+        assert "not started" not in str(exc_info.value)
+        fail_job.run.assert_called_once()
+        ok_job.run.assert_called_once()
+
+    def test_serial_fail_fast_true_omits_unstarted_from_report(
+        self, pbs_server
+    ):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+
+        fail_job = Mock(label="fail_job")
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        later_job = Mock(label="later_job")
+        later_job.run.return_value = None
+        later_job.is_complete.return_value = True
+
+        batch = dummy_batch_cls(
+            jobs=[fail_job, later_job],
+            no_run_in_parallel=True,
+            fail_fast=True,
+            jobrunner=runner,
+        )
+
+        with pytest.raises(
+            BatchExecutionError, match="1 attempted, 1 failed, 1 not started"
+        ) as exc_info:
+            batch.run()
+
+        assert "fail_job" in str(exc_info.value)
+        assert "later_job" not in str(exc_info.value)
+        fail_job.run.assert_called_once()
+        later_job.run.assert_not_called()
+        assert batch._jobs_not_started == 1
+
+    def test_parallel_fail_fast_still_submits_all(self, pbs_server):
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
+
+        fail_job = Mock(label="fail_job")
+        fail_job.run.side_effect = RuntimeError("fail")
+        fail_job.is_complete.return_value = False
+
+        ok_job = Mock(label="ok_job")
+        ok_job.run.return_value = None
+        ok_job.is_complete.return_value = True
+
+        batch = dummy_batch_cls(
+            jobs=[fail_job, ok_job],
+            no_run_in_parallel=False,
+            fail_fast=True,
+            jobrunner=runner,
+        )
+
+        with pytest.raises(BatchExecutionError, match="1 of 2"):
+            batch.run()
+
+        fail_job.run.assert_called_once()
+        ok_job.run.assert_called_once()
+
+    def test_run_child_jobs_as_batch_forwards_serial_mode(self, pbs_server):
+        from chemsmart.jobs.batch import run_child_jobs_as_batch
+
+        dummy_batch_cls = self._dummy_batch_cls()
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        parent = Mock()
+        parent.label = "parent"
+        parent.jobrunner = runner
+
+        ok_job = Mock(label="child")
+        ok_job.run.return_value = None
+        ok_job.is_complete.return_value = True
+
+        batch = run_child_jobs_as_batch(
+            batch_cls=dummy_batch_cls,
+            jobs=[ok_job],
+            parent=parent,
+            label_suffix="_batch",
+            fail_fast=False,
+        )
+
+        assert batch.no_run_in_parallel is True
+        assert batch.fail_fast is False
+        assert batch.label == "parent_batch"
+        ok_job.run.assert_called_once()
+
     def test_batch_run_multi_node_records_node_future_exception(
         self, pbs_server, mocker
     ):
@@ -333,9 +456,10 @@ class TestGaussianBatchDelegation:
         job._run_all_jobs()
 
         mock_batch_cls.assert_called_once()
-        call_kwargs = mock_batch_cls.call_args[1]
+        call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
         assert call_kwargs["no_run_in_parallel"] is False
+        assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_crest_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
         mock_batch.run.assert_called_once()
@@ -369,14 +493,15 @@ class TestGaussianBatchDelegation:
         job._run_all_jobs()
 
         mock_batch_cls.assert_called_once()
-        call_kwargs = mock_batch_cls.call_args[1]
+        call_kwargs = mock_batch_cls.call_args.kwargs
         assert call_kwargs["jobs"] == mock_jobs
         assert call_kwargs["no_run_in_parallel"] is False
+        assert call_kwargs["fail_fast"] is False
         assert call_kwargs["label"] == "test_traj_batch"
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
         mock_batch.run.assert_called_once()
 
-    def test_traj_job_serial_execution_stops_on_incomplete(
+    def test_traj_job_serial_mode_uses_batch_without_fail_fast(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -394,24 +519,56 @@ class TestGaussianBatchDelegation:
             proportion_structures_to_use=1.0,
         )
 
-        mock_job1 = Mock()
-        mock_job1.label = "traj_1"
-        mock_job1.is_complete.return_value = False
+        mock_jobs = [Mock(label="traj_1"), Mock(label="traj_2")]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
 
-        mock_job2 = Mock()
-        mock_job2.label = "traj_2"
-        mock_job2.is_complete.return_value = True
-
-        mocker.patch.object(
-            job,
-            "_prepare_all_jobs",
-            return_value=[mock_job1, mock_job2],
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
         )
+        mock_batch = mock_batch_cls.return_value
 
         job._run_all_jobs()
 
-        mock_job1.run.assert_called_once()
-        mock_job2.run.assert_not_called()
+        mock_batch_cls.assert_called_once()
+        call_kwargs = mock_batch_cls.call_args.kwargs
+        assert call_kwargs["jobs"] == mock_jobs
+        assert call_kwargs["no_run_in_parallel"] is True
+        assert call_kwargs["fail_fast"] is False
+        assert call_kwargs["label"] == "test_traj_serial_batch"
+        mock_batch.run.assert_called_once()
+
+    def test_crest_job_serial_mode_uses_batch_without_fail_fast(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        mock_molecules = [MockMolecule(), MockMolecule()]
+        settings = GaussianJobSettings()
+
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
+        job = GaussianCrestJob(
+            molecules=mock_molecules,
+            settings=settings,
+            label="test_crest_serial",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        mock_jobs = [Mock(label="conf_1"), Mock(label="conf_2")]
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=mock_jobs)
+
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.crest.GaussianBatchJob"
+        )
+        mock_batch = mock_batch_cls.return_value
+
+        job._run_all_jobs()
+
+        mock_batch_cls.assert_called_once()
+        call_kwargs = mock_batch_cls.call_args.kwargs
+        assert call_kwargs["no_run_in_parallel"] is True
+        assert call_kwargs["fail_fast"] is False
+        mock_batch.run.assert_called_once()
 
 
 class TestRunListFailureAggregation:

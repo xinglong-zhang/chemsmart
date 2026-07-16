@@ -13,6 +13,7 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.batch import run_child_jobs_as_batch
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.utils.grouper import StructureGrouperFactory
@@ -360,31 +361,14 @@ class GaussianTrajJob(GaussianJob):
                 : self.num_structures_to_run
             ]
 
-        # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.no_run_in_parallel:
-            logger.info(
-                "Running trajectory structure jobs in serial mode (one after another)"
-            )
-            for job in jobs_to_run:
-                job.run()
-                # Enforce that job completed before proceeding to next
-                if not job.is_complete():
-                    logger.warning(
-                        f"Trajectory job {job.label} did not complete successfully. "
-                        f"Stopping serial execution."
-                    )
-                    break
-        else:
-            logger.info(
-                "Running trajectory structure jobs using GaussianBatchJob"
-            )
-            batch_job = GaussianBatchJob(
-                jobs=jobs_to_run,
-                no_run_in_parallel=False,
-                label=f"{self.label}_batch",
-                jobrunner=self.jobrunner,
-            )
-            batch_job.run()
+        logger.info("Running trajectory structure jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=jobs_to_run,
+            parent=self,
+            label_suffix="_batch",
+            fail_fast=False,
+        )
 
     def _run(self):
         """

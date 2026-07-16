@@ -9,6 +9,7 @@ progress and completion tracking across the ensemble.
 
 import logging
 
+from chemsmart.jobs.batch import run_child_jobs_as_batch
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
@@ -228,35 +229,18 @@ class GaussianCrestJob(GaussianJob):
         """
         Execute all conformer optimization jobs up to the specified limit.
 
-        Runs the conformer optimization jobs sequentially up to the
-        number specified in num_confs_to_opt. This allows for partial
-        ensemble processing when needed.
+        Runs conformer jobs through ``GaussianBatchJob``. Serial vs parallel
+        follows the jobrunner policy; failure policy is run-all-then-raise.
         """
         jobs_to_run = self.all_conformers_jobs[: self.num_confs_to_opt]
-
-        # Check if jobs should be run in serial based on jobrunner flag
-        if self.jobrunner and self.jobrunner.no_run_in_parallel:
-            logger.info(
-                "Running conformer jobs in serial mode (one after another)"
-            )
-            for job in jobs_to_run:
-                job.run()
-                # Enforce that job completed before proceeding to next
-                if not job.is_complete():
-                    logger.warning(
-                        f"Conformer job {job.label} did not complete successfully. "
-                        f"Stopping serial execution."
-                    )
-                    break
-        else:
-            logger.info("Running conformer jobs using GaussianBatchJob")
-            batch_job = GaussianBatchJob(
-                jobs=jobs_to_run,
-                no_run_in_parallel=False,
-                label=f"{self.label}_batch",
-                jobrunner=self.jobrunner,
-            )
-            batch_job.run()
+        logger.info("Running conformer jobs using GaussianBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=GaussianBatchJob,
+            jobs=jobs_to_run,
+            parent=self,
+            label_suffix="_batch",
+            fail_fast=False,
+        )
 
     def _run(self):
         """

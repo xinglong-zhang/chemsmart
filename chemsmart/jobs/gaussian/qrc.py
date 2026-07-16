@@ -9,6 +9,7 @@ import logging
 
 import numpy as np
 
+from chemsmart.jobs.batch import run_child_jobs_as_batch
 from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
@@ -149,27 +150,22 @@ class GaussianQRCJob(GaussianJob):
 
     def _run_both_jobs(self):
         """
-        Execute both QRC jobs (forward and reverse).
-        Runs the QRC forward and reverse jobs simultaneously using GaussianBatchJob,
-        unless no_run_in_parallel is requested.
+        Execute both QRC jobs (forward and reverse) via ``GaussianBatchJob``.
+
+        Serial vs parallel follows the jobrunner policy; failure policy is
+        run-all-then-raise.
         """
-        # Determine execution mode
-        no_run_in_parallel = False
-        if self.jobrunner and self.jobrunner.no_run_in_parallel:
-            no_run_in_parallel = True
-
         logger.info(
-            f"Running QRC jobs (serial={no_run_in_parallel}) for label {self.label}"
+            f"Running QRC jobs using GaussianBatchJob for {self.label}"
         )
-
         try:
-            batch_job = GaussianBatchJob(
+            run_child_jobs_as_batch(
+                batch_cls=GaussianBatchJob,
                 jobs=self.both_qrc_jobs,
-                no_run_in_parallel=no_run_in_parallel,
-                label=f"{self.label}_batch",
-                jobrunner=self.jobrunner,
+                parent=self,
+                label_suffix="_batch",
+                fail_fast=False,
             )
-            batch_job.run()
         except Exception as e:
             logger.error(f"Error executing QRC batch job: {e}", exc_info=True)
             raise

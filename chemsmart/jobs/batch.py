@@ -22,13 +22,15 @@ import types
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import get_serial_mode, get_submitter_worker_count
 from chemsmart.utils.mixins import RegistryMeta
 
 logger = logging.getLogger(__name__)
+
+BatchJobT = TypeVar("BatchJobT", bound="BatchJob")
 
 
 class BatchExecutionError(RuntimeError):
@@ -46,6 +48,10 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     ``BatchJob`` intentionally keeps orchestration logic engine-agnostic and
     delegates engine-specific execution details to subclasses via
     ``_configure_runner_for_node``.
+
+    ``no_run_in_parallel`` controls scheduling only. ``fail_fast`` controls
+    whether serial mode stops submitting remaining siblings after the first
+    unsuccessful outcome (ignored in parallel mode).
     """
 
     PROGRAM: Optional[str] = None
@@ -55,6 +61,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self,
         jobs: Optional[Sequence[Job]],
         no_run_in_parallel: Optional[bool] = None,
+        fail_fast: bool = False,
         write_outcome_logs: bool = False,
         label: str = "batch_job",
         jobrunner: Any = None,
@@ -74,6 +81,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             self.no_run_in_parallel = runner_serial_mode.no_run_in_parallel
         else:
             self.no_run_in_parallel = bool(no_run_in_parallel)
+        self.fail_fast = bool(fail_fast)
         self.write_outcome_logs = bool(write_outcome_logs)
 
         # Cache completion checks to avoid repeatedly reparsing output files
@@ -85,6 +93,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self._status_cache_ttl_seconds: float = 2.0
         self._status_cache_lock = threading.Lock()
         self._last_batch_outcomes: list[dict[str, Any]] = []
+        self._jobs_not_started: int = 0
 
     def run(self, **kwargs: Any) -> None:
         """
@@ -95,33 +104,57 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         completion short-circuit at the batch container level.
         """
         self._invalidate_status_cache()
+        self._jobs_not_started = 0
         self._run(**kwargs)
 
     def _run(self, **kwargs: Any) -> None:
         """Dispatch execution to multi-node, serial, or parallel mode."""
         nodes = self._get_allocated_nodes()
+        total_jobs = len(self.jobs)
 
         if nodes and len(nodes) > 1:
             outcomes = self._run_multi_node(nodes, **kwargs)
         elif self.no_run_in_parallel:
-            logger.info(f"Running batch of {len(self.jobs)} jobs serially.")
+            logger.info(f"Running batch of {total_jobs} jobs serially.")
             outcomes = self._run_jobs_serially(self.jobs, **kwargs)
         else:
-            logger.info(f"Running batch of {len(self.jobs)} jobs in parallel.")
+            if self.fail_fast:
+                logger.info(
+                    "fail_fast is set but ignored in parallel mode; "
+                    "all child jobs will be submitted."
+                )
+            logger.info(f"Running batch of {total_jobs} jobs in parallel.")
             outcomes = self._run_jobs_in_parallel(self.jobs, **kwargs)
 
         self._last_batch_outcomes = outcomes
         if self.write_outcome_logs:
             self._write_outcome_logs(outcomes)
+        self._raise_if_failures(outcomes, total_jobs=total_jobs)
+
+    def _raise_if_failures(
+        self,
+        outcomes: Sequence[dict[str, Any]],
+        *,
+        total_jobs: int,
+    ) -> None:
+        """Raise ``BatchExecutionError`` summarizing attempted failures."""
         failures = [item for item in outcomes if not item["success"]]
-        if failures:
-            lines = [
-                f"- {item['label']}: {item['error']}" for item in failures
-            ]
-            raise BatchExecutionError(
-                f"{len(failures)} of {len(outcomes)} batch job(s) failed:\n"
-                + "\n".join(lines)
+        if not failures:
+            return
+
+        attempted = len(outcomes)
+        not_started = max(0, total_jobs - attempted)
+        lines = [f"- {item['label']}: {item['error']}" for item in failures]
+
+        if not_started:
+            summary = (
+                f"{attempted} attempted, {len(failures)} failed, "
+                f"{not_started} not started"
             )
+        else:
+            summary = f"{len(failures)} of {attempted} batch job(s) failed"
+
+        raise BatchExecutionError(summary + ":\n" + "\n".join(lines))
 
     def _run_jobs_serially(
         self,
@@ -129,10 +162,25 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         node: Optional[str] = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        """Submit child jobs one-by-one."""
+        """Submit child jobs one-by-one.
+
+        When ``fail_fast`` is enabled, stop after the first unsuccessful
+        outcome. Jobs not started are omitted from the returned outcomes and
+        counted via ``_jobs_not_started``.
+        """
         outcomes: list[dict[str, Any]] = []
-        for job in jobs:
-            outcomes.append(self._submit_job(job, node=node, **kwargs))
+        for index, job in enumerate(jobs):
+            outcome = self._submit_job(job, node=node, **kwargs)
+            outcomes.append(outcome)
+            if self.fail_fast and not outcome["success"]:
+                remaining = len(jobs) - (index + 1)
+                self._jobs_not_started += remaining
+                if remaining:
+                    logger.warning(
+                        "fail_fast enabled: stopping serial batch after "
+                        f"{job.label} failed; {remaining} job(s) not started."
+                    )
+                break
         return outcomes
 
     def _run_jobs_in_parallel(
@@ -463,3 +511,29 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         if not self.jobs:
             return True
         return all(self._job_is_complete_cached(job) for job in self.jobs)
+
+
+def run_child_jobs_as_batch(
+    *,
+    batch_cls: Type[BatchJobT],
+    jobs: Sequence[Job],
+    parent: Job,
+    label_suffix: str = "_batch",
+    fail_fast: bool = False,
+) -> BatchJobT:
+    """Run independent sibling jobs through an engine ``BatchJob``.
+
+    Forwards the parent jobrunner's serial/parallel policy so CLI
+    ``--no-run-in-parallel`` only controls concurrency. Failure policy is
+    controlled separately by ``fail_fast`` (default: run all, then raise).
+    """
+    serial_mode = get_serial_mode(parent.jobrunner)
+    batch_job = batch_cls(
+        jobs=jobs,
+        no_run_in_parallel=serial_mode.no_run_in_parallel,
+        fail_fast=fail_fast,
+        label=f"{parent.label}{label_suffix}",
+        jobrunner=parent.jobrunner,
+    )
+    batch_job.run()
+    return batch_job

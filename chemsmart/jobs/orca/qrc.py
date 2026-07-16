@@ -9,6 +9,7 @@ import logging
 
 import numpy as np
 
+from chemsmart.jobs.batch import run_child_jobs_as_batch
 from chemsmart.jobs.orca.batch import OrcaBatchJob
 from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
 
@@ -149,32 +150,19 @@ class ORCAQRCJob(ORCAJob):
 
     def _run_both_jobs(self):
         """
-        Execute both QRC jobs (forward and reverse).
+        Execute both QRC jobs (forward and reverse) via ``OrcaBatchJob``.
 
-        When ``no_run_in_parallel`` is requested on the jobrunner, preserve the
-        existing stop-on-incomplete serial behavior. Otherwise, delegate to the
-        shared batch-job orchestration for parallel fault-tolerant execution.
+        Serial vs parallel follows the jobrunner policy; failure policy is
+        run-all-then-raise.
         """
-        if self.jobrunner and self.jobrunner.no_run_in_parallel:
-            logger.info("Running QRC jobs in serial mode (one after another)")
-            for job in self.both_qrc_jobs:
-                job.run()
-                # Enforce that job completed before proceeding to next
-                if not job.is_complete():
-                    logger.warning(
-                        f"QRC job {job.label} did not complete successfully. "
-                        f"Stopping serial execution."
-                    )
-                    break
-        else:
-            logger.info("Running QRC jobs using OrcaBatchJob")
-            batch_job = OrcaBatchJob(
-                jobs=self.both_qrc_jobs,
-                no_run_in_parallel=False,
-                label=f"{self.label}_batch",
-                jobrunner=self.jobrunner,
-            )
-            batch_job.run()
+        logger.info("Running QRC jobs using OrcaBatchJob")
+        run_child_jobs_as_batch(
+            batch_cls=OrcaBatchJob,
+            jobs=self.both_qrc_jobs,
+            parent=self,
+            label_suffix="_batch",
+            fail_fast=False,
+        )
 
     def _run(self):
         """
