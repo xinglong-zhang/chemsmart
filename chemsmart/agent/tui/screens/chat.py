@@ -124,6 +124,7 @@ from chemsmart.agent.tui.widgets.cells import (
     ToolCallCell,
     UserMessageCell,
 )
+from chemsmart.agent.tui.widgets.cells.base import BaseCell
 from chemsmart.agent.tui.widgets.composer import Composer
 from chemsmart.agent.tui.widgets.calculation_strip import (
     CalculationStatusStrip,
@@ -138,7 +139,10 @@ from chemsmart.agent.tui.widgets.popups import (
     HistorySearchOverlay,
     PermissionModeOverlay,
     PermissionModeResult,
+    ProjectWriteOverlay,
+    ProjectWriteResult,
     ProjectYamlOverlay,
+    ResponseCopyOverlay,
     ShortcutOverlay,
     TextPromptOverlay,
     ToolActivityOverlay,
@@ -183,7 +187,7 @@ _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
     ("/doctor", "run inline diagnostics"),
     ("/mode", "show unified provider routing information"),
     ("/init", "start a project YAML request"),
-    ("/write-project", "write the latest validated project YAML"),
+    ("/write-project", "write or replace the latest validated project YAML"),
     ("/quit", "exit the TUI"),
     ("/exit", "exit the TUI"),
 )
@@ -252,6 +256,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._pending_approval_total: int | None = None
         self._approval_waiter: Event | None = None
         self._approval_decision: ApprovalDecision | None = None
+        self._pending_project_write_candidate: dict[str, object] | None = None
         self._latest_dry_run_content: str | None = None
         self._job_snapshot: dict[str, dict] = {}
         self._job_cells: dict[str, JobStatusCell] = {}
@@ -377,6 +382,18 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             text = event.text_area.text
             self.query_one(FooterWidget).update_draft(text)
             self._update_slash_palette(text)
+
+    def on_base_cell_copy_requested(
+        self, event: BaseCell.CopyRequested
+    ) -> None:
+        if self.app.plain:
+            self.app.copy_to_clipboard(event.text)
+            self.notify("Response copied", timeout=1.5)
+            return
+        self.app.push_screen(
+            ResponseCopyOverlay(event.text, title=event.title),
+            lambda _result: self.focus_composer(),
+        )
 
     def on_job_poller_error(self, message: JobPollerError) -> None:
         self.post_error(
@@ -527,7 +544,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             "approved",
             description,
             normalized_args,
-            "Confirmed by /write-project yes.",
+            "Confirmed in the workspace project write dialog.",
         )
         result = registry.call(tool_name, normalized_args)
         if isinstance(result, dict) and result.get("ok") is False:
@@ -1155,6 +1172,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 return
             if self._tailer is not None:
                 self._tailer.read_available()
+            self.query_one(Transcript).collapse_tool_chain(
+                self._active_turn_id
+            )
+            self.call_after_refresh(
+                self.query_one(Transcript).collapse_tool_chain,
+                self._active_turn_id,
+            )
             self._session_allow_tools = set(
                 result.get("session_allow_tools") or []
             )
@@ -1374,7 +1398,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             if self.app.plain:
                 self.post_agent_message(
                     "YAML MISSING\n\nBuild one with /init, then save it with "
-                    "/write-project <name> yes.",
+                    "/write-project.",
                     title="Workspace YAML",
                 )
                 return
@@ -1900,15 +1924,20 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 )
             )
             transcript.add_cell(
-                FinalAnswerCell(
-                    _final_command_text(
-                        command=command,
+                AgentMessageCell(
+                    _command_details_text(
                         explanation=(
                             explanation or "Prepared chemsmart command."
                         ),
                         confidence=confidence,
                         project=project,
                     ),
+                    title="Command details",
+                )
+            )
+            transcript.add_cell(
+                FinalAnswerCell(
+                    _final_command_text(command=command),
                     title="Final Command",
                 ),
             )
@@ -1918,6 +1947,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 if command_is_executable
                 else "Command shown, but execution evidence is incomplete"
             )
+            transcript.collapse_tool_chain(self._active_turn_id)
             return
 
         if status == "informational":
@@ -1963,6 +1993,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             footer.set_phase(Phase.FINISHED)
             footer.set_hint("Command analysis ready")
+            transcript.collapse_tool_chain(self._active_turn_id)
             return
 
         if status == "needs_clarification":
@@ -1994,6 +2025,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             footer.set_phase(Phase.WAITING_USER)
             footer.set_hint("Clarification needed")
+            self.query_one(Transcript).collapse_tool_chain(
+                self._active_turn_id
+            )
             return
 
         explanation = str(
@@ -2021,6 +2055,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
         footer.set_phase(Phase.FINISHED)
         footer.set_hint("No command generated")
+        self.query_one(Transcript).collapse_tool_chain(self._active_turn_id)
 
     def _publish_decision_trace(self, synthesis: dict[str, object]) -> None:
         trace = synthesis.get("decision_trace")
@@ -2420,7 +2455,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             if event.blocked and event.block_reason:
                 summary += f" Block reason: {event.block_reason}."
-            transcript.add_cell(AgentMessageCell(summary, title="Summary"))
+            summary_cell = AgentMessageCell(summary, title="Summary")
+            if event.blocked:
+                setattr(summary_cell, "_chemsmart_final_deliverable", True)
+            transcript.add_cell(summary_cell)
+            transcript.collapse_tool_chain(self._active_turn_id)
         elif isinstance(event, IgnoredEvent):
             pass
 
@@ -2658,15 +2697,21 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         title = "Final Command" if command else "Final Status"
         if tool_name == "repair_command" and command:
             title = "Repaired Command"
-        transcript.add_cell(
-            FinalAnswerCell(
-                (
-                    _final_command_text(
-                        command=command,
+        if command:
+            transcript.add_cell(
+                AgentMessageCell(
+                    _command_details_text(
                         explanation=str(payload.get("explanation") or ""),
                         confidence=str(payload.get("confidence") or "medium"),
                         project=str(payload.get("project") or ""),
-                    )
+                    ),
+                    title="Command details",
+                )
+            )
+        transcript.add_cell(
+            FinalAnswerCell(
+                (
+                    _final_command_text(command=command)
                     if command
                     else str(payload.get("explanation") or payload)
                 ),
@@ -2983,7 +3028,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             else:
                 self.post_error(
                     "Invalid write-project command",
-                    "Usage: /write-project [name] yes [overwrite]",
+                    "Usage: /write-project [name] (confirmation opens in TUI)",
                 )
                 return
 
@@ -2997,21 +3042,87 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 "Run /init and build a validated project YAML first.",
             )
             return
-        if not confirmed:
-            self.post_error(
-                "Confirmation required",
-                "Use /write-project [name] yes [overwrite] to write the latest validated project YAML.",
-            )
-            return
-
         if project_name:
             candidate["project_name"] = project_name
-        candidate["overwrite"] = overwrite
 
+        if confirmed:
+            candidate["overwrite"] = overwrite
+            self._start_project_yaml_write(candidate)
+            return
+        if self.app.plain:
+            self.post_error(
+                "Confirmation required",
+                "Plain mode uses /write-project [name] yes [overwrite].",
+            )
+            return
+        self._prompt_project_yaml_write(
+            candidate,
+            prefer_active=project_name is None,
+        )
+
+    def _prompt_project_yaml_write(
+        self,
+        candidate: dict[str, object],
+        *,
+        prefer_active: bool,
+    ) -> None:
+        program = str(candidate.get("program") or "gaussian").strip().lower()
+        requested = Path(
+            str(candidate.get("project_name") or "project")
+        ).stem
+        status = self._resolve_workspace_project_status()
+        overwrite_project = requested
+        if (
+            prefer_active
+            and status.loaded
+            and status.program == program
+            and status.project
+        ):
+            overwrite_project = status.project
+        target = workspace_project_path(overwrite_project, program)
+        new_project = self._next_available_project_name(requested, program)
+        self._pending_project_write_candidate = dict(candidate)
+        self.app.push_screen(
+            ProjectWriteOverlay(
+                target=target,
+                overwrite_project=overwrite_project,
+                new_project=new_project,
+                target_exists=target.exists(),
+            ),
+            self._handle_project_write_result,
+        )
+
+    def _handle_project_write_result(
+        self, result: ProjectWriteResult | None
+    ) -> None:
+        candidate = self._pending_project_write_candidate
+        self._pending_project_write_candidate = None
+        if result is None or candidate is None:
+            self.query_one(FooterWidget).set_hint("Project YAML write cancelled")
+            self.focus_composer()
+            return
+        candidate["project_name"] = result.project_name
+        candidate["overwrite"] = result.action == "overwrite"
+        self._start_project_yaml_write(candidate)
+
+    def _start_project_yaml_write(
+        self, candidate: dict[str, object]
+    ) -> None:
         footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.PLANNING)
         footer.set_hint("Writing project YAML…")
         self._current_worker = self.run_project_yaml_write(candidate)
+
+    def _next_available_project_name(
+        self, base_name: str, program: str
+    ) -> str:
+        base = Path(str(base_name or "project")).stem or "project"
+        if not workspace_project_path(base, program).exists():
+            return base
+        suffix = 2
+        while workspace_project_path(f"{base}-{suffix}", program).exists():
+            suffix += 1
+        return f"{base}-{suffix}"
 
     def _handle_wizard_probe_command(self, argument: str) -> None:
         if self._current_worker and not self._current_worker.is_finished:
@@ -3588,8 +3699,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ("[A]", "/doctor", "run inline diagnostics"),
             (
                 "[F]",
-                "/write-project [name] yes [overwrite]",
-                "write the latest validated project YAML",
+                "/write-project [name]",
+                "write or replace the latest validated project YAML",
             ),
             ("[A]", "/quit", "exit the TUI"),
         ]
@@ -3802,6 +3913,27 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 f"{self._pending_approval_total or 1})"
             )
             return
+        if pending.name == "write_project_yaml":
+            program = str(
+                pending.arguments.get("program") or "gaussian"
+            ).strip().lower()
+            project = Path(
+                str(pending.arguments.get("project_name") or "project")
+            ).stem
+            target = workspace_project_path(project, program)
+            if target.exists():
+                self.app.push_screen(
+                    ProjectWriteOverlay(
+                        target=target,
+                        overwrite_project=project,
+                        new_project=self._next_available_project_name(
+                            project, program
+                        ),
+                        target_exists=True,
+                    ),
+                    self._handle_agent_project_write_result,
+                )
+                return
         self.app.push_screen(
             build_approval_overlay(
                 active_mode=self._permission_mode.value.upper(),
@@ -3819,6 +3951,18 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ),
             self._handle_approval_result,
         )
+
+    def _handle_agent_project_write_result(
+        self, result: ProjectWriteResult | None
+    ) -> None:
+        pending = self._pending_tool_request
+        if result is None or pending is None or pending.name != "write_project_yaml":
+            self._resolve_pending_approval(ApprovalDecision.DENY)
+            return
+        pending.arguments["project_name"] = result.project_name
+        pending.arguments["overwrite"] = result.action == "overwrite"
+        self._pending_approval_args = dict(pending.arguments)
+        self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
 
     def _handle_approval_result(self, result: ApprovalResult | None) -> None:
         if result is None:
@@ -4238,8 +4382,9 @@ def _latest_project_yaml_candidate(
         return None
 
     candidate: dict[str, object] | None = None
-    candidate_yaml: str | None = None
+    candidate_yaml: object | None = None
     validated = False
+    validation_requests: dict[str, dict[str, object]] = {}
     try:
         for raw in log_path.read_text(encoding="utf-8").splitlines():
             if not raw.strip():
@@ -4249,6 +4394,26 @@ def _latest_project_yaml_candidate(
             if not isinstance(payload, dict):
                 continue
             tool = payload.get("tool")
+            call_id = str(payload.get("provider_call_id") or "")
+            if (
+                entry.get("kind") == "tool_use_request"
+                and tool == "validate_project_yaml"
+                and call_id
+            ):
+                args = payload.get("args") or {}
+                yaml_text = args.get("yaml_text") if isinstance(args, dict) else None
+                if isinstance(yaml_text, str) and not yaml_text.strip():
+                    continue
+                if not isinstance(yaml_text, (str, dict)):
+                    continue
+                validation_requests[call_id] = {
+                    "project_name": str(
+                        args.get("project_name") or "project"
+                    ),
+                    "program": str(args.get("program") or "gaussian"),
+                    "yaml_text": yaml_text,
+                }
+                continue
             if payload.get("status") not in {None, "ok"}:
                 continue
 
@@ -4259,10 +4424,20 @@ def _latest_project_yaml_candidate(
                 result = result["summary"]
             if not isinstance(result, dict):
                 continue
-            if tool == "validate_project_yaml" and candidate is not None:
+            if tool == "validate_project_yaml":
                 if result.get("verdict") not in {"ok", "warn", "reject"}:
                     continue
+                request_candidate = validation_requests.pop(call_id, None)
                 validated = result.get("verdict") in {"ok", "warn"}
+                if validated and request_candidate is not None:
+                    candidate = request_candidate
+                    candidate_yaml = request_candidate["yaml_text"]
+                    continue
+                # Older logs recorded only results. They may validate a prior
+                # accepted render, but never a rejected or missing candidate.
+                if candidate is None:
+                    validated = False
+                    continue
                 if not validated:
                     candidate = None
                     candidate_yaml = None
@@ -4271,6 +4446,16 @@ def _latest_project_yaml_candidate(
                 continue
             yaml_text = result.get("yaml_text")
             if not isinstance(yaml_text, str) or not yaml_text.strip():
+                continue
+            validation = result.get("validation")
+            render_rejected = result.get("ok") is False or (
+                isinstance(validation, dict)
+                and validation.get("verdict") == "reject"
+            )
+            if render_rejected:
+                candidate = None
+                candidate_yaml = None
+                validated = False
                 continue
             # A re-render of the identical candidate (build-mode over-iteration)
             # must NOT discard a prior successful validation — only a genuinely
@@ -4536,17 +4721,17 @@ def _decision_trace_dict(
 def _final_command_text(
     *,
     command: str,
+) -> str:
+    return "\n".join(("```bash", command, "```"))
+
+
+def _command_details_text(
+    *,
     explanation: str,
     confidence: str,
     project: str,
 ) -> str:
-    parts = [
-        "```bash",
-        command,
-        "```",
-        "",
-        f"confidence: `{confidence}`",
-    ]
+    parts = [f"confidence: `{confidence}`"]
     if project:
         parts.extend(["", f"active project: `{project}`"])
     if explanation:

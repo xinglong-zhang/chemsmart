@@ -6,6 +6,7 @@ from rich.console import Group
 from rich.markdown import Markdown
 from rich.table import Table
 from rich.text import Text
+from textual import events
 
 from .base import BaseCell
 
@@ -60,6 +61,13 @@ class FinalAnswerCell(BaseCell):
             Markdown(text or "_No final output was generated._"),
             title=title,
             classes="agent-cell final-answer-cell",
+        )
+        self.tooltip = "Click to select and copy this response"
+
+    def on_click(self, event: events.Click) -> None:
+        event.stop()
+        self.post_message(
+            self.CopyRequested(self.source_text, self.border_title or "Response")
         )
 
 

@@ -12,6 +12,8 @@ from .cwd_mismatch import CwdMismatchChoice, CwdMismatchOverlay
 from .file_picker import FilePickerOverlay
 from .history import HistorySearchOverlay
 from .project_yaml import ProjectYamlOverlay
+from .project_write import ProjectWriteOverlay, ProjectWriteResult
+from .response_copy import ResponseCopyOverlay
 from .text_prompt import TextPromptOverlay
 from .shortcuts import ShortcutOverlay
 
@@ -27,6 +29,9 @@ __all__ = [
     "FilePickerOverlay",
     "HistorySearchOverlay",
     "ProjectYamlOverlay",
+    "ProjectWriteOverlay",
+    "ProjectWriteResult",
+    "ResponseCopyOverlay",
     "TextPromptOverlay",
     "ShortcutOverlay",
 ]

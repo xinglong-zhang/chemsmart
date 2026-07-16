@@ -8,10 +8,12 @@ from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.events import ToolUseEvent
 from chemsmart.agent.tui.phase import Phase
 from chemsmart.agent.tui.widgets.cells import (
+    AgentMessageCell,
     CommandInterpretationCell,
     ErrorCell,
     FinalAnswerCell,
     SynthesisTraceCell,
+    ToolChainToggleCell,
     UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
@@ -277,6 +279,8 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
                 UserMessageCell,
                 SynthesisTraceCell,
                 CommandInterpretationCell,
+                AgentMessageCell,
+                ToolChainToggleCell,
                 FinalAnswerCell,
             ]
             trace = cells[1]
@@ -294,9 +298,13 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
             assert "- job: `sp` (single-point energy)" in interpretation.source_text
             assert "- `-p` meaning: program-level -p/--project" in interpretation.source_text
             assert interpretation.source_text.splitlines()[-1].startswith("Summary:")
-            final = cells[3]
+            assert not cells[1].display
+            assert not cells[2].display
+            assert not cells[3].display
+            final = cells[5]
             assert final.border_title == "Final Command"
             assert "chemsmart run gaussian" in final.source_text
+            assert "confidence:" not in final.source_text
 
     asyncio.run(scenario())
 

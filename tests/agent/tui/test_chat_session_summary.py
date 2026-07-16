@@ -5,7 +5,12 @@ from pathlib import Path
 
 from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.phase import Phase
-from chemsmart.agent.tui.widgets.cells import AgentMessageCell
+from chemsmart.agent.tui.widgets.cells import (
+    AgentMessageCell,
+    FinalAnswerCell,
+    ToolCallCell,
+    ToolChainToggleCell,
+)
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.transcript import Transcript
 
@@ -86,5 +91,56 @@ def test_blocked_summary_omits_unknown_block_reason_suffix(tmp_path: Path):
             footer = app.query_one(FooterWidget)
             assert footer.phase == Phase.ERROR
             assert footer.hint == "Blocked"
+
+    asyncio.run(scenario())
+
+
+def test_blocked_summary_hides_stale_command_and_remains_visible(
+    tmp_path: Path,
+):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            transcript = app.query_one(Transcript)
+            transcript.clear_cells()
+            app.chat_screen._begin_turn()
+            transcript.add_cell(
+                ToolCallCell(
+                    tool="synthesize_command",
+                    status="ok",
+                    description="Synthesized an intermediate command.",
+                    provider_call_id="synth-blocked",
+                )
+            )
+            stale = FinalAnswerCell(
+                "```bash\nchemsmart run gaussian opt\n```",
+                title="Final Command",
+            )
+            transcript.add_cell(stale)
+            assert transcript.collapse_tool_chain(
+                app.chat_screen._active_turn_id
+            )
+
+            app.chat_screen._apply_log_entry(
+                {
+                    "kind": "session_summary",
+                    "payload": {
+                        "blocked": True,
+                        "block_reason": "semantic_reject",
+                        "total_steps_executed": 1,
+                        "total_steps_planned": 2,
+                    },
+                }
+            )
+            await pilot.pause()
+
+            children = list(transcript.query_one("#cells").children)
+            visible = [cell for cell in children if cell.display]
+            assert len(visible) == 2
+            assert isinstance(visible[0], ToolChainToggleCell)
+            assert isinstance(visible[1], AgentMessageCell)
+            assert "semantic_reject" in visible[1].source_text
+            assert not stale.display
 
     asyncio.run(scenario())
