@@ -55,11 +55,15 @@ class ConversationTurn(BaseModel):
 
 
 class EntityMemory(BaseModel):
+    last_command: str | None = None
     last_server: str | None = None
     last_scheduler: Literal["slurm", "pbs", "sge", "lsf"] | None = None
     last_job_id: str | None = None
     last_log_path: str | None = None
     last_probe_error: str | None = None
+    last_run_id: str | None = None
+    last_output_path: str | None = None
+    last_calculation_status: str | None = None
 
 
 class ConversationMemory(BaseModel):
@@ -91,6 +95,42 @@ class ConversationMemory(BaseModel):
                 )
                 turns.append(current_turn)
                 tool_calls = {}
+                continue
+
+            if kind == "calculation_event" and isinstance(payload, dict):
+                run = payload.get("run")
+                if isinstance(run, dict):
+                    run_id = _string_value(run.get("run_id"))
+                    output_path = _string_value(run.get("output_path"))
+                    status = _string_value(run.get("status"))
+                    if run_id:
+                        entities.last_run_id = run_id
+                    if output_path:
+                        entities.last_output_path = output_path
+                        entities.last_log_path = output_path
+                    if status:
+                        entities.last_calculation_status = status
+                    if (
+                        current_turn is not None
+                        and status
+                        in {
+                            "completed",
+                            "chemistry_failed",
+                            "process_failed",
+                            "cancelled",
+                            "timeout",
+                        }
+                    ):
+                        summary = (
+                            f"Calculation {run_id or 'latest'} ended with "
+                            f"status={status}"
+                        )
+                        energy = run.get("energy")
+                        if isinstance(energy, (int, float)):
+                            summary += f", energy={float(energy):.12f} Eh"
+                        if output_path:
+                            summary += f", output={output_path}"
+                        current_turn.reusable_results.append(summary + ".")
                 continue
 
             if current_turn is None or not isinstance(payload, dict):
@@ -338,14 +378,32 @@ def _summarize_tool_result(
         return " ".join(pieces) + "."
 
     if tool == "dry_run_input":
+        command = _string_value(result_payload.get("command"))
         inputfile = _string_value(result_payload.get("inputfile"))
         route = _extract_route_line(result_payload.get("content"))
         pieces = ["dry_run_input wrote"]
         if inputfile:
             pieces.append(inputfile)
+        if command:
+            pieces.append(f"for command {command}")
         if route:
             pieces.append(f"with route {route}")
         return " ".join(pieces) + "."
+
+    if tool in {"execute_chemsmart_command", "inspect_calculation"}:
+        calculation = result_payload.get("calculation")
+        if not isinstance(calculation, dict):
+            return None
+        run_id = _string_value(calculation.get("run_id")) or "latest"
+        status = _string_value(calculation.get("status")) or "unknown"
+        output_path = _string_value(calculation.get("output_path"))
+        energy = calculation.get("energy")
+        pieces = [f"{tool} recorded {run_id} status={status}"]
+        if output_path:
+            pieces.append(f"output={output_path}")
+        if isinstance(energy, (int, float)):
+            pieces.append(f"energy={float(energy):.12f} Eh")
+        return ", ".join(pieces) + "."
 
     if tool == "extract_optimized_geometry":
         formula = _molecule_formula(result_payload)
@@ -452,6 +510,32 @@ def _apply_mva_entity_updates(
     result = payload.get("payload")
     if not isinstance(result, dict):
         result = {}
+    result_summary = result.get("summary")
+    if isinstance(result_summary, dict):
+        result = result_summary
+
+    if tool in {"synthesize_command", "repair_command", "dry_run_input"}:
+        command = _string_value(result.get("command"))
+        if command:
+            entities.last_command = command
+
+    if tool in {"execute_chemsmart_command", "inspect_calculation"}:
+        calculation = result.get("calculation")
+        if isinstance(calculation, dict):
+            run_id = _string_value(calculation.get("run_id"))
+            output_path = _string_value(calculation.get("output_path"))
+            status = _string_value(calculation.get("status"))
+            if run_id:
+                entities.last_run_id = run_id
+            if output_path:
+                entities.last_output_path = output_path
+                entities.last_log_path = output_path
+            if status:
+                entities.last_calculation_status = status
+        if tool == "execute_chemsmart_command":
+            command = _string_value(result.get("command"))
+            if command:
+                entities.last_command = command
 
     server = _string_value(args.get("server"))
     if tool == "ssh_probe":
@@ -697,10 +781,13 @@ def _summarize_tool_use_result(
             if isinstance(s, dict):
                 input_summary = s
         inputfile = _string_value(input_summary.get("inputfile"))
+        command = _string_value(input_summary.get("command"))
         route = _extract_route_line(input_summary.get("content"))
         pieces = ["dry_run_input wrote"]
         if inputfile:
             pieces.append(inputfile)
+        if command:
+            pieces.append(f"for command {command}")
         if route:
             pieces.append(f"with route {route}")
         return " ".join(pieces) + "."

@@ -140,11 +140,17 @@ def render_project_yaml(
         # forcing the tool loop to patch YAML by trial and error.
         document["td"] = _render_method_block(td_method, normalized_program)
     yaml_text = yaml.safe_dump(document, sort_keys=False)
+    validation = validate_project_yaml(
+        yaml_text,
+        program=normalized_program,
+        project_name=name,
+    )
     return {
-        "ok": True,
+        "ok": validation["verdict"] in {"ok", "warn"},
         "project_name": name,
         "program": normalized_program,
         "yaml_text": yaml_text,
+        "validation": validation,
         "unsupported_yaml_features": protocol.get(
             "unsupported_yaml_features", []
         ),

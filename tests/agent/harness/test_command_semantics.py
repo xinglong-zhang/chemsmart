@@ -133,6 +133,32 @@ def test_wrong_option_order_is_rejected_before_safe_execution(
     assert result.failed_rule_ids == ["cmd.semantic.option_order"]
 
 
+def test_missing_job_subcommand_rejects_before_safe_execution(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def should_not_run(*_args, **_kwargs):  # pragma: no cover - defensive
+        raise AssertionError("semantic gate should reject before subprocess")
+
+    monkeypatch.setattr(
+        "chemsmart.agent.harness.command_semantics.subprocess.run",
+        should_not_run,
+    )
+
+    result = evaluate_command_semantics(
+        "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 -r freq",
+        cwd=tmp_path,
+    )
+
+    assert result.verdict == "reject"
+    assert result.failed_rule_ids == [
+        "cmd.contract.job_subcommand_required"
+    ]
+    assert result.missing_info == [
+        "explicit gaussian computational job subcommand"
+    ]
+
+
 def test_db_source_without_selector_rejects_before_safe_execution(
     monkeypatch,
     tmp_path,
@@ -164,7 +190,10 @@ def test_db_record_selector_shape_passes_to_safe_execution(
         from pathlib import Path
 
         (Path(_kwargs["cwd"]) / "record_sp.com").write_text(
-            "# b3lyp/def2svp\n\nrecord\n\n0 1\nH 0 0 0\n\n",
+            (
+                "# b3lyp/def2svp\n\nrecord\n\n0 1\n"
+                "H 0 0 0\nH 0 0 0.74\n\n"
+            ),
             encoding="utf-8",
         )
         return subprocess.CompletedProcess(argv, 0, "", "")

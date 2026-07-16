@@ -69,6 +69,7 @@ class ToolLoopBudgets:
     max_total_tool_calls_per_turn: int = 32
     max_consecutive_tool_errors: int = 4
     max_same_signature_retries: int = 2
+    max_provider_errors_per_turn: int = 2
     log_provider_turn_raw: bool = False
 
 
@@ -82,6 +83,7 @@ class ToolLoop:
         budgets: ToolLoopBudgets | None = None,
         policy: PermissionPolicy | None = None,
         approver: Callable[[ToolRequest], ApprovalDecision] | None = None,
+        lifecycle: Any | None = None,
     ) -> None:
         self.provider = provider
         self.registry = registry
@@ -90,18 +92,29 @@ class ToolLoop:
         self.budgets = budgets or ToolLoopBudgets()
         self.policy = policy or PermissionPolicy(mode=PermissionMode.DRIVING)
         self.approver = approver
+        self.lifecycle = lifecycle
 
     def run_turn(
         self,
         messages: list[dict[str, Any]],
         tool_defs: list[dict[str, Any]] | None = None,
         mode: RuntimePermissionMode | None = None,
+        allowed_tool_names: set[str] | None = None,
     ) -> dict[str, Any]:
         provider_name = getattr(self.provider, "name", None) or "openai"
+        wire_protocol = (
+            getattr(self.provider, "wire_protocol", None) or provider_name
+        )
         if mode is not None:
-            tool_defs = self._tool_defs_for_mode(provider_name, mode)
+            tool_defs = self._tool_defs_for_mode(wire_protocol, mode)
         elif tool_defs is None:
-            tool_defs = self._tool_defs_for_provider(provider_name)
+            tool_defs = self._tool_defs_for_provider(wire_protocol)
+        if allowed_tool_names is not None:
+            tool_defs = _filter_tool_defs(
+                wire_protocol,
+                tool_defs,
+                allowed_tool_names,
+            )
         history = [deepcopy(message) for message in messages]
         assistant_text = ""
         stop_reason = None
@@ -117,6 +130,7 @@ class ToolLoop:
         approvals_count = 0
         denials_count = 0
         ask_user_outcome: dict[str, Any] | None = None
+        provider_errors = 0
 
         while True:
             if model_steps >= self.budgets.max_model_steps_per_turn:
@@ -124,11 +138,30 @@ class ToolLoop:
                 break
 
             model_steps += 1
-            response = self.provider.chat(
-                history,
-                tools=tool_defs,
-                timeout_s=DEFAULT_TIMEOUT_S,
-            )
+            try:
+                response = self.provider.chat(
+                    history,
+                    tools=tool_defs,
+                    timeout_s=DEFAULT_TIMEOUT_S,
+                )
+            except Exception as exc:
+                provider_errors += 1
+                self.decision_log.write(
+                    "provider_turn_error",
+                    {
+                        "step": model_steps,
+                        "error_type": exc.__class__.__name__,
+                        "message": str(exc)[:500],
+                        "attempt": provider_errors,
+                    },
+                )
+                if (
+                    provider_errors
+                    >= self.budgets.max_provider_errors_per_turn
+                ):
+                    limit_reason = "provider_errors"
+                    break
+                continue
             response_dict = response_payload(response)
             if self.budgets.log_provider_turn_raw:
                 self.decision_log.write(
@@ -140,10 +173,10 @@ class ToolLoop:
                 )
 
             assistant_message = _assistant_message(
-                provider_name, response_dict
+                wire_protocol, response_dict
             )
             assistant_text, requests, stop_reason = normalize_response(
-                provider_name,
+                wire_protocol,
                 response_dict,
             )
             usage = extract_response_usage(response_dict)
@@ -340,7 +373,7 @@ class ToolLoop:
 
             if step_outcomes:
                 history.extend(
-                    build_tool_result_messages(provider_name, step_outcomes)
+                    build_tool_result_messages(wire_protocol, step_outcomes)
                 )
 
             if asked_user:
@@ -372,6 +405,7 @@ class ToolLoop:
             "approvals_count": approvals_count,
             "denials_count": denials_count,
             "ask_user": ask_user_outcome,
+            "provider_errors": provider_errors,
         }
 
     def _run_one_request(
@@ -381,6 +415,11 @@ class ToolLoop:
     ) -> tuple[ToolOutcome, bool]:
         resolved = self.policy.resolve(request)
         if resolved.decision == ResolvedDecision.AUTO_DENY:
+            self._runtime_permission(
+                request,
+                decision="denied",
+                reason=resolved.reason,
+            )
             return (
                 self._deny_request(
                     step,
@@ -391,7 +430,17 @@ class ToolLoop:
             )
 
         if resolved.decision == ResolvedDecision.NEEDS_USER:
+            self._runtime_permission(
+                request,
+                decision="needs_user",
+                reason=resolved.reason,
+            )
             if self.approver is None:
+                self._runtime_permission(
+                    request,
+                    decision="denied",
+                    reason="no_approver",
+                )
                 return (
                     self._deny_request(
                         step,
@@ -403,6 +452,11 @@ class ToolLoop:
 
             approval = self.approver(request)
             if approval == ApprovalDecision.DENY:
+                self._runtime_permission(
+                    request,
+                    decision="denied",
+                    reason="user_denied",
+                )
                 return (
                     self._deny_request(
                         step,
@@ -413,6 +467,15 @@ class ToolLoop:
                 )
 
             self.policy.record(request.name, approval)
+            self._runtime_permission(
+                request,
+                decision="approved",
+                reason=(
+                    "user_session_approval"
+                    if approval == ApprovalDecision.ALLOW_SESSION
+                    else "user_once_approval"
+                ),
+            )
             self._log_approved(
                 step,
                 request,
@@ -425,6 +488,11 @@ class ToolLoop:
             )
             return self._execute_request(step, request), True
 
+        self._runtime_permission(
+            request,
+            decision="approved",
+            reason=resolved.reason,
+        )
         self._log_approved(
             step,
             request,
@@ -438,6 +506,20 @@ class ToolLoop:
         step: int,
         request: ToolRequest,
     ) -> ToolOutcome:
+        if self.lifecycle is not None:
+            try:
+                self.lifecycle.before_tool(
+                    request_id=request.request_id,
+                    tool_name=request.name,
+                    arguments=request.arguments,
+                )
+            except Exception as exc:
+                return self._error_outcome(
+                    step,
+                    request,
+                    error_type=exc.__class__.__name__,
+                    error_message=str(exc),
+                )
         try:
             resolved_args = _resolve_handles(
                 request.arguments,
@@ -501,6 +583,12 @@ class ToolLoop:
                 "handle_id": handle_id,
             },
         )
+        if self.lifecycle is not None:
+            self.lifecycle.after_tool(
+                request_id=request.request_id,
+                tool_name=request.name,
+                result=result,
+            )
         return outcome
 
     def _deny_request(
@@ -580,6 +668,14 @@ class ToolLoop:
         error_message: str,
         raw_result: Any = None,
     ) -> ToolOutcome:
+        if self.lifecycle is not None:
+            self.lifecycle.tool_failed(
+                request_id=request.request_id,
+                tool_name=request.name,
+                error_type=error_type,
+                error_message=error_message,
+                result=raw_result,
+            )
         outcome = ToolOutcome(
             request_id=request.request_id,
             provider_call_id=request.provider_call_id,
@@ -609,6 +705,22 @@ class ToolLoop:
             },
         )
         return outcome
+
+    def _runtime_permission(
+        self,
+        request: ToolRequest,
+        *,
+        decision: str,
+        reason: str,
+    ) -> None:
+        if self.lifecycle is None:
+            return
+        self.lifecycle.permission(
+            request_id=request.request_id,
+            tool_name=request.name,
+            decision=decision,
+            reason=reason,
+        )
 
     def _skipped_outcome(
         self,
@@ -769,6 +881,19 @@ def registry_tool_defs_for_provider(
     else:
         tool_defs = registry.openai_tool_defs()
     return with_virtual_tool_defs(provider_name, tool_defs)
+
+
+def _filter_tool_defs(
+    provider_name: str,
+    tool_defs: list[dict[str, Any]],
+    allowed_tool_names: set[str],
+) -> list[dict[str, Any]]:
+    filtered = [
+        tool_def
+        for tool_def in tool_defs
+        if _tool_def_name(tool_def) in allowed_tool_names
+    ]
+    return with_virtual_tool_defs(provider_name, filtered)
 
 
 def _ask_user_tool_def_for_provider(provider_name: str) -> dict[str, Any]:

@@ -101,6 +101,19 @@ def test_duplicate_opt_block_via_route_params_rejects():
     )
 
 
+def test_second_parenthesized_opt_form_rejects():
+    result = check_gaussian_ts_route(
+        "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-31g(d) "
+        "opt(maxstep=8)"
+    )
+
+    assert result.verdict == "reject"
+    assert any(
+        "more than one Opt route form" in issue.message
+        for issue in result.issues
+    )
+
+
 def test_bare_ts_token_outside_opt_block_rejects():
     # Leak: bare `ts` route token from --additional-route-parameters, outside
     # the runtime-owned opt=(...) block.

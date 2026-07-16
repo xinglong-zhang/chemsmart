@@ -81,6 +81,7 @@ TOOL_GROUPS: dict[str, frozenset[str]] = {
     ),
     "diagnostics": frozenset(
         {
+            "inspect_calculation",
             "read",
             "ssh_probe",
             "scheduler_query",
@@ -96,6 +97,58 @@ _TOOL_GROUP_BY_NAME: dict[str, str] = {
 }
 
 _TOOL_GROUPS_ENV_VAR = "CHEMSMART_AGENT_TOOL_GROUPS"
+
+_MODEL_FIELD_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+    ("build_job", "molecule"): {
+        "type": "string",
+        "pattern": r"^mol_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_molecule.",
+    },
+    ("build_job", "settings"): {
+        "type": "string",
+        "pattern": r"^(?:gset|oset)_[0-9a-f]{4,}$",
+        "description": "Handle returned by a program settings builder.",
+    },
+    ("dry_run_input", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("validate_runtime", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("run_local", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("extract_optimized_geometry", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("submit_hpc", "job"): {
+        "type": "string",
+        "pattern": r"^job_[0-9a-f]{4,}$",
+        "description": "Handle returned by build_job.",
+    },
+    ("validate_runtime", "server"): {
+        "oneOf": [{"type": "string"}, {"type": "object"}, {"type": "null"}],
+        "description": "Workspace server name or validated server mapping.",
+    },
+    ("submit_hpc", "server"): {
+        "oneOf": [{"type": "string"}, {"type": "object"}, {"type": "null"}],
+        "description": "Workspace server name or validated server mapping.",
+    },
+}
+_MODEL_EXCLUDED_FIELDS = frozenset(
+    {
+        ("build_job", "jobrunner"),
+        ("submit_hpc", "transport"),
+    }
+)
 
 
 def tool_group(tool_name: str) -> str | None:
@@ -144,6 +197,7 @@ class ToolSpec:
     description: str | None = None
     accepts_kwargs: bool = False
     schema_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    model_excluded_fields: frozenset[str] = frozenset()
     metadata: RuntimeToolMetadata = field(default_factory=RuntimeToolMetadata)
 
     def openai_tool_def(self) -> dict[str, Any]:
@@ -173,6 +227,15 @@ class ToolSpec:
         schema.pop("title", None)
         schema.pop("$defs", None)
         properties = schema.get("properties", {})
+        for field_name in self.model_excluded_fields:
+            properties.pop(field_name, None)
+        required = schema.get("required")
+        if isinstance(required, list):
+            schema["required"] = [
+                field_name
+                for field_name in required
+                if field_name not in self.model_excluded_fields
+            ]
         for field_name, override in self.schema_overrides.items():
             if field_name not in properties:
                 continue
@@ -298,6 +361,15 @@ class ToolRegistry:
                     read_only=False,
                     ui_summary_template="Execute chemsmart command",
                     side_effect="runs a local chemsmart command",
+                ),
+            ),
+            (
+                "inspect_calculation",
+                "chemsmart.agent.runtime.calculations",
+                "Inspect the latest or named Gaussian/ORCA calculation receipt and output using deterministic chemistry parsers.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Inspect calculation {run_id}",
                 ),
             ),
             ("build_gaussian_settings", "chemsmart.agent.tools", None, None),
@@ -484,6 +556,7 @@ def _build_tool_spec(
 ) -> ToolSpec:
     fields: dict[str, Any] = {}
     schema_overrides: dict[str, dict[str, Any]] = {}
+    model_excluded_fields: set[str] = set()
     accepts_kwargs = False
     signature = inspect.signature(func)
     resolved_hints = get_type_hints(func)
@@ -496,13 +569,22 @@ def _build_tool_spec(
         annotation = resolved_hints.get(param.name, param.annotation)
         if annotation is inspect.Signature.empty:
             annotation = Any
-        schema_override = _annotation_to_schema(annotation)
+        field_key = (registered_name or func.__name__, param.name)
+        schema_override = _MODEL_FIELD_SCHEMAS.get(field_key)
+        if schema_override is None:
+            schema_override = _annotation_to_schema(annotation)
         if schema_override is not None:
             schema_overrides[param.name] = schema_override
+        if field_key in _MODEL_EXCLUDED_FIELDS:
+            model_excluded_fields.add(param.name)
         annotation = _schema_friendly_annotation(
             annotation,
             tool_name=registered_name or func.__name__,
             field_name=param.name,
+            has_model_contract=(
+                schema_override is not None
+                or field_key in _MODEL_EXCLUDED_FIELDS
+            ),
         )
         default = param.default
         if default is inspect.Signature.empty:
@@ -526,6 +608,7 @@ def _build_tool_spec(
         description=description,
         accepts_kwargs=accepts_kwargs,
         schema_overrides=schema_overrides,
+        model_excluded_fields=frozenset(model_excluded_fields),
         metadata=metadata or RuntimeToolMetadata(),
     )
 
@@ -555,6 +638,7 @@ def _schema_friendly_annotation(
     *,
     tool_name: str,
     field_name: str,
+    has_model_contract: bool = False,
 ) -> Any:
     try:
         TypeAdapter(annotation).json_schema()
@@ -563,12 +647,13 @@ def _schema_friendly_annotation(
         PydanticSchemaGenerationError,
         TypeError,
     ):
-        logger.warning(
-            "Falling back to Any for tool schema field %s.%s with annotation %r",
-            tool_name,
-            field_name,
-            annotation,
-        )
+        if not has_model_contract:
+            logger.warning(
+                "Falling back to Any for tool schema field %s.%s with annotation %r",
+                tool_name,
+                field_name,
+                annotation,
+            )
         return Any
     return annotation
 

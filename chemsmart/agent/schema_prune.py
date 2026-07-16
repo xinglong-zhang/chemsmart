@@ -219,9 +219,10 @@ def _select_kinds(text: str) -> set[str]:
         if pattern.search(text)
     }
     if not matched:
-        # No cue at all: keep every jobkind of the selected program(s) so
-        # the model is never denied a legal path it might need.
-        return set()
+        # No cue means the model should ask or choose only the conservative
+        # common floor.  Exposing every kind recreates the full-schema prompt
+        # and encourages unsupported guesses.
+        return set(_KIND_FLOOR)
     expanded = set(matched)
     for kind in matched:
         expanded |= _CONFUSABLE_SIBLINGS.get(kind, frozenset())

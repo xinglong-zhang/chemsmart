@@ -286,8 +286,11 @@ project.
 | `chemsmart agent tools` | Show registered runtime tools |
 | `chemsmart agent doctor` | Provider/SSH/permission health check |
 
-Inside the TUI, use `/mode ask` for command synthesis and command explanation,
-`/mode run` for the full tool-loop harness, and `/init` to build a project YAML
+The TUI has one provider-aware interface: local providers synthesize commands,
+while API providers use the unified tool loop automatically. After semantic,
+intent, generated-input, and workspace-project checks pass, use `/run` for a
+validated `chemsmart run` command or `/submit` for a validated `chemsmart sub`
+command. `/mode` is informational only. Use `/init` to build a project YAML
 from a reported computational method.
 
 ### Current agent behavior

@@ -8,6 +8,8 @@ from typing import Any
 
 from rich.console import Group
 from rich.text import Text
+from textual.binding import Binding
+from textual.events import Click
 
 from chemsmart.agent.core import Plan, Step, _restore_json_result
 from chemsmart.io.molecules.structure import Molecule
@@ -33,6 +35,11 @@ _STATUS_ICON = {
 
 
 class PlanCell(BaseCell):
+    BINDINGS = [
+        Binding("enter", "toggle_expand", "Expand", show=False),
+        Binding("space", "toggle_expand", "Expand", show=False),
+    ]
+
     def __init__(self, content: Plan | str) -> None:
         self.plan = content if isinstance(content, Plan) else None
         self.plan_text = content if isinstance(content, str) else None
@@ -47,6 +54,8 @@ class PlanCell(BaseCell):
             if self.plan is not None
             else []
         )
+        self._last_changed: _WorkflowRow | None = None
+        self.expanded = False
         super().__init__(
             self._build_renderable(),
             title="Workflow" if self.plan is not None else "Plan",
@@ -64,6 +73,7 @@ class PlanCell(BaseCell):
             return
         row.status = "running"
         row.detail = _running_detail(tool, args or row.args)
+        self._last_changed = row
         self.update(self._build_renderable())
 
     def mark_completed(
@@ -77,6 +87,7 @@ class PlanCell(BaseCell):
             return
         row.status = "done"
         row.detail = _completed_detail(tool, row.args, payload)
+        self._last_changed = row
         self.update(self._build_renderable())
 
     def mark_failed(
@@ -90,6 +101,18 @@ class PlanCell(BaseCell):
             return
         row.status = "failed"
         row.detail = message.strip() or "Execution was interrupted."
+        self._last_changed = row
+        self.expanded = True
+        self.update(self._build_renderable())
+
+    def on_click(self, _event: Click) -> None:
+        self.action_toggle_expand()
+
+    def action_toggle_expand(self) -> None:
+        self.set_expanded(not self.expanded)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.expanded = bool(expanded)
         self.update(self._build_renderable())
 
     def _find_row(self, step_index: int, tool: str) -> _WorkflowRow | None:
@@ -106,7 +129,43 @@ class PlanCell(BaseCell):
             if self.plan.rationale:
                 return Text(self.plan.rationale)
             return no_data_text()
-        lines = []
+        completed = sum(row.status == "done" for row in self._rows)
+        current = next(
+            (row for row in self._rows if row.status == "running"),
+            next((row for row in self._rows if row.status == "pending"), None),
+        )
+        failed = next(
+            (row for row in self._rows if row.status == "failed"), None
+        )
+        active = failed or current
+        state = "failed" if failed is not None else (
+            active.status if active is not None else "done"
+        )
+        header = Text.assemble(
+            ("Workflow", "bold"),
+            (f" · {completed}/{len(self._rows)}", "dim"),
+            (
+                f" · {active.tool} {state}" if active is not None else " · complete",
+                _status_style(state),
+            ),
+            ("  [enter expand]", "dim"),
+        )
+        if not self.expanded:
+            display = failed or (
+                active if active is not None and active.status == "running" else None
+            ) or self._last_changed or active
+            if display is None:
+                return Group(header, Text("All steps complete", style="success"))
+            icon = _STATUS_ICON.get(display.status, "•")
+            line = Text()
+            line.append(f"{icon} ", style=_status_style(display.status))
+            line.append(f"{display.index}. {display.tool}", style="bold")
+            if display.detail:
+                line.append("  ", style="dim")
+                line.append(display.detail, style=_status_style(display.status))
+            return Group(header, line)
+
+        lines = [header]
         for row in self._rows:
             icon = _STATUS_ICON.get(row.status, "•")
             line = Text()

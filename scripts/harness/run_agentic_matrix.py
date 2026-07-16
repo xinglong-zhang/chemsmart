@@ -133,6 +133,12 @@ def run_batch(
                 and isinstance(execution.get("terminal_state"), dict)
                 else None
             )
+            execution_stage = "completed" if execution is not None else "not_reached"
+            terminal_rule_ids = (
+                validate_terminal_state(terminal)
+                if execution is not None
+                else []
+            )
             if case.expected_outcome == "valid_ask":
                 passed = outcome is OutcomeClass.VALID_ASK
             else:
@@ -157,9 +163,10 @@ def run_batch(
                     "intent_rule_ids": intent.get("failed_rule_ids") or [],
                     "command": str(result.get("command") or ""),
                     "turn_results": turn_results,
+                    "execution_stage": execution_stage,
                     "execution": _public_execution_result(execution),
                     "terminal_state": terminal,
-                    "terminal_rule_ids": validate_terminal_state(terminal),
+                    "terminal_rule_ids": terminal_rule_ids,
                     "token_estimate": {
                         "input": _estimate_tokens("\n".join(case.turns)),
                         "output": _estimate_tokens(session._last_raw_response),

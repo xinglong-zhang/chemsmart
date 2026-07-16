@@ -9,6 +9,7 @@ program, job type, state, or server.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import PurePath
 from typing import Any
@@ -50,6 +51,9 @@ def _equivalent_value(expected: Any, observed: Any) -> bool:
         return expected == observed
     expected_text = str(expected).strip()
     observed_text = str(observed).strip()
+    expected_sequence = _structured_sequence(expected)
+    if expected_sequence is not None:
+        return expected_sequence == _structured_sequence(observed)
     try:
         return float(expected_text) == float(observed_text)
     except ValueError:
@@ -60,6 +64,30 @@ def _equivalent_value(expected: Any, observed: Any) -> bool:
             return expected_numbers == observed_numbers
         observed_compact = re.sub(r"[\s\[\](){}]", "", observed_text)
         return expected_compact == observed_compact
+
+
+def _structured_sequence(value: Any) -> tuple[Any, ...] | None:
+    if isinstance(value, str):
+        try:
+            value = ast.literal_eval(value)
+        except (SyntaxError, ValueError):
+            return None
+    if not isinstance(value, (list, tuple)):
+        return None
+    normalized: list[Any] = []
+    for item in value:
+        if isinstance(item, (list, tuple)):
+            nested = _structured_sequence(item)
+            if nested is None:
+                return None
+            normalized.append(nested)
+        elif isinstance(item, bool):
+            normalized.append(item)
+        elif isinstance(item, (int, float)):
+            normalized.append(float(item))
+        else:
+            normalized.append(str(item).strip().lower())
+    return tuple(normalized)
 
 
 def build_sub_intent_assertions(
@@ -169,8 +197,12 @@ def build_sub_intent_assertions(
                 )
             if observed is None and field == "step_size":
                 observed = parsed.structural_options.get("step_size_or_solv")
-            expected_value = _text(expected[field])
-            observed_value = _text(observed)
+            if field in {"coordinates", "constrained_coordinates"}:
+                expected_value = expected[field]
+                observed_value = observed
+            else:
+                expected_value = _text(expected[field])
+                observed_value = _text(observed)
             rows.append(
                 {
                     "id": assertion_id,

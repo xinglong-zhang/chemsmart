@@ -7,6 +7,7 @@ import os
 import re
 import shlex
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import click
@@ -21,6 +22,7 @@ from chemsmart.agent.harness.command_semantics import (
 from chemsmart.agent.harness.workflow_state import (
     current_workflow_state,
     select_project_from_request,
+    select_workspace_project,
 )
 from chemsmart.agent.command_answerer import (
     ComposedAnswer,
@@ -34,6 +36,7 @@ from chemsmart.agent.model_command_parser import (
 )
 from chemsmart.agent.prompts.synthesis import build_synthesis_system_prompt
 from chemsmart.agent.provider_adapter import extract_response_text
+from chemsmart.agent.schema_prune import prune_schema_for_request
 from chemsmart.agent.services.conversation_memory import (
     ConversationMemory,
     ConversationTurn,
@@ -198,6 +201,7 @@ class SynthesisSession:
         request: str,
         *,
         intent_request: str | None = None,
+        enforce_intent: bool = True,
     ) -> JsonDict:
         """Return a structured synthesis result for ``request``.
 
@@ -227,14 +231,17 @@ class SynthesisSession:
                         default_project=self.default_project or None,
                     )
                     _apply_spec_invariants(result, parsed, request)
+                    result = self._apply_default_project(result)
+                else:
+                    result = self._apply_default_project(
+                        _normalize_result(parsed)
+                    )
+                if enforce_intent:
                     return self._enforce_request_intent(
                         intent_request or request,
-                        self._apply_default_project(result),
+                        result,
                     )
-                return self._enforce_request_intent(
-                    intent_request or request,
-                    self._apply_default_project(_normalize_result(parsed)),
-                )
+                return result
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
@@ -302,6 +309,36 @@ class SynthesisSession:
             + "); confirm the intended job before running."
         ).strip()
         return result
+
+    def _intent_correction_prompt(
+        self,
+        original_request: str,
+        result: JsonDict,
+    ) -> str:
+        assertion = self._last_intent_assertion or {}
+        failed_rows = [
+            row
+            for row in assertion.get("assertions") or []
+            if isinstance(row, dict) and row.get("status") == "fail"
+        ]
+        evidence = "\n".join(
+            "- {id}: expected {expected!r}, observed {observed!r}".format(
+                id=row.get("id"),
+                expected=row.get("expected"),
+                observed=row.get("observed"),
+            )
+            for row in failed_rows
+        )
+        return (
+            f"Original request: {original_request}\n"
+            "The command passed safe runtime validation but changed an "
+            "explicitly stated user value or job intent.\n"
+            f"Command: {result.get('command') or ''}\n"
+            f"Intent mismatches:\n{evidence or '- unknown'}\n"
+            "Return ONLY corrected JSON matching the synthesis schema. "
+            "Preserve the explicit expected values above; do not invent "
+            "any missing scientific setting."
+        )
 
     def validate_command(self, command: str) -> tuple[bool, str]:
         """Dry-parse ``command`` and return ``(ok, error)``."""
@@ -390,6 +427,12 @@ class SynthesisSession:
                 self.default_project = selected.name
 
         yaml_status = resolve_workspace_project()
+        if not self.default_project and yaml_status.loaded:
+            # A single workspace YAML is an unambiguous runtime default.  Keep
+            # the command synthesizer and the observable workflow state in
+            # sync so providers do not ask again for an already loaded project.
+            self.default_project = yaml_status.project
+            select_workspace_project(yaml_status.project, yaml_status.program)
         if (
             not self.default_project
             and not yaml_status.loaded
@@ -421,7 +464,11 @@ class SynthesisSession:
         if routed is not None:
             return routed
 
-        result = self.synthesize(request)
+        # Runtime semantics and generated-input invariants must run before the
+        # request-intent gate.  Otherwise a lossy command parser can reject a
+        # valid command before the stronger runtime evidence exists, and a
+        # repairable CLI failure never reaches the repair loop.
+        result = self.synthesize(request, enforce_intent=False)
         if result["status"] != "ready":
             return self._attach_harness_evidence(result)
 
@@ -467,6 +514,8 @@ class SynthesisSession:
                     "alternatives": [],
                 }
             )
+        if repaired.get("status") != "ready":
+            return self._attach_harness_evidence(repaired)
         command = str(repaired.get("command") or "")
         self._remember_turn(
             request,
@@ -666,6 +715,7 @@ class SynthesisSession:
         """Validate a ready result and ask the model to repair gate failures."""
 
         semantic_retried = False
+        intent_retried = False
         for attempt in range(self.max_retries + 1):
             if result["status"] != "ready":
                 click.echo(
@@ -703,19 +753,45 @@ class SynthesisSession:
                         "Notice: synthesized command passed with runtime "
                         "semantic warnings."
                     )
-                else:
-                    if semantic_retried:
+                if semantic_result.verdict != "reject":
+                    checked = self._enforce_request_intent(
+                        current_request,
+                        result,
+                    )
+                    if checked.get("status") != "ready":
+                        result = checked
+                        intent_retried = True
+                        retry_request = self._intent_correction_prompt(
+                            current_request,
+                            result,
+                        )
+                    elif semantic_retried or intent_retried:
                         click.echo(
                             "Notice: synthesized command was repaired after "
-                            "runtime semantic validation."
+                            "deterministic harness validation."
                         )
-                    return result
+                        return checked
+                    else:
+                        return checked
             else:
-                return result
+                checked = self._enforce_request_intent(
+                    current_request,
+                    result,
+                )
+                if checked.get("status") == "ready":
+                    return checked
+                result = checked
+                intent_retried = True
+                retry_request = self._intent_correction_prompt(
+                    current_request,
+                    result,
+                )
 
             if retry_request is None:
                 return result
             if attempt >= self.max_retries:
+                if result.get("intent_reject"):
+                    return result
                 if self.semantic_gate and self._last_semantic_result:
                     click.echo(
                         "Synthesized command failed runtime semantic "
@@ -735,6 +811,7 @@ class SynthesisSession:
             result = self.synthesize(
                 retry_request,
                 intent_request=current_request,
+                enforce_intent=False,
             )
         return None
 
@@ -808,10 +885,32 @@ class SynthesisSession:
         return quiet_chemsmart_argv(tokens, debug=self.debug)
 
     def _messages_for_request(self, request: str) -> list[dict[str, str]]:
+        selected_project = current_workflow_state().project
+        workspace_program = (
+            selected_project.program if selected_project is not None else None
+        )
+        prompt_schema = prune_schema_for_request(
+            self.schema,
+            request,
+            workspace_program=workspace_program,
+        )
+        system_prompt = build_synthesis_system_prompt(prompt_schema)
+        if (
+            selected_project is not None
+            and selected_project.name == self.default_project
+            and Path(selected_project.path).is_file()
+        ):
+            system_prompt += (
+                "\nRuntime-owned workspace context: the selected "
+                f"{selected_project.program} project is "
+                f"`{selected_project.name}`. For a matching program command, "
+                "use this value for -p/--project and do not ask the user for "
+                "the project name again."
+            )
         messages = [
             {
                 "role": "system",
-                "content": build_synthesis_system_prompt(self.schema),
+                "content": system_prompt,
             }
         ]
         for turn in self.memory.turns:
@@ -827,10 +926,50 @@ class SynthesisSession:
     def _apply_default_project(self, result: JsonDict) -> JsonDict:
         """Attach the active runtime project to ready Gaussian/ORCA commands."""
 
-        if result.get("status") != "ready" or not self.default_project:
+        if not self.default_project:
             return result
         normalized = dict(result)
         command = str(normalized.get("command") or "")
+
+        if normalized.get("status") == "needs_clarification":
+            missing = [
+                str(item) for item in normalized.get("missing_info") or []
+            ]
+            project_missing = [
+                item for item in missing if _is_project_name_missing(item)
+            ]
+            remaining = [
+                item for item in missing if not _is_project_name_missing(item)
+            ]
+            selected = _selected_project_for_command(
+                command,
+                self.default_project,
+            )
+            if (
+                not project_missing
+                or selected is None
+                or not _command_project_is_unresolved(command)
+            ):
+                return result
+            normalized["command"] = _ensure_program_project(
+                command,
+                selected.name,
+            )
+            normalized["project"] = selected.name
+            normalized["missing_info"] = remaining
+            if not remaining:
+                normalized["status"] = "ready"
+                explanation = str(normalized.get("explanation") or "").strip()
+                note = (
+                    f"Using the selected workspace project {selected.name}."
+                )
+                normalized["explanation"] = (
+                    f"{explanation} {note}".strip()
+                )
+            return normalized
+
+        if normalized.get("status") != "ready":
+            return result
         normalized["command"] = _ensure_program_project(
             command,
             self.default_project,
@@ -1234,11 +1373,89 @@ def _ensure_program_project(command: str, project: str) -> str:
     program_index = _find_program_index(tokens)
     if program_index is None:
         return command
-    if _program_has_project(tokens, program_index):
-        return command
     updated = list(tokens)
+    for index in range(program_index + 1, len(updated)):
+        token = updated[index]
+        if token in {"-p", "--project"}:
+            if index + 1 >= len(updated):
+                return command
+            if _is_project_placeholder(updated[index + 1]):
+                updated[index + 1] = project
+                return shlex.join(updated)
+            return command
+        if token.startswith("--project="):
+            value = token.split("=", 1)[1]
+            if _is_project_placeholder(value):
+                updated[index] = f"--project={project}"
+                return shlex.join(updated)
+            return command
     updated[program_index + 1 : program_index + 1] = ["-p", project]
     return shlex.join(updated)
+
+
+def _selected_project_for_command(
+    command: str,
+    default_project: str,
+) -> Any | None:
+    """Return the selected workspace project only when it matches the command."""
+
+    selected = current_workflow_state().project
+    if (
+        selected is None
+        or selected.name != default_project
+        or not Path(selected.path).is_file()
+    ):
+        return None
+    parsed = parse_model_command(command)
+    if parsed.parse_error or parsed.program != selected.program:
+        return None
+    return selected
+
+
+def _command_project_is_unresolved(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    program_index = _find_program_index(tokens)
+    if program_index is None:
+        return False
+    for index in range(program_index + 1, len(tokens)):
+        token = tokens[index]
+        if token in {"-p", "--project"}:
+            return index + 1 < len(tokens) and _is_project_placeholder(
+                tokens[index + 1]
+            )
+        if token.startswith("--project="):
+            return _is_project_placeholder(token.split("=", 1)[1])
+    return True
+
+
+def _is_project_placeholder(value: str) -> bool:
+    return value.strip().lower() in {
+        "<project>",
+        "<project-name>",
+        "<project_name>",
+        "{project}",
+        "{project_name}",
+    }
+
+
+def _is_project_name_missing(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+    if "project" not in normalized:
+        return False
+    return any(
+        marker in normalized
+        for marker in (
+            "project name",
+            "project yaml",
+            "selected project",
+            "select project",
+            "which project",
+            "workspace project",
+        )
+    )
 
 
 def _find_program_index(tokens: list[str]) -> int | None:

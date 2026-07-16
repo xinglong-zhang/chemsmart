@@ -24,6 +24,7 @@ def _set_composer_text(app: ChemsmartTuiApp, text: str) -> None:
 
 
 def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     session_root = tmp_path / "sessions"
     write_session_fixture(session_root)
 
@@ -49,7 +50,7 @@ def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
             await pilot.pause()
             _set_composer_text(app, command)
             await pilot.press("enter")
-            await pilot.pause()
+            await pilot.pause(0.2)
             if command == "/sessions":
                 await pilot.pause()
             if command.startswith("/resume"):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from rich.console import Group
 from rich.table import Table
 from rich.text import Text
+from textual.binding import Binding
 from textual.events import Click
 
 from .base import BaseCell
@@ -18,6 +19,11 @@ class DecisionTraceCell(BaseCell):
     rejected action categories so a user can audit why the agent synthesized,
     explained, critiqued, repaired, or asked for clarification.
     """
+
+    BINDINGS = [
+        Binding("enter", "toggle", "Expand", show=False),
+        Binding("space", "toggle", "Expand", show=False),
+    ]
 
     def __init__(self, trace: dict[str, object]) -> None:
         self.trace = trace
@@ -36,7 +42,10 @@ class DecisionTraceCell(BaseCell):
         self.toggle()
 
     def toggle(self) -> None:
-        self.expanded = not self.expanded
+        self.set_expanded(not self.expanded)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.expanded = bool(expanded)
         self.border_title = (
             "Decision Trace ▾" if self.expanded else "Decision Trace ▸"
         )

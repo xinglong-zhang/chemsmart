@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 
 from chemsmart.io.yaml import YAMLFile
 
@@ -40,6 +41,21 @@ def _default_yaml_path() -> Path:
     return Path.home() / ".chemsmart" / "agent" / "agent.yaml"
 
 
+def _load_provider_environment() -> Path | None:
+    """Load the first configured agent environment file, if one exists."""
+    explicit = os.environ.get("CHEMSMART_API_ENV", "").strip()
+    candidates = (
+        Path(explicit) if explicit else None,
+        Path.home() / ".chemsmart" / "api.env",
+        Path.cwd() / "api.env",
+    )
+    for candidate in candidates:
+        if candidate is not None and candidate.is_file():
+            load_dotenv(candidate, override=False)
+            return candidate
+    return None
+
+
 def load_active_provider_config(
     yaml_path: str | os.PathLike[str] | None = None,
 ) -> AgentProviderConfig | None:
@@ -58,6 +74,7 @@ def load_active_provider_config(
             provider, uses an unknown provider type, or does not resolve an API
             key.
     """
+    _load_provider_environment()
     path = Path(yaml_path) if yaml_path is not None else _default_yaml_path()
     if not path.is_file():
         return None

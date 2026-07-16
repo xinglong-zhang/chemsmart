@@ -38,6 +38,10 @@ def test_tool_call_cell_renders_read_result_summary_and_detail():
     )
 
     renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert "L10-16 of 200, truncated" in renderables[0].plain
+    cell.set_expanded(True)
+    renderables = _renderables(cell)
     assert any(
         item.plain == "Result · L10-16 of 200, truncated"
         for item in renderables
@@ -66,6 +70,10 @@ def test_tool_call_cell_renders_ssh_probe_result_summary_and_detail():
         result=result,
     )
 
+    renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert "rc=0 in 0.13s" in renderables[0].plain
+    cell.set_expanded(True)
     renderables = _renderables(cell)
     assert any(item.plain == "Result · rc=0 in 0.13s" for item in renderables)
     detail = render_tool_result_detail("ssh_probe", result)
@@ -99,6 +107,10 @@ def test_tool_call_cell_renders_scheduler_query_result_summary_and_detail():
         result=queue_result,
     )
 
+    renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert "slurm: debug 4n/128cpu" in renderables[0].plain
+    cell.set_expanded(True)
     renderables = _renderables(cell)
     assert any(
         item.plain == "Result · slurm: debug 4n/128cpu" for item in renderables
@@ -157,6 +169,13 @@ def test_tool_call_cell_renders_log_tail_result_summary_and_detail():
     )
 
     renderables = _renderables(cell)
+    assert len(renderables) == 1
+    assert (
+        "12L, 4 errors: oom_killed, walltime_exceeded, missing_module"
+        in renderables[0].plain
+    )
+    cell.set_expanded(True)
+    renderables = _renderables(cell)
     assert any(
         item.plain
         == "Result · 12L, 4 errors: oom_killed, walltime_exceeded, missing_module"
@@ -178,8 +197,15 @@ def test_tool_call_cell_result_none_stays_backward_compatible():
     )
 
     renderables = _renderables(cell)
-    assert [item.plain for item in renderables] == [
-        "● PENDING build_job [local-state]",
+    assert len(renderables) == 1
+    assert renderables[0].plain.startswith(
+        "● PENDING · build_job · local-state · 0.0s · Build"
+    )
+    assert renderables[0].plain.endswith("[enter expand]")
+
+    cell.set_expanded(True)
+    renderables = _renderables(cell)
+    assert [item.plain for item in renderables[1:]] == [
         "Build",
         "effect: creates a job object handle",
         "",

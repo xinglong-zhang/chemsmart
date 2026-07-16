@@ -256,9 +256,10 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
             await pilot.pause()
-            # Local providers default to ask mode (run/harness is incompatible).
-            assert app.chat_screen._interaction_mode == "ask"
-            assert "ask:local" in str(app.query_one(FooterWidget).renderable)
+            assert app.chat_screen._interaction_mode == "synthesis"
+            assert "synthesis:local" in str(
+                app.query_one(FooterWidget).renderable
+            )
 
             composer = app.query_one(Composer)
             composer.load_text("single-point on examples/h2o.xyz with Gaussian")
@@ -319,9 +320,9 @@ def test_frontier_provider_defaults_to_unified_tool_loop(
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
             await pilot.pause()
-            assert app.chat_screen._interaction_mode == "ask"
+            assert app.chat_screen._interaction_mode == "unified"
             footer_text = str(app.query_one(FooterWidget).renderable)
-            assert "ask:openai" in footer_text
+            assert "unified:openai" in footer_text
             assert "project test" in footer_text
 
             composer = app.query_one(Composer)
@@ -501,7 +502,7 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
     asyncio.run(scenario())
 
 
-def test_local_provider_refuses_run_mode(monkeypatch, tmp_path: Path):
+def test_mode_alias_does_not_change_local_provider_role(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
         "chemsmart.agent.tui.screens.chat.load_active_provider_config",
@@ -512,14 +513,16 @@ def test_local_provider_refuses_run_mode(monkeypatch, tmp_path: Path):
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
             await pilot.pause()
-            # Local defaults to ask and cannot switch into the run/harness path
-            # (the tool-calling loop does not support the local provider).
-            assert app.chat_screen._interaction_mode == "ask"
-            assert "ask:local" in str(app.query_one(FooterWidget).renderable)
+            assert app.chat_screen._interaction_mode == "synthesis"
+            assert "synthesis:local" in str(
+                app.query_one(FooterWidget).renderable
+            )
 
             app.chat_screen._handle_slash_command("/mode run")
             await pilot.pause()
-            assert app.chat_screen._interaction_mode == "ask"
-            assert "ask:local" in str(app.query_one(FooterWidget).renderable)
+            assert app.chat_screen._interaction_mode == "synthesis"
+            assert "synthesis:local" in str(
+                app.query_one(FooterWidget).renderable
+            )
 
     asyncio.run(scenario())

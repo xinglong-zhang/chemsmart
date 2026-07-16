@@ -172,3 +172,32 @@ providers:
     assert config is not None
     assert config.api_key == "env-key"
     assert config.type == "anthropic"
+
+
+def test_load_active_provider_config_loads_api_env_before_yaml(
+    monkeypatch, tmp_path
+):
+    env_path = tmp_path / "api.env"
+    env_path.write_text("DEEPSEEK-api-key=deepseek-key\n", encoding="utf-8")
+    yaml_path = _write_agent_yaml(
+        tmp_path / "agent.yaml",
+        """
+active: deepseek
+providers:
+  deepseek:
+    type: openai
+    api_key_env: DEEPSEEK-api-key
+    model: deepseek-v4-pro
+    base_url: https://api.deepseek.com
+    extra_headers: {}
+""",
+    )
+    monkeypatch.setenv("CHEMSMART_API_ENV", str(env_path))
+    monkeypatch.delenv("DEEPSEEK-api-key", raising=False)
+
+    config = load_active_provider_config(yaml_path)
+
+    assert config is not None
+    assert config.name == "deepseek"
+    assert config.api_key == "deepseek-key"
+    assert config.model == "deepseek-v4-pro"

@@ -1,6 +1,7 @@
 """Transcript cells used by the Phase 1 TUI."""
 
 from .agent_message import AgentMessageCell
+from .calculation_receipt import CalculationReceiptCell
 from .command_interpretation import CommandInterpretationCell
 from .critic_verdict import CriticVerdictCell
 from .decision_trace import DecisionTraceCell
@@ -21,6 +22,7 @@ from .workflow import WorkflowCell
 
 __all__ = [
     "AgentMessageCell",
+    "CalculationReceiptCell",
     "CommandInterpretationCell",
     "CriticVerdictCell",
     "DecisionTraceCell",

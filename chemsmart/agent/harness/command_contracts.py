@@ -646,7 +646,14 @@ def _parse_coordinate_literal(
             for item in group
         ):
             return None, "coordinate atom indices must be positive integers"
+        if len(group) != len(set(group)):
+            return None, "a coordinate cannot repeat the same atom index"
         normalized.append(list(group))
+    canonical_groups = {
+        min(tuple(group), tuple(reversed(group))) for group in normalized
+    }
+    if len(normalized) != len(canonical_groups):
+        return None, "coordinate groups must not be duplicated or reversed duplicates"
     return normalized, None
 
 

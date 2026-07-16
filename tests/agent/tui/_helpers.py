@@ -16,6 +16,7 @@ def normalize_svg(svg: str) -> str:
     svg = re.sub(r'height="\d+(?:\.\d+)?"', 'height="NORMALIZED"', svg)
     svg = re.sub(r"fill: #[0-9a-fA-F]{6}", "fill: #COLOR", svg)
     svg = re.sub(r'fill="#[0-9a-fA-F]{6}"', 'fill="#COLOR"', svg)
+    svg = re.sub(r"[▁▂▃▄▅▆▇█]+", "CURSOR", svg)
     return svg.strip()
 
 

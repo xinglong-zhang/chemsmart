@@ -54,7 +54,7 @@ def test_openai_denial_returns_tool_result_message(tmp_path):
         "ok": False,
         "error": {
             "type": "PermissionDenied",
-            "message": "missing_yolo",
+                "message": "no_approver",
             "tool": "run_local",
         },
     }
@@ -103,7 +103,7 @@ def test_anthropic_denial_returns_tool_result_block(tmp_path):
         "ok": False,
         "error": {
             "type": "PermissionDenied",
-            "message": "missing_yolo",
+                "message": "no_approver",
             "tool": "run_local",
         },
     }

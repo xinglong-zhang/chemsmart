@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -16,6 +17,7 @@ from chemsmart.agent.harness.generated_invariants import (
     check_generated_input_invariants,
 )
 from chemsmart.agent.harness.extractors import (
+    extract_cartesian_state,
     extract_gaussian_route,
     extract_orca_route,
 )
@@ -538,7 +540,23 @@ def _command_contract_issues(
         return ()
     job_index = _first_job_token_index(tokens, software_index + 1)
     if job_index is None:
-        return ()
+        return (
+            CommandSemanticIssue(
+                rule_id="cmd.contract.job_subcommand_required",
+                severity="reject",
+                message=(
+                    f"{program} requires an explicit ChemSmart job "
+                    "subcommand such as opt, sp, ts, scan, or modred"
+                ),
+                evidence={
+                    "program": program,
+                    "command_tokens": tokens,
+                },
+                missing_info=(
+                    f"explicit {program} computational job subcommand",
+                ),
+            ),
+        )
     contract_issues = check_command_contracts(
         program=program,
         job=tokens[job_index],
@@ -768,11 +786,30 @@ def _generated_inputs(
                 if suffix in {".com", ".gjf"}
                 else extract_orca_route(content)
             )
+            software = "gaussian" if suffix in {".com", ".gjf"} else "orca"
+            state = extract_cartesian_state(content, software=software)
+            state_evidence: dict[str, Any] = {}
+            if state:
+                state_evidence = {
+                    "charge": state["charge"],
+                    "multiplicity": state["multiplicity"],
+                    "element_counts": dict(
+                        sorted(Counter(state["element_symbols"]).items())
+                    ),
+                }
+                for key in (
+                    "charge_multiplicity_pairs",
+                    "atom_layers",
+                    "layer_atoms",
+                ):
+                    if key in state:
+                        state_evidence[key] = state[key]
             generated.append(
                 {
                     "path": str(path),
                     "route": route,
-                    "content_tail": _tail(content),
+                    "content_tail": _input_excerpt(content),
+                    **state_evidence,
                 }
             )
     return generated
@@ -825,6 +862,21 @@ def _tail(value: Any, limit: int = 2000) -> str:
         else str(value)
     )
     return text[-limit:]
+
+
+def _input_excerpt(value: Any, limit: int = 4000) -> str:
+    """Keep both input headers and coordinate directives without full-file bloat."""
+    if value is None:
+        return ""
+    text = (
+        value.decode("utf-8", errors="replace")
+        if isinstance(value, bytes)
+        else str(value)
+    )
+    if len(text) <= limit:
+        return text
+    half = limit // 2
+    return f"{text[:half]}\n...<content omitted>...\n{text[-half:]}"
 
 
 def _single_issue_result(

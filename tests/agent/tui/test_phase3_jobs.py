@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from chemsmart.agent.tui.app import ChemsmartTuiApp
-from chemsmart.agent.tui.screens.jobs_panel import JobsPanel
+from chemsmart.agent.tui.screens.calculations import CalculationMonitor
 from chemsmart.agent.tui.services import job_poller
 from chemsmart.agent.tui.widgets.composer import Composer
 
@@ -52,15 +52,13 @@ def test_jobs_panel_keys_and_polling_diff(monkeypatch, tmp_path: Path):
         )
         cancel_calls: list[str] = []
         extract_calls: list[str] = []
-        resume_calls: list[str] = []
         app.chat_screen._confirm_cancel = lambda job_id: cancel_calls.append(job_id)  # type: ignore[method-assign]
         app.chat_screen._extract_job_result = lambda job_id: extract_calls.append(job_id)  # type: ignore[method-assign]
-        app.chat_screen._resume_or_prompt = lambda session_id: resume_calls.append(session_id)  # type: ignore[method-assign]
         async with app.run_test() as pilot:
             await pilot.pause()
             app.chat_screen.action_open_jobs_panel()
             await pilot.pause()
-            assert isinstance(app.screen, JobsPanel)
+            assert isinstance(app.screen, CalculationMonitor)
             assert app.screen.jobs["12345.remote"]["status"] == "queued"
 
             snapshots.pop(0)
@@ -68,7 +66,7 @@ def test_jobs_panel_keys_and_polling_diff(monkeypatch, tmp_path: Path):
             await pilot.pause(0.2)
             app.chat_screen._refresh_job_snapshot()
             await pilot.pause()
-            assert isinstance(app.screen, JobsPanel)
+            assert isinstance(app.screen, CalculationMonitor)
             assert app.screen.jobs["12345.remote"]["status"] == "running"
 
             await pilot.press("c")
@@ -85,7 +83,7 @@ def test_jobs_panel_keys_and_polling_diff(monkeypatch, tmp_path: Path):
             await pilot.pause()
             await pilot.press("enter")
             await pilot.pause()
-            assert resume_calls == ["session-001"]
+            assert isinstance(app.screen, CalculationMonitor)
 
     asyncio.run(scenario())
 
@@ -115,7 +113,7 @@ def test_jobs_plain_mode_falls_back_to_inline_table(
             composer.load_text("/jobs")
             await pilot.press("enter")
             await pilot.pause()
-            assert not isinstance(app.screen, JobsPanel)
+            assert not isinstance(app.screen, CalculationMonitor)
             assert "12345.remote" in normalize_svg(app.export_screenshot())
 
     asyncio.run(scenario())

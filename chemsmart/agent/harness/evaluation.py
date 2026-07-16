@@ -28,6 +28,41 @@ class OutcomeClass(str, Enum):
     TERMINAL_ENVIRONMENT_FAILURE = "terminal_environment_failure"
 
 
+_GENERATED_INPUT_RULE_IDS = frozenset(
+    {
+        "cmd.semantic.generated_input_missing",
+        "cmd.semantic.generated_route_missing",
+        "cmd.semantic.submit_generated_input_not_observed",
+    }
+)
+_GENERATED_INPUT_RULE_PREFIXES = (
+    "input.",
+    "gaussian.ts.",
+    "gaussian.freq.",
+    "gaussian.irc.",
+    "orca.ts.",
+    "orca.freq.",
+    "orca.irc.",
+)
+_FORMAT_RULE_IDS = frozenset(
+    {
+        "cmd.runtime.cli_value_error",
+        "cmd.semantic.option_order",
+        "cmd.semantic.orca_aux_basis_short_flag",
+        "cmd.semantic.strict_parser",
+    }
+)
+_TERMINAL_RULE_IDS = frozenset(
+    {
+        "cmd.runtime.dependency_missing",
+        "cmd.runtime.input_not_found",
+        "cmd.runtime.runner_unavailable",
+        "cmd.runtime.server_invalid",
+        "cmd.semantic.timeout",
+    }
+)
+
+
 @dataclass(frozen=True)
 class HarnessCase:
     case_id: str
@@ -95,14 +130,7 @@ def evaluate_case_command(
     semantic_rules = tuple(semantic.failed_rule_ids)
     intent_rules = tuple(intent.failed_rule_ids)
     if semantic.verdict == "reject":
-        if any(rule.startswith("input.") for rule in semantic_rules):
-            outcome = OutcomeClass.GENERATED_INPUT_FAILURE
-        elif any("project" in rule or "yaml" in rule for rule in semantic_rules):
-            outcome = OutcomeClass.YAML_STATE_FAILURE
-        elif any("terminal" in rule or "server" in rule for rule in semantic_rules):
-            outcome = OutcomeClass.TERMINAL_ENVIRONMENT_FAILURE
-        else:
-            outcome = OutcomeClass.CLI_RUNTIME_FAILURE
+        outcome = classify_semantic_failure(semantic_rules)
         return CaseEvaluation(case.case_id, outcome, False, semantic, intent, semantic_rules)
     if intent.verdict == "reject":
         return CaseEvaluation(case.case_id, OutcomeClass.INTENT_DRIFT, False, semantic, intent, intent_rules)
@@ -124,12 +152,8 @@ def classify_agent_result(
         return OutcomeClass.VALID_ASK if expected_outcome == "valid_ask" else OutcomeClass.SPURIOUS_ASK
     if intent:
         return OutcomeClass.INTENT_DRIFT
-    if any(rule.startswith("input.") for rule in semantic):
-        return OutcomeClass.GENERATED_INPUT_FAILURE
-    if any("project" in rule or "yaml" in rule for rule in semantic):
-        return OutcomeClass.YAML_STATE_FAILURE
     if semantic:
-        return OutcomeClass.CLI_RUNTIME_FAILURE
+        return classify_semantic_failure(semantic)
     if status not in {"ready", "ok"}:
         return OutcomeClass.FORMAT_SCHEMA_FAILURE
     return OutcomeClass.REPAIR_PASS if repaired else OutcomeClass.DIRECT_PASS
@@ -144,10 +168,29 @@ def reliability_metrics(rows: Iterable[dict[str, Any]], *, k: int = 3) -> dict[s
     return {
         "case_count": len(trials),
         "trial_count": len(all_attempts),
-        "pass_at_1": (sum(all_attempts) / len(all_attempts)) if all_attempts else 0.0,
+        "pass_at_1": (sum(values[0] for values in trials) / len(trials)) if trials else 0.0,
         f"pass_at_{k}": (sum(any(values) for values in trials) / len(trials)) if trials else 0.0,
         f"pass_power_{k}": (sum(len(values) == k and all(values) for values in trials) / len(trials)) if trials else 0.0,
     }
+
+
+def classify_semantic_failure(rule_ids: Iterable[str]) -> OutcomeClass:
+    """Classify stable harness rules without relying on provider error prose."""
+
+    rules = tuple(str(rule_id) for rule_id in rule_ids)
+    if any(
+        rule in _GENERATED_INPUT_RULE_IDS
+        or rule.startswith(_GENERATED_INPUT_RULE_PREFIXES)
+        for rule in rules
+    ):
+        return OutcomeClass.GENERATED_INPUT_FAILURE
+    if any("project" in rule or "yaml" in rule for rule in rules):
+        return OutcomeClass.YAML_STATE_FAILURE
+    if any(rule in _TERMINAL_RULE_IDS or rule.startswith("terminal.") for rule in rules):
+        return OutcomeClass.TERMINAL_ENVIRONMENT_FAILURE
+    if any(rule in _FORMAT_RULE_IDS or rule.startswith("cmd.contract.") for rule in rules):
+        return OutcomeClass.FORMAT_SCHEMA_FAILURE
+    return OutcomeClass.CLI_RUNTIME_FAILURE
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -165,6 +208,7 @@ __all__ = [
     "HarnessCase",
     "OutcomeClass",
     "classify_agent_result",
+    "classify_semantic_failure",
     "evaluate_case_command",
     "load_case_matrix",
     "reliability_metrics",

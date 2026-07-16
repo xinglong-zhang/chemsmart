@@ -5,6 +5,7 @@ from __future__ import annotations
 from rich.console import Group
 from rich.text import Text
 from textual.binding import Binding
+from textual.events import Click
 
 from .base import BaseCell
 
@@ -39,7 +40,13 @@ class WorkflowCell(BaseCell):
         )
 
     def action_toggle_expand(self) -> None:
-        self.expanded = not self.expanded
+        self.set_expanded(not self.expanded)
+
+    def on_click(self, _event: Click) -> None:
+        self.action_toggle_expand()
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.expanded = bool(expanded)
         self.update(self._build_renderable())
 
     def _build_renderable(self):

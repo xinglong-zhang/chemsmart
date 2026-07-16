@@ -8,6 +8,7 @@ from textual.widgets import Static
 
 from chemsmart.agent.tui.app import ChemsmartTuiApp
 from chemsmart.agent.tui.screens.sessions import SessionsScreen
+from chemsmart.agent.tui.services.session_index import agent_session_dirs
 
 from ._helpers import write_session_fixture
 
@@ -30,6 +31,18 @@ class _SessionsHarness(App[None]):
 
     def _capture_selection(self, session_id: str | None) -> None:
         self.selected_session_id = session_id
+
+
+def test_runtime_calculation_store_is_not_an_agent_session(tmp_path: Path):
+    session_root = tmp_path / "sessions"
+    write_session_fixture(session_root, "session-001")
+    runtime = session_root / ".runtime" / "tui-one"
+    runtime.mkdir(parents=True)
+    (runtime / "decision_log.jsonl").write_text("{}\n", encoding="utf-8")
+
+    assert [path.name for path in agent_session_dirs(session_root)] == [
+        "session-001"
+    ]
 
 
 def test_sessions_screen_down_enter_dismisses_selected_session(

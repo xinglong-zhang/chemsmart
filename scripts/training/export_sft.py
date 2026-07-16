@@ -90,11 +90,45 @@ _SOLVENT_FLAG_RE = re.compile(
 )
 
 
+def _strip_project_option(command: str) -> str:
+    """Return ``command`` with any ``-p/--project`` option (and its value)
+    removed.
+
+    ``parse_model_command`` resolves ``-p <project>`` against the installed
+    project YAML and fills ``functional``/``basis``/``solvent`` from it. Those
+    values are runtime-owned, not a model leak, so the leak guard re-parses the
+    project-stripped command: with no project, the parser fills those fields
+    only from explicit ``-x``/``-b``/``-sm`` flags, while ``traj``/``scan`` keep
+    their position-correct ``-x`` meaning.
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return command
+    kept: list[str] = []
+    skip_value = False
+    for token in tokens:
+        if skip_value:
+            skip_value = False
+            continue
+        if token in {"-p", "--project"}:
+            skip_value = True
+            continue
+        if token.startswith("-p=") or token.startswith("--project="):
+            continue
+        kept.append(token)
+    return shlex.join(kept)
+
+
 def _runtime_owned_leak(command: str) -> str | None:
     from chemsmart.agent.model_command_parser import parse_model_command
 
+    # Only an EXPLICIT theory/basis/solvent flag on the command is a leak. A
+    # method value that the parser resolves from ``-p <project>`` is
+    # runtime-owned, so parse the project-stripped command (see
+    # ``_strip_project_option``) to isolate model-emitted flags.
     try:
-        parsed = parse_model_command(command)
+        parsed = parse_model_command(_strip_project_option(command))
     except Exception:
         parsed = None
     if parsed is not None and not getattr(parsed, "parse_error", None):
@@ -880,9 +914,12 @@ def _compact_spec_from_command(command: str) -> tuple[JsonDict | None, str]:
         return None, "command_parse_error"
     if parsed.program not in {"gaussian", "orca"} or not parsed.job:
         return None, "unsupported_command"
-    if parsed.functional or parsed.basis or parsed.ab_initio:
+    # Reject only EXPLICIT runtime-owned theory flags; project-resolved method
+    # values (from ``-p <project>``) are not a leak. See ``_runtime_owned_leak``.
+    leak = _runtime_owned_leak(command)
+    if leak in {"runtime_owned_method_flag", "runtime_owned_basis_flag"}:
         return None, "runtime_owned_method_flags"
-    if parsed.solvent_model or parsed.solvent_id:
+    if leak == "runtime_owned_solvent_flag":
         return None, "runtime_owned_solvent_flags"
 
     kind_job = (

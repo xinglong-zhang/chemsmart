@@ -46,7 +46,9 @@ def test_chitchat_input_renders_single_reply_cell_only(
     monkeypatch.setattr("chemsmart.agent.core.get_provider", fake_get_provider)
 
     async def scenario() -> None:
-        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        app = ChemsmartTuiApp(
+            session_root=tmp_path / "sessions", runtime_v2="off"
+        )
         async with app.run_test() as pilot:
             await pilot.pause()
             composer = app.query_one(Composer)
@@ -115,7 +117,9 @@ def test_chemistry_request_keeps_full_workflow_rendering(
     monkeypatch.setattr(agent_tools, "validate_runtime", fake_validate_runtime)
 
     async def scenario() -> None:
-        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        app = ChemsmartTuiApp(
+            session_root=tmp_path / "sessions", runtime_v2="off"
+        )
         async with app.run_test() as pilot:
             await pilot.pause()
             composer = app.query_one(Composer)

@@ -38,6 +38,8 @@ ALWAYS_REQUIRE_APPROVAL = {
     "write_project_yaml",
     "update_project_yaml",
     "execute_chemsmart_command",
+    "run_local",
+    "submit_hpc",
 }
 READ_ONLY_TOOLS = {
     "read",
@@ -167,17 +169,30 @@ def resolve(
             reason=f"never_auto_allow:{pattern_id}",
         )
 
+    if mode == RuntimePermissionMode.PLAN:
+        return ResolvedPermission(
+            decision=ResolvedDecision.AUTO_DENY,
+            reason=PLAN_MODE_REASON,
+        )
+
+    if _is_safe_fake_or_preview(req):
+        return ResolvedPermission(
+            decision=ResolvedDecision.AUTO_ALLOW,
+            reason="safe_fake_or_preview",
+        )
+
+    if req.name in ALWAYS_REQUIRE_APPROVAL:
+        return ResolvedPermission(
+            decision=ResolvedDecision.NEEDS_USER,
+            reason="always_require_approval",
+        )
+
     if isinstance(mode, RuntimePermissionMode):
         tool = req.name
         if mode == RuntimePermissionMode.BYPASS:
             return ResolvedPermission(
                 decision=ResolvedDecision.AUTO_ALLOW,
                 reason="bypass_mode",
-            )
-        if mode == RuntimePermissionMode.PLAN:
-            return ResolvedPermission(
-                decision=ResolvedDecision.AUTO_DENY,
-                reason=PLAN_MODE_REASON,
             )
         if tool in READ_ONLY_TOOLS:
             return ResolvedPermission(
@@ -198,12 +213,6 @@ def resolve(
         )
 
     tool = req.name
-    if tool in ALWAYS_REQUIRE_APPROVAL:
-        return ResolvedPermission(
-            decision=ResolvedDecision.NEEDS_USER,
-            reason="always_require_approval",
-        )
-
     decision_keys = _decision_keys(req)
     denylist = (
         DRIVING_DEFAULT_DENY if driving_denylist is None else driving_denylist
@@ -238,3 +247,11 @@ def resolve(
         decision=ResolvedDecision.NEEDS_USER,
         reason="needs_user",
     )
+
+
+def _is_safe_fake_or_preview(req: ToolRequest) -> bool:
+    if req.name == "execute_chemsmart_command":
+        return req.arguments.get("test") is True
+    if req.name == "submit_hpc":
+        return req.arguments.get("execute", False) is False
+    return False
