@@ -167,11 +167,7 @@ class Transcript(VerticalScroll):
     def on_tool_chain_toggle_cell_toggled(
         self, event: ToolChainToggleCell.Toggled
     ) -> None:
-        entry = self._turn_tool_chains.get(event.turn_id)
-        if entry is None:
-            return
-        toggle, _cells = entry
-        self.set_tool_chain_expanded(event.turn_id, not toggle.expanded)
+        self.set_tool_chain_expanded(event.turn_id, event.expanded)
 
 
 def _final_turn_deliverable(turn_cells: list[Widget]) -> Widget | None:

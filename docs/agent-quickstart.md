@@ -103,7 +103,8 @@ Before that command becomes executable, CHEMSMART checks:
 The deterministic parser and gate evidence remain visible while the agent is
 working. Once the turn finishes, they collapse into one **Tool chain** row.
 Press `Enter`, `Space`, or click it to inspect the evidence again. The final
-command remains visible.
+command remains visible. Activate the same Tool chain row again to hide the
+expanded evidence.
 
 ## Execute And Monitor
 

@@ -16,9 +16,10 @@ class ToolChainToggleCell(BaseCell):
     ]
 
     class Toggled(Message):
-        def __init__(self, turn_id: str) -> None:
+        def __init__(self, turn_id: str, *, expanded: bool) -> None:
             super().__init__()
             self.turn_id = turn_id
+            self.expanded = expanded
 
     def __init__(
         self,
@@ -37,7 +38,9 @@ class ToolChainToggleCell(BaseCell):
         )
 
     def action_toggle(self) -> None:
-        self.post_message(self.Toggled(self.turn_id))
+        self.post_message(
+            self.Toggled(self.turn_id, expanded=not self.expanded)
+        )
 
     def on_click(self, event: events.Click) -> None:
         event.stop()
@@ -56,8 +59,11 @@ class ToolChainToggleCell(BaseCell):
         return f"Tool chain {'▾' if self.expanded else '▸'}"
 
     def _summary(self) -> str:
-        state = "shown" if self.expanded else "hidden after completion"
+        if self.expanded:
+            state = "shown · activate again to hide"
+        else:
+            state = "hidden after completion · activate to show"
         return (
             f"{self.tool_count} tool/validation step(s) · {state} · "
-            "Enter, Space, or click to toggle"
+            "Enter, Space, or click"
         )

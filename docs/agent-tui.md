@@ -135,7 +135,8 @@ While a response is being prepared, tool calls, deterministic parser output,
 semantic and intent gates, repair attempts, and intermediate commands remain
 visible. After the turn finishes, those cells collapse into one **Tool chain**
 row. Press `Enter`, `Space`, or click that row to inspect the complete public
-evidence again. The last valid command remains the visible final deliverable;
+evidence again; activate the same Tool chain row once more to hide it. The last
+valid command remains the visible final deliverable;
 for non-command turns the last substantive answer remains visible. A reject or
 blocked summary replaces any stale command as the final deliverable.
 

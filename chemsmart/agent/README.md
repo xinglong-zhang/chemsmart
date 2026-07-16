@@ -238,7 +238,7 @@ conda run --no-capture-output -n chemsmart python -m pytest \
   tests/agent/tui tests/agent/test_project_yaml_tools.py -q
 ```
 
-Result: `149 passed`.
+Result: `150 passed`.
 
 The full agent regression suite also passed:
 

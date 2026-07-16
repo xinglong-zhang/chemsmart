@@ -230,8 +230,46 @@ def test_completed_tool_chain_collapses_and_toggles(tmp_path: Path):
 
             toggle.action_toggle()
             await pilot.pause()
+            assert not tool.display
+            assert not toggle.expanded
             transcript.clear_turn_chrome()
             assert tool in transcript.query_one("#cells").children
+
+    asyncio.run(scenario())
+
+
+def test_completed_tool_chain_keyboard_toggle_can_hide_again(tmp_path: Path):
+    async def scenario() -> None:
+        app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            transcript = app.query_one(Transcript)
+            transcript.clear_cells()
+            transcript.start_turn("turn-keyboard-toggle")
+            tool = ToolCallCell(
+                tool="validate_project_yaml",
+                status="ok",
+                description="Validate the workspace project.",
+                provider_call_id="validate-1",
+            )
+            answer = FinalAnswerCell("The project is valid.", title="Answer")
+            transcript.add_cell(tool)
+            transcript.add_cell(answer)
+            assert transcript.collapse_tool_chain("turn-keyboard-toggle")
+            await pilot.pause()
+
+            toggle = transcript.query_one(ToolChainToggleCell)
+            toggle.focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert toggle.expanded
+            assert tool.display
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert not toggle.expanded
+            assert not tool.display
+            assert answer.display
 
     asyncio.run(scenario())
 

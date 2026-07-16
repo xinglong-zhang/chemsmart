@@ -26,7 +26,7 @@ workspace truth while reducing transcript clutter:
   and `Ctrl+B` calculation monitor, with chemistry receipts separated from raw
   logs.
 
-Verification on the integrated branch: `149 passed` for the TUI plus
+Verification on the integrated branch: `150 passed` for the TUI plus
 project-YAML slice and `1062 passed, 5 warnings` for the full `tests/agent`
 suite.
 
