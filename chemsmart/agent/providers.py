@@ -113,9 +113,11 @@ class OpenAIProvider:
         model: str | None = None,
         base_url: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        provider_name: str | None = None,
     ) -> None:
         import openai
 
+        self.name = (provider_name or type(self).name).strip()
         self.default_model = model or type(self).default_model
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
@@ -372,6 +374,9 @@ def get_provider(
     Prefer ``~/.chemsmart/agent/agent.yaml``. If it is absent, fall back to the
     legacy ``api.env``/``AI_PROVIDER`` path for backwards compatibility.
     """
+    if isinstance(env_path, str) and env_path.strip():
+        load_dotenv(env_path.strip(), override=False)
+
     try:
         config = load_active_provider_config()
     except AgentProviderConfigError as exc:
@@ -391,6 +396,7 @@ def get_provider(
                 model=config.model,
                 base_url=config.base_url or None,
                 extra_headers=config.extra_headers,
+                provider_name=config.name,
             )
         if config.type == "local":
             return LocalProvider(

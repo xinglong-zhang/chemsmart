@@ -47,7 +47,27 @@ def test_get_provider_prefers_yaml_config(monkeypatch):
         "model": "gpt-yaml",
         "base_url": "https://example.test/v1",
         "extra_headers": {"X-Test": "value"},
+        "provider_name": "main",
     }
+
+
+def test_get_provider_preserves_openai_compatible_provider_name(monkeypatch):
+    config = AgentProviderConfig(
+        name="deepseek",
+        type="openai",
+        api_key="deepseek-key",
+        model="deepseek-v4-pro",
+        base_url="https://api.deepseek.com",
+        extra_headers={},
+    )
+    monkeypatch.setattr(
+        providers, "load_active_provider_config", lambda: config
+    )
+    monkeypatch.setattr(providers, "OpenAIProvider", DummyOpenAIProvider)
+
+    provider = providers.get_provider()
+
+    assert provider.kwargs["provider_name"] == "deepseek"
 
 
 def test_get_provider_builds_mlx_local_provider(monkeypatch):
