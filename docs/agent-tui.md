@@ -32,6 +32,7 @@ Current high-value commands:
 |---|---|
 | `/mode` | Show provider routing information; no mode switch is required |
 | `/init` | Build and validate a project YAML from a reported method |
+| `/write-project [name]` | Approve writing or replacing the latest validated workspace YAML |
 | `/tools` | List registered tools |
 | `/doctor` | Run provider/runtime diagnostics |
 | `/sessions` | Browse saved sessions |
@@ -130,6 +131,18 @@ stay compact; warnings, rejects, and errors expand automatically. Press `Enter`
 or `Space` on a tool or public decision-trace cell to inspect arguments, side
 effects, semantic evidence, and failed rule IDs.
 
+While a response is being prepared, tool calls, deterministic parser output,
+semantic and intent gates, repair attempts, and intermediate commands remain
+visible. After the turn finishes, those cells collapse into one **Tool chain**
+row. Press `Enter`, `Space`, or click that row to inspect the complete public
+evidence again. The last valid command remains the visible final deliverable;
+for non-command turns the last substantive answer remains visible. A reject or
+blocked summary replaces any stale command as the final deliverable.
+
+Click a rendered answer or command explanation to open a plain-text selection
+view. Drag with the mouse to copy a range, press `A` to select all, `C` to copy
+the selection, and `Esc` to return to the conversation.
+
 The footer reports the actual runtime phase, active operation, project/YAML and
 server state, permission mode, provider/model, jobs, queued prompt, and measured
 usage. It displays `YAML OK` or `YAML MISSING` in text as well as color. Token
@@ -203,8 +216,30 @@ extract_project_protocol
 Project YAML creation does not require a structure file. Valid output uses
 CHEMSMART project-settings shape with top-level `gas:` and/or `solv:` blocks.
 
-## Active Project Display
+The candidate and the write are intentionally separate. After a validated
+candidate is rendered, run `/write-project` (or `/write-project co2`) to open
+the approval dialog. If the target already exists, choose `Y` to overwrite the
+current settings or `N` to preserve them and save a new numbered project. The
+write is blocked if the candidate's matching validation receipt is absent,
+rejected, or belongs to another provider call.
 
-The footer shows provider mode/model information and the active project when
-available from `~/.chemsmart/agent/agent.yaml`. The same project should be used
-for generated commands unless the user explicitly selects another project.
+## Workspace Project Selection
+
+Agent project YAML is resolved from the launch directory, not from a global
+project folder:
+
+```text
+<workspace>/.chemsmart/gaussian/<project>.yaml
+<workspace>/.chemsmart/orca/<project>.yaml
+```
+
+One candidate is loaded automatically. With two or more candidates, the footer
+shows `YAML MISSING` until one is selected. Press `Shift+Tab`, move with
+`Tab`/`Down` or `Shift+Tab`/`Up`, then press `Enter`. The selected path and hash
+are bound to a validated command; modifying the file or changing the working
+directory invalidates `/run` and `/submit` until the command is regenerated.
+The footer always shows `YAML OK <program>:<project>` or `YAML MISSING`.
+
+The provider definition remains global at
+`~/.chemsmart/agent/agent.yaml`. Its optional `project:` value can select a
+same-named workspace candidate but cannot substitute for a missing local file.

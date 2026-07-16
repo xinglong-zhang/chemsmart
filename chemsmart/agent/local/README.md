@@ -45,7 +45,7 @@ providers:
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: ""
-    project: ""  # optional runtime-owned Gaussian/ORCA project, e.g. test
+    project: ""  # optional selector for a same-named workspace project
   local_chemsmart_v13_1_mlx4:
     type: local
     model: chemsmart-qwen2.5-coder-3b-instruct-v13_1-mlx-4bit
@@ -54,7 +54,7 @@ providers:
     hf_token_env: HF_TOKEN
     hf_token: ""
     runtime: mlx
-    project: ""  # optional runtime-owned Gaussian/ORCA project, e.g. test
+    project: ""  # optional selector for a same-named workspace project
 ```
 
 Install runtime dependencies once:
@@ -82,10 +82,12 @@ pip install "mlx-lm==0.31.3"
 provider stack. Select `active: local_chemsmart_v13_1_mlx4` to use the MLX
 runtime.
 
-If runtime semantic validation reports missing project settings, install a
-project YAML such as `~/.chemsmart/gaussian/test.yaml` and set
-`project: test` on the active local provider. This remains runtime-owned; the
-model target must not emit project/method/solvent fields.
+If runtime semantic validation reports missing project settings, create or
+select a workspace-local YAML such as
+`<workspace>/.chemsmart/gaussian/test.yaml`. The optional `project: test`
+provider value can select that same-named workspace candidate, but it cannot
+replace an absent file. Project/method/solvent resolution remains
+runtime-owned; the model target must not emit those fields.
 
 Then verify:
 

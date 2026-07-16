@@ -2,10 +2,36 @@
 
 Date: 2026-06-29
 
-Latest documentation addendum: 2026-07-04
+Latest documentation addendum: 2026-07-16
 
 This document summarizes the current local chemsmart CLI agent state after the
 v13.1 model integration, runtime semantic gate work, and Colab smoke testing.
+
+## 2026-07-16 TUI And Workspace Addendum
+
+The current TUI keeps model behavior subordinate to CHEMSMART CLI and
+workspace truth while reducing transcript clutter:
+
+- project YAML is discovered only from the launch workspace under
+  `.chemsmart/{gaussian,orca}/`; one candidate auto-loads and multiple
+  candidates require an explicit `Shift+Tab` selection;
+- `/write-project` uses the latest provider-call-matched validation receipt and
+  asks whether to overwrite the active YAML or create a new project name;
+- generated commands remain the final visible artifact, while deterministic
+  parsing, semantic/intent evidence, repair attempts, and intermediate answers
+  collapse after completion into a reversible Tool chain row;
+- response cells open a mouse-selectable copy view without replacing Rich
+  rendering in the transcript;
+- local calculations remain asynchronous and visible through the status strip
+  and `Ctrl+B` calculation monitor, with chemistry receipts separated from raw
+  logs.
+
+Verification on the integrated branch: `149 passed` for the TUI plus
+project-YAML slice and `1062 passed, 5 warnings` for the full `tests/agent`
+suite.
+
+Historical model-performance numbers below are retained as dated evidence;
+they are not a claim about a newer model release.
 
 ## 2026-07-04 Addendum
 
