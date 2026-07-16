@@ -95,6 +95,34 @@ def test_scan_accepts_single_and_multi_coordinate_literals() -> None:
     assert multiple == ()
 
 
+def test_modred_rejects_repeated_atoms_and_duplicate_coordinate_groups() -> None:
+    repeated_atom = _issues(
+        "orca",
+        "modred",
+        job_tokens=["modred", "--coordinates", "[[1,1]]"],
+    )
+    duplicate_group = _issues(
+        "orca",
+        "modred",
+        job_tokens=["modred", "--coordinates", "[[1,2],[1,2]]"],
+    )
+    reversed_duplicate = _issues(
+        "orca",
+        "modred",
+        job_tokens=["modred", "--coordinates", "[[1,2],[2,1]]"],
+    )
+
+    assert [issue.rule_id for issue in repeated_atom] == [
+        "cmd.contract.coordinate_literal"
+    ]
+    assert [issue.rule_id for issue in duplicate_group] == [
+        "cmd.contract.coordinate_literal"
+    ]
+    assert [issue.rule_id for issue in reversed_duplicate] == [
+        "cmd.contract.coordinate_literal"
+    ]
+
+
 def test_scan_rejects_parameter_cardinality_mismatch() -> None:
     issues = _issues(
         "gaussian",

@@ -341,6 +341,101 @@ def test_generated_input_invariants_detect_coordinate_and_qmmm_drift():
     }
 
 
+def test_orca_scan_exact_row_rejects_point_count_drift():
+    command = (
+        "chemsmart run orca -p demo -f complex.xyz -c 0 -m 1 scan "
+        "--coordinates '[2,7]' --dist-start 1.8 --dist-end 3.0 "
+        "--num-steps 13"
+    )
+    base = {
+        "path": "complex_scan.inp",
+        "route": "! B3LYP def2-SVP",
+    }
+    correct = check_generated_input_invariants(
+        command,
+        [
+            {
+                **base,
+                "content_tail": (
+                    "%geom\n  Scan\n  B 1 6 = 1.8, 3.0, 13\n"
+                    "  end\nend\n* xyz 0 1\nH 0 0 0\n*\n"
+                ),
+            }
+        ],
+    )
+    drifted = check_generated_input_invariants(
+        command,
+        [
+            {
+                **base,
+                # The unrelated comment contains 13, proving that a global
+                # number search cannot validate the scan definition.
+                "content_tail": (
+                    "%geom\n  Scan\n  B 1 6 = 1.8, 3.0, 12\n"
+                    "  end\nend\n# requested 13 points\n"
+                    "* xyz 0 1\nH 0 0 0\n*\n"
+                ),
+            }
+        ],
+    )
+
+    assert correct == ()
+    assert [issue.rule_id for issue in drifted] == [
+        "input.orca.scan.num_steps"
+    ]
+
+
+def test_gaussian_scan_exact_row_rejects_step_drift():
+    command = (
+        "chemsmart run gaussian -p demo -f ethanol.xyz -c 0 -m 1 scan "
+        "--coordinates '[[1,2]]' --step-size '[0.05]' --num-steps '[10]'"
+    )
+    correct = check_generated_input_invariants(
+        command,
+        [
+            {
+                "path": "ethanol_scan.com",
+                "route": "# opt=modredundant b3lyp/6-31g(d)",
+                "content_tail": "B 1 2 S 10 0.05\n",
+            }
+        ],
+    )
+    drifted = check_generated_input_invariants(
+        command,
+        [
+            {
+                "path": "ethanol_scan.com",
+                "route": "# opt=modredundant b3lyp/6-31g(d)",
+                "content_tail": "B 1 2 S 9 0.05\n# requested 10 steps\n",
+            }
+        ],
+    )
+
+    assert correct == ()
+    assert [issue.rule_id for issue in drifted] == [
+        "input.gaussian.scan.num_steps"
+    ]
+
+
+def test_generated_input_invariants_accept_orca_modred_constraint_indices():
+    issues = check_generated_input_invariants(
+        "chemsmart run orca -p demo -f probe.xyz -c 0 -m 1 modred "
+        "--coordinates '[[2,5]]'",
+        [
+            {
+                "path": "probe_modred.inp",
+                "route": "! Opt B3LYP def2-SVP",
+                "content_tail": (
+                    "%geom\n  Constraints\n  {B 1 4 C}\n  end\nend\n"
+                    "* xyz 0 1\nC 0.0 0.0 0.0\n*\n"
+                ),
+            }
+        ],
+    )
+
+    assert issues == ()
+
+
 def test_runtime_failure_taxonomy_decomposes_generic_failure():
     project = classify_runtime_failure(
         stderr="No project settings implemented. Currently available projects: ['demo']",
@@ -479,3 +574,65 @@ def test_matrix_runner_executes_ready_command_in_safe_test_mode(
     assert seen == [True]
     assert rows[0]["passed"] is True
     assert rows[0]["terminal_state"]["status"] == "passed"
+
+
+def test_matrix_runner_does_not_emit_terminal_failure_before_execution(
+    monkeypatch, tmp_path
+):
+    import scripts.harness.run_agentic_matrix as matrix_runner
+
+    matrix = tmp_path / "matrix.json"
+    matrix.write_text(
+        json.dumps(
+            {
+                "families": [
+                    {
+                        "id": "gaussian_opt",
+                        "fixture": {"workspace_projects": ["demo"]},
+                        "intent": {
+                            "program": "gaussian",
+                            "kind": "gaussian.opt",
+                        },
+                        "variants": [
+                            {
+                                "id": "bad_command",
+                                "turns": ["Optimize water.xyz."],
+                                "expected_outcome": "direct_pass",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class Provider:
+        name = "test"
+        model = "test-model"
+
+    class Session:
+        def __init__(self, **_kwargs):
+            self._last_raw_response = "invalid"
+
+        def prepare_command(self, _turn):
+            return {
+                "status": "needs_clarification",
+                "command": "",
+                "semantic": {
+                    "verdict": "reject",
+                    "failed_rule_ids": [
+                        "cmd.contract.job_subcommand_required"
+                    ],
+                },
+            }
+
+    monkeypatch.setattr(matrix_runner, "get_provider", lambda: Provider())
+    monkeypatch.setattr(matrix_runner, "SynthesisSession", Session)
+
+    rows = matrix_runner.run_batch(matrix, offset=0, limit=1, repeats=1)
+
+    assert rows[0]["passed"] is False
+    assert rows[0]["execution_stage"] == "not_reached"
+    assert rows[0]["terminal_state"] is None
+    assert rows[0]["terminal_rule_ids"] == []

@@ -74,7 +74,7 @@ _CUE = re.compile(
     r"coordinate)\b",
     re.IGNORECASE,
 )
-_ATOM_PAIR = re.compile(r"\b\d+\s*[-,]\s*\d+\b")
+_ATOM_PAIR = re.compile(r"\b\d+\s*[-,、]\s*\d+\b")
 _COORD_SPEC = re.compile(r"\b[BAD]\s+\d+(?:\s+\d+)+\b")
 
 
@@ -117,6 +117,15 @@ def check_job(job: dict[str, Any], query: str) -> list[InvariantIssue]:
             )
         )
         return issues
+
+    if job.get("project") not in (None, ""):
+        issues.append(
+            _issue(
+                "spec.project.runtime_owned",
+                "project selection is runtime-owned and must not be model-emitted",
+                {**evidence, "project": job.get("project")},
+            )
+        )
 
     issues.extend(_db_selector_issues(job, str(kind), evidence))
 

@@ -63,6 +63,26 @@ def test_submission_rejects_project_and_kind_drift():
     assert {"sub.intent_kind", "sub.intent_project"} <= _failed_ids(rows)
 
 
+def test_submission_rejects_regrouped_coordinate_intent() -> None:
+    command = (
+        "chemsmart sub -s mock-pbs --fake orca -p mock "
+        "-f examples/h2o.xyz -c 0 -m 1 modred "
+        "--coordinates '[[1,2,3,4]]'"
+    )
+    rows = build_sub_intent_assertions(
+        command,
+        {
+            "program": "orca",
+            "job": "modred",
+            "server": "mock-pbs",
+            "filename": "examples/h2o.xyz",
+            "coordinates": [[1, 2], [3, 4]],
+        },
+    )
+
+    assert "sub.intent_coordinates" in _failed_ids(rows)
+
+
 def test_neb_assertions_cover_endpoint_and_image_count():
     command = (
         "chemsmart sub -s mock-pbs --fake orca -p mock "

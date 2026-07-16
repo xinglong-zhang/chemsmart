@@ -253,10 +253,7 @@ _SUBCOMMAND_OPTIONS = {
     "--states": _OptionSpec("states"),
     "--root": _OptionSpec("root"),
     "--nstates": _OptionSpec("nstates"),
-    "--eqsolv": _OptionSpec("eqsolv", takes_value=False, flag_value="true"),
-    "--no-eqsolv": _OptionSpec(
-        "eqsolv", takes_value=False, flag_value="false"
-    ),
+    "--eqsolv": _OptionSpec("eqsolv"),
     "--recalc-hess": _OptionSpec("recalc_hess"),
     "--trust-radius": _OptionSpec("trust_radius"),
     "--tssearch-type": _OptionSpec("tssearch_type"),
@@ -272,12 +269,91 @@ _SUBCOMMAND_OPTIONS = {
     "--low-level-atoms": _OptionSpec("low_level_atoms"),
     "-S": _OptionSpec("skip_completed", takes_value=False, flag_value="true"),
     "-R": _OptionSpec("skip_completed", takes_value=False, flag_value="false"),
+    "-j": _OptionSpec("jobtype"),
+    "--jobtype": _OptionSpec("jobtype"),
+    "-ns": _OptionSpec("num_structures_to_run"),
+    "--num-structures-to-run": _OptionSpec("num_structures_to_run"),
+    "-g": _OptionSpec("grouping_strategy"),
+    "--grouping-strategy": _OptionSpec("grouping_strategy"),
+    "--proportion-structures-to-use": _OptionSpec("proportion_structures_to_use"),
     "--skip-completed": _OptionSpec(
         "skip_completed", takes_value=False, flag_value="true"
     ),
     "--no-skip-completed": _OptionSpec(
         "skip_completed", takes_value=False, flag_value="false"
     ),
+}
+
+# Gaussian reuses short option letters across nested job commands.  They must
+# be read relative to the selected job: ``td -r 2`` is an excited-state root,
+# while ``userjob -r pop=(nbo)`` is a custom Gaussian route.  A global map
+# silently corrupts one of those meanings.
+# ``qmmm``/ONIOM carries per-layer charge and multiplicity as subcommand
+# options (``gaussian qmmm`` and ``orca qmmm`` share these letters). They are
+# distinct quantities from the program-level ``-c``/``-m`` model-system charge,
+# so a request that pins the total or a layer state can only be asserted if the
+# parser exposes them instead of dropping them as unrecognized. See the real
+# CLI in ``chemsmart/cli/{gaussian,orca}/qmmm.py``.
+_QMMM_CHARGE_MULT_OPTIONS: dict[str, _OptionSpec] = {
+    "-ct": _OptionSpec("charge_total"),
+    "--charge-total": _OptionSpec("charge_total"),
+    "-mt": _OptionSpec("mult_total"),
+    "--mult-total": _OptionSpec("mult_total"),
+    "-ci": _OptionSpec("charge_intermediate"),
+    "--charge-intermediate": _OptionSpec("charge_intermediate"),
+    "-mi": _OptionSpec("mult_intermediate"),
+    "--mult-intermediate": _OptionSpec("mult_intermediate"),
+    "-ch": _OptionSpec("charge_high"),
+    "--charge-high": _OptionSpec("charge_high"),
+    "-mh": _OptionSpec("mult_high"),
+    "--mult-high": _OptionSpec("mult_high"),
+}
+
+# Per-layer atom-region options (short forms plus the long forms not already in
+# ``_SUBCOMMAND_OPTIONS``). Gaussian ONIOM uses high/medium/low; ORCA uses
+# high/intermediate/active. Source: ``chemsmart/cli/{gaussian,orca}/qmmm.py``.
+_GAUSSIAN_QMMM_OPTIONS: dict[str, _OptionSpec] = {
+    **_QMMM_CHARGE_MULT_OPTIONS,
+    "-ha": _OptionSpec("high_level_atoms"),
+    "-ma": _OptionSpec("medium_level_atoms"),
+    "--medium-level-atoms": _OptionSpec("medium_level_atoms"),
+    "-la": _OptionSpec("low_level_atoms"),
+    "-ba": _OptionSpec("bonded_atoms"),
+    "--bonded-atoms": _OptionSpec("bonded_atoms"),
+}
+_ORCA_QMMM_OPTIONS: dict[str, _OptionSpec] = {
+    **_QMMM_CHARGE_MULT_OPTIONS,
+    "-ha": _OptionSpec("high_level_atoms"),
+    "-ia": _OptionSpec("intermediate_level_atoms"),
+    "--intermediate-level-atoms": _OptionSpec("intermediate_level_atoms"),
+    "-a": _OptionSpec("active_atoms"),
+    "--active-atoms": _OptionSpec("active_atoms"),
+}
+
+_JOB_OPTION_OVERRIDES: dict[tuple[str, str], dict[str, _OptionSpec]] = {
+    ("gaussian", "td"): {
+        "-s": _OptionSpec("states"),
+        "-r": _OptionSpec("root"),
+        "-n": _OptionSpec("nstates"),
+        "-e": _OptionSpec("eqsolv"),
+        "--states": _OptionSpec("states"),
+        "--root": _OptionSpec("root"),
+        "--nstates": _OptionSpec("nstates"),
+        "--eqsolv": _OptionSpec("eqsolv"),
+    },
+    ("gaussian", "userjob"): {
+        "-r": _OptionSpec("route_parameters"),
+        "--route": _OptionSpec("route_parameters"),
+    },
+    ("gaussian", "qmmm"): dict(_GAUSSIAN_QMMM_OPTIONS),
+    ("orca", "qmmm"): dict(_ORCA_QMMM_OPTIONS),
+    # ORCA TS overloads ``-s`` as ``--recalc-hess`` (steps between Hessian
+    # recalculations); the generic ``-s`` is a scan step size, which a TS search
+    # never takes. Source: ``chemsmart/cli/orca/ts.py``.
+    ("orca", "ts"): {
+        "-s": _OptionSpec("recalc_hess"),
+        "--recalc-hess": _OptionSpec("recalc_hess"),
+    },
 }
 
 _JOB_LABELS = {
@@ -371,14 +447,42 @@ def parse_model_command(
     else:
         job = tokens[subcommand_index]
 
+    # The real CLI nests ``qmmm`` under a parent job (``opt qmmm``, ``ts qmmm``,
+    # ``sp qmmm`` …). ``_find_subcommand_index`` stops at the parent token, so
+    # the parent remains the job (and ``qmmm`` is detected as a required token
+    # by the intent oracle), but the per-layer charge/mult/region options that
+    # follow the nested ``qmmm`` token must be parsed with the qmmm option specs
+    # so they land in ``structural_options`` instead of being reported as
+    # unrecognized parent-job options. Source:
+    # ``chemsmart/cli/{gaussian,orca}/qmmm.py``.
+    subcommand_option_index = subcommand_index
+    subcommand_specs_job = job
+    if job is not None and job != "qmmm":
+        nested_qmmm_index = _find_first(
+            tokens, {"qmmm"}, start=subcommand_index + 1
+        )
+        if nested_qmmm_index is not None:
+            subcommand_specs_job = "qmmm"
+            subcommand_option_index = nested_qmmm_index
+
     program_opts, program_warnings = _parse_options(
         tokens[program_index + 1 : subcommand_index], _PROGRAM_OPTIONS
     )
     warnings.extend(program_warnings)
+    subcommand_specs = dict(_SUBCOMMAND_OPTIONS)
+    subcommand_specs.update(
+        _JOB_OPTION_OVERRIDES.get((program, subcommand_specs_job or ""), {})
+    )
     subcommand_opts, subcommand_warnings = _parse_options(
-        tokens[subcommand_index + 1 :], _SUBCOMMAND_OPTIONS
+        tokens[subcommand_option_index + 1 :], subcommand_specs
     )
     warnings.extend(subcommand_warnings)
+    if program == "gaussian" and job == "traj" and "dist_start" in subcommand_opts:
+        # ``traj`` owns its post-subcommand ``-x`` as a selection proportion;
+        # ORCA scan retains the distinct distance-start meaning.
+        subcommand_opts["proportion_structures_to_use"] = subcommand_opts.pop(
+            "dist_start"
+        )
 
     project = program_opts.get("project")
     resolved, resolve_warning = _resolve_project_method(
@@ -397,7 +501,7 @@ def parse_model_command(
     structural_options = {
         key: value
         for key, value in subcommand_opts.items()
-        if value is not None and key not in {"skip_completed"}
+        if value is not None and key not in {"skip_completed", "route_parameters"}
     }
     resources = {
         key: value
@@ -450,7 +554,10 @@ def parse_model_command(
         scf_algorithm=resolved.get("scf_algorithm"),
         solvent_model=resolved.get("solvent_model"),
         solvent_id=resolved.get("solvent_id"),
-        route_parameters=program_opts.get("route_parameters"),
+        route_parameters=(
+            program_opts.get("route_parameters")
+            or subcommand_opts.get("route_parameters")
+        ),
         opt_options=program_opts.get("opt_options"),
         structural_options=structural_options,
         resources=resources,

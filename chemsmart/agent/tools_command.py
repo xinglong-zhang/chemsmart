@@ -86,12 +86,9 @@ def synthesize_command(request: str) -> JsonDict:
     try:
         session.schema = pruned
         result = session.prepare_command(request)
-        if result.get("status") == "infeasible" and pruned is not full_schema:
-            # The prune may have removed the subcommand the request actually
-            # needed; give the model one full-schema retry before giving up.
-            session.schema = full_schema
-            variant = "full-fallback"
-            result = session.prepare_command(request)
+        # Full-schema retries are intentionally forbidden here. They exceed
+        # the synthesis budget and cannot become positive SFT examples. An
+        # infeasible scoped result should ask for a clearer intent instead.
     finally:
         session.schema = full_schema
     semantic = session._last_semantic_result

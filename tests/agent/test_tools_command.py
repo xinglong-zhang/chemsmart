@@ -516,7 +516,7 @@ def test_synthesize_command_uses_pruned_schema_and_restores(
     assert session.schema is full_schema
 
 
-def test_synthesize_command_falls_back_to_full_schema_on_infeasible(
+def test_synthesize_command_does_not_use_full_schema_fallback(
     _pruning_session,
 ):
     session = _pruning_session
@@ -525,14 +525,7 @@ def test_synthesize_command_falls_back_to_full_schema_on_infeasible(
 
     def fake_prepare(request):
         calls.append(session.schema)
-        if len(calls) == 1:
-            return {"status": "infeasible", "command": "", "explanation": ""}
-        return {
-            "status": "ready",
-            "command": "chemsmart run gaussian -f a.xyz -c 0 -m 1 ts",
-            "explanation": "ok",
-            "confidence": "high",
-        }
+        return {"status": "infeasible", "command": "", "explanation": ""}
 
     session.prepare_command = fake_prepare
 
@@ -540,11 +533,10 @@ def test_synthesize_command_falls_back_to_full_schema_on_infeasible(
         "transition state of a.xyz with gaussian"
     )
 
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert calls[0] is not full_schema  # first attempt pruned
-    assert calls[1] is full_schema  # retry with the full schema
-    assert payload["schema_variant"] == "full-fallback"
-    assert payload["status"] == "ready"
+    assert payload["schema_variant"] == "run/gaussian[opt,sp,ts]"
+    assert payload["status"] == "infeasible"
     assert session.schema is full_schema
 
 

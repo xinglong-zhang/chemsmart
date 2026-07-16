@@ -109,3 +109,48 @@ def test_parse_database_selectors_and_orca_aux_basis(tmp_path):
     text = format_model_command_explanation(parsed.command, cwd=tmp_path)
     assert "database selection: `record_id=abc123, structure_index=2`" in text
     assert "auxiliary basis `def2/J`" in text
+
+
+def test_parse_gaussian_userjob_route_after_subcommand(tmp_path):
+    parsed = parse_model_command(
+        "chemsmart run gaussian -f anisole.xyz -c 0 -m 1 userjob --route nmr=giao",
+        cwd=tmp_path,
+    )
+
+    assert parsed.job == "userjob"
+    assert parsed.route_parameters == "nmr=giao"
+    assert "unrecognized option `--route`" not in parsed.warnings
+
+
+def test_parse_gaussian_td_short_options_after_subcommand(tmp_path):
+    parsed = parse_model_command(
+        "chemsmart run gaussian -f dye.xyz -c 0 -m 1 "
+        "td -s singlets -n 8 -r 3 -e eqsolv",
+        cwd=tmp_path,
+    )
+
+    assert parsed.job == "td"
+    assert parsed.route_parameters is None
+    assert parsed.structural_options == {
+        "states": "singlets",
+        "nstates": "8",
+        "root": "3",
+        "eqsolv": "eqsolv",
+    }
+    assert not parsed.warnings
+
+
+def test_parse_gaussian_traj_selection_options_after_subcommand(tmp_path):
+    parsed = parse_model_command(
+        "chemsmart run gaussian -f md_frames.xyz -c 0 -m 1 "
+        "traj -j opt -ns 6 -x 0.2",
+        cwd=tmp_path,
+    )
+
+    assert parsed.job == "traj"
+    assert parsed.structural_options == {
+        "jobtype": "opt",
+        "num_structures_to_run": "6",
+        "proportion_structures_to_use": "0.2",
+    }
+    assert not parsed.warnings

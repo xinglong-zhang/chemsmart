@@ -184,7 +184,36 @@ def project_name_from_request(request: str) -> str:
         if not match:
             continue
         candidate = Path(match.group(1)).stem.strip("._-")
-        if candidate.lower() not in {"yaml", "settings", "configuration"}:
+        if candidate.lower() not in {
+            "active",
+            "and",
+            "configuration",
+            "current",
+            "default",
+            "for",
+            "in",
+            "is",
+            "loaded",
+            "settings",
+            "the",
+            "to",
+            "unchanged",
+            "using",
+            "with",
+            "yaml",
+            # QM/MM describes a calculation partition, not a workspace
+            # project name. The loose ``<word> project settings`` prose
+            # pattern otherwise captures the final ``MM`` token.
+            "qm",
+            "mm",
+            # Program names in prose such as ``using ORCA project demo`` are
+            # not project identifiers. Continue to the explicit
+            # ``project demo`` pattern instead.
+            "gaussian",
+            "g09",
+            "g16",
+            "orca",
+        }:
             return candidate
     return ""
 

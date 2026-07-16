@@ -49,6 +49,14 @@ def check_gaussian_ts_route(
     # (or bare ts/calcfc/noeigentest tokens outside the block) is a model leak
     # via --additional-route-parameters that would corrupt the route.
     opt_blocks = _OPT_BLOCK_RE.findall(route)
+    opt_keyword_count = len(re.findall(r"\bopt\b", route, re.IGNORECASE))
+    if opt_keyword_count > 1:
+        issues.append(
+            _reject(
+                "Gaussian TS route contains more than one Opt route form",
+                {**evidence, "opt_keyword_count": opt_keyword_count},
+            )
+        )
     if len(opt_blocks) > 1:
         issues.append(
             _reject(

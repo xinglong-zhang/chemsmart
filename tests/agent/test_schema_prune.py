@@ -132,19 +132,12 @@ def test_submit_keywords_select_sub_entry():
     assert set(gaussian["subcommands"]) == {"opt", "sp", "wbi"}
 
 
-def test_no_kind_cue_keeps_all_jobkinds_but_strips_qmmm():
+def test_no_kind_cue_keeps_only_conservative_floor():
     pruned = prune_schema_for_request(
         make_schema(), "do something with my molecule please"
     )
     gaussian = pruned["subcommands"]["run"]["subcommands"]["gaussian"]
-    assert set(gaussian["subcommands"]) == {
-        "opt",
-        "sp",
-        "ts",
-        "td",
-        "scan",
-        "wbi",
-    }
+    assert set(gaussian["subcommands"]) == {"opt", "sp"}
     for kind_node in gaussian["subcommands"].values():
         assert "qmmm" not in kind_node["subcommands"]
 

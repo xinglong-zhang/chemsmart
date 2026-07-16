@@ -392,7 +392,7 @@ class AgentSession:
                 messages = [{"role": "user", "content": request}]
         messages = ensure_system_message(
             messages,
-            self._tool_loop_system_prompt(policy),
+            self._tool_loop_system_prompt(policy, request=request),
         )
         if budgets is None:
             budgets = ToolLoopBudgets(
@@ -1547,6 +1547,8 @@ class AgentSession:
     def _tool_loop_system_prompt(
         self,
         policy: PermissionPolicy,
+        *,
+        request: str = "",
     ) -> str:
         current_turn_index = self.state.turn_index if self.state else None
         return build_system_prompt(
@@ -1560,6 +1562,8 @@ class AgentSession:
             conversation_context=self.conversation_history.prompt_context(
                 current_turn_index=current_turn_index
             ),
+            request=request,
+            max_chars=4096,
         )
 
     def _current_turn_entries(self) -> list[dict[str, Any]]:

@@ -8,6 +8,7 @@ benchmark fixtures may provide a complete :class:`IntentSpec` directly.
 
 from __future__ import annotations
 
+import ast
 import re
 import shlex
 from dataclasses import asdict, dataclass, field
@@ -86,10 +87,65 @@ class IntentSpec:
             value = _number_after(text, labels, integer=integer)
             if value is not None:
                 chemistry[key] = value
-        states = re.search(r"\b(singlets?|triplets?|50-50)\b", lowered)
-        if states and kind == "gaussian.tddft":
-            chemistry["states"] = states.group(1).rstrip("s") + "s" if states.group(1) != "50-50" else "50-50"
-        if "eqsolv" in lowered or "equilibrium solvation" in lowered:
+        if kind and kind.endswith(".scan"):
+            count = re.search(
+                r"\b(\d+)\s+(?:scan\s+)?(?:steps?|points?)\b",
+                lowered,
+            )
+            if count:
+                # Prefer ordinary scientific prose (``10 steps of 0.05``)
+                # over the generic label-after parser, which would otherwise
+                # misread the following step size as an integer count of zero.
+                chemistry["num_steps"] = int(count.group(1))
+            elif "num_steps" not in chemistry:
+                count = re.search(
+                    r"\b(?:steps?|points?)\s*(?:=|:|is)?\s*(\d+)\b",
+                    lowered,
+                )
+                if count:
+                    chemistry["num_steps"] = int(count.group(1))
+        if kind == "gaussian.tddft":
+            # A literal ``nstates=6`` is more specific than prose such as
+            # ``50-50 states``. Without this precedence the latter can be
+            # read as a count of 50 rather than the intended six roots.
+            explicit_nstates = re.search(
+                r"\bnstates\s*(?:=|:)?\s*(\d+)", lowered
+            )
+            if explicit_nstates:
+                chemistry["nstates"] = int(explicit_nstates.group(1))
+        if kind == "gaussian.tddft" and "nstates" not in chemistry:
+            # Chemists normally write "10 excited states", whereas the CLI
+            # spelling places the number after ``nstates``.
+            state_count = re.search(
+                r"\b(\d+)\s+(?:lowest\s+)?(?:singlet\s+|triplet\s+)?"
+                r"(?:excited\s+)?states?\b",
+                lowered,
+            )
+            if state_count:
+                chemistry["nstates"] = int(state_count.group(1))
+        if kind == "gaussian.userjob":
+            route = _userjob_route_from_request(text)
+            if route:
+                chemistry["route_contains"] = route
+        if kind == "gaussian.traj":
+            selection_count = _trajectory_selection_count(lowered)
+            if selection_count is not None:
+                chemistry["num_structures_to_run"] = selection_count
+            jobtype = _trajectory_jobtype_from_request(lowered)
+            if jobtype:
+                chemistry["jobtype"] = jobtype
+        state_mentions = re.findall(r"\b(singlets?|triplets?|50-50)\b", lowered)
+        if state_mentions and kind == "gaussian.tddft":
+            # In a multi-turn correction the later state declaration is the
+            # operative one: "triplets by mistake; correct to singlets" must
+            # assert singlets rather than freeze the abandoned request.
+            states = state_mentions[-1]
+            chemistry["states"] = (
+                states.rstrip("s") + "s" if states != "50-50" else "50-50"
+            )
+        if "noneqsolv" in lowered or "nonequilibrium solvation" in lowered:
+            chemistry["eqsolv"] = False
+        elif "eqsolv" in lowered or "equilibrium solvation" in lowered:
             chemistry["eqsolv"] = True
         direction = re.search(r"\b(forward|reverse|both)\b(?:\s+directions?)?", lowered)
         if direction:
@@ -97,14 +153,25 @@ class IntentSpec:
         bond = re.search(r"\b(?:scan|stretch|vary)\s+(?:the\s+)?bond\s+(\d+)\s*[-–]\s*(\d+)", lowered)
         if bond:
             chemistry["coordinates"] = [int(bond.group(1)), int(bond.group(2))]
-        frozen = re.search(r"\b(?:freeze|frozen|keep)\s+(?:the\s+)?bond\s+(\d+)\s*[-–]\s*(\d+)", lowered)
+        frozen = re.search(
+            r"\b(?:freez\w*|keep\w*)\s+(?:the\s+)?bond\s+"
+            r"(\d+)\s*[-–]\s*(\d+)",
+            lowered,
+        )
         if frozen:
-            chemistry["constrained_coordinates"] = [[int(frozen.group(1)), int(frozen.group(2))]]
+            coordinate = [[int(frozen.group(1)), int(frozen.group(2))]]
+            # For a modred job the primary ``--coordinates`` value is the
+            # frozen coordinate.  ``constrained_coordinates`` is instead the
+            # auxiliary-freeze field used by scan jobs.
+            if kind and kind.endswith(".modred"):
+                chemistry["coordinates"] = coordinate
+            else:
+                chemistry["constrained_coordinates"] = coordinate
         qm_atoms = re.search(r"\b(?:qm|high[- ]level)\s+atoms?\s+([0-9,\-–\s]+)", lowered)
         if qm_atoms:
             chemistry["high_level_atoms"] = re.sub(r"\s+", "", qm_atoms.group(1).replace("–", "-"))
         endpoint_matches = re.findall(r"([\w./-]+\.xyz)\b", text, flags=re.IGNORECASE)
-        if len(endpoint_matches) > 1:
+        if kind == "orca.neb" and len(endpoint_matches) > 1:
             chemistry["ending_xyzfile"] = endpoint_matches[1]
         joboption = re.search(r"\b(neb(?:-ci|-ts)?|fast-neb-ts|tight-neb-ts)\b", lowered)
         if joboption:
@@ -154,6 +221,8 @@ class ObservedIntent:
         if kind == "gaussian.td":
             kind = "gaussian.tddft"
         chemistry = dict(parsed.structural_options)
+        if parsed.program and "qmmm" in tokens and parsed.job:
+            chemistry["parent_job"] = parsed.job
         if "num_steps" not in chemistry and "num_steps_or_every_n_points" in chemistry:
             chemistry["num_steps"] = chemistry["num_steps_or_every_n_points"]
         if "step_size" not in chemistry and "step_size_or_solv" in chemistry:
@@ -171,6 +240,18 @@ class ObservedIntent:
             value = _option_value(tokens, aliases, flag_value=flag_value)
             if value is not None and key not in chemistry:
                 chemistry[key] = value
+        if kind == "gaussian.tddft":
+            # ``-e`` is Gaussian TD's eqsolv value, not ORCA NEB's endpoint.
+            # The generic option scan is intentionally broad, so remove its
+            # incompatible alias interpretation after the job is known.
+            chemistry.pop("ending_xyzfile", None)
+        if kind == "gaussian.traj":
+            proportion = _option_value(
+                tokens,
+                ("-x", "--proportion-structures-to-use"),
+            )
+            if proportion is not None:
+                chemistry["proportion_structures_to_use"] = proportion
         return cls(
             action=parsed.action,
             program=parsed.program,
@@ -277,7 +358,15 @@ def _equivalent(expected: Any, observed: Any, *, path: bool = False) -> bool:
     if path and expected is not None and observed is not None:
         return str(PurePath(str(expected))) == str(PurePath(str(observed)))
     if isinstance(expected, (list, tuple)):
-        return _number_list(expected) == _number_list(observed)
+        left = _structured_sequence(expected)
+        right = _structured_sequence(observed)
+        if left == right:
+            return True
+        # The Gaussian/ORCA CLIs legitimately expose one coordinate either as
+        # ``[1, 2]`` or ``[[1, 2]]``.  Treat only that singleton wrapper as
+        # equivalent; flattening two or more coordinate groups would erase
+        # chemically meaningful grouping and remains a hard intent failure.
+        return _unwrap_singleton_group(left) == right or left == _unwrap_singleton_group(right)
     if isinstance(expected, bool):
         return expected is _as_bool(observed)
     try:
@@ -290,6 +379,40 @@ def _equivalent(expected: Any, observed: Any, *, path: bool = False) -> bool:
 
 def _number_list(value: Any) -> list[str]:
     return re.findall(r"-?\d+(?:\.\d+)?", str(value))
+
+
+def _structured_sequence(value: Any) -> tuple[Any, ...] | None:
+    """Preserve nested coordinate grouping instead of comparing flat numbers."""
+    if isinstance(value, str):
+        try:
+            value = ast.literal_eval(value)
+        except (SyntaxError, ValueError):
+            tokens = re.findall(r"-?\d+(?:\.\d+)?", value)
+            if not tokens:
+                return None
+            value = [float(token) for token in tokens]
+    if not isinstance(value, (list, tuple)):
+        return None
+    normalized: list[Any] = []
+    for item in value:
+        if isinstance(item, (list, tuple)):
+            nested = _structured_sequence(item)
+            if nested is None:
+                return None
+            normalized.append(nested)
+        elif isinstance(item, bool):
+            normalized.append(item)
+        elif isinstance(item, (int, float)):
+            normalized.append(float(item))
+        else:
+            normalized.append(str(item).strip().lower())
+    return tuple(normalized)
+
+
+def _unwrap_singleton_group(value: tuple[Any, ...] | None) -> tuple[Any, ...] | None:
+    if value is not None and len(value) == 1 and isinstance(value[0], tuple):
+        return value[0]
+    return value
 
 
 def _as_bool(value: Any) -> bool | None:
@@ -338,11 +461,21 @@ _FREEZE_INTENT_RE = re.compile(
     r"|\bmodred\w*\b",
     re.I,
 )
+_TRAJECTORY_INTENT_RE = re.compile(
+    r"\b(?:select(?:ed|ing|ion)?|representative|ensemble|subset|cluster(?:ed|ing)?)\b"
+    r"[^.]*\b(?:trajectory|frames?|snapshots?|structures?)\b"
+    r"|\b(?:trajectory|frames?|snapshots?)\b[^.]*\b(?:select(?:ed|ing|ion)?|"
+    r"representative|ensemble|subset|cluster(?:ed|ing)?)\b"
+    r"|\b(?:md\s+)?trajectory[^.]*?(?:대표\s*)?구조\s*\d+\s*개",
+    re.I,
+)
 
 
 def _kind_from_request(lowered: str, program: str | None) -> str | None:
     if not program:
         return None
+    if program == "gaussian" and _TRAJECTORY_INTENT_RE.search(lowered):
+        return "gaussian.traj"
     if not _TS_INTENT_RE.search(lowered):
         if _SCAN_INTENT_RE.search(lowered):
             return f"{program}.scan"
@@ -352,6 +485,7 @@ def _kind_from_request(lowered: str, program: str | None) -> str | None:
             return f"{program}.modred"
     markers = (
         ("qmmm", ("qm/mm", "qmmm", "oniom")),
+        ("userjob", ("user job", "userjob", "custom gaussian job")),
         ("tddft", ("td-dft", "tddft", "excited state", "absorption spectrum")),
         ("scan", ("relaxed scan", "coordinate scan", "scan bond", "scan angle", "scan dihedral")),
         ("modred", ("modred", "constrained optimization", "freeze bond")),
@@ -373,7 +507,7 @@ def _kind_from_request(lowered: str, program: str | None) -> str | None:
         if any(word in padded for word in words):
             if suffix == "tddft" and program != "gaussian":
                 return None
-            if suffix in {"dias", "crest", "traj", "resp", "nci", "wbi"} and program != "gaussian":
+            if suffix in {"dias", "crest", "traj", "resp", "nci", "userjob", "wbi"} and program != "gaussian":
                 return None
             if suffix == "neb" and program != "orca":
                 return None
@@ -390,6 +524,60 @@ def _server_from_request(text: str) -> str | None:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             return match.group(1)
+    return None
+
+
+def _userjob_route_from_request(text: str) -> str | None:
+    """Extract only an explicitly written userjob route keyword."""
+    patterns = (
+        r"\b([A-Za-z][A-Za-z0-9_-]*\s*=\s*[A-Za-z0-9_(),+.-]+)\s+(?:route|keyword)\b",
+        r"\b(?:route|keyword)\s*(?:is|as|:|=)?\s*[`'\"]?"
+        r"([A-Za-z][A-Za-z0-9_-]*\s*=\s*[A-Za-z0-9_(),+.-]+)",
+        r"\b(?:route|keyword)\s*(?:is|as|:|=)?\s*[`'\"]?"
+        r"([A-Za-z][A-Za-z0-9_()=-]*)\b",
+    )
+    non_route_words = {"a", "an", "for", "keyword", "request", "route", "the"}
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            # Sentence punctuation is not part of a Gaussian route. Keep
+            # commas inside parenthesized options (for example, ``pop=(nbo,
+            # npa)``), but discard only the prose punctuation at the end.
+            value = re.sub(r"\s+", "", match.group(1)).lower().rstrip(".,;:")
+            if value not in non_route_words:
+                return value
+    return None
+
+
+def _trajectory_selection_count(lowered: str) -> int | None:
+    """Return an explicitly requested trajectory-frame count, if present."""
+    patterns = (
+        r"\b(?:exactly\s+)?(\d+)\s+(?:(?:lowest|representative|selected|"
+        r"cluster(?:\s+medoid)?)\s+)*(?:md\s+)?(?:trajectory\s+)?"
+        r"(?:frames?|snapshots?|structures?)\b",
+        r"\b(?:select|choose|carry|run)\s+(?:exactly\s+)?(\d+)\s+"
+        r"(?:(?:lowest|representative|selected)\s+)*(?:md\s+)?"
+        r"(?:trajectory\s+)?(?:frames?|snapshots?|structures?)\b",
+        r"\b(?:frames?|snapshots?|structures?)\s+(\d+)",
+        r"(?:대표\s*)?구조\s*(\d+)\s*개",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _trajectory_jobtype_from_request(lowered: str) -> str | None:
+    """Extract only an explicit downstream calculation type for ``traj``."""
+    explicit = re.search(r"\bjobtype\s*(?:is|:|=)?\s*(opt|sp|ts)\b", lowered)
+    if explicit:
+        return explicit.group(1)
+    if re.search(r"\b(?:geometry\s+)?optimi[sz](?:e|ation|ations)\b", lowered):
+        return "opt"
+    if re.search(r"\b(?:single[ -]?point|sp\s+(?:calculation|energy))\b", lowered):
+        return "sp"
+    if re.search(r"\btransition[ -]?state\b", lowered):
+        return "ts"
     return None
 
 
@@ -429,6 +617,7 @@ _CHEMISTRY_OPTIONS = (
     ("num_confs_to_run", ("-nc", "--num-confs-to-run"), None),
     ("num_structures_to_run", ("-ns", "--num-structures-to-run"), None),
     ("grouping_strategy", ("-g", "--grouping-strategy"), None),
+    ("jobtype", ("-j", "--jobtype"), None),
 )
 
 

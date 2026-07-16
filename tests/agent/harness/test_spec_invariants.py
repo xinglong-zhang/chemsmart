@@ -57,10 +57,28 @@ def test_missing_modred_atoms_requires_decline():
     assert any(issue.rule_id == "spec.decline_contract" for issue in issues)
 
 
+def test_job_project_is_runtime_owned():
+    spec = _workflow("orca.modred", {"modred": [[1, 2]]})
+    spec["jobs"][0]["project"] = "model-chosen-project"
+
+    issues = SI.check_spec(spec, "Freeze bond 1-2 in mol.xyz")
+
+    assert any(issue.rule_id == "spec.project.runtime_owned" for issue in issues)
+
+
 def test_fragment_indices_with_underscore_counts_as_structural_slot():
     issues = SI.check_spec(
         _workflow("gaussian.dias", {"fragment_indices": [[1], [2]]}),
         "Need a Gaussian DIAS job for mol.xyz; fragment_indices [[1], [2]].",
+    )
+
+    assert not [issue for issue in issues if issue.rule_id == "spec.decline_contract"]
+
+
+def test_chinese_atom_enumeration_satisfies_decline_contract():
+    issues = SI.check_spec(
+        _workflow("orca.modred", {"modred": [[1, 2, 3]]}),
+        "Pd、ipso-C 和 Br 分别是原子 1、2、3。保持当前角度。",
     )
 
     assert not [issue for issue in issues if issue.rule_id == "spec.decline_contract"]

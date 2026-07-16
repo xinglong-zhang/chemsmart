@@ -12,6 +12,7 @@ from chemsmart.agent.harness.command_semantics import (
     CommandSemanticIssue,
     CommandSemanticResult,
 )
+from chemsmart.agent.harness.workflow_state import current_workflow_state
 from chemsmart.agent.cli import agent
 from chemsmart.agent.synthesis import SynthesisSession, resolve_default_project
 
@@ -244,6 +245,44 @@ def test_prepare_command_falls_back_when_workspace_yaml_missing(
     assert provider.messages == []
 
 
+def test_prepare_command_uses_unique_workspace_project_and_records_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    project_dir = tmp_path / ".chemsmart" / "gaussian"
+    project_dir.mkdir(parents=True)
+    (project_dir / "demo.yaml").write_text("gas: {}\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    ready_without_project = {
+        "status": "ready",
+        "command": (
+            "chemsmart run gaussian -f examples/h2o.xyz -c 0 -m 1 opt"
+        ),
+        "explanation": "Prepare a Gaussian optimization.",
+        "confidence": "high",
+        "missing_info": [],
+        "alternatives": [],
+    }
+    provider = DummyProvider(
+        [_json_response(ready_without_project)], name="local"
+    )
+    session = SynthesisSession(
+        provider=provider,
+        semantic_gate=False,
+        enable_intent_router=False,
+    )
+
+    result = session.prepare_command("Prepare a Gaussian optimization.")
+
+    assert result["status"] == "ready"
+    assert result["command"].startswith("chemsmart run gaussian -p demo ")
+    assert session.default_project == "demo"
+    assert current_workflow_state().project is not None
+    assert current_workflow_state().project.name == "demo"
+    assert current_workflow_state().project.program == "gaussian"
+
+
 def test_synthesize_retries_once_after_invalid_json() -> None:
     provider = DummyProvider(["not json", _json_response(READY)])
     session = SynthesisSession(
@@ -375,6 +414,123 @@ def test_run_interactive_retries_after_runtime_semantic_reject(
     assert "runtime semantic validation" in retry_prompt
     assert "valid chemsmart server configuration" in retry_prompt
     assert "available servers: ['colab_orca']" in retry_prompt
+
+
+def test_prepare_command_repairs_missing_job_before_intent_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bad = {
+        "status": "ready",
+        "command": (
+            "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 "
+            "-r freq"
+        ),
+        "explanation": "Optimization and frequency.",
+        "confidence": "high",
+        "missing_info": [],
+        "alternatives": [],
+    }
+    repaired = {
+        **bad,
+        "command": bad["command"] + " opt",
+        "explanation": "Repaired optimization and frequency command.",
+    }
+    provider = DummyProvider(
+        [_json_response(bad), _json_response(repaired)],
+        name="openai",
+    )
+    session = SynthesisSession(
+        provider=provider,
+        default_project="demo",
+        max_retries=1,
+        enable_intent_router=False,
+    )
+    semantic_calls: list[str] = []
+
+    def fake_semantic(command: str, **_kwargs: Any) -> CommandSemanticResult:
+        semantic_calls.append(command)
+        if not command.endswith(" opt"):
+            return CommandSemanticResult(
+                verdict="reject",
+                command=command,
+                issues=(
+                    CommandSemanticIssue(
+                        rule_id="cmd.contract.job_subcommand_required",
+                        severity="reject",
+                        message="explicit Gaussian job subcommand required",
+                    ),
+                ),
+            )
+        return CommandSemanticResult(verdict="ok", command=command)
+
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        fake_semantic,
+    )
+
+    result = session.prepare_command(
+        "Prepare a Gaussian optimization and frequency calculation for "
+        "water.xyz, charge 0 multiplicity 1."
+    )
+
+    assert semantic_calls == [bad["command"], repaired["command"]]
+    assert result["status"] == "ready"
+    assert result["command"].endswith(" opt")
+    assert result["intent_assertion"]["verdict"] == "ok"
+
+
+def test_prepare_command_repairs_explicit_intent_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command_12 = (
+        "chemsmart run orca -p orca_demo -f complex.xyz -c 0 -m 1 scan "
+        "--coordinates '[2,7]' --dist-start 1.8 --dist-end 3.0 "
+        "--num-steps 12"
+    )
+    command_13 = command_12.replace("--num-steps 12", "--num-steps 13")
+
+    def response(command: str) -> str:
+        return _json_response(
+            {
+                "status": "ready",
+                "command": command,
+                "explanation": "Prepare an ORCA scan.",
+                "confidence": "high",
+                "missing_info": [],
+                "alternatives": [],
+            }
+        )
+
+    provider = DummyProvider(
+        [response(command_12), response(command_13)],
+        name="openai",
+    )
+    session = SynthesisSession(
+        provider=provider,
+        default_project="orca_demo",
+        max_retries=1,
+        enable_intent_router=False,
+    )
+    monkeypatch.setattr(
+        "chemsmart.agent.synthesis.evaluate_command_semantics",
+        lambda command, **_kwargs: CommandSemanticResult(
+            verdict="ok",
+            command=command,
+        ),
+    )
+
+    result = session.prepare_command(
+        "Using ORCA project orca_demo, scan bond 2-7 in complex.xyz from "
+        "1.8 to 3.0 angstrom with 13 points."
+    )
+
+    assert result["status"] == "ready"
+    assert result["command"] == command_13
+    assert result["intent_assertion"]["verdict"] == "ok"
+    retry_prompt = provider.messages[1][-1]["content"]
+    assert "intent.chemistry.num_steps" in retry_prompt
+    assert "expected 13" in retry_prompt
+    assert "observed '12'" in retry_prompt
 
 
 def test_run_interactive_reports_final_runtime_semantic_reject(
