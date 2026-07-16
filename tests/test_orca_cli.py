@@ -595,7 +595,6 @@ class TestORCARunSubNoParallelIntegration:
                 return None
 
         job_settings = ORCAJobSettings.default()
-        job_settings.run_in_parallel = True
 
         runner = CliRunner()
         dummy_batch_job = DummyBatchJob(
@@ -660,7 +659,6 @@ class TestORCARunSubNoParallelIntegration:
     ):
         """`sub --no-run-in-parallel` submits ORCA batch with serial flag."""
         job_settings = ORCAJobSettings.default()
-        job_settings.run_in_parallel = True
 
         runner = CliRunner()
         mock_batch_job = MagicMock()

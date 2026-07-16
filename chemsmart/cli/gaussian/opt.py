@@ -73,8 +73,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
         if molecule_indices is not None
         else [(molecules[-1], None)]
     )
-    run_in_parallel = bool(getattr(job_settings, "run_in_parallel", False))
-    batch_requested = run_in_parallel and len(job_targets) > 1
+    batch_requested = len(job_targets) > 1
 
     if ctx.invoked_subcommand is None:
         check_charge_and_multiplicity(opt_settings)

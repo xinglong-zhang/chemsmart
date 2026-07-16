@@ -64,8 +64,7 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
         if molecule_indices is not None
         else [(molecules[-1], None)]
     )
-    run_in_parallel = bool(getattr(job_settings, "run_in_parallel", False))
-    batch_requested = run_in_parallel and len(job_targets) > 1
+    batch_requested = len(job_targets) > 1
 
     # Store parent context for potential qmmm subcommand
     ctx.obj["parent_skip_completed"] = skip_completed

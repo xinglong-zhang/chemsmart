@@ -122,8 +122,7 @@ def opt(
         if molecule_indices is not None
         else [(molecules[-1], None)]
     )
-    run_in_parallel = bool(getattr(job_settings, "run_in_parallel", False))
-    batch_requested = run_in_parallel and len(job_targets) > 1
+    batch_requested = len(job_targets) > 1
 
     # Handle multiple molecules: create one job per molecule
     if batch_requested:

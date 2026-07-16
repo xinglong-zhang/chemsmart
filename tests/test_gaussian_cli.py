@@ -24,7 +24,6 @@ from click.testing import CliRunner
 
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.main import entry_point
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
 
 class TestGaussianCLIPubChemOptCommand:
@@ -678,7 +677,7 @@ class TestGaussianCLIScanCommand:
 
 
 class TestGaussianBatchTriggeringGate:
-    """Regression tests for Gaussian batch trigger gating."""
+    """Regression tests for Gaussian multi-molecule fan-out gating."""
 
     @pytest.mark.parametrize(
         "subcommand,job_class_path,extra_args",
@@ -691,7 +690,7 @@ class TestGaussianBatchTriggeringGate:
             ),
         ],
     )
-    def test_fanout_when_parallel_and_multiple_indices(
+    def test_fanout_when_multiple_indices(
         self,
         subcommand,
         job_class_path,
@@ -700,18 +699,9 @@ class TestGaussianBatchTriggeringGate:
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
     ):
-        """Multiple selected targets fan out only when parallel is enabled."""
-        job_settings = GaussianJobSettings.default()
-        job_settings.run_in_parallel = True
-
+        """Multiple selected molecule indices fan out into one job each."""
         runner = CliRunner()
-        with (
-            patch(
-                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
-                return_value=job_settings,
-            ),
-            patch(job_class_path) as mock_job_cls,
-        ):
+        with patch(job_class_path) as mock_job_cls:
             mock_job_cls.return_value = MagicMock()
             result = runner.invoke(
                 gaussian,
@@ -747,7 +737,7 @@ class TestGaussianBatchTriggeringGate:
             ),
         ],
     )
-    def test_no_fanout_when_parallel_disabled(
+    def test_fanout_still_happens_with_no_run_in_parallel(
         self,
         subcommand,
         job_class_path,
@@ -756,18 +746,11 @@ class TestGaussianBatchTriggeringGate:
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
     ):
-        """Multiple selected targets do not fan out when parallel is disabled."""
-        job_settings = GaussianJobSettings.default()
-        job_settings.run_in_parallel = False
+        """jobrunner.no_run_in_parallel controls execution mode, not fan-out."""
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = True
 
         runner = CliRunner()
-        with (
-            patch(
-                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
-                return_value=job_settings,
-            ),
-            patch(job_class_path) as mock_job_cls,
-        ):
+        with patch(job_class_path) as mock_job_cls:
             mock_job_cls.return_value = MagicMock()
             result = runner.invoke(
                 gaussian,
@@ -790,7 +773,9 @@ class TestGaussianBatchTriggeringGate:
             )
 
         assert result.exit_code == 0, result.output
-        assert mock_job_cls.call_count == 1
+        assert mock_job_cls.call_count == 2
+        for call in mock_job_cls.call_args_list:
+            assert call.kwargs["jobrunner"].no_run_in_parallel is True
 
 
 class TestGaussianRunSubNoParallelIntegration:
@@ -802,9 +787,6 @@ class TestGaussianRunSubNoParallelIntegration:
         pbs_server,
     ):
         """`run --no-run-in-parallel` keeps fan-out but executes jobs serially."""
-        job_settings = GaussianJobSettings.default()
-        job_settings.run_in_parallel = True
-
         runner = CliRunner()
         job1 = MagicMock(label="opt_idx1")
         job2 = MagicMock(label="opt_idx2")
@@ -814,10 +796,6 @@ class TestGaussianRunSubNoParallelIntegration:
             patch(
                 "chemsmart.cli.run.Server.from_servername",
                 return_value=pbs_server,
-            ),
-            patch(
-                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
-                return_value=job_settings,
             ),
             patch(
                 "chemsmart.jobs.gaussian.opt.GaussianOptJob",
@@ -864,9 +842,6 @@ class TestGaussianRunSubNoParallelIntegration:
         pbs_server,
     ):
         """`sub --no-run-in-parallel` submits each selected job target."""
-        job_settings = GaussianJobSettings.default()
-        job_settings.run_in_parallel = True
-
         runner = CliRunner()
         job1 = MagicMock(label="opt_idx1")
         job2 = MagicMock(label="opt_idx2")
@@ -877,10 +852,6 @@ class TestGaussianRunSubNoParallelIntegration:
             patch(
                 "chemsmart.cli.sub.Server.from_servername",
                 return_value=pbs_server,
-            ),
-            patch(
-                "chemsmart.jobs.gaussian.settings.GaussianJobSettings.default",
-                return_value=job_settings,
             ),
             patch(
                 "chemsmart.jobs.gaussian.opt.GaussianOptJob",
