@@ -14,8 +14,8 @@ class OrcaBatchJob(BatchJob):
     """
     Generic ORCA batch job class for running a collection of ORCA jobs.
 
-    Engine-specific input writing and command execution remain delegated to the
-    child ORCA jobs and their associated job runners.
+    Shared batch orchestration is inherited from ``BatchJob``; this subclass
+    only applies ORCA runner node-pinning behavior when needed.
     """
 
     PROGRAM = "orca"
@@ -26,7 +26,8 @@ class OrcaBatchJob(BatchJob):
         node: str,
         job: Any,
     ) -> Any:
-        return runner
+        """Apply ORCA runner node pinning through shared batch helper."""
+        return self._wrap_runner_command_for_node(runner=runner, node=node)
 
 
 ORCABatchJob = OrcaBatchJob

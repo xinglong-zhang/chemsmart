@@ -126,6 +126,28 @@ class TestBatchJobRefactor:
 
         assert chunks == [[1, 2], [3, 4], [5]]
 
+    def test_orca_and_gaussian_batch_pin_runner_to_slurm_node(
+        self, pbs_server, monkeypatch
+    ):
+        """Engine wrappers should pin child commands via srun --nodelist."""
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+        from chemsmart.jobs.orca.batch import OrcaBatchJob
+
+        monkeypatch.setenv("SLURM_JOB_NODELIST", "nodeA")
+
+        for batch_cls in (GaussianBatchJob, OrcaBatchJob):
+            runner = JobRunner(server=pbs_server, fake=True)
+            runner._get_command = Mock(return_value="run.exe job.inp")
+            batch = batch_cls(jobs=[], jobrunner=runner)
+            pinned = batch._configure_runner_for_node(
+                runner=runner, node="nodeA", job=Mock()
+            )
+            command = pinned._get_command(Mock())
+            assert command.startswith(
+                "srun --nodelist=nodeA --exclusive -N1 -n1 "
+            )
+            assert command.endswith("run.exe job.inp")
+
     def test_batch_serial_mode_when_unset(self, pbs_server):
         """Test that BatchJob runs all jobs when they are unset."""
         dummy_batch_cls = self._dummy_batch_cls()
