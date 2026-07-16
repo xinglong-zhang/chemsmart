@@ -107,7 +107,10 @@ def process_pipeline(ctx, *args, **kwargs):
     # jobrunner at this stage is an instance of JobRunner class
     jobrunner = ctx.obj["jobrunner"]
 
-    # Get the job
+    # Get the job (some command paths intentionally return no job object)
+    if not args:
+        logger.debug("No pipeline output returned. Skipping job execution.")
+        return None
     job = args[0]
     logger.debug(f"Job to be run: {job}")
 
