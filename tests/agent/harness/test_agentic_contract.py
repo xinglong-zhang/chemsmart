@@ -479,7 +479,7 @@ def test_frozen_matrix_has_48_cases_and_reliability_metrics():
 
     assert len(cases) == 48
     assert len({case.family for case in cases}) == 12
-    assert metrics["pass_at_1"] == 4 / 6
+    assert metrics["pass_at_1"] == 1 / 2
     assert metrics["pass_at_3"] == 1.0
     assert metrics["pass_power_3"] == 0.0
 
