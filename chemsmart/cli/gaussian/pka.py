@@ -31,8 +31,10 @@ from chemsmart.cli.pka import (
     resolve_pka_submit_proton_options,
     resolve_proton_index,
     validate_reference_options,
+    wrap_pka_jobs_in_batch,
 )
 from chemsmart.io.file import PKaCDXFile
+from chemsmart.jobs.gaussian.batch import GaussianBatchJob
 from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.jobs.gaussian.settings import GaussianpKaJobSettings
 from chemsmart.utils.cli import MyCommand, MyGroup
@@ -139,7 +141,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
 
     Returns:
         GaussianpKaJob: Single job when one molecule is processed.
-        list[GaussianpKaJob]: List of jobs when multiple molecules detected.
+        GaussianBatchJob: Batch container when multiple molecules are detected.
     """
     shared = ctx.obj["pka_shared"]
     filename = ctx.obj.get("filename")
@@ -198,7 +200,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
 
     if len(molecules) > 1 and molecule_indices:
         logger.info(f"Creating {len(molecules)} pKa jobs")
-        return [
+        jobs = [
             GaussianpKaJob(
                 molecule=mol,
                 settings=pka_settings,
@@ -209,6 +211,12 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
             )
             for mol, idx in zip(molecules, molecule_indices)
         ]
+        return wrap_pka_jobs_in_batch(
+            jobs,
+            GaussianBatchJob,
+            jobrunner,
+            label=f"{label}_pka_batch",
+        )
 
     return GaussianpKaJob(
         molecule=molecules[-1],
@@ -344,28 +352,25 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             sp_settings=project_settings.sp_settings(),
         )
 
-        job = GaussianpKaJob(
-            molecule=molecule,
-            settings=pka_settings,
-            label=label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
+        jobs.append(
+            GaussianpKaJob(
+                molecule=molecule,
+                settings=pka_settings,
+                label=label,
+                jobrunner=jobrunner,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
         )
-        # Preserve row-level input so submit-script reconstruction can emit
-        # one-entry commands instead of replaying the full table.
-        job._batch_entry = {
-            "filepath": str(filepath),
-            "proton_index": row_proton_index,
-            "charge": int(entry.charge),
-            "multiplicity": int(entry.multiplicity),
-            "scheme": row_shared["scheme"],
-            "label": label,
-        }
-        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from table")
-    return jobs
+    table_label = Path(input_table_path).stem or "pka_batch"
+    return wrap_pka_jobs_in_batch(
+        jobs,
+        GaussianBatchJob,
+        jobrunner,
+        label=f"{table_label}_pka_batch",
+    )
 
 
 def _create_pka_jobs_from_molecules(
@@ -409,27 +414,25 @@ def _create_pka_jobs_from_molecules(
             f"proton_index={pka_mol.proton_index}, label={label}"
         )
 
-        job = GaussianpKaJob(
-            molecule=pka_mol,
-            settings=pka_settings,
-            label=label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
+        jobs.append(
+            GaussianpKaJob(
+                molecule=pka_mol,
+                settings=pka_settings,
+                label=label,
+                jobrunner=jobrunner,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
         )
-        job._batch_entry = {
-            "filepath": str(filename),
-            "proton_index": pka_mol.proton_index,
-            "charge": int(pka_settings.charge),
-            "multiplicity": int(pka_settings.multiplicity),
-            "scheme": shared["scheme"],
-            "fragment_index": idx,
-            "label": label,
-        }
-        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} pKa jobs from multi-fragment CDXML")
-    return jobs
+    basename = Path(filename).stem or "pka"
+    return wrap_pka_jobs_in_batch(
+        jobs,
+        GaussianBatchJob,
+        jobrunner,
+        label=f"{basename}_pka_batch",
+    )
 
 
 def log_pka_settings(pka_settings, proton_index, shared):

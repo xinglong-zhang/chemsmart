@@ -33,8 +33,10 @@ from chemsmart.cli.pka import (
     resolve_pka_submit_proton_options,
     resolve_proton_index,
     validate_reference_options,
+    wrap_pka_jobs_in_batch,
 )
 from chemsmart.io.file import PKaCDXFile
+from chemsmart.jobs.orca.batch import OrcaBatchJob
 from chemsmart.jobs.orca.settings import ORCApKaJobSettings
 from chemsmart.utils.cli import MyCommand, MyGroup
 
@@ -215,7 +217,7 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
 
     if len(molecules) > 1 and molecule_indices:
         logger.info(f"Creating {len(molecules)} ORCA pKa jobs")
-        return [
+        jobs = [
             ORCApKaJob(
                 molecule=mol,
                 settings=pka_settings,
@@ -226,6 +228,12 @@ def submit(ctx, skip_completed, proton_index, color_code, **kwargs):
             )
             for mol, idx in zip(molecules, molecule_indices)
         ]
+        return wrap_pka_jobs_in_batch(
+            jobs,
+            OrcaBatchJob,
+            jobrunner,
+            label=f"{base_label}_batch",
+        )
 
     return ORCApKaJob(
         molecule=molecules[-1],
@@ -376,28 +384,25 @@ def batch(ctx, skip_completed, proton_index, color_code, **kwargs):
             opt_settings=row_opt_settings,
         )
 
-        job = ORCApKaJob(
-            molecule=molecule,
-            settings=pka_settings,
-            label=base_label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
+        jobs.append(
+            ORCApKaJob(
+                molecule=molecule,
+                settings=pka_settings,
+                label=base_label,
+                jobrunner=jobrunner,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
         )
-        # Preserve row-level input so submit-script reconstruction can emit
-        # one-entry commands instead of replaying the full table.
-        job._batch_entry = {
-            "filepath": str(filepath),
-            "proton_index": row_proton_index,
-            "charge": int(entry.charge),
-            "multiplicity": int(entry.multiplicity),
-            "scheme": row_shared["scheme"],
-            "label": base_label,
-        }
-        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from table")
-    return jobs
+    table_label = Path(input_table_path).stem or "pka_batch"
+    return wrap_pka_jobs_in_batch(
+        jobs,
+        OrcaBatchJob,
+        jobrunner,
+        label=f"{table_label}_pka_batch",
+    )
 
 
 def _create_orca_pka_jobs_from_molecules(
@@ -437,24 +442,21 @@ def _create_orca_pka_jobs_from_molecules(
             f"proton_index={pka_mol.proton_index}, label={mol_label}"
         )
 
-        job = ORCApKaJob(
-            molecule=pka_mol,
-            settings=pka_settings,
-            label=mol_label,
-            jobrunner=jobrunner,
-            skip_completed=skip_completed,
-            **kwargs,
+        jobs.append(
+            ORCApKaJob(
+                molecule=pka_mol,
+                settings=pka_settings,
+                label=mol_label,
+                jobrunner=jobrunner,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
         )
-        job._batch_entry = {
-            "filepath": str(filename),
-            "proton_index": pka_mol.proton_index,
-            "charge": int(pka_settings.charge),
-            "multiplicity": int(pka_settings.multiplicity),
-            "scheme": shared["scheme"],
-            "fragment_index": idx,
-            "label": mol_label,
-        }
-        jobs.append(job)
 
     logger.info(f"Created {len(jobs)} ORCA pKa jobs from multi-fragment CDXML")
-    return jobs
+    return wrap_pka_jobs_in_batch(
+        jobs,
+        OrcaBatchJob,
+        jobrunner,
+        label=f"{base_name}_pka_batch",
+    )
