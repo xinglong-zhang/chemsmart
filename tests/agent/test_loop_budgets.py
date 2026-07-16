@@ -27,6 +27,11 @@ class FlakyProvider(FakeProvider):
         return super().chat(messages, tools=tools, timeout_s=timeout_s)
 
 
+class OpenAICompatibleProvider(FakeProvider):
+    name = "deepseek"
+    wire_protocol = "openai"
+
+
 @pytest.mark.parametrize(
     (
         "budgets",
@@ -228,3 +233,35 @@ def test_tool_loop_stops_after_provider_error_budget(tmp_path):
 
     assert result["provider_errors"] == 2
     assert result["limit_reason"] == "provider_errors"
+
+
+def test_tool_loop_separates_provider_identity_from_wire_protocol(tmp_path):
+    provider = OpenAICompatibleProvider(
+        [
+            {
+                "__raw_response__": openai_tool_call_response(
+                    tool_call(
+                        "call_1", "recommend_method", {"task": "opt"}
+                    )
+                )
+            },
+            {"__raw_response__": openai_final_response("Completed.")},
+        ]
+    )
+    registry = ScriptedRegistry(
+        {"recommend_method": {"method": "b3lyp"}}
+    )
+    loop = ToolLoop(
+        provider=provider,
+        registry=registry,
+        handle_store=HandleStore(tmp_path),
+        decision_log=DecisionLog(tmp_path / "decision_log.jsonl"),
+    )
+
+    result = loop.run_turn(
+        messages=[{"role": "user", "content": "Recommend a method."}],
+    )
+
+    assert result["assistant_text"] == "Completed."
+    assert result["tool_outcomes"][0].status == "ok"
+    assert result["tool_requests"][0].provider == "openai"

@@ -93,6 +93,13 @@ The autonomy boundary is fixed in runtime policy:
 
 `bypass` and legacy `yolo` do not override the final two rows.
 
+New project authoring and project writes are separate runtime phases. Authoring
+may extract, render, and validate a candidate automatically; it never writes a
+workspace file. A successful authoring response includes a deterministic notice
+to use `/write-project`, which enters the approval-gated write path. A rendered
+candidate cannot complete unless its latest runtime-loader verdict is `ok` or
+`warn`.
+
 ## Provider Modes
 
 `~/.chemsmart/agent/agent.yaml` is the source of truth for the active provider.
@@ -106,6 +113,10 @@ Supported provider types:
   configuration. Runtime v2 treats it as a synthesis specialist and exposes
   only `synthesize_command` and `repair_command`; orchestration remains
   deterministic.
+
+Provider identity is independent from the wire protocol. OpenAI-compatible
+providers such as DeepSeek keep their own identity for routing and receipts but
+declare `wire_protocol = "openai"` for tool-call parsing and tool-result messages.
 
 If the provider config sets `project: test`, that project is attached
 deterministically. The model should not invent project, functional, basis, or

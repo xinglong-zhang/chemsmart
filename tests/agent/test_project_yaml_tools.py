@@ -59,6 +59,7 @@ def test_professor_co2_prompt_renders_valid_gaussian_project_yaml():
         "CREST/GFN2-xTB conformer sampling workflow"
         in protocol["unsupported_yaml_features"]
     )
+    assert rendered["validation"]["verdict"] == "ok"
 
     parsed = yaml.safe_load(rendered["yaml_text"])
     expected_block = {

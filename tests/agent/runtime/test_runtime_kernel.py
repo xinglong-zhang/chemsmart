@@ -243,6 +243,13 @@ def test_router_preserves_local_specialist_and_write_boundary():
     )
     assert (
         route_initial_phase(
+            "Write a new Gaussian project YAML with B3LYP/def2-SVP.",
+            role=ProviderRole.CONTROLLER,
+        )
+        is TaskPhase.PROJECT
+    )
+    assert (
+        route_initial_phase(
             "Create a project YAML from this method section.",
             role=ProviderRole.CONTROLLER,
         )
@@ -251,6 +258,13 @@ def test_router_preserves_local_specialist_and_write_boundary():
     assert (
         route_initial_phase(
             "Read project YAML co2 and explain the settings.",
+            role=ProviderRole.CONTROLLER,
+        )
+        is TaskPhase.PROJECT_READ
+    )
+    assert (
+        route_initial_phase(
+            "Read the workspace project YAML named co2 and validate it.",
             role=ProviderRole.CONTROLLER,
         )
         is TaskPhase.PROJECT_READ
@@ -402,3 +416,57 @@ def test_controller_rejects_invalid_phase_transition(tmp_path):
 
     with pytest.raises(ValueError, match="invalid runtime transition"):
         controller.validate_decision(decision)
+
+
+def test_project_authoring_completion_requires_validated_render(tmp_path):
+    controller = RuntimeController(
+        session_dir=tmp_path,
+        session_id="s1",
+        registry=_Registry(),
+        mode=RuntimeV2Mode.ACTIVE,
+    )
+    controller.start_turn(
+        request="Create a Gaussian project YAML for water.",
+        turn_index=1,
+        provider_name="openai",
+        cwd=str(tmp_path),
+    )
+
+    assert controller.complete() is False
+    assert controller.state.phase is TaskPhase.BLOCKED
+    assert controller.state.blocked_reason == "runtime.project.render_required"
+
+
+def test_project_authoring_completion_accepts_validated_render(tmp_path):
+    controller = RuntimeController(
+        session_dir=tmp_path,
+        session_id="s1",
+        registry=_Registry(),
+        mode=RuntimeV2Mode.ACTIVE,
+    )
+    controller.start_turn(
+        request="Create a Gaussian project YAML for water.",
+        turn_index=1,
+        provider_name="openai",
+        cwd=str(tmp_path),
+    )
+    lifecycle = controller.lifecycle()
+    lifecycle.before_tool(
+        request_id="call-1",
+        tool_name="render_project_yaml",
+        arguments={"protocol": {}},
+    )
+    lifecycle.after_tool(
+        request_id="call-1",
+        tool_name="render_project_yaml",
+        result={
+            "ok": True,
+            "yaml_text": "gas: {}",
+            "validation": {"verdict": "ok"},
+        },
+    )
+
+    assert controller.complete() is True
+    assert controller.state.phase is TaskPhase.COMPLETE
+    assert "no workspace file was written" in controller.completion_notice()
+    assert "/write-project" in controller.completion_notice()

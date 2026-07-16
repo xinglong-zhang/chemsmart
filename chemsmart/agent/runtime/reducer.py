@@ -29,6 +29,7 @@ class RuntimeState(BaseModel):
     exposed_tools: list[str] = Field(default_factory=list)
     active_tool_calls: dict[str, str] = Field(default_factory=dict)
     completed_tools: list[str] = Field(default_factory=list)
+    completed_tool_receipts: list[dict[str, str]] = Field(default_factory=list)
     artifacts: list[ArtifactRef] = Field(default_factory=list)
     pending_approval: str = ""
     blocked_reason: str = ""
@@ -66,6 +67,9 @@ def apply_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
             phase=TaskPhase(
                 str(payload.get("phase") or TaskPhase.ROUTE.value)
             ),
+            active_tool_calls={},
+            completed_tools=[],
+            completed_tool_receipts=[],
             blocked_reason="",
             last_failure_rule_ids=[],
         )
@@ -86,9 +90,17 @@ def apply_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         calls.pop(str(payload.get("request_id") or ""), None)
         updates["active_tool_calls"] = calls
         if event.kind is EventKind.TOOL_SUCCEEDED:
+            tool_name = str(payload.get("tool") or "")
             updates["completed_tools"] = [
                 *state.completed_tools,
-                str(payload.get("tool") or ""),
+                tool_name,
+            ]
+            updates["completed_tool_receipts"] = [
+                *state.completed_tool_receipts,
+                {
+                    "tool": tool_name,
+                    "verdict": str(payload.get("verdict") or ""),
+                },
             ]
         else:
             updates["last_failure_rule_ids"] = [

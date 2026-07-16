@@ -151,6 +151,9 @@ def _success_payload(
     }
     if isinstance(result, dict):
         payload["result_keys"] = sorted(str(key) for key in result)
+        verdict = _result_verdict(result)
+        if verdict:
+            payload["verdict"] = verdict
         if isinstance(result.get("state_delta"), dict):
             payload["state_delta"] = result["state_delta"]
     return payload
@@ -226,6 +229,16 @@ def _rule_ids(value: Any) -> tuple[str, ...]:
 def _nested_value(value: dict[str, Any], key: str, child: str) -> Any:
     nested = value.get(key)
     return nested.get(child) if isinstance(nested, dict) else None
+
+
+def _result_verdict(result: dict[str, Any]) -> str:
+    direct = str(result.get("verdict") or "").strip().lower()
+    if direct:
+        return direct
+    validation = result.get("validation")
+    if isinstance(validation, dict):
+        return str(validation.get("verdict") or "").strip().lower()
+    return ""
 
 
 def _runtime_error_rule(error_type: str) -> str:

@@ -43,6 +43,7 @@ class ProviderError(Exception):
 
 class AnthropicProvider:
     name = "anthropic"
+    wire_protocol = "anthropic"
     default_model = "claude-sonnet-4-6"
     gateway_url = _GATEWAY_URL_ANTHROPIC
 
@@ -102,6 +103,7 @@ class AnthropicProvider:
 
 class OpenAIProvider:
     name = "openai"
+    wire_protocol = "openai"
     default_model = "gpt-5.4"
     gateway_url = _GATEWAY_URL_OPENAI
 
@@ -171,6 +173,7 @@ class LocalProvider:
     """
 
     name = "local"
+    wire_protocol = "openai"
     default_model = "chemsmart-qwen2.5-coder-3b-instruct-v13_1"
 
     def __init__(

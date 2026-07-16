@@ -211,12 +211,63 @@ class RuntimeController:
                 f"invalid runtime transition {current.value} -> {decision.phase.value}"
             )
 
-    def complete(self, *, status: str = "ok") -> None:
+    def complete(self, *, status: str = "ok") -> bool:
+        rule_ids = self.completion_rule_ids()
+        if rule_ids:
+            self.block(reason=rule_ids[0], rule_ids=rule_ids)
+            return False
         self.emit(
             EventKind.TURN_COMPLETED,
             {"status": status},
             idempotency_key=f"turn-complete:{self.turn_id}",
         )
+        return True
+
+    def completion_rule_ids(self) -> tuple[str, ...]:
+        phase = self.selection.phase if self.selection is not None else self.state.phase
+        receipts = self.state.completed_tool_receipts
+        if phase is TaskPhase.PROJECT and _project_authoring_requested(
+            self.state.request
+        ):
+            rendered = [
+                item
+                for item in receipts
+                if item.get("tool") == "render_project_yaml"
+            ]
+            if not rendered:
+                return ("runtime.project.render_required",)
+            if rendered[-1].get("verdict") not in {"ok", "warn"}:
+                return ("runtime.project.validation_required",)
+        if phase is TaskPhase.PROJECT_READ:
+            reads = [
+                item
+                for item in receipts
+                if item.get("tool") == "read_project_yaml"
+            ]
+            if not reads:
+                return ("runtime.project.read_required",)
+            if reads[-1].get("verdict") == "reject":
+                return ("runtime.project.read_invalid",)
+        if phase is TaskPhase.PROJECT_WRITE and not any(
+            item.get("tool") in {"write_project_yaml", "update_project_yaml"}
+            for item in receipts
+        ):
+            return ("runtime.project.write_required",)
+        return ()
+
+    def completion_notice(self) -> str:
+        phase = self.selection.phase if self.selection is not None else self.state.phase
+        if (
+            phase is TaskPhase.PROJECT
+            and _project_authoring_requested(self.state.request)
+            and not self.completion_rule_ids()
+        ):
+            return (
+                "The project YAML candidate was validated, but no workspace "
+                "file was written. Use /write-project to review and approve "
+                "the write explicitly."
+            )
+        return ""
 
     def block(self, *, reason: str, rule_ids: tuple[str, ...] = ()) -> None:
         self.emit(
@@ -267,33 +318,30 @@ def route_initial_phase(
     if role is ProviderRole.SYNTHESIS_SPECIALIST:
         return TaskPhase.SYNTHESIS
     text = str(request or "").lower()
+    if _is_direct_project_write(text):
+        return TaskPhase.PROJECT_WRITE
     if (
         _matches(
             text,
-            r"(?:write|save|overwrite|update|patch).{0,24}(?:ya?ml|project)",
+            r"(?:read|show|inspect|check).{0,48}(?:project|ya?ml)",
         )
         or _matches(
             text,
-            r"(?:yaml|project).{0,24}(?:write|save|overwrite|update|patch)",
+            r"(?:project|ya?ml).{0,48}(?:read|show|inspect|check)",
         )
         or any(
             marker in text
-            for marker in ("프로젝트 수정", "yaml 저장", "写入", "更新项目")
-        )
-    ):
-        return TaskPhase.PROJECT_WRITE
-    if any(
-        marker in text
-        for marker in (
-            "read project",
-            "show project",
-            "inspect project",
-            "check project yaml",
-            "yaml 조회",
-            "yaml 확인",
-            "프로젝트 읽",
-            "查看项目",
-            "读取项目",
+            for marker in (
+                "read project",
+                "show project",
+                "inspect project",
+                "check project yaml",
+                "yaml 조회",
+                "yaml 확인",
+                "프로젝트 읽",
+                "查看项目",
+                "读取项目",
+            )
         )
     ):
         return TaskPhase.PROJECT_READ
@@ -380,6 +428,76 @@ def _workspace_ref(value: Any) -> WorkspaceRef | None:
 
 def _matches(value: str, pattern: str) -> bool:
     return re.search(pattern, value, flags=re.IGNORECASE) is not None
+
+
+def _is_direct_project_write(text: str) -> bool:
+    updates_existing = (
+        _matches(
+            text,
+            r"(?:overwrite|update|patch).{0,32}(?:ya?ml|project)",
+        )
+        or _matches(
+            text,
+            r"(?:yaml|project).{0,32}(?:overwrite|update|patch)",
+        )
+        or any(
+            marker in text
+            for marker in ("프로젝트 수정", "更新项目", "覆盖项目")
+        )
+    )
+    if updates_existing:
+        return True
+
+    writes_candidate = (
+        _matches(
+            text,
+            r"(?:write|save).{0,48}(?:ya?ml|project)",
+        )
+        or _matches(
+            text,
+            r"(?:yaml|project).{0,48}(?:write|save)",
+        )
+        or any(marker in text for marker in ("yaml 저장", "写入", "保存"))
+    )
+    candidate_exists = any(
+        marker in text
+        for marker in (
+            "validated",
+            "candidate",
+            "latest yaml",
+            "already rendered",
+            "검증된",
+            "후보 yaml",
+            "그대로 저장",
+            "已验证",
+            "候选",
+        )
+    )
+    return writes_candidate and candidate_exists
+
+
+def _project_authoring_requested(request: str) -> bool:
+    text = str(request or "").lower()
+    return (
+        _matches(
+            text,
+            r"(?:create|build|make|render|set up|write).{0,48}(?:ya?ml|project)",
+        )
+        or _matches(
+            text,
+            r"(?:yaml|project).{0,48}(?:create|build|make|render|set up|write)",
+        )
+        or any(
+            marker in text
+            for marker in (
+                "프로젝트 생성",
+                "yaml 생성",
+                "yaml 작성",
+                "创建项目",
+                "生成 yaml",
+            )
+        )
+    )
 
 
 __all__ = [

@@ -62,6 +62,8 @@ def test_active_runtime_limits_tools_and_writes_replayable_events(tmp_path):
     assert exposed == ["synthesize_command", "ask_user"]
     assert result["runtime_v2"]["mode"] == "active"
     assert result["runtime_v2"]["phase"] == "complete"
+    assert result["provider_errors"] == 0
+    assert result["loop_state"]["provider_errors"] == 0
     assert session.session_dir is not None
     assert (session.session_dir / "runtime_events.jsonl").is_file()
     assert (session.session_dir / "runtime_state.json").is_file()

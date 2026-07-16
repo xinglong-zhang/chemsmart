@@ -516,6 +516,16 @@ class AgentSession:
                 )
             else:
                 runtime_controller.complete()
+            completion_notice = runtime_controller.completion_notice()
+            if completion_notice:
+                assistant_text = str(
+                    loop_result.get("assistant_text") or ""
+                ).rstrip()
+                loop_result["assistant_text"] = (
+                    f"{assistant_text}\n\n{completion_notice}"
+                    if assistant_text
+                    else completion_notice
+                )
 
         tool_requests = loop_result["tool_requests"]
         tool_outcomes = loop_result["tool_outcomes"]
@@ -679,9 +689,11 @@ class AgentSession:
                     ]
                 ),
                 "limit_reason": loop_result["limit_reason"],
+                "provider_errors": loop_result["provider_errors"],
             },
             "final_message": loop_result["assistant_text"],
             "limit_reason": loop_result["limit_reason"],
+            "provider_errors": loop_result["provider_errors"],
             "advisory_only": not tool_requests,
             "is_chitchat": (
                 _is_chitchat_request(intent_request) and not tool_requests

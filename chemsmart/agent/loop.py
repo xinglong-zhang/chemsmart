@@ -102,13 +102,16 @@ class ToolLoop:
         allowed_tool_names: set[str] | None = None,
     ) -> dict[str, Any]:
         provider_name = getattr(self.provider, "name", None) or "openai"
+        wire_protocol = (
+            getattr(self.provider, "wire_protocol", None) or provider_name
+        )
         if mode is not None:
-            tool_defs = self._tool_defs_for_mode(provider_name, mode)
+            tool_defs = self._tool_defs_for_mode(wire_protocol, mode)
         elif tool_defs is None:
-            tool_defs = self._tool_defs_for_provider(provider_name)
+            tool_defs = self._tool_defs_for_provider(wire_protocol)
         if allowed_tool_names is not None:
             tool_defs = _filter_tool_defs(
-                provider_name,
+                wire_protocol,
                 tool_defs,
                 allowed_tool_names,
             )
@@ -170,10 +173,10 @@ class ToolLoop:
                 )
 
             assistant_message = _assistant_message(
-                provider_name, response_dict
+                wire_protocol, response_dict
             )
             assistant_text, requests, stop_reason = normalize_response(
-                provider_name,
+                wire_protocol,
                 response_dict,
             )
             usage = extract_response_usage(response_dict)
@@ -370,7 +373,7 @@ class ToolLoop:
 
             if step_outcomes:
                 history.extend(
-                    build_tool_result_messages(provider_name, step_outcomes)
+                    build_tool_result_messages(wire_protocol, step_outcomes)
                 )
 
             if asked_user:
