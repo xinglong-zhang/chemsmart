@@ -572,7 +572,7 @@ class TestGaussianBatchDelegation:
 
 
 class TestRunListFailureAggregation:
-    """Legacy list path used by pKa should fail like BatchJob."""
+    """Legacy list path should still aggregate failures like BatchJob."""
 
     def test_parallel_list_execution_raises_aggregated_failures(
         self, pbs_server, mocker
@@ -589,9 +589,11 @@ class TestRunListFailureAggregation:
         ctx.ensure_object(dict)
         ctx.obj["jobrunner"] = jobrunner
 
-        ok_job = Mock(label="ok_job", TYPE="g16opt")
+        from chemsmart.jobs.job import Job
+
+        ok_job = Mock(spec=Job, label="ok_job", TYPE="g16opt")
         ok_job.run.return_value = None
-        fail_job = Mock(label="fail_job", TYPE="g16opt")
+        fail_job = Mock(spec=Job, label="fail_job", TYPE="g16opt")
         fail_job.run.side_effect = RuntimeError("boom")
 
         mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)

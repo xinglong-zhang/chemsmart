@@ -138,6 +138,11 @@ def process_pipeline(ctx, *args, **kwargs):
 
     # Handle list of jobs (legacy multi-molecule return path)
     if isinstance(job, list):
+        if not job:
+            logger.debug("Empty job list. Skipping job execution.")
+            return None
+        if not all(isinstance(single_job, Job) for single_job in job):
+            raise ValueError("Expected a list of Job instances.")
         logger.info(f"Running {len(job)} jobs")
         serial_mode = get_serial_mode(jobrunner)
 

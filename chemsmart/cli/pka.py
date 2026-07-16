@@ -778,6 +778,25 @@ def resolve_pka_batch_row(filepath, proton_index=None, color_code=None):
     return pka_mol.proton_index, pka_mol
 
 
+def wrap_pka_jobs_in_batch(jobs, batch_cls, jobrunner, label="pka_batch"):
+    """Return a single job or wrap multiple pKa jobs in a backend BatchJob.
+
+    When more than one pKa child job is created, the returned batch container
+    is submitted and executed as one orchestration unit (matching Gaussian/ORCA
+    multi-target fan-out).
+    """
+    if not jobs:
+        raise ValueError("No pKa jobs to submit.")
+    if len(jobs) == 1:
+        return jobs[0]
+    return batch_cls(
+        jobs=jobs,
+        no_run_in_parallel=jobrunner.no_run_in_parallel,
+        label=label,
+        jobrunner=jobrunner,
+    )
+
+
 def batch_pka_jobs_from_cdxml(
     ctx,
     skip_completed,
