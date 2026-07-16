@@ -103,6 +103,49 @@ def current_workflow_state(
     return state
 
 
+def hydrate_workflow_state(
+    payload: dict[str, Any],
+    *,
+    cwd: str | Path | None = None,
+    overwrite: bool = False,
+) -> WorkflowState:
+    """Restore durable runtime state into the scoped compatibility store."""
+
+    cwd_key = _cwd_key(cwd or payload.get("cwd"))
+    key = (current_workflow_scope(), cwd_key)
+    current = current_workflow_state(cwd_key)
+    project = _selection_from_payload(payload.get("project"))
+    server = _selection_from_payload(payload.get("server"))
+    restored = WorkflowState(
+        cwd=cwd_key,
+        project=(
+            project
+            if overwrite or current.project is None
+            else current.project
+        ),
+        server=(
+            server if overwrite or current.server is None else current.server
+        ),
+        previous_command=(
+            str(payload.get("previous_command") or "")
+            if overwrite or not current.previous_command
+            else current.previous_command
+        ),
+        unresolved_slots=(
+            tuple(str(item) for item in payload.get("unresolved_slots") or ())
+            if overwrite or not current.unresolved_slots
+            else current.unresolved_slots
+        ),
+        asked_slots=(
+            tuple(str(item) for item in payload.get("asked_slots") or ())
+            if overwrite or not current.asked_slots
+            else current.asked_slots
+        ),
+    )
+    _STATES[key] = restored
+    return restored
+
+
 def reset_workflow_state(cwd: str | Path | None = None) -> None:
     if cwd is None:
         _STATES.clear()
@@ -239,7 +282,9 @@ def record_clarification_slots(
     cwd_key = _cwd_key(cwd)
     key = (current_workflow_scope(), cwd_key)
     state = current_workflow_state(cwd_key)
-    normalized = tuple(dict.fromkeys(str(item).strip() for item in slots if str(item).strip()))
+    normalized = tuple(
+        dict.fromkeys(str(item).strip() for item in slots if str(item).strip())
+    )
     new = tuple(item for item in normalized if item not in state.asked_slots)
     _STATES[key] = replace(
         state,
@@ -273,12 +318,28 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _selection_from_payload(value: Any) -> WorkspaceSelection | None:
+    if not isinstance(value, dict):
+        return None
+    name = str(value.get("name") or value.get("project") or "").strip()
+    path = str(value.get("path") or "").strip()
+    if not name or not path:
+        return None
+    return WorkspaceSelection(
+        name=name,
+        program=str(value.get("program") or ""),
+        path=path,
+        sha256=str(value.get("sha256") or ""),
+    )
+
+
 __all__ = [
     "WorkflowState",
     "WorkspaceSelection",
     "clear_resolved_slots",
     "current_workflow_scope",
     "current_workflow_state",
+    "hydrate_workflow_state",
     "project_name_from_request",
     "record_clarification_slots",
     "record_command",

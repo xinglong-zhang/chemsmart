@@ -35,6 +35,7 @@ class ProviderRole(str, Enum):
 class TaskPhase(str, Enum):
     ROUTE = "route"
     PROJECT = "project"
+    PROJECT_READ = "project_read"
     PROJECT_WRITE = "project_write"
     SYNTHESIS = "synthesis"
     VALIDATION = "validation"

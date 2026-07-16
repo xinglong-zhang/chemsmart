@@ -5,6 +5,12 @@ from dataclasses import dataclass
 
 import pytest
 
+from chemsmart.agent.harness.workflow_state import (
+    current_workflow_state,
+    hydrate_workflow_state,
+    reset_workflow_state,
+    workflow_state_scope,
+)
 from chemsmart.agent.runtime.contracts import (
     AgentAction,
     AgentDecision,
@@ -144,6 +150,70 @@ def test_replay_preserves_inflight_tool_after_crash(tmp_path):
     assert state.active_tool_calls == {"call-1": "synthesize_command"}
 
 
+def test_durable_project_state_hydrates_session_scoped_compatibility_store(
+    tmp_path,
+):
+    reset_workflow_state()
+    with workflow_state_scope("session-1", cwd=tmp_path):
+        hydrate_workflow_state(
+            {
+                "cwd": str(tmp_path),
+                "project": {
+                    "name": "co2",
+                    "program": "gaussian",
+                    "path": str(tmp_path / "co2.yaml"),
+                    "sha256": "abc123",
+                },
+                "previous_command": "chemsmart run gaussian -p co2 ...",
+            },
+            cwd=tmp_path,
+        )
+        restored = current_workflow_state(tmp_path)
+
+    assert restored.project is not None
+    assert restored.project.name == "co2"
+    assert restored.previous_command.startswith("chemsmart run gaussian")
+    reset_workflow_state()
+
+
+def test_durable_project_state_overrides_inherited_workspace_default(tmp_path):
+    reset_workflow_state()
+    with workflow_state_scope("default", cwd=tmp_path):
+        hydrate_workflow_state(
+            {
+                "cwd": str(tmp_path),
+                "project": {
+                    "name": "workspace-default",
+                    "program": "gaussian",
+                    "path": str(tmp_path / "workspace-default.yaml"),
+                },
+            },
+            cwd=tmp_path,
+            overwrite=True,
+        )
+
+    with workflow_state_scope("resumed-session", cwd=tmp_path):
+        restored = hydrate_workflow_state(
+            {
+                "cwd": str(tmp_path),
+                "project": {
+                    "name": "durable-project",
+                    "program": "orca",
+                    "path": str(tmp_path / "durable-project.yaml"),
+                    "sha256": "durable-hash",
+                },
+            },
+            cwd=tmp_path,
+            overwrite=True,
+        )
+
+    assert restored.project is not None
+    assert restored.project.name == "durable-project"
+    assert restored.project.program == "orca"
+    assert restored.project.sha256 == "durable-hash"
+    reset_workflow_state()
+
+
 def test_phase_catalog_limits_controller_and_local_tool_surfaces():
     catalog = ToolCatalog(_Registry())
     controller = catalog.select(
@@ -157,6 +227,7 @@ def test_phase_catalog_limits_controller_and_local_tool_surfaces():
 
     assert len(controller.direct) == 5
     assert "write_project_yaml" not in controller.direct
+    assert "critic_project_yaml" in controller.direct
     assert specialist.direct == ("synthesize_command", "repair_command")
     assert "build_job" in controller.hidden
 
@@ -176,6 +247,13 @@ def test_router_preserves_local_specialist_and_write_boundary():
             role=ProviderRole.CONTROLLER,
         )
         is TaskPhase.PROJECT
+    )
+    assert (
+        route_initial_phase(
+            "Read project YAML co2 and explain the settings.",
+            role=ProviderRole.CONTROLLER,
+        )
+        is TaskPhase.PROJECT_READ
     )
     assert (
         route_initial_phase(

@@ -31,8 +31,14 @@ _PHASE_TOOLS: dict[TaskPhase, tuple[str, ...]] = {
         "extract_project_protocol",
         "render_project_yaml",
         "validate_project_yaml",
+        "critic_project_yaml",
         "search_basis_sets",
+    ),
+    TaskPhase.PROJECT_READ: (
         "read_project_yaml",
+        "validate_project_yaml",
+        "critic_project_yaml",
+        "search_basis_sets",
     ),
     TaskPhase.PROJECT_WRITE: (
         "read_project_yaml",

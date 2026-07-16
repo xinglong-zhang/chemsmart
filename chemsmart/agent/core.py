@@ -24,7 +24,10 @@ from chemsmart.agent.handles import (
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.runner import evaluate_harness
 from chemsmart.agent.harness.trace import write_harness_result
-from chemsmart.agent.harness.workflow_state import workflow_state_scope
+from chemsmart.agent.harness.workflow_state import (
+    hydrate_workflow_state,
+    workflow_state_scope,
+)
 from chemsmart.agent.loop import (
     ToolLoop,
     ToolLoopBudgets,
@@ -48,6 +51,9 @@ from chemsmart.agent.providers import (
     get_provider,
 )
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.runtime.contracts import RuntimeV2Mode, TaskPhase
+from chemsmart.agent.runtime.events import EventKind
+from chemsmart.agent.runtime.orchestrator import RuntimeController
 from chemsmart.agent.services.conversation_memory import ConversationMemory
 
 UTC = timezone.utc
@@ -211,6 +217,7 @@ class AgentSession:
         session_root: str | os.PathLike[str] | None = None,
         transport: Any | None = None,
         stage_prompt: str = "tool_loop.md",
+        runtime_v2: str | bool | None = None,
     ) -> None:
         self._provider = provider
         self.registry = registry or ToolRegistry.default()
@@ -228,6 +235,13 @@ class AgentSession:
         self._loop_mode_state: tuple[str, bool] | None = None
         self._last_harness_result: HarnessResult | None = None
         self._training_writer: Any | None = None
+        runtime_setting = (
+            runtime_v2
+            if runtime_v2 is not None
+            else os.environ.get("CHEMSMART_AGENT_RUNTIME_V2")
+        )
+        self.runtime_v2_mode = RuntimeV2Mode.parse(runtime_setting)
+        self._runtime_controller: RuntimeController | None = None
 
     @property
     def stage_prompt(self) -> str:
@@ -381,6 +395,53 @@ class AgentSession:
             if runtime_mode is not None
             else self._tool_defs_for_provider(provider_name)
         )
+        runtime_controller = self._ensure_runtime_controller()
+        runtime_allowed_tools: set[str] | None = None
+        runtime_lifecycle = None
+        if runtime_controller is not None:
+            with workflow_state_scope(self.state.session_id):
+                durable = runtime_controller.state
+                has_durable_workflow_state = any(
+                    (
+                        durable.active_project is not None,
+                        durable.active_server is not None,
+                        bool(durable.previous_command),
+                        bool(durable.unresolved_slots),
+                    )
+                )
+                hydrated = hydrate_workflow_state(
+                    {
+                        "cwd": self.state.cwd,
+                        "project": (
+                            durable.active_project.model_dump(mode="json")
+                            if durable.active_project is not None
+                            else None
+                        ),
+                        "server": (
+                            durable.active_server.model_dump(mode="json")
+                            if durable.active_server is not None
+                            else None
+                        ),
+                        "previous_command": durable.previous_command,
+                        "unresolved_slots": durable.unresolved_slots,
+                    },
+                    cwd=self.state.cwd,
+                    overwrite=has_durable_workflow_state,
+                )
+                runtime_controller.start_turn(
+                    request=request,
+                    turn_index=self.state.turn_index,
+                    provider_name=provider_name,
+                    cwd=self.state.cwd,
+                    workflow_state=hydrated,
+                )
+            runtime_lifecycle = runtime_controller.lifecycle()
+            if self.runtime_v2_mode is RuntimeV2Mode.ACTIVE:
+                tool_defs = runtime_controller.tool_defs(provider_name)
+                assert runtime_controller.selection is not None
+                runtime_allowed_tools = set(
+                    runtime_controller.selection.direct
+                )
         self._log_loop_mode(policy)
         if messages is None:
             if continuing_ask_user:
@@ -410,6 +471,9 @@ class AgentSession:
                 max_same_signature_retries=(
                     budgets.max_same_signature_retries
                 ),
+                max_provider_errors_per_turn=(
+                    budgets.max_provider_errors_per_turn
+                ),
                 log_provider_turn_raw=True,
             )
 
@@ -421,13 +485,37 @@ class AgentSession:
             budgets=budgets,
             policy=policy,
             approver=approver,
+            lifecycle=runtime_lifecycle,
         )
         with workflow_state_scope(self.state.session_id):
             loop_result = loop.run_turn(
                 messages=messages,
                 tool_defs=tool_defs,
                 mode=runtime_mode,
+                allowed_tool_names=runtime_allowed_tools,
             )
+
+        if runtime_controller is not None:
+            if loop_result.get("ask_user"):
+                if (
+                    runtime_controller.state.phase
+                    is not TaskPhase.WAITING_USER
+                ):
+                    runtime_controller.emit(
+                        EventKind.CLARIFICATION_REQUESTED,
+                        {
+                            "slots": ["clarification"],
+                            "question": loop_result["ask_user"].get(
+                                "question", ""
+                            ),
+                        },
+                    )
+            elif loop_result.get("limit_reason"):
+                runtime_controller.block(
+                    reason=str(loop_result["limit_reason"])
+                )
+            else:
+                runtime_controller.complete()
 
         tool_requests = loop_result["tool_requests"]
         tool_outcomes = loop_result["tool_outcomes"]
@@ -525,9 +613,11 @@ class AgentSession:
                         ]
                     ),
                     "limit_reason": loop_result["limit_reason"],
+                    "provider_errors": loop_result["provider_errors"],
                 },
                 "final_message": loop_result["assistant_text"],
                 "limit_reason": loop_result["limit_reason"],
+                "provider_errors": loop_result["provider_errors"],
                 "advisory_only": not tool_requests,
                 "is_chitchat": (
                     _is_chitchat_request(intent_request) and not tool_requests
@@ -538,6 +628,7 @@ class AgentSession:
                 "denials_count": loop_result["denials_count"],
                 "approvals_count": loop_result["approvals_count"],
                 "ask_user_question": loop_result["ask_user"],
+                "runtime_v2": self._runtime_v2_metadata(),
             }
 
         self._write_training_episode(
@@ -601,6 +692,7 @@ class AgentSession:
             "denials_count": loop_result["denials_count"],
             "approvals_count": loop_result["approvals_count"],
             "ask_user_question": None,
+            "runtime_v2": self._runtime_v2_metadata(),
         }
 
     def _continue_run(
@@ -1329,6 +1421,22 @@ class AgentSession:
                 if harness_result is not None
                 else []
             ),
+            "runtime_v2_mode": self.runtime_v2_mode.value,
+            "runtime_v2_phase": (
+                self._runtime_controller.state.phase.value
+                if self._runtime_controller is not None
+                else "not_run"
+            ),
+            "runtime_v2_event_count": (
+                self._runtime_controller.state.latest_sequence
+                if self._runtime_controller is not None
+                else 0
+            ),
+            "runtime_v2_shadow_violations": (
+                list(self._runtime_controller.state.shadow_violations)
+                if self._runtime_controller is not None
+                else []
+            ),
             "exit_status": summary["exit_status"],
             "advisory_only": advisory_only,
             "is_chitchat": is_chitchat,
@@ -1358,6 +1466,40 @@ class AgentSession:
         provider_name: str,
     ) -> list[dict[str, Any]]:
         return registry_tool_defs_for_provider(self.registry, provider_name)
+
+    def _ensure_runtime_controller(
+        self,
+    ) -> RuntimeController | None:
+        if self.runtime_v2_mode is RuntimeV2Mode.OFF:
+            return None
+        assert self.state is not None
+        assert self.session_dir is not None
+        if self._runtime_controller is None:
+            self._runtime_controller = RuntimeController(
+                session_dir=self.session_dir,
+                session_id=self.state.session_id,
+                registry=self.registry,
+                mode=self.runtime_v2_mode,
+            )
+        return self._runtime_controller
+
+    def _runtime_v2_metadata(self) -> dict[str, Any]:
+        controller = self._runtime_controller
+        if controller is None:
+            return {"mode": self.runtime_v2_mode.value}
+        selection = controller.selection
+        return {
+            "mode": self.runtime_v2_mode.value,
+            "phase": controller.state.phase.value,
+            "exposed_tools": (
+                list(selection.direct) if selection is not None else []
+            ),
+            "shadow_violations": list(controller.state.shadow_violations),
+            "event_log": str(controller.store.path),
+            "state_snapshot": str(
+                controller.session_dir / "runtime_state.json"
+            ),
+        }
 
     def _has_pending_ask_user(self) -> bool:
         if self.state is None:
@@ -1874,7 +2016,13 @@ def run_agent(request: str, **kwargs: Any) -> dict[str, Any]:
 def _session_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     return {
         key: kwargs[key]
-        for key in ("provider", "registry", "session_root", "transport")
+        for key in (
+            "provider",
+            "registry",
+            "session_root",
+            "transport",
+            "runtime_v2",
+        )
         if key in kwargs
     }
 

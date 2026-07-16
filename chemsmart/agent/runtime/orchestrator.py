@@ -28,6 +28,7 @@ _TRANSITIONS: dict[TaskPhase, frozenset[TaskPhase]] = {
     TaskPhase.ROUTE: frozenset(
         {
             TaskPhase.PROJECT,
+            TaskPhase.PROJECT_READ,
             TaskPhase.PROJECT_WRITE,
             TaskPhase.SYNTHESIS,
             TaskPhase.REPAIR,
@@ -37,6 +38,14 @@ _TRANSITIONS: dict[TaskPhase, frozenset[TaskPhase]] = {
         }
     ),
     TaskPhase.PROJECT: frozenset(
+        {
+            TaskPhase.PROJECT_WRITE,
+            TaskPhase.SYNTHESIS,
+            TaskPhase.COMPLETE,
+            TaskPhase.WAITING_USER,
+        }
+    ),
+    TaskPhase.PROJECT_READ: frozenset(
         {
             TaskPhase.PROJECT_WRITE,
             TaskPhase.SYNTHESIS,
@@ -78,6 +87,7 @@ _TRANSITIONS: dict[TaskPhase, frozenset[TaskPhase]] = {
     TaskPhase.WAITING_USER: frozenset(
         {
             TaskPhase.PROJECT,
+            TaskPhase.PROJECT_READ,
             TaskPhase.SYNTHESIS,
             TaskPhase.REPAIR,
             TaskPhase.EXECUTION,
@@ -227,7 +237,11 @@ class RuntimeController:
             turn_id=self.turn_id or "bootstrap",
             kind=kind,
             payload=payload,
-            idempotency_key=idempotency_key,
+            idempotency_key=(
+                f"{self.turn_id or 'bootstrap'}:{idempotency_key}"
+                if idempotency_key
+                else ""
+            ),
         )
         if event.sequence > self.state.latest_sequence:
             self.state = apply_event(self.state, event)
@@ -268,6 +282,21 @@ def route_initial_phase(
         )
     ):
         return TaskPhase.PROJECT_WRITE
+    if any(
+        marker in text
+        for marker in (
+            "read project",
+            "show project",
+            "inspect project",
+            "check project yaml",
+            "yaml 조회",
+            "yaml 확인",
+            "프로젝트 읽",
+            "查看项目",
+            "读取项目",
+        )
+    ):
+        return TaskPhase.PROJECT_READ
     if any(
         marker in text
         for marker in (

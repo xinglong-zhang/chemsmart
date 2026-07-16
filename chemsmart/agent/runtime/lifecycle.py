@@ -121,6 +121,10 @@ class RuntimeLifecycle:
         error_message: str,
         result: Any = None,
     ) -> None:
+        rule_ids = list(_rule_ids(result))
+        runtime_rule = _runtime_error_rule(error_type)
+        if runtime_rule and runtime_rule not in rule_ids:
+            rule_ids.append(runtime_rule)
         self.emitter.emit(
             EventKind.TOOL_FAILED,
             {
@@ -128,7 +132,7 @@ class RuntimeLifecycle:
                 "tool": tool_name,
                 "error_type": error_type,
                 "message": error_message[:500],
-                "rule_ids": list(_rule_ids(result)),
+                "rule_ids": rule_ids,
             },
             idempotency_key=f"tool-result:{request_id}",
         )
@@ -222,6 +226,15 @@ def _rule_ids(value: Any) -> tuple[str, ...]:
 def _nested_value(value: dict[str, Any], key: str, child: str) -> Any:
     nested = value.get(key)
     return nested.get(child) if isinstance(nested, dict) else None
+
+
+def _runtime_error_rule(error_type: str) -> str:
+    return {
+        "ToolExposureViolation": "runtime.tool.not_exposed",
+        "UnknownHandle": "runtime.handle.unknown",
+        "ValidationError": "runtime.tool.schema_validation",
+        "TimeoutError": "runtime.tool.timeout",
+    }.get(str(error_type), "runtime.tool.execution_error")
 
 
 __all__ = ["RuntimeLifecycle", "ToolExposureViolation"]

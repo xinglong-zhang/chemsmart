@@ -65,6 +65,47 @@ def test_registry_round_trips_build_gaussian_settings_call():
     assert "additional_route_parameters" in gaussian_settings_props
 
 
+def test_registry_exposes_typed_handles_and_hides_runtime_owned_fields():
+    registry = ToolRegistry.default()
+    definitions = {
+        item["function"]["name"]: item["function"]["parameters"]
+        for item in registry.openai_tool_defs()
+    }
+
+    build_job = definitions["build_job"]
+    assert build_job["properties"]["molecule"]["pattern"].startswith("^mol_")
+    assert build_job["properties"]["settings"]["pattern"].startswith(
+        "^(?:gset|oset)"
+    )
+    assert "jobrunner" not in build_job["properties"]
+
+    for tool_name in {
+        "dry_run_input",
+        "validate_runtime",
+        "run_local",
+        "extract_optimized_geometry",
+        "submit_hpc",
+    }:
+        job_schema = definitions[tool_name]["properties"]["job"]
+        assert job_schema["type"] == "string"
+        assert job_schema["pattern"].startswith("^job_")
+
+    assert "transport" not in definitions["submit_hpc"]["properties"]
+
+
+def test_registry_model_facing_properties_never_use_empty_any_schema():
+    registry = ToolRegistry.default()
+
+    empty_properties = []
+    for definition in registry.openai_tool_defs():
+        function = definition["function"]
+        for name, schema in function["parameters"]["properties"].items():
+            if not schema:
+                empty_properties.append(f"{function['name']}.{name}")
+
+    assert empty_properties == []
+
+
 def test_registry_unknown_tool_name_raises_clearly():
     registry = ToolRegistry.default()
 

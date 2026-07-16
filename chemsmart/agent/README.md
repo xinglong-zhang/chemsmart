@@ -41,6 +41,7 @@ Common TUI commands:
 ```text
 user request
   -> provider/router
+  -> runtime task envelope + phase-scoped tool catalog
   -> compact SPEC or CLI-grounded command decision
   -> deterministic postprocessor / adapter
   -> real chemsmart run|sub command
@@ -60,6 +61,38 @@ For job-creation requests, the primary user-facing artifact must be a real
 CHEMSMART command, not an internal `build_molecule`/`build_job` tool path.
 Internal tool calls remain useful for validation and evidence.
 
+### Runtime v2
+
+The provider-independent runtime kernel lives in `runtime/`. It adds a typed
+task envelope, phase-scoped tool exposure, lifecycle hooks, artifact receipts,
+a bounded repair policy, and an append-only hash-chained event log. Runtime
+state is reconstructed from `runtime_events.jsonl`; `runtime_state.json` is an
+atomic snapshot, not a second source of truth.
+
+Migration is feature-flagged:
+
+```bash
+CHEMSMART_AGENT_RUNTIME_V2=shadow chemsmart agent  # observe, do not restrict
+CHEMSMART_AGENT_RUNTIME_V2=active chemsmart agent  # enforce phase tool sets
+```
+
+`shadow` keeps the legacy tool surface and records exposure violations.
+`active` exposes at most five real tools for the current phase plus the virtual
+`ask_user` tool. The flag remains off by default until the frozen HighRisk48
+regression matrix passes.
+
+The autonomy boundary is fixed in runtime policy:
+
+| Operation | Runtime policy |
+|---|---|
+| Read/validate project YAML | Automatic |
+| Synthesize/repair and semantic-gate a command | Automatic |
+| Execute with `test=True` or preview `submit_hpc(execute=False)` | Automatic safe path |
+| Write/update project YAML | Explicit approval every time |
+| Real local execution or HPC submission | Explicit approval every time |
+
+`bypass` and legacy `yolo` do not override the final two rows.
+
 ## Provider Modes
 
 `~/.chemsmart/agent/agent.yaml` is the source of truth for the active provider.
@@ -70,7 +103,9 @@ Supported provider types:
   command synthesis, command explanation, critique, repair, and clarification.
 - `local`: the local fine-tuned CHEMSMART model path. This uses the compact SPEC
   adapter and can run with PyTorch or Apple Silicon MLX, depending on provider
-  configuration.
+  configuration. Runtime v2 treats it as a synthesis specialist and exposes
+  only `synthesize_command` and `repair_command`; orchestration remains
+  deterministic.
 
 If the provider config sets `project: test`, that project is attached
 deterministically. The model should not invent project, functional, basis, or
@@ -89,6 +124,7 @@ solvent defaults when runtime configuration owns those fields.
 | `harness/invariants/gaussian_ts.py` | Gaussian TS route invariants, including duplicate/leaked TS-token rejection |
 | `harness/basis_sets/` | BSE-backed basis-set catalog, resolver, and top-k search tool |
 | `project_yaml.py` | Extract, render, validate, critique, and write CHEMSMART project YAML |
+| `runtime/` | Task contracts, event replay, tool exposure, lifecycle, receipts, and repair policy |
 | `tui/` | Textual UI, slash palette, transcript cells, footer/header state, session workers |
 
 ## TUI Evidence Cells
