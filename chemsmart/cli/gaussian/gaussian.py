@@ -599,7 +599,7 @@ def gaussian(
             f"CSV batch file detected: {filename}. "
             "Molecule loading deferred to subcommand."
         )
-    elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
+    elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
