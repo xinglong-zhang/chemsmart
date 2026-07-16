@@ -12,6 +12,7 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.jobs.batch import BatchJob
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -187,12 +188,22 @@ def process_pipeline(ctx, *args, **kwargs):
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
 
-    # Handle list of jobs (when multiple molecules are specified with --index)
+    # Handle list of jobs (legacy multi-molecule return path)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
         for single_job in job:
             single_job.jobrunner = jobrunner
             _process_single_job(job=single_job)
+    elif isinstance(job, BatchJob):
+        # Submit one scheduler job; the generated run script replays the
+        # full CLI command and run.py orchestrates child execution.
+        if not job.jobs:
+            raise ValueError(f"BatchJob {job} has no child jobs to submit.")
+        logger.info(
+            f"Submitting batch container with {len(job.jobs)} child job(s)"
+        )
+        job.jobrunner = jobrunner
+        _process_single_job(job=job)
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)
