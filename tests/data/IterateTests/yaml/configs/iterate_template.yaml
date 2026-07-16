@@ -1,6 +1,21 @@
 # Chemsmart Iterate Configuration Template (YAML)
 # ================================================
 #
+# The configuration is split into two independent layers:
+#   1. Input format layer  -> chosen via the CLI subcommand ('yaml', 'cdxml').
+#      This file *is* the YAML input; it lists skeletons and substituents.
+#   2. Algorithm layer      -> how substituent positions are optimized.
+#      Configured via the optional top-level 'algorithm' block below, and/or
+#      via a CLI algorithm subcommand ('yaml lagrange', 'yaml etkdg').
+#
+# ALGORITHM PRIORITY (low -> high):
+#   built-in default (lagrange_multipliers)
+#     < 'algorithm' block in this file
+#     < CLI algorithm subcommand name
+#     < CLI algorithm options explicitly passed on the command line.
+# If the CLI selects a different algorithm than this file, the options in
+# this file (which belong to the other algorithm) are ignored.
+#
 # Each skeleton contributes to a global contiguous 1-based group sequence:
 #   - Skeleton with "link_index": occupies one implicit group per skeleton.
 #   - Skeleton with "slots":      occupies one group per slot.
@@ -13,6 +28,21 @@
 #   - All substituents must specify "groups".
 #   - Atom indices are 1-based (first atom is index 1).
 #   - If skeleton_indices is specified, it must include all link atoms.
+
+# === Algorithm layer (optional; default is lagrange_multipliers) ===
+algorithm:
+  name: lagrange_multipliers      # or 'etkdg'
+  options:
+    sphere_direction_samples_num: 96
+    axial_rotations_sample_num: 6
+  # --- ETKDG (RDKit ETKDGv3; local by default) ---
+  # name: etkdg
+  # options:
+  #   use_global_optimization: false  # true re-embeds every atom
+  #   num_conformers: 10              # best (lowest-energy) one is kept
+  #   random_seed: 42
+  #   max_iterations: 2000
+  #   force_field: none               # or uff / mmff94 / mmff94s
 
 skeletons:
   # === link_index shorthand (auto-assigned group 1) ===

@@ -104,7 +104,7 @@ To quickly get started, you can generate a template configuration file:
 
 .. code:: bash
 
-   chemsmart run iterate -g my_config.toml
+   chemsmart run iterate yaml -g my_config.yaml
 
 Run Generation (Merged Output)
 ==============================
@@ -113,7 +113,7 @@ To run the job and save all generated molecules into a single XYZ file (useful f
 
 .. code:: bash
 
-   chemsmart run iterate -f my_config.toml -o results
+   chemsmart run iterate yaml -f my_config.yaml -o results
 
 This will create ``results.xyz``.
 
@@ -124,7 +124,42 @@ To generate a separate file for each valid combination (useful for subsequent di
 
 .. code:: bash
 
-   chemsmart run iterate -f my_config.toml --separate-outputs -d ./output_dir -np 4
+   chemsmart run iterate yaml -f my_config.yaml --separate-outputs -d ./output_dir -np 4
 
 This will: 1. Use 4 parallel processes to speed up generation. 2. Save each generated molecule as an individual file in
 ``./output_dir``.
+
+*********************
+ Algorithm Selection
+*********************
+
+Structure input (the ``yaml`` command) and the position-optimization algorithm are configured independently. The
+algorithm can be declared in an optional top-level ``algorithm`` block in the configuration file, and/or selected via an
+algorithm subcommand (``lagrange``, ``etkdg``). When both are given, the CLI takes precedence.
+
+Two algorithms are available:
+
+-  ``lagrange`` (default): a Lagrange-multipliers orientation search.
+-  ``etkdg``: RDKit ETKDGv3 distance-geometry embedding. In the default **local** mode the skeleton is held fixed and
+   only the substituent is re-embedded; ``--global`` re-embeds the whole molecule.
+
+.. code:: yaml
+
+   # ETKDG configured through the YAML algorithm block
+   algorithm:
+     name: etkdg
+     options:
+       use_global_optimization: false   # true re-embeds every atom
+       num_conformers: 10
+       random_seed: 42
+       force_field: none                # or uff / mmff94 / mmff94s
+
+.. code:: bash
+
+   # ETKDG local mode (skeleton fixed) is the default
+   chemsmart run iterate yaml -f my_config.yaml etkdg
+
+   # Switch to global mode from the command line
+   chemsmart run iterate yaml -f my_config.yaml etkdg --global
+
+See :doc:`Iterate CLI Options <iterate-cli-options>` for the full option list and priority rules.

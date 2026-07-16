@@ -1,18 +1,42 @@
+import hashlib
 import logging
 import multiprocessing
 import os
 import queue
+import sys
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import datetime
 from itertools import product
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.iterate.iterate import (
-    IterateAnalyzer,
     SkeletonPreprocessor,
     SubstituentPreprocessor,
+)
+from chemsmart.jobs.iterate.report import (
+    ERROR_CODE_INTERNAL,
+    ERROR_CODE_INTERRUPTED,
+    STAGE_ALGORITHM,
+    STAGE_PREPROCESSING,
+    STAGE_WRITE,
+    STATUS_FAILED,
+    STATUS_SUCCESS,
+    STATUS_TIMED_OUT,
+    STATUS_WRITE_FAILED,
+    CombinationResult,
+    IterateReport,
+    summarize_results,
+    write_report_atomically,
+)
+from chemsmart.jobs.iterate.settings import (
+    IterateAlgorithmConfig,
+    get_algorithm_spec,
+    resolve_algorithm_config,
 )
 from chemsmart.jobs.runner import JobRunner
 
@@ -23,6 +47,71 @@ logger = logging.getLogger(__name__)
 
 # Default timeout for each combination worker (in seconds)
 DEFAULT_WORKER_TIMEOUT = 120  # 2 minutes
+
+
+def _silence_rdkit_warnings() -> None:
+    """Suppress RDKit's benign C++ warnings in the calling (worker) process.
+
+    ETKDG embedding and force-field typing emit noisy ``rdApp.warning``
+    messages (e.g. "explicit Hs", "UFFTYPER ...") that do not affect the run
+    outcome. Only warnings are disabled -- errors and Python exceptions are
+    untouched and no computation parameters change.
+    """
+    try:
+        from rdkit import RDLogger
+
+        RDLogger.DisableLog("rdApp.warning")
+    except Exception:
+        pass
+
+
+@dataclass
+class IterateRunSummary:
+    """Outcome of an iterate run.
+
+    Attributes
+    ----------
+    total : int
+        Number of combinations processed.
+    succeeded : int
+        Number of combinations that generated a structure (whether or not it
+        was subsequently written).
+    failed : int
+        Number of combinations that failed (excluding timeouts).
+    timed_out : int
+        Number of combinations killed by the worker timeout.
+    write_failed : int
+        Number of generated structures that could not be written.
+    structures_written : int
+        Number of structures actually written to disk.
+    input_error_count : int
+        Number of declared input files that failed to load.
+    error_codes : list[str]
+        Gaussian-style error codes that apply to the run (empty on a normal
+        termination). Several may be present at once.
+    output_paths : list[str]
+        Paths of the files actually written.
+    summary_path : str or None
+        Path of the run report, or ``None`` if it could not be written.
+    summary_write_error : str or None
+        Error message if the report failed to write.
+    exit_code : int
+        0 for a completely clean run, 1 for any error, 130 for a user
+        interrupt.
+    """
+
+    total: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    timed_out: int = 0
+    write_failed: int = 0
+    structures_written: int = 0
+    input_error_count: int = 0
+    error_codes: list = field(default_factory=list)
+    output_paths: list = field(default_factory=list)
+    summary_path: Optional[str] = None
+    summary_write_error: Optional[str] = None
+    exit_code: int = 0
 
 
 @dataclass
@@ -96,21 +185,18 @@ class IterateCombination:
     assignments : list[IterateAssignment]
         One or more assignments. len=1 for independent mode,
         >=1 for global mode.
-    method : str
-        Optimization method for orientation search.
-    sphere_direction_samples_num : int
-        Number of sphere direction samples for orientation search (default 96).
-    axial_rotations_sample_num : int
-        Number of axial rotation samples per direction (default 6).
+    algorithm_config : IterateAlgorithmConfig
+        Resolved algorithm configuration (name + options) used to build the
+        per-assignment analyzer (Lagrange multipliers or ETKDG).
     """
 
     skeleton_idx: int
     skeleton_label: str
     skeleton_indices: Optional[list[int]]  # 1-based, or None
     assignments: list[IterateAssignment] = field(default_factory=list)
-    method: str = "lagrange_multipliers"
-    sphere_direction_samples_num: int = 96
-    axial_rotations_sample_num: int = 6
+    algorithm_config: IterateAlgorithmConfig = field(
+        default_factory=resolve_algorithm_config
+    )
 
     @property
     def label(self) -> str:
@@ -207,14 +293,72 @@ def _batch_preprocess_skeleton(
     return processed, index_map
 
 
+def build_analyzer(
+    algorithm_config: IterateAlgorithmConfig,
+    skeleton: Molecule,
+    substituents: list,
+):
+    """Build the analyzer for a combination's algorithm via the registry.
+
+    Dispatch is driven by the algorithm registry (:mod:`settings`): the
+    resolved :class:`AlgorithmSpec` supplies the builder, so this function
+    stays algorithm-agnostic. The analyzer joins the skeleton and every
+    substituent into one molecule and produces the combined structure in a
+    single ``run()``.
+
+    The algorithm's ``supports_multi_substituent`` capability is enforced
+    here, before the analyzer is built, so a single-substituent-only
+    algorithm fails with a clear error instead of hiding the limit inside its
+    builder.
+
+    Parameters
+    ----------
+    algorithm_config : IterateAlgorithmConfig
+        Resolved algorithm configuration (canonical name + validated options).
+    skeleton : Molecule
+        Batch-preprocessed skeleton shared by every attachment.
+    substituents : list of tuple
+        One ``(substituent, skeleton_link_index, substituent_link_index)``
+        tuple per attachment (1-based link indices).
+
+    Returns
+    -------
+    object
+        An analyzer exposing a ``run() -> Molecule | None`` method.
+
+    Raises
+    ------
+    NotImplementedError
+        If more than one substituent is requested for an algorithm whose
+        spec does not advertise ``supports_multi_substituent``.
+    """
+    spec = get_algorithm_spec(algorithm_config.name)
+    if len(substituents) > 1 and not spec.supports_multi_substituent:
+        raise NotImplementedError(
+            f"Algorithm '{spec.canonical_name}' does not support "
+            f"multi-substituent combinations (received {len(substituents)} "
+            f"substituents); it attaches a single substituent per run."
+        )
+    return spec.analyzer_builder(
+        algorithm_config.options,
+        skeleton,
+        substituents,
+    )
+
+
 def _run_combination_task(
     combination: IterateCombination,
     pool: IterateMoleculePool,
-) -> tuple[str, Optional[Molecule]]:
-    """Execute a combination: batch-preprocess skeleton, then sequentially
-    insert all assigned substituents.
+    number: int,
+) -> CombinationResult:
+    """Execute a combination and return a structured :class:`CombinationResult`.
 
-    Works for single-assignment and multi-assignment combinations.
+    The skeleton and all assigned substituents are joined into one molecule
+    and optimized together (e.g. ETKDG embeds the whole assembly once), so
+    explicit connection bonds are preserved and no intermediate ``Molecule``
+    round-trip fragments the topology. The failure stage
+    (``PREPROCESSING`` / ``ALGORITHM``) and a concise error reason are
+    recorded; full tracebacks go to the debug log only.
 
     Parameters
     ----------
@@ -222,89 +366,103 @@ def _run_combination_task(
         The combination to process (lightweight, references pool by index).
     pool : IterateMoleculePool
         Shared molecule pool; molecules are copied here at execution time.
+    number : int
+        Stable 1-based combination number for the report.
 
     Returns
     -------
-    tuple[str, Molecule | None]
-        (label, result_molecule) or (label, None) if failed.
+    CombinationResult
+        Structured result carrying status, timing and failure details.
     """
     label = combination.label
+    start = time.perf_counter()
+    stage = STAGE_PREPROCESSING
 
     try:
-        # Copy skeleton from pool
+        # Copy skeleton from pool.
         skeleton = pool.skeletons[combination.skeleton_idx].copy()
 
-        # Collect all skeleton link indices from assignments
+        # Batch preprocess: remove old groups at every link position in one
+        # pass so the atom indices remap only once.
         all_link_indices = [
             a.skeleton_link_index for a in combination.assignments
         ]
-
-        # Batch preprocess: remove old groups at all link positions
         processed_skeleton, index_map = _batch_preprocess_skeleton(
             skeleton, all_link_indices, combination.skeleton_indices
         )
 
-        # Sequential insertion (descending link_index for determinism)
-        sorted_assignments = sorted(
+        # Preprocess every substituent, mapping each link index onto the
+        # preprocessed skeleton. Descending link_index keeps the attachment
+        # order deterministic.
+        substituents = []
+        for assignment in sorted(
             combination.assignments,
             key=lambda a: a.skeleton_link_index,
             reverse=True,
-        )
-
-        current_skeleton = processed_skeleton
-
-        for assignment in sorted_assignments:
-            # Copy substituent from pool
+        ):
             substituent = pool.substituents[assignment.substituent_idx].copy()
-
-            # Map original link index to preprocessed skeleton index
-            new_skel_link = index_map[assignment.skeleton_link_index]
-
-            # Preprocess substituent
             sub_prep = SubstituentPreprocessor(
                 molecule=substituent,
                 link_index=assignment.substituent_link_index,
             )
             processed_sub = sub_prep.run()
-            new_sub_link = sub_prep.get_new_link_index()
-
-            # Run IterateAnalyzer to combine skeleton + substituent
-            analyzer = IterateAnalyzer(
-                skeleton=current_skeleton,
-                substituent=processed_sub,
-                skeleton_link_index=new_skel_link,
-                substituent_link_index=new_sub_link,
-                method=combination.method,
-                sphere_direction_samples_num=combination.sphere_direction_samples_num,
-                axial_rotations_sample_num=combination.axial_rotations_sample_num,
-            )
-            result = analyzer.run()
-
-            if result is None:
-                logger.warning(
-                    f"Failed at {assignment.substituent_label}"
-                    f"@{assignment.skeleton_link_index} in {label}"
+            substituents.append(
+                (
+                    processed_sub,
+                    index_map[assignment.skeleton_link_index],
+                    sub_prep.get_new_link_index(),
                 )
-                return (label, None)
+            )
 
-            # Use result as new skeleton for next insertion.
-            # Skeleton atoms are at positions 0..n_skel-1 in the combined
-            # result, so index_map values remain valid for remaining
-            # assignments.
-            current_skeleton = result
+        # Build the combined structure in a single run.
+        stage = STAGE_ALGORITHM
+        analyzer = build_analyzer(
+            combination.algorithm_config, processed_skeleton, substituents
+        )
+        result = analyzer.run()
+        duration = time.perf_counter() - start
 
-        logger.info(f"Generated molecule for {label}")
-        return (label, current_skeleton)
+        if result is None:
+            logger.debug(f"Failed to generate molecule for {label}")
+            return CombinationResult(
+                combination_number=number,
+                label=label,
+                execution_status=STATUS_FAILED,
+                duration_seconds=duration,
+                failure_stage=STAGE_ALGORITHM,
+                error_type="NoSolution",
+                error_message="Algorithm produced no structure.",
+            )
+
+        logger.debug(f"Generated molecule for {label}")
+        return CombinationResult(
+            combination_number=number,
+            label=label,
+            execution_status=STATUS_SUCCESS,
+            molecule=result,
+            duration_seconds=duration,
+        )
 
     except Exception as e:
-        logger.error(f"Error in task for {label}: {e}")
-        return (label, None)
+        duration = time.perf_counter() - start
+        logger.debug(f"Error in task for {label} during {stage}: {e}")
+        logger.debug("Traceback for %s", label, exc_info=True)
+        return CombinationResult(
+            combination_number=number,
+            label=label,
+            execution_status=STATUS_FAILED,
+            duration_seconds=duration,
+            failure_stage=stage,
+            error_type=type(e).__name__,
+            error_message=str(e),
+        )
 
 
 def _run_combination_worker(
     combination: IterateCombination,
     pool: IterateMoleculePool,
     result_queue: "multiprocessing.Queue",
+    number: int,
 ) -> None:
     """Worker function for multiprocessing.Process.
 
@@ -315,14 +473,26 @@ def _run_combination_worker(
     pool : IterateMoleculePool
         Shared molecule pool.
     result_queue : multiprocessing.Queue
-        Queue to put the result tuple.
+        Queue to put the :class:`CombinationResult`.
+    number : int
+        Stable 1-based combination number for the report.
     """
+    _silence_rdkit_warnings()
     try:
-        result_pair = _run_combination_task(combination, pool)
-        result_queue.put(result_pair)
+        result = _run_combination_task(combination, pool, number)
+        result_queue.put(result)
     except Exception as e:
-        logger.error(f"Worker process panic for {combination.label}: {e}")
-        result_queue.put((combination.label, None))
+        logger.debug(f"Worker process panic for {combination.label}: {e}")
+        result_queue.put(
+            CombinationResult(
+                combination_number=number,
+                label=combination.label,
+                execution_status=STATUS_FAILED,
+                failure_stage=STAGE_ALGORITHM,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
+        )
 
 
 class IterateJobRunner(JobRunner):
@@ -373,7 +543,8 @@ class IterateJobRunner(JobRunner):
         combinations: list[IterateCombination],
         nprocs: int = 1,
         timeout: float = DEFAULT_WORKER_TIMEOUT,
-    ) -> list[tuple[str, Optional[Molecule]]]:
+        progress_callback=None,
+    ) -> list[CombinationResult]:
         """Run multiple combinations using multiprocessing.Process with watchdog.
 
         Manually manages processes to ensure they can be forcefully killed
@@ -389,24 +560,48 @@ class IterateJobRunner(JobRunner):
             Number of processes for parallel execution. Default 1.
         timeout : float
             Timeout in seconds for each worker. Default 120 (2 minutes).
+        progress_callback : callable, optional
+            ``callback(completed, total)`` invoked once when execution starts
+            (``completed == 0``) and once each time a combination is finalized
+            (SUCCESS / FAILED / TIMED OUT / crash). Each combination is
+            counted exactly once; a late worker result for an already-finalized
+            (e.g. timed-out) combination is ignored. Display-only: the runner
+            never depends on the callback.
 
         Returns
         -------
-        list[tuple[str, Molecule | None]]
-            List of (label, result_molecule) tuples.
+        list[CombinationResult]
+            Structured result for every combination, in original order.
         """
         if not combinations:
-            logger.warning("No combinations to process.")
+            logger.debug("No combinations to process.")
             return []
 
-        logger.info(
-            f"Running {len(combinations)} combination(s) with {nprocs} "
+        total = len(combinations)
+        logger.debug(
+            f"Running {total} combination(s) with {nprocs} "
             f"process(es), timeout={timeout}s"
         )
 
-        results_dict: dict[str, Optional[Molecule]] = {}
-        failed_labels: list[str] = []
-        timed_out_labels: list[str] = []
+        number_by_label = {
+            comb.label: i for i, comb in enumerate(combinations, start=1)
+        }
+        results_by_label: dict[str, CombinationResult] = {}
+        # Labels whose result has been finalized (and counted for progress).
+        # A finalized combination is never re-counted or overwritten, even if
+        # a late worker result arrives after a timeout was already recorded.
+        finalized: set[str] = set()
+
+        def _finalize(result: CombinationResult) -> None:
+            if result.label in finalized:
+                return
+            results_by_label[result.label] = result
+            finalized.add(result.label)
+            if progress_callback is not None:
+                progress_callback(len(finalized), total)
+
+        if progress_callback is not None:
+            progress_callback(0, total)
 
         max_workers = 1 if nprocs == 1 else nprocs
 
@@ -429,17 +624,23 @@ class IterateJobRunner(JobRunner):
                     comb = pending_combinations.popleft()
                     p = multiprocessing.Process(
                         target=_run_combination_worker,
-                        args=(comb, pool, result_queue),
+                        args=(
+                            comb,
+                            pool,
+                            result_queue,
+                            number_by_label[comb.label],
+                        ),
                         daemon=True,
                     )
                     p.start()
                     active_processes[id(p)] = (p, comb, time.time())
 
-                # 2. Check for results in queue
+                # 2. Drain the queue (late results for finalized labels are
+                #    ignored by _finalize).
                 while True:
                     try:
-                        lbl, mol = result_queue.get_nowait()
-                        results_dict[lbl] = mol
+                        res = result_queue.get_nowait()
+                        _finalize(res)
                     except queue.Empty:
                         break
                     except Exception:
@@ -459,21 +660,34 @@ class IterateJobRunner(JobRunner):
                         pids_to_remove.append(proc_id)
                     else:
                         if (current_time - start_time) > timeout:
-                            logger.warning(
+                            logger.debug(
                                 f"Timeout ({timeout}s) for {comb.label} "
                                 f"(pid {p.pid}). Terminating..."
                             )
                             p.terminate()
                             p.join(timeout=0.5)
                             if p.is_alive():
-                                logger.warning(
+                                logger.debug(
                                     f"Process {p.pid} stuck, killing..."
                                 )
                                 p.kill()  # SIGKILL
                                 p.join(timeout=1.0)
 
-                            timed_out_labels.append(comb.label)
-                            results_dict[comb.label] = None
+                            _finalize(
+                                CombinationResult(
+                                    combination_number=number_by_label[
+                                        comb.label
+                                    ],
+                                    label=comb.label,
+                                    execution_status=STATUS_TIMED_OUT,
+                                    duration_seconds=current_time - start_time,
+                                    error_type="Timeout",
+                                    error_message=(
+                                        f"Exceeded worker timeout of "
+                                        f"{timeout} seconds."
+                                    ),
+                                )
+                            )
                             pids_to_remove.append(proc_id)
 
                 # 4. Cleanup removed processes
@@ -487,8 +701,8 @@ class IterateJobRunner(JobRunner):
             # Final queue drain
             while True:
                 try:
-                    lbl, mol = result_queue.get_nowait()
-                    results_dict[lbl] = mol
+                    res = result_queue.get_nowait()
+                    _finalize(res)
                 except queue.Empty:
                     break
                 except Exception:
@@ -497,63 +711,37 @@ class IterateJobRunner(JobRunner):
         finally:
             manager.shutdown()
 
-        # Check for missing results (crashes that didn't write to queue)
+        # Fill in missing results (worker crashed without writing to queue).
         for comb in combinations:
-            if comb.label not in results_dict:
-                logger.error(
-                    f"No result found for {comb.label} - assuming worker crash."
+            if comb.label not in finalized:
+                logger.debug(
+                    f"No result found for {comb.label} - assuming worker "
+                    f"crash."
                 )
-                failed_labels.append(comb.label)
-                results_dict[comb.label] = None
-            elif (
-                results_dict[comb.label] is None
-                and comb.label not in timed_out_labels
-            ):
-                if comb.label not in failed_labels:
-                    failed_labels.append(comb.label)
+                _finalize(
+                    CombinationResult(
+                        combination_number=number_by_label[comb.label],
+                        label=comb.label,
+                        execution_status=STATUS_FAILED,
+                        failure_stage=STAGE_ALGORITHM,
+                        error_type="WorkerCrash",
+                        error_message="Worker process produced no result.",
+                    )
+                )
 
-        # Build results list in original order
-        results = [
-            (comb.label, results_dict.get(comb.label)) for comb in combinations
-        ]
+        # Build the results list in the original combination order.
+        results = [results_by_label[comb.label] for comb in combinations]
 
-        # Log results summary
-        successful_labels = [
-            label for label, mol in results if mol is not None
-        ]
-        logger.info(
-            f"Completed: {len(successful_labels)}/{len(results)} "
-            f"molecules generated successfully"
+        stats = summarize_results(results)
+        logger.debug(
+            f"Completed: {stats['generated']}/{stats['total']} "
+            f"combinations generated a structure "
+            f"({stats['failed']} failed, {stats['timed_out']} timed out)."
         )
-
-        if successful_labels or timed_out_labels or failed_labels:
-            logger.info("=" * 40)
-            logger.info("       SUMMARY OF RESULTS")
-            logger.info("=" * 40)
-
-            if successful_labels:
-                logger.info(f"Successful ({len(successful_labels)}):")
-                for label in successful_labels:
-                    logger.info(f"  - {label}")
-
-            if timed_out_labels:
-                logger.warning(f"Timed out ({len(timed_out_labels)}):")
-                for label in timed_out_labels:
-                    logger.warning(f"  - {label}")
-
-            if failed_labels:
-                logger.warning(
-                    f"Failed to find solution ({len(failed_labels)}):"
-                )
-                for label in failed_labels:
-                    logger.warning(f"  - {label}")
-
-            logger.info("=" * 40)
-
         return results
 
     def _load_molecule(
-        self, mol_config: dict, mol_type: str, idx: int
+        self, mol_config: dict, mol_type: str, idx: int, errors: list = None
     ) -> tuple[Optional[Molecule], str]:
         """Load a Molecule from configuration dict.
 
@@ -565,6 +753,9 @@ class IterateJobRunner(JobRunner):
             "skeleton" or "substituent" for logging.
         idx : int
             Index for logging.
+        errors : list, optional
+            When provided, structured input-error records are appended here
+            for the run report (never raises; failures still return None).
 
         Returns
         -------
@@ -573,6 +764,20 @@ class IterateJobRunner(JobRunner):
         """
         label = mol_config.get("label") or f"{mol_type}{idx + 1}"
         file_path = mol_config.get("file_path")
+        raw_path = mol_config.get("file_path_raw", file_path)
+
+        def _record(error_type: str, message: str) -> None:
+            if errors is not None:
+                errors.append(
+                    {
+                        "type": mol_type,
+                        "label": label,
+                        "raw_path": raw_path,
+                        "resolved_path": file_path,
+                        "error_type": error_type,
+                        "error_message": message,
+                    }
+                )
 
         try:
             if file_path:
@@ -585,6 +790,7 @@ class IterateJobRunner(JobRunner):
                     f"{mol_type.capitalize()} '{label}' has no valid source "
                     f"(file_path), skipping."
                 )
+                _record("MissingFilePath", "No file_path provided.")
                 return None, label
 
             # S2 Check: Validate indices against atom count
@@ -603,6 +809,11 @@ class IterateJobRunner(JobRunner):
                         f"{mol_type.capitalize()} '{label}': link_index "
                         f"{invalid_links} out of bounds. Molecule has "
                         f"{num_atoms} atoms."
+                    )
+                    _record(
+                        "IndexError",
+                        f"link_index {invalid_links} out of bounds "
+                        f"(molecule has {num_atoms} atoms).",
                     )
                     return None, label
 
@@ -623,16 +834,26 @@ class IterateJobRunner(JobRunner):
                             f"skeleton_indices {invalid_skels} out of bounds. "
                             f"Molecule has {num_atoms} atoms."
                         )
+                        _record(
+                            "IndexError",
+                            f"skeleton_indices {invalid_skels} out of bounds "
+                            f"(molecule has {num_atoms} atoms).",
+                        )
                         return None, label
 
             return molecule, label
         except Exception as e:
-            logger.error(f"Failed to load {mol_type} '{label}': {e}")
+            logger.error(
+                f"Failed to load {mol_type} '{label}' from '{raw_path}' "
+                f"(resolved to '{file_path}'): {e}"
+            )
+            logger.debug("Load traceback for %s", label, exc_info=True)
+            _record(type(e).__name__, str(e))
             return None, label
 
     def _generate_combinations(
         self, job: "IterateJob"
-    ) -> tuple[IterateMoleculePool, list[IterateCombination]]:
+    ) -> tuple[IterateMoleculePool, list[IterateCombination], list, int]:
         """Generate all combinations from job settings.
 
         Unified path for all skeletons. Skeletons without explicit slots
@@ -653,17 +874,18 @@ class IterateJobRunner(JobRunner):
 
         Returns
         -------
-        tuple[IterateMoleculePool, list[IterateCombination]]
-            Shared molecule pool and list of all valid combinations.
+        tuple[IterateMoleculePool, list[IterateCombination], list, int]
+            Shared molecule pool, list of all valid combinations, structured
+            input-error records, and the total attachment-site count.
         """
         pool = IterateMoleculePool()
         combinations: list[IterateCombination] = []
+        input_errors: list = []
+        attachment_site_count = 0
 
         skeleton_list = job.settings.skeleton_list or []
         substituent_list = job.settings.substituent_list or []
-        method = job.settings.method
-        sphere_samples = job.settings.sphere_direction_samples_num
-        axial_samples = job.settings.axial_rotations_sample_num
+        algorithm_config = job.settings.algorithm_config
         combination_mode = job.settings.combination_mode
 
         # --- Load substituents into pool ---
@@ -673,7 +895,7 @@ class IterateJobRunner(JobRunner):
 
         for sub_idx, sub_config in enumerate(substituent_list):
             mol, label = self._load_molecule(
-                sub_config, "substituent", sub_idx
+                sub_config, "substituent", sub_idx, input_errors
             )
             if mol is None:
                 continue
@@ -720,14 +942,12 @@ class IterateJobRunner(JobRunner):
                 for g in range(1, total_groups + 1):
                     if g not in sub_by_group:
                         sub_by_group[g] = []
-                    sub_by_group[g].append(
-                        (sp_idx, sp_label, sub_link_idx)
-                    )
+                    sub_by_group[g].append((sp_idx, sp_label, sub_link_idx))
 
         # --- Load skeletons and generate combinations ---
         for skel_idx, skel_config in enumerate(skeleton_list):
             skel_mol, skel_label = self._load_molecule(
-                skel_config, "skeleton", skel_idx
+                skel_config, "skeleton", skel_idx, input_errors
             )
             if skel_mol is None:
                 continue
@@ -735,6 +955,17 @@ class IterateJobRunner(JobRunner):
             skel_pool_idx = len(pool.skeletons)
             pool.skeletons.append(skel_mol)
             skeleton_indices = skel_config.get("skeleton_indices")
+
+            # Count attachment sites for this loaded skeleton.
+            _slots = skel_config.get("slots")
+            if _slots:
+                attachment_site_count += sum(
+                    len(s["link_indices"]) for s in _slots
+                )
+            else:
+                attachment_site_count += len(
+                    skel_config.get("link_index") or []
+                )
 
             slots = skel_config.get("slots")
 
@@ -750,9 +981,7 @@ class IterateJobRunner(JobRunner):
                         skel_label,
                         skeleton_indices,
                         position_options,
-                        method,
-                        sphere_samples,
-                        axial_samples,
+                        algorithm_config,
                         combinations,
                     )
                 else:
@@ -766,9 +995,7 @@ class IterateJobRunner(JobRunner):
                             skel_label,
                             skeleton_indices,
                             position_options,
-                            method,
-                            sphere_samples,
-                            axial_samples,
+                            algorithm_config,
                             combinations,
                         )
             else:
@@ -791,9 +1018,9 @@ class IterateJobRunner(JobRunner):
                         f"skipping."
                     )
                     continue
-                virtual_sub_by_group: dict[
-                    int, list[tuple[int, str, int]]
-                ] = {assigned_group: subs_for_group}
+                virtual_sub_by_group: dict[int, list[tuple[int, str, int]]] = {
+                    assigned_group: subs_for_group
+                }
                 for link_idx in skel_link_indices:
                     virtual_slot = {
                         "group": assigned_group,
@@ -809,13 +1036,23 @@ class IterateJobRunner(JobRunner):
                         skel_label,
                         skeleton_indices,
                         position_options,
-                        method,
-                        sphere_samples,
-                        axial_samples,
+                        algorithm_config,
                         combinations,
                     )
 
-        return pool, combinations
+        # Guard: combination labels must be unique so results are not
+        # silently overwritten and separate-output files never collide.
+        seen_labels: dict = {}
+        for combo in combinations:
+            if combo.label in seen_labels:
+                raise ValueError(
+                    f"Duplicate combination label '{combo.label}'. This "
+                    f"usually means duplicate skeleton/substituent labels or "
+                    f"overlapping link positions in the configuration."
+                )
+            seen_labels[combo.label] = combo
+
+        return pool, combinations, input_errors, attachment_site_count
 
     def _build_position_options(
         self,
@@ -882,9 +1119,7 @@ class IterateJobRunner(JobRunner):
         skel_label: str,
         skeleton_indices: Optional[list[int]],
         position_options: dict[int, list[IterateAssignment]],
-        method: str,
-        sphere_samples: int,
-        axial_samples: int,
+        algorithm_config: IterateAlgorithmConfig,
         combinations: list[IterateCombination],
     ) -> None:
         """Take the Cartesian product of position options and create combinations.
@@ -899,8 +1134,8 @@ class IterateJobRunner(JobRunner):
             Skeleton core indices.
         position_options : dict[int, list[IterateAssignment]]
             Per-position candidate lists.
-        method, sphere_samples, axial_samples
-            Algorithm parameters.
+        algorithm_config : IterateAlgorithmConfig
+            Resolved algorithm configuration for the generated combinations.
         combinations : list[IterateCombination]
             Output list to append to.
         """
@@ -927,87 +1162,131 @@ class IterateJobRunner(JobRunner):
                 skeleton_label=skel_label,
                 skeleton_indices=skeleton_indices,
                 assignments=list(assignments),
-                method=method,
-                sphere_direction_samples_num=sphere_samples,
-                axial_rotations_sample_num=axial_samples,
+                algorithm_config=algorithm_config,
             )
             combinations.append(combination)
-            logger.info(f"Created combination: {combination.label}")
+            logger.debug(f"Created combination: {combination.label}")
+
+    @staticmethod
+    def _write_xyz_file(
+        filename: str, items: list[tuple[str, Molecule]]
+    ) -> None:
+        """Write one or more labelled molecules to an XYZ file."""
+        with open(filename, "w") as f:
+            for label, mol in items:
+                f.write(f"{mol.num_atoms}\n")
+                f.write(f"       {label}\n")
+                for symbol, pos in zip(mol.chemical_symbols, mol.positions):
+                    f.write(
+                        f"{symbol:2s}  {pos[0]:15.10f}  "
+                        f"{pos[1]:15.10f}  {pos[2]:15.10f}\n"
+                    )
 
     def _write_outputs(
-        self, results: list[tuple[str, Optional[Molecule]]], job: "IterateJob"
-    ) -> None:
-        """Write execution results to output file(s).
+        self, results: list[CombinationResult], job: "IterateJob"
+    ) -> list[str]:
+        """Write successful structures and annotate each result.
 
-        Parameters
-        ----------
-        results : list[tuple[str, Molecule | None]]
-            List of (label, molecule) tuples from run_combinations.
-        job : IterateJob
-             The job instance with configuration options.
+        Mutates each successful :class:`CombinationResult` with its
+        ``output_path`` and ``structure_index``; a structure that fails to
+        write is flipped to ``WRITE FAILED`` with the failure recorded, so the
+        report can distinguish generation success from delivery success.
+
+        Returns
+        -------
+        list[str]
+            Paths of the files actually written (empty when nothing was
+            delivered; no empty placeholder file is ever created).
         """
-        successful_count = 0
+        written_paths: list[str] = []
+        successful = [
+            r
+            for r in results
+            if r.execution_status == STATUS_SUCCESS and r.molecule is not None
+        ]
 
         if job.separate_outputs:
             output_dir = job.output_directory or "."
             os.makedirs(output_dir, exist_ok=True)
-
-            logger.info(
+            logger.debug(
                 f"Writing separate output files to directory: {output_dir}"
             )
-
-            for label, mol in results:
-                if mol is not None:
-                    filename = os.path.join(output_dir, f"{label}.xyz")
-                    try:
-                        with open(filename, "w") as f:
-                            f.write(f"{mol.num_atoms}\n")
-                            f.write(f"       {label}\n")
-                            for symbol, pos in zip(
-                                mol.chemical_symbols, mol.positions
-                            ):
-                                f.write(
-                                    f"{symbol:2s}  {pos[0]:15.10f}  {pos[1]:15.10f}  {pos[2]:15.10f}\n"
-                                )
-                        successful_count += 1
-                        logger.debug(f"Wrote {filename}")
-                    except Exception as e:
-                        logger.error(f"Failed to write {filename}: {e}")
-
-            logger.info(
-                f"Wrote {successful_count} separate molecule files to "
+            used_filenames: set[str] = set()
+            for r in successful:
+                filename = os.path.join(output_dir, f"{r.label}.xyz")
+                if filename in used_filenames:
+                    raise ValueError(
+                        f"Duplicate output filename '{filename}' for label "
+                        f"'{r.label}'; refusing to overwrite a previously "
+                        f"written structure."
+                    )
+                used_filenames.add(filename)
+                try:
+                    self._write_xyz_file(filename, [(r.label, r.molecule)])
+                    r.output_path = filename
+                    r.structure_index = len(written_paths) + 1
+                    written_paths.append(filename)
+                    logger.debug(f"Wrote {filename}")
+                except Exception as e:
+                    logger.debug(f"Failed to write {filename}: {e}")
+                    r.execution_status = STATUS_WRITE_FAILED
+                    r.failure_stage = STAGE_WRITE
+                    r.error_type = type(e).__name__
+                    r.error_message = str(e)
+                    r.output_path = filename
+            logger.debug(
+                f"Wrote {len(written_paths)} separate molecule file(s) to "
                 f"{output_dir}"
             )
+            return written_paths
 
-        else:
-            outputfile = job.outputfile
-            output_dir = os.path.dirname(outputfile)
-            if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
-
-            with open(outputfile, "w") as f:
-                for label, mol in results:
-                    if mol is not None:
-                        f.write(f"{mol.num_atoms}\n")
-                        f.write(f"       {label}\n")
-                        for symbol, pos in zip(
-                            mol.chemical_symbols, mol.positions
-                        ):
-                            f.write(
-                                f"{symbol:2s}  {pos[0]:15.10f}  {pos[1]:15.10f}  {pos[2]:15.10f}\n"
-                            )
-                        successful_count += 1
-
-            logger.info(
-                f"Wrote {successful_count} molecule(s) to {outputfile}"
+        # Merged mode: only write when at least one structure succeeded, so a
+        # fully-failed run does not leave an empty file that looks like success.
+        if not successful:
+            logger.debug(
+                "No structures were generated; not creating an empty merged "
+                "output file."
             )
+            return written_paths
 
-    def run(self, job: "IterateJob", **kwargs) -> None:
-        """Run an IterateJob.
+        outputfile = job.outputfile
+        output_dir = os.path.dirname(outputfile)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
 
-        1. Generate all combinations
-        2. Run combinations with multiprocessing
-        3. Write results to output xyz file
+        try:
+            self._write_xyz_file(
+                outputfile, [(r.label, r.molecule) for r in successful]
+            )
+        except Exception as e:
+            logger.debug(f"Failed to write merged output {outputfile}: {e}")
+            for r in successful:
+                r.execution_status = STATUS_WRITE_FAILED
+                r.failure_stage = STAGE_WRITE
+                r.error_type = type(e).__name__
+                r.error_message = str(e)
+                r.output_path = outputfile
+            return written_paths
+
+        for index, r in enumerate(successful, start=1):
+            r.output_path = outputfile
+            r.structure_index = index
+        written_paths.append(outputfile)
+        logger.debug(f"Wrote {len(successful)} molecule(s) to {outputfile}")
+        return written_paths
+
+    def run(
+        self,
+        job: "IterateJob",
+        progress_callback=None,
+        **kwargs,
+    ) -> "IterateRunSummary":
+        """Run an IterateJob and emit a plain-text run report.
+
+        Generates combinations, executes them, writes the output XYZ(s), and
+        finally renders a Gaussian-log-style ``<config_stem>_iterate.out``
+        report next to the output. The report is always attempted once the
+        run phase is entered, even on full failure or timeout.
 
         Parameters
         ----------
@@ -1015,24 +1294,293 @@ class IterateJobRunner(JobRunner):
             The iterate job to run.
         **kwargs
             Additional keyword arguments.
+
+        Returns
+        -------
+        IterateRunSummary
+            Execution/delivery counts, the paths written, and the report path.
         """
-        logger.info(f"IterateJobRunner.run() called for job: {job}")
+        logger.debug(f"IterateJobRunner.run() called for job: {job}")
 
         if self.fake:
-            logger.info("Fake mode enabled, not actually running job.")
-            return
+            logger.debug("Fake mode enabled, not actually running job.")
+            return IterateRunSummary()
 
-        pool, combinations = self._generate_combinations(job)
-        logger.info(f"Generated {len(combinations)} combination(s)")
+        run_id = uuid.uuid4().hex[:12]
+        started_at = datetime.now()
+        start_perf = time.perf_counter()
 
-        if not combinations:
-            logger.warning("No valid combinations to process.")
-            return
+        try:
+            pool, combinations, input_errors, attachment_site_count = (
+                self._generate_combinations(job)
+            )
+            logger.debug(f"Generated {len(combinations)} combination(s)")
 
-        results = self.run_combinations(
-            pool, combinations, nprocs=job.nprocs, timeout=job.timeout
+            if combinations:
+                results = self.run_combinations(
+                    pool,
+                    combinations,
+                    nprocs=job.nprocs,
+                    timeout=job.timeout,
+                    progress_callback=progress_callback,
+                )
+                output_paths = self._write_outputs(results, job)
+            else:
+                logger.debug("No valid combinations to process.")
+                results = []
+                output_paths = []
+
+            finished_at = datetime.now()
+            duration = time.perf_counter() - start_perf
+            stats = summarize_results(results, len(input_errors))
+
+            report = self._build_report(
+                job=job,
+                run_id=run_id,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration=duration,
+                pool=pool,
+                combinations=combinations,
+                input_errors=input_errors,
+                attachment_site_count=attachment_site_count,
+                results=results,
+            )
+            summary_path, summary_error = self._write_report(job, report)
+
+            # A summary-write failure is itself an error termination.
+            exit_code = stats["exit_code"] if summary_error is None else 1
+
+            logger.debug(
+                f"IterateJobRunner completed job: {stats['generated']}/"
+                f"{stats['total']} generated, "
+                f"{stats['write_succeeded']} written, "
+                f"{stats['failed']} failed, {stats['timed_out']} timed out "
+                f"(error codes {stats['error_codes'] or 'none'}, "
+                f"exit {exit_code})."
+            )
+            return IterateRunSummary(
+                total=stats["total"],
+                succeeded=stats["generated"],
+                failed=stats["failed"],
+                timed_out=stats["timed_out"],
+                write_failed=stats["write_failed"],
+                structures_written=stats["write_succeeded"],
+                input_error_count=len(input_errors),
+                error_codes=stats["error_codes"],
+                output_paths=output_paths,
+                summary_path=summary_path,
+                summary_write_error=summary_error,
+                exit_code=exit_code,
+            )
+        except KeyboardInterrupt:
+            # Best-effort interrupt (SIGINT) summary; keep any structures
+            # already written and re-raise so the CLI exits with 130.
+            logger.debug("Iterate interrupted by user (SIGINT).")
+            finished_at = datetime.now()
+            duration = time.perf_counter() - start_perf
+            try:
+                report = self._build_error_report(
+                    job,
+                    run_id,
+                    started_at,
+                    finished_at,
+                    duration,
+                    "Interrupted by user (SIGINT).",
+                    error_codes=[ERROR_CODE_INTERRUPTED],
+                    exit_code=130,
+                )
+                self._write_report(job, report)
+            except Exception as report_error:
+                logger.error(
+                    f"Failed to write interrupt report: {report_error}"
+                )
+            raise
+        except Exception as error:
+            # Unexpected runtime failure: best-effort INTERNAL ERROR report.
+            logger.error(f"Unexpected error during iterate run: {error}")
+            logger.debug("Iterate run traceback", exc_info=True)
+            finished_at = datetime.now()
+            duration = time.perf_counter() - start_perf
+            summary_path, summary_error = None, None
+            try:
+                report = self._build_error_report(
+                    job, run_id, started_at, finished_at, duration, str(error)
+                )
+                summary_path, summary_error = self._write_report(job, report)
+            except Exception as report_error:
+                summary_error = str(report_error)
+                logger.error(
+                    f"Failed to write internal-error report: {report_error}"
+                )
+            return IterateRunSummary(
+                error_codes=[ERROR_CODE_INTERNAL],
+                summary_path=summary_path,
+                summary_write_error=summary_error,
+                exit_code=1,
+            )
+
+    @staticmethod
+    def _sha256_of_file(path: Optional[str]) -> str:
+        """Return the SHA256 hex digest of a file, or ``N/A`` if unavailable."""
+        if not path or not os.path.isfile(path):
+            return "N/A"
+        try:
+            digest = hashlib.sha256()
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(65536), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
+        except OSError:
+            return "N/A"
+
+    def _build_report(
+        self,
+        job: "IterateJob",
+        run_id: str,
+        started_at: datetime,
+        finished_at: datetime,
+        duration: float,
+        pool: IterateMoleculePool,
+        combinations: list,
+        input_errors: list,
+        attachment_site_count: int,
+        results: list,
+    ) -> IterateReport:
+        """Assemble the :class:`IterateReport` from the run state."""
+        settings = job.settings
+        config_file = settings.config_file
+
+        # Per-skeleton combination counts, preserving first-appearance order.
+        per_counts: dict = {}
+        for combo in combinations:
+            per_counts[combo.skeleton_label] = (
+                per_counts.get(combo.skeleton_label, 0) + 1
+            )
+
+        if job.separate_outputs:
+            output_mode = "separate"
+            output_location = os.path.abspath(
+                job.output_directory or os.getcwd()
+            )
+        else:
+            output_mode = "merged"
+            output_location = os.path.abspath(job.outputfile)
+
+        command_line = getattr(job, "command_line", None) or " ".join(sys.argv)
+
+        import rdkit
+
+        from chemsmart import __version__ as chemsmart_version
+
+        return IterateReport(
+            run_id=run_id,
+            chemsmart_version=chemsmart_version,
+            rdkit_version=getattr(rdkit, "__version__", "unknown"),
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=duration,
+            working_directory=os.getcwd(),
+            command_line=command_line,
+            config_file=config_file,
+            config_sha256=self._sha256_of_file(config_file),
+            skeleton_entries=list(settings.skeleton_list or []),
+            substituent_entries=list(settings.substituent_list or []),
+            input_errors=input_errors,
+            algorithm_name=settings.algorithm_config.name,
+            algorithm_options=dict(settings.algorithm_config.options),
+            combination_mode=settings.combination_mode,
+            nprocs=job.nprocs,
+            timeout_seconds=job.timeout,
+            output_mode=output_mode,
+            loaded_skeletons=len(pool.skeletons),
+            loaded_substituents=len(pool.substituents),
+            attachment_site_count=attachment_site_count,
+            total_combinations=len(combinations),
+            per_skeleton_counts=list(per_counts.items()),
+            results=results,
+            output_location=output_location,
         )
 
-        self._write_outputs(results, job)
+    def _build_error_report(
+        self,
+        job: "IterateJob",
+        run_id: str,
+        started_at: datetime,
+        finished_at: datetime,
+        duration: float,
+        error_message: str,
+        error_codes: Optional[list] = None,
+        exit_code: int = 1,
+    ) -> IterateReport:
+        """Assemble a minimal report for an abnormal termination.
 
-        logger.info("IterateJobRunner completed job")
+        Used for both an unexpected runtime failure (INTERNAL ERROR) and a
+        user interrupt (INTERRUPTED). Uses whatever job/settings context is
+        available; the results section is empty because the run did not
+        complete normally.
+        """
+        import rdkit
+
+        from chemsmart import __version__ as chemsmart_version
+
+        settings = job.settings
+        config_file = settings.config_file
+        command_line = getattr(job, "command_line", None) or " ".join(sys.argv)
+        return IterateReport(
+            run_id=run_id,
+            chemsmart_version=chemsmart_version,
+            rdkit_version=getattr(rdkit, "__version__", "unknown"),
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=duration,
+            working_directory=os.getcwd(),
+            command_line=command_line,
+            config_file=config_file,
+            config_sha256=self._sha256_of_file(config_file),
+            skeleton_entries=list(settings.skeleton_list or []),
+            substituent_entries=list(settings.substituent_list or []),
+            algorithm_name=settings.algorithm_config.name,
+            algorithm_options=dict(settings.algorithm_config.options),
+            combination_mode=settings.combination_mode,
+            nprocs=job.nprocs,
+            timeout_seconds=job.timeout,
+            output_mode="separate" if job.separate_outputs else "merged",
+            extra_error_codes=(
+                error_codes
+                if error_codes is not None
+                else [ERROR_CODE_INTERNAL]
+            ),
+            exit_code_override=exit_code,
+            error_message=error_message,
+        )
+
+    def _write_report(
+        self, job: "IterateJob", report: IterateReport
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Render and atomically write the run report.
+
+        The filename is derived from the YAML config stem
+        (``<stem>_iterate.out``) and placed next to the output (merged file's
+        directory, the separate-outputs directory, or the current working
+        directory). Returns ``(summary_path, error_message)``; on failure the
+        path is ``None`` and a clear error is logged to the terminal.
+        """
+        config_file = job.settings.config_file
+        stem = Path(config_file).stem if config_file else "iterate"
+        filename = f"{stem}_iterate.out"
+        if job.separate_outputs:
+            summary_dir = job.output_directory or os.getcwd()
+        else:
+            out_dir = os.path.dirname(job.outputfile)
+            summary_dir = out_dir if out_dir else os.getcwd()
+        summary_path = os.path.join(summary_dir, filename)
+
+        try:
+            write_report_atomically(summary_path, report.render())
+            logger.debug(f"Wrote run report to {summary_path}")
+            return summary_path, None
+        except Exception as e:
+            message = f"could not write report to {summary_path}: {e}"
+            logger.debug(f"Failed to write run report: {message}")
+            return None, message

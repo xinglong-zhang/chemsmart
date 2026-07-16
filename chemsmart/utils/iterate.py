@@ -12,7 +12,8 @@ from chemsmart.utils.utils import get_list_from_string_range
 logger = logging.getLogger(__name__)
 
 # Define allowed keys for configuration validation
-ALLOWED_TOP_LEVEL_KEYS = {"skeletons", "substituents"}
+ALLOWED_TOP_LEVEL_KEYS = {"skeletons", "substituents", "algorithm"}
+ALLOWED_ALGORITHM_KEYS = {"name", "options"}
 ALLOWED_SKELETON_KEYS = {
     "file_path",
     "label",
@@ -35,6 +36,21 @@ ITERATE_YAML_TEMPLATE = """\
 # Chemsmart Iterate Configuration Template (YAML)
 # ================================================
 #
+# The configuration is split into two independent layers:
+#   1. Input format layer  -> chosen via the CLI subcommand ('yaml', 'cdxml').
+#      This file *is* the YAML input; it lists skeletons and substituents.
+#   2. Algorithm layer      -> how substituent positions are optimized.
+#      Configured via the optional top-level 'algorithm' block below, and/or
+#      via a CLI algorithm subcommand ('yaml lagrange', 'yaml etkdg').
+#
+# ALGORITHM PRIORITY (low -> high):
+#   built-in default (lagrange_multipliers)
+#     < 'algorithm' block in this file
+#     < CLI algorithm subcommand name
+#     < CLI algorithm options explicitly passed on the command line.
+# If the CLI selects a different algorithm than this file, the options in
+# this file (which belong to the other algorithm) are ignored.
+#
 # Each skeleton contributes to a global contiguous 1-based group sequence:
 #   - Skeleton with "link_index": occupies one implicit group per skeleton.
 #   - Skeleton with "slots":      occupies one group per slot.
@@ -47,6 +63,21 @@ ITERATE_YAML_TEMPLATE = """\
 #   - All substituents must specify "groups".
 #   - Atom indices are 1-based (first atom is index 1).
 #   - If skeleton_indices is specified, it must include all link atoms.
+
+# === Algorithm layer (optional; default is lagrange_multipliers) ===
+algorithm:
+  name: lagrange_multipliers      # or 'etkdg'
+  options:
+    sphere_direction_samples_num: 96
+    axial_rotations_sample_num: 6
+  # --- ETKDG (RDKit ETKDGv3; local by default) ---
+  # name: etkdg
+  # options:
+  #   use_global_optimization: false  # true re-embeds every atom
+  #   num_conformers: 10              # best (lowest-energy) one is kept
+  #   random_seed: 42
+  #   max_iterations: 2000
+  #   force_field: none               # or uff / mmff94 / mmff94s
 
 skeletons:
   # === link_index shorthand (auto-assigned group 1) ===
@@ -204,6 +235,22 @@ def _parse_index_string(
     )
 
 
+def _resolve_file_path(file_path, config_dir: str):
+    """Resolve a molecule file path against the config file's directory.
+
+    Relative ``file_path`` values are resolved relative to the directory of
+    the YAML configuration file (not the current working directory), so
+    molecule files can live next to their config and do not depend on where
+    the command is invoked. Absolute paths and empty values are returned
+    unchanged.
+    """
+    if not file_path:
+        return file_path
+    if os.path.isabs(file_path):
+        return file_path
+    return os.path.normpath(os.path.join(config_dir, file_path))
+
+
 def validate_yaml_config(config: dict, filename: str) -> dict:
     """
     Validate YAML configuration and normalize values.
@@ -277,6 +324,22 @@ def validate_yaml_config(config: dict, filename: str) -> dict:
     else:
         validated_config["substituents"] = []
 
+    # Resolve relative molecule paths against the config file's directory so
+    # that file_path values never depend on the current working directory.
+    # The original (as-written) value is preserved for diagnostics.
+    config_dir = os.path.dirname(os.path.abspath(filename))
+    for entry in (
+        validated_config["skeletons"] + validated_config["substituents"]
+    ):
+        raw_path = entry.get("file_path")
+        entry["file_path_raw"] = raw_path
+        entry["file_path"] = _resolve_file_path(raw_path, config_dir)
+
+    # Validate and normalize the optional algorithm block
+    validated_config["algorithm"] = _validate_algorithm_entry(
+        config.get("algorithm"), filename
+    )
+
     # Enforce link_index XOR slots for each skeleton
     for idx, skel in enumerate(validated_config["skeletons"]):
         has_link = skel.get("link_index") is not None
@@ -307,6 +370,85 @@ def validate_yaml_config(config: dict, filename: str) -> dict:
     return validated_config
 
 
+def _validate_algorithm_entry(entry, filename: str):
+    """
+    Validate and normalize the optional top-level ``algorithm`` block.
+
+    Parameters
+    ----------
+    entry : dict or None
+        Raw ``algorithm`` block from the parsed YAML file.
+    filename : str
+        Path to configuration file (for error messages).
+
+    Returns
+    -------
+    dict or None
+        Normalized ``{"name": <canonical>, "options": {...}}`` mapping, or
+        ``None`` when no algorithm block is present.
+
+    Raises
+    ------
+    click.BadParameter
+        If the block is malformed, references an unknown algorithm, or
+        contains options not supported by that algorithm.
+    """
+    # Imported lazily to keep importing this module lightweight (the
+    # algorithm registry lives alongside the job settings).
+    from chemsmart.jobs.iterate.settings import (
+        available_algorithm_names,
+        normalize_algorithm_name,
+        validate_algorithm_options,
+    )
+
+    if entry is None:
+        return None
+
+    if not isinstance(entry, dict):
+        raise click.BadParameter(
+            f"'algorithm' must be a mapping, got {type(entry).__name__}.",
+            param_hint="'-f' / '--filename'",
+        )
+
+    unknown_keys = set(entry.keys()) - ALLOWED_ALGORITHM_KEYS
+    if unknown_keys:
+        raise click.BadParameter(
+            f"Unknown key(s) in 'algorithm' block: {unknown_keys}. "
+            f"Allowed keys: {ALLOWED_ALGORITHM_KEYS}",
+            param_hint="'-f' / '--filename'",
+        )
+
+    name = entry.get("name")
+    if name is None:
+        raise click.BadParameter(
+            "'algorithm' block is missing required field 'name'. "
+            f"Available algorithms: {available_algorithm_names()}.",
+            param_hint="'-f' / '--filename'",
+        )
+
+    try:
+        canonical_name = normalize_algorithm_name(name)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'-f' / '--filename'")
+
+    options = entry.get("options")
+    if options is None:
+        options = {}
+    elif not isinstance(options, dict):
+        raise click.BadParameter(
+            f"'algorithm.options' must be a mapping, "
+            f"got {type(options).__name__}.",
+            param_hint="'-f' / '--filename'",
+        )
+
+    try:
+        validated_options = validate_algorithm_options(canonical_name, options)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'-f' / '--filename'")
+
+    return {"name": canonical_name, "options": validated_options}
+
+
 def _validate_business_logic(
     skeletons: list, substituents: list, filename: str
 ):
@@ -316,6 +458,37 @@ def _validate_business_logic(
     _validate_skeletons_logic(skeletons, filename)
 
     _validate_substituents_logic(substituents, filename)
+
+    _validate_unique_labels(skeletons, substituents, filename)
+
+
+def _validate_unique_labels(
+    skeletons: list, substituents: list, filename: str
+):
+    """Reject duplicate skeleton or substituent labels.
+
+    Labels are used to build combination labels and output filenames, so a
+    duplicate would silently overwrite another structure's result/file.
+    """
+
+    def _check(entries: list, kind: str):
+        seen: dict = {}
+        for idx, entry in enumerate(entries):
+            label = entry.get("label")
+            if label is None:
+                continue
+            if label in seen:
+                raise click.BadParameter(
+                    f"{kind} entry {idx + 1}: duplicate label '{label}' "
+                    f"(already used by {kind.lower()} entry "
+                    f"{seen[label] + 1}). Labels must be unique to avoid "
+                    f"output collisions.",
+                    param_hint=filename,
+                )
+            seen[label] = idx
+
+    _check(skeletons, "Skeleton")
+    _check(substituents, "Substituent")
 
 
 def _validate_skeletons_logic(skeletons: list, filename: str):
@@ -338,6 +511,49 @@ def _validate_single_skeleton_rules(entry: dict, idx: int, filename: str):
 
     # Rule 3: label must be safe for filenames
     _rule_label_syntax(entry, idx, "Skeleton", filename)
+
+    # Rule 4: link_index values must not repeat within one skeleton
+    _rule_no_duplicate_link_index(entry, idx, filename)
+
+    # Rule 5: a connection site must not be shared across slots
+    _rule_no_overlapping_slot_links(entry, idx, filename)
+
+
+def _rule_no_duplicate_link_index(entry: dict, idx: int, filename: str):
+    """Rule: link_index values must be unique within a skeleton."""
+    link_indices = entry.get("link_index")
+    if not link_indices:
+        return
+    seen = set()
+    duplicates = sorted({i for i in link_indices if i in seen or seen.add(i)})
+    if duplicates:
+        raise click.BadParameter(
+            f"Skeleton entry {idx + 1} "
+            f"(label='{entry.get('label', 'unnamed')}'): "
+            f"Duplicate link_index value(s) {duplicates}. "
+            f"Each connection site must be listed once.",
+            param_hint=filename,
+        )
+
+
+def _rule_no_overlapping_slot_links(entry: dict, idx: int, filename: str):
+    """Rule: a link index must belong to at most one slot."""
+    slots = entry.get("slots")
+    if not slots:
+        return
+    owner: dict = {}
+    for slot in slots:
+        for link in slot["link_indices"]:
+            if link in owner:
+                raise click.BadParameter(
+                    f"Skeleton entry {idx + 1} "
+                    f"(label='{entry.get('label', 'unnamed')}'): "
+                    f"link index {link} is used by multiple slots "
+                    f"(groups {owner[link]} and {slot['group']}). "
+                    f"Each connection site may belong to only one slot.",
+                    param_hint=filename,
+                )
+            owner[link] = slot["group"]
 
 
 def _rule_label_syntax(entry: dict, idx: int, entry_type: str, filename: str):
@@ -423,9 +639,7 @@ def _validate_single_substituent_rules(entry: dict, idx: int, filename: str):
     _rule_label_syntax(entry, idx, "Substituent", filename)
 
 
-def _validate_skeleton_entry(
-    entry: dict, skel_idx: int
-) -> dict:
+def _validate_skeleton_entry(entry: dict, skel_idx: int) -> dict:
     """
     Validate a single skeleton entry.
 
@@ -506,9 +720,7 @@ def _validate_skeleton_entry(
     return normalized
 
 
-def _validate_substituent_entry(
-    entry: dict, sub_idx: int
-) -> dict:
+def _validate_substituent_entry(entry: dict, sub_idx: int) -> dict:
     """
     Validate a single substituent entry.
 
@@ -557,7 +769,9 @@ def _validate_substituent_entry(
 
     # Parse link_index
     normalized["link_index"] = _parse_index_string(
-        entry.get("link_index"), f"Substituent entry {sub_idx + 1}", "link_index"
+        entry.get("link_index"),
+        f"Substituent entry {sub_idx + 1}",
+        "link_index",
     )
 
     # Handle groups field
@@ -586,9 +800,7 @@ def _validate_substituent_entry(
     return normalized
 
 
-def _validate_embedded_slot_entry(
-    entry, skel_idx: int, slot_idx: int
-) -> dict:
+def _validate_embedded_slot_entry(entry, skel_idx: int, slot_idx: int) -> dict:
     """
     Validate a single embedded slot entry within a skeleton.
 
@@ -616,8 +828,7 @@ def _validate_embedded_slot_entry(
 
     if not isinstance(entry, dict):
         raise click.BadParameter(
-            f"{prefix}: must be a dictionary, "
-            f"got {type(entry).__name__}.",
+            f"{prefix}: must be a dictionary, " f"got {type(entry).__name__}.",
             param_hint="'-f' / '--filename'",
         )
 
@@ -654,12 +865,19 @@ def _validate_embedded_slot_entry(
             param_hint="'-f' / '--filename'",
         )
 
+    seen: set = set()
+    duplicates = sorted({i for i in link_indices if i in seen or seen.add(i)})
+    if duplicates:
+        raise click.BadParameter(
+            f"{prefix}: 'link_indices' contains duplicate value(s) "
+            f"{duplicates}.",
+            param_hint="'-f' / '--filename'",
+        )
+
     return {"group": group, "link_indices": link_indices}
 
 
-def _validate_yaml_multi_site_logic(
-    validated: dict, filename: str
-):
+def _validate_yaml_multi_site_logic(validated: dict, filename: str):
     """
     Cross-validate YAML configuration with global group numbering.
 
@@ -763,8 +981,7 @@ def _validate_yaml_multi_site_logic(
             skel_set = set(skeleton_indices)
             for slot in slots:
                 missing = [
-                    i for i in slot["link_indices"]
-                    if i not in skel_set
+                    i for i in slot["link_indices"] if i not in skel_set
                 ]
                 if missing:
                     raise click.BadParameter(
