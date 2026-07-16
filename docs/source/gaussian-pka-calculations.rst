@@ -127,10 +127,10 @@ Direct cycle (``-s direct`` must be set explicitly):
 
 .. note::
 
-   In batch mode, each table row becomes an independent pKa job.
+   In batch mode, each table row becomes an independent pKa child job inside one ``BatchJob`` container.
 
-   On HPC clusters, use ``chemsmart sub`` instead of ``chemsmart run``; each row receives its own scheduler script with
-   a reconstructed single-row ``pka submit`` command. See :ref:`pka-hpc-batch-submission`.
+   On HPC clusters, use ``chemsmart sub`` instead of ``chemsmart run``; batch input produces **one** scheduler
+   submission whose run script replays the full ``pka batch`` command. See :ref:`pka-hpc-batch-submission`.
 
 Table Format
 ============
@@ -186,8 +186,9 @@ A CSV table may list single-molecule ``.cdxml`` paths per row (see Table Format 
 coloured-proton auto-detection for that row. ``charge`` and ``multiplicity`` still come from the table columns for CSV
 rows; for multi-fragment CDXML passed directly as ``-f``, see :ref:`pka-calculations` (Charge and multiplicity).
 
-On clusters, ``chemsmart sub ... pka batch`` with a CDXML file creates one submission per fragment; each run script
-targets a single fragment via ``--index``. See :ref:`pka-hpc-batch-submission`.
+On clusters, ``chemsmart sub ... pka batch`` with a CDXML file submits one ``BatchJob`` whose run script replays the
+full ``pka batch`` command; ``run.py`` orchestrates all fragments on the compute node. See
+:ref:`pka-hpc-batch-submission`.
 
 ******************************************
  Computing pKa from Existing Output Files
