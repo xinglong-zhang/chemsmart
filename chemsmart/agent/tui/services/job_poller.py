@@ -31,6 +31,8 @@ from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.cluster import ClusterHelper
 from chemsmart.utils.io import get_program_type_from_file
 
+from .session_index import agent_session_dirs
+
 UTC = timezone.utc
 _JOB_SNAPSHOT_CACHE_LOCK = Lock()
 
@@ -234,9 +236,7 @@ def collect_job_snapshot(session_root: Path) -> dict[str, dict[str, Any]]:
     if not session_root.exists():
         return snapshot
 
-    for session_dir in sorted(session_root.iterdir(), reverse=True):
-        if not session_dir.is_dir():
-            continue
+    for session_dir in agent_session_dirs(session_root):
         session_jobs = _session_jobs(
             session_dir,
             cluster_running_ids=cluster_running_ids,

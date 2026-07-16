@@ -10,6 +10,8 @@ from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
+from chemsmart.agent.tui.services.session_index import agent_session_dirs
+
 
 class SessionsScreen(ModalScreen[str | None]):
     BINDINGS = [
@@ -85,17 +87,7 @@ class SessionsScreen(ModalScreen[str | None]):
     def _load_session_ids(self) -> list[str]:
         if not self.session_root.exists():
             return []
-        return [
-            path.name
-            for path in sorted(
-                [
-                    path
-                    for path in self.session_root.iterdir()
-                    if path.is_dir()
-                ],
-                reverse=True,
-            )[:10]
-        ]
+        return [path.name for path in agent_session_dirs(self.session_root)[:10]]
 
     def _render_text(self) -> str:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]

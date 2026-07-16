@@ -41,6 +41,7 @@ class TaskPhase(str, Enum):
     VALIDATION = "validation"
     REPAIR = "repair"
     EXECUTION = "execution"
+    DIAGNOSTICS = "diagnostics"
     WAITING_USER = "waiting_user"
     COMPLETE = "complete"
     BLOCKED = "blocked"
@@ -56,6 +57,7 @@ class AgentAction(str, Enum):
     REPAIR_COMMAND = "repair_command"
     VALIDATE = "validate"
     EXECUTE = "execute"
+    INSPECT_CALCULATION = "inspect_calculation"
 
 
 class ExecutionMode(str, Enum):

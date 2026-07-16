@@ -42,6 +42,7 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
         Binding("y", "approve_once", "Yes once", show=False, priority=True),
         Binding("s", "approve_session", "Session", show=False, priority=True),
         Binding("n", "deny", "No", show=False, priority=True),
+        Binding("r", "revise", "Revise", show=False, priority=True),
         Binding("escape", "cancel", "Cancel", show=False, priority=True),
     ]
 
@@ -116,7 +117,7 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
             f"session rule: {session_rule}\n\n"
             "args:\n"
             f"{pretty_tool_args(self.arguments)}\n\n"
-            "y once · s this-session · n deny · esc cancel"
+            "y once · s this-session · n deny · r revise · esc cancel"
         )
         if self.request:
             summary += f"\n\nrequest: {self.request}"
@@ -138,6 +139,9 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
         elif event.key == "n":
             event.stop()
             self.action_deny()
+        elif event.key == "r":
+            event.stop()
+            self.action_revise()
         elif event.key == "escape":
             event.stop()
             self.action_cancel()
@@ -150,6 +154,9 @@ class ApprovalOverlay(ModalScreen[ApprovalResult | None]):
 
     def action_deny(self) -> None:
         self.dismiss(ApprovalResult("n"))
+
+    def action_revise(self) -> None:
+        self.dismiss(ApprovalResult("r"))
 
     def action_cancel(self) -> None:
         self.dismiss(None)

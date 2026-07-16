@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from threading import Event, get_ident
 from typing import Iterable
@@ -16,6 +19,7 @@ from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
+from textual.widgets import OptionList
 from textual.worker import Worker, WorkerState
 
 from chemsmart.agent.cli import agent
@@ -34,11 +38,20 @@ from chemsmart.agent.provider_config import (
 from chemsmart.agent.model_command_parser import parse_model_command
 from chemsmart.agent.provider_adapter import ToolRequest
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.runtime.calculations import (
+    CalculationContext,
+    CalculationEvent,
+    cancel_calculation,
+    inspect_calculation,
+    load_calculation_runs,
+)
 from chemsmart.agent.services.conversation_memory import ConversationMemory
 from chemsmart.agent.synthesis import SynthesisSession, resolve_default_project
+from chemsmart.agent.tools_command import execute_chemsmart_command_observed
 from chemsmart.settings.workspace_project import (
     WorkspaceProjectStatus,
     resolve_workspace_project,
+    workspace_project_path,
 )
 from chemsmart.agent.tui.events import (
     AssistantTurnEvent,
@@ -60,7 +73,12 @@ from chemsmart.agent.tui.events import (
     session_completed,
 )
 from chemsmart.agent.tui.phase import Phase
+from chemsmart.agent.tui.state import TuiState
 from chemsmart.agent.tui.screens.jobs_panel import JobsPanel, JobsPanelAction
+from chemsmart.agent.tui.screens.calculations import (
+    CalculationMonitor,
+    CalculationMonitorAction,
+)
 from chemsmart.agent.tui.screens.sessions import SessionsScreen
 from chemsmart.agent.tui.services.job_poller import (
     JobPollerError,
@@ -75,6 +93,7 @@ from chemsmart.agent.tui.services.job_poller import (
     queue_snapshot,
 )
 from chemsmart.agent.tui.services.log_tailer import LogTailer
+from chemsmart.agent.tui.services.session_index import agent_session_dirs
 from chemsmart.agent.tui.services.session_runner import SessionRunnerMixin
 from chemsmart.agent.tui.tool_meta import (
     format_assumptions_banner,
@@ -82,6 +101,7 @@ from chemsmart.agent.tui.tool_meta import (
 )
 from chemsmart.agent.tui.widgets.cells import (
     AgentMessageCell,
+    CalculationReceiptCell,
     CommandInterpretationCell,
     CriticVerdictCell,
     DecisionTraceCell,
@@ -101,6 +121,7 @@ from chemsmart.agent.tui.widgets.cells import (
     UserMessageCell,
 )
 from chemsmart.agent.tui.widgets.composer import Composer
+from chemsmart.agent.tui.widgets.calculation_strip import CalculationStatusStrip
 from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.header import ChemsmartHeader
 from chemsmart.agent.tui.widgets.popups import (
@@ -108,19 +129,26 @@ from chemsmart.agent.tui.widgets.popups import (
     CwdMismatchChoice,
     CwdMismatchOverlay,
     FilePickerOverlay,
+    HistorySearchOverlay,
     PermissionModeOverlay,
     PermissionModeResult,
     ProjectYamlOverlay,
+    ShortcutOverlay,
     TextPromptOverlay,
+    ToolActivityOverlay,
     build_approval_overlay,
 )
-from chemsmart.agent.tui.widgets.slash_palette import SlashCommandPalette
+from chemsmart.agent.tui.widgets.slash_palette import (
+    SlashCommandPalette,
+    SlashPaletteItem,
+)
 from chemsmart.agent.tui.widgets.transcript import Transcript
 from chemsmart.io.molecules.structure import Molecule
 
 _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
     ("/help", "show available commands"),
     ("/jobs", "open the jobs panel"),
+    ("/runs", "open the calculation monitor"),
     ("/queue", "show the current queue snapshot"),
     ("/server", "switch the active HPC server"),
     ("/molecule", "load and preview a molecule"),
@@ -133,8 +161,8 @@ _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
     ("/permissions", "toggle permission or driving mode"),
     ("/yolo", "toggle risky-tool autonomy"),
     ("/execute", "submit the dry-run to HPC for real"),
-    ("/submit", "backward-compatible submit approval"),
-    ("/run", "backward-compatible local-run approval"),
+    ("/submit", "submit the validated chemsmart sub command"),
+    ("/run", "execute the validated chemsmart run command"),
     ("/critic", "show the current critic verdict"),
     ("/plan", "show the current plan"),
     ("/rationale", "show planner rationale"),
@@ -147,7 +175,7 @@ _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
     ("/wizard-verify", "verify server transport wiring"),
     ("/wizard-write", "write latest wizard YAML"),
     ("/doctor", "run inline diagnostics"),
-    ("/mode", "show provider routing mode"),
+    ("/mode", "show unified provider routing information"),
     ("/init", "start a project YAML request"),
     ("/write-project", "write the latest validated project YAML"),
     ("/quit", "exit the TUI"),
@@ -155,11 +183,20 @@ _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
 )
 
 
+@dataclass(frozen=True)
+class _ReadyCommand:
+    command: str
+    action: str
+    workspace: Path
+    semantic_verdict: str
+    intent_verdict: str
+    project_path: Path | None = None
+    project_sha256: str | None = None
+    source: str = ""
+
+
 class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
-    BINDINGS = [
-        Binding("j", "open_jobs_panel", "Jobs", show=False),
-        Binding("shift+tab", "show_project_yaml", "Project YAML", show=False),
-    ]
+    BINDINGS: list[Binding] = []
 
     DEFAULT_CSS = """
     ChatScreen {
@@ -176,13 +213,20 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         *,
         session_root: Path,
         job_poll_interval: float = 5.0,
+        runtime_v2: str = "active",
     ) -> None:
         super().__init__()
         self.session_root = session_root
         self.job_poll_interval = job_poll_interval
+        self.runtime_v2 = runtime_v2
+        self.tui_state = TuiState()
         self._tailer: LogTailer | None = None
         self._tailer_path: Path | None = None
         self._current_worker: Worker | None = None
+        self._queued_prompt: str | None = None
+        self._request_history: list[str] = []
+        self._history_cursor = 0
+        self._waiting_for_user = False
         self._quit_armed = False
         self._quit_timer = None
         self._session_poll_timer = None
@@ -210,6 +254,21 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._active_server_name = self._default_active_server_name()
         self._latest_wizard_probe: dict[str, object] | None = None
         self._last_dry_run_session_id: str | None = None
+        self._ready_command: _ReadyCommand | None = None
+        self._tool_cells: dict[str, ToolCallCell] = {}
+        self._tool_order: list[str] = []
+        self._direct_tool_call_ids: dict[str, str] = {}
+        self._calculation_runs: dict[str, dict[str, object]] = {}
+        self._calculation_cells: dict[str, CalculationReceiptCell] = {}
+        self._turn_serial = 0
+        self._active_turn_id = "turn-0"
+        self._tui_session_dir = self.session_root / ".runtime" / (
+            "tui-"
+            + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            + "-"
+            + uuid.uuid4().hex[:8]
+        )
+        self._calculation_decision_log: DecisionLog | None = None
         self._active_provider_config = _load_tui_provider_config()
         self._interaction_mode = _default_interaction_mode(
             self._active_provider_config
@@ -221,38 +280,79 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     def compose(self) -> ComposeResult:
         yield ChemsmartHeader(id="chat-header")
         yield Transcript(id="chat-body")
+        yield CalculationStatusStrip(id="calculation-strip")
         yield SlashCommandPalette(id="slash-palette")
         yield Composer()
-        yield FooterWidget(id="status-footer")
+        yield FooterWidget(id="status-footer", state=self.tui_state)
 
     def on_mount(self) -> None:
         self.post_agent_message(
             "## Welcome to the chemsmart agent\n\n"
             "Plan calculations in natural language, preview input files, "
-            "and run pre-flight checks before execution.\n\n"
-            "Start with: /doctor · Ask safely: ask mode · "
-            "Real workflows: run mode\n\n"
+            "and run pre-flight checks before execution. The same interface "
+            "handles planning, validation, and approved execution.\n\n"
+            "Start with: /doctor · Execute a validated local command: /run · "
+            "Submit a validated HPC command: /submit\n\n"
             "Example: `single-point on examples/h2o.xyz at B3LYP/6-31G(d) "
             "Gaussian`"
         )
         self.focus_composer()
         footer = self.query_one(FooterWidget)
         self._sync_footer_provider()
+        footer.set_server(self._active_server_name)
+        footer.set_permission(
+            self._permission_mode.value,
+            yolo=self._yolo_enabled,
+        )
         footer.update_draft("")
+        config = getattr(self.app, "tui_config", None)
+        if config is not None and config.issues:
+            self.post_agent_message(
+                "TUI configuration used safe defaults:\n\n"
+                + "\n".join(f"- {issue}" for issue in config.issues),
+                title="TUI configuration",
+            )
         self.run_job_poller(self.job_poll_interval)
         self._refresh_job_snapshot()
+        self._restore_calculation_runs()
 
     def on_composer_submitted(self, event: Composer.Submitted) -> None:
         text = event.text.strip()
-        event.composer.clear_text()
-        self.query_one(FooterWidget).update_draft("")
-        self.query_one(SlashCommandPalette).hide()
         if text.startswith("/"):
+            event.composer.clear_text()
+            self.query_one(FooterWidget).update_draft("")
+            self.query_one(SlashCommandPalette).hide()
             self._handle_slash_command(text)
             return
         if self._handle_plain_approval_alias(text):
+            event.composer.clear_text()
+            self.query_one(FooterWidget).update_draft("")
             return
+        if self._worker_is_busy():
+            event.composer.load_text(text)
+            self.query_one(FooterWidget).set_hint(
+                "Request in progress · Tab queues this draft"
+            )
+            return
+        event.composer.clear_text()
+        self.query_one(FooterWidget).update_draft("")
+        self.query_one(SlashCommandPalette).hide()
+        if not self._request_history or self._request_history[-1] != text:
+            self._request_history.append(text)
+        self._history_cursor = len(self._request_history)
+        self._waiting_for_user = False
         self.start_request(text)
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected
+    ) -> None:
+        palette = self.query_one(SlashCommandPalette)
+        if event.option_list is not palette or not event.option_id:
+            return
+        composer = self.query_one(Composer)
+        composer.load_text(f"{event.option_id} ")
+        palette.hide()
+        composer.focus()
 
     def on_text_area_changed(self, event) -> None:
         if getattr(event.text_area, "id", None) == "composer":
@@ -308,6 +408,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.active_agent_session = AgentSession(
                 session_root=str(self.session_root),
                 stage_prompt="unified_agent.md",
+                runtime_v2=self.runtime_v2,
             )
         policy = self._permission_policy(prompt_risky=True)
         result = self.active_agent_session.run_loop(
@@ -462,6 +563,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             session_id,
             session_root=str(self.session_root),
             cwd_override=cwd_override,
+            runtime_v2=self.runtime_v2,
         )
         policy = self._permission_policy()
         request = self.active_agent_session.state.request or "Continue."
@@ -491,6 +593,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.active_agent_session = AgentSession.load(
                 session_id,
                 session_root=str(self.session_root),
+                runtime_v2=self.runtime_v2,
             )
         session = self.active_agent_session
 
@@ -546,15 +649,23 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             session_id,
             session_root=str(self.session_root),
             cwd_override=cwd_override,
+            runtime_v2=self.runtime_v2,
         )
         return self.active_agent_session
 
     def start_request(self, text: str) -> None:
-        if self._current_worker and not self._current_worker.is_finished:
+        if self._worker_is_busy():
             self.post_error(
                 "Session already running",
-                "Wait for the current request to finish before starting a new request.",
+                "The current request is still running. Press Tab to queue one follow-up.",
             )
+            return
+        if (
+            self._active_provider_config is not None
+            and self._active_provider_config.type == "local"
+            and _is_calculation_diagnostic_request(text)
+        ):
+            self._start_local_diagnostic_request(text)
             return
         if self._active_provider_config is not None and (
             self._active_provider_config.type == "local"
@@ -562,6 +673,28 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._start_synthesis_request(text)
             return
         self._start_unified_request(text)
+
+    def _worker_is_busy(self) -> bool:
+        return bool(
+            self._current_worker and not self._current_worker.is_finished
+        )
+
+    def _maybe_start_queued_prompt(self) -> None:
+        if self._queued_prompt is None or self._worker_is_busy():
+            return
+        if self._pending_approval or self._waiting_for_user:
+            self.query_one(FooterWidget).set_hint(
+                "Follow-up remains queued until the requested input is resolved"
+            )
+            return
+        prompt = self._queued_prompt
+        self._queued_prompt = None
+        footer = self.query_one(FooterWidget)
+        footer.set_queued_prompt(False)
+        if not self._request_history or self._request_history[-1] != prompt:
+            self._request_history.append(prompt)
+        self._history_cursor = len(self._request_history)
+        self.call_after_refresh(self.start_request, prompt)
 
     def _start_unified_request(self, text: str) -> None:
         keep_conversational = self.active_agent_session is not None
@@ -572,6 +705,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             keep_conversational=keep_conversational,
         )
         self._current_request = text
+        self._begin_turn()
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint("Unified agent is reasoning…")
         self.query_one(Transcript).add_cell(UserMessageCell(text))
@@ -592,11 +726,46 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             keep_conversational=keep_conversational,
         )
         self._current_request = text
+        self._begin_turn()
         self.query_one(FooterWidget).set_phase(Phase.PLANNING)
         self.query_one(FooterWidget).set_hint("Model is synthesizing…")
         self.query_one(Transcript).add_cell(UserMessageCell(text))
         self._user_requests.add(text)
         self._current_worker = self.run_synthesis_session(text)
+
+    def _begin_turn(self) -> str:
+        self._turn_serial += 1
+        self._active_turn_id = f"turn-{self._turn_serial}"
+        self.query_one(Transcript).start_turn(self._active_turn_id)
+        return self._active_turn_id
+
+    def _start_local_diagnostic_request(self, text: str) -> None:
+        self._reset_request_state(
+            clear_transcript=True,
+            keep_conversational=True,
+        )
+        self._current_request = text
+        self._begin_turn()
+        transcript = self.query_one(Transcript)
+        transcript.add_cell(UserMessageCell(text))
+        result = inspect_calculation(
+            session_root=str(self.session_root),
+        )
+        calculation = result.get("calculation")
+        if not result.get("ok") or not isinstance(calculation, dict):
+            self.post_error(
+                "Calculation result unavailable",
+                str(result.get("error") or "No calculation result was found."),
+            )
+            return
+        self._on_calculation_run(dict(calculation), persist=False)
+        self.post_agent_message(
+            _calculation_diagnostic_summary(calculation),
+            title="Deterministic calculation diagnosis",
+        )
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.FINISHED)
+        footer.set_hint("Calculation diagnosis ready")
 
     @work(
         thread=True,
@@ -609,6 +778,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self,
         tool_name: str,
         arguments: dict[str, object],
+        *,
+        explicit_approval: bool = False,
     ) -> dict[str, object]:
         registry = ToolRegistry.default()
         normalized_args = registry.normalize_args(tool_name, arguments)
@@ -625,7 +796,20 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         policy = self._permission_policy()
         resolved = policy.resolve(request)
 
-        if resolved.decision == ResolvedDecision.NEEDS_USER:
+        if explicit_approval:
+            if tool_name != "execute_chemsmart_command":
+                raise ValueError(
+                    "explicit slash approval is only valid for command execution"
+                )
+            self.app.call_from_thread(
+                self._publish_tool_call_cell,
+                tool_name,
+                "approved",
+                description,
+                normalized_args,
+                "Approved explicitly by slash command.",
+            )
+        elif resolved.decision == ResolvedDecision.NEEDS_USER:
             self.app.call_from_thread(
                 self._set_pending_tool_context,
                 description,
@@ -689,13 +873,14 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
 
         result = registry.call(tool_name, normalized_args)
-        if (
-            isinstance(result, dict)
-            and result.get("ok") is False
-            and "error" in result
-        ):
+        if isinstance(result, dict) and result.get("ok") is False:
+            error = result.get("error")
+            if isinstance(error, dict):
+                error = error.get("message")
             message = str(
-                result.get("error", {}).get("message") or "Tool failed."
+                error
+                or result.get("stderr_tail")
+                or f"Tool returned status {result.get('status') or 'error'}."
             )
             self.app.call_from_thread(
                 self._publish_tool_call_cell,
@@ -709,6 +894,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 self._handle_slash_tool_failure,
                 tool_name,
                 message,
+                result,
             )
             return {"tool": tool_name, "status": "error", "result": result}
 
@@ -727,6 +913,155 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             result,
         )
         return {"tool": tool_name, "status": "ok", "result": result}
+
+    @work(
+        thread=True,
+        exclusive=False,
+        exit_on_error=False,
+        group="calculation",
+        name="calculation",
+    )
+    def run_calculation_request(
+        self,
+        ready: _ReadyCommand,
+        *,
+        session_dir: str,
+        session_id: str,
+        turn_id: str,
+    ) -> dict[str, object]:
+        tool_name = "execute_chemsmart_command"
+        description = "Execute validated chemsmart command"
+        arguments = {"command": ready.command, "test": False}
+        self.app.call_from_thread(
+            self._publish_tool_call_cell,
+            tool_name,
+            "approved",
+            description,
+            arguments,
+            "Approved explicitly by /run or /submit.",
+        )
+
+        def event_sink(event: CalculationEvent) -> None:
+            self.app.call_from_thread(
+                self._on_calculation_event,
+                event.to_dict(),
+            )
+
+        result = execute_chemsmart_command_observed(
+            ready.command,
+            test=False,
+            calculation_context=CalculationContext(
+                session_dir=Path(session_dir),
+                session_id=session_id,
+                turn_id=turn_id,
+                semantic_verdict=ready.semantic_verdict,
+                intent_verdict=ready.intent_verdict,
+            ),
+            event_sink=event_sink,
+        )
+        ok = bool(result.get("ok"))
+        note = (
+            self._tool_success_note(tool_name, result)
+            if ok
+            else str(
+                result.get("error")
+                or result.get("status")
+                or "Calculation failed."
+            )
+        )
+        self.app.call_from_thread(
+            self._publish_tool_call_cell,
+            tool_name,
+            "ok" if ok else "error",
+            description,
+            arguments,
+            note,
+        )
+        self.app.call_from_thread(self._finish_calculation_request, result)
+        return result
+
+    def _on_calculation_event(self, payload: dict[str, object]) -> None:
+        run = payload.get("run")
+        if not isinstance(run, dict):
+            return
+        self._on_calculation_run(dict(run), persist=True, event=payload)
+
+    def _on_calculation_run(
+        self,
+        run: dict[str, object],
+        *,
+        persist: bool,
+        event: dict[str, object] | None = None,
+    ) -> None:
+        run_id = str(run.get("run_id") or "")
+        if not run_id:
+            return
+        self._calculation_runs[run_id] = dict(run)
+        strip = self.query_one(CalculationStatusStrip)
+        strip.update_run(run)
+        cell = self._calculation_cells.get(run_id)
+        if cell is None and str(run.get("status") or "") != "validating":
+            cell = CalculationReceiptCell(run)
+            self._calculation_cells[run_id] = cell
+            self.query_one(Transcript).add_cell(
+                cell,
+                turn_id=str(run.get("turn_id") or self._active_turn_id),
+            )
+        elif cell is not None:
+            cell.update_run(run)
+        if isinstance(self.app.screen, CalculationMonitor):
+            self.app.screen.update_run(run)
+        if persist and event is not None:
+            self._decision_log_for_calculation(run).write(
+                "calculation_event",
+                event,
+                rationale=str(run.get("stage") or ""),
+            )
+        self._update_footer_job_counts()
+
+    def _finish_calculation_request(self, result: dict[str, object]) -> None:
+        calculation = result.get("calculation")
+        if isinstance(calculation, dict):
+            self._on_calculation_run(dict(calculation), persist=False)
+        status = (
+            str(calculation.get("status"))
+            if isinstance(calculation, dict)
+            else str(result.get("status") or "unknown")
+        )
+        if not self._worker_is_busy():
+            footer = self.query_one(FooterWidget)
+            footer.set_phase(
+                Phase.FINISHED if status == "completed" else Phase.ERROR
+            )
+            footer.set_hint(
+                "Calculation completed · Ctrl+B for receipt"
+                if status == "completed"
+                else "Calculation failed · Ctrl+B for diagnostics"
+            )
+        self.notify(
+            "Calculation completed."
+            if status == "completed"
+            else f"Calculation ended with status {status}.",
+            severity="information" if status == "completed" else "error",
+            timeout=5,
+        )
+
+    def _decision_log_for_calculation(
+        self, run: dict[str, object]
+    ) -> DecisionLog:
+        session = self.active_agent_session
+        if (
+            session is not None
+            and session.state is not None
+            and session.decision_log is not None
+            and session.state.session_id == str(run.get("session_id") or "")
+        ):
+            return session.decision_log
+        if self._calculation_decision_log is None:
+            self._calculation_decision_log = DecisionLog(
+                self._tui_session_dir / "decision_log.jsonl"
+            )
+        return self._calculation_decision_log
 
     def start_resume(
         self,
@@ -760,6 +1095,19 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         )
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        if event.worker.group == "calculation":
+            if event.state == WorkerState.ERROR:
+                error = event.worker.error
+                self.post_error(
+                    error.__class__.__name__ if error else "Calculation worker error",
+                    str(error) if error else "Unknown calculation worker error",
+                )
+                if not self._worker_is_busy():
+                    self.query_one(FooterWidget).set_phase(Phase.ERROR)
+                    self.query_one(FooterWidget).set_hint(
+                        "Calculation worker failed"
+                    )
+            return
         if event.worker.group == "slash-tool":
             self._current_worker = event.worker
             if event.state == WorkerState.ERROR:
@@ -770,14 +1118,18 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 )
                 self.query_one(FooterWidget).set_phase(Phase.ERROR)
                 self.query_one(FooterWidget).set_hint("Slash command failed")
+            if event.state in {WorkerState.SUCCESS, WorkerState.ERROR}:
+                self._maybe_start_queued_prompt()
             return
         if event.worker.group != "agent-session":
             return
         if event.state == WorkerState.SUCCESS:
             result = event.worker.result or {}
             self._current_worker = event.worker
+            self._sync_footer_usage(result)
             if event.worker.name == "agent-ask":
                 self._publish_synthesis_result(result)
+                self._maybe_start_queued_prompt()
                 return
             if self._tailer is not None:
                 self._tailer.read_available()
@@ -790,8 +1142,12 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 advisory = result.get("advisory_only", False)
                 chitchat = result.get("is_chitchat", False)
                 blocked = result.get("blocked", False)
+                has_legacy_dry_run = bool(
+                    result.get("dry_run_result") or result.get("dry_run_results")
+                )
                 if (
                     session_id
+                    and has_legacy_dry_run
                     and not blocked
                     and not advisory
                     and not chitchat
@@ -813,6 +1169,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 self.query_one(FooterWidget).set_hint(
                     "Submitted to HPC — /jobs to track"
                 )
+            elif self._ready_command is not None:
+                self.query_one(FooterWidget).set_phase(Phase.FINISHED)
+                self.query_one(FooterWidget).set_hint(
+                    _ready_command_hint(self._ready_command)
+                )
             elif self._last_dry_run_session_id:
                 self.query_one(FooterWidget).set_phase(Phase.FINISHED)
                 self.query_one(FooterWidget).set_hint(
@@ -832,22 +1193,149 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._current_worker = event.worker
         elif event.state == WorkerState.CANCELLED:
             self.post_agent_message("Run cancelled.")
-            self.query_one(FooterWidget).set_phase(Phase.IDLE)
-            self.query_one(FooterWidget).set_hint("Ready")
+            self.query_one(FooterWidget).set_phase(Phase.INTERRUPTED)
+            self.query_one(FooterWidget).set_hint("Run interrupted")
             self._current_worker = event.worker
         self._refresh_job_snapshot()
+        if event.state in {WorkerState.SUCCESS, WorkerState.ERROR}:
+            self._maybe_start_queued_prompt()
+
+    def _sync_footer_usage(self, result: dict[str, object]) -> None:
+        input_tokens = result.get("total_input_tokens")
+        output_tokens = result.get("total_output_tokens")
+        if not isinstance(input_tokens, int) and not isinstance(
+            output_tokens, int
+        ):
+            return
+        self.query_one(FooterWidget).set_usage(
+            input_tokens=input_tokens if isinstance(input_tokens, int) else None,
+            output_tokens=(
+                output_tokens if isinstance(output_tokens, int) else None
+            ),
+        )
 
     def action_open_jobs_panel(self) -> None:
+        self.action_show_calculations()
+
+    def action_show_calculations(self) -> None:
         self._refresh_job_snapshot()
+        self._restore_calculation_runs()
+        runs = list(self._calculation_runs.values())
         if self.app.plain:
             rows = sorted(self._job_snapshot.values(), key=_jobs_sort_key)
+            calculation_lines = [
+                (
+                    f"{str(run.get('status') or 'unknown'):<18} "
+                    f"{str(run.get('program') or 'calc'):<9} "
+                    f"{str(run.get('kind') or 'job'):<10} "
+                    f"{str(run.get('label') or run.get('run_id') or '')}"
+                )
+                for run in runs
+            ]
             self.post_agent_message(
-                f"```\n{format_jobs_table(rows)}\n```",
-                title="Jobs",
+                "```\n"
+                + ("\n".join(calculation_lines) or "No local calculations.")
+                + "\n\n"
+                + format_jobs_table(rows)
+                + "\n```",
+                title="Calculations",
             )
             return
         self.app.push_screen(
-            JobsPanel(self._job_snapshot), self._handle_jobs_panel_action
+            CalculationMonitor(runs, self._job_snapshot),
+            self._handle_calculation_monitor_action,
+        )
+
+    def _handle_calculation_monitor_action(
+        self, action: CalculationMonitorAction | None
+    ) -> None:
+        if action is None:
+            self.focus_composer()
+            return
+        if action.run_id.startswith("job:"):
+            job_id = action.run_id.removeprefix("job:")
+            if action.action == "extract":
+                self._extract_job_result(job_id)
+            elif action.action == "cancel":
+                self._confirm_cancel(job_id)
+            return
+        if action.action == "extract":
+            result = inspect_calculation(
+                action.run_id,
+                session_root=str(self.session_root),
+            )
+            calculation = result.get("calculation")
+            if isinstance(calculation, dict):
+                self._on_calculation_run(dict(calculation), persist=False)
+                self.post_agent_message(
+                    _calculation_diagnostic_summary(calculation),
+                    title="Calculation result",
+                )
+            else:
+                self.post_error(
+                    "Result extraction failed",
+                    str(result.get("error") or "No result was found."),
+                )
+            return
+        if action.action == "cancel":
+            if self.app.plain:
+                self.post_error(
+                    "Confirmation required",
+                    f"Use /cancel {action.run_id} yes.",
+                )
+                return
+            self.app.push_screen(
+                TextPromptOverlay(
+                    title="Cancel local calculation",
+                    prompt=(
+                        f"Type yes to terminate {action.run_id}. "
+                        "The calculation process group will receive SIGTERM."
+                    ),
+                ),
+                lambda value, run_id=action.run_id: self._confirm_local_calculation_cancel(
+                    run_id, value
+                ),
+            )
+
+    def _confirm_local_calculation_cancel(
+        self, run_id: str, value: str | None
+    ) -> None:
+        if str(value or "").strip().lower() not in {"y", "yes"}:
+            self.notify("Calculation cancellation dismissed.", timeout=2)
+            return
+        run = self._calculation_runs.get(run_id, {})
+        pid = run.get("pid")
+        cancelled = cancel_calculation(
+            run_id,
+            int(pid) if isinstance(pid, int) else None,
+        )
+        if cancelled:
+            self.notify(f"Cancellation requested for {run_id}.", timeout=3)
+        else:
+            self.post_error(
+                "Cancellation failed",
+                f"No active local process was found for {run_id}.",
+            )
+
+    def _has_active_local_calculation(self) -> bool:
+        return any(
+            str(run.get("execution_mode") or "local") == "local"
+            and str(run.get("status") or "")
+            in {"validating", "starting", "running"}
+            for run in self._calculation_runs.values()
+        )
+
+    def _restore_calculation_runs(self) -> None:
+        current_cwd = Path.cwd().resolve()
+        persisted = [
+            run.to_dict()
+            for run in load_calculation_runs(self.session_root)
+            if Path(run.cwd).resolve() == current_cwd
+        ]
+        for run in persisted:
+            self._calculation_runs[str(run["run_id"])] = run
+        self.query_one(CalculationStatusStrip).replace_runs(
+            list(self._calculation_runs.values())
         )
 
     def action_show_project_yaml(self) -> None:
@@ -858,6 +1346,13 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             label=_yaml_footer_label(status),
         )
         if not status.loaded or status.path is None:
+            if self.app.plain:
+                self.post_agent_message(
+                    "YAML MISSING\n\nBuild one with /init, then save it with "
+                    "/write-project <name> yes.",
+                    title="Workspace YAML",
+                )
+                return
             self.app.push_screen(
                 ProjectYamlOverlay(
                     title="Workspace YAML",
@@ -874,6 +1369,12 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             yaml_text = status.path.read_text(encoding="utf-8")
         except OSError as exc:
             yaml_text = f"# Failed to read {status.path}: {exc}\n"
+        if self.app.plain:
+            self.post_agent_message(
+                f"path: `{status.path}`\n\n```yaml\n{yaml_text.rstrip()}\n```",
+                title=f"Workspace YAML: {status.program}:{status.project}",
+            )
+            return
         self.app.push_screen(
             ProjectYamlOverlay(
                 title=f"Workspace YAML: {status.program}:{status.project}",
@@ -881,6 +1382,108 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 yaml_text=yaml_text,
             )
         )
+
+    def action_show_shortcuts(self) -> None:
+        if self.app.plain:
+            self._show_help()
+            return
+        config = getattr(self.app, "tui_config", None)
+        bindings = config.keybindings if config is not None else {}
+        self.app.push_screen(ShortcutOverlay(bindings))
+
+    def action_toggle_transcript(self) -> None:
+        transcript = self.query_one(Transcript)
+        expanded = transcript.toggle_detail_mode()
+        self.query_one(FooterWidget).set_hint(
+            "Transcript detail expanded" if expanded else "Transcript compact"
+        )
+
+    def action_show_activity(self) -> None:
+        entries = [
+            self._tool_cells[call_id].activity_snapshot()
+            for call_id in self._tool_order
+            if call_id in self._tool_cells
+        ]
+        context = {
+            "phase": self.tui_state.phase.value,
+            "operation": self.tui_state.operation,
+            "progress": self.tui_state.tool_progress or "no active tool",
+        }
+        if self.app.plain:
+            if not entries:
+                self.post_agent_message(
+                    "No tool activity in this turn.", title="Tool activity"
+                )
+                return
+            lines = [
+                f"phase: {context['phase']}",
+                f"operation: {context['operation']}",
+                f"workflow: {context['progress']}",
+                "",
+            ]
+            lines.extend(
+                f"- {entry['status']} {entry['tool']} {entry['elapsed']}"
+                for entry in entries
+            )
+            self.post_agent_message("\n".join(lines), title="Tool activity")
+            return
+        self.app.push_screen(ToolActivityOverlay(entries, context=context))
+
+    def action_search_history(self) -> None:
+        if not self._request_history:
+            self.notify("No request history yet.", timeout=2)
+            return
+        if not self.app.plain:
+            self.app.push_screen(
+                HistorySearchOverlay(self._request_history),
+                self._handle_history_search,
+            )
+            return
+        self._history_cursor = max(0, self._history_cursor - 1)
+        composer = self.query_one(Composer)
+        composer.load_text(self._request_history[self._history_cursor])
+        composer.focus()
+        self.query_one(FooterWidget).set_hint(
+            f"History {self._history_cursor + 1}/{len(self._request_history)}"
+        )
+
+    def _handle_history_search(self, value: str | None) -> None:
+        if not value:
+            self.focus_composer()
+            return
+        composer = self.query_one(Composer)
+        composer.load_text(value)
+        composer.focus()
+        self.query_one(FooterWidget).set_hint("History request restored")
+
+    def action_context_tab(self) -> None:
+        palette = self.query_one(SlashCommandPalette)
+        composer = self.query_one(Composer)
+        if palette.is_open:
+            selected = palette.selected_item()
+            if selected is not None:
+                composer.load_text(f"{selected.command} ")
+                palette.hide()
+            return
+        if not self._worker_is_busy():
+            return
+        draft = composer.resolve_text().strip()
+        footer = self.query_one(FooterWidget)
+        if draft and self._queued_prompt is None:
+            self._queued_prompt = draft
+            composer.clear_text()
+            footer.update_draft("")
+            footer.set_queued_prompt(True)
+            footer.set_hint("Follow-up queued · Tab on an empty draft restores it")
+            return
+        if not draft and self._queued_prompt is not None:
+            composer.load_text(self._queued_prompt)
+            self._queued_prompt = None
+            footer.set_queued_prompt(False)
+            footer.set_hint("Queued follow-up restored for editing")
+            return
+        if draft and self._queued_prompt is not None:
+            self.notify("One follow-up is already queued.", severity="warning", timeout=3)
 
     def action_soft_cancel(self) -> None:
         if self._quit_armed:
@@ -916,6 +1519,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     def action_dismiss_overlay(self) -> None:
         if self.app.screen is not self:
             self.app.pop_screen()
+            self.call_after_refresh(self.focus_composer)
+            return
+        self.query_one(SlashCommandPalette).hide()
+        self.focus_composer()
 
     def focus_composer(self) -> None:
         self.query_one(Composer).focus()
@@ -937,19 +1544,85 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             palette.hide()
             return
         query = raw[1:].lower()
-        matches = [
-            item
-            for item in _SLASH_PALETTE_COMMANDS
-            if item[0][1:].startswith(query)
-        ]
+        matches = self._slash_palette_items(query)
         palette.show_matches(query=query, matches=matches)
+
+    def _slash_palette_items(self, query: str) -> list[SlashPaletteItem]:
+        shortcuts = {
+            "/help": getattr(self.app, "tui_config", None).keybindings.get(
+                "show_shortcuts", "f1"
+            )
+            if getattr(self.app, "tui_config", None) is not None
+            else "f1",
+            "/jobs": "ctrl+b",
+            "/runs": "ctrl+b",
+        }
+        items: list[SlashPaletteItem] = []
+        for command, description in _SLASH_PALETTE_COMMANDS:
+            aliases = {
+                "/permissions": ("perms",),
+                "/quit": ("q",),
+                "/resume": ("continue",),
+            }.get(command, ())
+            if not (
+                command[1:].startswith(query)
+                or any(alias.startswith(query) for alias in aliases)
+            ):
+                continue
+            reason = self._slash_unavailable_reason(command)
+            items.append(
+                SlashPaletteItem(
+                    command,
+                    description,
+                    enabled=reason is None,
+                    unavailable_reason=reason or "",
+                    shortcut=shortcuts.get(command, ""),
+                    aliases=aliases,
+                )
+            )
+        return items
+
+    def _slash_unavailable_reason(self, command: str) -> str | None:
+        if command in {"/allow", "/allow-session", "/deny"} and not self._pending_approval:
+            return "no approval is pending"
+        if command == "/execute" and not self._last_dry_run_session_id:
+            return "no validated dry-run is ready"
+        if command == "/run" and not self._can_approve_or_execute("run"):
+            return "no validated local command is ready"
+        if command == "/submit" and not self._can_approve_or_execute("sub"):
+            return "no validated submission command is ready"
+        if command == "/critic" and self._current_verdict is None:
+            return "no critic verdict yet"
+        if command in {"/plan", "/rationale"} and self._current_plan is None:
+            return "no active plan yet"
+        return None
+
+    def accept_slash_palette(self) -> str | bool | None:
+        palette = self.query_one(SlashCommandPalette)
+        if not palette.is_open:
+            return None
+        selected = palette.selected_item()
+        if selected is None:
+            reason = next(
+                (
+                    item.unavailable_reason
+                    for item in palette.items
+                    if item.unavailable_reason
+                ),
+                "No available command is selected.",
+            )
+            self.notify(reason, severity="warning", timeout=3)
+            return False
+        palette.hide()
+        return selected.command
 
     def _sync_footer_provider(self) -> None:
         config = self._active_provider_config
         self._workspace_project_status = resolve_workspace_project()
         if config is not None:
+            role = "synthesis" if config.type == "local" else "unified"
             self.query_one(FooterWidget).set_provider_model(
-                f"{self._interaction_mode}:{config.type}",
+                f"{role}:{config.type}",
                 config.model,
                 project=config.project or resolve_default_project(),
             )
@@ -957,6 +1630,96 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             loaded=self._workspace_project_status.loaded,
             label=_yaml_footer_label(self._workspace_project_status),
         )
+
+    def _can_approve_or_execute(self, action: str) -> bool:
+        pending = self._pending_tool_request
+        if self._pending_approval and pending is not None:
+            if pending.name == "execute_chemsmart_command":
+                pending_command = str(pending.arguments.get("command") or "")
+                return parse_model_command(pending_command).action == action
+            return pending.name == (
+                "run_local" if action == "run" else "submit_hpc"
+            )
+        return bool(
+            self._ready_command is not None
+            and self._ready_command.action == action
+        )
+
+    def _remember_ready_command(
+        self,
+        *,
+        command: str,
+        semantic: dict[str, object] | None,
+        intent: dict[str, object] | None,
+        source: str,
+    ) -> bool:
+        self._ready_command = None
+        parsed = parse_model_command(command)
+        if parsed.parse_error or parsed.action not in {"run", "sub"}:
+            return False
+        if not isinstance(semantic, dict):
+            return False
+        semantic_verdict = str(semantic.get("verdict") or "").lower()
+        if semantic_verdict not in {"ok", "warn"}:
+            return False
+        generated_inputs = semantic.get("generated_inputs")
+        if not isinstance(generated_inputs, list) or not generated_inputs:
+            return False
+        if not isinstance(intent, dict):
+            return False
+        intent_verdict = str(intent.get("verdict") or "").lower()
+        if intent_verdict not in {"ok", "warn"}:
+            return False
+
+        project_path: Path | None = None
+        project_hash: str | None = None
+        if parsed.program in {"gaussian", "orca"}:
+            if not parsed.project:
+                return False
+            project_path = workspace_project_path(
+                parsed.project,
+                parsed.program,
+                cwd=Path.cwd(),
+            )
+            if not project_path.is_file():
+                return False
+            project_hash = sha256(project_path.read_bytes()).hexdigest()
+
+        self._ready_command = _ReadyCommand(
+            command=command,
+            action=parsed.action,
+            workspace=Path.cwd().resolve(),
+            semantic_verdict=semantic_verdict,
+            intent_verdict=intent_verdict,
+            project_path=project_path,
+            project_sha256=project_hash,
+            source=source,
+        )
+        return True
+
+    def _ready_command_problem(self, expected_action: str) -> str | None:
+        ready = self._ready_command
+        if ready is None:
+            return "No semantic- and intent-validated command is ready."
+        if ready.action != expected_action:
+            expected = "chemsmart run" if expected_action == "run" else "chemsmart sub"
+            return f"The validated command is not a `{expected}` command."
+        if ready.workspace != Path.cwd().resolve():
+            return (
+                "The workspace changed after validation. Regenerate the command "
+                "from the current workspace before execution."
+            )
+        if ready.project_path is not None:
+            if not ready.project_path.is_file():
+                return "The validated workspace project YAML no longer exists."
+            current_hash = sha256(ready.project_path.read_bytes()).hexdigest()
+            if current_hash != ready.project_sha256:
+                return (
+                    "The workspace project YAML changed after validation. "
+                    "Regenerate the command so the generated-input evidence "
+                    "matches the current project."
+                )
+        return None
 
     def _publish_synthesis_result(self, result: dict[str, object]) -> None:
         synthesis = result.get("synthesis")
@@ -967,6 +1730,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             return
 
         status = str(synthesis.get("status") or "")
+        self._waiting_for_user = status == "needs_clarification"
         footer = self.query_one(FooterWidget)
         provider_type = str(result.get("provider_type") or "offline")
         provider_model = str(result.get("provider_model") or "auto")
@@ -978,6 +1742,14 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             explanation = str(synthesis.get("explanation") or "")
             confidence = str(synthesis.get("confidence") or "low")
             project = str(synthesis.get("project") or "")
+            intent = synthesis.get("intent_assertion") or synthesis.get("intent")
+            intent_dict = intent if isinstance(intent, dict) else None
+            command_is_executable = self._remember_ready_command(
+                command=command,
+                semantic=semantic_dict,
+                intent=intent_dict,
+                source="local_synthesis",
+            )
             transcript = self.query_one(Transcript)
             transcript.add_cell(
                 SynthesisTraceCell(
@@ -1012,7 +1784,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 ),
             )
             footer.set_phase(Phase.FINISHED)
-            footer.set_hint("Command ready — /mode run for full harness")
+            footer.set_hint(
+                _ready_command_hint(self._ready_command)
+                if command_is_executable
+                else "Command shown, but execution evidence is incomplete"
+            )
             return
 
         if status == "informational":
@@ -1087,7 +1863,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     title="Clarification",
                 )
             )
-            footer.set_phase(Phase.IDLE)
+            footer.set_phase(Phase.WAITING_USER)
             footer.set_hint("Clarification needed")
             return
 
@@ -1378,19 +2154,20 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                         event.payload,
                     )
             if event.tool == "run_local":
-                footer.set_phase(Phase.RUNNING)
+                footer.set_phase(Phase.EXECUTING)
                 footer.set_hint(
                     "Local run in progress…"
                     if event.status == "running"
                     else "Local run complete"
                 )
             else:
-                footer.set_phase(Phase.PLANNING)
+                footer.set_phase(Phase.TOOL_RUNNING)
                 footer.set_hint(
                     f"{event.tool} in progress…"
                     if event.status == "running"
                     else f"{event.tool} complete"
                 )
+            footer.set_tool_progress(event.tool, step=event.step_index)
         elif isinstance(event, ToolPreviewEvent):
             if workflow_cell is not None and event.status == "running":
                 workflow_cell.mark_started(
@@ -1398,8 +2175,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                     event.tool,
                     event.args,
                 )
-            footer.set_phase(Phase.DRY_RUN_READY)
+            footer.set_phase(Phase.VALIDATING)
             footer.set_hint("Preparing submission preview…")
+            footer.set_tool_progress(event.tool, step=event.step_index)
         elif isinstance(event, ToolUseEvent):
             self._apply_tool_use_event(event)
         elif isinstance(event, MethodEvent):
@@ -1539,7 +2317,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         lines.append("_Type your answer in the prompt below._")
         self.post_agent_message("\n".join(lines), title="Clarification needed")
         footer = self.query_one(FooterWidget)
-        footer.set_phase(Phase.IDLE)
+        self._waiting_for_user = True
+        footer.set_phase(Phase.WAITING_USER)
         footer.set_hint("Answer the question to continue")
 
     def _apply_tool_use_event(self, event: ToolUseEvent) -> None:
@@ -1571,21 +2350,29 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 or event.status
             )
 
-        transcript.add_cell(
-            ToolCallCell(
-                tool=event.tool,
-                status=event.status,
-                description=event.description or event.tool,
-                arguments=event.args,
-                note=note,
-                queue_index=event.queue_index,
-                queue_total=event.queue_total,
-                session_rule_active=(
-                    event.tool in self._session_allow_tools
-                    if event.status == "pending"
-                    else False
-                ),
-            )
+        call_id = event.provider_call_id or (
+            f"legacy:{event.step_index}:{event.tool}"
+        )
+        self._upsert_tool_cell(
+            provider_call_id=call_id,
+            tool=event.tool,
+            status=event.status,
+            description=event.description or event.tool,
+            arguments=event.args,
+            note=note,
+            queue_index=event.queue_index,
+            queue_total=event.queue_total,
+            session_rule_active=(
+                event.tool in self._session_allow_tools
+                if event.status == "pending"
+                else False
+            ),
+            result=_public_tool_result_payload(event.payload),
+        )
+        footer.set_tool_progress(
+            event.tool,
+            step=event.queue_index or event.step_index or None,
+            total=event.queue_total,
         )
         if event.status == "ok" and event.tool in {
             "synthesize_command",
@@ -1635,7 +2422,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._pending_approval_args = dict(event.args)
             self._pending_approval_index = event.queue_index
             self._pending_approval_total = event.queue_total
-            footer.set_phase(Phase.PLANNING)
+            footer.set_phase(
+                Phase.APPROVAL_REQUIRED
+                if self._permission_mode == PermissionMode.PERMISSION
+                else Phase.TOOL_RUNNING
+            )
             if self._permission_mode == PermissionMode.PERMISSION:
                 footer.set_hint(
                     "PERMISSION_PENDING "
@@ -1644,17 +2435,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             else:
                 footer.set_hint("DRIVING_AUTO")
         elif event.status == "denied":
-            footer.set_phase(Phase.PLANNING)
+            footer.set_phase(Phase.TOOL_RUNNING)
             footer.set_hint("DENIED_CONTINUING")
         elif event.status in {"approved", "ok"}:
-            footer.set_phase(Phase.PLANNING)
+            footer.set_phase(Phase.TOOL_RUNNING)
             footer.set_hint(
                 "DRIVING_AUTO"
                 if self._permission_mode == PermissionMode.DRIVING
                 else "Awaiting next tool decision…"
             )
         elif event.status in {"error", "skipped", "interrupted"}:
-            footer.set_phase(Phase.ERROR)
+            footer.set_phase(Phase.FAILED)
             footer.set_hint("Tool call reported an error")
 
         if event.status in {
@@ -1679,6 +2470,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         status = str(payload.get("status") or "")
         semantic = payload.get("semantic")
         semantic_dict = semantic if isinstance(semantic, dict) else None
+        intent = payload.get("intent") or payload.get("intent_assertion")
+        intent_dict = intent if isinstance(intent, dict) else None
+        if status == "ready" and command:
+            self._remember_ready_command(
+                command=command,
+                semantic=semantic_dict,
+                intent=intent_dict,
+                source=tool_name,
+            )
         decision_trace = payload.get("decision_trace")
         decision_dict = (
             decision_trace if isinstance(decision_trace, dict) else None
@@ -1739,27 +2539,78 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self,
         payload: dict[str, object],
     ) -> None:
-        command = str(payload.get("command") or "")
-        argv = payload.get("executed_argv")
-        argv_text = " ".join(map(str, argv)) if isinstance(argv, list) else ""
-        lines = [
-            f"status: `{payload.get('status') or 'unknown'}`",
-            f"returncode: `{payload.get('returncode')}`",
-        ]
-        if command:
-            lines.extend(
-                ["", "Requested command:", "", "```bash", command, "```"]
+        calculation = payload.get("calculation")
+        if isinstance(calculation, dict):
+            self._on_calculation_run(dict(calculation), persist=False)
+            return
+        parsed = parse_model_command(str(payload.get("command") or ""))
+        fallback = {
+            "run_id": f"legacy-{uuid.uuid4().hex[:8]}",
+            "turn_id": self._active_turn_id,
+            "command": str(payload.get("command") or ""),
+            "cwd": str(Path.cwd()),
+            "program": parsed.program or "",
+            "kind": parsed.job or "",
+            "label": parsed.label or parsed.filename or "calculation",
+            "project": parsed.project or "",
+            "input_path": parsed.filename or "",
+            "status": (
+                "completed" if payload.get("ok") else "process_failed"
+            ),
+            "stage": str(payload.get("status") or "Execution finished"),
+            "returncode": payload.get("returncode"),
+            "error": "\n".join(
+                str(payload.get("stderr_tail") or "").splitlines()[-40:]
+            ),
+        }
+        self._on_calculation_run(fallback, persist=False)
+
+    def _upsert_tool_cell(
+        self,
+        *,
+        provider_call_id: str,
+        tool: str,
+        status: str,
+        description: str,
+        arguments: dict,
+        note: str | None,
+        queue_index: int | None = None,
+        queue_total: int | None = None,
+        session_rule_active: bool = False,
+        result: dict | None = None,
+    ) -> ToolCallCell:
+        cell = self._tool_cells.get(provider_call_id)
+        if cell is None:
+            config = getattr(self.app, "tui_config", None)
+            expanded = bool(config and config.tool_detail == "full")
+            cell = ToolCallCell(
+                tool=tool,
+                status=status,
+                description=description,
+                arguments=arguments,
+                note=note,
+                queue_index=queue_index,
+                queue_total=queue_total,
+                session_rule_active=session_rule_active,
+                result=result,
+                provider_call_id=provider_call_id,
+                expanded=expanded,
             )
-        if argv_text:
-            lines.extend(
-                ["", "Executed argv:", "", "```bash", argv_text, "```"]
-            )
-        stderr = str(payload.get("stderr_tail") or "").strip()
-        if stderr:
-            lines.extend(["", "stderr tail:", "", "```text", stderr, "```"])
-        self.query_one(Transcript).add_cell(
-            FinalAnswerCell("\n".join(lines), title="Execution Result")
+            self._tool_cells[provider_call_id] = cell
+            self._tool_order.append(provider_call_id)
+            self.query_one(Transcript).add_cell(cell)
+            return cell
+        cell.update_lifecycle(
+            status=status,
+            description=description,
+            arguments=arguments,
+            note=note,
+            queue_index=queue_index,
+            queue_total=queue_total,
+            session_rule_active=session_rule_active,
+            result=result,
         )
+        return cell
 
     def _current_entity_snapshot(self) -> dict[str, object] | None:
         session_dir = self.current_session_dir()
@@ -1821,8 +2672,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 self.app.push_screen(SessionsScreen(self.session_root))
                 return
             self._resume_or_prompt(argument)
-        elif command == "/jobs":
-            self.action_open_jobs_panel()
+        elif command in {"/jobs", "/runs"}:
+            self.action_show_calculations()
         elif command == "/queue":
             self._show_queue_snapshot()
         elif command == "/server":
@@ -1961,13 +2812,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         elif command == "/execute":
             self._handle_execute_command(argument)
         elif command == "/submit":
-            if argument and self._handle_inline_approval(argument):
-                return
-            self._request_approval("submit_hpc")
+            self._handle_ready_command_execution("sub", argument)
         elif command == "/run":
-            if argument and self._handle_inline_approval(argument):
-                return
-            self._request_approval("run_local")
+            self._handle_ready_command_execution("run", argument)
         else:
             self.post_error("Unknown command", raw)
 
@@ -2195,25 +3042,42 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         arguments: dict,
         note: str,
     ) -> None:
-        self.query_one(Transcript).add_cell(
-            ToolCallCell(
-                tool=tool_name,
-                status=status,
-                description=description,
-                arguments=arguments,
-                note=note,
-                queue_index=1,
-                queue_total=1,
-                session_rule_active=tool_name in self._session_allow_tools,
-            )
+        call_id = self._direct_tool_call_ids.get(tool_name)
+        existing = self._tool_cells.get(call_id or "")
+        if call_id is None or (
+            status in {"pending", "approved"}
+            and existing is not None
+            and existing.status
+            in {"ok", "error", "denied", "skipped", "interrupted"}
+        ):
+            call_id = f"direct:{tool_name}:{len(self._tool_order) + 1}"
+            self._direct_tool_call_ids[tool_name] = call_id
+        self._upsert_tool_cell(
+            provider_call_id=call_id,
+            tool=tool_name,
+            status=status,
+            description=description,
+            arguments=arguments,
+            note=note,
+            queue_index=1,
+            queue_total=1,
+            session_rule_active=tool_name in self._session_allow_tools,
         )
 
     def _sync_session_allow_tools(self, allowed: set[str]) -> None:
         self._session_allow_tools = set(allowed)
 
-    def _handle_slash_tool_failure(self, tool_name: str, message: str) -> None:
+    def _handle_slash_tool_failure(
+        self,
+        tool_name: str,
+        message: str,
+        result: dict[str, object] | None = None,
+    ) -> None:
         self.query_one(FooterWidget).set_phase(Phase.ERROR)
         self.query_one(FooterWidget).set_hint("Slash command failed")
+        if tool_name == "execute_chemsmart_command" and result is not None:
+            self._ready_command = None
+            self._publish_execute_tool_result(result)
         self.post_error(tool_name, message)
 
     def _handle_slash_tool_success(
@@ -2224,6 +3088,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     ) -> None:
         footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.FINISHED)
+        if tool_name == "execute_chemsmart_command" and isinstance(result, dict):
+            self._ready_command = None
+            self._publish_execute_tool_result(result)
+            footer.set_hint("Command execution completed")
+            return
         if tool_name == "wizard_probe" and isinstance(result, dict):
             self._latest_wizard_probe = result
             server_name = str(
@@ -2452,7 +3321,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def _start_execute(self, session_id: str) -> None:
         footer = self.query_one(FooterWidget)
-        footer.set_phase(Phase.RUNNING)
+        footer.set_phase(Phase.SUBMITTING)
         footer.set_hint("Submitting to HPC…")
         session_dir = self.session_root / session_id
         if session_dir.exists() and not (
@@ -2462,6 +3331,85 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._attach_tailer(session_dir / "decision_log.jsonl")
         self._current_worker = self.execute_agent_session(session_id)
 
+    def _handle_ready_command_execution(
+        self,
+        action: str,
+        argument: str,
+    ) -> None:
+        slash_command = "/run" if action == "run" else "/submit"
+        pending = self._pending_tool_request
+        if self._pending_approval and pending is not None:
+            if not self._can_approve_or_execute(action):
+                self.post_error(
+                    "Approval target mismatch",
+                    f"{slash_command} does not approve the pending "
+                    f"`{pending.name}` action.",
+                )
+                return
+            if argument:
+                self._handle_inline_approval(argument)
+            else:
+                self._resolve_pending_approval(ApprovalDecision.ALLOW_ONCE)
+            return
+
+        if self._worker_is_busy():
+            self.post_error(
+                "Session already running",
+                "Wait for the current request to finish before execution.",
+            )
+            return
+        confirmation = argument.strip().lower()
+        if (
+            action == "run"
+            and self._has_active_local_calculation()
+            and confirmation not in {"y", "yes"}
+        ):
+            self.post_error(
+                "Local calculation already running",
+                "ChemSmart keeps one local calculation active by default to avoid CPU/RAM contention. Use Ctrl+B to inspect it, or use `/run yes` to explicitly start another local calculation.",
+            )
+            return
+        if confirmation not in {"", "y", "yes"}:
+            self.post_error(
+                "Invalid execution confirmation",
+                f"Usage: {slash_command} [yes]",
+            )
+            return
+        problem = self._ready_command_problem(action)
+        if problem is not None:
+            self.post_error("Validated command unavailable", problem)
+            return
+
+        ready = self._ready_command
+        if ready is None:  # narrowed by _ready_command_problem
+            return
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(
+            Phase.EXECUTING if action == "run" else Phase.SUBMITTING
+        )
+        footer.set_hint(
+            "Executing validated local command…"
+            if action == "run"
+            else "Submitting validated command…"
+        )
+        session = self.active_agent_session
+        session_dir = self._tui_session_dir
+        session_id = self._tui_session_dir.name
+        if (
+            session is not None
+            and session.session_dir is not None
+            and session.state is not None
+        ):
+            session_dir = session.session_dir
+            session_id = session.state.session_id
+        self.run_calculation_request(
+            ready,
+            session_dir=str(session_dir),
+            session_id=session_id,
+            turn_id=self._active_turn_id,
+        )
+        self._ready_command = None
+
     def _show_help(self) -> None:
         table = Table(show_header=True, box=None, padding=(0, 1))
         table.add_column("Phase", style="dim", no_wrap=True)
@@ -2470,6 +3418,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         rows = [
             ("[A]", "/help", "show this help"),
             ("[A]", "/jobs", "open the jobs panel"),
+            ("[A]", "/runs · Ctrl+B", "monitor calculations and logs"),
             ("[A]", "/queue", "show the current queue snapshot"),
             ("[A]", "/server <name>", "switch the active HPC server"),
             ("[A]", "/molecule <path>", "load and preview a molecule"),
@@ -2486,8 +3435,8 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             ("[A]", "/permissions", "toggle permission/driving mode"),
             ("[A]", "/yolo on|off", "toggle risky-tool autonomy"),
             ("[F]", "/execute [yes]", "submit the dry-run to HPC for real"),
-            ("[D]", "/submit", "backward-compatible submit approval"),
-            ("[D]", "/run", "backward-compatible local-run approval"),
+            ("[F]", "/submit [yes]", "submit validated chemsmart sub command"),
+            ("[F]", "/run [yes]", "execute validated chemsmart run command"),
             ("[P,D]", "/critic", "show the current critic verdict"),
             ("[P,D,R]", "/plan", "show the current plan"),
             ("[A]", "/rationale", "show planner rationale"),
@@ -2513,54 +3462,26 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
 
     def _handle_mode_command(self, argument: str) -> None:
         value = argument.strip().lower()
-        if not value:
-            route = (
-                "local synthesis-only"
-                if self._active_provider_config is not None
-                and self._active_provider_config.type == "local"
-                else "frontier unified tool-loop"
-            )
-            self.post_agent_message(
-                (
-                    "```\n"
-                    f"route: {route}\n"
-                    f"legacy_mode: {self._interaction_mode}\n"
-                    "local: CLI-first synthesis + runtime semantic gate\n"
-                    "frontier: unified tool loop with command/YAML tools\n"
-                    "```"
-                ),
-                title="Mode",
-            )
+        if value and value not in {"ask", "run", "unified"}:
+            self.post_error("Unknown mode", "Usage: /mode")
             return
-        if value not in {"ask", "run"}:
-            self.post_error("Unknown mode", "Usage: /mode ask|run")
-            return
-        if (
-            value == "run"
-            and self._active_provider_config is not None
-            and (self._active_provider_config.type == "local")
-        ):
-            self.post_error(
-                "Run mode unavailable for local provider",
-                "The local model only supports ask mode (single-shot command "
-                "synthesis + semantic gate). The run-mode harness needs a "
-                "tool-calling provider (anthropic/openai).",
-            )
-            return
-        self._build_mode = False
-        self._interaction_mode = value
-        self._sync_footer_provider()
+        provider_type = _provider_type_label(self._active_provider_config)
+        provider_role = (
+            "CLI synthesis" if provider_type == "local" else "unified tool loop"
+        )
         self.post_agent_message(
             (
-                "Mode preference recorded without resetting the session. "
-                "Local providers still use synthesis-only routing."
-                if value == "ask"
-                else (
-                    "Mode preference recorded without resetting the session. "
-                    "Frontier providers use the unified tool-loop routing."
-                )
+                "```\n"
+                "interface: unified\n"
+                f"provider_role: {provider_role}\n"
+                "planning_and_validation: natural-language request\n"
+                "approved_local_execution: /run\n"
+                "approved_hpc_submission: /submit\n"
+                "```\n\n"
+                "`/mode ask` and `/mode run` are compatibility aliases only; "
+                "they no longer switch or reset the session."
             ),
-            title="Mode",
+            title="Unified interface",
         )
 
     def _handle_init_command(self, argument: str) -> None:
@@ -2612,14 +3533,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
     def _show_sessions_snapshot(self) -> None:
         lines = ["Sessions", "", "Use /resume <session-id> to load one."]
         if self.session_root.exists():
-            session_dirs = sorted(
-                [
-                    path
-                    for path in self.session_root.iterdir()
-                    if path.is_dir()
-                ],
-                reverse=True,
-            )
+            session_dirs = agent_session_dirs(self.session_root)
         else:
             session_dirs = []
         if not session_dirs:
@@ -2769,10 +3683,37 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         if result is None:
             self._resolve_pending_approval(ApprovalDecision.DENY)
             return
+        if result.choice == "r":
+            self.app.push_screen(
+                TextPromptOverlay(
+                    title="Revise request",
+                    prompt=(
+                        "Describe the correction. The pending tool will be denied "
+                        "and the corrected request will run next."
+                    ),
+                ),
+                self._handle_approval_revision,
+            )
+            return
         decision = result.to_decision()
         if decision is None:
             return
         self._resolve_pending_approval(decision)
+
+    def _handle_approval_revision(self, value: str | None) -> None:
+        correction = (value or "").strip()
+        if not correction:
+            self._request_approval(
+                self._pending_tool_request.name
+                if self._pending_tool_request is not None
+                else ""
+            )
+            return
+        self._queued_prompt = self._corrected_request(correction)
+        footer = self.query_one(FooterWidget)
+        footer.set_queued_prompt(True)
+        footer.set_hint("Correction queued; pending tool denied")
+        self._resolve_pending_approval(ApprovalDecision.DENY)
 
     def _corrected_request(self, corrective_text: str) -> str:
         original = self._current_request or ""
@@ -2790,7 +3731,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._pending_approval = True
             self._pending_tool_request = request
             footer = self.query_one(FooterWidget)
-            footer.set_phase(Phase.PLANNING)
+            footer.set_phase(Phase.APPROVAL_REQUIRED)
             footer.set_hint(
                 "PERMISSION_PENDING "
                 f"({self._pending_approval_index or 1} of "
@@ -2822,7 +3763,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._pending_approval_total = None
         waiter = self._approval_waiter
         self._approval_waiter = None
-        self.query_one(FooterWidget).set_phase(Phase.PLANNING)
+        self.query_one(FooterWidget).set_phase(Phase.TOOL_RUNNING)
         self.query_one(FooterWidget).set_hint(
             "DENIED_CONTINUING"
             if decision == ApprovalDecision.DENY
@@ -2853,6 +3794,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             return
         self._permission_mode = result.mode
         self._yolo_enabled = result.yolo
+        self.query_one(FooterWidget).set_permission(
+            self._permission_mode.value,
+            yolo=self._yolo_enabled,
+        )
         self.post_agent_message(
             (
                 f"Permissions set to `{self._permission_mode.value}` "
@@ -2865,9 +3810,17 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         value = argument.strip().lower()
         if value == "permission":
             self._permission_mode = PermissionMode.PERMISSION
+            self.query_one(FooterWidget).set_permission(
+                self._permission_mode.value,
+                yolo=self._yolo_enabled,
+            )
             return True
         if value == "driving":
             self._permission_mode = PermissionMode.DRIVING
+            self.query_one(FooterWidget).set_permission(
+                self._permission_mode.value,
+                yolo=self._yolo_enabled,
+            )
             return True
         return False
 
@@ -2877,6 +3830,10 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self.post_error("Unknown value", "Usage: /yolo on|off")
             return
         self._yolo_enabled = value == "on"
+        self.query_one(FooterWidget).set_permission(
+            self._permission_mode.value,
+            yolo=self._yolo_enabled,
+        )
         self.post_agent_message(
             f"YOLO {'enabled' if self._yolo_enabled else 'disabled'}.",
             title="Permissions",
@@ -2902,6 +3859,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._current_plan_text = None
         self._current_verdict = None
         self._workflow_cell = None
+        self._ready_command = None
         self._pending_approval = False
         self._pending_tool_request = None
         self._pending_approval_description = ""
@@ -2911,6 +3869,9 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._approval_waiter = None
         self._approval_decision = None
         self._latest_dry_run_content = None
+        self._tool_cells.clear()
+        self._tool_order.clear()
+        self._direct_tool_call_ids.clear()
         self._job_cells.clear()
         self._rendered_run_results.clear()
         self._latest_wizard_probe = None
@@ -2926,12 +3887,15 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
                 transcript.clear_turn_chrome()
             else:
                 transcript.clear_cells()
+                self._calculation_cells.clear()
         self._refresh_job_snapshot()
 
     def _emit_job_update(self, job_id: str, fields: dict) -> None:
         self.post_message(JobStatusUpdated(job_id, fields))
         if isinstance(self.app.screen, JobsPanel):
             self.app.screen.post_message(JobStatusUpdated(job_id, fields))
+        elif isinstance(self.app.screen, CalculationMonitor):
+            self.app.screen.update_job(job_id, fields)
 
     def _refresh_job_snapshot(self) -> None:
         from chemsmart.agent.tui.services import (
@@ -2968,6 +3932,16 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             status = snapshot.get("status")
             if status in counts:
                 counts[str(status)] += 1
+        for run in self._calculation_runs.values():
+            status = str(run.get("status") or "")
+            if status in {"validating", "starting", "running"}:
+                counts["running"] += 1
+            elif status in {
+                "chemistry_failed",
+                "process_failed",
+                "timeout",
+            }:
+                counts["failed"] += 1
         self.query_one(FooterWidget).set_job_counts(**counts)
 
     def _maybe_render_run_result(self, job_id: str, snapshot: dict) -> None:
@@ -3025,6 +3999,7 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             )
             return
         self._active_server_name = name
+        self.query_one(FooterWidget).set_server(name)
         self.post_agent_message(
             f"Active server set to `{name}`.", title="Server"
         )
@@ -3176,8 +4151,8 @@ def _latest_project_yaml_candidate(
 
 def _yaml_footer_label(status: WorkspaceProjectStatus) -> str:
     if status.loaded:
-        return f"Yaml loaded {status.program}:{status.project}"
-    return "Yaml unloaded"
+        return f"YAML OK {status.program}:{status.project}"
+    return "YAML MISSING"
 
 
 def _find_project_yaml_candidate_for_write(
@@ -3192,7 +4167,11 @@ def _find_project_yaml_candidate_for_write(
         return None
     try:
         session_dirs = sorted(
-            [path for path in session_root.iterdir() if path.is_dir()],
+            [
+                path
+                for path in session_root.iterdir()
+                if path.is_dir() and not path.name.startswith(".")
+            ],
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )
@@ -3235,6 +4214,38 @@ def _tool_use_summary_payload(payload: object) -> dict[str, object] | None:
     if "content" in payload or "inputfile" in payload:
         return payload
     return None
+
+
+def _public_tool_result_payload(payload: object) -> dict[str, object] | None:
+    """Project tool output without raw model responses or private reasoning."""
+
+    if not isinstance(payload, dict):
+        return None
+    summary = payload.get("summary")
+    if isinstance(summary, dict):
+        payload = summary
+    allowed = {
+        "ok",
+        "status",
+        "error",
+        "message",
+        "path",
+        "handle_id",
+        "inputfile",
+        "command",
+        "semantic",
+        "verdict",
+        "failed_rule_ids",
+        "issues",
+        "job_id",
+        "server",
+        "returncode",
+        "cli_grounded",
+        "cli_grounding_issue",
+        "calculation",
+    }
+    projected = {key: value for key, value in payload.items() if key in allowed}
+    return projected or None
 
 
 def _jobs_sort_key(job: dict) -> tuple[int, str, str]:
@@ -3298,13 +4309,72 @@ def _write_synthesis_artifact(
 
 
 def _default_interaction_mode(config: AgentProviderConfig | None) -> str:
-    requested = os.environ.get("CHEMSMART_AGENT_TUI_MODE", "").strip().lower()
-    if requested in {"ask", "run"}:
-        return requested
-    # CLI command synthesis is the user-facing source of truth for both local
-    # and API/frontier providers. The tool-calling harness remains available
-    # through explicit `/mode run`, but it is no longer the default entry path.
-    return "ask"
+    return "synthesis" if config is not None and config.type == "local" else "unified"
+
+
+def _ready_command_hint(ready: _ReadyCommand | None) -> str:
+    if ready is None:
+        return "Command shown, but execution evidence is incomplete"
+    if ready.action == "run":
+        return "Command validated — /run to execute locally"
+    return "Command validated — /submit to submit for real"
+
+
+def _is_calculation_diagnostic_request(request: str) -> bool:
+    text = str(request or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "diagnose the result",
+            "inspect the result",
+            "analyze the result",
+            "calculation result",
+            "check the output",
+            "계산 결과",
+            "결과를 진단",
+            "결과 분석",
+            "출력 파일 확인",
+            "诊断结果",
+            "分析计算结果",
+        )
+    )
+
+
+def _calculation_diagnostic_summary(calculation: dict[str, object]) -> str:
+    program = str(calculation.get("program") or "calculation").upper()
+    kind = str(calculation.get("kind") or "job").upper()
+    status = str(calculation.get("status") or "parsed")
+    lines = [f"{program} {kind} status: `{status}`"]
+    energy = calculation.get("energy")
+    if isinstance(energy, (int, float)):
+        lines.append(f"- Final electronic energy: `{float(energy):.12f} Eh`")
+    cycles = calculation.get("scf_cycles")
+    if isinstance(cycles, int):
+        lines.append(f"- SCF convergence: `{cycles} cycles`")
+    imag = list(calculation.get("imag_freqs") or [])
+    if imag:
+        lines.append(
+            "- Imaginary frequencies: `"
+            + ", ".join(f"{float(value):.1f}" for value in imag)
+            + " cm^-1`"
+        )
+    normal = calculation.get("normal_termination")
+    if normal is not None:
+        lines.append(
+            "- Program termination: `normal`"
+            if normal
+            else "- Program termination: `not confirmed`"
+        )
+    output_path = str(calculation.get("output_path") or "")
+    if output_path:
+        lines.append(f"- Output: `{output_path}`")
+    if status != "completed":
+        error = str(calculation.get("error") or "").strip()
+        if error:
+            lines.extend(["", "Relevant diagnostic context:", "```text"])
+            lines.extend(error.splitlines()[-40:])
+            lines.append("```")
+    return "\n".join(lines)
 
 
 def _decision_trace_dict(
@@ -3394,8 +4464,8 @@ def _format_synthesis_exception(exc: Exception) -> str:
             "environment cannot load `mlx_lm` or Apple Metal. Start the TUI "
             "with the MLX-enabled interpreter, for example "
             "`/Users/hongjiseung/developer/chemsmart/.venv-mlx/bin/python -m "
-            "chemsmart.cli.main agent`, or switch to `/mode run` with an API "
-            "frontier provider. Active-env install command: "
+            "chemsmart.cli.main agent`, or configure an API frontier provider "
+            "in `agent.yaml`. Active-env install command: "
             "`python -m pip install 'mlx-lm==0.31.3'`."
         )
     if "local provider" in message.lower() or "mlx" in message.lower():
@@ -3403,7 +4473,7 @@ def _format_synthesis_exception(exc: Exception) -> str:
             "The local model provider could not start.\n\n"
             f"{message}\n\n"
             "Use `/doctor` to inspect the active provider, run the TUI from the "
-            "MLX-enabled environment, or switch to `/mode run` with an API "
-            "frontier provider."
+            "MLX-enabled environment, or configure an API frontier provider "
+            "in `agent.yaml`."
         )
     return message

@@ -190,6 +190,20 @@ def check_job(job: dict[str, Any], query: str) -> list[InvariantIssue]:
                 )
             )
 
+    if kind == "gaussian.scan":
+        route_value = settings.get("additional_opt_options_in_route")
+        route_directives, _ = _partition_coordinate_route_values(route_value)
+        if route_directives:
+            issues.append(
+                _issue(
+                    "spec.scan.coordinate_in_route",
+                    (
+                        "Gaussian scan constraints belong in scan_definition "
+                        "as F rows, not additional_opt_options_in_route"
+                    ),
+                    {**evidence, "directives": route_directives},
+                )
+            )
     slot = REQUIRED_SLOT.get(kind)
     if slot:
         present = slot in settings and settings.get(slot) not in (None, [], "")
@@ -221,6 +235,23 @@ def check_job(job: dict[str, Any], query: str) -> list[InvariantIssue]:
             )
         )
     return issues
+
+
+def _partition_coordinate_route_values(value: Any) -> tuple[list[str], list[str]]:
+    values = value if isinstance(value, (list, tuple)) else [value]
+    directives: list[str] = []
+    remaining: list[str] = []
+    pattern = re.compile(
+        r"^[BAD](?:[,\s]+\d+){2,4}[,\s]+[FS](?:[,\s]+\d+[,\s]+[-+0-9.eE]+)?$",
+        re.IGNORECASE,
+    )
+    for raw in values:
+        for chunk in re.split(r"[;\n]+", str(raw or "")):
+            item = chunk.strip()
+            if not item:
+                continue
+            (directives if pattern.match(item) else remaining).append(item)
+    return directives, remaining
 
 
 def _db_selector_issues(

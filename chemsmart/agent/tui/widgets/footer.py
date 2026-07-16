@@ -1,37 +1,33 @@
-"""Footer widget for phase and status display."""
+"""Responsive footer backed by observable TUI state."""
 
 from __future__ import annotations
 
-import os
-from collections import OrderedDict
-
 from rich.spinner import Spinner
 from rich.text import Text
+from textual import events
 from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widgets import Static
 
 from chemsmart.agent.tui.phase import Phase
+from chemsmart.agent.tui.state import TuiState, TuiStateReducer
 
-_DEFAULT_MODELS = {
-    "anthropic": "claude-sonnet-4-6",
-    "openai": "gpt-5.4",
-}
-_ACTIVE_SPINNER_PHASES = frozenset({Phase.PLANNING, Phase.RUNNING})
-_SPINNER_LABELS = (
-    "thinking…",
-    "calculating…",
-    "resting…",
-    "mapping orbitals…",
-    "checking constraints…",
-    "tuning the plan…",
-    "queuing tools…",
+_ACTIVE_SPINNER_PHASES = frozenset(
+    {
+        Phase.PLANNING,
+        Phase.TOOL_RUNNING,
+        Phase.VALIDATING,
+        Phase.RUNNING,
+        Phase.EXECUTING,
+        Phase.SUBMITTING,
+    }
 )
+_SPINNER_LABELS = ("working",)
 
 
 class FooterWidget(Static):
     phase: reactive[Phase] = reactive(Phase.IDLE)
-    hint: reactive[str] = reactive("Enter to submit • /help for commands")
+    hint: reactive[str] = reactive("Enter to submit · F1 shortcuts")
     entity_status: reactive[str | None] = reactive(None)
 
     DEFAULT_CSS = """
@@ -45,25 +41,22 @@ class FooterWidget(Static):
 
     SPINNER_LABELS = _SPINNER_LABELS
     _SPINNER_INTERVAL_SECONDS = 0.1
-    _SPINNER_LABEL_SECONDS = 2.5
     _STATIC_WORKING_LABEL = "Working…"
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        state: TuiState | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(*args, **kwargs)
-        self._job_counts = OrderedDict(queued=0, running=0, failed=0)
-        provider = (os.environ.get("AI_PROVIDER") or "").strip().lower()
-        self._provider = provider or "offline"
-        self._model = _DEFAULT_MODELS.get(provider, "auto")
-        self._project = ""
-        self._yaml_loaded = False
-        self._yaml_label = "Yaml unloaded"
-        self._draft_tokens = 0
+        self.reducer = TuiStateReducer(state)
+        self.state = self.reducer.state
         spinner = Spinner("arc")
         self._spinner_frames = tuple(spinner.frames)
         self._spinner_frame_index = 0
-        self._spinner_label_index = 0
-        self._spinner_tick_count = 0
         self._spinner_timer: Timer | None = None
+        self._draft_estimate: int | None = None
 
     @property
     def spinner_visible(self) -> bool:
@@ -75,10 +68,7 @@ class FooterWidget(Static):
             return ""
         if self._has_reduced_motion():
             return self._STATIC_WORKING_LABEL
-        return (
-            f"{self._spinner_frames[self._spinner_frame_index]} "
-            f"{self.SPINNER_LABELS[self._spinner_label_index]}"
-        )
+        return f"{self._spinner_frames[self._spinner_frame_index]} working"
 
     def on_mount(self) -> None:
         self._spinner_timer = self.set_interval(
@@ -89,23 +79,22 @@ class FooterWidget(Static):
         self._sync_spinner_timer(reset=True)
         self._refresh_text()
 
+    def on_resize(self, _event: events.Resize) -> None:
+        self._refresh_text()
+
     def watch_phase(self, old: Phase, new: Phase) -> None:
+        self.reducer.set_phase(new)
         self._sync_spinner_timer(
-            reset=(
-                old not in _ACTIVE_SPINNER_PHASES
-                and new in _ACTIVE_SPINNER_PHASES
-            )
+            reset=old not in _ACTIVE_SPINNER_PHASES
+            and new in _ACTIVE_SPINNER_PHASES
         )
         self._refresh_text()
 
-    def watch_hint(self, old: str, new: str) -> None:
+    def watch_hint(self, _old: str, new: str) -> None:
+        self.reducer.update(operation=new)
         self._refresh_text()
 
-    def watch_entity_status(
-        self,
-        old: str | None,
-        new: str | None,
-    ) -> None:
+    def watch_entity_status(self, _old: str | None, _new: str | None) -> None:
         self._refresh_text()
 
     def set_phase(self, phase: Phase) -> None:
@@ -121,33 +110,63 @@ class FooterWidget(Static):
         project: str | None = None,
     ) -> None:
         if provider:
-            self._provider = provider
+            self.reducer.update(provider=provider)
         if model:
-            self._model = model
+            self.reducer.update(model=model)
         if project is not None:
-            self._project = project
+            self.reducer.update(project=project)
         self._refresh_text()
 
-    def set_yaml_status(
+    def set_yaml_status(self, *, loaded: bool, label: str | None = None) -> None:
+        self.reducer.update(
+            yaml_loaded=bool(loaded),
+            yaml_label=label or ("YAML OK" if loaded else "YAML MISSING"),
+        )
+        self._refresh_text()
+
+    def set_server(self, server: str | None) -> None:
+        self.reducer.update(server=server or "local/default")
+        self._refresh_text()
+
+    def set_permission(self, mode: str, *, yolo: bool) -> None:
+        self.reducer.update(permission_mode=mode, yolo=yolo)
+        self._refresh_text()
+
+    def set_tool_progress(
+        self,
+        tool: str,
+        *,
+        step: int | None = None,
+        total: int | None = None,
+    ) -> None:
+        self.reducer.set_tool(tool, step=step, total=total)
+        self._refresh_text()
+
+    def set_queued_prompt(self, queued: bool) -> None:
+        self.reducer.update(queued_prompt=queued)
+        self._refresh_text()
+
+    def set_usage(
         self,
         *,
-        loaded: bool,
-        label: str | None = None,
+        input_tokens: int | None,
+        output_tokens: int | None,
     ) -> None:
-        self._yaml_loaded = bool(loaded)
-        self._yaml_label = label or (
-            "Yaml loaded" if self._yaml_loaded else "Yaml unloaded"
+        self.reducer.update(
+            usage_input_tokens=input_tokens,
+            usage_output_tokens=output_tokens,
         )
         self._refresh_text()
 
     def update_draft(self, text: str) -> None:
-        self._draft_tokens = len([part for part in text.split() if part])
+        stripped = text.strip()
+        self._draft_estimate = (
+            max(1, (len(stripped) + 3) // 4) if stripped else None
+        )
         self._refresh_text()
 
     def set_job_counts(self, **counts: int) -> None:
-        for key in self._job_counts:
-            if key in counts:
-                self._job_counts[key] = int(counts[key])
+        self.reducer.set_jobs(**counts)
         self._refresh_text()
 
     def reset_job_counts(self) -> None:
@@ -160,95 +179,120 @@ class FooterWidget(Static):
             self.app.animation_level == "none"
         )
 
-    def _reset_spinner_state(self) -> None:
-        self._spinner_frame_index = 0
-        self._spinner_label_index = 0
-        self._spinner_tick_count = 0
-
-    def _should_animate_spinner(self) -> bool:
-        return self.spinner_visible and not self._has_reduced_motion()
-
     def _sync_spinner_timer(self, *, reset: bool = False) -> None:
         if reset:
-            self._reset_spinner_state()
+            self._spinner_frame_index = 0
         if self._spinner_timer is None:
             return
-        if self._should_animate_spinner():
-            if reset:
-                self._spinner_timer.reset()
+        if self.spinner_visible and not self._has_reduced_motion():
             self._spinner_timer.resume()
-            return
-        self._spinner_timer.pause()
+        else:
+            self._spinner_timer.pause()
 
     def _advance_spinner(self) -> None:
-        if not self._should_animate_spinner():
+        if not self.spinner_visible or self._has_reduced_motion():
             return
-        self._spinner_tick_count += 1
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(
             self._spinner_frames
         )
-        label_interval = max(
-            1,
-            round(
-                self._SPINNER_LABEL_SECONDS / self._SPINNER_INTERVAL_SECONDS
-            ),
-        )
-        if self._spinner_tick_count % label_interval == 0:
-            self._spinner_label_index = (self._spinner_label_index + 1) % len(
-                self.SPINNER_LABELS
-            )
         self._refresh_text()
 
-    def _append_spinner(self, text: Text) -> None:
-        if not self.spinner_visible:
-            return
-        text.append(" • ", style="dim")
-        if self._has_reduced_motion():
-            text.append(self._STATIC_WORKING_LABEL, style="dim")
-            return
-        text.append(
-            self._spinner_frames[self._spinner_frame_index], style="accent"
-        )
-        text.append(" ", style="dim")
-        text.append(
-            self.SPINNER_LABELS[self._spinner_label_index], style="dim"
-        )
+    @staticmethod
+    def _segment(label: str, value: str, style: str = "dim") -> Text:
+        return Text.assemble((label, "dim"), (value, style))
 
     def _refresh_text(self) -> None:
-        text = Text()
-        text.append(self.phase.label, style="bold")
-        self._append_spinner(text)
-        if self.hint:
-            text.append(" • ", style="dim")
-            text.append(self.hint, style="dim")
-        text.append(" • ", style="dim")
-        text.append("jobs ", style="dim")
-        text.append(f"q{self._job_counts['queued']} ", style="dim")
-        text.append(
-            f"r{self._job_counts['running']} ",
-            style="accent" if self._job_counts["running"] else "dim",
+        width = self.size.width or 120
+        text = Text(self.phase.label, style="bold")
+        if self.spinner_visible:
+            text.append(" ", style="dim")
+            if self._has_reduced_motion():
+                text.append(self._STATIC_WORKING_LABEL, style="dim")
+            else:
+                text.append(
+                    self._spinner_frames[self._spinner_frame_index],
+                    style="accent",
+                )
+                text.append(" working", style="dim")
+
+        segments: list[tuple[int, Text]] = []
+        operation = self.hint or self.state.tool_progress
+        if operation:
+            segments.append((0, Text(operation, style="dim")))
+        yaml_style = "success" if self.state.yaml_loaded else "error"
+        project = self.state.project or "none"
+        segments.append(
+            (
+                1,
+                Text.assemble(
+                    ("project ", "dim"),
+                    (project, "accent"),
+                    (" · ", "dim"),
+                    (self.state.yaml_label, yaml_style),
+                    (" (S-Tab)", "dim"),
+                ),
+            )
         )
-        text.append(
-            f"f{self._job_counts['failed']}",
-            style="error" if self._job_counts["failed"] else "dim",
+        segments.append(
+            (
+                2,
+                self._segment(
+                    "ask:", f"{self.state.provider}/{self.state.model}"
+                ),
+            )
         )
-        text.append(" • ", style="dim")
-        text.append(self._provider, style="dim")
-        text.append("/", style="dim")
-        text.append(self._model, style="dim")
-        if self._project:
-            text.append(" • ", style="dim")
-            text.append("project ", style="dim")
-            text.append(self._project, style="accent")
-        text.append(" • ", style="dim")
-        text.append(
-            self._yaml_label,
-            style="success" if self._yaml_loaded else "error",
+        counts = self.state.job_counts
+        segments.append(
+            (
+                3,
+                Text(
+                    f"jobs q{counts['queued']} r{counts['running']} "
+                    f"f{counts['failed']}",
+                    style="dim",
+                ),
+            )
         )
-        text.append(" (S-Tab)", style="dim")
-        text.append(" • ", style="dim")
-        text.append(f"tok {self._draft_tokens}", style="dim")
+        if self.state.queued_prompt:
+            segments.append((1, Text("next queued", style="warning")))
+        segments.append(
+            (
+                4,
+                Text(
+                    f"server {self.state.server} · permission "
+                    f"{self.state.permission_mode}"
+                    f"{'/yolo' if self.state.yolo else ''}",
+                    style="dim",
+                ),
+            )
+        )
+        if (
+            self.state.usage_input_tokens is not None
+            or self.state.usage_output_tokens is not None
+        ):
+            segments.append(
+                (
+                    4,
+                    Text(
+                        "usage "
+                        f"{self.state.usage_input_tokens or 0}/"
+                        f"{self.state.usage_output_tokens or 0}",
+                        style="dim",
+                    ),
+                )
+            )
+        elif self._draft_estimate is not None:
+            segments.append(
+                (4, Text(f"draft ~{self._draft_estimate}", style="dim"))
+            )
         if self.entity_status:
-            text.append(" | ", style="dim")
-            text.append(self.entity_status, style="dim")
+            segments.append((5, Text(self.entity_status, style="dim")))
+
+        # Preserve high-priority state on narrow terminals and progressively
+        # reveal operational detail as space becomes available.
+        for priority, segment in segments:
+            minimum_width = (0, 52, 78, 102, 126, 150)[priority]
+            if width < minimum_width:
+                continue
+            text.append(" · ", style="dim")
+            text.append_text(segment)
         self.update(text)

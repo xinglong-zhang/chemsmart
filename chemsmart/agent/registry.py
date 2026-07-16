@@ -81,6 +81,7 @@ TOOL_GROUPS: dict[str, frozenset[str]] = {
     ),
     "diagnostics": frozenset(
         {
+            "inspect_calculation",
             "read",
             "ssh_probe",
             "scheduler_query",
@@ -360,6 +361,15 @@ class ToolRegistry:
                     read_only=False,
                     ui_summary_template="Execute chemsmart command",
                     side_effect="runs a local chemsmart command",
+                ),
+            ),
+            (
+                "inspect_calculation",
+                "chemsmart.agent.runtime.calculations",
+                "Inspect the latest or named Gaussian/ORCA calculation receipt and output using deterministic chemistry parsers.",
+                RuntimeToolMetadata(
+                    read_only=True,
+                    ui_summary_template="Inspect calculation {run_id}",
                 ),
             ),
             ("build_gaussian_settings", "chemsmart.agent.tools", None, None),

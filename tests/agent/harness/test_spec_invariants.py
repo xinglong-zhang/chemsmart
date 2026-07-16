@@ -48,6 +48,23 @@ def test_ts_true_extra_passes_spec_gate():
     assert not [issue for issue in issues if issue.severity == "reject"]
 
 
+def test_gaussian_scan_rejects_constraint_in_route_options():
+    issues = SI.check_spec(
+        _workflow(
+            "gaussian.scan",
+            {
+                "scan_definition": "B 1 2 S 10 0.05",
+                "additional_opt_options_in_route": "B 1 3 F",
+            },
+        ),
+        "Scan bond 1-2 and freeze bond 1-3 in mol.xyz",
+    )
+
+    assert any(
+        issue.rule_id == "spec.scan.coordinate_in_route" for issue in issues
+    )
+
+
 def test_missing_modred_atoms_requires_decline():
     issues = SI.check_spec(
         _workflow("gaussian.modred", {"modred": [[2, 3]]}),

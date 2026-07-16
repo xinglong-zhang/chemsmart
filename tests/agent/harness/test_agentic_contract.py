@@ -341,6 +341,25 @@ def test_generated_input_invariants_detect_coordinate_and_qmmm_drift():
     }
 
 
+def test_gaussian_scan_rejects_modredundant_coordinate_in_route():
+    issues = check_generated_input_invariants(
+        "chemsmart run gaussian -p demo -f water.xyz -c 0 -m 1 "
+        "--additional-opt-options B,1,3,F scan "
+        "--coordinates '[[1,2]]' --num-steps 10 --step-size 0.05",
+        [
+            {
+                "path": "scan.com",
+                "route": "# opt=(modredundant,B,1,3,F) b3lyp/6-31g(d)",
+                "content_tail": "B 1 2 S 10 0.05\n",
+            }
+        ],
+    )
+
+    assert "input.gaussian.coordinate_in_route" in {
+        issue.rule_id for issue in issues
+    }
+
+
 def test_orca_scan_exact_row_rejects_point_count_drift():
     command = (
         "chemsmart run orca -p demo -f complex.xyz -c 0 -m 1 scan "

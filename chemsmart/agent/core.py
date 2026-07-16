@@ -1630,6 +1630,12 @@ class AgentSession:
         if self._loop_mode_state is not None:
             meta["approval_mode"] = self._loop_mode_state[0]
             meta["yolo"] = self._loop_mode_state[1]
+        if self._runtime_controller is not None:
+            runtime_state = self._runtime_controller.state
+            if runtime_state.active_project is not None:
+                meta["active_project"] = runtime_state.active_project.name
+            if runtime_state.previous_command:
+                meta["previous_command"] = runtime_state.previous_command
         return meta
 
     def _write_training_episode(

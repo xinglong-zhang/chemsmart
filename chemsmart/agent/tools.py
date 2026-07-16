@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 import yaml
 
+from chemsmart.agent.harness.workflow_state import current_workflow_state
 from chemsmart.agent.transport import LocalDryRunTransport, SubmitTransport
 from chemsmart.cli.sub import sub as sub_cli
 from chemsmart.io.gaussian.output import Gaussian16Output
@@ -157,6 +158,25 @@ _ORCA_AB_INITIO_KEYWORDS = (
     "MRCI",
 )
 _ORCA_AB_INITIO_EXACT_METHODS = {"HF", "RHF", "UHF", "ROHF"}
+_PROJECT_RUNTIME_SETTING_FIELDS = {
+    "functional",
+    "basis",
+    "semiempirical",
+    "solvent_model",
+    "solvent_id",
+    "custom_solvent",
+    "heavy_elements",
+    "heavy_elements_basis",
+    "ab_initio",
+    "dispersion",
+    "aux_basis",
+    "extrapolation_basis",
+    "defgrid",
+    "scf_tol",
+    "scf_algorithm",
+    "scf_maxiter",
+    "scf_convergence",
+}
 
 
 def build_molecule(filepath: str, index: str = "-1") -> Molecule:
@@ -199,6 +219,19 @@ def build_gaussian_settings(
     workflows and is translated into ``settings.modred``.
     """
     modred = extras.pop("modred", None)
+    if scan_definition is not None and additional_opt_options_in_route:
+        coordinate_directives, route_options = (
+            _partition_modred_route_directives(
+                additional_opt_options_in_route
+            )
+        )
+        if coordinate_directives:
+            scan_definition = "\n".join(
+                (scan_definition, *coordinate_directives)
+            )
+            additional_opt_options_in_route = (
+                ",".join(route_options) if route_options else None
+            )
     if scan_definition is not None:
         if modred is not None:
             raise ValueError(
@@ -226,7 +259,7 @@ def build_gaussian_settings(
         ]
         additional_opt_options_in_route = ",".join(_kept) if _kept else None
 
-    return GaussianJobSettings(
+    settings = GaussianJobSettings(
         functional=functional,
         basis=basis,
         charge=charge,
@@ -243,6 +276,8 @@ def build_gaussian_settings(
         modred=modred,
         **extras,
     )
+    _attach_selected_project(settings, "gaussian")
+    return settings
 
 
 def build_orca_settings(
@@ -294,7 +329,7 @@ def build_orca_settings(
         ab_initio = functional
         functional = None
 
-    return ORCAJobSettings(
+    settings = ORCAJobSettings(
         ab_initio=ab_initio,
         functional=functional,
         dispersion=dispersion,
@@ -334,6 +369,8 @@ def build_orca_settings(
         invert_constraints=invert_constraints,
         **extras,
     )
+    _attach_selected_project(settings, "orca")
+    return settings
 
 
 def _looks_like_orca_ab_initio_method(method: Any) -> bool:
@@ -346,6 +383,71 @@ def _looks_like_orca_ab_initio_method(method: Any) -> bool:
     if normalized in _ORCA_AB_INITIO_EXACT_METHODS:
         return True
     return any(keyword in normalized for keyword in _ORCA_AB_INITIO_KEYWORDS)
+
+
+def _attach_selected_project(settings: Any, program: str) -> None:
+    selected = current_workflow_state().project
+    if selected is None or selected.program != program:
+        return
+    setattr(settings, "_agent_project_name", selected.name)
+    setattr(settings, "_agent_project_path", selected.path)
+    setattr(settings, "_agent_project_sha256", selected.sha256)
+
+
+def _partition_modred_route_directives(
+    value: Any,
+) -> tuple[list[str], list[str]]:
+    entries = value if isinstance(value, (list, tuple)) else [value]
+    directives: list[str] = []
+    route_options: list[str] = []
+    for entry in entries:
+        for chunk in re.split(r"[;\n]+", str(entry)):
+            stripped = chunk.strip()
+            if not stripped:
+                continue
+            directive = _canonical_modred_directive(stripped)
+            if directive is None:
+                route_options.append(stripped)
+            else:
+                directives.append(directive)
+    return directives, route_options
+
+
+def _canonical_modred_directive(value: str) -> str | None:
+    tokens = [token for token in re.split(r"[,\s]+", value) if token]
+    if not tokens:
+        return None
+    coordinate_type = tokens[0].upper()
+    atom_count = {"B": 2, "A": 3, "D": 4}.get(coordinate_type)
+    if atom_count is None or len(tokens) < atom_count + 2:
+        return None
+    try:
+        atoms = [int(token) for token in tokens[1 : atom_count + 1]]
+    except ValueError:
+        return None
+    if any(atom < 1 for atom in atoms):
+        return None
+    directive = tokens[atom_count + 1].upper()
+    if directive == "F" and len(tokens) == atom_count + 2:
+        return " ".join((coordinate_type, *(str(atom) for atom in atoms), "F"))
+    if directive != "S" or len(tokens) != atom_count + 4:
+        return None
+    try:
+        steps = int(tokens[atom_count + 2])
+        step_size = float(tokens[atom_count + 3])
+    except ValueError:
+        return None
+    if steps < 1:
+        return None
+    return " ".join(
+        (
+            coordinate_type,
+            *(str(atom) for atom in atoms),
+            "S",
+            str(steps),
+            str(step_size),
+        )
+    )
 
 
 def _parse_gaussian_scan_definition(scan_definition: str) -> dict[str, Any]:
@@ -482,6 +584,14 @@ def build_job(
     if source_index is not None:
         setattr(job, "_agent_source_index", source_index)
     setattr(job, "_agent_kind", normalized_kind)
+    for attribute in (
+        "_agent_project_name",
+        "_agent_project_path",
+        "_agent_project_sha256",
+    ):
+        value = getattr(settings, attribute, None)
+        if value:
+            setattr(job, attribute, value)
     return job
 
 
@@ -554,10 +664,15 @@ def _reconstruct_run_cli_args(job: Job) -> list[str] | None:
 
     cli_jobtype = _run_cli_jobtype_name(job)
     argv = ["chemsmart", "run", program]
+    project = getattr(job, "_agent_project_name", None)
+    project_backed = isinstance(project, str) and bool(project.strip())
+    if project_backed:
+        argv.extend(["-p", project.strip()])
     argv.extend(
         _program_cli_args(
             settings,
             force_route_freq=_jobtype_name_for_settings(job) == "freq",
+            project_backed=project_backed,
         )
     )
     argv.extend(["-f", source_filepath])
@@ -573,7 +688,10 @@ def _reconstruct_run_cli_args(job: Job) -> list[str] | None:
 
 
 def _program_cli_args(
-    settings: Any, *, force_route_freq: bool = False
+    settings: Any,
+    *,
+    force_route_freq: bool = False,
+    project_backed: bool = False,
 ) -> list[str]:
     if settings is None:
         return []
@@ -603,6 +721,8 @@ def _program_cli_args(
     ]
     argv: list[str] = []
     for name, flag in flag_map:
+        if project_backed and name in _PROJECT_RUNTIME_SETTING_FIELDS:
+            continue
         if not hasattr(settings, name):
             continue
         value = getattr(settings, name)

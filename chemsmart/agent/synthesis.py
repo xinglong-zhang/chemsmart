@@ -7,6 +7,7 @@ import os
 import re
 import shlex
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import click
@@ -893,10 +894,23 @@ class SynthesisSession:
             request,
             workspace_program=workspace_program,
         )
+        system_prompt = build_synthesis_system_prompt(prompt_schema)
+        if (
+            selected_project is not None
+            and selected_project.name == self.default_project
+            and Path(selected_project.path).is_file()
+        ):
+            system_prompt += (
+                "\nRuntime-owned workspace context: the selected "
+                f"{selected_project.program} project is "
+                f"`{selected_project.name}`. For a matching program command, "
+                "use this value for -p/--project and do not ask the user for "
+                "the project name again."
+            )
         messages = [
             {
                 "role": "system",
-                "content": build_synthesis_system_prompt(prompt_schema),
+                "content": system_prompt,
             }
         ]
         for turn in self.memory.turns:
@@ -912,10 +926,50 @@ class SynthesisSession:
     def _apply_default_project(self, result: JsonDict) -> JsonDict:
         """Attach the active runtime project to ready Gaussian/ORCA commands."""
 
-        if result.get("status") != "ready" or not self.default_project:
+        if not self.default_project:
             return result
         normalized = dict(result)
         command = str(normalized.get("command") or "")
+
+        if normalized.get("status") == "needs_clarification":
+            missing = [
+                str(item) for item in normalized.get("missing_info") or []
+            ]
+            project_missing = [
+                item for item in missing if _is_project_name_missing(item)
+            ]
+            remaining = [
+                item for item in missing if not _is_project_name_missing(item)
+            ]
+            selected = _selected_project_for_command(
+                command,
+                self.default_project,
+            )
+            if (
+                not project_missing
+                or selected is None
+                or not _command_project_is_unresolved(command)
+            ):
+                return result
+            normalized["command"] = _ensure_program_project(
+                command,
+                selected.name,
+            )
+            normalized["project"] = selected.name
+            normalized["missing_info"] = remaining
+            if not remaining:
+                normalized["status"] = "ready"
+                explanation = str(normalized.get("explanation") or "").strip()
+                note = (
+                    f"Using the selected workspace project {selected.name}."
+                )
+                normalized["explanation"] = (
+                    f"{explanation} {note}".strip()
+                )
+            return normalized
+
+        if normalized.get("status") != "ready":
+            return result
         normalized["command"] = _ensure_program_project(
             command,
             self.default_project,
@@ -1319,11 +1373,89 @@ def _ensure_program_project(command: str, project: str) -> str:
     program_index = _find_program_index(tokens)
     if program_index is None:
         return command
-    if _program_has_project(tokens, program_index):
-        return command
     updated = list(tokens)
+    for index in range(program_index + 1, len(updated)):
+        token = updated[index]
+        if token in {"-p", "--project"}:
+            if index + 1 >= len(updated):
+                return command
+            if _is_project_placeholder(updated[index + 1]):
+                updated[index + 1] = project
+                return shlex.join(updated)
+            return command
+        if token.startswith("--project="):
+            value = token.split("=", 1)[1]
+            if _is_project_placeholder(value):
+                updated[index] = f"--project={project}"
+                return shlex.join(updated)
+            return command
     updated[program_index + 1 : program_index + 1] = ["-p", project]
     return shlex.join(updated)
+
+
+def _selected_project_for_command(
+    command: str,
+    default_project: str,
+) -> Any | None:
+    """Return the selected workspace project only when it matches the command."""
+
+    selected = current_workflow_state().project
+    if (
+        selected is None
+        or selected.name != default_project
+        or not Path(selected.path).is_file()
+    ):
+        return None
+    parsed = parse_model_command(command)
+    if parsed.parse_error or parsed.program != selected.program:
+        return None
+    return selected
+
+
+def _command_project_is_unresolved(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    program_index = _find_program_index(tokens)
+    if program_index is None:
+        return False
+    for index in range(program_index + 1, len(tokens)):
+        token = tokens[index]
+        if token in {"-p", "--project"}:
+            return index + 1 < len(tokens) and _is_project_placeholder(
+                tokens[index + 1]
+            )
+        if token.startswith("--project="):
+            return _is_project_placeholder(token.split("=", 1)[1])
+    return True
+
+
+def _is_project_placeholder(value: str) -> bool:
+    return value.strip().lower() in {
+        "<project>",
+        "<project-name>",
+        "<project_name>",
+        "{project}",
+        "{project_name}",
+    }
+
+
+def _is_project_name_missing(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+    if "project" not in normalized:
+        return False
+    return any(
+        marker in normalized
+        for marker in (
+            "project name",
+            "project yaml",
+            "selected project",
+            "select project",
+            "which project",
+            "workspace project",
+        )
+    )
 
 
 def _find_program_index(tokens: list[str]) -> int | None:

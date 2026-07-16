@@ -60,6 +60,6 @@ Verify / dry-run requests:
   through the real chemsmart project-settings loader. If the user asks to
   "verify"/"dry-run"/"confirm", state the validate verdict (it already loaded in
   chemsmart) and, if the YAML was written, give a concrete example command the
-  user can dry-run in ask/run mode, e.g.
+  user can dry-run in the unified TUI, e.g.
   `chemsmart run <program> -p <project> -f <your_structure>.xyz --fake opt`.
   Do not ask for a structure file yourself; just show the example.

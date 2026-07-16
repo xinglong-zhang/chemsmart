@@ -7,6 +7,11 @@ import json
 from typing import Any, Protocol
 
 from chemsmart.agent.runtime.contracts import RuntimeV2Mode
+from chemsmart.agent.runtime.calculations import (
+    CalculationContext,
+    reset_calculation_context,
+    set_calculation_context,
+)
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.runtime.receipts import collect_artifact_refs
 from chemsmart.agent.runtime.tool_catalog import ToolSelection
@@ -37,6 +42,7 @@ class RuntimeLifecycle:
         self.emitter = emitter
         self.selection = selection
         self.mode = mode
+        self._calculation_context_token = None
 
     def before_tool(
         self,
@@ -70,6 +76,17 @@ class RuntimeLifecycle:
             },
             idempotency_key=f"tool-start:{request_id}",
         )
+        if tool_name == "execute_chemsmart_command":
+            session_dir = getattr(self.emitter, "session_dir", None)
+            session_id = str(getattr(self.emitter, "session_id", ""))
+            turn_id = str(getattr(self.emitter, "turn_id", ""))
+            self._calculation_context_token = set_calculation_context(
+                CalculationContext(
+                    session_dir=session_dir,
+                    session_id=session_id,
+                    turn_id=turn_id,
+                )
+            )
 
     def permission(
         self,
@@ -111,6 +128,7 @@ class RuntimeLifecycle:
                 receipt.model_dump(mode="json"),
                 idempotency_key=f"artifact:{receipt.sha256}",
             )
+        self._reset_calculation_context()
 
     def tool_failed(
         self,
@@ -136,6 +154,13 @@ class RuntimeLifecycle:
             },
             idempotency_key=f"tool-result:{request_id}",
         )
+        self._reset_calculation_context()
+
+    def _reset_calculation_context(self) -> None:
+        if self._calculation_context_token is None:
+            return
+        reset_calculation_context(self._calculation_context_token)
+        self._calculation_context_token = None
 
 
 def _success_payload(
@@ -181,9 +206,14 @@ def _emit_state_delta(
                 f"project:{project.get('sha256') or project.get('path')}"
             ),
         )
-    if tool_name in {"synthesize_command", "repair_command"}:
+    if tool_name in {
+        "synthesize_command",
+        "repair_command",
+        "dry_run_input",
+    }:
         command = str(result.get("command") or "").strip()
-        if command:
+        cli_grounded = result.get("cli_grounded")
+        if command and cli_grounded is not False:
             emitter.emit(
                 EventKind.COMMAND_SYNTHESIZED,
                 {
@@ -197,7 +227,10 @@ def _emit_state_delta(
                 },
                 idempotency_key=f"command:{hashlib.sha256(command.encode()).hexdigest()}",
             )
-        if result.get("status") == "needs_clarification":
+        if (
+            tool_name in {"synthesize_command", "repair_command"}
+            and result.get("status") == "needs_clarification"
+        ):
             emitter.emit(
                 EventKind.CLARIFICATION_REQUESTED,
                 {"slots": list(result.get("missing_info") or [])},

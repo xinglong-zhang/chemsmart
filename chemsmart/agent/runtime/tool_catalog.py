@@ -72,6 +72,12 @@ _PHASE_TOOLS: dict[TaskPhase, tuple[str, ...]] = {
         "execute_chemsmart_command",
         "read_project_yaml",
     ),
+    TaskPhase.DIAGNOSTICS: (
+        "inspect_calculation",
+        "read_project_yaml",
+        "log_tail",
+        "scheduler_query",
+    ),
 }
 _SPECIALIST_TOOLS = ("synthesize_command", "repair_command")
 

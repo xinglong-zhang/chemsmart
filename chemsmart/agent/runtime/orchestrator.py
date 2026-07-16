@@ -33,6 +33,7 @@ _TRANSITIONS: dict[TaskPhase, frozenset[TaskPhase]] = {
             TaskPhase.SYNTHESIS,
             TaskPhase.REPAIR,
             TaskPhase.EXECUTION,
+            TaskPhase.DIAGNOSTICS,
             TaskPhase.COMPLETE,
             TaskPhase.WAITING_USER,
         }
@@ -82,6 +83,14 @@ _TRANSITIONS: dict[TaskPhase, frozenset[TaskPhase]] = {
         }
     ),
     TaskPhase.EXECUTION: frozenset(
+        {
+            TaskPhase.COMPLETE,
+            TaskPhase.REPAIR,
+            TaskPhase.DIAGNOSTICS,
+            TaskPhase.WAITING_USER,
+        }
+    ),
+    TaskPhase.DIAGNOSTICS: frozenset(
         {TaskPhase.COMPLETE, TaskPhase.REPAIR, TaskPhase.WAITING_USER}
     ),
     TaskPhase.WAITING_USER: frozenset(
@@ -91,6 +100,7 @@ _TRANSITIONS: dict[TaskPhase, frozenset[TaskPhase]] = {
             TaskPhase.SYNTHESIS,
             TaskPhase.REPAIR,
             TaskPhase.EXECUTION,
+            TaskPhase.DIAGNOSTICS,
         }
     ),
     TaskPhase.COMPLETE: frozenset({TaskPhase.ROUTE}),
@@ -253,6 +263,10 @@ class RuntimeController:
             for item in receipts
         ):
             return ("runtime.project.write_required",)
+        if phase is TaskPhase.DIAGNOSTICS and not any(
+            item.get("tool") == "inspect_calculation" for item in receipts
+        ):
+            return ("runtime.calculation.inspection_required",)
         return ()
 
     def completion_notice(self) -> str:
@@ -345,6 +359,24 @@ def route_initial_phase(
         )
     ):
         return TaskPhase.PROJECT_READ
+    if any(
+        marker in text
+        for marker in (
+            "diagnose the result",
+            "inspect the result",
+            "analyze the result",
+            "check the calculation",
+            "calculation result",
+            "output result",
+            "결과를 진단",
+            "계산 결과",
+            "결과 분석",
+            "출력 파일 확인",
+            "诊断结果",
+            "分析计算结果",
+        )
+    ):
+        return TaskPhase.DIAGNOSTICS
     if any(
         marker in text
         for marker in (

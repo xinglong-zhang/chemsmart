@@ -27,14 +27,15 @@ Common TUI commands:
 
 | Command | Purpose |
 |---|---|
-| `/mode ask` | Command synthesis, command explanation, critique, and repair |
-| `/mode run` | Full tool-loop harness mode |
+| `/mode` | Show the automatically selected provider role; does not switch sessions |
 | `/init` | Build a project YAML from a reported method |
 | `/tools` | List registered tools |
 | `/doctor` | Check provider/runtime health |
 | `/sessions` | Browse resumable sessions |
 | `/resume <session-id>` | Resume a saved session |
-| `/run`, `/submit` | Continue a prepared session toward local run or submission |
+| `/runs` or `/jobs` | Monitor local calculations and scheduler jobs |
+| `/run` | Execute the latest validated `chemsmart run` command |
+| `/submit` | Execute the latest validated `chemsmart sub` command |
 
 ## Architecture
 
@@ -56,6 +57,11 @@ The important separation is:
 - deterministic code owns project defaults, command rendering, parser checks,
   generated-input inspection, and final warnings/rejections;
 - risky tools stay behind permission gates and explicit approval paths.
+
+`/run` and `/submit` are explicit approvals. They are enabled only when the
+latest command has semantic and intent verdicts, generated-input evidence, and
+an unchanged workspace project YAML. The execution tool repeats semantic
+validation immediately before launching the real CLI command.
 
 For job-creation requests, the primary user-facing artifact must be a real
 CHEMSMART command, not an internal `build_molecule`/`build_job` tool path.
@@ -149,6 +155,21 @@ Recent TUI updates add:
 - active provider/model/project display in the footer;
 - slash-command palette with prefix filtering;
 - project-YAML build mode through `/init`.
+- background calculation lifecycle events and a persistent status strip;
+- a `Ctrl+B` calculation monitor with receipt, bounded log, search, extraction,
+  and cancellation actions;
+- chemistry-oriented ORCA/Gaussian receipts instead of raw stdout in the main
+  transcript;
+- deterministic latest-result diagnosis without asking again for an unambiguous
+  output path.
+
+Local CLI execution uses `subprocess.Popen` with stdout/stderr streamed to the
+calculation store. A process return code and the chemistry program's normal
+termination marker are evaluated independently. The receipt cell stays in the
+turn that started the calculation and is updated in place, so a late completion
+cannot move an old result below a newer user message. Opt/frequency/scan/NEB and
+QMMM receipts include job-specific convergence, frequency, path, image, or
+region evidence when present.
 
 The public decision trace is intentionally not hidden chain-of-thought. It shows
 observable routing evidence, the selected action, confidence, rejected action

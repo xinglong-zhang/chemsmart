@@ -24,6 +24,7 @@ def _set_composer_text(app: ChemsmartTuiApp, text: str) -> None:
 
 
 def test_phase1_slash_commands_match_snapshots(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     session_root = tmp_path / "sessions"
     write_session_fixture(session_root)
 

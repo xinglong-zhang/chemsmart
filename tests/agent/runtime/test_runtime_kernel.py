@@ -381,6 +381,38 @@ def test_lifecycle_records_command_project_and_artifact_receipts(tmp_path):
     assert replayed.state.phase is TaskPhase.COMPLETE
 
 
+def test_lifecycle_records_cli_grounded_direct_dry_run_command(tmp_path):
+    command = (
+        "chemsmart run gaussian -p water_demo -f h2o.xyz -c 0 -m 1 "
+        "scan --coordinates '[[1,2]]' --num-steps 10 --step-size 0.05"
+    )
+    controller = RuntimeController(
+        session_dir=tmp_path / "session",
+        session_id="s1",
+        registry=_Registry(),
+        mode=RuntimeV2Mode.SHADOW,
+    )
+    controller.start_turn(
+        request="Prepare a Gaussian scan.",
+        turn_index=1,
+        provider_name="openai",
+        cwd=str(tmp_path),
+    )
+    lifecycle = controller.lifecycle()
+    lifecycle.before_tool(
+        request_id="call-1",
+        tool_name="dry_run_input",
+        arguments={"job": "job_1"},
+    )
+    lifecycle.after_tool(
+        request_id="call-1",
+        tool_name="dry_run_input",
+        result={"command": command, "cli_grounded": True},
+    )
+
+    assert controller.state.previous_command == command
+
+
 @pytest.mark.parametrize(
     ("rules", "repeat", "action"),
     [

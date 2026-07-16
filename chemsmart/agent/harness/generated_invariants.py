@@ -53,6 +53,17 @@ def check_generated_input_invariants(
         if kind == "gaussian.tddft":
             issues.extend(_gaussian_td_issues(route, observed.chemistry, evidence))
         if kind in {"gaussian.scan", "gaussian.modred"}:
+            if _gaussian_coordinate_in_route(route):
+                issues.append(
+                    _reject(
+                        "input.gaussian.coordinate_in_route",
+                        (
+                            "Gaussian ModRedundant coordinate directives "
+                            "must be input-body rows, not opt route options"
+                        ),
+                        evidence,
+                    )
+                )
             issues.extend(_gaussian_coordinate_issues(kind, content, observed.chemistry, evidence))
         if kind in {"orca.scan", "orca.modred"}:
             issues.extend(
@@ -85,6 +96,16 @@ def check_generated_input_invariants(
         if kind == "gaussian.dias":
             issues.extend(_dias_issues(observed.chemistry, evidence))
     return tuple(issues)
+
+
+def _gaussian_coordinate_in_route(route: str) -> bool:
+    opt_blocks = re.findall(r"\bopt\s*=\s*\(([^)]*)\)", route, re.IGNORECASE)
+    pattern = re.compile(
+        r"(?:^|,)\s*[BAD]\s*,\s*\d+(?:\s*,\s*\d+){1,3}"
+        r"\s*,\s*[FS](?:\s*,|\s*$)",
+        re.IGNORECASE,
+    )
+    return any(pattern.search(block) is not None for block in opt_blocks)
 
 
 def _electron_multiplicity_issues(

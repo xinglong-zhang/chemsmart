@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import shlex
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from chemsmart.agent.cli_schema import build_chemsmart_cli_schema
 from chemsmart.agent.harness.command_semantics import (
@@ -26,6 +25,11 @@ from chemsmart.agent.harness.workflow_state import (
     select_workspace_project,
 )
 from chemsmart.agent.model_command_parser import parse_model_command
+from chemsmart.agent.runtime.calculations import (
+    CalculationContext,
+    CalculationEvent,
+    execute_observed_process,
+)
 from chemsmart.agent.schema_prune import (
     prune_schema_for_request,
     schema_variant_id,
@@ -385,6 +389,27 @@ def execute_chemsmart_command(
     receipt, but never represents a real scheduler submission outcome.
     """
 
+    return execute_chemsmart_command_observed(
+        command,
+        test=test,
+        timeout_s=timeout_s,
+    )
+
+
+def execute_chemsmart_command_observed(
+    command: str,
+    *,
+    test: bool = False,
+    timeout_s: int = 3600,
+    calculation_context: CalculationContext | None = None,
+    event_sink: Callable[[CalculationEvent], None] | None = None,
+) -> JsonDict:
+    """Execute a command while optionally publishing calculation events.
+
+    The observer and persistence context are internal runtime concerns and are
+    deliberately absent from the model-facing tool schema.
+    """
+
     normalized = command.strip()
     semantic = _gate_command(normalized)
     if semantic.verdict == "reject":
@@ -410,48 +435,42 @@ def execute_chemsmart_command(
     argv = _test_argv(tokens) if test else list(tokens)
     argv = quiet_chemsmart_argv(argv)
     submit_scripts_before = _submit_script_fingerprints(Path.cwd())
-    try:
-        completed = subprocess.run(
-            argv,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=float(timeout_s),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "ok": False,
-            "status": "timeout",
-            "command": normalized,
-            "executed_argv": argv,
-            "test": test,
-            "returncode": None,
-            "timeout_s": timeout_s,
-            "stdout_tail": _tail(exc.stdout),
-            "stderr_tail": _tail(exc.stderr),
-            "semantic": semantic.to_dict(),
-            "error": (
-                f"command exceeded timeout of {timeout_s}s and was killed"
-            ),
-        }
+    observed = execute_observed_process(
+        argv,
+        command=normalized,
+        timeout_s=timeout_s,
+        context=calculation_context,
+        event_sink=event_sink,
+    )
+    calculation = dict(observed.get("calculation") or {})
+    returncode = calculation.get("returncode")
+    calculation_status = str(calculation.get("status") or "process_failed")
+    stdout = str(observed.get("stdout_tail") or "")
+    stderr = str(observed.get("stderr_tail") or "")
+    ok = calculation_status == "completed" and returncode == 0
     return {
-        "ok": completed.returncode == 0,
-        "status": "ok" if completed.returncode == 0 else "error",
+        "ok": ok,
+        "status": "ok" if ok else calculation_status,
         "command": normalized,
         "executed_argv": argv,
         "test": test,
-        "returncode": completed.returncode,
-        "stdout_tail": _tail(completed.stdout),
-        "stderr_tail": _tail(completed.stderr),
+        "returncode": returncode,
+        "stdout_tail": stdout,
+        "stderr_tail": stderr,
         "semantic": semantic.to_dict(),
+        "calculation": calculation,
         "terminal_state": _execution_terminal_state(
             normalized,
-            returncode=completed.returncode,
+            returncode=int(returncode) if isinstance(returncode, int) else 1,
             test=test,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
+            stdout=stdout,
+            stderr=stderr,
             submit_scripts_before=submit_scripts_before,
+        ),
+        **(
+            {"error": calculation.get("error") or calculation.get("stage")}
+            if not ok
+            else {}
         ),
     }
 

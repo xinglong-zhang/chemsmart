@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -22,11 +20,26 @@ def _reset_command_tools_state():
     tools_command.reset_command_tools_state()
 
 
-@dataclass
-class Completed:
-    returncode: int = 0
-    stdout: str = ""
-    stderr: str = ""
+def _observed_result(
+    *,
+    returncode: int | None = 0,
+    stdout: str = "",
+    stderr: str = "",
+    status: str | None = None,
+) -> dict:
+    resolved_status = status or (
+        "completed" if returncode == 0 else "process_failed"
+    )
+    return {
+        "calculation": {
+            "run_id": "calc-test",
+            "status": resolved_status,
+            "returncode": returncode,
+            "stage": resolved_status,
+        },
+        "stdout_tail": stdout,
+        "stderr_tail": stderr,
+    }
 
 
 def test_execute_command_rejects_before_subprocess(monkeypatch):
@@ -43,9 +56,9 @@ def test_execute_command_rejects_before_subprocess(monkeypatch):
 
     def fake_run(*args, **kwargs):
         calls["run"] += 1
-        return Completed()
+        return _observed_result()
 
-    monkeypatch.setattr(tools_command.subprocess, "run", fake_run)
+    monkeypatch.setattr(tools_command, "execute_observed_process", fake_run)
 
     result = tools_command.execute_chemsmart_command(
         "chemsmart run gaussian -f examples/h2o.xyz -c 0 -m 1 sp"
@@ -94,9 +107,9 @@ def test_execute_command_test_mode_adds_fake_runner_flags(monkeypatch):
 
     def fake_run(argv, **kwargs):
         seen["argv"] = argv
-        return Completed(returncode=0, stdout="ok\n")
+        return _observed_result(stdout="ok\n")
 
-    monkeypatch.setattr(tools_command.subprocess, "run", fake_run)
+    monkeypatch.setattr(tools_command, "execute_observed_process", fake_run)
 
     result = tools_command.execute_chemsmart_command(
         "chemsmart run gaussian -f examples/h2o.xyz -c 0 -m 1 sp",
@@ -123,9 +136,9 @@ def test_execute_command_test_mode_adds_submit_test_flags(monkeypatch):
 
     def fake_run(argv, **kwargs):
         seen["argv"] = argv
-        return Completed(returncode=0)
+        return _observed_result()
 
-    monkeypatch.setattr(tools_command.subprocess, "run", fake_run)
+    monkeypatch.setattr(tools_command, "execute_observed_process", fake_run)
 
     tools_command.execute_chemsmart_command(
         "chemsmart sub gaussian -f examples/h2o.xyz -c 0 -m 1 sp",
@@ -164,9 +177,9 @@ def test_submit_terminal_state_records_server_yaml_and_scheduler(
         (tmp_path / "chemsmart_sub_h2o_opt.sh").write_text(
             "#!/bin/sh\n#PBS -N h2o\n", encoding="utf-8"
         )
-        return Completed(returncode=0, stdout="job-1\n")
+        return _observed_result(stdout="job-1\n")
 
-    monkeypatch.setattr(tools_command.subprocess, "run", fake_run)
+    monkeypatch.setattr(tools_command, "execute_observed_process", fake_run)
 
     command = (
         "chemsmart sub -s mock-pbs gaussian -p demo "
@@ -242,9 +255,9 @@ def test_submit_terminal_state_rejects_stale_submit_script(
         lambda value: CommandSemanticResult(verdict="ok", command=value),
     )
     monkeypatch.setattr(
-        tools_command.subprocess,
-        "run",
-        lambda *args, **kwargs: Completed(returncode=0),
+        tools_command,
+        "execute_observed_process",
+        lambda *args, **kwargs: _observed_result(),
     )
 
     result = tools_command.execute_chemsmart_command(command)
@@ -268,9 +281,9 @@ def test_submit_terminal_state_requires_independent_intent_provenance(
         lambda command: CommandSemanticResult(verdict="ok", command=command),
     )
     monkeypatch.setattr(
-        tools_command.subprocess,
-        "run",
-        lambda *args, **kwargs: Completed(returncode=0),
+        tools_command,
+        "execute_observed_process",
+        lambda *args, **kwargs: _observed_result(),
     )
 
     command = (
@@ -298,9 +311,9 @@ def test_submit_terminal_state_rejects_cached_input_path_drift(
         lambda command: CommandSemanticResult(verdict="ok", command=command),
     )
     monkeypatch.setattr(
-        tools_command.subprocess,
-        "run",
-        lambda *args, **kwargs: Completed(returncode=0),
+        tools_command,
+        "execute_observed_process",
+        lambda *args, **kwargs: _observed_result(),
     )
 
     command = (
@@ -345,11 +358,14 @@ def test_execute_command_timeout_returns_structured_result(monkeypatch):
     )
 
     def fake_run(argv, **kwargs):
-        raise subprocess.TimeoutExpired(
-            cmd=argv, timeout=5, output="partial out", stderr="partial err"
+        return _observed_result(
+            returncode=None,
+            stdout="partial out",
+            stderr="partial err",
+            status="timeout",
         )
 
-    monkeypatch.setattr(tools_command.subprocess, "run", fake_run)
+    monkeypatch.setattr(tools_command, "execute_observed_process", fake_run)
 
     result = tools_command.execute_chemsmart_command(
         "chemsmart run gaussian -f examples/h2o.xyz -c 0 -m 1 sp",

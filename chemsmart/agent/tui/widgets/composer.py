@@ -25,6 +25,8 @@ class Composer(TextArea):
 
     BINDINGS = [
         Binding("enter", "submit", show=False, priority=True),
+        Binding("tab", "context_tab", show=False, priority=True),
+        Binding("ctrl+r", "history", show=False, priority=True),
         Binding("ctrl+j", "insert_newline", show=False, priority=True),
         Binding("shift+enter", "insert_newline", show=False, priority=True),
         Binding("ctrl+g", "external_editor", show=False, priority=True),
@@ -70,11 +72,60 @@ class Composer(TextArea):
     async def _on_key(self, event: events.Key) -> None:
         if self._consume_duplicate_paste_key(event):
             return
+        if self._matches_configured_key(event, "show_project_yaml"):
+            event.stop()
+            event.prevent_default()
+            handler = getattr(self.app, "action_show_project_yaml", None)
+            if callable(handler):
+                handler()
+            return
+        palette = self._slash_palette()
+        if palette is not None and palette.is_open:
+            if event.key == "up":
+                event.stop()
+                event.prevent_default()
+                palette.move_highlight(-1)
+                return
+            if event.key == "down":
+                event.stop()
+                event.prevent_default()
+                palette.move_highlight(1)
+                return
+            if event.key == "escape":
+                event.stop()
+                event.prevent_default()
+                palette.hide()
+                return
         await super()._on_key(event)
+
+    def _matches_configured_key(
+        self,
+        event: events.Key,
+        action: str,
+    ) -> bool:
+        config = getattr(self.app, "tui_config", None)
+        bindings = getattr(config, "keybindings", {})
+        configured = str(bindings.get(action) or "").strip().lower()
+        if not configured:
+            return False
+        event_key = str(event.key or "").strip().lower()
+        aliases = {configured}
+        if configured == "shift+tab":
+            # Textual/terminal backends may normalize Shift+Tab either way.
+            aliases.add("backtab")
+        return event_key in aliases
 
     def action_submit(self) -> None:
         if self._submitting:
             return
+        screen = getattr(self.app, "screen", None)
+        accept = getattr(screen, "accept_slash_palette", None)
+        if callable(accept):
+            selected = accept()
+            if selected is False:
+                return
+            if selected:
+                self.load_text(selected)
         text = self.resolve_text().strip()
         if not text:
             return
@@ -83,6 +134,18 @@ class Composer(TextArea):
 
     def action_insert_newline(self) -> None:
         self.insert("\n")
+
+    def action_context_tab(self) -> None:
+        screen = getattr(self.app, "screen", None)
+        handler = getattr(screen, "action_context_tab", None)
+        if callable(handler):
+            handler()
+
+    def action_history(self) -> None:
+        screen = getattr(self.app, "screen", None)
+        handler = getattr(screen, "action_search_history", None)
+        if callable(handler):
+            handler()
 
     def action_external_editor(self) -> None:
         editor = os.environ.get("EDITOR", "vi").strip() or "vi"
@@ -151,3 +214,16 @@ class Composer(TextArea):
         self._submitting = False
         self._paste_guard_text = ""
         super().load_text(text)
+
+    def _slash_palette(self):
+        screen = getattr(self.app, "screen", None)
+        if screen is None:
+            return None
+        try:
+            from chemsmart.agent.tui.widgets.slash_palette import (
+                SlashCommandPalette,
+            )
+
+            return screen.query_one(SlashCommandPalette)
+        except Exception:
+            return None
