@@ -1,0 +1,78 @@
+---
+
+description: Core development requirements for the CHEMSMART repository
+alwaysApply: true
+-----------------
+
+# CHEMSMART Development Requirements
+
+## Before editing
+
+Before modifying code:
+
+1. Inspect the relevant implementation and nearby helpers.
+2. Inspect the CLI parser, registries, dispatch mappings, exports, tests, and documentation affected by the requested change.
+3. Determine the complete integration surface before editing.
+4. Follow the existing architecture rather than creating a parallel implementation.
+5. Check whether the repository already provides a helper, constant, utility, or abstraction for the requested behavior.
+
+Do not begin by editing only the first matching file.
+
+## Implementation principles
+
+* Make the smallest coherent change that fully implements the request.
+* Reuse existing helpers and shared constants.
+* Avoid duplicated logic.
+* Preserve public APIs and existing CLI behavior unless a breaking change is explicitly requested.
+* Do not remove existing options while adding a new option.
+* Do not perform unrelated refactoring.
+* Keep functions focused and independently testable.
+* Use descriptive names and concise docstrings.
+* Preserve existing project conventions and code style.
+* Do not replace generalized logic with molecule-specific or example-specific logic.
+* Do not silently omit part of the requested integration.
+
+## Compatibility
+
+* Preserve backward compatibility wherever possible.
+* New options must be added to every applicable registry, parser choice, dispatch mapping, export, documentation location, and test.
+* Avoid introducing dependencies unless they are necessary.
+* Handle optional external-program or version-dependent settings safely.
+* Do not suppress exceptions around core program logic merely to make a test pass.
+
+## Validation
+
+After modifying code:
+
+1. Run the narrowest relevant tests first.
+2. Run the broader affected test module or suite when practical.
+3. Run configured formatting or linting checks when relevant.
+4. Inspect the final diff for accidental or unrelated changes.
+5. Verify that all requested integration points were updated.
+
+Never claim that tests passed unless they were actually executed.
+
+When a test cannot be run, state exactly why it could not be run.
+
+## Agent behavior
+
+For implementation requests:
+
+* Modify the code directly instead of only proposing pseudocode.
+* Do not stop after updating only the main implementation function.
+* Do not ask for confirmation when the request is already sufficiently defined.
+* Make reasonable decisions based on the surrounding code.
+* Clearly report any assumption that materially affects behavior.
+* Prefer partial verified implementation over unsupported claims.
+
+## Completion report
+
+At the end of the task, report:
+
+* files changed
+* main implementation decisions
+* compatibility considerations
+* tests and checks executed
+* test results
+* anything that could not be validated
+
