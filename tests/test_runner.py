@@ -5,7 +5,11 @@ from unittest.mock import Mock
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.runner import JobRunner, get_submitter_worker_count
+from chemsmart.jobs.runner import (
+    JobRunner,
+    get_submitter_worker_count,
+    run_phase_jobs,
+)
 
 
 class MockMolecule(Molecule):
@@ -46,6 +50,28 @@ class TestJobRunner:
             server=pbs_server, fake=True, no_run_in_parallel=False
         )
         assert runner.no_run_in_parallel is False
+
+    def test_run_phase_jobs_defaults_serial_mode_from_parent_runner(
+        self, pbs_server, mocker
+    ):
+        from chemsmart.jobs.job import Job
+
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        mock_child = Mock()
+        mock_child.run.return_value = None
+        mock_child.is_complete.return_value = True
+        mock_execute = mocker.patch.object(Job, "_execute_phase_jobs")
+
+        run_phase_jobs(
+            parent_runner=runner,
+            jobs=[mock_child],
+            phase_label="test phase",
+        )
+
+        mock_execute.assert_called_once()
+        assert mock_execute.call_args.kwargs["no_run_in_parallel"] is True
 
     def test_submitter_worker_count_uses_policy_cap(self, pbs_server):
         runner = JobRunner(server=pbs_server, fake=True)

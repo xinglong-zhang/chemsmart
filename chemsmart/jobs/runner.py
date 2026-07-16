@@ -40,7 +40,7 @@ class PhaseTransitionDecision:
 def run_phase_jobs(
     *,
     parent_runner,
-    serial_mode: SerialMode,
+    serial_mode: Optional[SerialMode] = None,
     jobs: Optional[Sequence] = None,
     jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
     stop_on_incomplete: bool = False,
@@ -49,6 +49,8 @@ def run_phase_jobs(
     phase_label: str = "phase",
 ) -> None:
     """Shared phase runner wrapper."""
+    if serial_mode is None:
+        serial_mode = get_serial_mode(parent_runner)
     Job._execute_phase_jobs(
         parent_runner=parent_runner,
         jobs=jobs,
