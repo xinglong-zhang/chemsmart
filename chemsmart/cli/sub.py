@@ -113,7 +113,7 @@ def sub(
 
 @sub.result_callback(replace=True)
 @click.pass_context
-def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
+def process_pipeline(ctx, *args, **kwargs):
     """
     Process the job for submission to queuing system.
 
@@ -156,141 +156,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             command["kwargs"].pop(keyword, None)
         return ctx
 
-    def _replace_batch_table_tokens(cli_args, batch_entry):
-        """Rewrite table-mode args to a single-entry invocation.
-
-        For pKa table mode we generated one job per table row. Submission
-        scripts should therefore execute just that row, not the entire table.
-        """
-        if not batch_entry:
-            return cli_args
-
-        args = list(cli_args)
-        table_option_names = {
-            "-f",
-            "--filename",
-        }
-
-        # Replace table filename with row filepath.
-        for idx in range(len(args) - 1):
-            if args[idx] in table_option_names:
-                args[idx + 1] = str(batch_entry["filepath"])
-                break
-
-        # Per-row scripts should run a single pKa submission, not table mode.
-        if "batch" in args:
-            args[args.index("batch")] = "submit"
-
-        def _drop_option(tokens, option_names):
-            idx = 0
-            while idx < len(tokens):
-                if tokens[idx] in option_names:
-                    del tokens[idx]
-                    if idx < len(tokens):
-                        del tokens[idx]
-                    continue
-                idx += 1
-
-        # Ensure row-level proton/charge/multiplicity are explicit.
-        option_map = {
-            "--proton-index": str(batch_entry["proton_index"]),
-            "-pi": str(batch_entry["proton_index"]),
-            "--charge": str(batch_entry["charge"]),
-            "-c": str(batch_entry["charge"]),
-            "--multiplicity": str(batch_entry["multiplicity"]),
-            "-m": str(batch_entry["multiplicity"]),
-        }
-
-        fragment_index = batch_entry.get("fragment_index")
-        if fragment_index is not None:
-            option_map["--index"] = str(fragment_index)
-            option_map["-i"] = str(fragment_index)
-
-        batch_label = batch_entry.get("label")
-        if batch_label is not None:
-            option_map["--label"] = str(batch_label)
-            option_map["-l"] = str(batch_label)
-
-        def _drop_option_pair(tokens, option_names):
-            idx = 0
-            while idx < len(tokens):
-                if tokens[idx] in option_names:
-                    del tokens[idx : idx + 2]
-                    continue
-                idx += 1
-
-        def _set_option(tokens, long_opt, short_opt, insert_before=None):
-            if long_opt in tokens:
-                pos = tokens.index(long_opt)
-                if pos + 1 < len(tokens):
-                    tokens[pos + 1] = option_map[long_opt]
-                return
-            if short_opt in tokens:
-                pos = tokens.index(short_opt)
-                if pos + 1 < len(tokens):
-                    tokens[pos + 1] = option_map[short_opt]
-                return
-
-            insert_idx = len(tokens)
-            if insert_before in tokens:
-                insert_idx = tokens.index(insert_before)
-            # Prefer long-form options to avoid Click treating multi-char
-            # aliases such as "-pi" as grouped short flags (e.g. "-p -i").
-            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
-
-        def _set_option_after(tokens, long_opt, short_opt, insert_after=None):
-            _drop_option_pair(tokens, {long_opt, short_opt})
-            insert_idx = len(tokens)
-            if insert_after in tokens:
-                insert_idx = tokens.index(insert_after) + 1
-            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
-
-        # Proton index is declared on ``pka submit``; place it after ``submit``
-        # so per-row ``chemsmart run`` scripts parse it reliably.
-        _set_option_after(args, "--proton-index", "-pi", insert_after="submit")
-        # Charge/multiplicity belong to the backend group (gaussian/orca), so
-        # they must appear before entering the "pka" group.
-        _set_option(args, "--charge", "-c", insert_before="pka")
-        _set_option(args, "--multiplicity", "-m", insert_before="pka")
-        if fragment_index is not None:
-            _set_option(args, "--index", "-i", insert_before="pka")
-        if batch_label is not None:
-            _set_option(args, "--label", "-l", insert_before="pka")
-
-        batch_scheme = batch_entry.get("scheme")
-        if batch_scheme is not None:
-            option_map.update(
-                {
-                    "--scheme": str(batch_scheme),
-                    "-s": str(batch_scheme),
-                }
-            )
-            _set_option(args, "--scheme", "-s", insert_before="submit")
-
-            if batch_scheme == "direct":
-                # Subsequent batch rows run direct mode only; drop all
-                # reference-acid CLI options so click validation does not fail.
-                _drop_option(
-                    args,
-                    {
-                        "--reference",
-                        "-r",
-                        "--reference-proton-index",
-                        "-rpi",
-                        "--reference-color-code",
-                        "-rcc",
-                        "--reference-charge",
-                        "-rc",
-                        "--reference-multiplicity",
-                        "-rm",
-                        "--reference-conjugate-base-charge",
-                        "--reference-conjugate-base-multiplicity",
-                    },
-                )
-
-        return args
-
-    def _reconstruct_cli_args(ctx, job):
+    def _reconstruct_cli_args(ctx):
         """
         Get cli args that reconstruct the command line.
 
@@ -303,9 +169,6 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
-        cli_args = _replace_batch_table_tokens(
-            cli_args, getattr(job, "_batch_entry", None)
-        )
 
         if kwargs.get("print_command"):
             print(cli_args)
@@ -315,7 +178,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
-        cli_args = _reconstruct_cli_args(ctx, job)
+        cli_args = _reconstruct_cli_args(ctx)
 
         server = Server.from_servername(kwargs.get("server"))
         server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
