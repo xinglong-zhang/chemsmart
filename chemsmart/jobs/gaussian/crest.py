@@ -257,8 +257,6 @@ class GaussianCrestJob(GaussianJob):
                 jobrunner=self.jobrunner,
             )
             batch_job.run()
-        for job in self.all_conformers_jobs[: self.num_confs_to_opt]:
-            job.run()
 
     def _run(self):
         """
