@@ -8,7 +8,7 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.batch import BatchJob
+from chemsmart.jobs.batch import BatchExecutionError, BatchJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import (
     JobRunner,
@@ -149,6 +149,7 @@ def process_pipeline(ctx, *args, **kwargs):
         logger.info("Running jobs in parallel mode")
         max_workers = get_submitter_worker_count(jobrunner, len(job))
         logger.info(f"Using up to {max_workers} parallel submitter workers")
+        failures = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_job = {}
             for single_job in job:
@@ -165,6 +166,18 @@ def process_pipeline(ctx, *args, **kwargs):
                         f"Job {single_job.label} failed in list execution: {exc}",
                         exc_info=True,
                     )
+                    failures.append(
+                        {"label": single_job.label, "error": str(exc)}
+                    )
+
+        if failures:
+            lines = [
+                f"- {item['label']}: {item['error']}" for item in failures
+            ]
+            raise BatchExecutionError(
+                f"{len(failures)} of {len(job)} list job(s) failed:\n"
+                + "\n".join(lines)
+            )
         return None
 
     # BatchJob has no runner TYPE; bind an engine runner from the first child

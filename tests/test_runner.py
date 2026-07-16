@@ -390,3 +390,36 @@ class TestGaussianBatchDelegation:
 
         mock_job1.run.assert_called_once()
         mock_job2.run.assert_not_called()
+
+
+class TestRunListFailureAggregation:
+    """Legacy list path used by pKa should fail like BatchJob."""
+
+    def test_parallel_list_execution_raises_aggregated_failures(
+        self, pbs_server, mocker
+    ):
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.batch import BatchExecutionError
+
+        jobrunner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=False
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        ok_job = Mock(label="ok_job", TYPE="g16opt")
+        ok_job.run.return_value = None
+        fail_job = Mock(label="fail_job", TYPE="g16opt")
+        fail_job.run.side_effect = RuntimeError("boom")
+
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        with pytest.raises(BatchExecutionError, match="fail_job") as exc_info:
+            process_pipeline.__wrapped__(ctx, [ok_job, fail_job])
+
+        assert "1 of 2 list job(s) failed" in str(exc_info.value)
+        ok_job.run.assert_called_once()
+        fail_job.run.assert_called_once()
