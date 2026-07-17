@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 from threading import RLock
-from typing import Any, IO, Iterable
+from typing import IO, Any, Iterable
 
 from chemsmart.agent.runtime.events import EventKind, RuntimeEvent
 
