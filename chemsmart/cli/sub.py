@@ -13,7 +13,7 @@ from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.batch import BatchJob
-from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.runner import JobRunner, get_configured_max_submitters
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
 from chemsmart.utils.logger import create_logger
@@ -175,6 +175,20 @@ def process_pipeline(ctx, *args, **kwargs):
             print(cli_args)
         return cli_args
 
+    def _array_throttle(jobrunner, num_jobs):
+        """Return SLURM ``--array=1-N%M`` concurrency throttle ``M``.
+
+        ``--no-run-in-parallel`` forces ``M=1``. Otherwise prefer ``-N`` /
+        ``num_nodes``, then ``CHEMSMART_MAX_SUBMITTERS`` / cores policy,
+        then ``num_jobs``.
+        """
+        if jobrunner.no_run_in_parallel:
+            return 1
+        num_nodes = jobrunner.num_nodes
+        if num_nodes is not None and num_nodes > 0:
+            return int(num_nodes)
+        return min(num_jobs, get_configured_max_submitters(jobrunner))
+
     def _process_single_job(job):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
@@ -184,26 +198,46 @@ def process_pipeline(ctx, *args, **kwargs):
         server = Server.from_servername(kwargs.get("server"))
         server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
 
+    def _process_batch_job(batch_job):
+        """Submit a top-level BatchJob as a scheduler array (one task/child)."""
+        if kwargs.get("test"):
+            logger.warning('Not submitting as "test" flag specified.')
+
+        cli_args = _reconstruct_cli_args(ctx)
+        # Shared CLI for every array task: chemsmart run replays the full
+        # batch command; BatchJob.run() selects the child via array env.
+        throttle = _array_throttle(jobrunner, len(batch_job.jobs))
+        logger.info(
+            "Submitting BatchJob %r as array with %s task(s), "
+            "concurrency throttle %%s=%s",
+            batch_job.label,
+            len(batch_job.jobs),
+            throttle,
+        )
+        server = Server.from_servername(kwargs.get("server"))
+        server.submit_array_job(
+            jobs=batch_job.jobs,
+            num_nodes=throttle,
+            test=kwargs.get("test"),
+            cli_args=cli_args,
+            batch_label=batch_job.label,
+        )
+
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
 
-    # Handle list of jobs (legacy multi-molecule return path)
+    # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
         for single_job in job:
             single_job.jobrunner = jobrunner
             _process_single_job(job=single_job)
     elif isinstance(job, BatchJob):
-        # Submit one scheduler job; the generated run script replays the
-        # full CLI command and run.py orchestrates child execution.
         if not job.jobs:
             raise ValueError(f"BatchJob {job} has no child jobs to submit.")
-        logger.info(
-            f"Submitting batch container with {len(job.jobs)} child job(s)"
-        )
         job.jobrunner = jobrunner
-        _process_single_job(job=job)
+        _process_batch_job(job)
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)

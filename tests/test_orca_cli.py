@@ -652,16 +652,21 @@ class TestORCARunSubNoParallelIntegration:
         assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
         assert mock_batch_run.call_count == 1
 
-    def test_sub_no_run_in_parallel_submits_serial_batch_job(
+    def test_sub_no_run_in_parallel_submits_array_batch_job(
         self,
         multiple_molecules_xyz_file,
         pbs_server,
     ):
-        """`sub --no-run-in-parallel` submits ORCA batch with serial flag."""
+        """`sub --no-run-in-parallel` submits ORCA BatchJob as array with %1."""
+        from chemsmart.jobs.orca.batch import ORCABatchJob
+
         job_settings = ORCAJobSettings.default()
 
         runner = CliRunner()
-        mock_batch_job = MagicMock()
+        mock_batch_job = ORCABatchJob(
+            jobs=[MagicMock(label="j1"), MagicMock(label="j2")],
+            label="mols_batch",
+        )
         with (
             patch(
                 "chemsmart.cli.sub.Server.from_servername",
@@ -676,7 +681,9 @@ class TestORCARunSubNoParallelIntegration:
                 "chemsmart.jobs.orca.batch.ORCABatchJob",
                 return_value=mock_batch_job,
             ) as mock_batch_cls,
-            patch("chemsmart.settings.server.Server.submit") as mock_submit,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
         ):
             result = runner.invoke(
                 entry_point,
@@ -709,10 +716,15 @@ class TestORCARunSubNoParallelIntegration:
         assert mock_job_cls.call_count == 2
         assert mock_batch_cls.call_count == 1
         assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
-        assert mock_submit.call_count == 1
-        assert mock_submit.call_args.kwargs["test"] is True
+        assert mock_submit_array.call_count == 1
+        assert mock_submit_array.call_args.kwargs["test"] is True
+        assert mock_submit_array.call_args.kwargs["num_nodes"] == 1
         assert (
-            "--no-run-in-parallel" in mock_submit.call_args.kwargs["cli_args"]
+            mock_submit_array.call_args.kwargs["batch_label"] == "mols_batch"
+        )
+        assert (
+            "--no-run-in-parallel"
+            in mock_submit_array.call_args.kwargs["cli_args"]
         )
 
 

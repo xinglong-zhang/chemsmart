@@ -849,14 +849,19 @@ class TestGaussianRunSubNoParallelIntegration:
         assert len(mock_batch_cls.call_args.kwargs["jobs"]) == 2
         assert mock_batch_run.call_count == 1
 
-    def test_sub_no_run_in_parallel_submits_serial_batch_job(
+    def test_sub_no_run_in_parallel_submits_array_batch_job(
         self,
         multiple_molecules_xyz_file,
         pbs_server,
     ):
-        """`sub --no-run-in-parallel` submits Gaussian batch with serial flag."""
+        """`sub --no-run-in-parallel` submits BatchJob as array with %1."""
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+
         runner = CliRunner()
-        mock_batch_job = MagicMock()
+        mock_batch_job = GaussianBatchJob(
+            jobs=[MagicMock(label="j1"), MagicMock(label="j2")],
+            label="mols_batch",
+        )
         with (
             patch(
                 "chemsmart.cli.sub.Server.from_servername",
@@ -869,7 +874,9 @@ class TestGaussianRunSubNoParallelIntegration:
                 "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
                 return_value=mock_batch_job,
             ) as mock_batch_cls,
-            patch("chemsmart.settings.server.Server.submit") as mock_submit,
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
         ):
             result = runner.invoke(
                 entry_point,
@@ -902,11 +909,80 @@ class TestGaussianRunSubNoParallelIntegration:
         assert mock_job_cls.call_count == 2
         assert mock_batch_cls.call_count == 1
         assert mock_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
-        assert mock_submit.call_count == 1
-        assert mock_submit.call_args.kwargs["test"] is True
+        assert mock_submit_array.call_count == 1
+        assert mock_submit_array.call_args.kwargs["test"] is True
+        assert mock_submit_array.call_args.kwargs["num_nodes"] == 1
         assert (
-            "--no-run-in-parallel" in mock_submit.call_args.kwargs["cli_args"]
+            mock_submit_array.call_args.kwargs["batch_label"] == "mols_batch"
         )
+        assert len(mock_submit_array.call_args.kwargs["jobs"]) == 2
+        assert (
+            "--no-run-in-parallel"
+            in mock_submit_array.call_args.kwargs["cli_args"]
+        )
+
+    def test_sub_run_in_parallel_uses_num_nodes_as_array_throttle(
+        self,
+        multiple_molecules_xyz_file,
+        pbs_server,
+    ):
+        """`sub --run-in-parallel -N 2` throttles array concurrency to 2."""
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+
+        runner = CliRunner()
+        mock_batch_job = GaussianBatchJob(
+            jobs=[
+                MagicMock(label="j1"),
+                MagicMock(label="j2"),
+                MagicMock(label="j3"),
+            ],
+            label="mols_batch",
+        )
+        with (
+            patch(
+                "chemsmart.cli.sub.Server.from_servername",
+                return_value=pbs_server,
+            ),
+            patch("chemsmart.jobs.gaussian.opt.GaussianOptJob"),
+            patch(
+                "chemsmart.jobs.gaussian.batch.GaussianBatchJob",
+                return_value=mock_batch_job,
+            ),
+            patch(
+                "chemsmart.settings.server.Server.submit_array_job"
+            ) as mock_submit_array,
+        ):
+            result = runner.invoke(
+                entry_point,
+                [
+                    "sub",
+                    "-s",
+                    "PBS",
+                    "-N",
+                    "2",
+                    "--run-in-parallel",
+                    "--test",
+                    "gaussian",
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1,2,3",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj={},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_submit_array.call_count == 1
+        assert mock_submit_array.call_args.kwargs["num_nodes"] == 2
+        assert len(mock_submit_array.call_args.kwargs["jobs"]) == 3
 
     def test_scan_settings_from_project(
         self,
