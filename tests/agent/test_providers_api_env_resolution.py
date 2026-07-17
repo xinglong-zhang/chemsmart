@@ -98,7 +98,7 @@ def test_get_provider_uses_cwd_api_env_when_home_missing(
     assert provider.api_key == "cwd-key"
 
 
-def test_get_provider_skips_dotenv_when_no_api_env_file_found(
+def test_get_provider_skips_legacy_env_loader_when_no_api_env_file_found(
     monkeypatch, tmp_path
 ):
     dummy_provider = _configure_openai(monkeypatch)
@@ -109,12 +109,12 @@ def test_get_provider_skips_dotenv_when_no_api_env_file_found(
     monkeypatch.chdir(cwd_dir)
     monkeypatch.setenv("ai_api_key", "shell-key")
 
-    def fail_load_dotenv(*args, **kwargs):
+    def fail_load_legacy_env(*args, **kwargs):
         raise AssertionError(
-            "load_dotenv should be skipped when no file exists"
+            "legacy env loader should be skipped when no file exists"
         )
 
-    monkeypatch.setattr(providers, "load_dotenv", fail_load_dotenv)
+    monkeypatch.setattr(providers, "_load_legacy_env", fail_load_legacy_env)
 
     provider = providers.get_provider()
 
