@@ -22,10 +22,10 @@ import time
 import types
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional, Sequence, Type, TypeVar
+from typing import Any, Iterator, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import get_serial_mode, get_submitter_worker_count
@@ -76,6 +76,25 @@ def resolve_array_task_id() -> Optional[int]:
                 f"Invalid {key}={value!r}; expected an integer task id."
             ) from exc
     return None
+
+
+@contextmanager
+def cleared_array_task_env() -> Iterator[None]:
+    """Temporarily remove scheduler array task id environment variables.
+
+    Top-level ``BatchJob._run_array_task`` uses this around ``child.run()`` so
+    nestable parents (crest/QRC/dias/traj) do not treat the outer array task
+    id as a nested child index. Nestable array submit still re-invokes the
+    parent CLI with these variables set (no outer ``BatchJob`` array wrapper).
+    """
+    saved: dict[str, str] = {}
+    for key in _ARRAY_TASK_ID_ENV_VARS:
+        if key in os.environ:
+            saved[key] = os.environ.pop(key)
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
 
 
 def resolve_batch_execution_mode() -> BatchExecutionMode:
@@ -208,6 +227,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
         ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX`` are
         treated as 1-based indexes into ``self.jobs``.
+
+        Array-task env vars are cleared around ``child.run()`` so nestable
+        children do not reuse the outer task id for nested selection.
         """
         task_id = resolve_array_task_id()
         if task_id is None:
@@ -266,7 +288,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             mem_gb,
             child.label,
         )
-        outcome = self._submit_job(child, node=None, **kwargs)
+        # Isolate nestable selection from this outer array task id.
+        with cleared_array_task_env():
+            outcome = self._submit_job(child, node=None, **kwargs)
         outcomes = [outcome]
         self._last_batch_outcomes = outcomes
         if self.write_outcome_logs:
@@ -755,6 +779,10 @@ def run_selected_array_child(
     ``chemsmart sub --run-in-parallel``: each array task re-invokes the
     parent CLI, and this helper runs only ``jobs[task_id - 1]`` with the
     parent's full resources.
+
+    Top-level ``BatchJob._run_array_task`` clears array-task env vars before
+    running a selected child, so nestable selection does not fire for
+    parents that are themselves top-level array children.
 
     Returns:
         True if an array task was handled; False if no array env is set

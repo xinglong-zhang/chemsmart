@@ -697,6 +697,67 @@ class TestGaussianBatchDelegation:
         assert child_r.jobrunner is gaussian_jobrunner_no_scratch
         mock_batch_cls.return_value.run.assert_not_called()
 
+    def test_multi_molecule_orca_qrc_outer_array_runs_both_directions(
+        self, pbs_server, orca_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """Outer SLURM array must not steal nestable QRC child selection.
+
+        ``chemsmart sub ... orca -i 1,2,3 qrc`` yields ORCABatchJob of three
+        ORCAQRCJobs. Each array task runs one molecule; that QRC must still
+        run both forward and reverse. Task id 3 previously raised ValueError
+        against the two nested QRC children.
+        """
+        import os
+
+        from chemsmart.jobs.orca.batch import ORCABatchJob
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "3")
+        settings = ORCAJobSettings()
+        qrc_parents = []
+        nested_pairs = []
+        for index in range(3):
+            parent = ORCAQRCJob(
+                molecule=MockMolecule(),
+                settings=settings,
+                label=f"mol{index}_qrc",
+                jobrunner=orca_jobrunner_no_scratch,
+                skip_completed=False,
+            )
+            forward = Mock(label=f"mol{index}_f")
+            forward.run.return_value = None
+            forward.is_complete.return_value = True
+            reverse = Mock(label=f"mol{index}_r")
+            reverse.run.return_value = None
+            reverse.is_complete.return_value = True
+            nested = [forward, reverse]
+            nested_pairs.append(nested)
+            mocker.patch.object(
+                parent, "_prepare_both_qrc_jobs", return_value=nested
+            )
+            qrc_parents.append(parent)
+
+        batch = ORCABatchJob(
+            jobs=qrc_parents,
+            no_run_in_parallel=True,
+            label="mols_qrc_batch",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        batch.run()
+
+        # Outer array selected molecule 3 only.
+        for index, nested in enumerate(nested_pairs):
+            if index == 2:
+                nested[0].run.assert_called_once()
+                nested[1].run.assert_called_once()
+            else:
+                nested[0].run.assert_not_called()
+                nested[1].run.assert_not_called()
+
+        # Outer array env restored after the selected child finishes.
+        assert os.environ.get("SLURM_ARRAY_TASK_ID") == "3"
+
 
 class TestRunListFailureAggregation:
     """List execution aggregates failures like BatchJob."""
@@ -1220,6 +1281,43 @@ class TestBatchExecutionModes:
         children[3].run.assert_not_called()
         assert children[1].jobrunner.num_cores == 16
         assert children[1].jobrunner.mem_gb == 32
+
+    def test_array_task_clears_scheduler_env_during_child_run(
+        self, pbs_server, monkeypatch
+    ):
+        """Outer array task id must not be visible inside child.run()."""
+        import os
+
+        from chemsmart.jobs.batch import resolve_array_task_id
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        seen = {}
+
+        def _record_env(**kwargs):
+            seen["task_id"] = resolve_array_task_id()
+            seen["slurm"] = os.environ.get("SLURM_ARRAY_TASK_ID")
+
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(3):
+            child = Mock(label=f"child_{index}")
+            child.run.side_effect = _record_env if index == 1 else None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            no_run_in_parallel=True,
+            jobrunner=runner,
+            label="array_batch",
+        )
+        batch.run()
+
+        assert seen["task_id"] is None
+        assert seen["slurm"] is None
+        assert os.environ.get("SLURM_ARRAY_TASK_ID") == "2"
 
     def test_array_task_rejects_out_of_range_task_id(
         self, pbs_server, monkeypatch
