@@ -30,6 +30,26 @@ from chemsmart.agent.tui.widgets.footer import FooterWidget
 from chemsmart.agent.tui.widgets.transcript import Transcript
 
 
+def _tool_lifecycle_note(event: ToolUseEvent) -> str | None:
+    if event.status == "approved":
+        if event.scope == "session":
+            return "approved for the rest of this session"
+        return "approved"
+    if event.status == "denied":
+        return (
+            "Denied by user; model will continue without this action."
+            if event.reason == "user_denied"
+            else f"Denied: {event.reason or 'policy blocked'}"
+        )
+    if event.status != "pending":
+        return (
+            event.reason
+            or _tool_use_payload_summary(event.payload)
+            or event.status
+        )
+    return None
+
+
 class ToolEventMixin:
     """Render tool calls while preserving provider call lifecycle identity."""
 
@@ -59,7 +79,6 @@ class ToolEventMixin:
         footer.set_hint("Answer the question to continue")
 
     def _apply_tool_use_event(self, event: ToolUseEvent) -> None:
-        transcript = self.query_one(Transcript)
         footer = self.query_one(FooterWidget)
         # ask_user is a clarification, not a permission-gated action. Render it
         # as a plain question (never a "[unknown]" risky pending tool cell) and
@@ -68,25 +87,6 @@ class ToolEventMixin:
             if event.status == "pending":
                 self._render_ask_user_prompt(event)
             return
-        note = None
-        if event.status == "approved":
-            if event.scope == "session":
-                note = "approved for the rest of this session"
-            else:
-                note = "approved"
-        elif event.status == "denied":
-            note = (
-                "Denied by user; model will continue without this action."
-                if event.reason == "user_denied"
-                else f"Denied: {event.reason or 'policy blocked'}"
-            )
-        elif event.status not in {"pending", "approved"}:
-            note = (
-                event.reason
-                or _tool_use_payload_summary(event.payload)
-                or event.status
-            )
-
         call_id = event.provider_call_id or (
             f"legacy:{event.step_index}:{event.tool}"
         )
@@ -101,7 +101,7 @@ class ToolEventMixin:
             status=event.status,
             description=event.description or event.tool,
             arguments=event.args,
-            note=note,
+            note=_tool_lifecycle_note(event),
             queue_index=event.queue_index,
             queue_total=event.queue_total,
             session_rule_active=(
@@ -128,35 +128,43 @@ class ToolEventMixin:
             payload = event.payload if isinstance(event.payload, dict) else {}
             self._publish_execute_tool_result(payload)
         if event.tool == "dry_run_input" and event.status == "ok":
-            summary = _tool_use_summary_payload(event.payload)
-            if summary is not None:
-                content = str(summary.get("content") or "")
-                inputfile = (
-                    str(summary.get("inputfile"))
-                    if summary.get("inputfile") is not None
-                    else None
-                )
-                command = (
-                    str(summary.get("command"))
-                    if summary.get("command") is not None
-                    else None
-                )
-                transcript.add_cell(
-                    DryRunInputCell(
-                        content,
-                        inputfile=inputfile,
-                        previous_content=self._latest_dry_run_content,
-                        command=command,
-                        cli_grounded=bool(summary.get("cli_grounded")),
-                        cli_grounding_issue=(
-                            str(summary.get("cli_grounding_issue"))
-                            if summary.get("cli_grounding_issue") is not None
-                            else None
-                        ),
-                    )
-                )
-                self._latest_dry_run_content = content
+            self._render_dry_run_result(event)
+        self._update_footer_for_tool_status(event, footer)
 
+    def _render_dry_run_result(self, event: ToolUseEvent) -> None:
+        summary = _tool_use_summary_payload(event.payload)
+        if summary is None:
+            return
+        content = str(summary.get("content") or "")
+        inputfile = (
+            str(summary.get("inputfile"))
+            if summary.get("inputfile") is not None
+            else None
+        )
+        command = (
+            str(summary.get("command"))
+            if summary.get("command") is not None
+            else None
+        )
+        self.query_one(Transcript).add_cell(
+            DryRunInputCell(
+                content,
+                inputfile=inputfile,
+                previous_content=self._latest_dry_run_content,
+                command=command,
+                cli_grounded=bool(summary.get("cli_grounded")),
+                cli_grounding_issue=(
+                    str(summary.get("cli_grounding_issue"))
+                    if summary.get("cli_grounding_issue") is not None
+                    else None
+                ),
+            )
+        )
+        self._latest_dry_run_content = content
+
+    def _update_footer_for_tool_status(
+        self, event: ToolUseEvent, footer: FooterWidget
+    ) -> None:
         if event.status == "pending":
             self._pending_approval_description = (
                 event.description or event.tool

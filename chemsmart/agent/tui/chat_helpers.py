@@ -88,98 +88,118 @@ def _latest_project_yaml_candidate(
     if not log_path.exists():
         return None
 
-    candidate: dict[str, object] | None = None
-    candidate_yaml: object | None = None
-    validated = False
-    validation_requests: dict[str, dict[str, object]] = {}
+    scan = _YamlCandidateScan()
     try:
         for raw in log_path.read_text(encoding="utf-8").splitlines():
             if not raw.strip():
                 continue
-            entry = json.loads(raw)
-            payload = entry.get("payload") or {}
-            if not isinstance(payload, dict):
-                continue
-            tool = payload.get("tool")
-            call_id = str(payload.get("provider_call_id") or "")
-            if (
-                entry.get("kind") == "tool_use_request"
-                and tool == "validate_project_yaml"
-                and call_id
-            ):
-                args = payload.get("args") or {}
-                yaml_text = args.get("yaml_text") if isinstance(args, dict) else None
-                if isinstance(yaml_text, str) and not yaml_text.strip():
-                    continue
-                if not isinstance(yaml_text, (str, dict)):
-                    continue
-                validation_requests[call_id] = {
-                    "project_name": str(
-                        args.get("project_name") or "project"
-                    ),
-                    "program": str(args.get("program") or "gaussian"),
-                    "yaml_text": yaml_text,
-                }
-                continue
-            if payload.get("status") not in {None, "ok"}:
-                continue
-
-            result = payload.get("payload") or {}
-            if isinstance(result, dict) and isinstance(
-                result.get("summary"), dict
-            ):
-                result = result["summary"]
-            if not isinstance(result, dict):
-                continue
-            if tool == "validate_project_yaml":
-                if result.get("verdict") not in {"ok", "warn", "reject"}:
-                    continue
-                request_candidate = validation_requests.pop(call_id, None)
-                validated = result.get("verdict") in {"ok", "warn"}
-                if validated and request_candidate is not None:
-                    candidate = request_candidate
-                    candidate_yaml = request_candidate["yaml_text"]
-                    continue
-                # Older logs recorded only results. They may validate a prior
-                # accepted render, but never a rejected or missing candidate.
-                if candidate is None:
-                    validated = False
-                    continue
-                if not validated:
-                    candidate = None
-                    candidate_yaml = None
-                continue
-            if tool != "render_project_yaml":
-                continue
-            yaml_text = result.get("yaml_text")
-            if not isinstance(yaml_text, str) or not yaml_text.strip():
-                continue
-            validation = result.get("validation")
-            render_rejected = result.get("ok") is False or (
-                isinstance(validation, dict)
-                and validation.get("verdict") == "reject"
-            )
-            if render_rejected:
-                candidate = None
-                candidate_yaml = None
-                validated = False
-                continue
-            # A re-render of the identical candidate (build-mode over-iteration)
-            # must NOT discard a prior successful validation — only a genuinely
-            # new/changed candidate resets the validated flag and needs
-            # re-validation before it can be written.
-            if yaml_text == candidate_yaml:
-                continue
-            candidate = {
-                "project_name": str(result.get("project_name") or "project"),
-                "program": str(result.get("program") or "gaussian"),
-                "yaml_text": yaml_text,
-            }
-            candidate_yaml = yaml_text
-            validated = False
+            scan.feed(json.loads(raw))
     except Exception:
         return None
-    return candidate if validated else None
+    return scan.candidate if scan.validated else None
+
+
+class _YamlCandidateScan:
+    """Replay a decision log to find the last validated YAML candidate."""
+
+    def __init__(self) -> None:
+        self.candidate: dict[str, object] | None = None
+        self.candidate_yaml: object | None = None
+        self.validated = False
+        self.validation_requests: dict[str, dict[str, object]] = {}
+
+    def feed(self, entry: dict[str, object]) -> None:
+        payload = entry.get("payload") or {}
+        if not isinstance(payload, dict):
+            return
+        tool = payload.get("tool")
+        call_id = str(payload.get("provider_call_id") or "")
+        if (
+            entry.get("kind") == "tool_use_request"
+            and tool == "validate_project_yaml"
+            and call_id
+        ):
+            self._record_validation_request(call_id, payload)
+            return
+        if payload.get("status") not in {None, "ok"}:
+            return
+        result = _summary_result(payload)
+        if result is None:
+            return
+        if tool == "validate_project_yaml":
+            self._apply_validation_result(call_id, result)
+        elif tool == "render_project_yaml":
+            self._apply_render_result(result)
+
+    def _record_validation_request(
+        self, call_id: str, payload: dict[str, object]
+    ) -> None:
+        args = payload.get("args") or {}
+        yaml_text = args.get("yaml_text") if isinstance(args, dict) else None
+        if isinstance(yaml_text, str) and not yaml_text.strip():
+            return
+        if not isinstance(yaml_text, (str, dict)):
+            return
+        self.validation_requests[call_id] = {
+            "project_name": str(args.get("project_name") or "project"),
+            "program": str(args.get("program") or "gaussian"),
+            "yaml_text": yaml_text,
+        }
+
+    def _apply_validation_result(
+        self, call_id: str, result: dict[str, object]
+    ) -> None:
+        if result.get("verdict") not in {"ok", "warn", "reject"}:
+            return
+        request_candidate = self.validation_requests.pop(call_id, None)
+        self.validated = result.get("verdict") in {"ok", "warn"}
+        if self.validated and request_candidate is not None:
+            self.candidate = request_candidate
+            self.candidate_yaml = request_candidate["yaml_text"]
+            return
+        # Older logs recorded only results. They may validate a prior
+        # accepted render, but never a rejected or missing candidate.
+        if self.candidate is None:
+            self.validated = False
+            return
+        if not self.validated:
+            self.candidate = None
+            self.candidate_yaml = None
+
+    def _apply_render_result(self, result: dict[str, object]) -> None:
+        yaml_text = result.get("yaml_text")
+        if not isinstance(yaml_text, str) or not yaml_text.strip():
+            return
+        validation = result.get("validation")
+        render_rejected = result.get("ok") is False or (
+            isinstance(validation, dict)
+            and validation.get("verdict") == "reject"
+        )
+        if render_rejected:
+            self.candidate = None
+            self.candidate_yaml = None
+            self.validated = False
+            return
+        # A re-render of the identical candidate (build-mode over-iteration)
+        # must NOT discard a prior successful validation — only a genuinely
+        # new/changed candidate resets the validated flag and needs
+        # re-validation before it can be written.
+        if yaml_text == self.candidate_yaml:
+            return
+        self.candidate = {
+            "project_name": str(result.get("project_name") or "project"),
+            "program": str(result.get("program") or "gaussian"),
+            "yaml_text": yaml_text,
+        }
+        self.candidate_yaml = yaml_text
+        self.validated = False
+
+
+def _summary_result(payload: dict[str, object]) -> dict[str, object] | None:
+    result = payload.get("payload") or {}
+    if isinstance(result, dict) and isinstance(result.get("summary"), dict):
+        result = result["summary"]
+    return result if isinstance(result, dict) else None
 
 
 def _yaml_footer_label(status: WorkspaceProjectStatus) -> str:
