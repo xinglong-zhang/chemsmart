@@ -345,34 +345,44 @@ class TestBatchJobRefactor:
         later_job.run.assert_not_called()
         assert batch._jobs_not_started == 1
 
-    def test_parallel_fail_fast_still_submits_all(self, pbs_server):
+    def test_parallel_request_falls_back_to_serial(self, pbs_server):
+        """In-process parallel is disabled; children run serially."""
         from chemsmart.jobs.batch import BatchExecutionError
 
         dummy_batch_cls = self._dummy_batch_cls()
         runner = JobRunner(
-            server=pbs_server, fake=True, no_run_in_parallel=False
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=False,
+            num_cores=16,
+            mem_gb=32,
         )
 
         fail_job = Mock(label="fail_job")
         fail_job.run.side_effect = RuntimeError("fail")
         fail_job.is_complete.return_value = False
 
-        ok_job = Mock(label="ok_job")
-        ok_job.run.return_value = None
-        ok_job.is_complete.return_value = True
+        later_job = Mock(label="later_job")
+        later_job.run.return_value = None
+        later_job.is_complete.return_value = True
 
         batch = dummy_batch_cls(
-            jobs=[fail_job, ok_job],
+            jobs=[fail_job, later_job],
             no_run_in_parallel=False,
             fail_fast=True,
             jobrunner=runner,
         )
 
-        with pytest.raises(BatchExecutionError, match="1 of 2"):
+        with pytest.raises(
+            BatchExecutionError, match="1 attempted, 1 failed, 1 not started"
+        ):
             batch.run()
 
+        assert batch.no_run_in_parallel is True
         fail_job.run.assert_called_once()
-        ok_job.run.assert_called_once()
+        later_job.run.assert_not_called()
+        assert fail_job.jobrunner.num_cores == 16
+        assert fail_job.jobrunner.mem_gb == 32
 
     def test_run_child_jobs_as_batch_always_serial(self, pbs_server):
         """Nested batches always run children serially with full resources."""

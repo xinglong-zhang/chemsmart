@@ -4,7 +4,7 @@ Shared batch job infrastructure.
 Provides the abstract ``BatchJob`` base class for orchestrating collections
 of engine-specific jobs. Engine-agnostic behavior includes:
 
-- serial and parallel child-job scheduling
+- serial local child-job execution with full resources per child
 - fault-tolerant execution with aggregated failures
 - scheduler/node allocation detection (SLURM/PBS)
 - distribution of child jobs across allocated nodes
@@ -48,9 +48,11 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     Orchestration is engine-agnostic. Subclasses implement
     ``_configure_runner_for_node`` for engine-specific node adaptation.
 
-    ``no_run_in_parallel`` selects serial vs parallel child scheduling.
+    Local ``run()`` always executes children serially with full resources.
+    ``no_run_in_parallel`` may still be set by callers for CLI/submit
+    policy, but in-process concurrent children are not used.
     ``fail_fast`` stops serial submission after the first unsuccessful
-    outcome (ignored in parallel mode).
+    outcome.
     """
 
     PROGRAM: Optional[str] = None
@@ -115,13 +117,21 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self.no_run_in_parallel = True
 
     def _run(self, **kwargs: Any) -> None:
-        """Dispatch execution to multi-node, serial, or parallel mode."""
+        """Dispatch execution to multi-node or serial local mode."""
         nodes = self._get_allocated_nodes()
         total_jobs = len(self.jobs)
 
         if nodes and len(nodes) > 1:
             outcomes = self._run_multi_node(nodes, **kwargs)
-        elif self.no_run_in_parallel:
+        else:
+            if not self.no_run_in_parallel:
+                logger.warning(
+                    "BatchJob in-process parallel execution is disabled; "
+                    "running %s child job(s) serially with full resources. "
+                    "Use chemsmart sub for cluster concurrency.",
+                    total_jobs,
+                )
+                self.no_run_in_parallel = True
             runner = self.jobrunner
             if runner is not None:
                 cores = runner.num_cores
@@ -137,14 +147,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                 mem_gb,
             )
             outcomes = self._run_jobs_serially(self.jobs, **kwargs)
-        else:
-            if self.fail_fast:
-                logger.info(
-                    "fail_fast is set but ignored in parallel mode; "
-                    "all child jobs will be submitted."
-                )
-            logger.info(f"Running batch of {total_jobs} jobs in parallel.")
-            outcomes = self._run_jobs_in_parallel(self.jobs, **kwargs)
 
         self._last_batch_outcomes = outcomes
         if self.write_outcome_logs:
@@ -201,40 +203,6 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                         f"{job.label} failed; {remaining} job(s) not started."
                     )
                 break
-        return outcomes
-
-    def _run_jobs_in_parallel(
-        self,
-        jobs: Sequence[Job],
-        **kwargs: Any,
-    ) -> list[dict[str, Any]]:
-        """Submit child jobs concurrently using a thread pool."""
-        outcomes: list[dict[str, Any]] = []
-        max_workers = get_submitter_worker_count(self.jobrunner, len(jobs))
-        logger.info(f"Using up to {max_workers} parallel submitter workers")
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_job = {
-                executor.submit(self._submit_job, job, None, **kwargs): job
-                for job in jobs
-            }
-
-            for future in as_completed(future_to_job):
-                job = future_to_job[future]
-                try:
-                    outcomes.append(future.result())
-                except Exception as e:
-                    logger.error(
-                        f"Unexpected failure while coordinating job {job.label}: {e}",
-                        exc_info=True,
-                    )
-                    outcomes.append(
-                        {
-                            "label": job.label,
-                            "success": False,
-                            "error": str(e),
-                            "node": None,
-                        }
-                    )
         return outcomes
 
     def _submit_job(
