@@ -68,8 +68,23 @@ ITERATE_YAML_TEMPLATE = """\
 algorithm:
   name: lagrange_multipliers      # or 'etkdg'
   options:
-    sphere_direction_samples_num: 96
-    axial_rotations_sample_num: 6
+    # Joint Lagrange places one or more substituents in a single 6K-dim
+    # optimization. With adaptive sampling on (default), a fixed coarse stage
+    # runs first and the six sampling/pruning parameters (n_link_sphere,
+    # n_orientation_sphere, n_axial, candidate_pool_size, preselect,
+    # beam_width) only take effect when the coarse stage does not yield
+    # an acceptable optimized structure; max_starts and slsqp_maxiter always
+    # apply. Set
+    # use_adaptive_sampling: false to always apply the full sampling values.
+    use_adaptive_sampling: true
+    n_link_sphere: 48
+    n_orientation_sphere: 24
+    n_axial: 4
+    candidate_pool_size: 20
+    preselect: 48
+    beam_width: 4096
+    max_starts: 8
+    slsqp_maxiter: 200
   # --- ETKDG (RDKit ETKDGv3; local by default) ---
   # name: etkdg
   # options:

@@ -212,7 +212,7 @@ class IterateCombination:
         >=1 for global mode.
     algorithm_config : IterateAlgorithmConfig
         Resolved algorithm configuration (name + options) used to build the
-        per-assignment analyzer (Lagrange multipliers or ETKDG).
+        per-combination analyzer (Joint Lagrange or ETKDG).
     """
 
     skeleton_idx: int
@@ -327,14 +327,9 @@ def build_analyzer(
 
     Dispatch is driven by the algorithm registry (:mod:`settings`): the
     resolved :class:`AlgorithmSpec` supplies the builder, so this function
-    stays algorithm-agnostic. The analyzer joins the skeleton and every
-    substituent into one molecule and produces the combined structure in a
-    single ``run()``.
-
-    The algorithm's ``supports_multi_substituent`` capability is enforced
-    here, before the analyzer is built, so a single-substituent-only
-    algorithm fails with a clear error instead of hiding the limit inside its
-    builder.
+    stays algorithm-agnostic. Every registered algorithm accepts one or more
+    substituent assignments and joins the skeleton and all substituents into
+    one molecule, producing the combined structure in a single ``run()``.
 
     Parameters
     ----------
@@ -350,20 +345,8 @@ def build_analyzer(
     -------
     object
         An analyzer exposing a ``run() -> Molecule | None`` method.
-
-    Raises
-    ------
-    NotImplementedError
-        If more than one substituent is requested for an algorithm whose
-        spec does not advertise ``supports_multi_substituent``.
     """
     spec = get_algorithm_spec(algorithm_config.name)
-    if len(substituents) > 1 and not spec.supports_multi_substituent:
-        raise NotImplementedError(
-            f"Algorithm '{spec.canonical_name}' does not support "
-            f"multi-substituent combinations (received {len(substituents)} "
-            f"substituents); it attaches a single substituent per run."
-        )
     return spec.analyzer_builder(
         algorithm_config.options,
         skeleton,

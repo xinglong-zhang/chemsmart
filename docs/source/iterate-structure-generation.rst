@@ -139,7 +139,8 @@ algorithm subcommand (``lagrange``, ``etkdg``). When both are given, the CLI tak
 
 Two algorithms are available:
 
--  ``lagrange`` (default): a Lagrange-multipliers orientation search.
+-  ``lagrange`` (default): a joint Lagrange placement that attaches one or
+   more substituents in a single 6K-dimensional optimization.
 -  ``etkdg``: RDKit ETKDGv3 distance-geometry embedding. In the default **local** mode the skeleton is held fixed and
    only the substituent is re-embedded; ``--global`` re-embeds the whole molecule.
 

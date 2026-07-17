@@ -47,7 +47,7 @@ class IterateAlgorithmConfig:
     name : str
         Canonical algorithm name (e.g. ``lagrange_multipliers``).
     options : dict
-        Algorithm-specific options (e.g. ``sphere_direction_samples_num``).
+        Algorithm-specific options (e.g. ``n_link_sphere``).
     """
 
     name: str = DEFAULT_ALGORITHM_NAME
@@ -80,15 +80,9 @@ class AlgorithmSpec:
         analyzer for a combination, where ``substituents`` is a list of
         ``(substituent, skeleton_link, substituent_link)`` tuples (1-based
         link indices). The analyzer joins the skeleton and every substituent
-        into one molecule and produces the combined structure in a single
-        ``run()``. Required: every registered algorithm must provide a
-        builder (there are no placeholder algorithms).
-    supports_multi_substituent : bool
-        Whether the algorithm can attach more than one substituent in a
-        single combined optimization. ETKDG advertises ``True`` (joint
-        embedding); Lagrange multipliers advertise ``False`` (one substituent
-        per run). The runner checks this before building the analyzer, so the
-        limit is not hidden inside a builder.
+        (one or more) into one molecule and produces the combined structure
+        in a single ``run()``. Required: every registered algorithm must
+        provide a builder (there are no placeholder algorithms).
     """
 
     canonical_name: str
@@ -96,7 +90,6 @@ class AlgorithmSpec:
     default_options: dict
     analyzer_builder: AnalyzerBuilder
     option_validators: dict = field(default_factory=dict)
-    supports_multi_substituent: bool = False
 
     def __post_init__(self):
         # Freeze the mutable mappings so a registered spec cannot be
@@ -186,20 +179,16 @@ def _build_lagrange_analyzer(
     skeleton,
     substituents,
 ):
-    from chemsmart.jobs.iterate.iterate import IterateAnalyzer
+    from chemsmart.jobs.iterate.joint_lagrange import (
+        IterateJointLagrangeAnalyzer,
+    )
 
-    # build_analyzer only routes single-substituent combinations here
-    # (Lagrange advertises supports_multi_substituent=False), so unpack the
-    # sole attachment.
-    substituent, skeleton_link_index, substituent_link_index = substituents[0]
-    return IterateAnalyzer(
+    # The Joint-Lagrange optimizer consumes the full substituent list in one
+    # 6K-dimensional optimization; K=1 and K>1 share this single path.
+    return IterateJointLagrangeAnalyzer(
         skeleton=skeleton,
-        substituent=substituent,
-        skeleton_link_index=skeleton_link_index,
-        substituent_link_index=substituent_link_index,
-        method="lagrange_multipliers",
-        sphere_direction_samples_num=options["sphere_direction_samples_num"],
-        axial_rotations_sample_num=options["axial_rotations_sample_num"],
+        substituents=substituents,
+        options=options,
     )
 
 
@@ -208,7 +197,7 @@ def _build_etkdg_analyzer(
     skeleton,
     substituents,
 ):
-    from chemsmart.jobs.iterate.iterate import IterateETKDGAnalyzer
+    from chemsmart.jobs.iterate.etkdg import IterateETKDGAnalyzer
 
     return IterateETKDGAnalyzer(
         skeleton=skeleton,
@@ -255,12 +244,40 @@ _ALGORITHM_SPECS = (
         canonical_name="lagrange_multipliers",
         aliases=("lagrange", "lagrange_multipliers"),
         default_options={
-            "sphere_direction_samples_num": 96,
-            "axial_rotations_sample_num": 6,
+            # Adaptive sampling first runs a fixed coarse stage; the six
+            # full-stage sampling/pruning parameters (n_link_sphere,
+            # n_orientation_sphere, n_axial, candidate_pool_size, preselect,
+            # beam_width) only take effect when the coarse stage does not
+            # produce an acceptable optimized structure. max_starts and
+            # slsqp_maxiter always apply, in either stage.
+            "use_adaptive_sampling": True,
+            # Full-stage sampling of linking-atom bond-sphere positions.
+            "n_link_sphere": 48,
+            # Full-stage sampling of substituent principal-axis directions.
+            "n_orientation_sphere": 24,
+            # Axial rotations per orientation direction.
+            "n_axial": 4,
+            # Per-substituent candidate pool size after region exclusion.
+            "candidate_pool_size": 20,
+            # Top joint combinations fed into greedy start selection.
+            "preselect": 48,
+            # Beam width retained per layer during feasible pruning.
+            "beam_width": 4096,
+            # Maximum 6K-dimensional joint starts handed to SLSQP.
+            "max_starts": 8,
+            # Maximum SLSQP iterations per start.
+            "slsqp_maxiter": 200,
         },
         option_validators={
-            "sphere_direction_samples_num": _validate_positive_int,
-            "axial_rotations_sample_num": _validate_positive_int,
+            "use_adaptive_sampling": _validate_bool,
+            "n_link_sphere": _validate_positive_int,
+            "n_orientation_sphere": _validate_positive_int,
+            "n_axial": _validate_positive_int,
+            "candidate_pool_size": _validate_positive_int,
+            "preselect": _validate_positive_int,
+            "beam_width": _validate_positive_int,
+            "max_starts": _validate_positive_int,
+            "slsqp_maxiter": _validate_positive_int,
         },
         analyzer_builder=_build_lagrange_analyzer,
     ),
@@ -295,7 +312,6 @@ _ALGORITHM_SPECS = (
             "force_field": _validate_force_field,
         },
         analyzer_builder=_build_etkdg_analyzer,
-        supports_multi_substituent=True,
     ),
 )
 

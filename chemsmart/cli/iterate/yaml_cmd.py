@@ -6,7 +6,7 @@ configuration file). The position-optimization *algorithm* is a separate
 layer, selected via an optional algorithm subcommand:
 
 \b
-    yaml lagrange   Lagrange-multipliers algorithm.
+    yaml lagrange   Joint Lagrange algorithm (joint multi-substituent).
     yaml etkdg      RDKit ETKDGv3 algorithm (local by default; --global).
 
 When no algorithm subcommand is given, the algorithm declared in the YAML
@@ -440,8 +440,9 @@ def yaml_cmd(
     chemsmart run iterate yaml -f config.yaml
     chemsmart run iterate yaml -f config.yaml lagrange
     chemsmart run iterate yaml -f config.yaml lagrange \\
-        --sphere-direction-samples-number 128 \\
-        --axial-rotations-sample-number 8
+        --no-adaptive-sampling \\
+        --link-sphere-samples 48 \\
+        --axial-samples 4
     chemsmart run iterate yaml -f config.yaml etkdg \\
         --num-conformers 50 --random-seed 1
     chemsmart run iterate yaml -g
@@ -496,42 +497,132 @@ def yaml_cmd(
 
 @yaml_cmd.command(name="lagrange")
 @click.option(
-    "--sphere-direction-samples-number",
-    "sphere_direction_samples_num",
-    default=96,
-    type=int,
+    "--adaptive-sampling/--no-adaptive-sampling",
+    "use_adaptive_sampling",
+    default=True,
     show_default=True,
-    help="Number of points to sample on the unit sphere.",
+    help="Run a fixed coarse sampling stage first; the six full-stage "
+    "sampling/pruning options (--link-sphere-samples, "
+    "--orientation-sphere-samples, --axial-samples, --candidate-pool-size, "
+    "--preselect, --beam-width) only take effect when the coarse stage does "
+    "not produce an acceptable optimized structure. --max-starts and "
+    "--slsqp-maxiter always apply. Use --no-adaptive-sampling to always "
+    "apply the full sampling parameters.",
 )
 @click.option(
-    "--axial-rotations-sample-number",
-    "axial_rotations_sample_num",
-    default=6,
+    "--link-sphere-samples",
+    "n_link_sphere",
+    default=48,
     type=int,
     show_default=True,
-    help="Number of axial rotations per sphere point.",
+    help="Full-stage number of linking-atom bond-sphere position samples.",
+)
+@click.option(
+    "--orientation-sphere-samples",
+    "n_orientation_sphere",
+    default=24,
+    type=int,
+    show_default=True,
+    help="Full-stage number of substituent principal-axis direction samples.",
+)
+@click.option(
+    "--axial-samples",
+    "n_axial",
+    default=4,
+    type=int,
+    show_default=True,
+    help="Number of axial rotations per orientation direction.",
+)
+@click.option(
+    "--candidate-pool-size",
+    "candidate_pool_size",
+    default=20,
+    type=int,
+    show_default=True,
+    help="Per-substituent candidate pool size kept after region exclusion.",
+)
+@click.option(
+    "--preselect",
+    "preselect",
+    default=48,
+    type=int,
+    show_default=True,
+    help="Top joint combinations fed into greedy start selection.",
+)
+@click.option(
+    "--beam-width",
+    "beam_width",
+    default=4096,
+    type=int,
+    show_default=True,
+    help="Beam width retained per layer during feasible-domain pruning.",
+)
+@click.option(
+    "--max-starts",
+    "max_starts",
+    default=8,
+    type=int,
+    show_default=True,
+    help="Maximum number of 6K-dimensional joint starts handed to SLSQP.",
+)
+@click.option(
+    "--slsqp-maxiter",
+    "slsqp_maxiter",
+    default=200,
+    type=int,
+    show_default=True,
+    help="Maximum SLSQP iterations per start.",
 )
 @click.pass_context
-def lagrange(ctx, sphere_direction_samples_num, axial_rotations_sample_num):
+def lagrange(
+    ctx,
+    use_adaptive_sampling,
+    n_link_sphere,
+    n_orientation_sphere,
+    n_axial,
+    candidate_pool_size,
+    preselect,
+    beam_width,
+    max_starts,
+    slsqp_maxiter,
+):
     """
-    Optimize substituent positions with the Lagrange-multipliers algorithm.
+    Optimize substituent positions with the Joint Lagrange algorithm.
 
-    Options passed here override the matching values in the YAML
-    ``algorithm`` block; options left unset keep their YAML value.
+    Attaches one or more substituents to the skeleton in a single joint
+    (6K-dimensional) optimization. Options passed here override the matching
+    values in the YAML ``algorithm`` block; options left unset keep their YAML
+    value.
+
+    With adaptive sampling enabled (the default), a fixed coarse stage runs
+    first and the six full-stage sampling/pruning options
+    (--link-sphere-samples, --orientation-sphere-samples, --axial-samples,
+    --candidate-pool-size, --preselect, --beam-width) only take effect when
+    the coarse stage does not produce an acceptable optimized structure;
+    --max-starts and --slsqp-maxiter always apply. Use
+    --no-adaptive-sampling to always apply the full sampling parameters.
 
     Examples:
 
     \b
     chemsmart run iterate yaml -f config.yaml lagrange
     chemsmart run iterate yaml -f config.yaml lagrange \\
-        --sphere-direction-samples-number 128 \\
-        --axial-rotations-sample-number 8
+        --no-adaptive-sampling \\
+        --max-starts 16 \\
+        --slsqp-maxiter 300
     """
     cli_options = _collect_explicit_options(
         ctx,
         {
-            "sphere_direction_samples_num": sphere_direction_samples_num,
-            "axial_rotations_sample_num": axial_rotations_sample_num,
+            "use_adaptive_sampling": use_adaptive_sampling,
+            "n_link_sphere": n_link_sphere,
+            "n_orientation_sphere": n_orientation_sphere,
+            "n_axial": n_axial,
+            "candidate_pool_size": candidate_pool_size,
+            "preselect": preselect,
+            "beam_width": beam_width,
+            "max_starts": max_starts,
+            "slsqp_maxiter": slsqp_maxiter,
         },
     )
     _execute_iterate_job(

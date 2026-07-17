@@ -124,8 +124,12 @@ Output Options
 Algorithm parameters are isolated per algorithm; each algorithm exposes only
 its own options.
 
-``lagrange`` (Lagrange multipliers)
-===================================
+``lagrange`` (Joint Lagrange)
+=============================
+
+Attaches one or more substituents in a single joint (6K-dimensional)
+optimization; the same path handles single- and multi-substituent
+combinations.
 
 .. list-table::
    :header-rows: 1
@@ -135,19 +139,59 @@ its own options.
       -  Type
       -  Description
 
-   -  -  ``--sphere-direction-samples-number``
-      -  int
-      -  Number of points to sample on the unit sphere for orientation
-         optimization (default: 96)
+   -  -  ``--adaptive-sampling`` / ``--no-adaptive-sampling``
+      -  flag
+      -  Run a fixed coarse sampling stage first (default:
+         ``--adaptive-sampling``).
 
-   -  -  ``--axial-rotations-sample-number``
+   -  -  ``--link-sphere-samples``
       -  int
-      -  Number of axial rotations to sample per sphere point (default: 6)
+      -  Full-stage number of linking-atom bond-sphere position samples
+         (default: 48)
+
+   -  -  ``--orientation-sphere-samples``
+      -  int
+      -  Full-stage number of substituent principal-axis direction samples
+         (default: 24)
+
+   -  -  ``--axial-samples``
+      -  int
+      -  Number of axial rotations per orientation direction (default: 4)
+
+   -  -  ``--candidate-pool-size``
+      -  int
+      -  Per-substituent candidate pool size kept after region exclusion
+         (default: 20)
+
+   -  -  ``--preselect``
+      -  int
+      -  Top joint combinations fed into greedy start selection (default: 48)
+
+   -  -  ``--beam-width``
+      -  int
+      -  Beam width retained per layer during feasible-domain pruning
+         (default: 4096)
+
+   -  -  ``--max-starts``
+      -  int
+      -  Maximum number of 6K-dimensional joint starts handed to SLSQP
+         (default: 8)
+
+   -  -  ``--slsqp-maxiter``
+      -  int
+      -  Maximum SLSQP iterations per start (default: 200)
 
 .. note::
 
-   Increasing these sampling numbers increases the time required for molecule
-   generation.
+   With adaptive sampling enabled (the default), a fixed coarse stage runs
+   first and the six full-stage sampling/pruning options
+   (``--link-sphere-samples``, ``--orientation-sphere-samples``,
+   ``--axial-samples``, ``--candidate-pool-size``, ``--preselect``,
+   ``--beam-width``) only take effect when the coarse stage does not yield
+   an acceptable optimized structure; ``--max-starts`` and
+   ``--slsqp-maxiter`` always apply. Use ``--no-adaptive-sampling`` to always
+   apply the full sampling parameters. Increasing the sampling numbers
+   increases the time required for molecule generation.
 
 ``etkdg`` (RDKit ETKDGv3)
 =========================
@@ -255,13 +299,14 @@ YAML ``algorithm`` block (ETKDG example):
    # Use the YAML algorithm block (or the default if none is declared)
    chemsmart run iterate yaml -f config.yaml
 
-   # Explicitly select Lagrange multipliers (equivalent to the default)
+   # Explicitly select Joint Lagrange (equivalent to the default)
    chemsmart run iterate yaml -f config.yaml lagrange
 
    # Override Lagrange sampling parameters from the CLI
    chemsmart run iterate yaml -f config.yaml lagrange \
-       --sphere-direction-samples-number 128 \
-       --axial-rotations-sample-number 8
+       --no-adaptive-sampling \
+       --link-sphere-samples 48 \
+       --axial-samples 4
 
    # ETKDG, local mode (skeleton fixed) is the default
    chemsmart run iterate yaml -f config.yaml etkdg
@@ -275,4 +320,3 @@ YAML ``algorithm`` block (ETKDG example):
 
    # Generate a template YAML configuration file
    chemsmart run iterate yaml -g my_config.yaml
-
