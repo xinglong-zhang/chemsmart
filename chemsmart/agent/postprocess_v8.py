@@ -34,11 +34,7 @@ _ALLOWED_TS_EXTRA = re.compile(
 
 
 def _split(value: Any) -> list[str]:
-    return [
-        item
-        for item in re.split(r"[,\s/]+", str(value).strip())
-        if item
-    ]
+    return [item for item in re.split(r"[,\s/]+", str(value).strip()) if item]
 
 
 def _fix_scan_type(scan_definition: Any) -> Any:
@@ -102,64 +98,78 @@ def postprocess(spec: dict[str, Any]) -> dict[str, Any]:
         return spec
 
     for job in jobs:
-        if not isinstance(job, dict):
-            continue
-        raw_kind = str(job.get("kind", "")).strip().lower().replace(" ", "")
-        kind = _KIND_CANON.get(raw_kind, raw_kind)
-        if kind:
-            job["kind"] = kind
-        settings = dict(job.get("settings", {}) or {})
-        if raw_kind in _KIND_CANON:
-            settings["freq"] = True
-        for key in _DB_SELECTOR_KEYS:
-            if key in settings and key not in job:
-                job[key] = settings.pop(key)
-
-        allowed = set(KI.KIND_SETTINGS.get(kind, {}))
-        if kind == "orca.ts" and str(
-            settings.get("tssearch_type", "")
-        ).lower() in _TSSEARCH_DROP:
-            settings.pop("tssearch_type", None)
-        if kind == "gaussian.scan" and "scan_definition" in settings:
-            settings["scan_definition"] = _fix_scan_type(
-                settings["scan_definition"]
-            )
-        if kind == "gaussian.tddft" and "states" in settings:
-            states = str(settings["states"]).strip().lower()
-            if states not in _TDDFT_STATES:
-                settings.pop("states", None)
-
-        new: dict[str, Any] = {}
-        is_ts = isinstance(kind, str) and kind.endswith(".ts")
-        if is_ts and "additional_opt_options_in_route" in allowed:
-            extras = [
-                token
-                for token in _route_opts(settings, is_ts=False)
-                if token not in ROUTE and _ALLOWED_TS_EXTRA.match(token)
-            ]
-            if extras:
-                new["additional_opt_options_in_route"] = extras
-
-        for key, value in settings.items():
-            if key not in allowed or key in new:
-                continue
-            if key == "additional_opt_options_in_route" and is_ts:
-                continue
-            if key == "additional_route_parameters" and not isinstance(
-                value, str
-            ):
-                continue
-            if key in _ARRAY_KEYS and isinstance(value, str):
-                value = _split(value)
-            if key == "freq" and value is False:
-                continue
-            new[key] = value
-
-        if new:
-            job["settings"] = new
-        else:
-            job.pop("settings", None)
+        if isinstance(job, dict):
+            _postprocess_job(job)
     return spec
+
+
+def _postprocess_job(job: dict[str, Any]) -> None:
+    raw_kind = str(job.get("kind", "")).strip().lower().replace(" ", "")
+    kind = _KIND_CANON.get(raw_kind, raw_kind)
+    if kind:
+        job["kind"] = kind
+    settings = dict(job.get("settings", {}) or {})
+    if raw_kind in _KIND_CANON:
+        settings["freq"] = True
+    for key in _DB_SELECTOR_KEYS:
+        if key in settings and key not in job:
+            job[key] = settings.pop(key)
+
+    _apply_kind_fixes(kind, settings)
+    allowed = set(KI.KIND_SETTINGS.get(kind, {}))
+    new: dict[str, Any] = {}
+    is_ts = isinstance(kind, str) and kind.endswith(".ts")
+    if is_ts and "additional_opt_options_in_route" in allowed:
+        extras = [
+            token
+            for token in _route_opts(settings, is_ts=False)
+            if token not in ROUTE and _ALLOWED_TS_EXTRA.match(token)
+        ]
+        if extras:
+            new["additional_opt_options_in_route"] = extras
+    _merge_allowed_settings(new, settings, allowed=allowed, is_ts=is_ts)
+
+    if new:
+        job["settings"] = new
+    else:
+        job.pop("settings", None)
+
+
+def _apply_kind_fixes(kind: str, settings: dict[str, Any]) -> None:
+    if (
+        kind == "orca.ts"
+        and str(settings.get("tssearch_type", "")).lower() in _TSSEARCH_DROP
+    ):
+        settings.pop("tssearch_type", None)
+    if kind == "gaussian.scan" and "scan_definition" in settings:
+        settings["scan_definition"] = _fix_scan_type(
+            settings["scan_definition"]
+        )
+    if kind == "gaussian.tddft" and "states" in settings:
+        states = str(settings["states"]).strip().lower()
+        if states not in _TDDFT_STATES:
+            settings.pop("states", None)
+
+
+def _merge_allowed_settings(
+    new: dict[str, Any],
+    settings: dict[str, Any],
+    *,
+    allowed: set[str],
+    is_ts: bool,
+) -> None:
+    for key, value in settings.items():
+        if key not in allowed or key in new:
+            continue
+        if key == "additional_opt_options_in_route" and is_ts:
+            continue
+        if key == "additional_route_parameters" and not isinstance(value, str):
+            continue
+        if key in _ARRAY_KEYS and isinstance(value, str):
+            value = _split(value)
+        if key == "freq" and value is False:
+            continue
+        new[key] = value
 
 
 __all__ = ["postprocess"]
