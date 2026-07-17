@@ -3,7 +3,10 @@ import os
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.settings.submitters import Submitter
@@ -13,6 +16,45 @@ from chemsmart.utils.mixins import RegistryMixin, cached_property
 user_settings = ChemsmartUserSettings()
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SchedulerArrayPolicy:
+    """Concurrency policy for submitting a ``BatchJob`` as a scheduler array.
+
+    Controls the SLURM ``--array=1-N%M`` throttle ``M``:
+
+    - ``no_run_in_parallel`` → ``M=1``
+    - else ``num_nodes`` when set and positive
+    - else ``min(num_jobs, max_concurrent)``
+    """
+
+    no_run_in_parallel: bool = False
+    num_nodes: Optional[int] = None
+    max_concurrent: Optional[int] = None
+
+    @classmethod
+    def from_jobrunner(cls, jobrunner: Any) -> "SchedulerArrayPolicy":
+        """Build a policy from a ``JobRunner`` (CLI ``sub`` resources/flags)."""
+        from chemsmart.jobs.runner import get_configured_max_submitters
+
+        return cls(
+            no_run_in_parallel=bool(jobrunner.no_run_in_parallel),
+            num_nodes=jobrunner.num_nodes,
+            max_concurrent=get_configured_max_submitters(jobrunner),
+        )
+
+    def array_throttle(self, num_jobs: int) -> int:
+        """Return the array concurrency throttle ``M`` for *num_jobs* tasks."""
+        if num_jobs <= 0:
+            return 1
+        if self.no_run_in_parallel:
+            return 1
+        if self.num_nodes is not None and self.num_nodes > 0:
+            return int(self.num_nodes)
+        if self.max_concurrent is not None and self.max_concurrent > 0:
+            return min(num_jobs, int(self.max_concurrent))
+        return num_jobs
 
 
 class Server(RegistryMixin):
@@ -728,6 +770,111 @@ class Server(RegistryMixin):
 
         if not test:
             self._submit_array_job(first_job, submitter)
+
+    def submit_batch(
+        self,
+        batch_job,
+        *,
+        policy: Optional[SchedulerArrayPolicy] = None,
+        test: bool = False,
+        cli_args: Optional[Sequence[str]] = None,
+        rewrite_cli: Optional[
+            Callable[
+                [Sequence[str], Optional[Mapping[str, Any]]],
+                list[str],
+            ]
+        ] = None,
+        **kwargs,
+    ):
+        """Submit a top-level ``BatchJob`` as a scheduler array.
+
+        Resolves per-task CLI args (optional *rewrite_cli* for heterogeneous
+        children), writes a batch manifest when needed, applies *policy* for
+        the array concurrency throttle, then delegates to
+        ``submit_array_job``.
+
+        Args:
+            batch_job: Top-level ``BatchJob`` whose children become array tasks.
+            policy: Array concurrency policy; defaults to an empty policy
+                (throttle equals number of children).
+            test: If True, write scripts only (do not queue).
+            cli_args: Shared reconstructed ``chemsmart run`` CLI tokens.
+            rewrite_cli: Optional callback to rewrite shared CLI for each
+                child ``batch_entry`` (e.g. pKa per-row submit).
+            **kwargs: Extra submitter construction parameters.
+        """
+        from chemsmart.jobs.batch import BatchJob
+        from chemsmart.jobs.batch_manifest import (
+            build_manifest_children,
+            get_job_batch_entry,
+            resolve_array_cli_args,
+            write_batch_manifest,
+        )
+
+        if not isinstance(batch_job, BatchJob):
+            raise TypeError(
+                f"submit_batch expects a BatchJob, got {type(batch_job)!r}"
+            )
+        if not batch_job.jobs:
+            raise ValueError(
+                f"BatchJob {batch_job} has no child jobs to submit."
+            )
+
+        if policy is None:
+            policy = SchedulerArrayPolicy()
+
+        shared_cli_args = list(cli_args) if cli_args is not None else []
+        has_batch_entries = any(
+            get_job_batch_entry(job) is not None for job in batch_job.jobs
+        )
+        if has_batch_entries and rewrite_cli is None:
+            raise ValueError(
+                "Heterogeneous BatchJob children have batch_entry but no "
+                "rewrite_cli callback was provided for per-task CLI args."
+            )
+        active_rewrite = rewrite_cli if has_batch_entries else None
+        array_cli_args = resolve_array_cli_args(
+            batch_job.jobs,
+            shared_cli_args,
+            rewrite_cli=active_rewrite,
+        )
+
+        if has_batch_entries:
+            program = batch_job.PROGRAM or batch_job.jobs[0].PROGRAM
+            first_folder = batch_job.jobs[0].folder
+            try:
+                manifest_dir = (
+                    Path(first_folder) if first_folder else Path(".")
+                )
+            except TypeError:
+                manifest_dir = Path(".")
+            write_batch_manifest(
+                batch_label=batch_job.label,
+                program=str(program).lower() if program else "unknown",
+                children=build_manifest_children(
+                    batch_job.jobs,
+                    shared_cli_args,
+                    rewrite_cli=active_rewrite,
+                ),
+                directory=manifest_dir,
+            )
+
+        throttle = policy.array_throttle(len(batch_job.jobs))
+        logger.info(
+            "Submitting BatchJob %r as array with %s task(s), "
+            "concurrency throttle %%s=%s",
+            batch_job.label,
+            len(batch_job.jobs),
+            throttle,
+        )
+        return self.submit_array_job(
+            jobs=batch_job.jobs,
+            num_nodes=throttle,
+            test=test,
+            cli_args=array_cli_args,
+            batch_label=batch_job.label,
+            **kwargs,
+        )
 
     def _submit_array_job(self, job, submitter):
         """Queue the array submit script for *job*'s folder."""

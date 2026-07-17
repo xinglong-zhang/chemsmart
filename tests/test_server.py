@@ -267,6 +267,139 @@ class TestArraySubmitInfrastructure:
         assert "#SBATCH --array=1-2%1\n" in submit_text
 
 
+class TestSchedulerArrayPolicy:
+    def test_no_run_in_parallel_forces_throttle_one(self):
+        from chemsmart.settings.server import SchedulerArrayPolicy
+
+        policy = SchedulerArrayPolicy(
+            no_run_in_parallel=True, num_nodes=4, max_concurrent=8
+        )
+        assert policy.array_throttle(10) == 1
+
+    def test_num_nodes_preferred_over_max_concurrent(self):
+        from chemsmart.settings.server import SchedulerArrayPolicy
+
+        policy = SchedulerArrayPolicy(
+            no_run_in_parallel=False, num_nodes=3, max_concurrent=8
+        )
+        assert policy.array_throttle(10) == 3
+
+    def test_max_concurrent_caps_num_jobs(self):
+        from chemsmart.settings.server import SchedulerArrayPolicy
+
+        policy = SchedulerArrayPolicy(
+            no_run_in_parallel=False, num_nodes=None, max_concurrent=2
+        )
+        assert policy.array_throttle(10) == 2
+
+    def test_from_jobrunner(self, pbs_server):
+        from chemsmart.jobs.runner import JobRunner
+        from chemsmart.settings.server import SchedulerArrayPolicy
+
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=True,
+            num_nodes=4,
+            num_cores=8,
+        )
+        policy = SchedulerArrayPolicy.from_jobrunner(runner)
+        assert policy.no_run_in_parallel is True
+        assert policy.num_nodes == 4
+        assert policy.array_throttle(10) == 1
+
+
+class TestSubmitBatch:
+    def test_submit_batch_delegates_to_submit_array_job(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+        from chemsmart.settings.server import (
+            SchedulerArrayPolicy,
+            Server,
+        )
+
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "batch-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            SUBMIT_COMMAND="sbatch",
+        )
+        monkeypatch.setattr(
+            Server,
+            "_check_running_jobs",
+            staticmethod(lambda job: None),
+        )
+        captured = {}
+
+        def _fake_submit_array(
+            self,
+            jobs,
+            num_nodes=None,
+            test=False,
+            cli_args=None,
+            batch_label=None,
+            **kwargs,
+        ):
+            captured.update(
+                {
+                    "jobs": list(jobs),
+                    "num_nodes": num_nodes,
+                    "test": test,
+                    "cli_args": cli_args,
+                    "batch_label": batch_label,
+                }
+            )
+
+        monkeypatch.setattr(Server, "submit_array_job", _fake_submit_array)
+
+        children = [
+            type(
+                "Child",
+                (),
+                {
+                    "label": "a",
+                    "PROGRAM": "gaussian",
+                    "folder": str(tmp_path),
+                },
+            )(),
+            type(
+                "Child",
+                (),
+                {
+                    "label": "b",
+                    "PROGRAM": "gaussian",
+                    "folder": str(tmp_path),
+                },
+            )(),
+        ]
+        batch = GaussianBatchJob(
+            jobs=children, label="mols_batch", no_run_in_parallel=True
+        )
+        server.submit_batch(
+            batch,
+            policy=SchedulerArrayPolicy(no_run_in_parallel=True),
+            test=True,
+            cli_args=["gaussian", "-f", "mols.xyz", "-i", "1,2", "opt"],
+        )
+
+        assert captured["batch_label"] == "mols_batch"
+        assert captured["num_nodes"] == 1
+        assert captured["test"] is True
+        assert len(captured["jobs"]) == 2
+        assert captured["cli_args"] == [
+            "gaussian",
+            "-f",
+            "mols.xyz",
+            "-i",
+            "1,2",
+            "opt",
+        ]
+
+
 class TestCheckRunningJobs:
     class _MockClusterHelper:
         running_job_names = []

@@ -6,7 +6,6 @@ various queuing systems and cluster schedulers.
 """
 
 import logging
-from pathlib import Path
 
 import click
 
@@ -15,14 +14,9 @@ from chemsmart.cli.logger import logger_options
 from chemsmart.cli.pka import rewrite_pka_batch_cli_args
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.batch import BatchJob
-from chemsmart.jobs.batch_manifest import (
-    build_manifest_children,
-    get_job_batch_entry,
-    resolve_array_cli_args,
-    write_batch_manifest,
-)
-from chemsmart.jobs.runner import JobRunner, get_configured_max_submitters
-from chemsmart.settings.server import Server
+from chemsmart.jobs.batch_manifest import get_job_batch_entry
+from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.server import SchedulerArrayPolicy, Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
 from chemsmart.utils.logger import create_logger
 
@@ -183,20 +177,6 @@ def process_pipeline(ctx, *args, **kwargs):
             print(cli_args)
         return cli_args
 
-    def _array_throttle(jobrunner, num_jobs):
-        """Return SLURM ``--array=1-N%M`` concurrency throttle ``M``.
-
-        ``--no-run-in-parallel`` forces ``M=1``. Otherwise prefer ``-N`` /
-        ``num_nodes``, then ``CHEMSMART_MAX_SUBMITTERS`` / cores policy,
-        then ``num_jobs``.
-        """
-        if jobrunner.no_run_in_parallel:
-            return 1
-        num_nodes = jobrunner.num_nodes
-        if num_nodes is not None and num_nodes > 0:
-            return int(num_nodes)
-        return min(num_jobs, get_configured_max_submitters(jobrunner))
-
     def _process_single_job(job):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
@@ -207,58 +187,23 @@ def process_pipeline(ctx, *args, **kwargs):
         server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
 
     def _process_batch_job(batch_job):
-        """Submit a top-level BatchJob as a scheduler array (one task/child)."""
+        """Submit a top-level BatchJob via ``Server.submit_batch``."""
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
         shared_cli_args = _reconstruct_cli_args(ctx)
-        # Homogeneous batches keep a shared CLI; BatchJob.run() selects the
-        # child via array env. Heterogeneous pKa rows use per-task CLI lists
-        # (one submit command per child) from job.batch_entry.
-        has_batch_entries = any(
-            get_job_batch_entry(job) is not None for job in batch_job.jobs
-        )
-        # Currently only pKa attaches batch_entry; use its CLI rewriter.
-        rewrite_cli = rewrite_pka_batch_cli_args if has_batch_entries else None
-        array_cli_args = resolve_array_cli_args(
-            batch_job.jobs, shared_cli_args, rewrite_cli=rewrite_cli
-        )
-        if has_batch_entries:
-            program = batch_job.PROGRAM or (
-                batch_job.jobs[0].PROGRAM if batch_job.jobs else None
-            )
-            first_folder = getattr(batch_job.jobs[0], "folder", None)
-            try:
-                manifest_dir = (
-                    Path(first_folder) if first_folder else Path(".")
-                )
-            except TypeError:
-                manifest_dir = Path(".")
-            write_batch_manifest(
-                batch_label=batch_job.label,
-                program=str(program).lower() if program else "unknown",
-                children=build_manifest_children(
-                    batch_job.jobs,
-                    shared_cli_args,
-                    rewrite_cli=rewrite_cli,
-                ),
-                directory=manifest_dir,
-            )
-        throttle = _array_throttle(jobrunner, len(batch_job.jobs))
-        logger.info(
-            "Submitting BatchJob %r as array with %s task(s), "
-            "concurrency throttle %%s=%s",
-            batch_job.label,
-            len(batch_job.jobs),
-            throttle,
-        )
+        # Currently only pKa attaches batch_entry; pass its CLI rewriter.
+        rewrite_cli = None
+        if any(get_job_batch_entry(job) is not None for job in batch_job.jobs):
+            rewrite_cli = rewrite_pka_batch_cli_args
+
         server = Server.from_servername(kwargs.get("server"))
-        server.submit_array_job(
-            jobs=batch_job.jobs,
-            num_nodes=throttle,
+        server.submit_batch(
+            batch_job,
+            policy=SchedulerArrayPolicy.from_jobrunner(jobrunner),
             test=kwargs.get("test"),
-            cli_args=array_cli_args,
-            batch_label=batch_job.label,
+            cli_args=shared_cli_args,
+            rewrite_cli=rewrite_cli,
         )
 
     ctx = _clean_command(ctx)
