@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -45,12 +45,13 @@ _SOLVENT_ALIASES = {
     "toluene": "toluene",
     "water": "water",
 }
+ProjectProgram = Literal["gaussian", "orca"]
 
 
 def extract_project_protocol(
     text: str,
     project_name: str = "co2",
-    program: str = "gaussian",
+    program: ProjectProgram = "gaussian",
 ) -> dict[str, Any]:
     """Extract project-YAML-relevant facts from a literature protocol."""
 
@@ -99,7 +100,7 @@ def extract_project_protocol(
 def render_project_document(
     protocol: dict[str, Any],
     project_name: str | None = None,
-    program: str = "gaussian",
+    program: ProjectProgram = "gaussian",
 ) -> dict[str, Any]:
     """Render an unvalidated project-YAML document and its metadata."""
 

@@ -10,16 +10,16 @@ from chemsmart.agent.harness.workflow_state import current_workflow_state
 from chemsmart.agent.services.job_cli import (
     SUPPORTED_SUBMIT_JOBTYPES as _SUPPORTED_SUBMIT_JOBTYPES,
 )
-from chemsmart.agent.services.job_cli import dry_run_input as dry_run_input
+from chemsmart.agent.services.job_cli import dry_run_input as _dry_run_input
 from chemsmart.agent.services.local_runtime import (
-    extract_optimized_geometry as extract_optimized_geometry,
+    extract_optimized_geometry as _extract_optimized_geometry,
 )
-from chemsmart.agent.services.local_runtime import run_local as run_local
+from chemsmart.agent.services.local_runtime import run_local as _run_local
 from chemsmart.agent.services.local_runtime import (
-    validate_runtime as validate_runtime,
+    validate_runtime as _validate_runtime,
 )
 from chemsmart.agent.services.method_recommendation import (
-    recommend_method as recommend_method,
+    recommend_method as _recommend_method,
 )
 from chemsmart.agent.services.server_selection import (
     coerce_server as _coerce_server,
@@ -135,6 +135,48 @@ _ORCA_AB_INITIO_KEYWORDS = (
     "MRCI",
 )
 _ORCA_AB_INITIO_EXACT_METHODS = {"HF", "RHF", "UHF", "ROHF"}
+
+
+def dry_run_input(job: Job) -> dict[str, Any]:
+    """Render a job input file and return its absolute path and contents."""
+
+    return _dry_run_input(job)
+
+
+def recommend_method(
+    task: str,
+    charge: int = 0,
+    multiplicity: int = 1,
+    atomic_numbers: list[int] | None = None,
+    project_hint: str | None = None,
+) -> dict[str, Any]:
+    """Return a conservative project-based method recommendation or no-match."""
+
+    return _recommend_method(
+        task=task,
+        charge=charge,
+        multiplicity=multiplicity,
+        atomic_numbers=atomic_numbers,
+        project_hint=project_hint,
+    )
+
+
+def validate_runtime(job: Job, server=None) -> dict[str, Any]:
+    """Check local/runtime prerequisites and remote unknowns for a job."""
+
+    return _validate_runtime(job, server)
+
+
+def run_local(job: Job) -> dict[str, Any]:
+    """Execute a job locally and summarize the generated output artifacts."""
+
+    return _run_local(job)
+
+
+def extract_optimized_geometry(job: Job) -> Molecule:
+    """Extract the final optimized geometry from a completed job log."""
+
+    return _extract_optimized_geometry(job)
 
 
 def build_molecule(filepath: str, index: str = "-1") -> Molecule:
