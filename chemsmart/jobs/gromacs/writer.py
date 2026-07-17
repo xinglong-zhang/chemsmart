@@ -1,17 +1,18 @@
+from __future__ import annotations
+
 """
 GROMACS input writer.
 
 This module writes GROMACS .mdp files from ChemSmart GROMACS job settings.
 
-The first implementation supports automatic MDP generation for:
+The current implementation supports automatic MDP generation for:
 - EM  / gmxem
 - NVT / gmxnvt
+- NPT / gmxnpt
 
 Topology preparation and structure conversion are intentionally not handled
 here. Those belong to the GROMACS workflow setup layer.
 """
-
-from __future__ import annotations
 
 import logging
 from pathlib import Path
@@ -23,10 +24,9 @@ class GromacsInputWriter:
     """
     Write GROMACS input files for a GROMACS job.
 
-    The current scope is limited to .mdp generation. If the user already
-    supplies job.mdp_file, this writer does not overwrite it. If job.mdp_file
-    is missing, the writer creates a default .mdp file in the job folder and
-    assigns it back to job.mdp_file.
+    If the user already supplies job.mdp_file, this writer does not overwrite
+    it. If job.mdp_file is missing, the writer creates a default .mdp file in
+    the job folder and assigns it back to job.mdp_file.
 
     This keeps user-provided MDP files as an advanced override while allowing
     ChemSmart to generate reasonable default inputs automatically.
@@ -52,7 +52,7 @@ class GromacsInputWriter:
 
         Existing user-provided MDP files are respected and never overwritten.
         """
-        if getattr(self.job, "mdp_file", None) is not None:
+        if self.job.mdp_file is not None:
             logger.info(
                 "Using user-provided GROMACS MDP file: %s",
                 self.job.mdp_file,
@@ -62,7 +62,7 @@ class GromacsInputWriter:
         folder = Path(target_directory or self.job.folder)
         folder.mkdir(parents=True, exist_ok=True)
 
-        job_type = getattr(self.job, "TYPE", "").lower()
+        job_type = self.job.TYPE.lower()
 
         if job_type == "gmxem":
             mdp_path = folder / "em.mdp"
@@ -70,6 +70,9 @@ class GromacsInputWriter:
         elif job_type == "gmxnvt":
             mdp_path = folder / "nvt.mdp"
             content = self._build_nvt_mdp()
+        elif job_type == "gmxnpt":
+            mdp_path = folder / "npt.mdp"
+            content = self._build_npt_mdp()
         else:
             raise ValueError(
                 f"Unsupported GROMACS job type for MDP writing: {job_type}"
@@ -85,9 +88,9 @@ class GromacsInputWriter:
         """
         Build a default EM .mdp file.
         """
-        emtol = self._get("emtol", 1000.0)
-        emstep = self._get("emstep", 0.01)
-        nsteps = self._get("nsteps", self._get("em_nsteps", 50000))
+        emtol = self._value_or_default(self.job.emtol, 1000.0)
+        emstep = self._value_or_default(self.job.emstep, 0.01)
+        nsteps = self._value_or_default(self.job.nsteps, 50000)
 
         return self._format_mdp(
             {
@@ -108,14 +111,17 @@ class GromacsInputWriter:
         """
         Build a default NVT .mdp file.
         """
-        temperature = self._get("temperature", 300)
-        timestep = self._get("timestep", 0.002)
-        nsteps = self._get("nsteps", self._get("nvt_nsteps", 50000))
-        constraints = self._get("constraints", "h-bonds")
-        constraint_algorithm = self._get("constraint_algorithm", "lincs")
-        thermostat = self._get("thermostat", "V-rescale")
-        tau_t = self._get("tau_t", 0.1)
-        tc_grps = self._get("tc_grps", "System")
+        temperature = self._value_or_default(self.job.temperature, 300)
+        timestep = self._value_or_default(self.job.timestep, 0.002)
+        nsteps = self._value_or_default(self.job.nsteps, 50000)
+        constraints = self._value_or_default(self.job.constraints, "h-bonds")
+        constraint_algorithm = self._value_or_default(
+            self.job.constraint_algorithm,
+            "lincs",
+        )
+        thermostat = self._value_or_default(self.job.thermostat, "V-rescale")
+        tau_t = self._value_or_default(self.job.tau_t, 0.1)
+        tc_grps = self._value_or_default(self.job.tc_grps, "System")
 
         return self._format_mdp(
             {
@@ -142,11 +148,64 @@ class GromacsInputWriter:
             }
         )
 
-    def _get(self, name, default=None):
+    def _build_npt_mdp(self):
         """
-        Read an optional job attribute with a default fallback.
+        Build a default NPT .mdp file.
         """
-        value = getattr(self.job, name, None)
+        temperature = self._value_or_default(self.job.temperature, 300)
+        pressure = self._value_or_default(self.job.pressure, 1.0)
+        timestep = self._value_or_default(self.job.timestep, 0.002)
+        nsteps = self._value_or_default(self.job.nsteps, 50000)
+        constraints = self._value_or_default(self.job.constraints, "h-bonds")
+        constraint_algorithm = self._value_or_default(
+            self.job.constraint_algorithm,
+            "lincs",
+        )
+        thermostat = self._value_or_default(self.job.thermostat, "V-rescale")
+        barostat = self._value_or_default(
+            self.job.barostat,
+            "Parrinello-Rahman",
+        )
+        tau_t = self._value_or_default(self.job.tau_t, 0.1)
+        tc_grps = self._value_or_default(self.job.tc_grps, "System")
+        tau_p = self._value_or_default(self.job.tau_p, 2.0)
+        compressibility = self._value_or_default(
+            self.job.compressibility,
+            "4.5e-5",
+        )
+
+        return self._format_mdp(
+            {
+                "integrator": "md",
+                "nsteps": nsteps,
+                "dt": timestep,
+                "continuation": "yes",
+                "constraint_algorithm": constraint_algorithm,
+                "constraints": constraints,
+                "cutoff-scheme": "Verlet",
+                "nstlist": 10,
+                "rcoulomb": 1.0,
+                "rvdw": 1.0,
+                "coulombtype": "PME",
+                "pbc": "xyz",
+                "tcoupl": thermostat,
+                "tc-grps": tc_grps,
+                "tau_t": tau_t,
+                "ref_t": temperature,
+                "pcoupl": barostat,
+                "pcoupltype": "isotropic",
+                "tau_p": tau_p,
+                "ref_p": pressure,
+                "compressibility": compressibility,
+                "gen_vel": "no",
+            }
+        )
+
+    @staticmethod
+    def _value_or_default(value, default=None):
+        """
+        Return default when the given value is None.
+        """
         return default if value is None else value
 
     @staticmethod

@@ -6,7 +6,7 @@ from click.testing import CliRunner
 from chemsmart.cli.gromacs.gromacs import gromacs
 
 em_module = importlib.import_module("chemsmart.cli.gromacs.em")
-
+npt_module = importlib.import_module("chemsmart.cli.gromacs.npt")
 
 class DummyGromacsEMJob:
     """
@@ -66,7 +66,62 @@ class DummyGromacsEMJob:
             "skip_completed": skip_completed,
             "kwargs": kwargs,
         }
+class DummyGromacsNPTJob:
+    """
+    Dummy NPT job class used to test CLI argument flow without creating a real
+    job or running real GROMACS.
+    """
 
+    captured_from_settings = {}
+    captured_direct_init = {}
+
+    @classmethod
+    def from_project_settings(
+        cls,
+        settings,
+        molecule=None,
+        jobrunner=None,
+        skip_completed=False,
+        **kwargs,
+    ):
+        cls.captured_from_settings = {
+            "settings": settings,
+            "molecule": molecule,
+            "jobrunner": jobrunner,
+            "skip_completed": skip_completed,
+            "kwargs": kwargs,
+        }
+        return cls()
+
+    def __init__(
+        self,
+        molecule=None,
+        label=None,
+        jobrunner=None,
+        mdp_file=None,
+        structure_file=None,
+        input_pdb=None,
+        top_file=None,
+        itp_files=None,
+        index_file=None,
+        workflow=None,
+        skip_completed=False,
+        **kwargs,
+    ):
+        self.__class__.captured_direct_init = {
+            "molecule": molecule,
+            "label": label,
+            "jobrunner": jobrunner,
+            "mdp_file": mdp_file,
+            "structure_file": structure_file,
+            "input_pdb": input_pdb,
+            "top_file": top_file,
+            "itp_files": itp_files,
+            "index_file": index_file,
+            "workflow": workflow,
+            "skip_completed": skip_completed,
+            "kwargs": kwargs,
+        }
 
 @pytest.fixture(autouse=True)
 def patch_gromacs_em_job(monkeypatch):
@@ -77,11 +132,18 @@ def patch_gromacs_em_job(monkeypatch):
     """
     DummyGromacsEMJob.captured_from_settings = {}
     DummyGromacsEMJob.captured_direct_init = {}
+    DummyGromacsNPTJob.captured_from_settings = {}
+    DummyGromacsNPTJob.captured_direct_init = {}
 
     monkeypatch.setattr(
         em_module,
         "GromacsEMJob",
         DummyGromacsEMJob,
+    )
+    monkeypatch.setattr(
+        npt_module,
+        "GromacsNPTJob",
+        DummyGromacsNPTJob,
     )
 
 
@@ -109,6 +171,36 @@ inputs:
     )
 
     for filename in ["em.mdp", "input.gro", "topol.top"]:
+        (tmp_path / filename).write_text(
+            "dummy content",
+            encoding="utf-8",
+        )
+
+    return yaml_file
+
+@pytest.fixture
+def demo_npt_project_yaml(tmp_path):
+    """
+    Create a minimal prepared GROMACS NPT project YAML and required input files.
+    """
+    yaml_file = tmp_path / "project_npt.yaml"
+
+    yaml_file.write_text(
+        """
+project:
+  name: prepared_npt
+  type: gromacs
+  job_type: npt
+  mode: prepared
+
+inputs:
+  structure_file: nvt.gro
+  topology_file: topol.top
+""",
+        encoding="utf-8",
+    )
+
+    for filename in ["nvt.gro", "topol.top"]:
         (tmp_path / filename).write_text(
             "dummy content",
             encoding="utf-8",
@@ -320,3 +412,95 @@ def test_cli_rejects_missing_project_yaml(tmp_path):
 
     assert result.exit_code != 0
     assert result.exception is not None
+
+def test_cli_project_yaml_creates_npt_job(demo_npt_project_yaml):
+    """
+    Test YAML-driven NPT CLI mode.
+
+    Expected flow:
+        gromacs -p project_npt.yaml npt
+        -> GromacsProjectSettings
+        -> GromacsNPTJob.from_project_settings()
+    """
+    runner = CliRunner()
+
+    result = runner.invoke(
+        gromacs,
+        [
+            "-p",
+            str(demo_npt_project_yaml),
+            "npt",
+        ],
+        obj={"molecule": None},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.exception is None
+
+    captured = DummyGromacsNPTJob.captured_from_settings
+    assert captured
+
+    settings = captured["settings"]
+
+    assert settings.project_name == "prepared_npt"
+    assert settings.workflow == "prepared"
+    assert settings.job_type == "npt"
+
+    assert settings.mdp_file is None
+    assert settings.structure_file == demo_npt_project_yaml.parent / "nvt.gro"
+    assert settings.top_file == demo_npt_project_yaml.parent / "topol.top"
+
+    assert captured["molecule"] is None
+    assert captured["jobrunner"] is None
+
+
+def test_cli_direct_options_create_npt_job(tmp_path):
+    """
+    Test direct NPT CLI option mode.
+
+    Expected flow:
+        gromacs npt --structure nvt.gro --top topol.top
+        -> GromacsNPTJob(...)
+    """
+    runner = CliRunner()
+
+    structure_file = tmp_path / "nvt.gro"
+    top_file = tmp_path / "topol.top"
+
+    for file_path in [structure_file, top_file]:
+        file_path.write_text(
+            "dummy content",
+            encoding="utf-8",
+        )
+
+    result = runner.invoke(
+        gromacs,
+        [
+            "npt",
+            "--structure",
+            str(structure_file),
+            "--top",
+            str(top_file),
+            "--workflow",
+            "prepared",
+        ],
+        obj={"molecule": None},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.exception is None
+
+    captured = DummyGromacsNPTJob.captured_direct_init
+    assert captured
+
+    assert captured["label"] == "nvt_npt"
+    assert captured["workflow"] == "prepared"
+
+    assert captured["mdp_file"] is None
+    assert captured["structure_file"] == structure_file
+    assert captured["top_file"] == top_file
+
+    assert captured["itp_files"] == []
+    assert captured["index_file"] is None
+    assert captured["molecule"] is None
+    assert captured["jobrunner"] is None
