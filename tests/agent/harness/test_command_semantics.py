@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 from chemsmart.agent.harness.command_semantics import (
     evaluate_command_semantics,
@@ -19,6 +20,9 @@ def test_run_command_semantic_gate_uses_safe_fake_execution(
         assert check is False
         assert timeout == 30.0
         assert "PYTHONPATH" in env
+        gate_home = Path(env["HOME"])
+        assert gate_home.parent == Path(cwd)
+        assert (gate_home / ".chemsmart/server/local.yaml").is_file()
         assert argv[:5] == [
             sys.executable,
             "-m",
@@ -28,8 +32,6 @@ def test_run_command_semantic_gate_uses_safe_fake_execution(
         ]
         assert "--fake" in argv
         assert "--no-scratch" in argv
-        from pathlib import Path
-
         (Path(cwd) / "water_orca_opt.inp").write_text(
             "! Opt B3LYP def2-SVP\n"
             "* xyz 0 1\n"

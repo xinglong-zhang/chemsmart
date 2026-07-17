@@ -4,9 +4,7 @@ import os
 import shlex
 import shutil
 import subprocess
-import sys
 import tempfile
-from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -16,10 +14,12 @@ from chemsmart.agent.harness.failure_taxonomy import classify_runtime_failure
 from chemsmart.agent.harness.generated_invariants import (
     check_generated_input_invariants,
 )
-from chemsmart.agent.harness.extractors import (
-    extract_cartesian_state,
-    extract_gaussian_route,
-    extract_orca_route,
+from chemsmart.agent.harness.safe_runtime import (
+    absolutize_file_args,
+    generated_inputs as collect_generated_inputs,
+    input_snapshot,
+    prepare_safe_runtime_environment,
+    safe_execution_argv,
 )
 
 CommandSemanticVerdict = Literal["ok", "warn", "reject"]
@@ -27,7 +27,6 @@ CommandSemanticSeverity = Literal["warn", "reject"]
 
 _COMPUTATIONAL_TOP_LEVEL = {"run", "sub"}
 _SOFTWARE_COMMANDS = {"gaussian", "orca"}
-_INPUT_SUFFIXES = (".com", ".gjf", ".inp")
 _DB_SELECTOR_FLAGS = {
     "record_index": ("--ri", "--record-index"),
     "record_id": ("--rid", "--record-id"),
@@ -135,29 +134,6 @@ class CommandSemanticResult:
         }
 
 
-def _absolutize_file_args(argv: list[str], base: Path) -> list[str]:
-    """Rewrite relative input-file tokens to absolute paths against ``base``.
-
-    Needed when the safe exec runs in an isolated temp cwd: a ``-f examples/x.xyz``
-    style token would not resolve there. Only file-looking tokens (with a path
-    separator or an extension) that actually exist are rewritten, so option values
-    like a project name (``-p test``) or charge/multiplicity are never touched.
-    """
-    out: list[str] = []
-    for tok in argv:
-        if (
-            tok
-            and not tok.startswith("-")
-            and not os.path.isabs(tok)
-            and (os.sep in tok or os.path.splitext(tok)[1])
-            and (base / tok).exists()
-        ):
-            out.append(str((base / tok).resolve()))
-        else:
-            out.append(tok)
-    return out
-
-
 def evaluate_command_semantics(
     command: str,
     *,
@@ -258,7 +234,7 @@ def evaluate_command_semantics(
             issues=preflight_issues,
         )
 
-    safe_argv = _safe_execution_argv(tokens, top_index, top_level)
+    safe_argv = safe_execution_argv(tokens, top_index, top_level)
     # Run in an isolated temp dir so a stale <label>.out in the real cwd cannot
     # trigger chemsmart's skip-completed path (which writes no input and yields a
     # false generated_input_missing reject). The caller's cwd is still the
@@ -266,16 +242,20 @@ def evaluate_command_semantics(
     # workspace-local .chemsmart settings are mirrored into the temp dir so
     # project/server YAML lookup sees the same configuration the user sees.
     workdir = Path(tempfile.mkdtemp(prefix="chemsmart-gate-"))
-    safe_argv = _absolutize_file_args(safe_argv, base_cwd)
-    _mirror_workspace_config(base_cwd, workdir)
+    safe_argv = absolutize_file_args(safe_argv, base_cwd)
+    runtime_env = prepare_safe_runtime_environment(
+        base_cwd=base_cwd,
+        workdir=workdir,
+        top_level=top_level,
+    )
     cleanup_dir: Path | None = workdir
     try:
-        before = _input_snapshot(workdir)
+        before = input_snapshot(workdir)
         try:
             completed = subprocess.run(
                 safe_argv,
                 cwd=str(workdir),
-                env=_subprocess_env(),
+                env=runtime_env,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -301,7 +281,7 @@ def evaluate_command_semantics(
 
         stdout_tail = _tail(completed.stdout)
         stderr_tail = _tail(completed.stderr)
-        generated_inputs = _generated_inputs(workdir, before)
+        generated_inputs = collect_generated_inputs(workdir, before)
         issues: list[CommandSemanticIssue] = []
         if completed.returncode != 0:
             failure = classify_runtime_failure(
@@ -708,122 +688,8 @@ def _option_consumes_value(token: str, following: list[str]) -> bool:
     return not following[0].startswith("-")
 
 
-def _safe_execution_argv(
-    tokens: list[str],
-    top_index: int,
-    top_level: str,
-) -> list[str]:
-    argv = _with_no_verbose(tokens)
-    # Recompute because _with_no_verbose may insert a token before top_index.
-    top_index, _top_level = _top_level_command(argv)
-    insert_at = top_index + 1
-    additions: list[str] = []
-    if top_level == "run":
-        if "--fake" not in argv[insert_at:]:
-            additions.append("--fake")
-        if (
-            "--scratch" not in argv[insert_at:]
-            and "--no-scratch" not in argv[insert_at:]
-        ):
-            additions.append("--no-scratch")
-    elif top_level == "sub":
-        if "--test" not in argv[insert_at:]:
-            additions.append("--test")
-        if "--fake" not in argv[insert_at:]:
-            additions.append("--fake")
-    cli_args = argv[1:insert_at] + additions + argv[insert_at:]
-    return [sys.executable, "-m", "chemsmart.cli.main", *cli_args]
-
-
-def _subprocess_env() -> dict[str, str]:
-    env = dict(os.environ)
-    source_root = str(Path(__file__).resolve().parents[3])
-    existing = env.get("PYTHONPATH")
-    env["PYTHONPATH"] = (
-        source_root if not existing else f"{source_root}{os.pathsep}{existing}"
-    )
-    return env
-
-
-def _with_no_verbose(tokens: list[str]) -> list[str]:
-    if "--verbose" in tokens[:3] or "--no-verbose" in tokens[:3]:
-        return list(tokens)
-    return [tokens[0], "--no-verbose", *tokens[1:]]
-
-
-def _input_snapshot(workdir: Path) -> dict[Path, int]:
-    snapshot: dict[Path, int] = {}
-    if not workdir.exists():
-        return snapshot
-    for suffix in _INPUT_SUFFIXES:
-        for path in workdir.glob(f"*{suffix}"):
-            try:
-                snapshot[path.resolve()] = path.stat().st_mtime_ns
-            except FileNotFoundError:
-                continue
-    return snapshot
-
-
-def _generated_inputs(
-    workdir: Path,
-    before: dict[Path, int],
-) -> list[dict[str, Any]]:
-    generated: list[dict[str, Any]] = []
-    if not workdir.exists():
-        return generated
-    for suffix in _INPUT_SUFFIXES:
-        for path in sorted(workdir.glob(f"*{suffix}")):
-            try:
-                resolved = path.resolve()
-                mtime = path.stat().st_mtime_ns
-            except FileNotFoundError:
-                continue
-            if before.get(resolved) == mtime:
-                continue
-            content = path.read_text(encoding="utf-8", errors="replace")
-            route = (
-                extract_gaussian_route(content)
-                if suffix in {".com", ".gjf"}
-                else extract_orca_route(content)
-            )
-            software = "gaussian" if suffix in {".com", ".gjf"} else "orca"
-            state = extract_cartesian_state(content, software=software)
-            state_evidence: dict[str, Any] = {}
-            if state:
-                state_evidence = {
-                    "charge": state["charge"],
-                    "multiplicity": state["multiplicity"],
-                    "element_counts": dict(
-                        sorted(Counter(state["element_symbols"]).items())
-                    ),
-                }
-                for key in (
-                    "charge_multiplicity_pairs",
-                    "atom_layers",
-                    "layer_atoms",
-                ):
-                    if key in state:
-                        state_evidence[key] = state[key]
-            generated.append(
-                {
-                    "path": str(path),
-                    "route": route,
-                    "content_tail": _input_excerpt(content),
-                    **state_evidence,
-                }
-            )
-    return generated
-
-
 def _is_software_command(tokens: list[str], top_index: int) -> bool:
     return any(token in _SOFTWARE_COMMANDS for token in tokens[top_index + 1 :])
-
-
-def _mirror_workspace_config(base_cwd: Path, workdir: Path) -> None:
-    source = base_cwd / ".chemsmart"
-    if not source.is_dir():
-        return
-    shutil.copytree(source, workdir / ".chemsmart", dirs_exist_ok=True)
 
 
 def _missing_info_from_output(*chunks: str) -> list[str]:
@@ -862,21 +728,6 @@ def _tail(value: Any, limit: int = 2000) -> str:
         else str(value)
     )
     return text[-limit:]
-
-
-def _input_excerpt(value: Any, limit: int = 4000) -> str:
-    """Keep both input headers and coordinate directives without full-file bloat."""
-    if value is None:
-        return ""
-    text = (
-        value.decode("utf-8", errors="replace")
-        if isinstance(value, bytes)
-        else str(value)
-    )
-    if len(text) <= limit:
-        return text
-    half = limit // 2
-    return f"{text[:half]}\n...<content omitted>...\n{text[-half:]}"
 
 
 def _single_issue_result(

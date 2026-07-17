@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from chemsmart.agent.harness.command_semantics import _input_excerpt
 from chemsmart.agent.harness.generated_invariants import (
     check_generated_input_invariants,
     electron_multiplicity_evidence,
 )
 from chemsmart.agent.harness.intent import IntentSpec, evaluate_intent
+from chemsmart.agent.harness.safe_runtime import input_excerpt
 
 
 def test_freeze_bond_intent_maps_to_orca_modred_coordinates() -> None:
@@ -35,7 +35,7 @@ def test_large_orca_modred_excerpt_preserves_header_constraint() -> None:
         + "C 0.0 0.0 0.0\n" * 300
         + "*\n"
     )
-    excerpt = _input_excerpt(content)
+    excerpt = input_excerpt(content)
 
     assert "%geom" in excerpt
     assert "{B 1 4 C}" in excerpt

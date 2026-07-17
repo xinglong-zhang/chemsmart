@@ -154,27 +154,7 @@ def test_gaussian_qmmm_intent_observes_parent_job_and_layer_state():
     assert result.verdict == "ok"
 
 
-def test_gaussian_qmmm_fake_runtime_preserves_partition_and_state(
-    tmp_path, monkeypatch
-):
-    home = tmp_path / "home"
-    server_dir = home / ".chemsmart" / "server"
-    server_dir.mkdir(parents=True)
-    (server_dir / "local.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "SERVER": {"SCHEDULER": None, "NUM_CORES": 1},
-                "GAUSSIAN": {
-                    "EXEFOLDER": "/tmp",
-                    "LOCAL_RUN": True,
-                    "SCRATCH": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("HOME", str(home))
-
+def test_gaussian_qmmm_fake_runtime_preserves_partition_and_state(tmp_path):
     project_dir = tmp_path / ".chemsmart" / "gaussian"
     project_dir.mkdir(parents=True)
     (project_dir / "enzyme.yaml").write_text(
