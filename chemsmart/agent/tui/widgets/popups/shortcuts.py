@@ -43,6 +43,8 @@ class ShortcutOverlay(ModalScreen[None]):
             ("@", "workspace file picker"),
             ("Ctrl+G", "external editor"),
             ("Ctrl+J / Shift+Enter", "newline"),
+            ("Click a response", "open mouse-selectable copy view"),
+            ("Enter / Space on tool chain", "show or hide completed tools"),
             ("y / s / n / r", "approve once/session, deny, revise"),
             ("Esc", "close overlay and return to request"),
         ]

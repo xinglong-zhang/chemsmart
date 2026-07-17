@@ -198,14 +198,38 @@ def _render_entry(yaml_text: str, project="co2", program="gaussian"):
     }
 
 
-def _validate_entry(verdict="ok"):
+def _validate_request_entry(
+    yaml_text: str,
+    *,
+    call_id: str = "validate-1",
+    project: str = "co2",
+    program: str = "gaussian",
+):
     return {
-        "kind": "tool_use_result",
+        "kind": "tool_use_request",
         "payload": {
             "tool": "validate_project_yaml",
-            "status": "ok",
-            "payload": {"ok": verdict == "ok", "verdict": verdict},
+            "provider_call_id": call_id,
+            "args": {
+                "project_name": project,
+                "program": program,
+                "yaml_text": yaml_text,
+            },
         },
+    }
+
+
+def _validate_entry(verdict="ok", *, call_id: str | None = None):
+    payload = {
+        "tool": "validate_project_yaml",
+        "status": "ok",
+        "payload": {"ok": verdict == "ok", "verdict": verdict},
+    }
+    if call_id is not None:
+        payload["provider_call_id"] = call_id
+    return {
+        "kind": "tool_use_result",
+        "payload": payload,
     }
 
 
@@ -244,6 +268,91 @@ def test_changed_candidate_after_validate_requires_revalidation(tmp_path):
     ]
     (session_dir / "decision_log.jsonl").write_text(
         "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+
+    assert _latest_project_yaml_candidate(session_dir) is None
+
+
+def test_candidate_uses_yaml_from_matching_validation_request(tmp_path):
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    rejected_yaml = (
+        "gas:\n"
+        "  functional: null\n"
+        "  basis: def2svp\n"
+        "  freq: true\n"
+    )
+    validated_yaml = (
+        "gas:\n"
+        "  functional: pbe0\n"
+        "  basis: def2-SVP\n"
+        "  freq: true\n"
+    )
+    rejected_render = _render_entry(rejected_yaml, project="water")
+    rejected_render["payload"]["payload"].update(
+        {
+            "ok": False,
+            "validation": {"verdict": "reject"},
+        }
+    )
+    entries = [
+        rejected_render,
+        _validate_request_entry(
+            validated_yaml,
+            call_id="validate-pbe0",
+            project="water",
+        ),
+        _validate_entry("ok", call_id="validate-pbe0"),
+    ]
+    (session_dir / "decision_log.jsonl").write_text(
+        "\n".join(json.dumps(entry) for entry in entries) + "\n",
+        encoding="utf-8",
+    )
+
+    candidate = _latest_project_yaml_candidate(session_dir)
+
+    assert candidate == {
+        "project_name": "water",
+        "program": "gaussian",
+        "yaml_text": validated_yaml,
+    }
+
+
+def test_rejected_render_cannot_be_promoted_by_unbound_validation(tmp_path):
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    rejected_yaml = (
+        "gas:\n"
+        "  functional: null\n"
+        "  basis: def2svp\n"
+    )
+    rejected_render = _render_entry(rejected_yaml, project="water")
+    rejected_render["payload"]["payload"].update(
+        {
+            "ok": False,
+            "validation": {"verdict": "reject"},
+        }
+    )
+    entries = [rejected_render, _validate_entry("ok")]
+    (session_dir / "decision_log.jsonl").write_text(
+        "\n".join(json.dumps(entry) for entry in entries) + "\n",
+        encoding="utf-8",
+    )
+
+    assert _latest_project_yaml_candidate(session_dir) is None
+
+
+def test_validation_result_does_not_borrow_different_request(tmp_path):
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    yaml_text = "gas:\n  functional: pbe0\n  basis: def2-SVP\n"
+    entries = [
+        _validate_request_entry(yaml_text, call_id="request-a"),
+        _validate_entry("ok", call_id="result-b"),
+    ]
+    (session_dir / "decision_log.jsonl").write_text(
+        "\n".join(json.dumps(entry) for entry in entries) + "\n",
+        encoding="utf-8",
     )
 
     assert _latest_project_yaml_candidate(session_dir) is None

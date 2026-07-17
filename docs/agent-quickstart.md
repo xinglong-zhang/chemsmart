@@ -1,156 +1,189 @@
-# chemsmart agent quickstart
+# CHEMSMART agent quickstart
 
-This page is a single-session transcript for the current preview agent layer.
-All commands below were run on 2026-05-09 with `AI_PROVIDER=openai`;
-session IDs and temp paths will differ on your machine.
-Sample inputs ship in `examples/`; this guide uses `examples/h2o.xyz`.
+This guide starts one workspace-local computational-chemistry session. The
+agent always produces a real `chemsmart run ...` or `chemsmart sub ...` command
+before execution, and deterministic gates remain the source of truth.
 
-## Setup
-
-Install the optional TUI dependencies and export the provider before running
-any agent command:
+## Install And Check The Provider
 
 ```bash
+conda activate chemsmart
 pip install -e ".[agent-tui]"
-export AI_PROVIDER=openai
+chemsmart agent doctor
 ```
 
-Anthropic is also supported; swap the environment variable if that is your
-provider. In the current preview build used for this transcript, the API key
-was loaded from `~/developer/chemsmart/api.env`, with at least:
+The active provider is configured in `~/.chemsmart/agent/agent.yaml`. API and
+OpenAI-compatible providers can use the full tool loop. A local provider is a
+command-synthesis specialist; project authoring with `/init` requires a
+tool-calling API provider.
 
-```dotenv
-ai_api_key=...
-```
+## Start From A Research Workspace
 
-A healthy doctor run prints lines like:
-
-```text
-AI_PROVIDER=openai OK
-api.env: OK (key length=32)
-gateway: https://factchat-cloud.mindlogic.ai/v1/gateway
-ping: ok (model=gpt-5.4-2026-03-05, latency=911ms)
-tools registered: 10
-```
-
-## First run — advisory question
-
-Ask chemistry-only questions without preparing a job:
+Project YAML belongs to the directory where CHEMSMART is launched. Do not start
+the TUI in the source repository when the calculation belongs elsewhere.
 
 ```bash
-AI_PROVIDER=openai chemsmart agent ask "Recommend method/basis for a Cope rearrangement TS"
+mkdir -p /private/tmp/chemsmart-water-study/inputs
+cp examples/h2o.xyz /private/tmp/chemsmart-water-study/inputs/h2o.xyz
+cd /private/tmp/chemsmart-water-study
+chemsmart agent
 ```
 
-Sample output (abridged):
+The agent searches only these workspace paths for project settings:
 
 ```text
-╭────────────────────────────────── Request ───────────────────────────────────╮
-│ Recommend method/basis for a Cope rearrangement TS                           │
-╰──────────────────────────────────────────────────────────────────────────────╯
-╭─────────────────────────────────── Advice ───────────────────────────────────╮
-│ For a Cope rearrangement transition state, a good default is a DFT TS search │
-│ with frequency confirmation using a modern hybrid functional and at least a  │
-│ polarized double-zeta basis; for example, optimize the TS at M06-2X/6-31G*   │
-│ or wB97X-D/def2-SVP, then verify exactly one imaginary frequency and follow  │
-│ with an IRC.                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────╯
+.chemsmart/gaussian/<project>.yaml
+.chemsmart/orca/<project>.yaml
 ```
 
-The important behavior is that `ask` stays advisory: it returns chemistry
-reasoning directly and does not create an input file.
+The footer displays `YAML OK <program>:<project>` when one is active and
+`YAML MISSING` otherwise.
 
-## First run — dry-run input generation
+## Build A Project From A Method
 
-For the transcript below, I used the shipped sample file
-`examples/h2o.xyz` and ran the dry-submit path:
-
-```bash
-AI_PROVIDER=openai chemsmart agent run "single-point on examples/h2o.xyz at B3LYP/6-31G(d) Gaussian" --dry-submit
-```
-
-Sample stdout (abridged):
+Enter `/init`, then send a concise method description such as:
 
 ```text
-session: 20260509T082732Z-31b18565
-Plan:
-Rationale: This plan prepares a Gaussian single-point energy calculation on examples/h2o.xyz exactly at B3LYP/6-31G(d), with input preview and runtime validation before any execution step.
-Estimated cost: Low; very small Gaussian DFT single-point job, typically seconds to minutes locally.
-1. build_molecule {"filepath": "examples/h2o.xyz"}
-2. build_gaussian_settings {"basis": "6-31G(d)", "functional": "B3LYP", "title": "h2o_sp"}
-3. build_job {"kind": "gaussian.sp", "label": "h2o_gaussian_sp", "molecule": "$step1", "settings": "$step2"}
-4. dry_run_input {"job": "$step3"}
-5. validate_runtime {"job": "$step3"}
-critic verdict: ok
-inputfile: /Users/hongjiseung/developer/chemsmart/h2o_gaussian_sp.com
-decision log: /Users/hongjiseung/.chemsmart/agent/sessions/20260509T082732Z-31b18565/decision_log.jsonl
+Create an ORCA project named water_sp. Use gas-phase PBE0/def2-SVP for
+single-point calculations and do not request frequencies.
 ```
 
-The generated Gaussian input was:
+The API tool loop performs:
 
 ```text
-%chk=h2o_gaussian_sp.chk
-%nprocshared=12
-%mem=16GB
-# B3LYP 6-31G(d)
-h2o_sp
+extract_project_protocol
+  -> render_project_yaml
+  -> validate_project_yaml
+  -> critic_project_yaml
 ```
 
-The command exited with code `0`.
-
-## Resuming a session
-
-Re-run the saved plan with the session id printed above:
-
-```bash
-AI_PROVIDER=openai chemsmart agent resume 20260509T082732Z-31b18565 --dry-submit
-```
-
-That replayed the same plan and printed the same `inputfile:` path for the
-dry-run `.com` file without appending a second `session_summary` entry.
-
-## Going live (HPC submission)
-
-`chemsmart agent run --help` documents `--dry-submit / --execute` as “Write
-scripts without real remote submission, or execute submit_hpc.” In practice,
-the default quickstart path is safe: it writes previews, prints the dry-run
-input file, and can still surface `validate_runtime` warnings such as missing
-queue/account/scratch/module fields. For a real submit, use `--execute` and
-make sure your server settings under `~/.chemsmart/server/*.yaml` are ready;
-under `--dry-submit`, the submit step is skipped.
-
-## Inspecting what happened
-
-Every run writes an audit trail under `~/.chemsmart/agent/sessions/<id>/`. For
-the dry-run session above, the log lived at:
+This creates a validated candidate but does not write a file. Run:
 
 ```text
-~/.chemsmart/agent/sessions/20260509T082732Z-31b18565/decision_log.jsonl
+/write-project
 ```
 
-Example event line:
+The TUI asks for explicit write approval. If a file already exists, choose
+`Y` to overwrite it or `N` to keep it and create a new numbered project. In
+plain mode the equivalent explicit form is:
 
-```json
-{"kind":"request","payload":{"request":"single-point on examples/h2o.xyz at B3LYP/6-31G(d) Gaussian"},"rationale":"single-point on examples/h2o.xyz at B3LYP/6-31G(d) Gaussian","ts":"2026-05-09T08:27:32.455631+00:00"}
+```text
+/write-project water_sp yes overwrite
 ```
 
-Read it as: `kind=request` records the original prompt, `payload.request` is
-the exact text given to the agent, and `ts` is the UTC timestamp for that
-event.
+Press `Shift+Tab` to inspect the YAML. If several projects exist, use
+`Tab`/`Down` and `Shift+Tab`/`Up` to move, then `Enter` to select one.
 
-## TUI mode
+## Prepare A Calculation
 
-Running `chemsmart agent` with no subcommand opens the Textual TUI, and
-`chemsmart agent --plain` keeps it inline for conservative terminals such as
-HPC login nodes. In my launch test, the footer advertised `/help` and the first
-`Ctrl+C` changed the footer hint to `Press Ctrl+C again within 3s to quit`;
-`/jobs` is the jobs view shortcut once you are in the TUI.
+Send a natural-language request:
 
-## Common errors
+```text
+Prepare an ORCA single-point calculation for @inputs/h2o.xyz as a neutral
+singlet using the active water_sp project.
+```
 
-- `AI_PROVIDER not set`: run `export AI_PROVIDER=openai` in the shell before
-  any `chemsmart agent ...` command.
-- Missing extras for the TUI: if `chemsmart agent` refuses to start the UI, run
-  `pip install -e ".[agent-tui]"`.
-- Missing input file: `examples/h2o.xyz` ships in the repo, so if that path
-  cannot be found, run the command from the repository root or pass an absolute
-  path in the request.
+Typing `@` opens the workspace file picker. The completed turn should end with
+a visible command similar to:
+
+```text
+chemsmart run orca -p water_sp -f inputs/h2o.xyz -c 0 -m 1 sp
+```
+
+Before that command becomes executable, CHEMSMART checks:
+
+1. CLI tokenization and real option placement;
+2. workspace project resolution;
+3. safe fake/dry-run execution;
+4. generated ORCA or Gaussian input;
+5. program- and job-specific invariants;
+6. preservation of the requested program, kind, path, project, charge, and
+   multiplicity.
+
+The deterministic parser and gate evidence remain visible while the agent is
+working. Once the turn finishes, they collapse into one **Tool chain** row.
+Press `Enter`, `Space`, or click it to inspect the evidence again. The final
+command remains visible. Activate the same Tool chain row again to hide the
+expanded evidence.
+
+## Execute And Monitor
+
+Run the last validated local command with:
+
+```text
+/run
+```
+
+Real execution always requires this explicit action even in permissive modes.
+The status strip appears as soon as the process starts. Press `Ctrl+B` or use
+`/runs` to open the calculation monitor:
+
+| Key | Action |
+|---|---|
+| `Up` / `Down` | Select a calculation or scheduler job |
+| `Enter` | Open its structured receipt |
+| `L` | Follow the bounded raw log |
+| `/` | Search the log |
+| `E` | Extract the latest chemistry result |
+| `C` | Request cancellation |
+| `Esc` | Return to chat |
+
+The conversation remains usable while a local calculation runs. A completed
+single-point receipt reports final energy, SCF cycles, normal termination,
+method/basis, elapsed time, and output path. Raw output is kept in the monitor,
+not dumped into the main transcript.
+
+After completion, ask:
+
+```text
+Diagnose the latest calculation result.
+```
+
+When there is one unambiguous recent run, the deterministic diagnostics path
+uses its stored output path without asking for the project again.
+
+## Keyboard Reference
+
+| Shortcut | Action |
+|---|---|
+| `F1` | Show all shortcuts |
+| `/` | Open and filter the command palette |
+| `@` | Select a workspace file |
+| `Shift+Tab` | Inspect or select workspace project YAML |
+| `Ctrl+B` | Open calculation and scheduler monitor |
+| `Ctrl+T` | Inspect current tool activity |
+| `Ctrl+O` | Toggle compact/full transcript detail |
+| `Ctrl+R` | Recall the previous request |
+| `Ctrl+G` | Edit the draft in `$EDITOR` |
+| `Tab` while busy | Queue or restore one follow-up request |
+| `Esc` | Close an overlay and return to the composer |
+
+Click a rendered answer to open a selection view. Drag to copy a range, press
+`A` to select all, and `C` to copy the current selection.
+
+## Sessions And Audit Evidence
+
+Every session is stored below `~/.chemsmart/agent/sessions/<id>/`. The record
+may include:
+
+- `decision_log.jsonl` for requests, tool events, approvals, and verdicts;
+- `session_metadata.json` for runtime status and harness summary;
+- `harness_result.json` for generated-input invariant evidence;
+- `runtime_events.jsonl` and calculation receipts for replay/recovery;
+- generated `.com` or `.inp` inputs from safe validation.
+
+Use `/sessions` and `/resume <session-id>` in the TUI, or the matching
+`chemsmart agent sessions` and `chemsmart agent resume` CLI commands.
+
+## Common Failures
+
+- `YAML MISSING`: build one with `/init` and `/write-project`, or select among
+  existing workspace candidates with `Shift+Tab`.
+- `/run` blocked after editing YAML: regenerate the command so its stored YAML
+  hash matches the current file.
+- Project name requested despite an existing YAML: select it with `Shift+Tab`
+  and verify the footer reads `YAML OK` before sending the calculation request.
+- Missing input file in `@`: confirm the TUI was launched from the intended
+  workspace and the file is below that directory.
+- Local provider rejects `/init`: switch to a configured tool-calling API
+  provider for project authoring, then return to local synthesis if desired.
