@@ -114,25 +114,13 @@ def _submission_terminal_state(
             evidence={"cwd": str(cwd)},
         )
     )
-    server_name = _server_name(tokens)
-    server_path = _server_yaml_path(server_name)
-    scheduler = _server_scheduler(server_path)
-    marker = {"PBS": "#PBS", "SLURM": "#SBATCH", "SGE": "#$"}.get(
-        str(scheduler or "").upper(), ""
-    )
-    marker_present = bool(marker) and any(
-        marker in path.read_text(encoding="utf-8", errors="replace")
-        for path in scripts
+    server_name, server_path, scheduler, marker, marker_present = (
+        _submission_server_evidence(tokens, scripts)
     )
     assertions.extend(
         _server_assertions(server_path, scheduler, marker, marker_present)
     )
-    project_hash = (
-        selected_project.sha256
-        if selected_project is not None
-        and selected_project.name == parsed_project
-        else ""
-    )
+    project_hash = _selected_project_hash(selected_project, parsed_project)
     assertions.append(
         assertion(
             "sub.project_hash_present",
@@ -152,11 +140,7 @@ def _submission_terminal_state(
             "sub.project_hash_present",
         ]
     )
-    artifacts = [
-        {"kind": "submit_script", "path": str(path)} for path in scripts
-    ]
-    if server_path.is_file():
-        artifacts.append({"kind": "server_yaml", "path": str(server_path)})
+    artifacts = _submission_artifacts(scripts, server_path)
     return build_terminal_state(
         action="submit_job",
         command=command,
@@ -169,6 +153,41 @@ def _submission_terminal_state(
         required_assertion_ids=required_ids,
         artifacts=artifacts,
     )
+
+
+def _submission_server_evidence(
+    tokens: list[str], scripts: list[Path]
+) -> tuple[str | None, Path, str | None, str, bool]:
+    server_name = _server_name(tokens)
+    server_path = _server_yaml_path(server_name)
+    scheduler = _server_scheduler(server_path)
+    marker = {"PBS": "#PBS", "SLURM": "#SBATCH", "SGE": "#$"}.get(
+        str(scheduler or "").upper(), ""
+    )
+    marker_present = bool(marker) and any(
+        marker in path.read_text(encoding="utf-8", errors="replace")
+        for path in scripts
+    )
+    return server_name, server_path, scheduler, marker, marker_present
+
+
+def _selected_project_hash(
+    selected_project: Any, parsed_project: str | None
+) -> str:
+    if selected_project is None or selected_project.name != parsed_project:
+        return ""
+    return str(selected_project.sha256)
+
+
+def _submission_artifacts(
+    scripts: list[Path], server_path: Path
+) -> list[JsonDict]:
+    artifacts = [
+        {"kind": "submit_script", "path": str(path)} for path in scripts
+    ]
+    if server_path.is_file():
+        artifacts.append({"kind": "server_yaml", "path": str(server_path)})
+    return artifacts
 
 
 def _submission_intent_assertions(
