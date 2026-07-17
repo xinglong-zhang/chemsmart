@@ -91,6 +91,10 @@ from chemsmart.agent.services.step_executor import (
     run_local_failed,
     run_local_failure_message,
 )
+from chemsmart.agent.services.training_capture import (
+    TrainingCapture,
+    registry_tool_names,
+)
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
 UTC = timezone.utc
@@ -620,63 +624,15 @@ class AgentSession:
         loop_result: dict[str, Any],
         paused: bool = False,
     ) -> None:
-        """Append this completed turn to the cross-session training store."""
-
-        try:
-            from chemsmart.agent.training_log import (
-                TrainingEpisodeWriter,
-                tool_records_from_outcomes,
-            )
-
-            if self._training_writer is None:
-                self._training_writer = TrainingEpisodeWriter()
-            if not self._training_writer.enabled or self.state is None:
-                return
-            outcomes = list(loop_result.get("tool_outcomes") or [])
-            terminal_state = next(
-                (
-                    outcome.raw_result.get("terminal_state")
-                    for outcome in reversed(outcomes)
-                    if isinstance(outcome.raw_result, dict)
-                    and isinstance(
-                        outcome.raw_result.get("terminal_state"), dict
-                    )
-                ),
-                None,
-            )
-            self._training_writer.write_episode(
-                session_id=self.state.session_id,
-                turn=self.state.turn_index,
-                provider_name=provider_name,
-                model=getattr(provider, "default_model", None),
-                messages=_json_safe(loop_result.get("messages") or []),
-                tool_records=tool_records_from_outcomes(
-                    outcomes,
-                    requests=list(loop_result.get("tool_requests") or []),
-                ),
-                tool_requests=list(loop_result.get("tool_requests") or []),
-                approvals_count=loop_result.get("approvals_count") or 0,
-                denials_count=loop_result.get("denials_count") or 0,
-                cwd=self.state.cwd,
-                available_tools=self._registry_tool_names(),
-                final_answer=str(loop_result.get("assistant_text") or ""),
-                terminal_state=terminal_state,
-                paused=paused,
-            )
-        except Exception:
-            # Training capture must never break a live turn.
-            pass
+        TrainingCapture(self).write_episode(
+            provider_name=provider_name,
+            provider=provider,
+            loop_result=loop_result,
+            paused=paused,
+        )
 
     def _registry_tool_names(self) -> list[str]:
-        # Custom/test registries only need `call` + tool defs; don't let a
-        # missing list_tools() silently disable episode capture.
-        list_tools = getattr(self.registry, "list_tools", None)
-        if not callable(list_tools):
-            return []
-        try:
-            return [tool.name for tool in list_tools()]
-        except Exception:
-            return []
+        return registry_tool_names(self.registry)
 
     def _tool_loop_system_prompt(
         self,
