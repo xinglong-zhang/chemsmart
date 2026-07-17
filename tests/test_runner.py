@@ -782,3 +782,214 @@ class TestRunListFailureAggregation:
         assert child_b.jobrunner.mem_gb == 32
         assert child_a.jobrunner is not child_b.jobrunner
         assert child_a.jobrunner is not runner
+
+
+class TestBatchSerialExecutionPolicy:
+    """Serial local/nested BatchJob policy with full per-child resources."""
+
+    @staticmethod
+    def _dummy_batch_cls():
+        from chemsmart.jobs.batch import BatchJob
+
+        class DummyBatchJob(BatchJob):
+            PROGRAM = "dummy"
+
+            def _configure_runner_for_node(self, runner, node, job):
+                return runner
+
+        return DummyBatchJob
+
+    def test_toplevel_run_batch_is_serial_with_full_resources(
+        self, pbs_server, mocker
+    ):
+        """Top-level chemsmart run BatchJob: serial children, full cores/mem."""
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.job import Job
+
+        jobrunner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=False,
+            num_cores=16,
+            mem_gb=32,
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        call_order = []
+        cores_seen = []
+        mem_seen = []
+        children = []
+        for index in range(4):
+            child = Mock(spec=Job, label=f"mol_{index}", TYPE="g16opt")
+            child.is_complete.return_value = True
+
+            def _run(child_ref=child):
+                call_order.append(child_ref.label)
+                cores_seen.append(child_ref.jobrunner.num_cores)
+                mem_seen.append(child_ref.jobrunner.mem_gb)
+
+            child.run.side_effect = _run
+            children.append(child)
+
+        batch_cls = self._dummy_batch_cls()
+        batch = batch_cls(
+            jobs=children,
+            no_run_in_parallel=False,
+            jobrunner=jobrunner,
+            label="mols_batch",
+        )
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        process_pipeline.__wrapped__(ctx, batch)
+
+        assert batch.no_run_in_parallel is True
+        assert call_order == ["mol_0", "mol_1", "mol_2", "mol_3"]
+        assert cores_seen == [16, 16, 16, 16]
+        assert mem_seen == [32, 32, 32, 32]
+
+    def test_run_in_parallel_does_not_oversubscribe_cores(
+        self, pbs_server, mocker
+    ):
+        """--run-in-parallel on run must not assign N× full cores or split cores."""
+        import click
+
+        from chemsmart.cli.run import process_pipeline, run
+        from chemsmart.jobs.job import Job
+
+        parent_cores = 16
+        parent_mem = 32
+        num_children = 4
+        jobrunner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=False,
+            num_cores=parent_cores,
+            mem_gb=parent_mem,
+        )
+        ctx = click.Context(run)
+        ctx.ensure_object(dict)
+        ctx.obj["jobrunner"] = jobrunner
+
+        children = []
+        for index in range(num_children):
+            child = Mock(spec=Job, label=f"job_{index}", TYPE="g16opt")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch_cls = self._dummy_batch_cls()
+        batch = batch_cls(
+            jobs=children,
+            no_run_in_parallel=False,
+            jobrunner=jobrunner,
+            label="parallel_flag_batch",
+        )
+        mocker.patch.object(JobRunner, "from_job", return_value=jobrunner)
+
+        process_pipeline.__wrapped__(ctx, batch)
+
+        split_cores = parent_cores // num_children
+        for child in children:
+            assert child.jobrunner.num_cores == parent_cores
+            assert child.jobrunner.mem_gb == parent_mem
+            assert child.jobrunner.num_cores != split_cores
+
+    def test_nested_crest_qrc_serial_despite_parallel_runner(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker
+    ):
+        """Nested crest/QRC batches stay serial when runner allows parallel."""
+        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+        from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.orca.qrc import ORCAQRCJob
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        gaussian_jobrunner_no_scratch.no_run_in_parallel = False
+        settings = GaussianJobSettings()
+
+        crest = GaussianCrestJob(
+            molecules=[MockMolecule(), MockMolecule()],
+            settings=settings,
+            label="crest_nested",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        crest_jobs = [Mock(label="c1"), Mock(label="c2")]
+        mocker.patch.object(
+            crest, "_prepare_all_jobs", return_value=crest_jobs
+        )
+        crest_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.crest.GaussianBatchJob"
+        )
+        crest._run_all_jobs()
+        assert crest_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+
+        qrc = GaussianQRCJob(
+            molecule=MockMolecule(),
+            settings=settings,
+            label="qrc_nested",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        qrc_jobs = [Mock(label="qf"), Mock(label="qr")]
+        mocker.patch.object(
+            type(qrc),
+            "both_qrc_jobs",
+            new_callable=mocker.PropertyMock,
+            return_value=qrc_jobs,
+        )
+        qrc_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianBatchJob"
+        )
+        qrc._run_both_jobs()
+        assert qrc_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+
+        orca_settings = ORCAJobSettings()
+        orca_qrc = ORCAQRCJob(
+            molecule=MockMolecule(),
+            settings=orca_settings,
+            label="orca_qrc_nested",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        orca_jobs = [Mock(label="of"), Mock(label="or")]
+        mocker.patch.object(
+            type(orca_qrc),
+            "both_qrc_jobs",
+            new_callable=mocker.PropertyMock,
+            return_value=orca_jobs,
+        )
+        orca_batch_cls = mocker.patch("chemsmart.jobs.orca.qrc.OrcaBatchJob")
+        orca_qrc._run_both_jobs()
+        assert orca_batch_cls.call_args.kwargs["no_run_in_parallel"] is True
+
+    def test_single_child_keeps_full_engine_resources(self, pbs_server):
+        """A single child still receives the parent full core/memory allocation."""
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=True,
+            num_cores=64,
+            mem_gb=128,
+        )
+        child = Mock(label="only_child")
+        child.run.return_value = None
+        child.is_complete.return_value = True
+
+        batch = self._dummy_batch_cls()(
+            jobs=[child],
+            no_run_in_parallel=True,
+            jobrunner=runner,
+            label="single_child_batch",
+        )
+        batch.run()
+
+        assert child.jobrunner.num_cores == 64
+        assert child.jobrunner.mem_gb == 128
+
+    def test_batchjob_has_no_inprocess_parallel_runner(self):
+        """Unsplit in-process parallel path is removed from BatchJob."""
+        from chemsmart.jobs.batch import BatchJob
+
+        assert "_run_jobs_in_parallel" not in vars(BatchJob)
