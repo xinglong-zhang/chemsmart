@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 import time
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from chemsmart.agent.handles import (
-    HandleStore,
-    store_result_handle,
-)
+from chemsmart.agent.handles import HandleStore
 from chemsmart.agent.harness.models import HarnessResult
 from chemsmart.agent.harness.session_gates import (
     apply_deterministic_gates,
@@ -83,7 +77,12 @@ from chemsmart.agent.services.runtime_metrics import (
     schema_hash,
 )
 from chemsmart.agent.services.session_finalizer import SessionFinalizer
-from chemsmart.agent.services.session_store import load_current_session_state
+from chemsmart.agent.services.session_context import (
+    DecisionLog,
+    SessionContext,
+    env_snapshot,
+    new_session_id,
+)
 from chemsmart.agent.services.step_executor import (
     StepExecutor,
     is_submit_server_error,
@@ -97,8 +96,6 @@ from chemsmart.agent.services.training_capture import (
 )
 from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
-UTC = timezone.utc
-
 _REFERENCE_RE = REFERENCE_RE
 _LLM_MAX_ATTEMPTS = MAX_ATTEMPTS
 _LLM_BACKOFF_SECONDS = BACKOFF_SECONDS
@@ -110,33 +107,6 @@ _is_project_yaml_workflow = is_project_yaml_workflow
 _classify_intent = classify_intent
 _resolve_plan_intent = resolve_plan_intent
 _is_chitchat_request = is_chitchat_request
-
-
-class DecisionLog:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-
-    def write(
-        self,
-        kind: str,
-        payload: dict[str, Any],
-        rationale: str = "",
-    ) -> None:
-        entry = {
-            "ts": datetime.now(UTC).isoformat(),
-            "kind": kind,
-            "payload": _json_safe(payload),
-            "rationale": rationale,
-        }
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry, sort_keys=True) + "\n")
-
-    def read_all(self) -> list[dict[str, Any]]:
-        if not self.path.exists():
-            return []
-        with self.path.open(encoding="utf-8") as handle:
-            return [json.loads(line) for line in handle if line.strip()]
 
 
 class AgentSession:
@@ -438,18 +408,7 @@ class AgentSession:
         )
 
     def _tools_called(self) -> list[str]:
-        tools: list[str] = []
-        for entry in self._current_turn_entries():
-            if entry.get("kind") not in {
-                "tool_call",
-                "tool_preview",
-                "tool_use_request",
-            }:
-                continue
-            tool = entry.get("payload", {}).get("tool")
-            if isinstance(tool, str) and tool not in tools:
-                tools.append(tool)
-        return tools
+        return SessionContext(self).tools_called()
 
     def _tool_defs_for_provider(
         self,
@@ -460,161 +419,40 @@ class AgentSession:
     def _ensure_runtime_controller(
         self,
     ) -> RuntimeController | None:
-        if self.runtime_v2_mode is RuntimeV2Mode.OFF:
-            return None
-        assert self.state is not None
-        assert self.session_dir is not None
-        if self._runtime_controller is None:
-            self._runtime_controller = RuntimeController(
-                session_dir=self.session_dir,
-                session_id=self.state.session_id,
-                registry=self.registry,
-                mode=self.runtime_v2_mode,
-            )
-        return self._runtime_controller
+        return SessionContext(self).ensure_runtime_controller()
 
     def _runtime_v2_metadata(self) -> dict[str, Any]:
-        controller = self._runtime_controller
-        if controller is None:
-            return {"mode": self.runtime_v2_mode.value}
-        selection = controller.selection
-        return {
-            "mode": self.runtime_v2_mode.value,
-            "phase": controller.state.phase.value,
-            "exposed_tools": (
-                list(selection.direct) if selection is not None else []
-            ),
-            "shadow_violations": list(controller.state.shadow_violations),
-            "event_log": str(controller.store.path),
-            "state_snapshot": str(
-                controller.session_dir / "runtime_state.json"
-            ),
-        }
+        return SessionContext(self).runtime_metadata()
 
     def _has_pending_ask_user(self) -> bool:
-        if self.state is None:
-            return False
-        if self._get_logged_summary() is not None:
-            return False
-        return bool(
-            self.state.pending_ask_user and self.state.pending_messages
-        )
+        return SessionContext(self).has_pending_ask_user()
 
     def _resume_pending_ask_user(self, answer: str) -> None:
-        assert self.state is not None
-        assert self.decision_log is not None
-        self.state.cwd = os.path.abspath(os.getcwd())
-        self.state.env_snapshot = _env_snapshot()
-        pending = self.state.pending_ask_user or {}
-        self.decision_log.write(
-            "ask_user_answer",
-            {
-                "question": pending.get("question"),
-                "options": pending.get("options") or [],
-                "answer": answer,
-            },
-            rationale=answer,
-        )
+        SessionContext(self).resume_pending_ask_user(answer)
 
     def _log_loop_mode(self, policy: PermissionPolicy) -> None:
-        assert self.decision_log is not None
-
-        from_mode = None
-        if self._loop_mode_state is not None:
-            from_mode = self._loop_mode_state[0]
-
-        self.decision_log.write(
-            "mode_change",
-            {
-                "from_mode": from_mode,
-                "to_mode": policy.mode.value,
-                "yolo": policy.yolo,
-            },
-        )
-        self._loop_mode_state = (policy.mode.value, policy.yolo)
+        SessionContext(self).log_loop_mode(policy)
 
     def _metadata_provider_name(self) -> str:
-        if self._llm_stats:
-            return self._llm_stats[-1].get("provider_name") or "unknown"
-        provider = self._provider
-        return getattr(provider, "name", None) or "unknown"
+        return SessionContext(self).provider_name()
 
     def _metadata_resolved_model(self) -> str:
-        if self._llm_stats:
-            return self._llm_stats[-1].get("resolved_model") or "unknown"
-        provider = self._provider
-        return getattr(provider, "default_model", None) or "unknown"
+        return SessionContext(self).resolved_model()
 
     def _total_llm_tokens(self, field: str) -> int:
-        return sum(int(stat.get(field) or 0) for stat in self._llm_stats)
+        return SessionContext(self).total_tokens(field)
 
     def _start_new_session(self, request: str) -> None:
-        session_id = _new_session_id()
-        self.session_dir = self.session_root / session_id
-        self.session_dir.mkdir(parents=True, exist_ok=True)
-        self.handle_store = HandleStore(self.session_dir)
-        self.decision_log = DecisionLog(
-            self.session_dir / "decision_log.jsonl"
-        )
-        self.state = SessionState(
-            session_id=session_id,
-            cwd=os.path.abspath(os.getcwd()),
-            request_started_at=_utc_now_iso(),
-            turn_index=1,
-            current_step_index=0,
-            request=request,
-            env_snapshot=_env_snapshot(),
-        )
-        self.conversation_history = ConversationMemory()
+        SessionContext(self).start_new_session(request)
 
     def _start_new_turn(self, request: str) -> None:
-        assert self.state is not None
-        assert self.decision_log is not None
-        if self._get_logged_summary() is None and self.state.plan is not None:
-            raise RuntimeError(
-                "Cannot start a new request while the current turn is still "
-                "open. Resume or finish the existing turn first."
-            )
-        self.state.turn_index += 1
-        self.state.cwd = os.path.abspath(os.getcwd())
-        self.state.request_started_at = _utc_now_iso()
-        self.state.current_step_index = 0
-        self.state.total_steps_planned = 0
-        self.state.plan = None
-        self.state.request = request
-        self.state.request_intent = "unknown"
-        self.state.env_snapshot = _env_snapshot()
+        SessionContext(self).start_new_turn(request)
 
     def _refresh_conversation_history(self) -> None:
-        if self.decision_log is None:
-            self.conversation_history = ConversationMemory()
-            return
-        self.conversation_history = ConversationMemory.from_entries(
-            self.decision_log.read_all()
-        )
+        SessionContext(self).refresh_history()
 
     def _prompt_session_meta(self, **extra: Any) -> dict[str, Any]:
-        meta: dict[str, Any] = dict(extra)
-        if self.state is None:
-            return meta
-
-        meta.update(
-            {
-                "session_id": self.state.session_id,
-                "turn_index": self.state.turn_index,
-                "request_intent": self.state.request_intent,
-            }
-        )
-        if self._loop_mode_state is not None:
-            meta["approval_mode"] = self._loop_mode_state[0]
-            meta["yolo"] = self._loop_mode_state[1]
-        if self._runtime_controller is not None:
-            runtime_state = self._runtime_controller.state
-            if runtime_state.active_project is not None:
-                meta["active_project"] = runtime_state.active_project.name
-            if runtime_state.previous_command:
-                meta["previous_command"] = runtime_state.previous_command
-        return meta
+        return SessionContext(self).prompt_meta(**extra)
 
     def _write_training_episode(
         self,
@@ -657,137 +495,45 @@ class AgentSession:
         )
 
     def _current_turn_entries(self) -> list[dict[str, Any]]:
-        if self.decision_log is None or self.state is None:
-            return []
-        return self.conversation_history.entries_for_turn(
-            self.decision_log.read_all(),
-            self.state.turn_index,
-        )
+        return SessionContext(self).current_turn_entries()
 
     def _artifact_paths_for_current_turn(self) -> list[Path] | None:
-        assert self.state is not None
-        assert self.session_dir is not None
-        tool_results = [
-            entry
-            for entry in self._current_turn_entries()
-            if entry.get("kind") == "tool_result"
-        ]
-        if not tool_results:
-            return None
-        artifact_paths: list[Path] = []
-        for entry in tool_results:
-            payload = entry.get("payload") or {}
-            artifact_name = payload.get("artifact")
-            if isinstance(artifact_name, str) and artifact_name:
-                artifact_paths.append(self.session_dir / artifact_name)
-        return artifact_paths or None
+        return SessionContext(self).artifact_paths()
 
     def _write_result_artifact(self, step_index: int, result: Any) -> Path:
-        assert self.session_dir is not None
-        assert self.state is not None
-        artifact_path = self.session_dir / (
-            f"turn_{self.state.turn_index:02d}_step_{step_index + 1:02d}.json"
-        )
-        artifact_path.write_text(
-            json.dumps(_json_safe(result), indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        return artifact_path
+        return SessionContext(self).write_result_artifact(step_index, result)
 
     def _load_existing_session(self, session_id: str) -> None:
-        self.session_dir = self.session_root / session_id
-        self.state = load_current_session_state(
-            self.session_dir,
-            required=True,
-        )
-        self.handle_store = HandleStore(self.session_dir)
-        self.decision_log = DecisionLog(
-            self.session_dir / "decision_log.jsonl"
-        )
-        self._refresh_conversation_history()
-        expected_turn_index = max(1, len(self.conversation_history.turns))
-        if self.state.turn_index != expected_turn_index:
-            self.state.turn_index = expected_turn_index
-            self._save_state()
+        SessionContext(self).load_existing(session_id)
 
     def _load_completed_results(self) -> list[Any]:
-        assert self.session_dir is not None
-        assert self.state is not None
-        results: list[Any] = []
-        artifact_paths = self._artifact_paths_for_current_turn()
-        if artifact_paths is None:
-            artifact_paths = [
-                self.session_dir / f"step_{step_index + 1:02d}.json"
-                for step_index in range(self.state.current_step_index)
-            ]
-        for artifact_path in artifact_paths:
-            with artifact_path.open(encoding="utf-8") as handle:
-                results.append(json.load(handle))
-        return results
+        return SessionContext(self).load_completed_results()
 
     def _store_result_handle(
         self,
         tool_name: str,
         result: Any,
     ) -> str | None:
-        return store_result_handle(
-            self.handle_store,
-            tool_name,
-            result,
-            summary=_preview_value(result),
-        )
+        return SessionContext(self).store_result_handle(tool_name, result)
 
     def _save_state(self) -> None:
-        assert self.session_dir is not None
-        assert self.state is not None
-        self.state.save(self.session_dir / "session.json")
-        self.state.save(self.session_dir / "state.json")
+        SessionContext(self).save_state()
 
     def _collect_prior_results(
         self,
         results: list[Any],
         tool_name: str,
     ) -> list[Any]:
-        assert self.state is not None
-        assert self.state.plan is not None
-        return [
-            result
-            for step, result in zip(self.state.plan.steps, results)
-            if step.tool == tool_name
-        ]
+        return SessionContext(self).collect_prior_results(results, tool_name)
 
     def _find_prior_result(self, results: list[Any], tool_name: str) -> Any:
-        assert self.state is not None
-        assert self.state.plan is not None
-        return next(
-            (
-                result
-                for step, result in zip(self.state.plan.steps, results)
-                if step.tool == tool_name
-            ),
-            None,
-        )
+        return SessionContext(self).find_prior_result(results, tool_name)
 
     def _get_logged_verdict(self) -> CriticVerdict | None:
-        verdict_entries = [
-            entry
-            for entry in self._current_turn_entries()
-            if entry.get("kind") == "critic_verdict"
-        ]
-        if not verdict_entries:
-            return None
-        return CriticVerdict.model_validate(verdict_entries[-1]["payload"])
+        return SessionContext(self).logged_verdict()
 
     def _get_logged_summary(self) -> dict[str, Any] | None:
-        summary_entries = [
-            entry
-            for entry in self._current_turn_entries()
-            if entry.get("kind") == "session_summary"
-        ]
-        if not summary_entries:
-            return None
-        payload = summary_entries[-1].get("payload")
-        return payload if isinstance(payload, dict) else None
+        return SessionContext(self).logged_summary()
 
     def _apply_deterministic_gates(
         self,
@@ -850,16 +596,8 @@ def _default_session_root() -> str:
     return str(Path.home() / ".chemsmart" / "agent" / "sessions")
 
 
-def _new_session_id() -> str:
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    return f"{stamp}-{uuid.uuid4().hex[:8]}"
-
-
-def _env_snapshot() -> dict[str, str | None]:
-    return {
-        "AI_PROVIDER": os.environ.get("AI_PROVIDER"),
-        "PWD": os.path.abspath(os.getcwd()),
-    }
+_new_session_id = new_session_id
+_env_snapshot = env_snapshot
 
 
 _elapsed_ms = elapsed_ms
