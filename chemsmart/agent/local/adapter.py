@@ -84,6 +84,12 @@ def plan_to_synthesis_result(
             plan,
             default_project=default_project,
         )
+    return _legacy_plan_to_synthesis_result(plan, user_query, use_submit)
+
+
+def _legacy_plan_to_synthesis_result(
+    plan: dict[str, Any], user_query: str, use_submit: bool | None
+) -> dict[str, Any]:
 
     intent = str(plan.get("intent") or "").lower()
     if intent in {"decline", "infeasible", "out_of_scope"}:
@@ -169,9 +175,11 @@ def plan_to_synthesis_result(
 
 def _is_compact_spec(plan: dict[str, Any]) -> bool:
     intent = plan.get("intent")
-    return isinstance(intent, str) and (
-        intent in {"workflow", "advisory", "decline", "chitchat"}
-    ) and ("jobs" in plan or "message" in plan)
+    return (
+        isinstance(intent, str)
+        and (intent in {"workflow", "advisory", "decline", "chitchat"})
+        and ("jobs" in plan or "message" in plan)
+    )
 
 
 def _compact_spec_to_synthesis_result(
@@ -189,7 +197,8 @@ def _compact_spec_to_synthesis_result(
     if not commands:
         errors = adapted.get("errors") or ["no commands rendered"]
         return _needs_clarification(
-            "Planner SPEC could not be rendered: " + "; ".join(map(str, errors)),
+            "Planner SPEC could not be rendered: "
+            + "; ".join(map(str, errors)),
             ["jobs"],
         )
     if adapted.get("valid") is False:

@@ -337,30 +337,11 @@ def update_project_yaml(
 ) -> dict[str, Any]:
     """Patch an existing workspace project YAML after validation."""
 
-    if isinstance(updates, str):
-        try:
-            decoded = json.loads(updates)
-        except json.JSONDecodeError as exc:
-            return {
-                "ok": False,
-                "project_name": _normalize_project_name(project_name),
-                "program": str(program or ""),
-                "written_path": None,
-                "rule_id": "yaml.update.stringified_json_invalid",
-                "repair_hint": "Pass updates as a JSON object/dictionary.",
-                "error": f"stringified updates could not be decoded: {exc}",
-            }
-        if not isinstance(decoded, dict):
-            return {
-                "ok": False,
-                "project_name": _normalize_project_name(project_name),
-                "program": str(program or ""),
-                "written_path": None,
-                "rule_id": "yaml.update.mapping_required",
-                "repair_hint": "Pass updates as a JSON object/dictionary.",
-                "error": "decoded updates must be a mapping",
-            }
-        updates = decoded
+    updates, decode_error = _decode_project_updates(
+        updates, project_name, program
+    )
+    if decode_error is not None:
+        return decode_error
 
     resolved = _resolve_project_yaml_target(project_name, program)
     if resolved["path"] is None:
@@ -373,31 +354,10 @@ def update_project_yaml(
             or "workspace project YAML is not loaded",
         }
     path = Path(str(resolved["path"]))
-    before_text = path.read_text(encoding="utf-8")
-    try:
-        document = yaml.safe_load(before_text) or {}
-    except yaml.YAMLError as exc:
-        return {
-            "ok": False,
-            "project_name": resolved["project_name"],
-            "program": resolved["program"],
-            "written_path": str(path),
-            "error": f"existing YAML could not be parsed: {exc}",
-        }
-    if not isinstance(document, dict):
-        return {
-            "ok": False,
-            "project_name": resolved["project_name"],
-            "program": resolved["program"],
-            "written_path": str(path),
-            "error": "existing YAML root is not a mapping",
-        }
-
-    patched = deepcopy(document)
-    for dotted, value in (updates or {}).items():
-        _set_dotted_path(patched, str(dotted), value)
-    for dotted in unset or []:
-        _unset_dotted_path(patched, str(dotted))
+    before_text, document, load_error = _load_project_document(path, resolved)
+    if load_error is not None:
+        return load_error
+    patched = _patch_project_document(document, updates, unset)
 
     after_text = yaml.safe_dump(patched, sort_keys=False)
     validation = validate_project_yaml(
@@ -437,6 +397,96 @@ def update_project_yaml(
         "diff": diff,
         "state_delta": {"project": state_delta},
     }
+
+
+def _decode_project_updates(
+    updates: dict[str, Any] | str | None,
+    project_name: str,
+    program: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if not isinstance(updates, str):
+        return updates, None
+    try:
+        decoded = json.loads(updates)
+    except json.JSONDecodeError as exc:
+        return None, _project_update_error(
+            project_name,
+            program,
+            rule_id="yaml.update.stringified_json_invalid",
+            error=f"stringified updates could not be decoded: {exc}",
+        )
+    if not isinstance(decoded, dict):
+        return None, _project_update_error(
+            project_name,
+            program,
+            rule_id="yaml.update.mapping_required",
+            error="decoded updates must be a mapping",
+        )
+    return decoded, None
+
+
+def _project_update_error(
+    project_name: str,
+    program: str,
+    *,
+    rule_id: str,
+    error: str,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "project_name": _normalize_project_name(project_name),
+        "program": str(program or ""),
+        "written_path": None,
+        "rule_id": rule_id,
+        "repair_hint": "Pass updates as a JSON object/dictionary.",
+        "error": error,
+    }
+
+
+def _load_project_document(
+    path: Path, resolved: dict[str, Any]
+) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
+    before_text = path.read_text(encoding="utf-8")
+    try:
+        document = yaml.safe_load(before_text) or {}
+    except yaml.YAMLError as exc:
+        return (
+            before_text,
+            {},
+            {
+                "ok": False,
+                "project_name": resolved["project_name"],
+                "program": resolved["program"],
+                "written_path": str(path),
+                "error": f"existing YAML could not be parsed: {exc}",
+            },
+        )
+    if not isinstance(document, dict):
+        return (
+            before_text,
+            {},
+            {
+                "ok": False,
+                "project_name": resolved["project_name"],
+                "program": resolved["program"],
+                "written_path": str(path),
+                "error": "existing YAML root is not a mapping",
+            },
+        )
+    return before_text, document, None
+
+
+def _patch_project_document(
+    document: dict[str, Any],
+    updates: dict[str, Any] | None,
+    unset: list[str] | None,
+) -> dict[str, Any]:
+    patched = deepcopy(document)
+    for dotted, value in (updates or {}).items():
+        _set_dotted_path(patched, str(dotted), value)
+    for dotted in unset or []:
+        _unset_dotted_path(patched, str(dotted))
+    return patched
 
 
 def _resolve_project_yaml_target(
