@@ -13,7 +13,10 @@ from chemsmart.agent.harness.command_rules.structures import (
     parse_coordinate_literal,
     parse_numeric_sequence,
 )
-from chemsmart.agent.harness.command_rules.tokens import has_option, option_value
+from chemsmart.agent.harness.command_rules.tokens import (
+    has_option,
+    option_value,
+)
 
 
 COORDINATE_FLAGS = ("-c", "--coordinates")
@@ -41,14 +44,7 @@ def coordinate_contract_issues(
     issues: list[CommandContractIssue] = []
     coordinate_value = option_value(tokens, COORDINATE_FLAGS)
 
-    required: dict[str, tuple[str, ...]] = {"coordinates": COORDINATE_FLAGS}
-    if job == "scan":
-        required.update(SCAN_FLAGS.get(program, {}))
-    missing = [
-        f"{name} ({'/'.join(aliases)})"
-        for name, aliases in required.items()
-        if not has_option(tokens, aliases)
-    ]
+    missing = _missing_coordinate_parameters(program, job, tokens)
     if missing:
         issues.append(
             reject(
@@ -92,31 +88,10 @@ def coordinate_contract_issues(
     if job != "scan" or coordinates is None:
         return issues
 
-    parameter_values: dict[str, list[int | float]] = {}
-    for name, aliases in SCAN_FLAGS[program].items():
-        value = option_value(tokens, aliases)
-        values, value_error = parse_numeric_sequence(
-            value,
-            integers=name == "num_steps",
-        )
-        if value_error is not None:
-            issues.append(
-                reject(
-                    "cmd.contract.scan_parameter_literal",
-                    f"{name} {value_error}",
-                    {
-                        "program": program,
-                        "job": job,
-                        "parameter": name,
-                        "value": value,
-                    },
-                    (f"valid {name} scalar or list",),
-                )
-            )
-            continue
-        if values is not None:
-            parameter_values[name] = values
-
+    parameter_values, parameter_issues = _parse_scan_parameters(
+        program, job, tokens
+    )
+    issues.extend(parameter_issues)
     coordinate_count = len(coordinates)
     mismatched = {
         name: len(values)
@@ -140,6 +115,49 @@ def coordinate_contract_issues(
             )
         )
     return issues
+
+
+def _missing_coordinate_parameters(
+    program: str, job: str, tokens: list[str]
+) -> list[str]:
+    required: dict[str, tuple[str, ...]] = {"coordinates": COORDINATE_FLAGS}
+    if job == "scan":
+        required.update(SCAN_FLAGS.get(program, {}))
+    return [
+        f"{name} ({'/'.join(aliases)})"
+        for name, aliases in required.items()
+        if not has_option(tokens, aliases)
+    ]
+
+
+def _parse_scan_parameters(
+    program: str, job: str, tokens: list[str]
+) -> tuple[dict[str, list[int | float]], list[CommandContractIssue]]:
+    parameter_values: dict[str, list[int | float]] = {}
+    issues: list[CommandContractIssue] = []
+    for name, aliases in SCAN_FLAGS[program].items():
+        value = option_value(tokens, aliases)
+        values, value_error = parse_numeric_sequence(
+            value,
+            integers=name == "num_steps",
+        )
+        if value_error is not None:
+            issues.append(
+                reject(
+                    "cmd.contract.scan_parameter_literal",
+                    f"{name} {value_error}",
+                    {
+                        "program": program,
+                        "job": job,
+                        "parameter": name,
+                        "value": value,
+                    },
+                    (f"valid {name} scalar or list",),
+                )
+            )
+        elif values is not None:
+            parameter_values[name] = values
+    return parameter_values, issues
 
 
 __all__ = ["coordinate_contract_issues"]
