@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -14,7 +13,20 @@ from chemsmart.agent.handles import (
     store_result_handle,
 )
 from chemsmart.agent.harness.models import HarnessResult
-from chemsmart.agent.harness.runner import evaluate_harness
+from chemsmart.agent.harness.session_gates import (
+    apply_deterministic_gates,
+    block_reason,
+    dedupe_strings,
+    dry_run_job_kind,
+    filter_critic_issues,
+    harness_issue_messages,
+    is_remote_unknown_issue,
+    malformed_input_issue,
+    missing_irc_keyword_issues,
+    plan_requires_geometry_handoff,
+    route_text,
+    source_step_for_ref,
+)
 from chemsmart.agent.loop import (
     ToolLoopBudgets,
     registry_tool_defs_for_provider,
@@ -83,8 +95,6 @@ from chemsmart.agent.services.unified_session import UnifiedSessionRunner
 
 UTC = timezone.utc
 
-_GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#\s*\S+", re.MULTILINE)
-_ORCA_ROUTE_RE = re.compile(r"^\s*!\s*\S+", re.MULTILINE)
 _REFERENCE_RE = REFERENCE_RE
 _LLM_MAX_ATTEMPTS = MAX_ATTEMPTS
 _LLM_BACKOFF_SECONDS = BACKOFF_SECONDS
@@ -832,96 +842,14 @@ class AgentSession:
         preview_submit: dict[str, Any] | None,
         dry_submit: bool,
     ) -> CriticVerdict:
-        issues = _filter_critic_issues(
+        return apply_deterministic_gates(
+            self,
             plan=plan,
-            issues=verdict.issues,
+            verdict=verdict,
+            runtime_result=runtime_result,
+            dry_run_results=dry_run_results,
+            preview_submit=preview_submit,
             dry_submit=dry_submit,
-        )
-        rationale_parts = [verdict.rationale] if verdict.rationale else []
-        final_verdict = verdict.verdict
-
-        if runtime_result is not None:
-            runtime_ok = runtime_result.get("ok")
-            if runtime_ok == "fail":
-                final_verdict = "reject"
-                issues.extend(runtime_result.get("local_issues", []))
-                rationale_parts.append("validate_runtime returned fail")
-            elif runtime_ok == "partial" and not dry_submit:
-                final_verdict = (
-                    "warn" if final_verdict == "ok" else final_verdict
-                )
-                issues.extend(runtime_result.get("remote_unknown", []))
-                rationale_parts.append("validate_runtime returned partial")
-
-        malformed_issues = [
-            issue
-            for result in dry_run_results
-            if (issue := _malformed_input_issue(result)) is not None
-        ]
-        if malformed_issues:
-            if final_verdict != "reject":
-                final_verdict = "warn"
-            issues.extend(malformed_issues)
-            rationale_parts.append(
-                "dry-run input route line failed basic validation"
-            )
-
-        irc_keyword_issues = _missing_irc_keyword_issues(
-            plan=plan,
-            dry_run_results=dry_run_results,
-        )
-        if irc_keyword_issues:
-            final_verdict = "reject"
-            issues.extend(irc_keyword_issues)
-            rationale_parts.append(
-                "IRC input route line missing required keyword"
-            )
-
-        harness_result = evaluate_harness(
-            plan=plan,
-            dry_run_results=dry_run_results,
-        )
-        self._last_harness_result = harness_result
-        if self.decision_log is not None:
-            self.decision_log.write(
-                "harness_result",
-                harness_result.to_dict(),
-                rationale=f"runtime harness verdict: {harness_result.verdict}",
-            )
-        if harness_result.verdict == "reject":
-            final_verdict = "reject"
-            issues.extend(_harness_issue_messages(harness_result))
-            rationale_parts.append(
-                "software invariant harness rejected generated input"
-            )
-        elif harness_result.verdict == "warn":
-            final_verdict = "warn" if final_verdict == "ok" else final_verdict
-            issues.extend(_harness_issue_messages(harness_result))
-            rationale_parts.append(
-                "software invariant harness warned on generated input"
-            )
-
-        if preview_submit is not None:
-            duplicate_check = preview_submit.get("duplicate_check", {})
-            if duplicate_check.get("duplicate"):
-                final_verdict = "reject"
-                message = (
-                    duplicate_check.get("message")
-                    or "duplicate submission detected"
-                )
-                issues.append(message)
-                rationale_parts.append(
-                    "submit_hpc duplicate check rejected the plan"
-                )
-
-        if final_verdict == "warn" and not issues:
-            final_verdict = "ok"
-
-        return CriticVerdict(
-            verdict=final_verdict,
-            confidence=verdict.confidence,
-            issues=_dedupe_strings(issues),
-            rationale="; ".join(part for part in rationale_parts if part),
         )
 
     @staticmethod
@@ -931,24 +859,12 @@ class AgentSession:
         allow_remote_unknown: bool,
         allow_critic_override: bool,
     ) -> str | None:
-        if verdict.verdict == "reject":
-            return "critic_reject"
-        if verdict.verdict == "ok":
-            return None
-
-        has_remote_unknown = any(
-            _is_remote_unknown_issue(issue) for issue in verdict.issues
+        return block_reason(
+            verdict,
+            dry_submit,
+            allow_remote_unknown,
+            allow_critic_override,
         )
-        has_other_warn = any(
-            not _is_remote_unknown_issue(issue) for issue in verdict.issues
-        )
-        if not verdict.issues:
-            has_other_warn = True
-        if has_remote_unknown and not dry_submit and not allow_remote_unknown:
-            return "critic_warn_remote_unknown"
-        if has_other_warn and not allow_critic_override:
-            return "critic_warn_no_override"
-        return None
 
 
 def run_agent(request: str, **kwargs: Any) -> dict[str, Any]:
@@ -996,65 +912,10 @@ _elapsed_ms = elapsed_ms
 _parse_json_response = parse_json_response
 
 
-def _filter_critic_issues(
-    *,
-    plan: Plan,
-    issues: list[str],
-    dry_submit: bool,
-) -> list[str]:
-    geometry_handoff_required = _plan_requires_geometry_handoff(plan)
-    filtered: list[str] = []
-    for issue in issues:
-        normalized = issue.lower()
-        if dry_submit and _is_remote_unknown_issue(issue):
-            continue
-        if (
-            "geometry handoff missing" in normalized
-            and not geometry_handoff_required
-        ):
-            continue
-        filtered.append(issue)
-    return filtered
-
-
-def _plan_requires_geometry_handoff(plan: Plan) -> bool:
-    for step_index, step in enumerate(plan.steps):
-        if step.tool != "build_job":
-            continue
-        kind = step.args.get("kind")
-        if not (isinstance(kind, str) and kind.endswith(".sp")):
-            continue
-        source_step = _source_step_for_ref(plan, step.args.get("molecule"))
-        if source_step is None or source_step.tool != "build_molecule":
-            continue
-        if any(
-            prior_step.tool == "build_job"
-            and isinstance(prior_step.args.get("kind"), str)
-            and prior_step.args["kind"].endswith((".opt", ".ts", ".irc"))
-            for prior_step in plan.steps[:step_index]
-        ):
-            return True
-    return False
-
-
-def _source_step_for_ref(plan: Plan, value: Any) -> Step | None:
-    if not isinstance(value, str):
-        return None
-    match = _REFERENCE_RE.match(value)
-    if match is None or match.group("path"):
-        return None
-    ref_index = int(match.group("index")) - 1
-    if ref_index < 0 or ref_index >= len(plan.steps):
-        return None
-    return plan.steps[ref_index]
-
-
-def _is_remote_unknown_issue(issue: str) -> bool:
-    return (
-        issue.startswith("server.")
-        or issue.endswith("on HPC")
-        or issue == "ssh login reachable"
-    )
+_filter_critic_issues = filter_critic_issues
+_plan_requires_geometry_handoff = plan_requires_geometry_handoff
+_source_step_for_ref = source_step_for_ref
+_is_remote_unknown_issue = is_remote_unknown_issue
 
 
 _is_submit_server_error = is_submit_server_error
@@ -1091,95 +952,9 @@ _run_local_failed = run_local_failed
 _run_local_failure_message = run_local_failure_message
 
 
-def _malformed_input_issue(
-    dry_run_result: dict[str, Any] | None,
-) -> str | None:
-    if not dry_run_result:
-        return None
-    content = dry_run_result.get("content")
-    inputfile = str(dry_run_result.get("inputfile", "")).lower()
-    if not isinstance(content, str):
-        return None
-    if inputfile.endswith(".inp"):
-        if _ORCA_ROUTE_RE.search(content) is None:
-            return "ORCA route line missing or malformed"
-        return None
-    if _GAUSSIAN_ROUTE_RE.search(content) is None:
-        return "Gaussian route line missing or malformed"
-    return None
-
-
-def _missing_irc_keyword_issues(
-    plan: Plan,
-    dry_run_results: list[dict[str, Any]],
-) -> list[str]:
-    issues: list[str] = []
-    dry_run_steps = [
-        step for step in plan.steps if step.tool == "dry_run_input"
-    ]
-    for step, result in zip(dry_run_steps, dry_run_results):
-        kind = _dry_run_job_kind(plan, step)
-        if kind == "gaussian.irc":
-            route_text = _route_text(result)
-            if (
-                route_text is None
-                or re.search(r"\birc\s*=", route_text, re.IGNORECASE) is None
-            ):
-                issues.append("Gaussian IRC input missing irc= keyword")
-        elif kind == "orca.irc":
-            route_text = _route_text(result)
-            if (
-                route_text is None
-                or re.search(r"\birc\b", route_text, re.IGNORECASE) is None
-            ):
-                issues.append("ORCA IRC input missing IRC keyword")
-    return issues
-
-
-def _dry_run_job_kind(plan: Plan, dry_run_step: Step) -> str | None:
-    job_ref = dry_run_step.args.get("job")
-    if not isinstance(job_ref, str):
-        return None
-    match = _REFERENCE_RE.match(job_ref)
-    if match is None:
-        return None
-    job_index = int(match.group("index")) - 1
-    if job_index < 0 or job_index >= len(plan.steps):
-        return None
-    job_step = plan.steps[job_index]
-    if job_step.tool != "build_job":
-        return None
-    kind = job_step.args.get("kind")
-    if not isinstance(kind, str):
-        return None
-    return kind.strip().lower()
-
-
-def _route_text(dry_run_result: dict[str, Any] | None) -> str | None:
-    if not dry_run_result:
-        return None
-    content = dry_run_result.get("content")
-    inputfile = str(dry_run_result.get("inputfile", "")).lower()
-    if not isinstance(content, str):
-        return None
-    if inputfile.endswith(".inp"):
-        matches = re.findall(r"^\s*!\s*(.+)$", content, re.MULTILINE)
-    else:
-        matches = re.findall(r"^\s*#.*$", content, re.MULTILINE)
-    if not matches:
-        return None
-    return " ".join(match.strip() for match in matches)
-
-
-def _dedupe_strings(values: list[str]) -> list[str]:
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        if value not in seen:
-            seen.add(value)
-            deduped.append(value)
-    return deduped
-
-
-def _harness_issue_messages(result: HarnessResult) -> list[str]:
-    return [f"{issue.rule_id}: {issue.message}" for issue in result.issues]
+_malformed_input_issue = malformed_input_issue
+_missing_irc_keyword_issues = missing_irc_keyword_issues
+_dry_run_job_kind = dry_run_job_kind
+_route_text = route_text
+_dedupe_strings = dedupe_strings
+_harness_issue_messages = harness_issue_messages
