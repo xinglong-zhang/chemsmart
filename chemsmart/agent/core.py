@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from pydantic import BaseModel
-
 from chemsmart.agent.handles import (
     HandleStore,
     store_result_handle,
@@ -39,12 +37,8 @@ from chemsmart.agent.prompts import load_prompt
 from chemsmart.agent.prompts.identity import (
     build_system_prompt,
 )
-from chemsmart.agent.provider_adapter import ToolRequest, extract_response_text
-from chemsmart.agent.providers import (
-    DEFAULT_TIMEOUT_S,
-    extract_response_usage,
-    get_provider,
-)
+from chemsmart.agent.provider_adapter import ToolRequest
+from chemsmart.agent.providers import get_provider
 from chemsmart.agent.registry import ToolRegistry
 from chemsmart.agent.runtime.contracts import RuntimeV2Mode
 from chemsmart.agent.runtime.orchestrator import RuntimeController
@@ -58,6 +52,15 @@ from chemsmart.agent.services.plan_support import (
     synthetic_plan_from_tool_requests,
 )
 from chemsmart.agent.services.planned_session import PlannedSessionRunner
+from chemsmart.agent.services.provider_calls import (
+    BACKOFF_SECONDS,
+    MAX_ATTEMPTS,
+    ProviderCallService,
+    estimate_tokens,
+    parse_json_response,
+    resolved_model,
+    stringify_response,
+)
 from chemsmart.agent.services.result_codec import (
     REFERENCE_RE,
     json_safe,
@@ -79,8 +82,8 @@ UTC = timezone.utc
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#\s*\S+", re.MULTILINE)
 _ORCA_ROUTE_RE = re.compile(r"^\s*!\s*\S+", re.MULTILINE)
 _REFERENCE_RE = REFERENCE_RE
-_LLM_MAX_ATTEMPTS = 3
-_LLM_BACKOFF_SECONDS = (1, 2, 4)
+_LLM_MAX_ATTEMPTS = MAX_ATTEMPTS
+_LLM_BACKOFF_SECONDS = BACKOFF_SECONDS
 
 
 _utc_now_iso = utc_now_iso
@@ -301,41 +304,7 @@ class AgentSession:
         return self._provider
 
     def _planner_call(self, request: str) -> Plan:
-        current_turn_index = self.state.turn_index if self.state else None
-        prompt = build_system_prompt(
-            registry=self.registry,
-            stage_instructions=load_prompt("planner.md"),
-            session_meta=self._prompt_session_meta(stage="planner"),
-            conversation_context=self.conversation_history.prompt_context(
-                current_turn_index=current_turn_index
-            ),
-        )
-        tool_defs = self.registry.openai_tool_defs()
-        plan = self._llm_json_call(
-            stage="planner",
-            messages=[
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "request": request,
-                            "conversation_history": (
-                                self.conversation_history.prompt_context(
-                                    current_turn_index=current_turn_index
-                                )
-                            ),
-                            "tools": tool_defs,
-                        }
-                    ),
-                },
-            ],
-            model_cls=Plan,
-        )
-        for step in plan.steps:
-            step.args = self.registry.normalize_args(step.tool, step.args)
-        plan.intent = _resolve_plan_intent(request, plan)
-        return plan
+        return ProviderCallService(self).planner(request)
 
     def _critic_call(
         self,
@@ -343,35 +312,8 @@ class AgentSession:
         dry_run_results: list[dict[str, Any]],
         dry_submit: bool,
     ) -> CriticVerdict:
-        prompt = build_system_prompt(
-            registry=self.registry,
-            stage_instructions=load_prompt("critic.md"),
-            session_meta=self._prompt_session_meta(
-                stage="critic",
-                submission_mode="dry-submit" if dry_submit else "execute",
-            ),
-            conversation_context=self.conversation_history.prompt_context(
-                current_turn_index=(
-                    self.state.turn_index if self.state else None
-                )
-            ),
-        )
-        return self._llm_json_call(
-            stage="critic",
-            messages=[
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "plan": plan.model_dump(),
-                            "dry_run_inputs": dry_run_results,
-                            "dry_submit": dry_submit,
-                        }
-                    ),
-                },
-            ],
-            model_cls=CriticVerdict,
+        return ProviderCallService(self).critic(
+            plan, dry_run_results, dry_submit
         )
 
     def _llm_json_call(
@@ -379,48 +321,11 @@ class AgentSession:
         *,
         stage: str,
         messages: list[dict[str, Any]],
-        model_cls: type[BaseModel],
+        model_cls: type[Any],
     ) -> Any:
-        provider = self._provider_instance()
-        last_error: Exception | None = None
-
-        for attempt in range(1, _LLM_MAX_ATTEMPTS + 1):
-            response = None
-            started = time.perf_counter()
-            try:
-                response = provider.chat(
-                    messages,
-                    tools=None,
-                    timeout_s=DEFAULT_TIMEOUT_S,
-                )
-                parsed = _parse_json_response(response)
-                model = model_cls.model_validate(parsed)
-                self._record_llm_stats(
-                    stage=stage,
-                    attempt=attempt,
-                    provider=provider,
-                    messages=messages,
-                    response=response,
-                    latency_ms=_elapsed_ms(started),
-                )
-                return model
-            except Exception as exc:
-                last_error = exc
-                self._log_llm_failure(
-                    stage=stage,
-                    attempt=attempt,
-                    provider=provider,
-                    messages=messages,
-                    response=response,
-                    error=exc,
-                    latency_ms=_elapsed_ms(started),
-                )
-                if attempt >= _LLM_MAX_ATTEMPTS:
-                    break
-                time.sleep(_LLM_BACKOFF_SECONDS[attempt - 1])
-
-        assert last_error is not None
-        raise last_error
+        return ProviderCallService(self).json_call(
+            stage=stage, messages=messages, model_cls=model_cls
+        )
 
     def _record_llm_stats(
         self,
@@ -432,28 +337,13 @@ class AgentSession:
         response: Any,
         latency_ms: int,
     ) -> None:
-        usage = extract_response_usage(response)
-        input_tokens = usage["input_tokens"]
-        output_tokens = usage["output_tokens"]
-        raw_response = _stringify_response(response)
-        if input_tokens is None:
-            input_tokens = _estimate_tokens(messages)
-        if output_tokens is None:
-            output_tokens = _estimate_tokens(raw_response)
-
-        self._llm_stats.append(
-            {
-                "stage": stage,
-                "attempt": attempt,
-                "provider_name": getattr(provider, "name", None),
-                "resolved_model": _resolved_model_for_response(
-                    provider, response
-                ),
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "latency_ms": latency_ms,
-                "success": True,
-            }
+        ProviderCallService(self).record_stats(
+            stage=stage,
+            attempt=attempt,
+            provider=provider,
+            messages=messages,
+            response=response,
+            latency_ms=latency_ms,
         )
 
     def _log_llm_failure(
@@ -467,52 +357,14 @@ class AgentSession:
         error: Exception,
         latency_ms: int,
     ) -> None:
-        if self.decision_log is None:
-            pass
-
-        raw_response = _stringify_response(response)
-        usage = extract_response_usage(response)
-        input_tokens = usage["input_tokens"]
-        output_tokens = usage["output_tokens"]
-        if input_tokens is None:
-            input_tokens = _estimate_tokens(messages)
-        if output_tokens is None:
-            output_tokens = _estimate_tokens(raw_response)
-
-        self._llm_stats.append(
-            {
-                "stage": stage,
-                "attempt": attempt,
-                "provider_name": getattr(provider, "name", None),
-                "resolved_model": _resolved_model_for_response(
-                    provider, response
-                ),
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "latency_ms": latency_ms,
-                "success": False,
-            }
-        )
-
-        if self.decision_log is None:
-            return
-
-        self.decision_log.write(
-            "llm_error",
-            {
-                "stage": stage,
-                "attempt": attempt,
-                "provider_name": getattr(provider, "name", None),
-                "resolved_model": _resolved_model_for_response(
-                    provider, response
-                ),
-                "error_type": error.__class__.__name__,
-                "message": str(error),
-                "messages": messages,
-                "raw_response": raw_response,
-                "step_wall_time_ms": latency_ms,
-            },
-            rationale=f"{stage} attempt {attempt} failed",
+        ProviderCallService(self).log_failure(
+            stage=stage,
+            attempt=attempt,
+            provider=provider,
+            messages=messages,
+            response=response,
+            error=error,
+            latency_ms=latency_ms,
         )
 
     def _execute_step(
@@ -1264,36 +1116,7 @@ def _env_snapshot() -> dict[str, str | None]:
 _elapsed_ms = elapsed_ms
 
 
-def _parse_json_response(response: Any) -> dict[str, Any]:
-    if (
-        isinstance(response, dict)
-        and "parsed" in response
-        and isinstance(response["parsed"], dict)
-    ):
-        return response["parsed"]
-    if (
-        isinstance(response, dict)
-        and "json" in response
-        and isinstance(response["json"], dict)
-    ):
-        return response["json"]
-    if (
-        isinstance(response, dict)
-        and "content" in response
-        and isinstance(response["content"], dict)
-    ):
-        return response["content"]
-    text = extract_response_text(response)
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"LLM returned invalid JSON: {exc}\nRaw: {text!r}"
-        ) from exc
+_parse_json_response = parse_json_response
 
 
 def _filter_critic_issues(
@@ -1366,34 +1189,9 @@ def _is_submit_server_error(message: str) -> bool:
     )
 
 
-def _stringify_response(response: Any) -> str | None:
-    if response is None:
-        return None
-    if isinstance(response, str):
-        return response
-    try:
-        return json.dumps(_json_safe(response), ensure_ascii=False)
-    except TypeError:
-        return repr(response)
-
-
-def _estimate_tokens(value: Any) -> int:
-    if value is None:
-        return 0
-    if isinstance(value, str):
-        text = value
-    else:
-        text = json.dumps(_json_safe(value), sort_keys=True)
-    return max(1, int(round(len(text) / 4)))
-
-
-def _resolved_model_for_response(provider: Any, response: Any) -> str | None:
-    fallback = getattr(provider, "default_model", None)
-    if isinstance(response, dict):
-        model = response.get("model")
-        if isinstance(model, str) and model.strip():
-            return model
-    return fallback
+_stringify_response = stringify_response
+_estimate_tokens = estimate_tokens
+_resolved_model_for_response = resolved_model
 
 
 _schema_hash = schema_hash
