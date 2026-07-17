@@ -71,6 +71,7 @@ from chemsmart.agent.tui.mixins.command_execution import CommandExecutionMixin
 from chemsmart.agent.tui.mixins.slash_commands import SlashCommandsMixin
 from chemsmart.agent.tui.mixins.approval_flow import ApprovalFlowMixin
 from chemsmart.agent.tui.mixins.decision_log_events import DecisionEventMixin
+from chemsmart.agent.tui.mixins.tool_events import ToolEventMixin
 from chemsmart.agent.tui.widgets.cells import (
     CalculationReceiptCell,
     JobStatusCell,
@@ -110,6 +111,7 @@ class ChatScreen(
     SlashCommandsMixin,
     ApprovalFlowMixin,
     DecisionEventMixin,
+    ToolEventMixin,
     JobPollerMixin,
     SessionRunnerMixin,
     Screen,
