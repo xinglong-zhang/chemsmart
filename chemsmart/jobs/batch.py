@@ -23,8 +23,9 @@ import types
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
+from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, Optional, Sequence, Type, TypeVar
+from typing import Any, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import get_serial_mode, get_submitter_worker_count
@@ -34,7 +35,23 @@ logger = logging.getLogger(__name__)
 
 BatchJobT = TypeVar("BatchJobT", bound="BatchJob")
 
-BatchExecutionModeName = Literal["local_batch", "array_task"]
+
+class BatchExecutionMode(str, Enum):
+    """How ``BatchJob.run()`` executes children.
+
+    ``LOCAL_BATCH``
+        Run all children in-process (serial policy by default).
+    ``ARRAY_TASK``
+        Run one child selected by the scheduler array task id.
+    ``MULTI_NODE``
+        Distribute children across an allocated multi-node partition
+        (still entered from the local-batch path when nodes > 1).
+    """
+
+    LOCAL_BATCH = "local_batch"
+    ARRAY_TASK = "array_task"
+    MULTI_NODE = "multi_node"
+
 
 _ARRAY_TASK_ID_ENV_VARS = (
     "SLURM_ARRAY_TASK_ID",
@@ -61,14 +78,15 @@ def resolve_array_task_id() -> Optional[int]:
     return None
 
 
-def resolve_batch_execution_mode() -> BatchExecutionModeName:
-    """Return ``array_task`` when a scheduler array task id is set.
+def resolve_batch_execution_mode() -> BatchExecutionMode:
+    """Return ``ARRAY_TASK`` when a scheduler array task id is set.
 
-    Otherwise return ``local_batch`` (run all children in-process).
+    Otherwise return ``LOCAL_BATCH``. Multi-node distribution is resolved
+    later inside ``_run_local_batch`` when more than one node is allocated.
     """
     if resolve_array_task_id() is not None:
-        return "array_task"
-    return "local_batch"
+        return BatchExecutionMode.ARRAY_TASK
+    return BatchExecutionMode.LOCAL_BATCH
 
 
 class BatchExecutionError(RuntimeError):
@@ -91,12 +109,14 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     - ``array_task`` — one child at the 1-based scheduler array task id,
       with full resources
     - ``local_batch`` — all children serially with full resources
-      (multi-node distribution when allocated)
+      (``multi_node`` when more than one node is allocated)
 
     ``no_run_in_parallel`` may still be set by callers for CLI/submit
     policy, but in-process concurrent children are not used.
     ``fail_fast`` stops serial local submission after the first
     unsuccessful outcome.
+    ``nested_serial`` marks crest/QRC/dias/traj nested batches for
+    ``policy=serial_nested`` logging.
     """
 
     PROGRAM: Optional[str] = None
@@ -110,6 +130,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         write_outcome_logs: bool = False,
         label: str = "batch_job",
         jobrunner: Any = None,
+        nested_serial: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -128,6 +149,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             self.no_run_in_parallel = bool(no_run_in_parallel)
         self.fail_fast = bool(fail_fast)
         self.write_outcome_logs = bool(write_outcome_logs)
+        self.nested_serial = bool(nested_serial)
 
         # Cache completion checks to avoid repeatedly reparsing output files
         # from the head-node monitoring loop.
@@ -145,7 +167,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self._invalidate_status_cache()
         self._jobs_not_started = 0
         mode = resolve_batch_execution_mode()
-        if mode == "array_task":
+        if mode is BatchExecutionMode.ARRAY_TASK:
             self._run_array_task(**kwargs)
             return
         self._run_local_batch(**kwargs)
@@ -200,7 +222,7 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             load_batch_manifest_entry,
         )
 
-        folder = getattr(child, "folder", None)
+        folder = child.folder
         try:
             manifest_path = Path(folder) / batch_manifest_filename(self.label)
         except TypeError:
@@ -217,9 +239,10 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                 logger.warning("%s", exc)
 
         logger.info(
-            "BatchJob %r: execution=array_task, task=%s/%s, "
-            "cores=%s, mem_gb=%s, child=%s",
+            "BatchJob %r: execution=%s, task=%s/%s, cores=%s, "
+            "mem_gb=%s, child=%s",
             self.label,
+            BatchExecutionMode.ARRAY_TASK.value,
             task_id,
             total_jobs,
             cores,
@@ -240,9 +263,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
 
         if nodes and len(nodes) > 1:
             logger.info(
-                "BatchJob %r: execution=local_batch, children=%s, "
-                "policy=multi_node, nodes=%s",
+                "BatchJob %r: execution=%s, children=%s, nodes=%s",
                 self.label,
+                BatchExecutionMode.MULTI_NODE.value,
                 total_jobs,
                 list(nodes),
             )
@@ -263,11 +286,14 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             else:
                 cores = None
                 mem_gb = None
+            policy = "serial_nested" if self.nested_serial else "serial"
             logger.info(
-                "BatchJob %r: execution=local_batch, children=%s, "
-                "policy=serial, cores=%s, mem_gb=%s",
+                "BatchJob %r: execution=%s, children=%s, policy=%s, "
+                "cores=%s, mem_gb=%s",
                 self.label,
+                BatchExecutionMode.LOCAL_BATCH.value,
                 total_jobs,
+                policy,
                 cores,
                 mem_gb,
             )
@@ -680,6 +706,7 @@ def run_child_jobs_as_batch(
         fail_fast=fail_fast,
         label=f"{parent.label}{label_suffix}",
         jobrunner=parent.jobrunner,
+        nested_serial=True,
     )
     batch_job.enable_serial_local_execution()
     batch_job.run()

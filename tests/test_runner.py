@@ -1010,27 +1010,77 @@ class TestBatchExecutionModes:
 
         return DummyBatchJob
 
+    def test_batch_execution_mode_enum_values(self):
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        assert BatchExecutionMode.LOCAL_BATCH.value == "local_batch"
+        assert BatchExecutionMode.ARRAY_TASK.value == "array_task"
+        assert BatchExecutionMode.MULTI_NODE.value == "multi_node"
+
     def test_resolve_batch_execution_mode_defaults_to_local_batch(
         self, monkeypatch
     ):
-        from chemsmart.jobs.batch import resolve_batch_execution_mode
+        from chemsmart.jobs.batch import (
+            BatchExecutionMode,
+            resolve_batch_execution_mode,
+        )
 
         for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
             monkeypatch.delenv(key, raising=False)
 
-        assert resolve_batch_execution_mode() == "local_batch"
+        assert resolve_batch_execution_mode() is BatchExecutionMode.LOCAL_BATCH
 
     def test_resolve_batch_execution_mode_array_task_from_slurm(
         self, monkeypatch
     ):
         from chemsmart.jobs.batch import (
+            BatchExecutionMode,
             resolve_array_task_id,
             resolve_batch_execution_mode,
         )
 
         monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
         assert resolve_array_task_id() == 2
-        assert resolve_batch_execution_mode() == "array_task"
+        assert resolve_batch_execution_mode() is BatchExecutionMode.ARRAY_TASK
+
+    def test_array_task_logs_execution_mode(
+        self, pbs_server, monkeypatch, caplog
+    ):
+        import logging
+
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=True,
+            num_cores=16,
+            mem_gb=32,
+        )
+        children = []
+        for index in range(4):
+            child = Mock(label=f"child_{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            no_run_in_parallel=True,
+            jobrunner=runner,
+            label="mols_batch",
+        )
+        with caplog.at_level(logging.INFO):
+            batch.run()
+
+        assert any(
+            f"execution={BatchExecutionMode.ARRAY_TASK.value}"
+            in record.message
+            and "task=2/4" in record.message
+            and "cores=16" in record.message
+            for record in caplog.records
+        )
 
     def test_array_task_runs_only_selected_child(
         self, pbs_server, monkeypatch
@@ -1118,6 +1168,163 @@ class TestBatchExecutionModes:
 
         for child in children:
             child.run.assert_called_once()
+
+    def test_local_batch_logs_serial_policy(
+        self, pbs_server, monkeypatch, caplog
+    ):
+        import logging
+
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        runner = JobRunner(
+            server=pbs_server,
+            fake=True,
+            no_run_in_parallel=True,
+            num_cores=8,
+            mem_gb=16,
+        )
+        children = [
+            Mock(label="a", run=Mock(), is_complete=Mock(return_value=True)),
+            Mock(label="b", run=Mock(), is_complete=Mock(return_value=True)),
+            Mock(label="c", run=Mock(), is_complete=Mock(return_value=True)),
+            Mock(label="d", run=Mock(), is_complete=Mock(return_value=True)),
+        ]
+        for child in children:
+            child.run.return_value = None
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            no_run_in_parallel=True,
+            jobrunner=runner,
+            label="mols_batch",
+        )
+        with caplog.at_level(logging.INFO):
+            batch.run()
+
+        assert any(
+            f"execution={BatchExecutionMode.LOCAL_BATCH.value}"
+            in record.message
+            and "children=4" in record.message
+            and "policy=serial" in record.message
+            for record in caplog.records
+        )
+
+    def test_nested_serial_logs_serial_nested_policy(
+        self, pbs_server, monkeypatch, caplog
+    ):
+        import logging
+
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(8):
+            child = Mock(label=f"conf_{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            no_run_in_parallel=True,
+            jobrunner=runner,
+            label="crest_children",
+            nested_serial=True,
+        )
+        with caplog.at_level(logging.INFO):
+            batch.run()
+
+        assert any(
+            f"execution={BatchExecutionMode.LOCAL_BATCH.value}"
+            in record.message
+            and "children=8" in record.message
+            and "policy=serial_nested" in record.message
+            for record in caplog.records
+        )
+
+    def test_run_child_jobs_as_batch_sets_nested_serial(
+        self, pbs_server, monkeypatch
+    ):
+        from chemsmart.jobs.batch import run_child_jobs_as_batch
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        parent = Mock()
+        parent.label = "crest_parent"
+        parent.jobrunner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(2):
+            child = Mock(label=f"c{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = run_child_jobs_as_batch(
+            batch_cls=self._dummy_batch_cls(),
+            jobs=children,
+            parent=parent,
+            label_suffix="_children",
+        )
+        assert batch.nested_serial is True
+        assert batch.label == "crest_parent_children"
+
+    def test_multi_node_logs_multi_node_execution(
+        self, pbs_server, monkeypatch, caplog
+    ):
+        import logging
+
+        from chemsmart.jobs.batch import BatchExecutionMode
+
+        for key in ("SLURM_ARRAY_TASK_ID", "PBS_ARRAYID", "LSB_JOBINDEX"):
+            monkeypatch.delenv(key, raising=False)
+
+        runner = JobRunner(
+            server=pbs_server, fake=True, no_run_in_parallel=True
+        )
+        children = []
+        for index in range(2):
+            child = Mock(label=f"child_{index}")
+            child.run.return_value = None
+            child.is_complete.return_value = True
+            children.append(child)
+
+        batch = self._dummy_batch_cls()(
+            jobs=children,
+            no_run_in_parallel=True,
+            jobrunner=runner,
+            label="multi_node_batch",
+        )
+        monkeypatch.setattr(
+            batch, "_get_allocated_nodes", lambda: ["nodeA", "nodeB"]
+        )
+        monkeypatch.setattr(
+            batch,
+            "_run_multi_node",
+            lambda nodes, **kwargs: [
+                {"label": c.label, "success": True, "error": None}
+                for c in children
+            ],
+        )
+        with caplog.at_level(logging.INFO):
+            batch.run()
+
+        assert any(
+            f"execution={BatchExecutionMode.MULTI_NODE.value}"
+            in record.message
+            and "children=2" in record.message
+            for record in caplog.records
+        )
 
     def test_pbs_arrayid_selects_array_task_mode(
         self, pbs_server, monkeypatch
