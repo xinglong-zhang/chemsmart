@@ -282,6 +282,7 @@ class GaussianTrajJob(GaussianJob):
                     settings=self.settings,
                     label=label,
                     jobrunner=self.jobrunner,
+                    skip_completed=self.skip_completed,
                 )
             ]
         return jobs
@@ -297,13 +298,24 @@ class GaussianTrajJob(GaussianJob):
         """
         return self._prepare_all_jobs()
 
+    def _selected_structure_run_jobs(self):
+        """Return the stable structure-job slice for submit and run.
+
+        When ``num_structures_to_run`` is set, selects the last N prepared
+        jobs (end of trajectory). Completion is handled per child via
+        ``skip_completed``, not by filtering incompletes for indexing.
+        """
+        jobs = list(self.all_structures_run_jobs)
+        if self.num_structures_to_run is None:
+            return jobs
+        n = self.num_structures_to_run
+        if n <= 0:
+            return []
+        return jobs[-n:]
+
     def get_array_child_jobs(self):
         """Return structure jobs for scheduler array submission."""
-        if self.num_structures_to_run is None:
-            return list(self.all_structures_run_jobs)
-        return list(
-            self.incomplete_structure_run_jobs[: self.num_structures_to_run]
-        )
+        return list(self._selected_structure_run_jobs())
 
     @property
     def last_run_job_index(self):
@@ -358,17 +370,11 @@ class GaussianTrajJob(GaussianJob):
         Execute structure calculation jobs based on configuration.
 
         Runs either all available jobs or a specified subset based on
-        ``num_structures_to_run``. Nested structure jobs run serially
-        through ``GaussianBatchJob``, each with the parent jobrunner's
-        full resources.
+        ``num_structures_to_run`` (last N prepared jobs). Nested structure
+        jobs run serially through ``GaussianBatchJob``, each with the
+        parent jobrunner's full resources.
         """
-        if self.num_structures_to_run is None:
-            # run all jobs if num_structures_to_run is not specified
-            jobs_to_run = self.all_structures_run_jobs
-        else:
-            jobs_to_run = self.incomplete_structure_run_jobs[
-                : self.num_structures_to_run
-            ]
+        jobs_to_run = self._selected_structure_run_jobs()
 
         logger.info("Running trajectory structure jobs using GaussianBatchJob")
         run_child_jobs_as_batch(
@@ -402,20 +408,13 @@ class GaussianTrajJob(GaussianJob):
         """
         Verify completion status of all required structure jobs.
 
-        Checks completion based on whether all jobs or a subset
-        (num_structures_to_run) should be processed.
+        Checks the same stable selection used for submit and run
+        (all jobs, or the last ``num_structures_to_run`` jobs).
 
         Returns:
             bool: True if all required jobs are complete,
                 False otherwise.
         """
-        if self.num_structures_to_run is None:
-            return all(
-                job.is_complete() for job in self.all_structures_run_jobs
-            )
         return all(
-            job.is_complete()
-            for job in self.all_structures_run_jobs[
-                : self.num_structures_to_run
-            ]
+            job.is_complete() for job in self._selected_structure_run_jobs()
         )

@@ -646,3 +646,112 @@ class TestGaussianTrajJobs:
 
         # When no grouping strategy is provided, all structures are unique
         assert job.num_unique_structures == num_molecules_in_file
+
+    def test_traj_num_structures_to_run_selects_stable_end_slice(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """-ns N selects last N prepared jobs, not incompletes."""
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecules = []
+        for index in range(5):
+            mol = Molecule(
+                symbols=["C"],
+                positions=[[float(index), 0.0, 0.0]],
+                charge=0,
+                multiplicity=1,
+            )
+            mol.energy = float(index)
+            molecules.append(mol)
+
+        job = GaussianTrajJob(
+            molecules=molecules,
+            settings=settings,
+            label="traj_ns",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+            num_structures_to_run=3,
+        )
+
+        selected = job._selected_structure_run_jobs()
+        assert [j.label for j in selected] == [
+            "traj_ns_c3",
+            "traj_ns_c4",
+            "traj_ns_c5",
+        ]
+        assert [j.label for j in job.get_array_child_jobs()] == [
+            "traj_ns_c3",
+            "traj_ns_c4",
+            "traj_ns_c5",
+        ]
+
+    def test_traj_selected_jobs_stable_when_middle_already_complete(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        mocker,
+    ):
+        """Completed frames in the end slice must not shift array indices."""
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecules = []
+        for index in range(5):
+            mol = Molecule(
+                symbols=["C"],
+                positions=[[float(index), 0.0, 0.0]],
+                charge=0,
+                multiplicity=1,
+            )
+            mol.energy = float(index)
+            molecules.append(mol)
+
+        job = GaussianTrajJob(
+            molecules=molecules,
+            settings=settings,
+            label="traj_stable",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+            num_structures_to_run=3,
+        )
+
+        prepared = job.all_structures_run_jobs
+        # Simulate c4 already complete; incomplete filter would drop it.
+        mocker.patch.object(prepared[3], "is_complete", return_value=True)
+        for index, child in enumerate(prepared):
+            if index != 3:
+                mocker.patch.object(child, "is_complete", return_value=False)
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=prepared)
+
+        selected = job.get_array_child_jobs()
+        assert [j.label for j in selected] == [
+            "traj_stable_c3",
+            "traj_stable_c4",
+            "traj_stable_c5",
+        ]
+        # Incomplete filter would have been [c1,c2,c3,c5][:3] = c1,c2,c3
+        incomplete_labels = [
+            j.label for j in job.incomplete_structure_run_jobs
+        ]
+        assert incomplete_labels != [j.label for j in selected]

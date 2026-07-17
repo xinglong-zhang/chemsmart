@@ -551,6 +551,50 @@ class TestGaussianBatchDelegation:
         assert call_kwargs["jobrunner"] == gaussian_jobrunner_no_scratch
         mock_batch.run.assert_called_once()
 
+    def test_traj_array_task_maps_stable_end_slice(
+        self, pbs_server, gaussian_jobrunner_no_scratch, mocker, monkeypatch
+    ):
+        """SLURM task id indexes the stable last-N set, not incompletes."""
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "2")
+        molecules = [MockMolecule() for _ in range(5)]
+        for index, mol in enumerate(molecules):
+            mol.energy = float(index)
+
+        settings = GaussianJobSettings()
+        job = GaussianTrajJob(
+            molecules=molecules,
+            settings=settings,
+            label="traj_array",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+            num_structures_to_run=3,
+            skip_completed=False,
+        )
+
+        prepared = []
+        for index in range(5):
+            child = Mock(label=f"traj_array_c{index + 1}")
+            child.run.return_value = None
+            child.is_complete.return_value = index == 3  # c4 complete
+            prepared.append(child)
+        mocker.patch.object(job, "_prepare_all_jobs", return_value=prepared)
+        mock_batch_cls = mocker.patch(
+            "chemsmart.jobs.gaussian.traj.GaussianBatchJob"
+        )
+
+        job._run_all_jobs()
+
+        # Stable last-3 is c3,c4,c5; task 2 runs c4 only.
+        prepared[0].run.assert_not_called()
+        prepared[1].run.assert_not_called()
+        prepared[2].run.assert_not_called()
+        prepared[3].run.assert_called_once()
+        prepared[4].run.assert_not_called()
+        mock_batch_cls.return_value.run.assert_not_called()
+
     def test_traj_job_serial_mode_uses_batch_without_fail_fast(
         self, pbs_server, gaussian_jobrunner_no_scratch, mocker
     ):
