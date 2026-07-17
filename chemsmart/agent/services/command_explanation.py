@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import os
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from chemsmart.agent.model_command_parser import ParsedModelCommand
+from chemsmart.agent.command_models import ParsedModelCommand
 
 _JOB_LABELS = {
     "com": "Gaussian input regeneration",
@@ -30,16 +26,6 @@ _JOB_LABELS = {
     "userjob": "user-defined Gaussian job",
     "wbi": "Wiberg bond index calculation",
 }
-
-
-def format_model_command_explanation(
-    command: str,
-    *,
-    cwd: str | os.PathLike[str] | None = None,
-) -> str:
-    from chemsmart.agent.model_command_parser import parse_model_command
-
-    return format_parsed_model_command(parse_model_command(command, cwd=cwd))
 
 
 def format_parsed_model_command(parsed: ParsedModelCommand) -> str:
@@ -215,4 +201,4 @@ def _route_control_bits(parsed: ParsedModelCommand) -> list[str]:
     return [f"{name}={value}" for name, value in values if value]
 
 
-__all__ = ["format_model_command_explanation", "format_parsed_model_command"]
+__all__ = ["format_parsed_model_command"]
