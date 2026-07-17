@@ -163,7 +163,7 @@ def dump_cli_schema(out_path: Path | None) -> None:
     help="Skip the provider connectivity ping.",
 )
 def doctor(no_ping: bool):
-    """Validate api.env, AI_PROVIDER, and provider connectivity."""
+    """Validate agent.yaml, provider connectivity, and registered tools."""
     with _agent_command_logging():
         from chemsmart.agent.provider_config import (
             AgentProviderConfigError,

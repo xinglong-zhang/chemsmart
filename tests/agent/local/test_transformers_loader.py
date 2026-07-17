@@ -79,9 +79,3 @@ def test_merged_transformers_loader_preserves_platform_paths(
     assert model.eval_called is True
     assert bundle.base_model_id == "lab/merged-model"
     assert bundle.model_repo_id == "lab/merged-model"
-
-
-def test_legacy_loader_alias_loads_only_merged_models():
-    from chemsmart.agent.local import loader
-
-    assert loader.load_lora_model is loader.load_transformers_model

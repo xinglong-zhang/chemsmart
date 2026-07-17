@@ -262,13 +262,14 @@ available commands.
 ### Setup
 
 ```bash
-pip install -e ".[agent-tui]"            # interactive TUI extra (Textual/Rich)
-cp api.env.example api.env               # then set ai_api_key=...
+pip install -e ".[agent,agent-tui]"      # providers + interactive TUI
+# Configure ~/.chemsmart/agent/agent.yaml
 chemsmart agent doctor                   # verify provider, SSH, permissions
 ```
 
-Modern provider configuration is read from
-`~/.chemsmart/agent/agent.yaml`. The active provider may be API-backed
+Provider configuration is read from `~/.chemsmart/agent/agent.yaml`. A legacy
+`api.env` credential is accepted with a deprecation warning for one release,
+but is not a second configuration source. The active provider may be API-backed
 (`openai`/`anthropic`/OpenAI-compatible) or local (`local` with PyTorch or
 MLX). Project settings used by the interactive agent are workspace-local:
 start CHEMSMART from the research directory and keep project files under

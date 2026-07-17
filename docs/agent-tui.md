@@ -30,7 +30,6 @@ Current high-value commands:
 
 | Command | Purpose |
 |---|---|
-| `/mode` | Show provider routing information; no mode switch is required |
 | `/init` | Build and validate a project YAML from a reported method |
 | `/write-project [name]` | Approve writing or replacing the latest validated workspace YAML |
 | `/tools` | List registered tools |
@@ -47,6 +46,9 @@ executable only after semantic and intent gates pass, generated-input evidence
 exists, and the workspace project YAML remains unchanged. `/run` or `/submit`
 then acts as the user's explicit approval, and the execution tool repeats the
 semantic gate before starting the real command.
+
+The former `/mode` command has been removed. Entering `/mode` is reported as an
+unknown command; provider routing is automatic and visible in the footer.
 
 ## Keyboard Workflow
 

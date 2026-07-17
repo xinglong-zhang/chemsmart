@@ -122,11 +122,6 @@ def load_transformers_model(
     )
 
 
-# Kept as a source-compatible import for one release. It loads only merged
-# models; the historical PEFT adapter path has been removed.
-load_lora_model = load_transformers_model
-
-
 def _enforce_huggingface_hub_compat() -> None:
     """Block the well-known ``huggingface_hub>=1.0`` ↔ ``transformers==4.56`` clash."""
     try:
