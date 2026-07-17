@@ -58,3 +58,9 @@ def test_distribution_discovers_only_chemsmart_packages():
 
     assert package_find["include"] == ["chemsmart*"]
     assert {"tests*", "scripts*", "docs*"}.issubset(package_find["exclude"])
+
+
+def test_supported_python_range_covers_release_matrix():
+    requires_python = _project_metadata()["project"]["requires-python"]
+
+    assert requires_python == ">=3.10,<4.0"

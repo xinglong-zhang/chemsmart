@@ -8,7 +8,7 @@ before execution, and deterministic gates remain the source of truth.
 
 ```bash
 conda activate chemsmart
-pip install -e ".[agent-tui]"
+pip install -e ".[agent,agent-tui]"
 chemsmart agent doctor
 ```
 
