@@ -28,6 +28,15 @@ class CalculationReceiptCell(BaseCell):
 
     def _build_renderable(self):
         status = str(self.run.get("status") or "unknown")
+        table = Table.grid(expand=True)
+        table.add_column(style="dim", width=18)
+        table.add_column(ratio=1)
+        self._add_method_rows(table)
+        self._add_progress_rows(table)
+        self._add_runtime_rows(table, status)
+        return Group(self._heading(status), table)
+
+    def _heading(self, status: str) -> Text:
         style = (
             "success"
             if status == "completed"
@@ -38,14 +47,13 @@ class CalculationReceiptCell(BaseCell):
         program = str(self.run.get("program") or "calculation").upper()
         kind = str(self.run.get("kind") or "job").upper()
         label = str(self.run.get("label") or "calculation")
-        heading = Text.assemble(
+        return Text.assemble(
             (status.upper(), f"bold {style}"),
             (f" · {program} {kind} · ", "dim"),
             (label, "bold"),
         )
-        table = Table.grid(expand=True)
-        table.add_column(style="dim", width=18)
-        table.add_column(ratio=1)
+
+    def _add_method_rows(self, table: Table) -> None:
         method = "/".join(
             item
             for item in (
@@ -67,6 +75,8 @@ class CalculationReceiptCell(BaseCell):
         scf_cycles = self.run.get("scf_cycles")
         if isinstance(scf_cycles, int):
             table.add_row("SCF cycles", str(scf_cycles))
+
+    def _add_progress_rows(self, table: Table) -> None:
         opt_cycles = self.run.get("optimization_cycles")
         if isinstance(opt_cycles, int):
             convergence = self.run.get("optimization_converged")
@@ -115,6 +125,8 @@ class CalculationReceiptCell(BaseCell):
         direction = str(self.run.get("path_direction") or "")
         if direction:
             table.add_row("path direction", direction)
+
+    def _add_runtime_rows(self, table: Table, status: str) -> None:
         output_path = str(self.run.get("output_path") or "")
         if output_path:
             table.add_row("output", output_path)
@@ -135,7 +147,6 @@ class CalculationReceiptCell(BaseCell):
         if status not in {"validating", "starting", "running", "completed"}:
             error = str(self.run.get("error") or "No diagnostic message.")
             table.add_row("error", "\n".join(error.splitlines()[-40:]))
-        return Group(heading, table)
 
 
 __all__ = ["CalculationReceiptCell"]

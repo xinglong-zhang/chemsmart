@@ -233,31 +233,7 @@ class WizardCommandsMixin:
             footer.set_hint("Command execution completed")
             return
         if tool_name == "wizard_probe" and isinstance(result, dict):
-            self._latest_wizard_probe = result
-            server_name = str(
-                result.get("server_name")
-                or arguments.get("server_name")
-                or "wizard"
-            )
-            yaml_text = str(result.get("yaml_text") or "")
-            self.post_agent_message(
-                f"```yaml\n{yaml_text.rstrip()}\n```",
-                title=f"Wizard: {server_name}",
-            )
-            validation = result.get("validation")
-            if isinstance(validation, dict) and not validation.get(
-                "ok", False
-            ):
-                errors = validation.get("errors") or []
-                self.post_error(
-                    "Wizard validation failed",
-                    "\n".join(str(error) for error in errors)
-                    or "wizard output did not validate",
-                )
-                footer.set_phase(Phase.ERROR)
-                footer.set_hint("Wizard validation failed")
-                return
-            footer.set_hint("Wizard YAML ready")
+            self._on_wizard_probe_success(footer, arguments, result)
             return
         if tool_name == "wizard_write" and isinstance(result, dict):
             self.post_agent_message(
@@ -267,65 +243,110 @@ class WizardCommandsMixin:
             footer.set_hint("Wizard YAML written")
             return
         if tool_name == "write_project_yaml" and isinstance(result, dict):
-            project = str(result.get("project_name") or "project")
-            program = str(result.get("program") or "gaussian")
-            written_path = str(result.get("written_path") or "")
-            command_example = (
-                f"chemsmart run {program} -p {project} "
-                "-f examples/h2o.xyz -c 0 -m 1 opt"
-            )
-            self.post_agent_message(
-                (
-                    f"Wrote `{written_path}`.\n\n"
-                    "Deterministic use:\n\n"
-                    "```bash\n"
-                    f"{command_example}\n"
-                    "```\n\n"
-                    f"This workspace now has `{program}:{project}` loaded. "
-                    "The command-synthesis harness will attach and validate "
-                    f"this project automatically, and explicit CLI commands "
-                    f"can use `-p {project}` from this same workspace."
-                ),
-                title="Project YAML",
-            )
-            footer.set_hint(f"Project YAML written: {project}")
+            self._on_write_project_yaml_success(footer, result)
             return
         if tool_name == "wizard_refresh" and isinstance(result, dict):
-            self.post_agent_message(
-                self._wizard_refresh_result_table(result),
-                title=f"Wizard refresh: {result.get('server_name') or 'server'}",
-            )
-            status = str(result.get("status") or "")
-            if status == "error":
-                footer.set_phase(Phase.ERROR)
-                footer.set_hint("Wizard refresh failed")
-                return
-            if status == "stale":
-                footer.set_hint("Wizard refresh preserved stale cache")
-                return
-            footer.set_hint("Wizard cache ready")
+            self._on_wizard_refresh_success(footer, result)
             return
         if tool_name == "wizard_verify" and isinstance(result, dict):
-            self.post_agent_message(
-                self._wizard_verify_result_table(result),
-                title=f"Wizard verify: {result.get('server_name') or 'server'}",
-            )
-            errors = result.get("errors") or []
-            warnings = result.get("warnings") or []
-            if errors:
-                self.post_error(
-                    "Wizard verify failed",
-                    "\n".join(str(error) for error in errors),
-                )
-                footer.set_phase(Phase.ERROR)
-                footer.set_hint("Wizard verify found errors")
-                return
-            if warnings:
-                footer.set_hint("Wizard verify completed with warnings")
-                return
-            footer.set_hint("Wizard verify completed")
+            self._on_wizard_verify_success(footer, result)
             return
         footer.set_hint("Slash command complete")
+
+    def _on_wizard_probe_success(
+        self,
+        footer: FooterWidget,
+        arguments: dict[str, object],
+        result: dict[str, object],
+    ) -> None:
+        self._latest_wizard_probe = result
+        server_name = str(
+            result.get("server_name")
+            or arguments.get("server_name")
+            or "wizard"
+        )
+        yaml_text = str(result.get("yaml_text") or "")
+        self.post_agent_message(
+            f"```yaml\n{yaml_text.rstrip()}\n```",
+            title=f"Wizard: {server_name}",
+        )
+        validation = result.get("validation")
+        if isinstance(validation, dict) and not validation.get("ok", False):
+            errors = validation.get("errors") or []
+            self.post_error(
+                "Wizard validation failed",
+                "\n".join(str(error) for error in errors)
+                or "wizard output did not validate",
+            )
+            footer.set_phase(Phase.ERROR)
+            footer.set_hint("Wizard validation failed")
+            return
+        footer.set_hint("Wizard YAML ready")
+
+    def _on_write_project_yaml_success(
+        self, footer: FooterWidget, result: dict[str, object]
+    ) -> None:
+        project = str(result.get("project_name") or "project")
+        program = str(result.get("program") or "gaussian")
+        written_path = str(result.get("written_path") or "")
+        command_example = (
+            f"chemsmart run {program} -p {project} "
+            "-f examples/h2o.xyz -c 0 -m 1 opt"
+        )
+        self.post_agent_message(
+            (
+                f"Wrote `{written_path}`.\n\n"
+                "Deterministic use:\n\n"
+                "```bash\n"
+                f"{command_example}\n"
+                "```\n\n"
+                f"This workspace now has `{program}:{project}` loaded. "
+                "The command-synthesis harness will attach and validate "
+                f"this project automatically, and explicit CLI commands "
+                f"can use `-p {project}` from this same workspace."
+            ),
+            title="Project YAML",
+        )
+        footer.set_hint(f"Project YAML written: {project}")
+
+    def _on_wizard_refresh_success(
+        self, footer: FooterWidget, result: dict[str, object]
+    ) -> None:
+        self.post_agent_message(
+            self._wizard_refresh_result_table(result),
+            title=f"Wizard refresh: {result.get('server_name') or 'server'}",
+        )
+        status = str(result.get("status") or "")
+        if status == "error":
+            footer.set_phase(Phase.ERROR)
+            footer.set_hint("Wizard refresh failed")
+            return
+        if status == "stale":
+            footer.set_hint("Wizard refresh preserved stale cache")
+            return
+        footer.set_hint("Wizard cache ready")
+
+    def _on_wizard_verify_success(
+        self, footer: FooterWidget, result: dict[str, object]
+    ) -> None:
+        self.post_agent_message(
+            self._wizard_verify_result_table(result),
+            title=f"Wizard verify: {result.get('server_name') or 'server'}",
+        )
+        errors = result.get("errors") or []
+        warnings = result.get("warnings") or []
+        if errors:
+            self.post_error(
+                "Wizard verify failed",
+                "\n".join(str(error) for error in errors),
+            )
+            footer.set_phase(Phase.ERROR)
+            footer.set_hint("Wizard verify found errors")
+            return
+        if warnings:
+            footer.set_hint("Wizard verify completed with warnings")
+            return
+        footer.set_hint("Wizard verify completed")
 
     def _tool_success_note(self, tool_name: str, result: object) -> str:
         if tool_name == "wizard_probe" and isinstance(result, dict):
@@ -413,4 +434,3 @@ class WizardCommandsMixin:
         )
         table.add_row("last_error", str(result.get("last_error") or "-"))
         return table
-

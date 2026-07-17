@@ -168,8 +168,31 @@ class RequestFlowMixin:
             raw={"source": "slash"},
         )
         policy = self._permission_policy()
-        resolved = policy.resolve(request)
+        if not self._resolve_slash_approval(
+            request,
+            policy,
+            tool_name=tool_name,
+            description=description,
+            normalized_args=normalized_args,
+            explicit_approval=explicit_approval,
+        ):
+            return {"tool": tool_name, "status": "denied"}
+        result = registry.call(tool_name, normalized_args)
+        return self._publish_slash_tool_result(
+            tool_name, description, normalized_args, result
+        )
 
+    def _resolve_slash_approval(
+        self,
+        request: ToolRequest,
+        policy,
+        *,
+        tool_name: str,
+        description: str,
+        normalized_args: dict[str, object],
+        explicit_approval: bool,
+    ) -> bool:
+        resolved = policy.resolve(request)
         if explicit_approval:
             if tool_name != "execute_chemsmart_command":
                 raise ValueError(
@@ -207,7 +230,7 @@ class RequestFlowMixin:
                     normalized_args,
                     "Denied by user.",
                 )
-                return {"tool": tool_name, "status": "denied"}
+                return False
             policy.record(tool_name, decision)
             self.app.call_from_thread(
                 self._sync_session_allow_tools,
@@ -235,7 +258,7 @@ class RequestFlowMixin:
                 normalized_args,
                 "Blocked by current permissions; enable /yolo on to proceed.",
             )
-            return {"tool": tool_name, "status": "denied"}
+            return False
         else:
             self.app.call_from_thread(
                 self._publish_tool_call_cell,
@@ -245,8 +268,15 @@ class RequestFlowMixin:
                 normalized_args,
                 "Auto-approved.",
             )
+        return True
 
-        result = registry.call(tool_name, normalized_args)
+    def _publish_slash_tool_result(
+        self,
+        tool_name: str,
+        description: str,
+        normalized_args: dict[str, object],
+        result: object,
+    ) -> dict[str, object]:
         if isinstance(result, dict) and result.get("ok") is False:
             error = result.get("error")
             if isinstance(error, dict):
