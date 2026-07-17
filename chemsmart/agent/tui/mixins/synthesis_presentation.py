@@ -137,183 +137,171 @@ class SynthesisPresentationMixin:
             self.query_one(FooterWidget).set_phase(Phase.ERROR)
             self.query_one(FooterWidget).set_hint("Synthesis failed")
             return
-
         status = str(synthesis.get("status") or "")
         self._waiting_for_user = status == "needs_clarification"
-        footer = self.query_one(FooterWidget)
-        provider_type = str(result.get("provider_type") or "offline")
-        provider_model = str(result.get("provider_model") or "auto")
-        artifact_dir = str(result.get("synthesis_artifact_dir") or "")
         semantic = result.get("semantic_result")
-        semantic_dict = semantic if isinstance(semantic, dict) else None
-        if status == "ready":
-            command = str(synthesis.get("command") or "")
-            explanation = str(synthesis.get("explanation") or "")
-            confidence = str(synthesis.get("confidence") or "low")
-            project = str(synthesis.get("project") or "")
-            intent = synthesis.get("intent_assertion") or synthesis.get(
-                "intent"
-            )
-            intent_dict = intent if isinstance(intent, dict) else None
-            command_is_executable = self._remember_ready_command(
-                command=command,
-                semantic=semantic_dict,
-                intent=intent_dict,
-                source="local_synthesis",
-            )
-            transcript = self.query_one(Transcript)
-            transcript.add_cell(
-                SynthesisTraceCell(
-                    provider_type=provider_type,
-                    model=provider_model,
-                    mode=self._interaction_mode,
-                    status=status,
-                    command=command,
-                    semantic=semantic_dict,
-                    decision_trace=_decision_trace_dict(synthesis),
-                    artifact_dir=artifact_dir,
-                )
-            )
-            self._publish_decision_trace(synthesis)
-            transcript.add_cell(
-                CommandInterpretationCell(
-                    parse_model_command(command),
-                    expanded=True,
-                )
-            )
-            transcript.add_cell(
-                AgentMessageCell(
-                    _command_details_text(
-                        explanation=(
-                            explanation or "Prepared chemsmart command."
-                        ),
-                        confidence=confidence,
-                        project=project,
-                    ),
-                    title="Command details",
-                )
-            )
-            transcript.add_cell(
-                FinalAnswerCell(
-                    _final_command_text(command=command),
-                    title="Final Command",
-                ),
-            )
-            footer.set_phase(Phase.FINISHED)
-            footer.set_hint(
-                _ready_command_hint(self._ready_command)
-                if command_is_executable
-                else "Command shown, but execution evidence is incomplete"
-            )
-            transcript.collapse_tool_chain(self._active_turn_id)
-            return
-
-        if status == "informational":
-            command = str(synthesis.get("command") or "")
-            explanation = str(synthesis.get("explanation") or "")
-            action = str(synthesis.get("action") or "explain_command")
-            title = {
-                "explain_command": "Command Explanation",
-                "critique_command": "Command Critic",
-                "repair_command": "Command Repair",
-            }.get(action, "Command Analysis")
-            transcript = self.query_one(Transcript)
-            transcript.add_cell(
-                SynthesisTraceCell(
-                    provider_type=provider_type,
-                    model=provider_model,
-                    mode=self._interaction_mode,
-                    status=status,
-                    command=command,
-                    semantic=semantic_dict,
-                    decision_trace=_decision_trace_dict(synthesis),
-                    artifact_dir=artifact_dir,
-                )
-            )
-            self._publish_decision_trace(synthesis)
-            if command:
-                transcript.add_cell(
-                    CommandInterpretationCell(
-                        parse_model_command(command),
-                        expanded=True,
-                    )
-                )
-            transcript.add_cell(
-                FinalAnswerCell(
-                    _final_answer_text(
-                        command=command,
-                        explanation=(
-                            explanation or "No explanation was generated."
-                        ),
-                    ),
-                    title=title,
-                )
-            )
-            footer.set_phase(Phase.FINISHED)
-            footer.set_hint("Command analysis ready")
-            transcript.collapse_tool_chain(self._active_turn_id)
-            return
-
-        if status == "needs_clarification":
-            missing = synthesis.get("missing_info") or []
-            if not isinstance(missing, list):
-                missing = [str(missing)]
-            lines = "\n".join(f"- {item}" for item in missing) or "- details"
-            self.query_one(Transcript).add_cell(
-                SynthesisTraceCell(
-                    provider_type=provider_type,
-                    model=provider_model,
-                    mode=self._interaction_mode,
-                    status=status,
-                    command=str(synthesis.get("command") or ""),
-                    semantic=semantic_dict,
-                    decision_trace=_decision_trace_dict(synthesis),
-                    artifact_dir=artifact_dir,
-                )
-            )
-            self._publish_decision_trace(synthesis)
-            self.query_one(Transcript).add_cell(
-                FinalAnswerCell(
-                    (
-                        "I need more information before making a command:\n\n"
-                        f"{lines}"
-                    ),
-                    title="Clarification",
-                )
-            )
-            footer.set_phase(Phase.WAITING_USER)
-            footer.set_hint("Clarification needed")
-            self.query_one(Transcript).collapse_tool_chain(
-                self._active_turn_id
-            )
-            return
-
-        explanation = str(
-            synthesis.get("explanation") or "No executable command was made."
+        context = {
+            "provider_type": str(result.get("provider_type") or "offline"),
+            "provider_model": str(result.get("provider_model") or "auto"),
+            "artifact_dir": str(result.get("synthesis_artifact_dir") or ""),
+            "semantic": semantic if isinstance(semantic, dict) else None,
+        }
+        handlers = {
+            "ready": self._publish_ready_synthesis,
+            "informational": self._publish_informational_synthesis,
+            "needs_clarification": self._publish_clarification_synthesis,
+        }
+        handlers.get(status, self._publish_synthesis_fallback)(
+            synthesis, context
         )
-        semantic_text = _format_semantic_result(semantic_dict)
-        self.query_one(Transcript).add_cell(
+
+    def _append_synthesis_trace(
+        self,
+        synthesis: dict[str, object],
+        context: dict[str, object],
+    ) -> Transcript:
+        transcript = self.query_one(Transcript)
+        transcript.add_cell(
             SynthesisTraceCell(
-                provider_type=provider_type,
-                model=provider_model,
+                provider_type=str(context["provider_type"]),
+                model=str(context["provider_model"]),
                 mode=self._interaction_mode,
-                status=status,
+                status=str(synthesis.get("status") or ""),
                 command=str(synthesis.get("command") or ""),
-                semantic=semantic_dict,
+                semantic=context.get("semantic"),
                 decision_trace=_decision_trace_dict(synthesis),
-                artifact_dir=artifact_dir,
+                artifact_dir=str(context["artifact_dir"]),
             )
         )
         self._publish_decision_trace(synthesis)
-        self.query_one(Transcript).add_cell(
+        return transcript
+
+    def _publish_ready_synthesis(
+        self,
+        synthesis: dict[str, object],
+        context: dict[str, object],
+    ) -> None:
+        command = str(synthesis.get("command") or "")
+        intent = synthesis.get("intent_assertion") or synthesis.get("intent")
+        intent_dict = intent if isinstance(intent, dict) else None
+        semantic = context.get("semantic")
+        command_is_executable = self._remember_ready_command(
+            command=command,
+            semantic=semantic if isinstance(semantic, dict) else None,
+            intent=intent_dict,
+            source="local_synthesis",
+        )
+        transcript = self._append_synthesis_trace(synthesis, context)
+        transcript.add_cell(
+            CommandInterpretationCell(
+                parse_model_command(command), expanded=True
+            )
+        )
+        transcript.add_cell(
+            AgentMessageCell(
+                _command_details_text(
+                    explanation=str(
+                        synthesis.get("explanation")
+                        or "Prepared chemsmart command."
+                    ),
+                    confidence=str(synthesis.get("confidence") or "low"),
+                    project=str(synthesis.get("project") or ""),
+                ),
+                title="Command details",
+            )
+        )
+        transcript.add_cell(
             FinalAnswerCell(
-                f"{explanation}{semantic_text}",
+                _final_command_text(command=command), title="Final Command"
+            )
+        )
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.FINISHED)
+        footer.set_hint(
+            _ready_command_hint(self._ready_command)
+            if command_is_executable
+            else "Command shown, but execution evidence is incomplete"
+        )
+        transcript.collapse_tool_chain(self._active_turn_id)
+
+    def _publish_informational_synthesis(
+        self,
+        synthesis: dict[str, object],
+        context: dict[str, object],
+    ) -> None:
+        command = str(synthesis.get("command") or "")
+        action = str(synthesis.get("action") or "explain_command")
+        title = {
+            "explain_command": "Command Explanation",
+            "critique_command": "Command Critic",
+            "repair_command": "Command Repair",
+        }.get(action, "Command Analysis")
+        transcript = self._append_synthesis_trace(synthesis, context)
+        if command:
+            transcript.add_cell(
+                CommandInterpretationCell(
+                    parse_model_command(command), expanded=True
+                )
+            )
+        transcript.add_cell(
+            FinalAnswerCell(
+                _final_answer_text(
+                    command=command,
+                    explanation=str(
+                        synthesis.get("explanation")
+                        or "No explanation was generated."
+                    ),
+                ),
+                title=title,
+            )
+        )
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.FINISHED)
+        footer.set_hint("Command analysis ready")
+        transcript.collapse_tool_chain(self._active_turn_id)
+
+    def _publish_clarification_synthesis(
+        self,
+        synthesis: dict[str, object],
+        context: dict[str, object],
+    ) -> None:
+        missing = synthesis.get("missing_info") or []
+        if not isinstance(missing, list):
+            missing = [str(missing)]
+        lines = "\n".join(f"- {item}" for item in missing) or "- details"
+        transcript = self._append_synthesis_trace(synthesis, context)
+        transcript.add_cell(
+            FinalAnswerCell(
+                "I need more information before making a command:\n\n" + lines,
+                title="Clarification",
+            )
+        )
+        footer = self.query_one(FooterWidget)
+        footer.set_phase(Phase.WAITING_USER)
+        footer.set_hint("Clarification needed")
+        transcript.collapse_tool_chain(self._active_turn_id)
+
+    def _publish_synthesis_fallback(
+        self,
+        synthesis: dict[str, object],
+        context: dict[str, object],
+    ) -> None:
+        explanation = str(
+            synthesis.get("explanation") or "No executable command was made."
+        )
+        semantic = context.get("semantic")
+        semantic_dict = semantic if isinstance(semantic, dict) else None
+        transcript = self._append_synthesis_trace(synthesis, context)
+        transcript.add_cell(
+            FinalAnswerCell(
+                f"{explanation}{_format_semantic_result(semantic_dict)}",
                 title="Final Status",
             )
         )
+        footer = self.query_one(FooterWidget)
         footer.set_phase(Phase.FINISHED)
         footer.set_hint("No command generated")
-        self.query_one(Transcript).collapse_tool_chain(self._active_turn_id)
+        transcript.collapse_tool_chain(self._active_turn_id)
 
     def _publish_decision_trace(self, synthesis: dict[str, object]) -> None:
         trace = synthesis.get("decision_trace")
