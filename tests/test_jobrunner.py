@@ -1,6 +1,10 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from click.testing import CliRunner
+
+from chemsmart.cli.run import run
+from chemsmart.cli.sub import sub
 from chemsmart.jobs.gaussian.runner import (
     FakeGaussianJobRunner,
     GaussianJobRunner,
@@ -149,3 +153,26 @@ class TestJobRunnerSelection:
         assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
         assert Path(runner.job_errfile).name == "orca_opt_fake.err"
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
+
+
+class TestParallelFlagHelpText:
+    def test_run_help_describes_serial_batch_default(self):
+        result = CliRunner().invoke(run, ["--help"])
+        assert result.exit_code == 0
+        help_text = " ".join(result.output.split())
+        assert (
+            "Batch children always run serially with full resources"
+            in help_text
+        )
+        assert "use chemsmart sub for cluster concurrency" in help_text
+        assert "Max concurrent SLURM array tasks" not in help_text
+
+    def test_sub_help_describes_array_concurrency(self):
+        result = CliRunner().invoke(sub, ["--help"])
+        assert result.exit_code == 0
+        help_text = " ".join(result.output.split())
+        assert (
+            "Max concurrent SLURM array tasks when submitting a batch"
+            in help_text
+        )
+        assert "Batch children always run serially" not in help_text

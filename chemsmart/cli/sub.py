@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @click.group(name="sub", cls=MyGroup)
 @click.pass_context
-@click_jobrunner_options
+@click_jobrunner_options(entry_point="sub")
 @logger_options
 @click.option(
     "-t",

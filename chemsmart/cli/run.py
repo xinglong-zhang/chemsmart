@@ -38,7 +38,7 @@ else:
 
 @click.group(name="run")
 @click.pass_context
-@click_jobrunner_options
+@click_jobrunner_options(entry_point="run")
 @logger_options
 def run(
     ctx,
