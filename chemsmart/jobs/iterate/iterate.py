@@ -249,7 +249,7 @@ class SkeletonPreprocessor(BasePreprocessor):
         """
         # First check if link_index atom has available bonding position
         if self._has_available_bonding_position():
-            logger.info(
+            logger.debug(
                 f"Link atom at index {self.link_index + 1} (1-based) has available bonding position. "
                 "No substituent removal needed."
             )
@@ -433,7 +433,7 @@ class SubstituentPreprocessor(BasePreprocessor):
         """
         # First check if link_index atom has available bonding position
         if self._has_available_bonding_position():
-            logger.info(
+            logger.debug(
                 f"Substituent link atom at index {self.link_index + 1} (1-based) has available bonding position. "
                 "No removal needed."
             )
@@ -441,7 +441,7 @@ class SubstituentPreprocessor(BasePreprocessor):
             return self.molecule
 
         # Auto-detect and remove the smallest group at link position
-        logger.info(
+        logger.debug(
             f"Substituent link atom at index {self.link_index + 1} (1-based) has no available bonding position. "
             "Auto-detecting and removing group."
         )

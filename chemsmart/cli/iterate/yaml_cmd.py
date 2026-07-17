@@ -296,8 +296,12 @@ def _execute_iterate_job(
     job_settings.skeleton_list = config["skeletons"]
     job_settings.substituent_list = config["substituents"]
 
+    # The existing ``chemsmart run --debug`` logging option also selects the
+    # verbose Iterate display: no progress bar and no worker/RDKit suppression.
+    debug_mode = logger.isEnabledFor(logging.DEBUG)
+
     # Create job runner
-    jobrunner = IterateJobRunner()
+    jobrunner = IterateJobRunner(show_worker_logs=debug_mode)
 
     # Create job
     job = IterateJob(
@@ -323,7 +327,7 @@ def _execute_iterate_job(
         ),
     )
     try:
-        summary = job.run(progress_callback=progress)
+        summary = job.run(progress_callback=None if debug_mode else progress)
     except KeyboardInterrupt:
         # User interrupt (SIGINT): outputs are written only after all
         # combinations finish, so in-memory results may not have reached disk.

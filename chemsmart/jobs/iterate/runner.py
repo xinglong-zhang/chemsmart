@@ -7,7 +7,7 @@ import sys
 import time
 import uuid
 from collections import deque
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import product
@@ -488,6 +488,7 @@ def _run_combination_worker(
     pool: IterateMoleculePool,
     result_queue: "multiprocessing.Queue",
     number: int,
+    show_worker_logs: bool = False,
 ) -> None:
     """Worker function for multiprocessing.Process.
 
@@ -501,9 +502,16 @@ def _run_combination_worker(
         Queue to put the :class:`CombinationResult`.
     number : int
         Stable 1-based combination number for the report.
+    show_worker_logs : bool
+        Keep worker and RDKit diagnostic output visible in debug mode.
     """
-    _silence_rdkit_warnings()
-    with _silence_iterate_worker_logging():
+    if show_worker_logs:
+        logging_context = nullcontext()
+    else:
+        _silence_rdkit_warnings()
+        logging_context = _silence_iterate_worker_logging()
+
+    with logging_context:
         try:
             result = _run_combination_task(combination, pool, number)
             result_queue.put(result)
@@ -538,8 +546,15 @@ class IterateJobRunner(JobRunner):
     SCRATCH = False
 
     def __init__(
-        self, server=None, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self,
+        server=None,
+        scratch=None,
+        fake=False,
+        scratch_dir=None,
+        show_worker_logs: bool = False,
+        **kwargs,
     ):
+        self.show_worker_logs = show_worker_logs
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -655,6 +670,7 @@ class IterateJobRunner(JobRunner):
                             pool,
                             result_queue,
                             number_by_label[comb.label],
+                            self.show_worker_logs,
                         ),
                         daemon=True,
                     )

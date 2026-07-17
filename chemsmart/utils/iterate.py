@@ -144,7 +144,7 @@ def generate_yaml_template(
     with open(output_path, "w") as f:
         f.write(ITERATE_YAML_TEMPLATE)
 
-    logger.info(f"Generated YAML template: {output_path}")
+    logger.debug(f"Generated YAML template: {output_path}")
     return output_path
 
 
