@@ -11,6 +11,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chemsmart.agent.services.command_explanation import (
+    format_model_command_explanation as format_model_command_explanation,
+)
+from chemsmart.agent.services.command_explanation import (
+    format_parsed_model_command as format_parsed_model_command,
+)
+
 _TOP_LEVEL_COMMANDS = {"run", "sub"}
 _PROGRAMS = {"gaussian", "orca", "nciplot", "mol"}
 _GAUSSIAN_SUBCOMMANDS = {
@@ -275,7 +282,9 @@ _SUBCOMMAND_OPTIONS = {
     "--num-structures-to-run": _OptionSpec("num_structures_to_run"),
     "-g": _OptionSpec("grouping_strategy"),
     "--grouping-strategy": _OptionSpec("grouping_strategy"),
-    "--proportion-structures-to-use": _OptionSpec("proportion_structures_to_use"),
+    "--proportion-structures-to-use": _OptionSpec(
+        "proportion_structures_to_use"
+    ),
     "--skip-completed": _OptionSpec(
         "skip_completed", takes_value=False, flag_value="true"
     ),
@@ -354,29 +363,6 @@ _JOB_OPTION_OVERRIDES: dict[tuple[str, str], dict[str, _OptionSpec]] = {
         "-s": _OptionSpec("recalc_hess"),
         "--recalc-hess": _OptionSpec("recalc_hess"),
     },
-}
-
-_JOB_LABELS = {
-    "com": "Gaussian input regeneration",
-    "crest": "CREST conformer search",
-    "dias": "distortion-interaction analysis",
-    "inp": "ORCA input handling",
-    "irc": "intrinsic reaction coordinate",
-    "link": "Gaussian linked job",
-    "modred": "constrained optimization",
-    "neb": "nudged elastic band",
-    "nci": "non-covalent interaction analysis",
-    "opt": "geometry optimization",
-    "qmmm": "QM/MM calculation",
-    "qrc": "quasi-reaction coordinate scan",
-    "resp": "RESP charge calculation",
-    "scan": "coordinate scan",
-    "sp": "single-point energy",
-    "td": "TD-DFT excited-state calculation",
-    "traj": "trajectory frame workflow",
-    "ts": "transition-state search",
-    "userjob": "user-defined Gaussian job",
-    "wbi": "Wiberg bond index calculation",
 }
 
 
@@ -477,7 +463,11 @@ def parse_model_command(
         tokens[subcommand_option_index + 1 :], subcommand_specs
     )
     warnings.extend(subcommand_warnings)
-    if program == "gaussian" and job == "traj" and "dist_start" in subcommand_opts:
+    if (
+        program == "gaussian"
+        and job == "traj"
+        and "dist_start" in subcommand_opts
+    ):
         # ``traj`` owns its post-subcommand ``-x`` as a selection proportion;
         # ORCA scan retains the distinct distance-start meaning.
         subcommand_opts["proportion_structures_to_use"] = subcommand_opts.pop(
@@ -501,7 +491,8 @@ def parse_model_command(
     structural_options = {
         key: value
         for key, value in subcommand_opts.items()
-        if value is not None and key not in {"skip_completed", "route_parameters"}
+        if value is not None
+        and key not in {"skip_completed", "route_parameters"}
     }
     resources = {
         key: value
@@ -563,146 +554,6 @@ def parse_model_command(
         resources=resources,
         warnings=warnings,
     )
-
-
-def format_model_command_explanation(
-    command: str, *, cwd: str | os.PathLike[str] | None = None
-) -> str:
-    parsed = parse_model_command(command, cwd=cwd)
-    return format_parsed_model_command(parsed)
-
-
-def format_parsed_model_command(parsed: ParsedModelCommand) -> str:
-    if parsed.parse_error:
-        return "\n".join(
-            [
-                "deterministic command parser:",
-                f"- parse status: `error` ({parsed.parse_error})",
-                f"- workspace: `{parsed.workspace}`",
-                # Blank line so a Markdown renderer does not lazily glue the
-                # Summary line onto the preceding bullet list.
-                "",
-                f"Summary: This command could not be deterministically parsed: {parsed.parse_error}.",
-            ]
-        )
-
-    action_label = (
-        "submit to an HPC/server queue"
-        if parsed.action == "sub"
-        else "run locally"
-    )
-    dry_run_text = "yes" if parsed.dry_run else "no"
-    program_text = parsed.program or "unknown"
-    job_text = parsed.job or "unknown"
-    job_label = _JOB_LABELS.get(job_text, job_text)
-    project_text = parsed.project or "not specified"
-    server_text = parsed.server or (
-        "auto/default server" if parsed.action == "sub" else "local/default"
-    )
-    method_bits = []
-    if parsed.ab_initio:
-        method_bits.append(f"ab initio `{parsed.ab_initio}`")
-    if parsed.functional:
-        method_bits.append(f"functional `{parsed.functional}`")
-    if parsed.basis:
-        method_bits.append(f"basis `{parsed.basis}`")
-    if parsed.aux_basis:
-        method_bits.append(f"auxiliary basis `{parsed.aux_basis}`")
-    if parsed.extrapolation_basis:
-        method_bits.append(
-            f"extrapolation basis `{parsed.extrapolation_basis}`"
-        )
-    method_text = ", ".join(method_bits) if method_bits else "unresolved"
-
-    lines = [
-        "deterministic command parser:",
-        f"- workspace: `{parsed.workspace}`",
-        f"- execution: `{parsed.action}` ({action_label})",
-        f"- program: `{program_text}`",
-        f"- job: `{job_text}` ({job_label})",
-        f"- server: `{server_text}`",
-        f"- dry run requested by command: `{dry_run_text}`",
-        f"- molecule/input file: `{parsed.filename or 'not specified'}`",
-        f"- label: `{parsed.label or 'runtime-derived'}`",
-        f"- charge/multiplicity: `{parsed.charge or 'runtime/default'}` / `{parsed.multiplicity or 'runtime/default'}`",
-        f"- project: `{project_text}`",
-    ]
-    if parsed.project_p_flag_meaning:
-        lines.append(f"- `-p` meaning: {parsed.project_p_flag_meaning}")
-    if parsed.top_level_program:
-        lines.append(
-            "- top-level `-p/--program`: "
-            f"`{parsed.top_level_program}` (output-file processing target, not project)"
-        )
-    db_bits = []
-    if parsed.record_index:
-        db_bits.append(f"record_index={parsed.record_index}")
-    if parsed.record_id:
-        db_bits.append(f"record_id={parsed.record_id}")
-    if parsed.structure_index:
-        db_bits.append(f"structure_index={parsed.structure_index}")
-    if parsed.structure_id:
-        db_bits.append(f"structure_id={parsed.structure_id}")
-    if parsed.molecule_id:
-        db_bits.append(f"molecule_id={parsed.molecule_id}")
-    if db_bits:
-        lines.append(f"- database selection: `{', '.join(db_bits)}`")
-    lines.append(f"- resolved method: {method_text}")
-    if parsed.solvent_model or parsed.solvent_id:
-        lines.append(
-            "- resolved solvent: "
-            f"`{parsed.solvent_model or 'model default'}` / `{parsed.solvent_id or 'id default'}`"
-        )
-    route_control_bits = []
-    if parsed.defgrid:
-        route_control_bits.append(f"defgrid={parsed.defgrid}")
-    if parsed.scf_tol:
-        route_control_bits.append(f"scf_tol={parsed.scf_tol}")
-    if parsed.scf_algorithm:
-        route_control_bits.append(f"scf_algorithm={parsed.scf_algorithm}")
-    if route_control_bits:
-        lines.append(
-            f"- resolved route controls: `{', '.join(route_control_bits)}`"
-        )
-    if parsed.route_parameters:
-        lines.append(f"- route parameters: `{parsed.route_parameters}`")
-    if parsed.opt_options:
-        lines.append(f"- optimization route options: `{parsed.opt_options}`")
-    if parsed.resources:
-        resource_text = ", ".join(
-            f"{key}={value}" for key, value in sorted(parsed.resources.items())
-        )
-        lines.append(f"- resources: `{resource_text}`")
-    if parsed.structural_options:
-        option_text = ", ".join(
-            f"{key}={value}"
-            for key, value in sorted(parsed.structural_options.items())
-        )
-        lines.append(f"- job-specific options: `{option_text}`")
-    if parsed.warnings:
-        lines.append("- parser warnings:")
-        lines.extend(f"  - {warning}" for warning in parsed.warnings)
-
-    target = parsed.filename or "the selected input"
-    if parsed.action == "sub":
-        summary_action = (
-            f"submit a {program_text} {job_label} job for `{target}` "
-            f"to `{server_text}`"
-        )
-    else:
-        summary_action = (
-            f"run a {program_text} {job_label} job for `{target}` locally"
-        )
-    # Blank line so a Markdown renderer does not lazily glue the Summary line
-    # onto the preceding bullet list (the "explanation stuck to the command" bug).
-    lines.append("")
-    lines.append(
-        "Summary: This command will "
-        f"{summary_action} from `{parsed.workspace}` using project "
-        f"`{project_text}` with "
-        f"{method_text}; dry-run is {dry_run_text}."
-    )
-    return "\n".join(lines)
 
 
 def _find_first(
