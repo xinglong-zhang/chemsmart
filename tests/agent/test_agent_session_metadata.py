@@ -7,6 +7,7 @@ import pytest
 
 from chemsmart.agent.core import AgentSession
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.services.session_finalizer import SESSION_METADATA_KEYS
 
 from ._agent_session_helpers import FakeProvider, critic_ok, planner_plan
 
@@ -483,6 +484,7 @@ def test_session_metadata_has_all_required_fields(
     metadata = json.loads(
         (Path(result["session_dir"]) / "session_metadata.json").read_text()
     )
+    assert tuple(sorted(metadata)) == SESSION_METADATA_KEYS
     required = {
         "session_id": str,
         "request_intent": str,

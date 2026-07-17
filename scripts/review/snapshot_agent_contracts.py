@@ -197,26 +197,11 @@ def cli_help_contract(repo_root: Path, replacements: dict[str, str]) -> dict[str
     return output
 
 
-def literal_assignment(path: Path, name: str) -> Any:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    for node in tree.body:
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        if not any(isinstance(target, ast.Name) and target.id == name for target in targets):
-            continue
-        return ast.literal_eval(node.value)
-    raise ValueError(f"{name} is not a literal assignment in {path}")
-
-
 def tui_contract(repo_root: Path) -> dict[str, Any]:
     from chemsmart.agent.tui.bindings import BINDINGS
     from chemsmart.agent.tui.config import DEFAULT_KEYBINDINGS
+    from chemsmart.agent.tui.slash_catalog import SLASH_PALETTE_COMMANDS
 
-    slash = literal_assignment(
-        repo_root / "chemsmart/agent/tui/screens/chat.py",
-        "_SLASH_PALETTE_COMMANDS",
-    )
     safety = [
         {
             "key": binding.key,
@@ -229,7 +214,7 @@ def tui_contract(repo_root: Path) -> dict[str, Any]:
     return {
         "slash_commands": [
             {"command": command, "description": description}
-            for command, description in slash
+            for command, description in SLASH_PALETTE_COMMANDS
         ],
         "configurable_keybindings": dict(sorted(DEFAULT_KEYBINDINGS.items())),
         "safety_bindings": safety,
@@ -351,37 +336,13 @@ def workspace_yaml_contract(workspace: Path, replacements: dict[str, str]) -> di
     return statuses
 
 
-def _metadata_keys(core_path: Path) -> list[str]:
-    tree = ast.parse(core_path.read_text(encoding="utf-8"), filename=str(core_path))
-    for node in tree.body:
-        if not isinstance(node, ast.ClassDef) or node.name != "AgentSession":
-            continue
-        for member in node.body:
-            if not isinstance(member, ast.FunctionDef) or member.name != "_finalize_session":
-                continue
-            for nested in ast.walk(member):
-                if not isinstance(nested, ast.Assign):
-                    continue
-                if not any(
-                    isinstance(target, ast.Name) and target.id == "metadata"
-                    for target in nested.targets
-                ):
-                    continue
-                if isinstance(nested.value, ast.Dict):
-                    return sorted(
-                        key.value
-                        for key in nested.value.keys
-                        if isinstance(key, ast.Constant) and isinstance(key.value, str)
-                    )
-    raise ValueError("AgentSession._finalize_session metadata contract not found")
-
-
 def session_artifact_contract(repo_root: Path) -> dict[str, Any]:
     from chemsmart.agent.core import SessionState
+    from chemsmart.agent.services.session_finalizer import SESSION_METADATA_KEYS
 
     return {
         "artifact_names": list(SESSION_ARTIFACTS),
-        "metadata_keys": _metadata_keys(repo_root / "chemsmart/agent/core.py"),
+        "metadata_keys": list(SESSION_METADATA_KEYS),
         "session_state_schema": SessionState.model_json_schema(),
     }
 

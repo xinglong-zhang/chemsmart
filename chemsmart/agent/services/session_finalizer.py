@@ -16,6 +16,51 @@ from chemsmart.agent.services.runtime_metrics import (
 )
 
 
+SESSION_METADATA_KEYS = tuple(
+    sorted(
+        {
+            "advisory_only",
+            "block_reason",
+            "blocked",
+            "critic_confidence",
+            "critic_verdict",
+            "ended_at",
+            "executed_steps",
+            "exit_status",
+            "generated_commands",
+            "git_sha",
+            "harness_failed_rule_ids",
+            "harness_issue_count",
+            "harness_verdict",
+            "input_file",
+            "input_files",
+            "intent",
+            "is_chitchat",
+            "plan_steps",
+            "provider_name",
+            "rationale",
+            "request",
+            "request_intent",
+            "request_started_at",
+            "resolved_model",
+            "runtime_v2_event_count",
+            "runtime_v2_mode",
+            "runtime_v2_phase",
+            "runtime_v2_shadow_violations",
+            "schema_hash",
+            "session_id",
+            "started_at",
+            "tools_called",
+            "total_input_tokens",
+            "total_output_tokens",
+            "total_steps_executed",
+            "total_steps_planned",
+            "wall_time_ms",
+        }
+    )
+)
+
+
 class FinalizerHost(Protocol):
     state: SessionState | None
     session_dir: Path | None
@@ -268,4 +313,4 @@ def _harness_metadata(
     }
 
 
-__all__ = ["SessionFinalizer"]
+__all__ = ["SESSION_METADATA_KEYS", "SessionFinalizer"]

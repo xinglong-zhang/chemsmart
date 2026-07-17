@@ -4012,7 +4012,7 @@
         "sha256": "a06c0d21e93fdb0d059a26066e6f53529cf133a46e229077679e5b090574740b"
       }
     },
-    "full_cli_schema_sha256": "1da49b2f4e6561eb6a2a34eb3d7280ab0065066b3f541f39a0ec46ad4afcf2a2",
+    "full_cli_schema_sha256": "f1b9e00c452f93fa1186aaf2adac599392a1642a93e9ed11e2ef24144c089ba6",
     "rendered_synthesis_prompts": {
       "command": {
         "chars": 4288,
