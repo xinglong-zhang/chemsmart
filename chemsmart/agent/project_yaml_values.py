@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Any
 
 KNOWN_PROGRAMS = {"gaussian", "orca"}
-_DEF2_BASIS_PATTERN = (
+DEF2_BASIS_PATTERN = (
     r"def2[- ]?(?:svp|svpd|tzvp|tzvpd|tzvpp|tzvppd|qzvp|qzvpd)"
 )
-_SOLVENT_ALIASES = {
+SOLVENT_ALIASES = {
     "acetonitrile": "acetonitrile",
     "chloroform": "chloroform",
     "cyclohexane": "cyclohexane",
@@ -46,14 +46,14 @@ def normalize_basis_name(value: str) -> str:
 def normalize_basis_if_known(value: str | None) -> str | None:
     if value is None:
         return None
-    if re.fullmatch(rf"(?i){_DEF2_BASIS_PATTERN}", value.strip()):
+    if re.fullmatch(rf"(?i){DEF2_BASIS_PATTERN}", value.strip()):
         return normalize_basis_name(value)
     return value.strip()
 
 
 def normalize_solvent_id(value: str) -> str:
     key = re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
-    return _SOLVENT_ALIASES.get(key, key.replace(" ", ""))
+    return SOLVENT_ALIASES.get(key, key.replace(" ", ""))
 
 
 def normalize_yaml_text(yaml_text: str) -> str:
@@ -84,7 +84,9 @@ def first_or_none(values: Any) -> Any:
 
 
 __all__ = [
+    "DEF2_BASIS_PATTERN",
     "KNOWN_PROGRAMS",
+    "SOLVENT_ALIASES",
     "first_or_none",
     "normalize_basis_if_known",
     "normalize_basis_name",

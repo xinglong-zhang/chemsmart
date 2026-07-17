@@ -9,6 +9,8 @@ from typing import Any, Literal
 import yaml
 
 from chemsmart.agent.project_yaml_values import (
+    DEF2_BASIS_PATTERN,
+    SOLVENT_ALIASES,
     first_or_none,
     normalize_basis_if_known,
     normalize_basis_name,
@@ -28,23 +30,6 @@ _D3BJ_ALIASES = (
     "becke johnson",
 )
 _CREST_MARKERS = ("crest", "mtd", "metadynamics", "gfn2", "xtb")
-_DEF2_BASIS_PATTERN = (
-    r"def2[- ]?(?:svp|svpd|tzvp|tzvpd|tzvpp|tzvppd|qzvp|qzvpd)"
-)
-_SOLVENT_ALIASES = {
-    "acetonitrile": "acetonitrile",
-    "chloroform": "chloroform",
-    "cyclohexane": "cyclohexane",
-    "dichloroethane": "dichloroethane",
-    "dichloromethane": "dichloromethane",
-    "dmso": "dmso",
-    "ethanol": "ethanol",
-    "methanol": "methanol",
-    "thf": "thf",
-    "tetrahydrofuran": "thf",
-    "toluene": "toluene",
-    "water": "water",
-}
 ProjectProgram = Literal["gaussian", "orca"]
 
 
@@ -322,7 +307,7 @@ def _extract_dispersion(lowered: str) -> str | None:
 def _extract_heavy_basis(text: str) -> dict[str, str]:
     result: dict[str, str] = {}
     pattern = (
-        rf"(?i)({_DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?\s+"
+        rf"(?i)({DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?\s+"
         rf"[^.;,]{{0,120}}?\bfor\s+"
         rf"([A-Z][a-z]?(?:\s*(?:,|and)\s*[A-Z][a-z]?)*)\s*"
         rf"(?:atom|atoms|element|elements)?"
@@ -337,9 +322,9 @@ def _extract_heavy_basis(text: str) -> dict[str, str]:
 
 def _extract_light_basis(text: str) -> str | None:
     patterns = (
-        rf"(?i)({_DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?"
+        rf"(?i)({DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?"
         rf"(?:\s+basis\s+set)?\s+for\s+all\s+other\s+atoms",
-        rf"(?i)({_DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?"
+        rf"(?i)({DEF2_BASIS_PATTERN})(?:\s*\[[^\]]+\])?"
         rf"(?:\s+basis\s+set)?\s+for\s+light\s+atoms",
     )
     for pattern in patterns:
@@ -350,7 +335,7 @@ def _extract_light_basis(text: str) -> str | None:
 
 
 def _extract_first_basis(text: str) -> str | None:
-    match = re.search(rf"(?i)\b({_DEF2_BASIS_PATTERN})\b", text)
+    match = re.search(rf"(?i)\b({DEF2_BASIS_PATTERN})\b", text)
     return normalize_basis_name(match.group(1)) if match else None
 
 
@@ -377,7 +362,7 @@ def _extract_solvent(lowered: str) -> dict[str, str | None]:
         solvent_id = next(
             (
                 canonical
-                for alias, canonical in _SOLVENT_ALIASES.items()
+                for alias, canonical in SOLVENT_ALIASES.items()
                 if re.search(rf"\b{re.escape(alias)}\b", lowered)
             ),
             None,
