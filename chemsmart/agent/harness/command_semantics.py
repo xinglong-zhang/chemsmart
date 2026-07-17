@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from chemsmart.agent.harness.command_contracts import check_command_contracts
+from chemsmart.agent.harness.command_rules.db_selectors import (
+    db_selector_issues,
+)
+from chemsmart.agent.harness.command_rules.tokens import flag_option_present
 from chemsmart.agent.harness.failure_taxonomy import classify_runtime_failure
 from chemsmart.agent.harness.generated_invariants import (
     check_generated_input_invariants,
@@ -27,15 +31,6 @@ CommandSemanticSeverity = Literal["warn", "reject"]
 
 _COMPUTATIONAL_TOP_LEVEL = {"run", "sub"}
 _SOFTWARE_COMMANDS = {"gaussian", "orca"}
-_DB_SELECTOR_FLAGS = {
-    "record_index": ("--ri", "--record-index"),
-    "record_id": ("--rid", "--record-id"),
-    "structure_index": ("--si", "--structure-index"),
-    "structure_id": ("--sid", "--structure-id"),
-    "molecule_id": ("--mid", "--molecule-id"),
-}
-_DB_RECORD_SELECTORS = {"record_index", "record_id"}
-_DB_TOP_LEVEL_SELECTORS = {"record_index", "record_id", "structure_id"}
 
 
 @dataclass(frozen=True)
@@ -584,7 +579,7 @@ def _preflight_semantic_issues(
     program_tokens = tokens[software_index + 1 : job_index or len(tokens)]
 
     issues: list[CommandSemanticIssue] = []
-    if program == "orca" and _option_present(program_tokens, ("-a",)):
+    if program == "orca" and flag_option_present(program_tokens, ("-a",)):
         issues.append(
             CommandSemanticIssue(
                 rule_id="cmd.semantic.orca_aux_basis_short_flag",
@@ -598,8 +593,16 @@ def _preflight_semantic_issues(
             )
         )
 
-    db_issues = _db_selector_issues(program, program_tokens)
-    issues.extend(db_issues)
+    issues.extend(
+        CommandSemanticIssue(
+            rule_id=issue.rule_id,
+            severity=issue.severity,
+            message=issue.message,
+            evidence=issue.evidence,
+            missing_info=issue.missing_info,
+        )
+        for issue in db_selector_issues(program, program_tokens)
+    )
     return tuple(issues)
 
 
@@ -651,114 +654,6 @@ def _command_contract_issues(
         )
         for issue in contract_issues
     )
-
-
-def _db_selector_issues(
-    program: str,
-    program_tokens: list[str],
-) -> list[CommandSemanticIssue]:
-    present = {
-        key: _option_value(program_tokens, aliases)
-        for key, aliases in _DB_SELECTOR_FLAGS.items()
-        if _option_present(program_tokens, aliases)
-    }
-    source = _option_value(program_tokens, ("-f", "--filename"))
-    is_db = bool(source and str(source).lower().endswith(".db"))
-    if not present and not is_db:
-        return []
-    issues: list[CommandSemanticIssue] = []
-
-    if "molecule_id" in present:
-        issues.append(
-            CommandSemanticIssue(
-                rule_id="cmd.semantic.db_molecule_id_job",
-                severity="reject",
-                message=(
-                    "--mid/--molecule-id is not supported for Gaussian/ORCA "
-                    "job submission; select a structure with --sid or "
-                    "record plus structure index"
-                ),
-                evidence={
-                    "program": program,
-                    "filename": source,
-                    "selectors": sorted(present),
-                },
-            )
-        )
-
-    if not is_db:
-        issues.append(
-            CommandSemanticIssue(
-                rule_id="cmd.semantic.db_selector_without_db",
-                severity="reject",
-                message="database selectors require a .db input file",
-                evidence={
-                    "program": program,
-                    "filename": source,
-                    "selectors": sorted(present),
-                },
-            )
-        )
-        return issues
-
-    top_level = [key for key in _DB_TOP_LEVEL_SELECTORS if key in present]
-    if len(top_level) != 1:
-        issues.append(
-            CommandSemanticIssue(
-                rule_id="cmd.semantic.db_selector_cardinality",
-                severity="reject",
-                message=(
-                    ".db job input must select exactly one of "
-                    "--ri/--record-index, --rid/--record-id, or "
-                    "--sid/--structure-id"
-                ),
-                evidence={
-                    "program": program,
-                    "filename": source,
-                    "selectors": sorted(present),
-                },
-            )
-        )
-
-    if "structure_index" in present and not (
-        _DB_RECORD_SELECTORS & set(present)
-    ):
-        issues.append(
-            CommandSemanticIssue(
-                rule_id="cmd.semantic.db_structure_index_requires_record",
-                severity="reject",
-                message=(
-                    "--si/--structure-index can only be used together with "
-                    "--ri/--record-index or --rid/--record-id"
-                ),
-                evidence={
-                    "program": program,
-                    "filename": source,
-                    "selectors": sorted(present),
-                },
-            )
-        )
-    return issues
-
-
-def _option_present(tokens: list[str], aliases: tuple[str, ...]) -> bool:
-    return _option_value(tokens, aliases) is not None
-
-
-def _option_value(
-    tokens: list[str], aliases: tuple[str, ...]
-) -> str | bool | None:
-    for index, token in enumerate(tokens):
-        for alias in aliases:
-            if token == alias:
-                if index + 1 < len(tokens) and not tokens[
-                    index + 1
-                ].startswith("-"):
-                    return tokens[index + 1]
-                return True
-            if alias.startswith("--") and token.startswith(f"{alias}="):
-                return token.split("=", 1)[1]
-    return None
 
 
 def _software_index(tokens: list[str], top_index: int) -> int | None:
