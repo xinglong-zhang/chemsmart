@@ -2160,7 +2160,11 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
         self._rendered_run_results.add(str(value))
 
     def _resume_or_prompt(self, session_id: str) -> None:
-        state = JobStateReader.load(self.session_root / session_id)
+        try:
+            state = JobStateReader.load(self.session_root / session_id)
+        except RuntimeError as exc:
+            self.post_error("Resume failed", str(exc))
+            return
         if state is None:
             self.post_error(
                 "Resume failed", f"Unknown session id: {session_id}"

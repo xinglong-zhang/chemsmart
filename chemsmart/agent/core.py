@@ -62,6 +62,7 @@ from chemsmart.agent.runtime.contracts import RuntimeV2Mode, TaskPhase
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.runtime.orchestrator import RuntimeController
 from chemsmart.agent.services.conversation_memory import ConversationMemory
+from chemsmart.agent.services.session_store import load_current_session_state
 
 UTC = timezone.utc
 
@@ -1717,10 +1718,10 @@ class AgentSession:
 
     def _load_existing_session(self, session_id: str) -> None:
         self.session_dir = self.session_root / session_id
-        state_path = self.session_dir / "session.json"
-        if not state_path.exists():
-            state_path = self.session_dir / "state.json"
-        self.state = SessionState.load(state_path)
+        self.state = load_current_session_state(
+            self.session_dir,
+            required=True,
+        )
         self.handle_store = HandleStore(self.session_dir)
         self.decision_log = DecisionLog(
             self.session_dir / "decision_log.jsonl"

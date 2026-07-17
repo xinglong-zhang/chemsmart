@@ -45,6 +45,17 @@ def test_runtime_calculation_store_is_not_an_agent_session(tmp_path: Path):
     ]
 
 
+def test_legacy_state_only_directory_is_not_a_resumable_session(
+    tmp_path: Path,
+):
+    session_root = tmp_path / "sessions"
+    legacy = session_root / "legacy-001"
+    legacy.mkdir(parents=True)
+    (legacy / "state.json").write_text("{}", encoding="utf-8")
+
+    assert agent_session_dirs(session_root) == []
+
+
 def test_sessions_screen_down_enter_dismisses_selected_session(
     tmp_path: Path,
 ):

@@ -29,6 +29,12 @@ from chemsmart.agent.permissions import (
 )
 from chemsmart.agent.providers import ProviderError
 from chemsmart.agent.registry import ToolRegistry
+from chemsmart.agent.services.session_store import (
+    SessionMigrationError,
+    current_session_dirs,
+    migrate_legacy_session,
+    resolve_session_source,
+)
 from chemsmart.agent.tui._logging import (
     _apply_third_party_silence,
     _enable_console_logging,
@@ -443,6 +449,27 @@ def sessions(show_all: bool):
         Console().print(table)
 
 
+@agent.command(name="migrate-session")
+@click.argument("source")
+@click.option(
+    "--destination",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the migrated copy to this new directory.",
+)
+def migrate_session(source: str, destination: Path | None) -> None:
+    """Copy a legacy state.json session into the current session schema."""
+    session_root = Path(_default_session_root())
+    source_path = resolve_session_source(source, session_root)
+    try:
+        result = migrate_legacy_session(source_path, destination)
+    except SessionMigrationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"source preserved: {result['source']}")
+    click.echo(f"migrated session: {result['session_id']}")
+    click.echo(f"destination: {result['destination']}")
+
+
 @agent.command()
 @click.argument("name")
 @click.option(
@@ -720,9 +747,7 @@ def _load_session_snapshots(session_root: Path) -> list[dict[str, object]]:
     if not session_root.exists():
         return []
     snapshots = []
-    for session_dir in session_root.iterdir():
-        if not session_dir.is_dir():
-            continue
+    for session_dir in current_session_dirs(session_root):
         snapshots.append(_session_snapshot(session_dir))
     return sorted(
         snapshots,
@@ -733,9 +758,7 @@ def _load_session_snapshots(session_root: Path) -> list[dict[str, object]]:
 
 def _session_snapshot(session_dir: Path) -> dict[str, object]:
     metadata = _load_json(session_dir / "session_metadata.json")
-    state = _load_json(session_dir / "session.json") or _load_json(
-        session_dir / "state.json"
-    )
+    state = _load_json(session_dir / "session.json")
     entries = _load_decision_entries(session_dir / "decision_log.jsonl")
 
     request = ""

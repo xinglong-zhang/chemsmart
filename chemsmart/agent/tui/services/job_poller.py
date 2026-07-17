@@ -23,6 +23,10 @@ from chemsmart.agent.core import (
     _resolve_refs,
     _restore_json_result,
 )
+from chemsmart.agent.services.session_store import (
+    LegacySessionFormatError,
+    load_current_session_state,
+)
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.job import Job
@@ -117,20 +121,17 @@ class JobPollerMixin:
 
 
 class JobStateReader:
-    """Compatibility loader for agent session state files."""
+    """Read canonical agent session state for job monitoring."""
 
     @staticmethod
     def load(session_dir: Path) -> SessionState | None:
-        for name in ("state.json", "session.json"):
-            path = session_dir / name
-            if path.exists():
-                try:
-                    return SessionState.load(path)
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"Malformed session state: {path}"
-                    ) from exc
-        return None
+        path = session_dir / "session.json"
+        try:
+            return load_current_session_state(session_dir)
+        except LegacySessionFormatError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"Malformed session state: {path}") from exc
 
 
 def available_server_names() -> list[str]:
