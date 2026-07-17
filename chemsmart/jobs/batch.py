@@ -5,6 +5,7 @@ Provides the abstract ``BatchJob`` base class for orchestrating collections
 of engine-specific jobs. Engine-agnostic behavior includes:
 
 - serial local child-job execution with full resources per child
+- array-task execution of a single child (scheduler array env)
 - fault-tolerant execution with aggregated failures
 - scheduler/node allocation detection (SLURM/PBS)
 - distribution of child jobs across allocated nodes
@@ -22,7 +23,7 @@ import types
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
-from typing import Any, Optional, Sequence, Type, TypeVar
+from typing import Any, Literal, Optional, Sequence, Type, TypeVar
 
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import get_serial_mode, get_submitter_worker_count
@@ -31,6 +32,42 @@ from chemsmart.utils.mixins import RegistryMeta
 logger = logging.getLogger(__name__)
 
 BatchJobT = TypeVar("BatchJobT", bound="BatchJob")
+
+BatchExecutionModeName = Literal["local_batch", "array_task"]
+
+_ARRAY_TASK_ID_ENV_VARS = (
+    "SLURM_ARRAY_TASK_ID",
+    "PBS_ARRAYID",
+    "LSB_JOBINDEX",
+)
+
+
+def resolve_array_task_id() -> Optional[int]:
+    """Return the 1-based scheduler array task id, or ``None`` if unset.
+
+    Checks ``SLURM_ARRAY_TASK_ID``, ``PBS_ARRAYID``, then ``LSB_JOBINDEX``.
+    """
+    for key in _ARRAY_TASK_ID_ENV_VARS:
+        value = os.environ.get(key)
+        if value is None or value == "":
+            continue
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid {key}={value!r}; expected an integer task id."
+            ) from exc
+    return None
+
+
+def resolve_batch_execution_mode() -> BatchExecutionModeName:
+    """Return ``array_task`` when a scheduler array task id is set.
+
+    Otherwise return ``local_batch`` (run all children in-process).
+    """
+    if resolve_array_task_id() is not None:
+        return "array_task"
+    return "local_batch"
 
 
 class BatchExecutionError(RuntimeError):
@@ -48,11 +85,17 @@ class BatchJob(Job, metaclass=BatchJobMeta):
     Orchestration is engine-agnostic. Subclasses implement
     ``_configure_runner_for_node`` for engine-specific node adaptation.
 
-    Local ``run()`` always executes children serially with full resources.
+    ``run()`` selects execution mode from the environment:
+
+    - ``array_task`` — one child at the 1-based scheduler array task id,
+      with full resources
+    - ``local_batch`` — all children serially with full resources
+      (multi-node distribution when allocated)
+
     ``no_run_in_parallel`` may still be set by callers for CLI/submit
     policy, but in-process concurrent children are not used.
-    ``fail_fast`` stops serial submission after the first unsuccessful
-    outcome.
+    ``fail_fast`` stops serial local submission after the first
+    unsuccessful outcome.
     """
 
     PROGRAM: Optional[str] = None
@@ -97,10 +140,14 @@ class BatchJob(Job, metaclass=BatchJobMeta):
         self._jobs_not_started: int = 0
 
     def run(self, **kwargs: Any) -> None:
-        """Run all child jobs in this batch."""
+        """Run this batch in ``local_batch`` or ``array_task`` mode."""
         self._invalidate_status_cache()
         self._jobs_not_started = 0
-        self._run(**kwargs)
+        mode = resolve_batch_execution_mode()
+        if mode == "array_task":
+            self._run_array_task(**kwargs)
+            return
+        self._run_local_batch(**kwargs)
 
     def enable_serial_local_execution(self) -> None:
         """Configure this batch for serial local execution with full resources.
@@ -116,12 +163,66 @@ class BatchJob(Job, metaclass=BatchJobMeta):
             )
         self.no_run_in_parallel = True
 
-    def _run(self, **kwargs: Any) -> None:
-        """Dispatch execution to multi-node or serial local mode."""
+    def _run_array_task(self, **kwargs: Any) -> None:
+        """Run the single child selected by the scheduler array task id.
+
+        ``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX`` are
+        treated as 1-based indexes into ``self.jobs``.
+        """
+        task_id = resolve_array_task_id()
+        if task_id is None:
+            raise RuntimeError(
+                "array_task mode requires SLURM_ARRAY_TASK_ID, "
+                "PBS_ARRAYID, or LSB_JOBINDEX."
+            )
+        total_jobs = len(self.jobs)
+        if total_jobs == 0:
+            raise ValueError(f"BatchJob {self} has no child jobs to run.")
+        child_index = task_id - 1
+        if child_index < 0 or child_index >= total_jobs:
+            raise ValueError(
+                f"Array task id {task_id} out of range for {total_jobs} "
+                f"child job(s); expected 1..{total_jobs}."
+            )
+
+        child = self.jobs[child_index]
+        runner = self.jobrunner
+        if runner is not None:
+            cores = runner.num_cores
+            mem_gb = runner.mem_gb
+        else:
+            cores = None
+            mem_gb = None
+        logger.info(
+            "BatchJob %r: execution=array_task, task=%s/%s, "
+            "cores=%s, mem_gb=%s, child=%s",
+            self.label,
+            task_id,
+            total_jobs,
+            cores,
+            mem_gb,
+            child.label,
+        )
+        outcome = self._submit_job(child, node=None, **kwargs)
+        outcomes = [outcome]
+        self._last_batch_outcomes = outcomes
+        if self.write_outcome_logs:
+            self._write_outcome_logs(outcomes)
+        self._raise_if_failures(outcomes, total_jobs=1)
+
+    def _run_local_batch(self, **kwargs: Any) -> None:
+        """Run all children serially, or distribute across multi-node allocations."""
         nodes = self._get_allocated_nodes()
         total_jobs = len(self.jobs)
 
         if nodes and len(nodes) > 1:
+            logger.info(
+                "BatchJob %r: execution=local_batch, children=%s, "
+                "policy=multi_node, nodes=%s",
+                self.label,
+                total_jobs,
+                list(nodes),
+            )
             outcomes = self._run_multi_node(nodes, **kwargs)
         else:
             if not self.no_run_in_parallel:
@@ -140,8 +241,9 @@ class BatchJob(Job, metaclass=BatchJobMeta):
                 cores = None
                 mem_gb = None
             logger.info(
-                "Running batch of %s jobs serially "
-                "(full resources per child: cores=%s, mem_gb=%s).",
+                "BatchJob %r: execution=local_batch, children=%s, "
+                "policy=serial, cores=%s, mem_gb=%s",
+                self.label,
                 total_jobs,
                 cores,
                 mem_gb,
