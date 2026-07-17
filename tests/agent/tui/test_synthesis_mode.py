@@ -249,7 +249,7 @@ def test_local_provider_can_use_tui_synthesis_mode(monkeypatch, tmp_path: Path):
         lambda: _local_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        "chemsmart.agent.tui.mixins.session_workers.SynthesisSession",
         _FakeSynthesisSession,
     )
     _FakeSynthesisSession.requests = []
@@ -318,7 +318,7 @@ def test_frontier_provider_defaults_to_unified_tool_loop(
         lambda: _openai_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.AgentSession",
+        "chemsmart.agent.tui.mixins.session_workers.AgentSession",
         _FakeUnifiedAgentSession,
     )
     _FakeUnifiedAgentSession.requests = []
@@ -436,7 +436,7 @@ def test_semantic_reject_is_rendered_for_infeasible_synthesis(
         lambda: _local_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        "chemsmart.agent.tui.mixins.session_workers.SynthesisSession",
         _RejectingSynthesisSession,
     )
     _RejectingSynthesisSession.requests = []
@@ -477,7 +477,7 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
         lambda: _local_config(),
     )
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.SynthesisSession",
+        "chemsmart.agent.tui.mixins.session_workers.SynthesisSession",
         _BrokenMLXSynthesisSession,
     )
 
