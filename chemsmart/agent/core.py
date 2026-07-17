@@ -10,7 +10,7 @@ import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
@@ -59,6 +59,14 @@ from chemsmart.agent.runtime.contracts import RuntimeV2Mode, TaskPhase
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.runtime.orchestrator import RuntimeController
 from chemsmart.agent.services.conversation_memory import ConversationMemory
+from chemsmart.agent.services.plan_support import (
+    classify_intent,
+    is_chitchat_request,
+    is_project_yaml_workflow,
+    render_plan,
+    resolve_plan_intent,
+    synthetic_plan_from_tool_requests,
+)
 from chemsmart.agent.services.result_codec import (
     REFERENCE_RE,
     json_safe,
@@ -74,66 +82,16 @@ _RISKY_TOOLS = {"run_local", "submit_hpc"}
 _GAUSSIAN_ROUTE_RE = re.compile(r"^\s*#\s*\S+", re.MULTILINE)
 _ORCA_ROUTE_RE = re.compile(r"^\s*!\s*\S+", re.MULTILINE)
 _REFERENCE_RE = REFERENCE_RE
-_INTENT_PATTERNS = {
-    "opt": (
-        r"\bopt(?:imize|imization|imisation)?\b",
-        r"\bgeometry optimi[sz]ation\b",
-    ),
-    "ts": (r"\btransition state\b", r"\bts\b"),
-    "irc": (r"\birc\b", r"\breaction path\b"),
-    "sp": (
-        r"\bsingle[ -]?point\b",
-        r"\bsp\b",
-        r"\bsingle point energy\b",
-    ),
-    "freq": (
-        r"\bfrequenc(?:y|ies)\b",
-        r"\bfreq\b",
-        r"\bvibrational\b",
-    ),
-    "scan": (r"\bscan\b", r"\bpes\b"),
-}
-_CHITCHAT_EXACT_PATTERNS = (
-    r"(?:hi|hello|hey)(?: there)?[!. ]*",
-    r"(?:thanks|thank you|thx)[!. ]*",
-    r"good (?:morning|afternoon|evening)[!. ]*",
-    r"what can you do(?: for me)?\??",
-    r"what do you do\??",
-    r"who are you\??",
-    r"help\??",
-)
-_CHITCHAT_IDENTITY_PATTERNS = (
-    r"(?:hi|hello|hey)[!.,? ]*(?:what(?:'s| is) your name|who are you|what are you|introduce yourself)[!.,? ]*",
-    r"what(?:'s| is) your name[!.,? ]*",
-    r"who are you[!.,? ]*",
-    r"what are you[!.,? ]*",
-    r"introduce yourself[!.,? ]*",
-    r"tell me about yourself[!.,? ]*",
-    r"which (?:model|llm|ai) (?:are you|do you use)[!.,? ]*",
-)
-_CHITCHAT_TOKENS = {
-    "hello",
-    "hey",
-    "hi",
-    "thanks",
-    "thank",
-    "you",
-    "thx",
-}
 _LLM_MAX_ATTEMPTS = 3
 _LLM_BACKOFF_SECONDS = (1, 2, 4)
-_PROJECT_YAML_TOOLS = {
-    "extract_project_protocol",
-    "render_project_yaml",
-    "validate_project_yaml",
-    "critic_project_yaml",
-    "write_project_yaml",
-    "read_project_yaml",
-    "update_project_yaml",
-}
 
 
 _utc_now_iso = utc_now_iso
+_synthetic_plan_from_tool_requests = synthetic_plan_from_tool_requests
+_is_project_yaml_workflow = is_project_yaml_workflow
+_classify_intent = classify_intent
+_resolve_plan_intent = resolve_plan_intent
+_is_chitchat_request = is_chitchat_request
 
 
 class DecisionLog:
@@ -1941,41 +1899,6 @@ class AgentSession:
         return None
 
 
-def render_plan(plan: Plan) -> str:
-    lines = ["Plan:"]
-    if plan.rationale:
-        lines.append(f"Rationale: {plan.rationale}")
-    if plan.estimated_cost:
-        lines.append(f"Estimated cost: {plan.estimated_cost}")
-    for index, step in enumerate(plan.steps, start=1):
-        lines.append(
-            f"{index}. {step.tool} {json.dumps(_preview_value(step.args), sort_keys=True)}"
-        )
-        if step.rationale:
-            lines.append(f"   - {step.rationale}")
-    return "\n".join(lines)
-
-
-def _synthetic_plan_from_tool_requests(tool_requests: list[Any]) -> Plan:
-    steps = [
-        Step(
-            tool=request.name,
-            args=dict(request.arguments),
-            rationale="",
-        )
-        for request in tool_requests
-    ]
-    return Plan(
-        steps=steps,
-        rationale="Synthetic plan projected from tool_use_request entries.",
-        intent="workflow" if steps else "advisory",
-    )
-
-
-def _is_project_yaml_workflow(plan: Plan) -> bool:
-    return any(step.tool in _PROJECT_YAML_TOOLS for step in plan.steps)
-
-
 def run_agent(request: str, **kwargs: Any) -> dict[str, Any]:
     return AgentSession(**_session_kwargs(kwargs)).run(
         request,
@@ -2013,63 +1936,6 @@ def _env_snapshot() -> dict[str, str | None]:
         "AI_PROVIDER": os.environ.get("AI_PROVIDER"),
         "PWD": os.path.abspath(os.getcwd()),
     }
-
-
-def _classify_intent(request: str) -> str:
-    normalized = request.lower()
-    matches = [
-        intent
-        for intent, patterns in _INTENT_PATTERNS.items()
-        if any(re.search(pattern, normalized) for pattern in patterns)
-    ]
-    if not matches:
-        return "unknown"
-    unique_matches = list(dict.fromkeys(matches))
-    if len(unique_matches) == 1:
-        return unique_matches[0]
-
-    has_composite_marker = any(
-        marker in normalized for marker in ("+", " then ", " and ", " after ")
-    )
-    non_opt = [intent for intent in unique_matches if intent != "opt"]
-    if len(non_opt) == 1 and not has_composite_marker:
-        return non_opt[0]
-    return "composite"
-
-
-def _resolve_plan_intent(
-    request: str,
-    plan: Plan,
-) -> Literal["workflow", "advisory", "chitchat"]:
-    if plan.steps:
-        return "workflow"
-    if _is_chitchat_request(request):
-        return "chitchat"
-    if plan.intent in {"workflow", "advisory", "chitchat"}:
-        return plan.intent
-    return "advisory"
-
-
-def _is_chitchat_request(request: str) -> bool:
-    normalized = re.sub(r"\s+", " ", request).strip().lower()
-    if not normalized:
-        return False
-    if any(
-        re.fullmatch(pattern, normalized)
-        for pattern in _CHITCHAT_IDENTITY_PATTERNS
-    ):
-        return True
-    if any(
-        re.fullmatch(pattern, normalized)
-        for pattern in _CHITCHAT_EXACT_PATTERNS
-    ):
-        return True
-    tokens = re.findall(r"[a-z]+", normalized)
-    return (
-        bool(tokens)
-        and len(tokens) <= 3
-        and set(tokens).issubset(_CHITCHAT_TOKENS)
-    )
 
 
 def _elapsed_ms(
