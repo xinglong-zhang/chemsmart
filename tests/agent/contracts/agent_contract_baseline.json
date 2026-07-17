@@ -6074,7 +6074,7 @@
       },
       {
         "command": "/write-project",
-        "description": "write the latest validated project YAML"
+        "description": "write or replace the latest validated project YAML"
       },
       {
         "command": "/quit",
