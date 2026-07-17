@@ -4,8 +4,6 @@ import contextlib
 import importlib
 import os
 import re
-import shutil
-import traceback
 from typing import Any, Literal
 
 from chemsmart.agent.harness.workflow_state import current_workflow_state
@@ -13,16 +11,24 @@ from chemsmart.agent.services.job_cli import (
     SUPPORTED_SUBMIT_JOBTYPES as _SUPPORTED_SUBMIT_JOBTYPES,
 )
 from chemsmart.agent.services.job_cli import dry_run_input as dry_run_input
+from chemsmart.agent.services.local_runtime import (
+    extract_optimized_geometry as extract_optimized_geometry,
+)
+from chemsmart.agent.services.local_runtime import run_local as run_local
+from chemsmart.agent.services.local_runtime import (
+    validate_runtime as validate_runtime,
+)
 from chemsmart.agent.services.method_recommendation import (
     recommend_method as recommend_method,
 )
+from chemsmart.agent.services.server_selection import (
+    coerce_server as _coerce_server,
+)
 from chemsmart.agent.transport import LocalDryRunTransport, SubmitTransport
 from chemsmart.cli.sub import sub as sub_cli
-from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
-from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.jobs.gaussian.job import GaussianGeneralJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.scan import GaussianScanJob
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -30,7 +36,7 @@ from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.gaussian.ts import GaussianTSJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.irc import ORCAIRCJob
-from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
+from chemsmart.jobs.orca.job import ORCAGeneralJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.scan import ORCAScanJob
 from chemsmart.jobs.orca.settings import ORCAJobSettings
@@ -38,11 +44,7 @@ from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 from chemsmart.jobs.orca.ts import ORCATSJob
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
-from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.cli import CtxObjArguments
-from chemsmart.utils.periodictable import PeriodicTable
-
-_PERIODIC_TABLE = PeriodicTable()
 
 
 def _resolve_optional_job_class(
@@ -122,20 +124,6 @@ _JOB_KIND_ALIASES = {
     "orca.singlepoint": "orca.sp",
 }
 _SUPPORTED_JOB_KINDS = _CANONICAL_JOB_KINDS
-_REMOTE_UNKNOWN_SERVER_FIELDS = [
-    "server.queue required",
-    "server.account required",
-    "server.scratch_dir required",
-    "server.modules_or_executable_path required",
-]
-_REMOTE_UNKNOWN_SCRATCH = "scratch_dir writable on HPC"
-_REMOTE_UNKNOWN_MODULES = "module load succeeds on HPC"
-_REMOTE_UNKNOWN_QUEUE = "queue accepts jobs"
-_REMOTE_UNKNOWN_ACCOUNT = "account has remaining hours"
-_REMOTE_UNKNOWN_SSH = "ssh login reachable"
-_UNRESOLVED_ENVVAR_PATTERN = re.compile(
-    r"(\$(?:\{)?[A-Za-z_][A-Za-z0-9_]*(?:\})?)|(%[^%]+%)"
-)
 _ORCA_AB_INITIO_KEYWORDS = (
     "MP2",
     "MP3",
@@ -507,7 +495,6 @@ def build_job(
 ) -> Job:
     """Instantiate a chemsmart job object for a canonical agent job kind."""
     # jobrunner must be a proper runner object; reject strings/dicts passed by mistake
-    from chemsmart.jobs.runner import JobRunner
 
     if jobrunner is not None and not isinstance(jobrunner, JobRunner):
         jobrunner = None
@@ -562,169 +549,6 @@ def build_job(
         if value:
             setattr(job, attribute, value)
     return job
-
-
-def validate_runtime(
-    job: Job,
-    server=None,
-) -> dict[str, Any]:
-    """Check local/runtime prerequisites and remote unknowns for a job."""
-    local_issues = _validate_job_fields(job)
-    remote_unknown = []
-
-    if server is None:
-        remote_unknown.extend(_REMOTE_UNKNOWN_SERVER_FIELDS)
-        return _runtime_validation_result(local_issues, remote_unknown)
-
-    if not isinstance(server, Server):
-        try:
-            server = _coerce_server(server)
-        except Exception as exc:
-            local_issues.append(f"server.config invalid: {exc}")
-            return _runtime_validation_result(local_issues, remote_unknown)
-
-    server_config = getattr(server, "config", None)
-    if not isinstance(server_config, dict):
-        local_issues.append("server.config invalid")
-        return _runtime_validation_result(local_issues, remote_unknown)
-
-    queue_name = _get_server_queue_name(server_config)
-    account_name = _get_server_account_name(server_config)
-    scratch_value = server_config.get("SCRATCH_DIR")
-
-    if not _is_non_empty_string(queue_name):
-        local_issues.append("server.queue missing")
-    # account/project is optional for SGE/PBS — only flag as remote_unknown
-    if not _is_non_empty_string(account_name):
-        remote_unknown.append(_REMOTE_UNKNOWN_ACCOUNT)
-    # null SCRATCH_DIR means use system default — not a hard failure
-    if scratch_value is not None and not isinstance(scratch_value, str):
-        local_issues.append("server.scratch_dir invalid")
-
-    runner = None
-    try:
-        runner = JobRunner.from_job(job=job, server=server, scratch=False)
-    except Exception:
-        local_issues.append("jobrunner unavailable")
-
-    executable_path = None
-    modules = None
-    resolved_scratch_dir = None
-
-    if runner is not None:
-        try:
-            resolved_scratch_dir = runner._resolve_scratch_dir_candidate()
-            if resolved_scratch_dir is not None:
-                resolved_scratch_dir = runner._normalize_path_string(
-                    resolved_scratch_dir
-                )
-        except Exception:
-            local_issues.append("server.scratch_dir invalid")
-
-        try:
-            executable = runner.executable
-            executable_path = executable.get_executable()
-            modules = executable.modules
-        except Exception:
-            executable = None
-    else:
-        executable = None
-
-    if resolved_scratch_dir is not None and _has_unresolved_envvars(
-        resolved_scratch_dir
-    ):
-        local_issues.append("server.scratch_dir unresolved")
-
-    if modules is not None and not isinstance(modules, str):
-        local_issues.append("server.modules invalid")
-    if executable_path is not None and not isinstance(executable_path, str):
-        local_issues.append("server.executable_path invalid")
-
-    has_modules = _is_non_empty_string(modules)
-    has_executable_path = _is_non_empty_string(executable_path)
-    if not has_modules and not has_executable_path:
-        local_issues.append("server.modules_or_executable_path missing")
-
-    if has_executable_path and shutil.which(executable_path) is None:
-        local_issues.append("server.executable_path missing")
-
-    if _is_non_empty_string(resolved_scratch_dir):
-        remote_unknown.append(_REMOTE_UNKNOWN_SCRATCH)
-    if has_modules:
-        remote_unknown.append(_REMOTE_UNKNOWN_MODULES)
-    if _is_non_empty_string(queue_name):
-        remote_unknown.append(_REMOTE_UNKNOWN_QUEUE)
-    if _is_non_empty_string(account_name):
-        remote_unknown.append(_REMOTE_UNKNOWN_ACCOUNT)
-    remote_unknown.append(_REMOTE_UNKNOWN_SSH)
-
-    return _runtime_validation_result(local_issues, remote_unknown)
-
-
-def run_local(job: Job) -> dict[str, Any]:
-    """Execute a job locally and summarize the generated output artifacts."""
-    job_folder = os.path.abspath(job.folder)
-    os.makedirs(job_folder, exist_ok=True)
-    job.set_folder(job_folder)
-
-    stdout_path = os.path.join(job_folder, f"{job.label}.stdout")
-    stderr_path = os.path.join(job_folder, f"{job.label}.stderr")
-
-    job.local = True
-    returncode = 0
-
-    with (
-        open(stdout_path, "w") as stdout_handle,
-        open(stderr_path, "w") as stderr_handle,
-    ):
-        try:
-            with (
-                contextlib.redirect_stdout(stdout_handle),
-                contextlib.redirect_stderr(stderr_handle),
-            ):
-                job.run()
-        except Exception as exc:
-            traceback.print_exc(file=stderr_handle)
-            returncode = int(getattr(exc, "returncode", 1) or 1)
-
-    output_summary = {}
-    if returncode == 0:
-        output_summary = _summarize_local_output(job)
-
-    return {
-        "ok": returncode == 0,
-        "returncode": returncode,
-        "stdout_path": stdout_path,
-        "stderr_path": stderr_path,
-        "output_summary": output_summary,
-    }
-
-
-def extract_optimized_geometry(job: Job) -> Molecule:
-    """Extract the final optimized geometry from a completed job log."""
-    logfile = _resolve_geometry_logfile(job)
-    if not os.path.exists(logfile):
-        raise FileNotFoundError(f"Output log not found: {logfile}")
-
-    with open(logfile, encoding="utf-8", errors="ignore") as file:
-        lines = file.readlines()
-
-    if isinstance(job, GaussianJob):
-        symbols, positions = _parse_gaussian_geometry(lines)
-    elif isinstance(job, ORCAJob):
-        symbols, positions = _parse_orca_geometry(lines)
-    else:
-        raise ValueError(
-            "extract_optimized_geometry only supports GaussianJob and "
-            "ORCAJob instances"
-        )
-
-    return Molecule(
-        symbols=symbols,
-        positions=positions,
-        charge=getattr(job.settings, "charge", None),
-        multiplicity=getattr(job.settings, "multiplicity", None),
-    )
 
 
 def submit_hpc(
@@ -782,185 +606,6 @@ def submit_hpc(
     }
 
 
-def _validate_job_fields(job: Job) -> list[str]:
-    issues = []
-    if getattr(job, "molecule", None) is None:
-        issues.append("job.molecule missing")
-    if getattr(job, "settings", None) is None:
-        issues.append("job.settings missing")
-
-    label = getattr(job, "label", None)
-    if not _is_non_empty_string(label):
-        issues.append("job.label missing")
-    return issues
-
-
-def _runtime_validation_result(
-    local_issues: list[str],
-    remote_unknown: list[str],
-) -> dict[str, Any]:
-    if local_issues:
-        status = "fail"
-    elif remote_unknown:
-        status = "partial"
-    else:
-        status = "ok"
-
-    return {
-        "ok": status,
-        "local_ok": not local_issues,
-        "local_issues": local_issues,
-        "remote_unknown": remote_unknown,
-    }
-
-
-def _get_server_queue_name(server_config: dict[str, Any]) -> Any:
-    return server_config.get("QUEUE_NAME")
-
-
-def _get_server_account_name(server_config: dict[str, Any]) -> Any:
-    return server_config.get("ACCOUNT", server_config.get("PROJECT"))
-
-
-def _is_non_empty_string(value: Any) -> bool:
-    return isinstance(value, str) and bool(value.strip())
-
-
-def _resolve_geometry_logfile(job: Job) -> str:
-    outputfile = getattr(job, "outputfile", None)
-    if isinstance(outputfile, str) and os.path.exists(outputfile):
-        return outputfile
-
-    fallback_paths = [
-        os.path.join(job.folder, f"{job.label}.log"),
-        os.path.join(job.folder, f"{job.label}.out"),
-    ]
-    for path in fallback_paths:
-        if os.path.exists(path):
-            return path
-
-    if isinstance(outputfile, str):
-        return outputfile
-    return fallback_paths[0]
-
-
-def _parse_gaussian_geometry(
-    lines: list[str],
-) -> tuple[list[str], list[list[float]]]:
-    blocks: list[tuple[list[str], list[list[float]]]] = []
-
-    for index, line in enumerate(lines):
-        if "Standard orientation:" not in line:
-            continue
-
-        symbols = []
-        positions = []
-        coord_start = index + 5
-        for coord_line in lines[coord_start:]:
-            stripped = coord_line.strip()
-            if not stripped or set(stripped) == {"-"}:
-                break
-            parts = stripped.split()
-            if len(parts) < 6:
-                break
-            atomic_number = int(parts[1])
-            symbols.append(_PERIODIC_TABLE.to_symbol(atomic_number))
-            positions.append([float(value) for value in parts[3:6]])
-
-        if symbols:
-            blocks.append((symbols, positions))
-
-    if not blocks:
-        raise ValueError("No optimized Gaussian geometry found in output log")
-
-    return blocks[-1]
-
-
-def _parse_orca_geometry(
-    lines: list[str],
-) -> tuple[list[str], list[list[float]]]:
-    blocks: list[tuple[list[str], list[list[float]]]] = []
-
-    for index, line in enumerate(lines):
-        if "CARTESIAN COORDINATES (ANGSTROEM)" not in line:
-            continue
-
-        symbols = []
-        positions = []
-        coord_start = index + 2
-        for coord_line in lines[coord_start:]:
-            stripped = coord_line.strip()
-            if (
-                not stripped
-                or set(stripped) == {"-"}
-                or "CARTESIAN COORDINATES" in stripped
-            ):
-                break
-            parts = stripped.split()
-            if len(parts) < 4:
-                break
-            symbols.append(parts[0])
-            positions.append([float(value) for value in parts[1:4]])
-
-        if symbols:
-            blocks.append((symbols, positions))
-
-    if not blocks:
-        raise ValueError("No optimized ORCA geometry found in output log")
-
-    return blocks[-1]
-
-
-def _has_unresolved_envvars(path: str) -> bool:
-    return bool(_UNRESOLVED_ENVVAR_PATTERN.search(path))
-
-
-def _summarize_local_output(job: Job) -> dict[str, Any]:
-    parser_cls = None
-    output_path = None
-
-    if isinstance(job, GaussianJob):
-        parser_cls = Gaussian16Output
-        output_path = job.outputfile
-    elif isinstance(job, ORCAJob):
-        parser_cls = ORCAOutput
-        output_path = job.outputfile
-    else:
-        return {}
-
-    if output_path is None or not os.path.exists(output_path):
-        return {}
-
-    try:
-        parser = parser_cls(output_path)
-        energies = list(getattr(parser, "energies", []) or [])
-        energy = energies[-1] if energies else None
-        converged = bool(getattr(parser, "normal_termination", False))
-        frequencies = list(
-            getattr(parser, "vibrational_frequencies", []) or []
-        )
-        imag_freqs = [freq for freq in frequencies if freq < 0]
-        all_structures = list(getattr(parser, "all_structures", []) or [])
-        optimized_geometry_count = len(all_structures)
-
-        if (
-            energy is None
-            and not converged
-            and not imag_freqs
-            and optimized_geometry_count == 0
-        ):
-            return {}
-
-        return {
-            "energy": energy,
-            "converged": converged,
-            "imag_freqs": imag_freqs,
-            "optimized_geometry_count": optimized_geometry_count,
-        }
-    except Exception:
-        return {}
-
-
 def _select_submit_transport(
     transport: SubmitTransport | None,
     execute: bool,
@@ -985,31 +630,6 @@ def _check_duplicate_submission(job: Job) -> dict[str, Any]:
         "duplicate": False,
         "message": None,
     }
-
-
-def _coerce_server(server) -> Server:
-    if server is None:
-        server = _default_submit_server_name()
-    if isinstance(server, Server):
-        return server
-    if isinstance(server, str):
-        return Server.from_servername(server)
-    raise TypeError("server must be a chemsmart.settings.server.Server or str")
-
-
-def _default_submit_server_name() -> str:
-    user_settings = ChemsmartUserSettings()
-    available_servers = sorted(user_settings.all_available_servers)
-    if len(available_servers) == 1:
-        return available_servers[0]
-    if not available_servers:
-        raise ValueError(
-            "submit_hpc requires server when no configured servers are available"
-        )
-    raise ValueError(
-        "submit_hpc requires server when multiple configured servers are "
-        f"available: {', '.join(available_servers)}"
-    )
 
 
 def _reconstruct_submit_cli_args(job: Job, server: Server) -> list[str]:
