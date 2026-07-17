@@ -1015,7 +1015,7 @@ def test_run_executes_latest_validated_command_without_mode_switch(
         }
 
     monkeypatch.setattr(
-        "chemsmart.agent.tui.screens.chat.execute_chemsmart_command_observed",
+        "chemsmart.agent.tui.mixins.calculations.execute_chemsmart_command_observed",
         fake_execute,
     )
 
