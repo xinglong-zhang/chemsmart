@@ -6,8 +6,9 @@ current implementation is correct or production-ready.
 
 ## Scope
 
-- Pinned `fork/main`: `f5c7a3280dd86bf19d915430a87ee24c0b4783e4`
+- Original pinned `fork/main`: `f5c7a3280dd86bf19d915430a87ee24c0b4783e4`
 - Baseline stabilization commit: `95faa53c`
+- Latest local-main UX integration: `ea2a368e8bf5c812494fc5e465164b621ced4497`
 - Contract snapshot: `tests/agent/contracts/agent_contract_baseline.json`
 - Contract SHA-256: `9a5e20c313dac01dc4e53d5c19f49602371781a2e9cbcfd357659ffa1a6bc95b`
 - HighRisk48 fixture SHA-256: `88df9955a0e8fc587a074969ce356ba0bb1fd2c0bd7859a18d166b93b05a4dd1`
@@ -80,6 +81,9 @@ explicitly reviewed contract update.
 - Branch-aware coverage: 74.63%.
 - Existing order-dependent TUI and ambient-HOME test failures were corrected by
   characterization tests before this snapshot was created.
+- After integrating the latest local-main TUI commits, the frozen contract
+  remained byte-identical and the complete `tests/agent/tui` slice passed in
+  the isolated `chemsmart` Conda environment.
 
 The final regression audit must run the suite in three deterministic order
 permutations and replay Full26 and HighRisk48. This P0 receipt does not satisfy
