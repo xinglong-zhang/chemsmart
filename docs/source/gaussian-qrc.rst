@@ -20,6 +20,12 @@ The core idea:
 
 CHEMSMART automates this process, taking a TS frequency calculation output and directly submitting QRC jobs.
 
+.. note::
+
+   Forward and reverse QRC children inside one parent job run **serially**, each with the parent job's full ``-n`` /
+   memory allocation. Concurrent nested QRC children are not used. Independent QRC parents may still run concurrently
+   when submitted as separate scheduler jobs via ``chemsmart sub``.
+
 .. code:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] qrc [SUBCMD_OPTIONS]
