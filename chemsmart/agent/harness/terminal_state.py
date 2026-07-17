@@ -54,9 +54,11 @@ def build_terminal_state(
     rows = [dict(row) for row in assertions if isinstance(row, dict)]
     required = tuple(dict.fromkeys(required_assertion_ids or ()))
     observed_ids = {str(row.get("id") or "") for row in rows}
-    all_passed = bool(rows) and all(
-        row.get("status") == "pass" for row in rows
-    ) and all(assertion_id in observed_ids for assertion_id in required)
+    all_passed = (
+        bool(rows)
+        and all(row.get("status") == "pass" for row in rows)
+        and all(assertion_id in observed_ids for assertion_id in required)
+    )
     if expected_returncode is not None and returncode != expected_returncode:
         all_passed = False
     return {
@@ -84,6 +86,38 @@ def validate_terminal_state(state: Any) -> list[str]:
 
     if not isinstance(state, dict):
         return ["terminal_state.missing"]
+    issues = _header_issues(state)
+    assertions = state.get("assertions")
+    if not isinstance(assertions, list) or not assertions:
+        issues.append("terminal_state.assertions_missing")
+        assertions = []
+    seen: set[str] = set()
+    issues.extend(_assertion_row_issues(assertions, seen))
+    required = state.get("required_assertion_ids") or []
+    issues.extend(_required_assertion_issues(required, seen))
+    returncode = state.get("returncode")
+    expected_returncode = state.get("expected_returncode")
+    issues.extend(_returncode_issues(returncode, expected_returncode))
+    computed = (
+        bool(assertions)
+        and all(
+            isinstance(row, dict) and row.get("status") == "pass"
+            for row in assertions
+        )
+        and not (
+            expected_returncode is not None
+            and returncode != expected_returncode
+        )
+        and all(assertion_id in seen for assertion_id in required)
+    )
+    if state.get("all_passed") is not computed:
+        issues.append("terminal_state.aggregate_mismatch")
+    if state.get("status") != ("passed" if computed else "failed"):
+        issues.append("terminal_state.status_mismatch")
+    return sorted(set(issues))
+
+
+def _header_issues(state: JsonDict) -> list[str]:
     issues: list[str] = []
     if state.get("schema_version") != TERMINAL_STATE_SCHEMA_VERSION:
         issues.append("terminal_state.schema_version")
@@ -91,11 +125,11 @@ def validate_terminal_state(state: Any) -> list[str]:
         issues.append("terminal_state.action_missing")
     if not str(state.get("command") or "").strip():
         issues.append("terminal_state.command_missing")
-    assertions = state.get("assertions")
-    if not isinstance(assertions, list) or not assertions:
-        issues.append("terminal_state.assertions_missing")
-        assertions = []
-    seen: set[str] = set()
+    return issues
+
+
+def _assertion_row_issues(assertions: list[Any], seen: set[str]) -> list[str]:
+    issues: list[str] = []
     for row in assertions:
         if not isinstance(row, dict):
             issues.append("terminal_state.assertion_malformed")
@@ -110,18 +144,26 @@ def validate_terminal_state(state: Any) -> list[str]:
             issues.append("terminal_state.assertion_status_invalid")
         if row.get("status") == "fail":
             issues.append(f"terminal_state.failed:{assertion_id or 'unknown'}")
-    required = state.get("required_assertion_ids") or []
+    return issues
+
+
+def _required_assertion_issues(required: Any, seen: set[str]) -> list[str]:
     if not isinstance(required, list) or any(
         not isinstance(item, str) or not item for item in required
     ):
-        issues.append("terminal_state.required_assertions_invalid")
-    else:
-        for assertion_id in required:
-            if assertion_id not in seen:
-                issues.append(f"terminal_state.required_missing:{assertion_id}")
-    returncode = state.get("returncode")
-    expected_returncode = state.get("expected_returncode")
-    if expected_returncode is not None and not isinstance(expected_returncode, int):
+        return ["terminal_state.required_assertions_invalid"]
+    return [
+        f"terminal_state.required_missing:{assertion_id}"
+        for assertion_id in required
+        if assertion_id not in seen
+    ]
+
+
+def _returncode_issues(returncode: Any, expected_returncode: Any) -> list[str]:
+    issues: list[str] = []
+    if expected_returncode is not None and not isinstance(
+        expected_returncode, int
+    ):
         issues.append("terminal_state.expected_returncode_invalid")
     if (
         isinstance(expected_returncode, int)
@@ -135,18 +177,7 @@ def validate_terminal_state(state: Any) -> list[str]:
         and returncode != 0
     ):
         issues.append("terminal_state.returncode_nonzero")
-    computed = bool(assertions) and all(
-        isinstance(row, dict) and row.get("status") == "pass"
-        for row in assertions
-    ) and not (
-        expected_returncode is not None
-        and returncode != expected_returncode
-    ) and all(assertion_id in seen for assertion_id in required)
-    if state.get("all_passed") is not computed:
-        issues.append("terminal_state.aggregate_mismatch")
-    if state.get("status") != ("passed" if computed else "failed"):
-        issues.append("terminal_state.status_mismatch")
-    return sorted(set(issues))
+    return issues
 
 
 def terminal_state_is_positive(state: Any) -> bool:

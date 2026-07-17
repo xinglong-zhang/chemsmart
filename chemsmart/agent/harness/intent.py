@@ -291,47 +291,8 @@ class ObservedIntent:
             tokens = shlex.split(command)
         except ValueError:
             tokens = []
-        job = parsed.job
-        kind = f"{parsed.program}.{job}" if parsed.program and job else None
-        if parsed.program and "qmmm" in tokens:
-            kind = f"{parsed.program}.qmmm"
-        if kind == "gaussian.td":
-            kind = "gaussian.tddft"
-        chemistry = dict(parsed.structural_options)
-        if parsed.program and "qmmm" in tokens and parsed.job:
-            chemistry["parent_job"] = parsed.job
-        if (
-            "num_steps" not in chemistry
-            and "num_steps_or_every_n_points" in chemistry
-        ):
-            chemistry["num_steps"] = chemistry["num_steps_or_every_n_points"]
-        if "step_size" not in chemistry and "step_size_or_solv" in chemistry:
-            chemistry["step_size"] = chemistry["step_size_or_solv"]
-        if parsed.route_parameters:
-            chemistry["route_parameters"] = parsed.route_parameters
-        if parsed.opt_options:
-            chemistry["opt_options"] = parsed.opt_options
-            maxstep = re.search(
-                r"\bmaxstep\s*=\s*(\d+)", parsed.opt_options, re.IGNORECASE
-            )
-            if maxstep:
-                chemistry["maxstep"] = maxstep.group(1)
-        for key, aliases, flag_value in _CHEMISTRY_OPTIONS:
-            value = _option_value(tokens, aliases, flag_value=flag_value)
-            if value is not None and key not in chemistry:
-                chemistry[key] = value
-        if kind == "gaussian.tddft":
-            # ``-e`` is Gaussian TD's eqsolv value, not ORCA NEB's endpoint.
-            # The generic option scan is intentionally broad, so remove its
-            # incompatible alias interpretation after the job is known.
-            chemistry.pop("ending_xyzfile", None)
-        if kind == "gaussian.traj":
-            proportion = _option_value(
-                tokens,
-                ("-x", "--proportion-structures-to-use"),
-            )
-            if proportion is not None:
-                chemistry["proportion_structures_to_use"] = proportion
+        kind = _observed_kind(parsed, tokens)
+        chemistry = _observed_chemistry(parsed, tokens, kind)
         return cls(
             action=parsed.action,
             program=parsed.program,
@@ -352,6 +313,63 @@ class ObservedIntent:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _observed_kind(parsed: Any, tokens: list[str]) -> str | None:
+    job = parsed.job
+    kind = f"{parsed.program}.{job}" if parsed.program and job else None
+    if parsed.program and "qmmm" in tokens:
+        kind = f"{parsed.program}.qmmm"
+    if kind == "gaussian.td":
+        kind = "gaussian.tddft"
+    return kind
+
+
+def _observed_chemistry(
+    parsed: Any, tokens: list[str], kind: str | None
+) -> dict[str, Any]:
+    chemistry = dict(parsed.structural_options)
+    if parsed.program and "qmmm" in tokens and parsed.job:
+        chemistry["parent_job"] = parsed.job
+    _merge_parsed_route_options(chemistry, parsed)
+    for key, aliases, flag_value in _CHEMISTRY_OPTIONS:
+        value = _option_value(tokens, aliases, flag_value=flag_value)
+        if value is not None and key not in chemistry:
+            chemistry[key] = value
+    if kind == "gaussian.tddft":
+        # ``-e`` is Gaussian TD's eqsolv value, not ORCA NEB's endpoint.
+        # The generic option scan is intentionally broad, so remove its
+        # incompatible alias interpretation after the job is known.
+        chemistry.pop("ending_xyzfile", None)
+    if kind == "gaussian.traj":
+        proportion = _option_value(
+            tokens,
+            ("-x", "--proportion-structures-to-use"),
+        )
+        if proportion is not None:
+            chemistry["proportion_structures_to_use"] = proportion
+    return chemistry
+
+
+def _merge_parsed_route_options(
+    chemistry: dict[str, Any], parsed: Any
+) -> None:
+    if (
+        "num_steps" not in chemistry
+        and "num_steps_or_every_n_points" in chemistry
+    ):
+        chemistry["num_steps"] = chemistry["num_steps_or_every_n_points"]
+    if "step_size" not in chemistry and "step_size_or_solv" in chemistry:
+        chemistry["step_size"] = chemistry["step_size_or_solv"]
+    if parsed.route_parameters:
+        chemistry["route_parameters"] = parsed.route_parameters
+    if parsed.opt_options:
+        chemistry["opt_options"] = parsed.opt_options
+        maxstep = re.search(
+            r"\bmaxstep\s*=\s*(\d+)", parsed.opt_options, re.IGNORECASE
+        )
+        if maxstep:
+            chemistry["maxstep"] = maxstep.group(1)
 
 
 @dataclass(frozen=True)
