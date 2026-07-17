@@ -116,6 +116,157 @@ export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
         assert "#PBS -m abe\n" in buffer.getvalue()
 
 
+class TestArraySubmitInfrastructure:
+    """Phase 2.2: array submit script writing (1-based task ids)."""
+
+    @staticmethod
+    def _stub_program_sections(monkeypatch):
+        monkeypatch.setattr(
+            SLURMSubmitter,
+            "_write_program_specifics",
+            lambda self, f: None,
+        )
+        monkeypatch.setattr(
+            SLURMSubmitter,
+            "_write_extra_commands",
+            lambda self, f: None,
+        )
+
+    def test_slurm_array_submit_script_name_uses_batch_label(self):
+        server = Server(
+            "array-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=16,
+            MEM_GB=32,
+            NUM_GPUS=0,
+        )
+        child = type("Child", (), {"label": "child1", "PROGRAM": "gaussian"})()
+        submitter = SLURMSubmitter(job=child, server=server)
+        submitter.batch_label = "mols_batch"
+        assert (
+            submitter.array_submit_script
+            == "chemsmart_sub_array_mols_batch.sh"
+        )
+
+    def test_slurm_write_array_job_creates_1based_scripts(
+        self, tmp_path, monkeypatch
+    ):
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=16,
+            MEM_GB=32,
+            NUM_GPUS=0,
+            NUM_HOURS=12,
+            QUEUE_NAME="normal",
+        )
+        children = [
+            type(
+                "Child",
+                (),
+                {
+                    "label": f"mol{i}",
+                    "PROGRAM": "gaussian",
+                    "folder": str(tmp_path),
+                },
+            )()
+            for i in range(1, 5)
+        ]
+        template = children[0]
+        submitter = SLURMSubmitter(job=template, server=server)
+        shared_cli = ["gaussian", "-f", "mols.xyz", "-i", "1,2,3,4", "opt"]
+
+        submitter.write_array_job(
+            jobs=children,
+            num_nodes=2,
+            cli_args=shared_cli,
+            batch_label="mols_batch",
+        )
+
+        assert (tmp_path / "chemsmart_sub_array_mols_batch.sh").exists()
+        for task_id in range(1, 5):
+            assert (tmp_path / f"chemsmart_run_array_{task_id}.py").exists()
+        assert not (tmp_path / "chemsmart_run_array_0.py").exists()
+
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_mols_batch.sh"
+        ).read_text()
+        assert "#SBATCH --array=1-4%2\n" in submit_text
+        assert "--nodes=1 --ntasks-per-node=16 --mem=32G" in submit_text
+        assert "TASK_ID=$SLURM_ARRAY_TASK_ID" in submit_text
+        assert "SLURM_ARRAY_TASK_ID + 1" not in submit_text
+        assert "python chemsmart_run_array_${TASK_ID}.py" in submit_text
+
+        run_text = (tmp_path / "chemsmart_run_array_2.py").read_text()
+        assert "gaussian" in run_text
+        assert "mols.xyz" in run_text
+
+    def test_submit_array_job_test_mode_writes_without_queueing(
+        self, tmp_path, monkeypatch
+    ):
+        self._stub_program_sections(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        server = Server(
+            "array-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=16,
+            NUM_GPUS=0,
+            SUBMIT_COMMAND="sbatch",
+        )
+        monkeypatch.setattr(
+            Server,
+            "_check_running_jobs",
+            staticmethod(lambda job: None),
+        )
+        submitted = []
+
+        def _fake_submit(self, job, submitter):
+            submitted.append(submitter.array_submit_script)
+
+        monkeypatch.setattr(Server, "_submit_array_job", _fake_submit)
+
+        children = [
+            type(
+                "Child",
+                (),
+                {
+                    "label": "a",
+                    "PROGRAM": "gaussian",
+                    "folder": str(tmp_path),
+                },
+            )(),
+            type(
+                "Child",
+                (),
+                {
+                    "label": "b",
+                    "PROGRAM": "gaussian",
+                    "folder": str(tmp_path),
+                },
+            )(),
+        ]
+        server.submit_array_job(
+            jobs=children,
+            num_nodes=1,
+            test=True,
+            cli_args=["gaussian", "opt"],
+            batch_label="pka_batch",
+        )
+
+        assert (tmp_path / "chemsmart_sub_array_pka_batch.sh").exists()
+        assert (tmp_path / "chemsmart_run_array_1.py").exists()
+        assert (tmp_path / "chemsmart_run_array_2.py").exists()
+        assert submitted == []
+
+        submit_text = (
+            tmp_path / "chemsmart_sub_array_pka_batch.sh"
+        ).read_text()
+        assert "#SBATCH --array=1-2%1\n" in submit_text
+
+
 class TestCheckRunningJobs:
     class _MockClusterHelper:
         running_job_names = []

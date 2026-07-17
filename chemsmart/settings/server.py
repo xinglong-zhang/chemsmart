@@ -675,6 +675,76 @@ class Server(RegistryMixin):
             p = subprocess.Popen(shlex.split(command), cwd=job.folder)
         return p.wait()
 
+    def submit_array_job(
+        self,
+        jobs,
+        num_nodes=None,
+        test=False,
+        cli_args=None,
+        batch_label=None,
+        **kwargs,
+    ):
+        """Submit child jobs as a scheduler array job.
+
+        Writes per-task run scripts and an array submit script, then
+        optionally queues the array. Script naming uses *batch_label*
+        when provided (typically ``BatchJob.label``).
+
+        Args:
+            jobs: Child ``Job`` instances in array order.
+            num_nodes: Optional SLURM array concurrency throttle ``%M``.
+            test: If True, write scripts only (do not submit).
+            cli_args: Shared or per-job CLI arguments for run scripts.
+            batch_label: Label for ``chemsmart_sub_array_<label>.sh``.
+            **kwargs: Extra submitter construction parameters.
+        """
+        if not jobs:
+            logger.warning("No jobs to submit as array")
+            return
+
+        first_job = jobs[0]
+        if batch_label is not None:
+            # Duplicate-check the batch container label, not every child.
+            from chemsmart.jobs.gaussian.batch import GaussianBatchJob
+            from chemsmart.jobs.orca.batch import OrcaBatchJob
+
+            program = first_job.PROGRAM.lower() if first_job.PROGRAM else ""
+            if program == "orca":
+                check_job = OrcaBatchJob(jobs=jobs, label=batch_label)
+            else:
+                check_job = GaussianBatchJob(jobs=jobs, label=batch_label)
+            self._check_running_jobs(check_job)
+        else:
+            for job in jobs:
+                self._check_running_jobs(job)
+
+        submitter = self.get_submitter(first_job, **kwargs)
+        submitter.write_array_job(
+            jobs=jobs,
+            num_nodes=num_nodes,
+            cli_args=cli_args,
+            batch_label=batch_label,
+        )
+
+        if not test:
+            self._submit_array_job(first_job, submitter)
+
+    def _submit_array_job(self, job, submitter):
+        """Queue the array submit script for *job*'s folder."""
+        command = self.submit_command
+        if command is None:
+            raise ValueError(
+                f"Cannot submit job on {self} "
+                f"since no submit command is defined."
+            )
+        command += f" {submitter.array_submit_script}"
+        logger.info(f"Submitting array job with command: {command}")
+        if "<" in command or ">" in command or "|" in command:
+            p = subprocess.Popen(command, shell=True)
+        else:
+            p = subprocess.Popen(shlex.split(command), cwd=job.folder)
+        return p.wait()
+
 
 class YamlServerSettings(Server):
     """

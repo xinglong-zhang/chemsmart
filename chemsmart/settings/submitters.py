@@ -119,6 +119,9 @@ class Submitter(RegistryMixin):
         self.job = job
         self.server = server
         self.kwargs = kwargs
+        self.jobs = None
+        self.num_nodes = None
+        self.batch_label = None
 
     def __str__(self):
         """
@@ -218,6 +221,27 @@ class Submitter(RegistryMixin):
         return "chemsmart_sub.sh"
 
     @property
+    def array_label(self):
+        """Return label used for array submit script naming."""
+        if self.batch_label is not None:
+            return self.batch_label
+        if self.job is not None and self.job.label is not None:
+            return self.job.label
+        return None
+
+    @property
+    def array_submit_script(self):
+        """
+        Get the array job submission script filename.
+
+        Uses ``batch_label`` when set (e.g. ``BatchJob.label``), otherwise
+        the template job label.
+        """
+        if self.array_label is not None:
+            return f"chemsmart_sub_array_{self.array_label}.sh"
+        return "chemsmart_sub_array.sh"
+
+    @property
     def run_script(self):
         """
         Get the run script filename.
@@ -269,6 +293,102 @@ class Submitter(RegistryMixin):
             logger.warning("Submitting an already complete job.")
         self._write_runscript(cli_args)
         self._write_submitscript()
+
+    def write_array_job(
+        self, jobs, num_nodes=None, cli_args=None, batch_label=None
+    ):
+        """Write scripts for a scheduler array job over *jobs*.
+
+        Creates one 1-based run script per child
+        (``chemsmart_run_array_<task_id>.py``) and one array submit script
+        (``chemsmart_sub_array_<label>.sh``). Each array task runs its script
+        under the scheduler's array task id environment so
+        ``BatchJob.run()`` can enter ``array_task`` mode.
+
+        Args:
+            jobs: Child jobs in array order (task id 1 → ``jobs[0]``).
+            num_nodes: Optional concurrency throttle ``%M`` for SLURM
+                ``--array=1-N%M``. When ``None``, no throttle is applied.
+            cli_args: Shared CLI args for every task, or a sequence of
+                per-job CLI arg lists with the same length as *jobs*.
+            batch_label: Optional label for array script naming
+                (typically ``BatchJob.label``).
+        """
+        if not jobs:
+            logger.warning("No jobs provided for array job")
+            return
+
+        self.jobs = list(jobs)
+        self.num_nodes = num_nodes
+        if batch_label is not None:
+            self.batch_label = batch_label
+
+        self._write_array_runscripts(self.jobs, cli_args)
+        self._write_array_submitscript(num_nodes)
+
+    def _write_array_runscripts(self, jobs, cli_args):
+        """Write 1-based ``chemsmart_run_array_<task_id>.py`` scripts."""
+        for task_id, job in enumerate(jobs, start=1):
+            job_cli_args = cli_args
+            if isinstance(cli_args, (list, tuple)):
+                if len(cli_args) == len(jobs) and isinstance(
+                    cli_args[task_id - 1], (list, tuple)
+                ):
+                    job_cli_args = cli_args[task_id - 1]
+
+            runscript_name = f"chemsmart_run_array_{task_id}.py"
+            runscript = RunScript(runscript_name, job_cli_args)
+            logger.debug(
+                "Writing array run script %s: %s (job=%s)",
+                task_id,
+                runscript_name,
+                job.label,
+            )
+            runscript.write()
+
+    def _write_array_submitscript(self, num_nodes):
+        """Write the array job submission script."""
+        with open(self.array_submit_script, "w") as f:
+            logger.debug(
+                f"Writing array submission script: {self.array_submit_script}"
+            )
+            self._write_bash_header(f)
+            self._write_array_scheduler_options(f, num_nodes)
+            self._write_program_specifics(f)
+            self._write_extra_commands(f)
+            self._write_change_to_job_directory(f)
+            self._write_array_job_command(f)
+
+    def _write_array_scheduler_options(self, f, num_nodes):
+        """Write scheduler options for array submission.
+
+        Subclasses override for scheduler-specific array directives.
+        Default falls back to non-array scheduler options.
+        """
+        self._write_scheduler_options(f)
+
+    def _write_array_job_command(self, f):
+        """Write the command that runs the per-task array run script.
+
+        Uses the native 1-based scheduler task id
+        (``SLURM_ARRAY_TASK_ID`` / ``PBS_ARRAYID`` / ``LSB_JOBINDEX``)
+        to select ``chemsmart_run_array_<TASK_ID>.py``.
+        """
+        f.write("# Array job execution\n")
+        f.write('if [ -n "$SLURM_ARRAY_TASK_ID" ]; then\n')
+        f.write("  TASK_ID=$SLURM_ARRAY_TASK_ID\n")
+        f.write('elif [ -n "$PBS_ARRAYID" ]; then\n')
+        f.write("  TASK_ID=$PBS_ARRAYID\n")
+        f.write('elif [ -n "$LSB_JOBINDEX" ]; then\n')
+        f.write("  TASK_ID=$LSB_JOBINDEX\n")
+        f.write("else\n")
+        f.write(
+            '  echo "Error: no supported array task environment '
+            'variable found." >&2\n'
+        )
+        f.write("  exit 1\n")
+        f.write("fi\n\n")
+        f.write("python chemsmart_run_array_${TASK_ID}.py\n")
 
     def _write_runscript(self, cli_args):
         """
@@ -638,6 +758,46 @@ class SLURMSubmitter(Submitter):
             f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
         f.write(
             f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
+        )
+        if self.server.queue_name:
+            f.write(f"#SBATCH --partition={self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
+                f.write("#SBATCH --mail-type=END,FAIL\n")
+        self._write_extra_scheduler_directives(f)
+        f.write("\n")
+        f.write("\n")
+
+    def _write_array_scheduler_options(self, f, num_nodes):
+        """
+        Write SLURM array directives for one task per child job.
+
+        Each array task uses one node with the server's full cores/memory.
+        ``num_nodes`` is the optional concurrency throttle ``%M`` on
+        ``--array=1-N%M`` (maximum concurrent tasks), not nodes per task.
+        """
+        num_jobs = len(self.jobs) if self.jobs is not None else 1
+        label = self.array_label if self.array_label is not None else "array"
+
+        f.write(f"#SBATCH --job-name={label}_array\n")
+        f.write(f"#SBATCH --output={label}_array_%a.slurmout\n")
+        f.write(f"#SBATCH --error={label}_array_%a.slurmerr\n")
+
+        if num_nodes is not None:
+            f.write(f"#SBATCH --array=1-{num_jobs}%{num_nodes}\n")
+        else:
+            f.write(f"#SBATCH --array=1-{num_jobs}\n")
+
+        if self.server.num_gpus:
+            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
+        f.write(
+            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} "
+            f"--mem={self.server.mem_gb}G\n"
         )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
