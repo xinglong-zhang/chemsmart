@@ -6065,10 +6065,6 @@
         "description": "run inline diagnostics"
       },
       {
-        "command": "/mode",
-        "description": "show unified provider routing information"
-      },
-      {
         "command": "/init",
         "description": "start a project YAML request"
       },

@@ -185,7 +185,6 @@ _SLASH_PALETTE_COMMANDS: tuple[tuple[str, str], ...] = (
     ("/wizard-verify", "verify server transport wiring"),
     ("/wizard-write", "write latest wizard YAML"),
     ("/doctor", "run inline diagnostics"),
-    ("/mode", "show unified provider routing information"),
     ("/init", "start a project YAML request"),
     ("/write-project", "write or replace the latest validated project YAML"),
     ("/quit", "exit the TUI"),
@@ -2895,8 +2894,6 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             self._run_inline_cli(["tools"], title="Tools")
         elif command == "/doctor":
             self._run_inline_cli(["doctor"], title="Doctor")
-        elif command == "/mode":
-            self._handle_mode_command(argument)
         elif command == "/init":
             self._handle_init_command(argument)
         elif command == "/write-project":
@@ -3708,32 +3705,6 @@ class ChatScreen(JobPollerMixin, SessionRunnerMixin, Screen):
             table.add_row(*row)
         self.query_one(Transcript).add_cell(
             AgentMessageCell(table, title="Help")
-        )
-
-    def _handle_mode_command(self, argument: str) -> None:
-        value = argument.strip().lower()
-        if value and value not in {"ask", "run", "unified"}:
-            self.post_error("Unknown mode", "Usage: /mode")
-            return
-        provider_type = _provider_type_label(self._active_provider_config)
-        provider_role = (
-            "CLI synthesis"
-            if provider_type == "local"
-            else "unified tool loop"
-        )
-        self.post_agent_message(
-            (
-                "```\n"
-                "interface: unified\n"
-                f"provider_role: {provider_role}\n"
-                "planning_and_validation: natural-language request\n"
-                "approved_local_execution: /run\n"
-                "approved_hpc_submission: /submit\n"
-                "```\n\n"
-                "`/mode ask` and `/mode run` are compatibility aliases only; "
-                "they no longer switch or reset the session."
-            ),
-            title="Unified interface",
         )
 
     def _handle_init_command(self, argument: str) -> None:

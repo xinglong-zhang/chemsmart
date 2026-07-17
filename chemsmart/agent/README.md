@@ -27,7 +27,6 @@ Common TUI commands:
 
 | Command | Purpose |
 |---|---|
-| `/mode` | Show the automatically selected provider role; does not switch sessions |
 | `/init` | Build a project YAML from a reported method |
 | `/write-project [name]` | Approve writing or replacing the latest validated workspace YAML |
 | `/tools` | List registered tools |

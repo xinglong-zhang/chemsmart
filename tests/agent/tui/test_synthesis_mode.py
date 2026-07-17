@@ -485,9 +485,6 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
         app = ChemsmartTuiApp(session_root=tmp_path / "sessions")
         async with app.run_test() as pilot:
             await pilot.pause()
-            app.chat_screen._handle_slash_command("/mode ask")
-            await pilot.pause()
-
             composer = app.query_one(Composer)
             composer.load_text("single-point on examples/h2o.xyz with Gaussian")
             await pilot.press("enter")
@@ -510,7 +507,7 @@ def test_mlx_runtime_error_is_reported_inside_synthesis_mode(
     asyncio.run(scenario())
 
 
-def test_mode_alias_does_not_change_local_provider_role(monkeypatch, tmp_path: Path):
+def test_removed_mode_command_is_rejected(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setattr(
         "chemsmart.agent.tui.screens.chat.load_active_provider_config",
@@ -526,8 +523,12 @@ def test_mode_alias_does_not_change_local_provider_role(monkeypatch, tmp_path: P
                 app.query_one(FooterWidget).renderable
             )
 
-            app.chat_screen._handle_slash_command("/mode run")
+            app.chat_screen._handle_slash_command("/mode")
             await pilot.pause()
+            cells = list(app.query_one(Transcript).query_one("#cells").children)
+            error = next(cell for cell in cells if isinstance(cell, ErrorCell))
+            assert error.error_title == "Unknown command"
+            assert error.message == "/mode"
             assert app.chat_screen._interaction_mode == "synthesis"
             assert "synthesis:local" in str(
                 app.query_one(FooterWidget).renderable

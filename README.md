@@ -292,7 +292,7 @@ The TUI has one provider-aware interface: local providers synthesize commands,
 while API providers use the unified tool loop automatically. After semantic,
 intent, generated-input, and workspace-project checks pass, use `/run` for a
 validated `chemsmart run` command or `/submit` for a validated `chemsmart sub`
-command. `/mode` is informational only. Use `/init` to build a project YAML
+command. Use `/init` to build a project YAML
 from a reported computational method, then `/write-project` to approve writing
 it into the current workspace. `Shift+Tab` previews the active YAML and cycles
 between multiple workspace projects.
