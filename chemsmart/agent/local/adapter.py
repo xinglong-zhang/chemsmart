@@ -15,6 +15,11 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+from chemsmart.agent.services.compact_spec import (
+    non_workflow_result,
+    project_compact_spec,
+)
+
 # build_job.kind -> (chemsmart program subcommand, job subcommand)
 _KIND_TO_CLI: dict[str, tuple[str, str]] = {
     "gaussian.sp": ("gaussian", "sp"),
@@ -176,26 +181,11 @@ def _compact_spec_to_synthesis_result(
     from chemsmart.agent.v8_adapter import adapt
 
     adapted = adapt(plan, validate=True, default_project=default_project)
-    intent = str(adapted.get("intent") or plan.get("intent") or "")
-    if intent != "workflow":
-        message = str(adapted.get("message") or plan.get("message") or "")
-        status = "infeasible" if intent == "decline" else "needs_clarification"
-        if intent == "chitchat":
-            status = "infeasible"
-        return {
-            "status": status,
-            "command": "",
-            "explanation": message or "No executable workflow was requested.",
-            "confidence": "high",
-            "missing_info": [],
-            "alternatives": [],
-        }
+    projection = project_compact_spec(adapted, plan)
+    if projection.intent != "workflow":
+        return non_workflow_result(projection)
 
-    commands = [
-        command
-        for command in adapted.get("commands", [])
-        if isinstance(command, str) and command.strip()
-    ]
+    commands = list(projection.commands)
     if not commands:
         errors = adapted.get("errors") or ["no commands rendered"]
         return _needs_clarification(

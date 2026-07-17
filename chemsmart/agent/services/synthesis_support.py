@@ -9,6 +9,11 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+from chemsmart.agent.services.compact_spec import (
+    non_workflow_result,
+    project_compact_spec,
+)
+
 import click
 
 from chemsmart.agent.harness.command_semantics import CommandSemanticResult
@@ -167,26 +172,11 @@ def _normalize_v8_spec(
     from chemsmart.agent.v8_adapter import adapt
 
     adapted = adapt(result, validate=True, default_project=default_project)
-    intent = str(adapted.get("intent") or result.get("intent") or "")
-    if intent != "workflow":
-        message = str(adapted.get("message") or result.get("message") or "")
-        status = "infeasible" if intent == "decline" else "needs_clarification"
-        if intent == "chitchat":
-            status = "infeasible"
-        return {
-            "status": status,
-            "command": "",
-            "explanation": message or "No executable workflow was requested.",
-            "confidence": "high",
-            "missing_info": [],
-            "alternatives": [],
-        }
+    projection = project_compact_spec(adapted, result)
+    if projection.intent != "workflow":
+        return non_workflow_result(projection)
 
-    commands = [
-        command
-        for command in adapted.get("commands", [])
-        if isinstance(command, str) and command.strip()
-    ]
+    commands = list(projection.commands)
     if not commands:
         raise ValueError(
             "v8 compact SPEC rendered no commands: "
