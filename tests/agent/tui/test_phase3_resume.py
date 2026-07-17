@@ -31,7 +31,7 @@ def test_resume_cwd_mismatch_choices(monkeypatch, tmp_path: Path):
             ),
         )
         monkeypatch.setattr(
-            "chemsmart.agent.tui.screens.chat.os.chdir",
+                "chemsmart.agent.tui.mixins.job_interaction.os.chdir",
             lambda path: chdir_calls.append(path),
         )
         async with app.run_test() as pilot:
